@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.environment-derived-additions.v1",
+  "scope": "one exact independently inspected CPython cache derivative; no blanket pyc exception or original-source change",
+  "base_manifest_sha256": "07b07209ea8fb999b2258d000cf10ce388e0d9b28c15a1ccdf0ee1db712bdf41",
+  "derivation_proof_file": "derived-cache-proof.json",
+  "derivation_proof_sha256": "325cbf4cd832f8fd60d70c7352bcdde51a5c7e4a8b35841b8dc4be1b73ddd858",
+  "inspector_original_sha256": "a4562bc3ddb6053e8c5c9bb86c19adb4b6cbeb69a07d6e528265a50a45617391",
+  "added_files": [
+    {
+      "path": "env/lib/python3.11/site-packages/_distutils_hack/__pycache__/__init__.cpython-311.pyc",
+      "bytes": 12035,
+      "sha256": "b3ce65a9a3fd88d965dc760bbfc7d555cfb8e51cf3f2e84990efef2a51c4b97f",
+      "mode": "0o644"
+    }
+  ],
+  "runtime_cohort": "public-env-07b-plus-distutils-b3ce-v2",
+  "source_identity": {
+    "path": "env/lib/python3.11/site-packages/_distutils_hack/__init__.py",
+    "bytes": 6800,
+    "sha256": "ced72e54431ecf2d8d7dbd8a1e27724f1b171af3ca1503c304bf11c59a7fe861"
+  },
+  "generation_origin": "timestamp overlaps old root HOST dummy-grandchild without -B; consistent but exclusive writer causality unproven",
+  "historical_scope": "old3setup before this late cache remain unchanged; V3 Job failed preflight with zero scientific calls"
+}

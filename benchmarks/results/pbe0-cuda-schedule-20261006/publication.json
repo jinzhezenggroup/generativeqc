@@ -8,50 +8,26 @@
     {
       "path": "bundle.json.xz",
       "role": "samples",
-      "bytes": 737308,
-      "sha256": "aee8ec43398dcdaacef7e43e5ccc086e03c4328a9d674e8666e9dd8240c4e154"
-    },
-    {
-      "path": "manifest.json",
-      "role": "input",
-      "bytes": 24591,
-      "sha256": "b8c3df49b6c058ab0ed22d00732903b113f5c5861517031245d0d16bc83b1d91"
-    },
-    {
-      "path": "qualification.json",
-      "role": "summary",
-      "bytes": 25277,
-      "sha256": "86a7f3cc6461e4d90b76c1804c188be663b594bf1f6dabf728806541d54d2020"
+      "bytes": 375072,
+      "sha256": "13af6f5df073207897e6400eff44f4e818228b53b2035f907ff353c086e0740c"
     },
     {
       "path": "evidence.json.gz",
       "role": "evidence",
-      "bytes": 13497,
-      "sha256": "bf4a3940da4e81193934c3b88e004aac254b24524b314aec53f76bb1dbe93f45"
-    },
-    {
-      "path": "verify.py",
-      "role": "reproduction",
-      "bytes": 10094,
-      "sha256": "7f7f82fcc972f1048851daf93f5d5533ef9f7e3e7388d88073d4d772c61b6c49"
-    },
-    {
-      "path": "source.patch",
-      "role": "source-patch",
-      "bytes": 32486,
-      "sha256": "ed60f1df376fe235b4bfb473788d0c59c8f24a851099097a5b20b8dea1b485e8"
+      "bytes": 13498,
+      "sha256": "603229cb93b6e45774a34c0a095a9a2dfbe6beeb9ac5d41c048e9fd8a632efa2"
     },
     {
       "path": "integration-bundle.json.xz",
       "role": "samples",
-      "bytes": 599132,
-      "sha256": "4fa1fd8b7a8873090eea1d68f4cb212c8d4455ebfe69159b99bd7ad8106e7e00"
+      "bytes": 202072,
+      "sha256": "587cacf3e9783d393e1e0610d1ff2bf38569c8ae62ba21d2cf84802c34850f9c"
     },
     {
       "path": "integration-manifest.json",
       "role": "input",
-      "bytes": 13661,
-      "sha256": "d2117b6bdc24bd94d77db26b4ffb81ed12941edb90209132cb7375fdefc57340"
+      "bytes": 10344,
+      "sha256": "6195a35159d10d72ec119be0a05f1db60584076f976140c1291fac95c8a1d017"
     },
     {
       "path": "integration-qualification.json",
@@ -64,6 +40,30 @@
       "role": "source-patch",
       "bytes": 12774,
       "sha256": "befd07e4564426b5195beb7407c4e31e45364b9a8c1f8c08f9f18f7d81d494df"
+    },
+    {
+      "path": "manifest.json",
+      "role": "input",
+      "bytes": 22542,
+      "sha256": "170d4610444854d808b83cbee29e1a357219cea4a8ab640e3d4fff89e2bfdc40"
+    },
+    {
+      "path": "qualification.json",
+      "role": "summary",
+      "bytes": 25277,
+      "sha256": "86a7f3cc6461e4d90b76c1804c188be663b594bf1f6dabf728806541d54d2020"
+    },
+    {
+      "path": "source.patch",
+      "role": "source-patch",
+      "bytes": 32486,
+      "sha256": "ed60f1df376fe235b4bfb473788d0c59c8f24a851099097a5b20b8dea1b485e8"
+    },
+    {
+      "path": "verify.py",
+      "role": "reproduction",
+      "bytes": 10587,
+      "sha256": "a202a3627378224a4cf50c9f0b42744e26ca64e1a180fe09ac92966b5f4937a0"
     }
   ],
   "decision": {

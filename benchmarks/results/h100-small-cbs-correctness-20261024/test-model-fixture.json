@@ -1,0 +1,502 @@
+{
+  "scope": "retained historical Standard water sample for HOST gate tests only; not a new H100 return",
+  "archive_revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+  "archive_sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414",
+  "selector": "qualification.water.cases[0].samples[0]",
+  "sample": {
+    "energy": -76.49197883990522,
+    "forces": [
+      [
+        -3.906343575186869e-15,
+        -1.279449873133728e-18,
+        -0.018872374406832797
+      ],
+      [
+        0.014663447394386095,
+        2.846432468172181e-17,
+        0.009436187203441504
+      ],
+      [
+        -0.014663447394380486,
+        -2.7184874807979977e-17,
+        0.009436187203420758
+      ]
+    ],
+    "hf_energy": -76.20515321608025,
+    "mp2_correlation_energy": -0.27353470959258924,
+    "delta_ccsdt_energy": -0.013290914232371165,
+    "hf_weights": [
+      -0.24367215584898735,
+      1.2436721558489874
+    ],
+    "mp2_weights": [
+      -0.42105263157894735,
+      1.4210526315789473
+    ],
+    "executed_backend": "cuda",
+    "endpoint_seconds": 4.755730617791414,
+    "execution_groups": [
+      {
+        "basis_identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+        "primary": "df-ccsd(t)",
+        "methods": [
+          "df-ccsd(t)",
+          "mp2",
+          "rhf"
+        ],
+        "elapsed_seconds": 2.484670214354992
+      },
+      {
+        "basis_identity": "a3c83ca353e72ff85dd4b3f627ba666a68e5724f37769dad9a1188859589e322",
+        "primary": "mp2",
+        "methods": [
+          "mp2",
+          "rhf"
+        ],
+        "elapsed_seconds": 2.270716480910778
+      }
+    ],
+    "basis_metadata": {
+      "mp2": [
+        {
+          "identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+          "name": "sto-3g",
+          "cardinal": 2
+        },
+        {
+          "identity": "a3c83ca353e72ff85dd4b3f627ba666a68e5724f37769dad9a1188859589e322",
+          "name": "def2-svp",
+          "cardinal": 3
+        }
+      ],
+      "correction": {
+        "identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+        "name": "sto-3g"
+      },
+      "representation": "spherical",
+      "hf_extrapolation": "exponential",
+      "hf_exponent": 1.63,
+      "correlation_exponent": 3.0,
+      "frozen_core": 0,
+      "density_fitting": true,
+      "hf_reference": "exact",
+      "auxiliary_basis_identities": {
+        "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372": "d8a39cc61488847fad5380c1a5e1160ecda5d0d7202ec6f7a66f52ff0b66f191",
+        "a3c83ca353e72ff85dd4b3f627ba666a68e5724f37769dad9a1188859589e322": "d8a39cc61488847fad5380c1a5e1160ecda5d0d7202ec6f7a66f52ff0b66f191"
+      }
+    },
+    "convergence": {
+      "requested_policy": "standard",
+      "selected": "strict_fp64",
+      "arithmetic_request": "fp64",
+      "reason": "standard_convergence",
+      "budget": null,
+      "component_budget": null,
+      "coefficient_l1": 4.196866214617815,
+      "scale": 0.0,
+      "limits": {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-11,
+        "ccsd_energy_tolerance": 1e-12,
+        "ccsd_residual_tolerance": 1e-10,
+        "lambda_residual_tolerance": 1e-09,
+        "response_absolute_tolerance": 1e-12,
+        "orbital_residual_tolerance": 1e-10,
+        "stationarity_tolerance": 1e-08
+      },
+      "arithmetic": "fp64",
+      "lambda_arithmetic_request": "fp64",
+      "lambda_arithmetic": "fp64"
+    },
+    "components": [
+      {
+        "roles": [
+          "correction_ccsdt"
+        ],
+        "method": "df-ccsd(t)",
+        "basis_identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+        "coefficient": 1.0,
+        "elapsed_seconds": 2.484670214354992,
+        "energy": -75.00802054287274,
+        "forces": [
+          [
+            -1.7763568394002505e-15,
+            2.806680936510406e-17,
+            -0.13346217340873467
+          ],
+          [
+            0.0661256207425111,
+            4.2477658085123345e-17,
+            0.06673108670436889
+          ],
+          [
+            -0.06612562074250888,
+            -7.054446745016797e-17,
+            0.06673108670437
+          ]
+        ],
+        "converged": true,
+        "iterations": 16,
+        "executed_backend": "cuda",
+        "correlation": {
+          "reference_energy": -74.96033706904929,
+          "opposite_spin_energy": 0.0,
+          "same_spin_energy": 0.0,
+          "minimum_absolute_denominator": 1.0152399610506082,
+          "reference_residual": 4.11315426163128e-12,
+          "numeric_capacity_bytes": 108431717,
+          "energy_tile_count": 0,
+          "mo_host_staging": true,
+          "correlation_owned_device_bytes": 101037824,
+          "correlation_provider_retained_bytes": 44656,
+          "mo_transfer_bytes": 45048,
+          "host_to_device_ms": 0.0,
+          "device_to_host_ms": 0.0,
+          "transform_library_ms": 0.0,
+          "tensor_kernel_ms": 0.0,
+          "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+          "response_iterations": 4,
+          "response_restarts": 0,
+          "response_absolute_residual": 6.128407954733771e-18,
+          "response_relative_residual": 1.7986205323500983e-14,
+          "response_workspace_bytes": 3768,
+          "derivative_workspace_bytes": 0,
+          "planned_endpoint_peak_bytes": 108431717,
+          "measured_endpoint_peak_bytes": 0,
+          "force_provenance_flags": 15,
+          "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+          "measured_response_workspace_peak_bytes": 3688,
+          "response_workspace_allocation_count": 17,
+          "ccsd_iterations": 16,
+          "ccsd_diis_restarts": 0,
+          "ccsd_correlation_energy": -0.04762005589613378,
+          "ccsd_energy_change": 7.928449563543438e-13,
+          "ccsd_singles_residual_max": 1.0150959933730164e-12,
+          "ccsd_doubles_residual_max": 2.6618533766065156e-12,
+          "ccsd_replay_singles_residual_max": 1.0150959933730164e-12,
+          "ccsd_replay_doubles_residual_max": 2.661884601629083e-12,
+          "ccsd_setup_h2d_bytes": 23384,
+          "ccsd_scalar_d2h_bytes": 1220,
+          "ccsd_amplitude_d2h_bytes": 880,
+          "ccsd_synchronizations": 65,
+          "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+          "ccsd_t_triples_energy": -6.341792731640587e-05,
+          "ccsd_t_virtual_triples": 4,
+          "ccsd_t_workspace_bytes": 104880640,
+          "ccsd_t_equation_hash": "",
+          "reference_execution_plan_reused": false,
+          "reference_execution_plan_owned_device_bytes": 0
+        },
+        "cc_performance": {
+          "reference_seconds": 0.591903017,
+          "problem_seconds": 0.300676341,
+          "provider_seconds": 0.300643542,
+          "source_seconds": 0.061435029,
+          "solver_seconds": 0.088295662,
+          "iteration_seconds": 0.06147133199999998,
+          "replay_seconds": 0.024255899,
+          "update_seconds": 0.00027648400000000007,
+          "diis_seconds": 0.001056505,
+          "triples_seconds": 0.031269021,
+          "source_scans": 1,
+          "source_reads": 7,
+          "source_values": 5537,
+          "transform_fmas": 835974,
+          "transform_stages": 14,
+          "mo_blocks": 5,
+          "cuda_transform_calls": 1,
+          "cuda_batch_calls": 0,
+          "iteration_graph_calls": 16,
+          "replay_graph_calls": 1,
+          "update_calls": 15,
+          "generated_error_checks": 16,
+          "diis_gram_calls": 15,
+          "diis_coefficient_calls": 14,
+          "diis_combine_calls": 28,
+          "ccsd_fp32_requested": false,
+          "ccsd_fp32_executed": false,
+          "ccsd_fp32_refused": false,
+          "ccsd_fp32_evaluations": 0,
+          "ccsd_fp32_gemm_calls": 0,
+          "ccsd_fp32_cast_elements": 0,
+          "lambda_seconds": 0.171532702,
+          "source_response_seconds": 0.06294377,
+          "orbital_seconds": 0.505549773,
+          "lambda_fp32_requested": false,
+          "lambda_fp32_executed": false,
+          "lambda_fp32_refused": false,
+          "lambda_fp32_iterations": 0,
+          "lambda_fp64_iterations": 15,
+          "lambda_fp32_actions": 0,
+          "lambda_fp64_actions": 16,
+          "lambda_fp32_gemm_calls": 0,
+          "lambda_fp32_cast_elements": 0,
+          "lambda_auxiliary_batch_size": 32,
+          "lambda_numeric_capacity_bytes": 106399083,
+          "lambda_owned_device_bytes": 101089688
+        }
+      },
+      {
+        "roles": [
+          "mp2_low",
+          "correction_mp2"
+        ],
+        "method": "mp2",
+        "basis_identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+        "coefficient": -1.4210526315789473,
+        "elapsed_seconds": 2.484670214354992,
+        "energy": -74.99472962864037,
+        "forces": [
+          [
+            -1.9984014443252818e-15,
+            1.7052053303216816e-17,
+            -0.11845542983213209
+          ],
+          [
+            0.05754362616941616,
+            3.524642574229713e-17,
+            0.05922771491606693
+          ],
+          [
+            -0.057543626169414386,
+            -5.2298479045489124e-17,
+            0.059227714916068486
+          ]
+        ],
+        "converged": true,
+        "iterations": 16,
+        "executed_backend": "cuda",
+        "correlation": {
+          "reference_energy": -74.96033706904929,
+          "opposite_spin_energy": -0.03243206875647927,
+          "same_spin_energy": -0.0019604908346088257,
+          "minimum_absolute_denominator": 2.0304799221012164,
+          "reference_residual": 4.11315426163128e-12,
+          "numeric_capacity_bytes": 104921217,
+          "energy_tile_count": 0,
+          "mo_host_staging": true,
+          "correlation_owned_device_bytes": 0,
+          "correlation_provider_retained_bytes": 0,
+          "mo_transfer_bytes": 0,
+          "host_to_device_ms": 0.0,
+          "device_to_host_ms": 0.0,
+          "transform_library_ms": 0.0,
+          "tensor_kernel_ms": 0.0,
+          "equation_hash": "a88ee75a51be4c6987e790b9fc7232e495573faf498a1773c3e7245a6c310bea",
+          "response_iterations": 4,
+          "response_restarts": 0,
+          "response_absolute_residual": 2.4944150491030433e-17,
+          "response_relative_residual": 4.876329712157516e-16,
+          "response_workspace_bytes": 3768,
+          "derivative_workspace_bytes": 0,
+          "planned_endpoint_peak_bytes": 104921217,
+          "measured_endpoint_peak_bytes": 0,
+          "force_provenance_flags": 7,
+          "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+          "measured_response_workspace_peak_bytes": 3688,
+          "response_workspace_allocation_count": 17,
+          "ccsd_iterations": 0,
+          "ccsd_diis_restarts": 0,
+          "ccsd_correlation_energy": 0.0,
+          "ccsd_energy_change": 0.0,
+          "ccsd_singles_residual_max": 0.0,
+          "ccsd_doubles_residual_max": 0.0,
+          "ccsd_replay_singles_residual_max": 0.0,
+          "ccsd_replay_doubles_residual_max": 0.0,
+          "ccsd_setup_h2d_bytes": 0,
+          "ccsd_scalar_d2h_bytes": 0,
+          "ccsd_amplitude_d2h_bytes": 0,
+          "ccsd_synchronizations": 0,
+          "ccsd_replay_equation_hash": "",
+          "ccsd_t_triples_energy": 0.0,
+          "ccsd_t_virtual_triples": 0,
+          "ccsd_t_workspace_bytes": 0,
+          "ccsd_t_equation_hash": "",
+          "reference_execution_plan_reused": false,
+          "reference_execution_plan_owned_device_bytes": 0
+        },
+        "cc_performance": null
+      },
+      {
+        "roles": [
+          "hf_low"
+        ],
+        "method": "rhf",
+        "basis_identity": "7f1994a8bb221b4af5eb040e76ced92b4c45d2097b8862b66869a3b16c0d5372",
+        "coefficient": 0.17738047572996,
+        "elapsed_seconds": 2.484670214354992,
+        "energy": -74.96033706904929,
+        "forces": [
+          [
+            -2.220446049250313e-15,
+            -0.0,
+            -0.08512502442814185
+          ],
+          [
+            0.04387533361679269,
+            -0.0,
+            0.042562512214069814
+          ],
+          [
+            -0.04387533361679047,
+            -0.0,
+            0.042562512214071146
+          ]
+        ],
+        "converged": true,
+        "iterations": 16,
+        "executed_backend": "cuda",
+        "correlation": null,
+        "cc_performance": null
+      },
+      {
+        "roles": [
+          "mp2_high"
+        ],
+        "method": "mp2",
+        "basis_identity": "a3c83ca353e72ff85dd4b3f627ba666a68e5724f37769dad9a1188859589e322",
+        "coefficient": 1.4210526315789473,
+        "elapsed_seconds": 2.270716480910778,
+        "energy": -76.16393469478497,
+        "forces": [
+          [
+            -3.552713678800501e-15,
+            -3.599018012580148e-18,
+            -0.027293048685206767
+          ],
+          [
+            0.01646085845404549,
+            2.5385191125088647e-17,
+            0.013646524342621813
+          ],
+          [
+            -0.016460858454041938,
+            -2.1786173112097574e-17,
+            0.013646524342605826
+          ]
+        ],
+        "converged": true,
+        "iterations": 21,
+        "executed_backend": "cuda",
+        "correlation": {
+          "reference_energy": -75.96125691852616,
+          "opposite_spin_energy": -0.1514043509143727,
+          "same_spin_energy": -0.05127342534444205,
+          "minimum_absolute_denominator": 1.355851120157209,
+          "reference_residual": 8.29247781553022e-12,
+          "numeric_capacity_bytes": 225826620,
+          "energy_tile_count": 0,
+          "mo_host_staging": true,
+          "correlation_owned_device_bytes": 4517236,
+          "correlation_provider_retained_bytes": 434824,
+          "mo_transfer_bytes": 439432,
+          "host_to_device_ms": 0.0,
+          "device_to_host_ms": 0.0,
+          "transform_library_ms": 0.0,
+          "tensor_kernel_ms": 0.0,
+          "equation_hash": "a88ee75a51be4c6987e790b9fc7232e495573faf498a1773c3e7245a6c310bea",
+          "response_iterations": 13,
+          "response_restarts": 0,
+          "response_absolute_residual": 3.024770764149933e-13,
+          "response_relative_residual": 2.4327570106355863e-12,
+          "response_workspace_bytes": 63128,
+          "derivative_workspace_bytes": 0,
+          "planned_endpoint_peak_bytes": 225826620,
+          "measured_endpoint_peak_bytes": 0,
+          "force_provenance_flags": 7,
+          "response_operator_hash": "e511cc6d2677e37fba767e8edf262ba6dfb7bdfe77315d623b9a6def66ff03aa",
+          "measured_response_workspace_peak_bytes": 62368,
+          "response_workspace_allocation_count": 17,
+          "ccsd_iterations": 0,
+          "ccsd_diis_restarts": 0,
+          "ccsd_correlation_energy": 0.0,
+          "ccsd_energy_change": 0.0,
+          "ccsd_singles_residual_max": 0.0,
+          "ccsd_doubles_residual_max": 0.0,
+          "ccsd_replay_singles_residual_max": 0.0,
+          "ccsd_replay_doubles_residual_max": 0.0,
+          "ccsd_setup_h2d_bytes": 0,
+          "ccsd_scalar_d2h_bytes": 0,
+          "ccsd_amplitude_d2h_bytes": 0,
+          "ccsd_synchronizations": 0,
+          "ccsd_replay_equation_hash": "",
+          "ccsd_t_triples_energy": 0.0,
+          "ccsd_t_virtual_triples": 0,
+          "ccsd_t_workspace_bytes": 0,
+          "ccsd_t_equation_hash": "",
+          "reference_execution_plan_reused": false,
+          "reference_execution_plan_owned_device_bytes": 0
+        },
+        "cc_performance": null
+      },
+      {
+        "roles": [
+          "hf_high"
+        ],
+        "method": "rhf",
+        "basis_identity": "a3c83ca353e72ff85dd4b3f627ba666a68e5724f37769dad9a1188859589e322",
+        "coefficient": -0.17738047572995996,
+        "elapsed_seconds": 2.270716480910778,
+        "energy": -75.96125691852616,
+        "forces": [
+          [
+            -2.6645352591003757e-15,
+            -0.0,
+            -0.000804906521201687
+          ],
+          [
+            0.004871030590332059,
+            -0.0,
+            0.00040245326060750486
+          ],
+          [
+            -0.004871030590334724,
+            -0.0,
+            0.00040245326059151765
+          ]
+        ],
+        "converged": true,
+        "iterations": 21,
+        "executed_backend": "cuda",
+        "correlation": null,
+        "cc_performance": null
+      }
+    ],
+    "policy": "standard",
+    "budget_mib": 2048,
+    "repeat": 0,
+    "complete_seconds": 4.756255351006985,
+    "oracle_errors": {
+      "energy_abs": 6.679101716144942e-13,
+      "force_max_abs": 4.429309840778273e-09,
+      "force_rms": 2.2248102852075196e-09
+    },
+    "component_oracle_errors": [
+      {
+        "energy_abs": 2.2737367544323206e-13,
+        "force_max_abs": 4.115733476250938e-09,
+        "force_rms": 1.8257025711521345e-09
+      },
+      {
+        "energy_abs": 1.7053025658242404e-13,
+        "force_max_abs": 2.5345646970098556e-09,
+        "force_rms": 1.3127236017622129e-09
+      },
+      {
+        "energy_abs": 1.7053025658242404e-13,
+        "force_max_abs": 2.3622990924510034e-09,
+        "force_rms": 1.3008069724354442e-09
+      },
+      {
+        "energy_abs": 4.831690603168681e-13,
+        "force_max_abs": 1.9787500527002067e-09,
+        "force_rms": 9.620325484984015e-10
+      },
+      {
+        "energy_abs": 3.979039320256561e-13,
+        "force_max_abs": 2.4465337351495253e-09,
+        "force_rms": 1.1929716188457454e-09
+      }
+    ]
+  }
+}

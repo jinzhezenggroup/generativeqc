@@ -29,7 +29,7 @@ retained here. Issue #172 was still open when this snapshot was recorded.
   (`test_dft_complete_cpu.py`) and
   `0aeac3282222c6a891c8ccbd78a2ef3d7a8925999eb9fca19faf727cfe2a5262`
   (`test_r2scan3c_execution.py`). The versioned
-  [bounded endpoint runner](../../issue172_r2scan3c_endpoint.py) was
+  [bounded endpoint runner](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/issue172_r2scan3c_endpoint.py) was
   `ae9ccdf149c829a3e9056ac6f4716a68d388ca959b92a9593e0d96ec1ed3d3ce`.
 
 ## Numerical and resource gates

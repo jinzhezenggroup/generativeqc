@@ -1,5 +1,14 @@
 # Retained B with bounded contraction panels (#308)
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue308-retained-b`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 The 768-AO source retains its complete transformed B tensor under both a 4-GiB
 and an 8-GiB DF value allowance. Setup generates each raw integral exactly once;
 the three subsequent J, dense-K and occupied-K calls generate no raw integrals.
