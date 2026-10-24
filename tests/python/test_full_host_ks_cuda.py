@@ -43,7 +43,15 @@ def test_full_host_cache_complete_endpoints(
         solver.xc = functional
         solver.conv_tol, solver.conv_tol_grad = 1e-12, 1e-9
         solver.direct_scf = False
+        solver.max_cycle = 150
         solver.kernel()
+        if not solver.converged:
+            # The water cation can stall in DIIS at this tight reference gate.
+            # Newton resolves the same independent UKS equations; no native
+            # density or result enters this fallback.
+            solver = solver.newton()
+            solver.max_cycle = 150
+            solver.kernel()
         assert solver.converged
         gradient = solver.nuc_grad_method()
         gradient.grid_response = True
