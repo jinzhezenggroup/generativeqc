@@ -229,11 +229,12 @@ std::size_t prepare_optional(std::vector<void*>& allocations,
   if(selected_tiles) *selected_tiles=owner.batch.tiles;
   return resource.xc_device_bytes;
 }
-extern "C" void capacity(std::size_t work_jets,std::size_t spins,std::size_t limit,
+extern "C" void capacity(std::size_t jets,std::size_t work_jets,std::size_t spins,std::size_t limit,
                           std::uint64_t* result) {
   auto layout=dft::cuda_xc_layout_shape(2,6,512,49152,1,spins==2,256);
+  layout.jets=jets;
   layout.work_jets=work_jets;
-  layout.feature_terms=work_jets==4?5:4;
+  layout.feature_terms=work_jets==4?5:(jets==4?4:1);
   std::vector<void*> allocations;
   std::size_t selected=1;
   allocation_limit=limit;
@@ -432,7 +433,7 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.fleet.restype = None
-    probe.capacity.argtypes = [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
+    probe.capacity.argtypes = [ctypes.c_size_t] * 4 + [ctypes.POINTER(ctypes.c_uint64)]
     probe.capacity.restype = None
     probe.grid_lifetime.argtypes = [
         ctypes.c_void_p,
@@ -704,31 +705,39 @@ def test_unbudgeted_default_and_explicit_opt_out(
 
 
 @pytest.mark.parametrize("spins", (1, 2))
-def test_point_capacity_scales_with_work_jets_and_preserves_bounded_fallback(
-    native_probe: Any, monkeypatch: pytest.MonkeyPatch, spins: int
+@pytest.mark.parametrize("jets,work_jets", ((1, 1), (4, 1), (4, 4)))
+def test_point_capacity_scales_with_live_panels_and_preserves_bounded_fallback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    spins: int,
+    jets: int,
+    work_jets: int,
 ) -> None:
-    """Four-jet panels retain batching without bypassing explicit or OOM bounds."""
+    """AO and density panels retain batching within explicit and OOM bounds."""
     for name in CONTROLS:
         monkeypatch.delenv(name, raising=False)
     unlimited = ctypes.c_size_t(-1).value
 
-    def capacity(work_jets: int, limit: int = unlimited) -> tuple[int, int]:
+    def capacity(limit: int = unlimited) -> tuple[int, int]:
         result = (ctypes.c_uint64 * 2)()
-        native_probe.capacity(work_jets, spins, limit, result)
+        native_probe.capacity(jets, work_jets, spins, limit, result)
         return result[0], result[1]
 
-    automatic = capacity(4)
-    assert 32 << 20 < automatic[0] <= 128 << 20
-    monkeypatch.setenv(CONTROLS[1], str(128 << 20))
-    assert capacity(4) == automatic
+    automatic = capacity()
+    allowance = (32 if jets == 1 else 128) << 20
+    assert 0 < automatic[0] <= allowance
+    if jets == 4:
+        assert automatic[0] > 32 << 20
+    monkeypatch.setenv(CONTROLS[1], str(allowance))
+    assert capacity() == automatic
     monkeypatch.setenv(CONTROLS[1], str(32 << 20))
-    incumbent = capacity(4)
+    incumbent = capacity()
     assert 0 < incumbent[0] <= 32 << 20
     assert 1 < incumbent[1] <= automatic[1]
-    one_jet_explicit = capacity(1)
     monkeypatch.delenv(CONTROLS[1])
-    assert capacity(1) == one_jet_explicit
-    assert capacity(4, 32 << 20) == incumbent
-    assert capacity(4, 1) == (0, 1)
+    if jets == 1:
+        assert automatic == incumbent
+    assert capacity(32 << 20) == incumbent
+    assert capacity(1) == (0, 1)
     monkeypatch.setenv(CONTROLS[1], "0")
-    assert capacity(4) == (0, 1)
+    assert capacity() == (0, 1)
