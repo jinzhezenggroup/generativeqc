@@ -2038,6 +2038,28 @@
         "tests/python/test_ks_fast_strict_tail_cuda.py",
         "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
       ]
+    },
+    {
+      "id": "scf.df-md-charge-partitions",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_MD_CHARGE_SPLITS"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/cuda/df_md_owner.cu",
+        "src/scf/df_md_schedule_policy.hpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Candidate default permits at most 32 charge source partitions only on SM 12.0 angular classes with at least 8192 primitives. Complete partials must fit the existing dead orbital-potential allocation; other devices, short work and insufficient capacity retain one partition. Explicit 1..64 overrides remain owner-frozen. No new device allocation, screening, metric or precision change. Independent long-contraction, force, graph, sanitizer and complete endpoint qualification is pending.",
+      "revisit_condition": "Do not broaden devices, reduce the work threshold or promote performance claims without source-matched independent and complete endpoint qualification. Retain explicit rollback and constrained-capacity behavior.",
+      "evidence": [
+        "tests/python/test_df_md_schedule_policy.py",
+        "tests/python/test_df_md_j_cuda.py",
+        ".agents/notes/proposed/2026-10-24-bounded-df-charge-partitions.md"
+      ]
     }
   ]
 }
