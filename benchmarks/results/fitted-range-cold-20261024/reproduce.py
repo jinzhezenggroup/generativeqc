@@ -60,7 +60,7 @@ for revision, patch in provenance['patches'].items():
 for name, raw in provenance['support'].items():
     assert digest(raw) == provenance['support_sha256'][name], name
 support = provenance['support']
-for stage in (26,27,28,29):
+for stage in (26,27,28,29,33):
     manifest = manifests[f'stage{stage}-source-inputs.json']
     verified = json.loads(support[f'stage{stage}-source-verification.json'])
     assert verified['source_revision'] == manifest['source_revision']
@@ -77,6 +77,7 @@ for stage in (26,27):
     assert receipt['test_revision'] == tested['source_revision']
 
 identities = {
+    'ebe88719525b70aaf00b9c62267e165778c0adeb': '5f31db0ea769f548accc73d860f9a457cdf7459339b76c2c92e45b7c1ce94a11',
     '1ccc53419acd4c22d9496178a65fffd83f26d6b1': '4555f81fe4e277565cec634d642b41af99aa8c99ae108b0997ea78dec47e43db',
     '9029ad14236f7179547e3bab309974d6ea0f4da3': 'bd3cff2e92d8b4631ed65ba599ce44754dd82c6714de5ae3e468be5d8a4106ad',
     '4be44f9015d22dbf4425f6552a419d38add01b9e': '91111e95998c8049252ff8a09b8d6ba2beed59961b6051b3141bc2dc02e01f05',
@@ -84,13 +85,13 @@ identities = {
     '7dcfdc50eb2c0fcb47635e2094c9a00918f44e54': 'a7fe54048d25483a9fc26094a11355546f99960577a0abf6a410e3ecacf965d2',
 }
 final_revision = '7dcfdc50eb2c0fcb47635e2094c9a00918f44e54'
-for stage in (26,27,28,29):
+for stage in (26,27,28,29,33):
     revision = manifests[f'stage{stage}-source-inputs.json']['source_revision']
     assert identities[revision] in support[f'stage{stage}-library-sha256.txt']
 
 refs = ROOT.parent/'readme-final-20261022'
 oracles = reader.load_records([refs/'oracles.json.xz'],schema='generativeqc.readme-defaults-oracle.v1')
-reuse = json.loads((refs/'reference-reuse.json').read_text())
+reuse = json.loads(support['stage33-reference-reuse.json'])
 # Larger qualification extends only the archive reader's population, never
 # the production scientific settings. Its fresh two-grid oracle is retained.
 reader.SIZES = (*reader.SIZES,108)
@@ -107,12 +108,14 @@ for path, raw in packet['records'].items():
     stage = int(path.split('-',1)[0].removeprefix('stage'))
     if stage == 29:
         assert record['source_revision'] == final_revision
+    elif stage == 33:
+        assert record['source_revision'] == 'ebe88719525b70aaf00b9c62267e165778c0adeb'
     else:
         assert record['arm'] == 'standard' and record['atoms'] == 96
     manifest = base if record['source_revision'] == base['source_revision'] else manifests[f'stage{stage}-source-inputs.json']
     assert record['runner_sha256'] == manifest['files']['benchmarks/readme_defaults.py']
     view = copy.deepcopy(record)
-    if path.startswith('stage29-moved-df/') and record['arm'] == 'standard':
+    if path.startswith(('stage29-moved-df/','stage33-moved-df/')) and record['arm'] == 'standard':
         ref = packet['moved_reference']
         assert record['moved_geometry_bohr'] == ref['geometry_bohr']
         for key in ('method','mode','orbital_basis','basis_representation','charge','spin','auxiliary_input_sha256'):
@@ -125,9 +128,12 @@ for path, raw in packet['records'].items():
     assert q['status'] == 'qualified',(path,q)
     records[path] = record
     qualified[path] = q
-assert len(records) == 17
-assert sum(len(r['samples']) for r in records.values()) == packet['complete_calls'] == 36
+assert len(records) == 23
+assert sum(len(r['samples']) for r in records.values()) == packet['complete_calls'] == 50
 expected_paths = {
+    'stage33-moved-df/wb97m-v-df-standard.json',
+    *{f'stage33-larger/wb97m-v-df-{arm}.json' for arm in ('standard','gpu4pyscf')},
+    *{f'stage33-gpu4-pairs-df/wb97m-v-df-pair-0-{arm}.json' for arm in ('standard','fast','gpu4pyscf')},
     'stage26-screen-df/wb97m-v-df-range-baseline.json',
     'stage26-screen-df/wb97m-v-df-range-cached.json',
     'stage27-screen-df/wb97m-v-df-range-plain.json',
@@ -139,11 +145,30 @@ expected_paths = {
 }
 assert set(records) == expected_paths,'Missing or additional receipt population'
 assert Counter((p.split('/')[0],r['arm'],r['atoms']) for p,r in records.items()) == Counter({
+    ('stage33-larger','standard',108):1,('stage33-larger','gpu4pyscf',108):1,
+    ('stage33-gpu4-pairs-df','standard',96):1,('stage33-gpu4-pairs-df','fast',96):1,
+    ('stage33-gpu4-pairs-df','gpu4pyscf',96):1,('stage33-moved-df','standard',96):1,
     ('stage26-screen-df','standard',96):2,('stage27-screen-df','standard',96):2,
     ('stage28-screen-df','standard',96):1,
     ('stage29-gpu4-pairs-df','standard',96):5,('stage29-gpu4-pairs-df','gpu4pyscf',96):5,
     ('stage29-moved-df','standard',96):1,('stage29-moved-df','gpu4pyscf',96):1,
 })
+
+# The capacity fix has a separate current-source bridge. Never pool these
+# single observations with the historical five-pair performance population.
+capacity_bridge = {}
+for cohort, atoms in (('stage33-larger',108),('stage33-gpu4-pairs-df',96)):
+    group = {r['arm']:r for p,r in records.items() if p.startswith(cohort+'/')}
+    gpu4 = group['gpu4pyscf']
+    for arm, r in group.items():
+        for key in ('geometry_bohr','orbital_basis','basis_representation','charge','spin',
+                    'auxiliary_input_sha256','slurm_job_id','thread_controls'):
+            assert r.get(key) == gpu4.get(key),(cohort,arm,key)
+        assert r['environment']['packages'] == gpu4['environment']['packages']
+        assert r['environment']['runtime']['cuda_visible_devices'] == gpu4['environment']['runtime']['cuda_visible_devices']
+        assert [s['phase'] for s in r['samples']] == ['cold','warm']
+        assert all(_comparison(x,y,atoms)['passed'] for x,y in zip(r['samples'],gpu4['samples'],strict=True))
+    capacity_bridge[cohort] = {arm:{s['phase']:s['seconds'] for s in r['samples']} for arm,r in group.items()}
 
 pairs = {}
 for pair in range(5):
@@ -225,4 +250,4 @@ for path,raw in packet['failed_records'].items():
     assert 'stage29-library/libgenerativeqc.so' in support['local-stage29/stage29-larger.sh']
     assert not record['samples']
     assert 'stationary CUDA byte budget is not representable' in record['error']
-print(json.dumps(dict(qualified_calls=36,records=17,failed_records=1,timing=timing,work=work,qualification=qualified),indent=2))
+print(json.dumps(dict(qualified_calls=50,records=23,failed_records=1,capacity_bridge=capacity_bridge,timing=timing,work=work,qualification=qualified),indent=2))

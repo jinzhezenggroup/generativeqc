@@ -26,7 +26,7 @@ GPU4_MAD/GPU4_median))`, which is 2% for this population. All twenty calls
 pass the existing independent energy and full-force gates. No profiled,
 moved, pilot or failed observation enters these paired statistics.
 
-The complete archive contains 17 records / 36 qualified calls: Stage26/27/28
+The historical population contains 17 records / 36 qualified calls: Stage26/27/28
 pilots (10), Stage29 pairs (20), and Stage29 original/displaced compatibility
 (6). The displacement is atom 1 z +0.001 Bohr; moved and moved-warm native
 calls use their separately retained independent reference. Original raw
@@ -61,7 +61,7 @@ passed 819 tests with one skip. GPU work used finite Slurm allocations with
 device visibility preserved; builds used verified sccache 0.16.0. Oracle work
 never supplies a timed production density.
 
-## Retained larger failure
+## Retained larger failure and current capacity fix
 
 The original water108 candidate fails at force admission with `stationary CUDA
 byte budget is not representable`; it has zero complete samples. Its raw record
@@ -73,8 +73,31 @@ is preserved separately and excluded from qualification/timing populations.
 A fresh two-grid water108 independent oracle passes its stability gates. A dry
 capacity query identifies an unused 128 MiB MD-J reserve in the derivative-only
 long-range lease. Stage33 removes that reserve while keeping the original
-1 GiB cap and SCF allowance; real-device qualification is pending. The water96
-result therefore does not claim larger-size promotion.
+1 GiB cap and SCF allowance. Source
+`ebe88719525b70aaf00b9c62267e165778c0adeb`, core SHA-256
+`5f31db0ea769f548accc73d860f9a457cdf7459339b76c2c92e45b7c1ce94a11`,
+passes 14 new independent calls: water108 native/GPU4 cold/warm, water96
+Standard/Fast/GPU4 cold/warm, and native original/warm/moved/moved-warm.
+PR code `ba3b52ab7` has identical production/build roots to this measured source.
+The archive now totals **23 records / 50 qualified calls**, plus the original
+zero-sample failure. The new single observations remain separate from the
+historical five-pair statistics above.
+
+| Capacity-fix bridge | Native cold / warm (s) | GPU4 cold / warm (s) |
+| --- | ---: | ---: |
+| water96 Standard | 312.862 / 38.328 | 379.866 / 130.868 |
+| water96 Fast | 312.893 / 38.377 | same allocation/reference arm |
+| water108 Standard | 685.370 / 55.518 | 501.614 / 173.594 |
+
+Water108 now completes and passes the independent full-force gates, but its
+cold endpoint remains slower than GPU4. This is a capacity/correctness repair,
+not a larger-size speedup claim. Water96 displaced native calls take 265.231 /
+39.317 s and pass their independent moved reference; they are not timing pairs.
+The Stage33 immutable build also repeats the 24 Direct/high-angular, 36 range,
+six fitted-WB Fast, one failure-injection and native composition/factor checks.
+All pass. Host capacity-policy checks pass 38 tests. Benchmark and accuracy
+drivers are byte-identical to Stage29; the explicit larger-oracle reuse contract
+and original oracle are retained and rechecked offline.
 
 ## Offline reproduction and retention review
 

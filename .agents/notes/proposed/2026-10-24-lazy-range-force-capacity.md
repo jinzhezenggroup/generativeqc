@@ -1,6 +1,6 @@
 # Candidate: exclude unused MD-J capacity from lazy LR force admission
 
-Status: proposed; independent complete-endpoint qualification pending
+Status: implemented on the candidate branch; independent endpoints qualified
 Date: 2026-10-24
 
 ## Failure and diagnosis
@@ -34,3 +34,27 @@ force purpose. Re-run independent mixed WB force, cold/warm, water108 and
 water96 composition gates against the rebuilt library before claiming success.
 Revisit if a lazy derivative lease gains an actual Coulomb-value consumer; its
 required owner must then appear explicitly in the resource contract.
+
+## Current-source qualification
+
+Measured source `ebe88719525b70aaf00b9c62267e165778c0adeb`, core SHA-256
+`5f31db0ea769f548accc73d860f9a457cdf7459339b76c2c92e45b7c1ce94a11`:
+all 14 new water96/water108 cold/warm, Fast and displaced calls pass independent
+energy/full-force gates. Water108 now completes at 685.370 / 55.518 s versus
+GPU4 501.614 / 173.594 s; cold performance remains behind at that larger size.
+Water96 Standard 312.862 / 38.328 s and Fast 312.893 / 38.377 s compare with
+GPU4 379.866 / 130.868 s. These single bridge observations must not be pooled
+with the historical Stage29 five-pair population. The original failed record
+remains unchanged, including its absent completed binary receipt.
+
+Slurm jobs 13858/13860/13877 own the larger/bridge/moved endpoints; 13859 repeats
+24 Direct/high-angular, 36 range, six fitted-WB Fast, one failure-injection and
+native independent composition/factor cases, all passing. Verified sccache
+0.16.0 supplies the build (13857); 38 host checks pass. The original two-grid
+water108 oracle is reused under a retained explicit contract after verifying
+unchanged drivers, geometry, scientific inputs and package versions.
+
+The [retained campaign](../../../benchmarks/results/fitted-range-cold-20261024/README.md)
+authenticates complete raw endpoints, unchanged historical failure, manifests,
+binary/build/cache/allocation/test receipts and both production-equivalence
+bridges. Its offline reproducer independently checks all 50 complete calls.

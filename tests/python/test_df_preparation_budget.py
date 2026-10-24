@@ -392,11 +392,18 @@ int main() {
   const auto resident_values = plan_requested_density_fitting_tiles(
       DfPairStorageRequest::Automatic,1,768,3712,768,160,
       resident_split.value_bytes,100ULL<<20,true,0,true);
-  if (resident_split.total_bytes != split.total_bytes ||
-      resident_split.value_bytes + resident_split.response_bytes != split.total_bytes ||
-      resident_split.response_bytes < split.total_bytes/5 ||
+  // Complete U may need the automatic envelope's fractional slack. Check the
+  // actual hard resource boundary and complete occupied storage, rather than
+  // pinning the historical fractional split that admitted only packed B.
+  if (resident_split.total_bytes >
+          split.observed_free_bytes-split.reserved_headroom_bytes ||
+      resident_split.reserved_headroom_bytes != split.reserved_headroom_bytes ||
+      resident_split.value_bytes + resident_split.response_bytes != resident_split.total_bytes ||
+      !resident_split.response_bytes || resident_split.response_bytes > split.response_bytes ||
       !resident_values.stores_full_three_center ||
-      resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 15;
+      resident_values.peak_workspace_bytes > resident_split.value_bytes ||
+      resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+      resident_values.value_storage.rank_capacity != 160) return 15;
   for (const auto unchanged : {
       resolve_df_budget({768,3712,96,1,0,true}, {}, 0),
       resolve_df_budget({768,3712,96,1,0,true}, {24ULL<<30,32ULL<<30,true}, 4ULL<<30),

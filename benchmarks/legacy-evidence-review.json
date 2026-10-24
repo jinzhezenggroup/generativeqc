@@ -349,7 +349,7 @@
     },
     "fitted-range-cold-20261024": {
       "owner": "bounded fitted-primary exact range cold endpoint qualification",
-      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree and the failed larger endpoint separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps.",
+      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps.",
       "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md"
     }
   },
@@ -535,8 +535,8 @@
       "family": "fitted-range-cold-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
-      "bytes": 562260,
-      "sha256": "df0ea91ae4fec7c16648d639906eb5aeca8071e62b6e31ef3c8ddba61373201a"
+      "bytes": 587736,
+      "sha256": "46b5560fe1a50cc40c50f4d45788ffe19475a6f747387ae439333bb03598067b"
     },
     {
       "bytes": 143684,
