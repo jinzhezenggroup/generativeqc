@@ -1,5 +1,6 @@
 """Authenticate and requalify every retained DF charge-partition endpoint."""
 import copy
+from collections import Counter
 import hashlib
 import json
 import lzma
@@ -99,6 +100,45 @@ for campaign, count in (("screen-df",6), ("screen-direct",6), ("pairs-df",30),
                         ("gemm-matrix-df",14), ("gemm-matrix-direct",14),
                         ("moved-df",4), ("moved-direct",4), ("larger",3), ("cold-nsys",2)):
     assert sum(path.startswith("stage25-" + campaign + "/") for path in records) == count
+
+# Counts alone cannot establish method/mode/arm coverage: a duplicated valid
+# record can otherwise replace a missing population even after rehashing.
+methods = ("pbe", "pbe0", "b3lyp", "r2scan", "r2scan-3c", "m06-2x", "wb97m-v")
+expected = {}
+for mode in ("df", "direct"):
+    expected["stage25-screen-" + mode] = Counter({
+        (method, mode, "standard", policy): 1
+        for method in ("pbe", "pbe0", "r2scan-3c")
+        for policy in identities
+    })
+    expected["stage25-gemm-matrix-" + mode] = Counter({
+        (method, mode, arm, "automatic"): 1
+        for method in methods for arm in ("standard", "fast")
+    })
+    expected["stage25-moved-" + mode] = Counter({
+        (method, mode, arm, "automatic"): 1
+        for method in ("pbe", "r2scan-3c") for arm in ("standard", "fast")
+    })
+expected["stage25-pairs-df"] = Counter({
+    (method, "df", "standard", policy): 5
+    for method in ("pbe", "pbe0", "r2scan-3c") for policy in identities
+})
+expected["stage25-larger"] = Counter({
+    ("r2scan-3c", "df", "standard", "baseline"): 1,
+    ("r2scan-3c", "df", "standard", "automatic"): 1,
+    ("r2scan-3c", "df", "gpu4pyscf", "automatic"): 1,
+})
+expected["stage25-cold-nsys"] = Counter({
+    ("r2scan-3c", mode, "standard", "automatic"): 1 for mode in ("df", "direct")
+})
+actual = {}
+for path, record in records.items():
+    campaign = path.split("/", 1)[0]
+    actual.setdefault(campaign, Counter())[
+        (record["method"], record["mode"], record["arm"],
+         record.get("df_charge_policy_control", {}).get("selection", "automatic"))
+    ] += 1
+assert actual == expected, "Incomplete or duplicated endpoint population"
 
 for method in ("pbe", "pbe0", "r2scan-3c"):
     arms = {arm: {} for arm in identities}
