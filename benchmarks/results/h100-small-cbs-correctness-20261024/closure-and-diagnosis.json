@@ -1,0 +1,128 @@
+{
+  "scope": "terminal offline analysis only; no new solver/native/GPU/resource calls",
+  "scientific_state": "INCOMPLETE; never replace missing data or retry slots",
+  "independent_terminal_common_members": 213,
+  "common_bytes_hashes_modes": "PASS",
+  "owner_capsule_members": 213,
+  "root_capsule_members": 255,
+  "root_extra_members": "42 exact frozen scripts; task data/common originals equal",
+  "slot_statuses": {
+    "NO_RETURN; inspect original process outcome/streams": 2,
+    "NOT_RUN": 14,
+    "NUMERIC_PASS": 16
+  },
+  "attempted": 18,
+  "returned": 16,
+  "returned_EF": 11,
+  "returned_E_only": 5,
+  "rejected_EF_requests": 2,
+  "NOT_RUN": 14,
+  "local_vs_root_replay_statuses": "PASS",
+  "local_vs_root_replay_full_values_equal": true,
+  "successful_scope": [
+    {
+      "process": "conventional-water-algebra",
+      "independent_EF_returns": 1,
+      "max_composite_energy_error_Eh": 3.268496584496461e-13,
+      "max_composite_force_error_Eh_Bohr": 1.7446770932127986e-07,
+      "max_composite_force_rms_Eh_Bohr": 9.866686619367448e-08
+    },
+    {
+      "process": "archive-water-df",
+      "independent_EF_returns": 10,
+      "max_composite_energy_error_Eh": 6.289866405495559e-09,
+      "max_composite_force_error_Eh_Bohr": 2.9215061877021272e-08,
+      "max_composite_force_rms_Eh_Bohr": 1.6406127215679416e-08
+    }
+  ],
+  "water_algebra_directions_and_parity": {
+    "process": "conventional-water-algebra",
+    "status": "PASS",
+    "native_self_consistency": [
+      {
+        "step_bohr": 0.0003,
+        "error": 4.512348189544824e-09
+      },
+      {
+        "step_bohr": 0.0001,
+        "error": 3.9120031519734866e-10
+      }
+    ],
+    "independent_stored_PySCF_directions": [
+      {
+        "step_bohr": 0.001,
+        "error": 5.204055177759903e-08
+      },
+      {
+        "step_bohr": 0.0003,
+        "error": 4.867619557424874e-09
+      }
+    ],
+    "native_energy_parity_error": 0.0
+  },
+  "source_environment_before_after": "PASS",
+  "qualified_input_identity_sha256": "86d641d1581eea3f7d2fe9d4bdf1da2bf36ebff588f02bfbece5c7623243aca3",
+  "frozen_source_pins": [
+    {
+      "path": "src/scf/cuda/reference_export.cuh",
+      "base": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "sha256": "e5715c720da9672f6bcbb03a08af00ea5621f9b1f2613ba86232bd52180658d0",
+      "qualified_runtime_bytes_equal": true
+    },
+    {
+      "path": "src/scf/cuda_rhf.cpp",
+      "base": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "sha256": "de6bd0810195109f015736392472a0695d9bedce80c69c158094c59ba3e9e75d",
+      "qualified_runtime_bytes_equal": true
+    },
+    {
+      "path": "python/generativeqc/cbs.py",
+      "base": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "sha256": "696bd25e6ceac23ba557e5fe7437089ffd06b985b4b98e2ea698a43bd44d4027",
+      "qualified_runtime_bytes_equal": true
+    },
+    {
+      "path": "src/methods/rccsd_method.cpp",
+      "base": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "sha256": "db136bfcc13bfcbb169f7baa9b8a8e0de51ff2d9bf8951e21837d9e3dba35b5f",
+      "qualified_runtime_bytes_equal": true
+    },
+    {
+      "path": "include/generativeqc/generativeqc.h",
+      "base": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "sha256": "a3a76bd6c9f03f604bd75ec65a582f91f785d318ab7bf6a05c7af8debc76a6db",
+      "qualified_runtime_bytes_equal": true
+    }
+  ],
+  "refusal_branch": {
+    "file": "src/scf/cuda/reference_export.cuh",
+    "line": 28,
+    "formula": "delta=max(before_free-after_free,0); throw std::length_error if delta>allowance",
+    "caller": "src/scf/cuda_rhf.cpp:1166/1289; before cuBLAS/cuSOLVER handle preparation and after",
+    "allowance_formula": "(use_cublas ? 96MiB : 0)+(use_cusolver ? 96MiB : 0)",
+    "possible_allowance_bytes": [
+      0,
+      100663296,
+      201326592
+    ],
+    "actual_before_free": "UNAVAILABLE",
+    "actual_after_free": "UNAVAILABLE",
+    "actual_delta": "UNAVAILABLE",
+    "actual_selected_flags_and_allowance": "UNAVAILABLE",
+    "different_branch": "check_capacity throws CUDA RHF reference exceeds numeric memory budget; this was not the observed message",
+    "physical_OOM": "NOT_PROVEN; status enum7 is not evidence of cudaErrorMemoryAllocation",
+    "failing_basis_group": "UNAVAILABLE; no returned component result/progress identifies the internal group",
+    "request_budgets": {
+      "index0_conventional_H2": 34359738368,
+      "index12_archive_exact_Standard": 2147483648
+    },
+    "budget_change_permission": "NONE; changing caller budget does not establish this independent provider allowance"
+  },
+  "remaining": [
+    "H2 and correlation-only DF E+F required qualification incomplete",
+    "14 fixed slots NOT_RUN, no automatic completion/replacement",
+    "complete operator precision/work/peak/fallback remain INCOMPLETE",
+    "no third Job/SDK/source mutation authorized",
+    "no PR/CI/formal approval/merge delivery yet"
+  ]
+}

@@ -357,6 +357,10 @@ core_hotspots_a=(
   # Move the intact C++ closure audit (~460 observed worker-seconds),
   # retaining its ordinary modulo slot and every test/acceptance gate.
   tests/python/test_bulk_aot_clangxx_closure.py
+  # Runs 40123113539 / 40124170599 exhausted core-c while core-a
+  # completed in 20m49s in the latter. Keep the intact ~305-worker-second
+  # Lambda reuse module on core-a without removing its ordinary slot.
+  tests/python/test_df_lambda_core_reuse.py
   # Run 39378471974 timed out core-c with no recorded failures while core-a
   # finished in 17m45s. Transfer the complete corrected-Lambda family
   # (965 observed worker-seconds), preserving its priority and ordinary slots.
@@ -395,9 +399,7 @@ core_hotspots_c=(
   # module and its ordinary slot; only give it a stable lighter owner.
   tests/python/test_range_separated_df.py
   # Run 39908441593 exhausted core-b at 99% while core-c finished in
-  # 15m48s. Move the complete 296-worker-second Lambda reuse module and
-  # the queue census that only started at minute 29; retain modulo slots.
-  tests/python/test_df_lambda_core_reuse.py
+  # 15m48s. Keep the queue census here and retain its ordinary slot.
   tests/python/test_direct_exchange_queue.py
   # Keep the complete order-five probe independent of corrected Lambda.
   tests/python/test_cc_canonical_denominators.py
