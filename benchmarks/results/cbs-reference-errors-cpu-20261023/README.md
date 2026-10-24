@@ -43,6 +43,10 @@ python benchmarks/results/cbs-reference-errors-cpu-20261023/unpack.py --output /
 Replay requires only Python's standard library and Git. It verifies publication
 bytes, the committed LF native source closure, reference inputs, full raw
 identities and all numerical gates without running another calculation.
+Replay and recovery require non-optimized Python: omit `-O`/`-OO` and unset
+`PYTHONOPTIMIZE`. Importing the reader under optimization fails explicitly before
+any integrity gate can be bypassed. Run the host-only behavior regressions with
+`python benchmarks/results/cbs-reference-errors-cpu-20261023/test_replay.py`.
 Recovery rejects existing destinations and restores exact raw bytes; original
 Linux modes are applied on POSIX. Historical Windows preparation modes retain
 their separate context. The raw input runners document original execution;

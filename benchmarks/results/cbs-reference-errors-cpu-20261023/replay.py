@@ -11,6 +11,13 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 
+# Integrity and numerical gates below use assertions, which optimization removes.
+if not __debug__:
+    raise RuntimeError(
+        "CPU evidence verification requires non-optimized Python; "
+        "unset PYTHONOPTIMIZE and omit -O/-OO"
+    )
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 
