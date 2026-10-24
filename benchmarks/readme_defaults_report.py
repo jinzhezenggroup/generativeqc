@@ -142,9 +142,18 @@ def reduce_record(record: dict) -> dict:
 
 
 def render(
-    records: list[dict], destination: Path, *, qualifications: list[dict] | None = None
+    records: list[dict],
+    destination: Path,
+    *,
+    qualifications: list[dict] | None = None,
+    include_unqualified: bool = False,
 ) -> list[dict]:
-    """Render absolute latencies; leave missing points as visible curve gaps."""
+    """Render complete latency populations, retaining independent accuracy status.
+
+    Performance-only publication can include inaccurate endpoints without changing
+    their qualification. Incomplete or invalid endpoints remain excluded by the
+    reducer. The default preserves historical accuracy-filtered figure replay.
+    """
     if len({record.get("schema") for record in records}) > 1:
         raise ValueError("mixed measurement protocols")
     if any(record.get("schema") != SCHEMA for record in records):
@@ -200,6 +209,7 @@ def render(
                             population = row.get(phase)
                             if (
                                 qualifications is not None
+                                and not include_unqualified
                                 and row.get("qualification", {})
                                 .get(phase, {})
                                 .get("status")
@@ -250,7 +260,7 @@ def render(
                         0.5,
                         0.5,
                         "No qualified data"
-                        if qualifications is not None
+                        if qualifications is not None and not include_unqualified
                         else "No data",
                         transform=ax.transAxes,
                         ha="center",
@@ -292,7 +302,13 @@ def render(
                 0.5,
                 0.018,
                 f"{'Direct' if mode == 'direct' else 'Density fitting'} · RTX 5090 · cold includes setup · warm: frozen cold density · bars: min–max"
-                + (" · gaps: unqualified" if qualifications is not None else ""),
+                + (
+                    " · all complete points"
+                    if include_unqualified
+                    else " · gaps: unqualified"
+                    if qualifications is not None
+                    else ""
+                ),
                 ha="center",
                 fontsize=9,
                 color="#555555",
@@ -335,6 +351,11 @@ def main() -> None:
     parser.add_argument("--receipts", type=Path, nargs="+", required=True)
     parser.add_argument("--oracles", type=Path, nargs="+")
     parser.add_argument("--reference-reuse", type=Path)
+    parser.add_argument(
+        "--include-unqualified",
+        action="store_true",
+        help="Plot complete performance points regardless of retained accuracy status",
+    )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.reference_reuse and not args.oracles:
@@ -351,7 +372,12 @@ def main() -> None:
             if args.reference_reuse
             else None,
         )
-    rows = render(records, args.output, qualifications=qualifications)
+    rows = render(
+        records,
+        args.output,
+        qualifications=qualifications,
+        include_unqualified=args.include_unqualified,
+    )
     if qualifications is not None:
         (args.output / "qualification.json").write_text(
             json.dumps(qualifications, indent=2, allow_nan=False) + "\n"

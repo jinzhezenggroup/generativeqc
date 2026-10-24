@@ -17,7 +17,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "readme-dft-20261013": {
@@ -31,7 +31,7 @@
       "review_document": "benchmarks/results/occupied-xc-cold-20261023/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "owner": "bounded DFT scheduling qualification for #2475–#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -225,11 +225,6 @@
       "reason": "Lossless receipts retain all six same-source formal A/B/C endpoints, separate primers and profiling populations, independent-reference qualification inputs, actual LR work and transfer counts, source/build/test provenance, and the 96-atom host-admission limitation. Large profiler databases remain ignored; no storage limit or default policy changes. The separate automatic-default cohort retains original abbreviated-revision receipts with an archive/build binding, paired complete E+F, independent gates and source-work diagnostics; corrupt progress logs remain excluded.",
       "review_document": "benchmarks/results/host-lr-eri-20261025/README.md"
     },
-    "host-full-eri-20261025": {
-      "owner": "#2762 full-range KS host ERI qualification",
-      "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
-      "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
-    },
     "h100-small-cbs-correctness-20261024": {
       "owner": "H100 small CBS bounded correctness and admission evidence",
       "reason": "Retains 16 actual original returns, two exact-provider refusals and 14 NOT_RUN slots, zero-SCI first-Job failure, independently derived reference/model gates and all host/cache/provenance history. Storage acceptance is not numerical acceptance of the entire 32-slot matrix; #2727 and its parent remain incomplete. No new science, SDK, policy cap or external archive.",
@@ -239,6 +234,16 @@
       "owner": "VV10 same-binary reuse ablation (#2677)",
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
       "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
+    },
+    "readme-final-20261024": {
+      "owner": "README complete HF/DFT endpoint comparison",
+      "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
+      "review_document": "benchmarks/results/readme-final-20261024/README.md"
+    },
+    "host-full-eri-20261025": {
+      "owner": "#2762 full-range KS host ERI qualification",
+      "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
+      "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
     }
   },
   "files": [
@@ -619,6 +624,30 @@
       "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
     },
     {
+      "path": "benchmarks/results/readme-final-20261024/fast.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 240568,
+      "sha256": "1adbb7c58871bc48c0a3e9b4a6595432bcab2c8cc155d46d01cd4fdff49a468e"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/gpu4pyscf.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 188308,
+      "sha256": "eb73f614ddd36160ff5274f939488bf9997892925b2b6972c59c28519ebdc13a"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/standard.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 212060,
+      "sha256": "afa9bbe6670e1dcc335dfdc9ccaf1bda37bb1951dff0bdc66e824f04125d0491"
+    },
+    {
       "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
       "family": "readme-refresh-20261015",
       "bytes": 176084,
@@ -771,14 +800,6 @@
       "sha256": "6ffb615f4c9041284bfaee7b445a4c28a9922acc8b9bc290c73f05413c120c4d"
     },
     {
-      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
-      "family": "host-full-eri-20261025",
-      "classification": "required-compact-accepted-evidence",
-      "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
-      "bytes": 176688,
-      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
-    },
-    {
       "path": "benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz",
       "family": "h100-small-cbs-correctness-20261024",
       "classification": "required-compact-accepted-evidence",
@@ -833,9 +854,18 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
+    },
+    {
+      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
+      "family": "host-full-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
+      "bytes": 176688,
+      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
   "scope": "Retained current-tree benchmark evidence at or above the review threshold; storage review only, not scientific re-acceptance.",
   "threshold_bytes": 131072
 }
+
