@@ -564,7 +564,7 @@ def _review_updates(
     originals[review_name] = _read(REVIEW)
     review = decode_storage_json(originals[review_name])
     if not isinstance(review, dict):
-        raise ValueError("unsupported legacy review metadata")
+        raise TypeError("unsupported legacy review metadata")
     if review.get("schema") == "generativeqc.legacy-large-evidence-review.v1":
         return {review_name: _review_bytes(changes, originals)}
     if review.get("schema") != "generativeqc.legacy-large-evidence-index.v2":
