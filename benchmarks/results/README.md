@@ -143,8 +143,8 @@ This table is generated from the newest clean accepted artifacts with at least f
 | AO | Batch | Artifact | Source | Samples | Ordinary VibeQC / GPU4PySCF | Iteration-matched branch | Matched speedup | Max dE | Max dF |
 | ---: | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
 | 96 | 1 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b1`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b1.json) | `a5473bf` | 5 | 416.829 ms / 1948.937 ms | 3 | 3.579x | 1.71e-12 Eh | 1.76e-11 Eh/bohr |
-| 96 | 4 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json) | `a5473bf` | 5 | 1194.954 ms / 7260.944 ms | unavailable (unmatched) | n/a | 3.24e-12 Eh | 1.66e-11 Eh/bohr |
-| 192 | 1 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json) | `a5473bf` | 5 | 2495.702 ms / 2219.326 ms | unavailable (unmatched) | n/a | 8.75e-12 Eh | 5.49e-11 Eh/bohr |
+| 96 | 4 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json.gz) | `a5473bf` | 5 | 1194.954 ms / 7260.944 ms | unavailable (unmatched) | n/a | 3.24e-12 Eh | 1.66e-11 Eh/bohr |
+| 192 | 1 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json.gz) | `a5473bf` | 5 | 2495.702 ms / 2219.326 ms | unavailable (unmatched) | n/a | 8.75e-12 Eh | 5.49e-11 Eh/bohr |
 | 192 | 4 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b4`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b4.json) | `a5473bf` | 5 | 10558.560 ms / 7401.350 ms | unavailable (unmatched) | n/a | 1.27e-11 Eh | 2.44e-10 Eh/bohr |
 
 When a shared branch exists, the speed gate uses its iteration-matched median. Otherwise the ordinary median is explicitly labeled unmatched and remains a timing observation rather than a parity claim.
@@ -161,7 +161,7 @@ passes the issue's `<=1.05x` gate. The maximum paired differences are
 A clean completion-audit replay from metadata-only commit `2335e71` leaves the
 native implementation unchanged and independently passes at `2.236320 s`
 versus `2.144024 s`, or `1.043048x`. Its
-[`raw artifact`](rtx5090-2335e71-issue-41-completion-evidence.json) publishes
+[`raw artifact`](rtx5090-2335e71-issue-41-completion-evidence.json.gz) publishes
 all five ABBA samples per engine, per-replay iterations and final residuals,
 the fixed engine-local warm-start policy, CUDA and host compiler versions, and
 the post-measurement GPU clocks, power, temperature, and performance state.

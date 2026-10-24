@@ -78,7 +78,7 @@ void check(int status, const char* detail = "injected copy failure") {
   if (status) throw std::runtime_error(detail);
 }
 namespace scf { struct PreparedCudaOccupiedFockBinding {}; }
-namespace runtime::cuda_trace { void trace_counter(const char*, int) {} }
+namespace runtime::cuda_trace { void trace_counter(const char*, std::uint64_t) {} }
 struct Owner {
   bool is_pending = false;
   struct Source {
