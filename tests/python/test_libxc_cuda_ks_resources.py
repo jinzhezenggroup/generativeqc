@@ -127,13 +127,17 @@ struct AutomaticLibxcEntry {
   explicit operator bool() const { return program != nullptr; }
 };
 SemilocalPointProgram cpu{"metadata-only", "same-science", 7, 17, nullptr};
+RestrictedSemilocalPointProgram restricted{"metadata-only", "total-density-science", 1, 17, nullptr};
 CudaXcPointProgram cuda;
-bool missing{};
+bool missing{}, density_only{};
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t code) {
   return {code == 123 ? &cpu : nullptr};
 }
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) {
   return code == 123 && !missing ? &cuda : nullptr;
+}
+const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program(std::string_view) {
+  return density_only ? &restricted : nullptr;
 }
 }
 }
@@ -146,18 +150,27 @@ namespace generativeqc::dft {
 """
         + definition
         + r"""
-extern "C" bool final_model(bool cuda_backend, unsigned spins, unsigned mutation) {
+extern "C" bool final_model(bool cuda_backend, unsigned spins, unsigned mutation, bool density_only) {
   generated::cuda = {};
-  generated::cuda.expression_identity = "same-science";
+  generated::density_only = density_only;
+  generated::cpu.ingredient_mask = density_only ? 1 : 7;
+  generated::restricted = {"metadata-only", "total-density-science", 1, 17, nullptr};
+  generated::cuda.expression_identity = "aggregate-spin-science";
+  generated::cuda.polarized_expression_identity = "same-science";
+  generated::cuda.restricted_expression_identity = density_only ? "total-density-science" : nullptr;
   generated::cuda.functional_code = 123;
-  generated::cuda.ingredient_mask = 7;
+  generated::cuda.ingredient_mask = generated::cpu.ingredient_mask;
   generated::cuda.domain_version = 17;
   generated::missing = mutation == 1;
-  if (mutation == 2) generated::cuda.expression_identity = "other-science";
+  if (mutation == 2) generated::cuda.polarized_expression_identity = "other-science";
   if (mutation == 3) ++generated::cuda.ingredient_mask;
   if (mutation == 4) ++generated::cuda.domain_version;
   if (mutation == 5) ++generated::cuda.functional_code;
   if (mutation == 6) generated::cuda.expression_identity = nullptr;
+  if (mutation == 13) generated::cuda.restricted_expression_identity = "stale-total-density";
+  if (mutation == 14) ++generated::restricted.ingredient_mask;
+  if (mutation == 15) ++generated::restricted.domain_version;
+  if (mutation == 16) generated::cuda.restricted_expression_identity = nullptr;
   KsFinalStateIdentity identity;
   auto& fock = identity.determinant.model;
   fock.backend = cuda_backend ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
@@ -189,21 +202,38 @@ extern "C" bool final_model(bool cuda_backend, unsigned spins, unsigned mutation
         ),
     )
     library = ctypes.CDLL(str(path))
-    library.final_model.argtypes = [ctypes.c_bool, ctypes.c_uint, ctypes.c_uint]
+    library.final_model.argtypes = [
+        ctypes.c_bool,
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.c_bool,
+    ]
     library.final_model.restype = ctypes.c_bool
     return library.final_model
 
 
 @pytest.mark.parametrize("cuda", (False, True))
 @pytest.mark.parametrize("spins", (1, 2))
-@pytest.mark.parametrize("mutation", range(13))
+@pytest.mark.parametrize(
+    ("density_only", "mutation"),
+    [
+        (lda, mutation)
+        for lda in (False, True)
+        for mutation in range(17)
+        if lda or mutation < 13
+    ],
+)
 def test_automatic_final_model_authenticates_actual_backend_program(
-    final_model_admission: Any, cuda: bool, spins: int, mutation: int
+    final_model_admission: Any,
+    cuda: bool,
+    spins: int,
+    density_only: bool,
+    mutation: int,
 ) -> None:
     # CPU registration remains independent of optional CUDA packaging; CUDA
     # requires matching code/science/ingredients/domain, not just a device ID.
-    admitted = mutation == 0 or (not cuda and 1 <= mutation <= 6)
-    assert final_model_admission(cuda, spins, mutation) == admitted
+    admitted = mutation == 0 or (not cuda and (1 <= mutation <= 6 or mutation >= 13))
+    assert final_model_admission(cuda, spins, mutation, density_only) == admitted
 
 
 def _library(calls: list[tuple[Any, ...]], status: int = 0) -> SimpleNamespace:

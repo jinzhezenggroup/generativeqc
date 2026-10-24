@@ -24,6 +24,8 @@ from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
 from generativeqc_compiler.xc.automatic_cuda import emit_automatic_cuda_provider
 from generativeqc_compiler.xc.automatic_semilocal import AUTOMATIC_SCF_DOMAIN
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
+from generativeqc_compiler.xc.libxc_work import automatic_work_policy
 from test_libxc_automatic_point_native import NAMES
 
 pytestmark = pytest.mark.skipif(
@@ -251,7 +253,12 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
             endpoint_seconds = perf_counter() - started
             assert result.succeeded and result.converged
             assert result.executed_backend == "cuda"
-            assert result.ks_diagnostic.scf_domain == AUTOMATIC_SCF_DOMAIN
+            expected_domain = (
+                DENSITY_WORK_DOMAIN
+                if automatic_work_policy(name).family == "lda"
+                else AUTOMATIC_SCF_DOMAIN
+            )
+            assert result.ks_diagnostic.scf_domain == expected_domain
             assert result.ks_diagnostic.physical_residual_max < 2e-9
             assert result.ks_diagnostic.fock_builds > 0
             assert result.warm_start_used == (phase != "cold")
@@ -343,7 +350,7 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
             "name": name,
             "backend": "cuda",
             "product": "ks-energy",
-            "domain": AUTOMATIC_SCF_DOMAIN,
+            "domain": expected_domain,
             "spins": spins,
             "input_form": input_form,
             "basis": BASIS,
@@ -372,7 +379,9 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
             },
             "method_identity": calculator.method_ir.identity,
             "plan_identity": calculator.ks_options.execution_plan.identity,
-            "expression_identity": provider.point.expression_identity,
+            "expression_identity": provider.expression_identity,
+            "polarized_expression_identity": provider.point.expression_identity,
+            "restricted_expression_identity": provider.restricted.expression_identity,
             "source_identity": provider.source_identity,
             "native_library_sha256": file_hash(
                 Path(os.environ["GENERATIVEQC_LIBRARY"])

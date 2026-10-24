@@ -260,11 +260,15 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
           throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                             "automatic Libxc CUDA KS requires a static provider; build with "
                             "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON");
-        // CPU and CUDA must bind the same canonical point/domain contract.
+        // Authenticate individual CPU spin contracts; the CUDA expression
+        // identity combines both layouts and cannot equal either part's hash.
         const auto& cpu = *execution_plan.automatic_program;
-        if (std::string_view(program->expression_identity) != cpu.expression_identity ||
-            program->ingredient_mask != cpu.ingredient_mask ||
-            program->domain_version != cpu.domain_version)
+        const auto* restricted = execution_plan.automatic_restricted_program;
+        if (!program->matches_cpu_science(cpu.expression_identity,
+                                          restricted ? restricted->expression_identity : "",
+                                          cpu.ingredient_mask, cpu.domain_version) ||
+            (restricted && (restricted->ingredient_mask != cpu.ingredient_mask ||
+                            restricted->domain_version != cpu.domain_version)))
           throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                             "automatic Libxc CPU/CUDA scientific identity mismatch");
       }

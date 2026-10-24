@@ -38,14 +38,17 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #if GENERATIVEQC_HAS_CUDA
   if (automatic_libxc && fock.backend == scf::FockBackend::Cuda) {
     const auto* program = generated::automatic_cuda_point_entry(model.functional);
+    const auto& cpu = *automatic_entry.program;
+    const auto* restricted = generated::automatic_restricted_libxc_program(cpu.identifier);
     // A CUDA ordinal alone cannot authorize a detached automatic state. Bind
     // the installed provider to the same canonical science as CPU execution.
     automatic_backend_valid =
-        program && program->functional_code == model.functional && program->expression_identity &&
-        std::string_view(program->expression_identity) ==
-            automatic_entry.program->expression_identity &&
-        program->ingredient_mask == automatic_entry.program->ingredient_mask &&
-        program->domain_version == automatic_entry.program->domain_version;
+        program && program->functional_code == model.functional &&
+        program->matches_cpu_science(cpu.expression_identity,
+                                     restricted ? restricted->expression_identity : "",
+                                     cpu.ingredient_mask, cpu.domain_version) &&
+        (!restricted || (restricted->ingredient_mask == cpu.ingredient_mask &&
+                         restricted->domain_version == cpu.domain_version));
   }
 #endif
   const auto* family_metadata = split_hybrid || automatic_libxc
@@ -83,9 +86,15 @@ bool valid_model(const KsFinalStateIdentity& identity) {
         model.semilocal_correlation_scale != 1.0)
       return false;
     const auto& correction = *model.range_correction;
-    return fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+    // The ordinary RSH owner can lend a matched DF J/K primary plus a
+    // separately prepared exact LR correction. Authenticate that same pair
+    // here; requiring Direct J incorrectly rejects its converged snapshot.
+    // This does not admit mixed primary J/K approximations or fitted LR.
+    const auto primary = fock.spec.coulomb.approximation;
+    return (primary == scf::FockApproximation::Exact ||
+            primary == scf::FockApproximation::DensityFitted) &&
            (!fock.spec.exchange.present ||
-            (fock.spec.exchange.approximation == scf::FockApproximation::Exact &&
+            (fock.spec.exchange.approximation == primary &&
              fock.spec.exchange.op == scf::FockOperator::FullRange)) &&
            correction.backend == scf::FockBackend::Cuda && correction.spec.spin == fock.spec.spin &&
            correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
