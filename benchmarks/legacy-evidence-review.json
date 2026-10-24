@@ -1,5 +1,10 @@
 {
   "families": {
+    "h100-small-cbs-correctness-20261024": {
+      "owner": "H100 small CBS bounded correctness and admission evidence",
+      "reason": "Retains 16 actual original returns, two exact-provider refusals and 14 NOT_RUN slots, zero-SCI first-Job failure, independently derived reference/model gates and all host/cache/provenance history. Storage acceptance is not numerical acceptance of the entire 32-slot matrix; #2727 and its parent remain incomplete. No new science, SDK, policy cap or external archive.",
+      "review_document": "benchmarks/results/h100-small-cbs-correctness-20261024/README.md"
+    },
     "h100-paper-environment-20261024": {
       "owner": "#2726 H100 environment/setup source inventory",
       "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
@@ -232,6 +237,30 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz",
+      "family": "h100-small-cbs-correctness-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "all-255-actual-source-preflight-release-IEEE-return-and-failure-originals",
+      "bytes": 436816,
+      "sha256": "2e9a5aa83bd998bcf2b63703f590f97c93a67b87fc0e573c034fbb438510816f"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/frozen-host-packet-v3.json.xz",
+      "family": "h100-small-cbs-correctness-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "immutable-v3-host-source-tests-and-negative-history",
+      "bytes": 231044,
+      "sha256": "25b07f18f30ee99216538ef087f7f107c707d8a1b0fce2620494238d8e8671f0"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/frozen-host-packet-v4.json.xz",
+      "family": "h100-small-cbs-correctness-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "immutable-executed-v4-source-inputs-and-derived-cache-qualification",
+      "bytes": 365704,
+      "sha256": "cf1f173d413e9b7571be7b1f209b1a4796ae1a90a1c3ec71783f02249371bfca"
+    },
     {
       "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
       "family": "h100-paper-environment-20261024",
@@ -609,6 +638,14 @@
       "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
     },
     {
+      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
+      "family": "hf-cold-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
+      "bytes": 219828,
+      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
+    },
+    {
       "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
       "family": "readme-refresh-20261015",
       "bytes": 176084,
@@ -775,14 +812,6 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
-    },
-    {
-      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
-      "family": "hf-cold-work-20261025",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
-      "bytes": 219828,
-      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

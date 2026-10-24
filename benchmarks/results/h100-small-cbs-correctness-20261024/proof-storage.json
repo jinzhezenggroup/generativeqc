@@ -1,0 +1,11 @@
+{
+  "scope": "storage only; exact original proof is also retained in both immutable executed packet and actual terminal scripts",
+  "original_path": "derived-cache-proof.json",
+  "original_bytes": 1429,
+  "original_sha256": "325cbf4cd832f8fd60d70c7352bcdde51a5c7e4a8b35841b8dc4be1b73ddd858",
+  "original_line_endings": "CRLF retained verbatim",
+  "stored_path": "derived-cache-proof.json.xz",
+  "stored_bytes": 712,
+  "stored_sha256": "f043800eb95a3b52ed758534cea4b1ce8b0d3769a1c5616ae668918b0d374456",
+  "restore": "decompress into a new directory; never overwrite old runtime state"
+}
