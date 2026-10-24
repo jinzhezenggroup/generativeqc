@@ -108,6 +108,17 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
                                                                     std::uint32_t bucket_mask,
                                                                     std::string& detail);
 
+/** Add bounded pageable FP64 backing to omitted buckets of a strict LR lease.
+ * maximum_bytes includes pageable values and both pinned tiles; device_budget
+ * includes both device tiles. A refusal publishes nothing and preserves the
+ * existing GPU source. Only one immutable system and eager replay are supported.
+ */
+generativeqc_status prepare_cuda_direct_jk_host_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::size_t device_budget,
+    std::size_t tile_bytes, std::uint32_t bucket_mask, std::string& detail);
+std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* plan) noexcept;
+std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan* plan) noexcept;
+
 /** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
  * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
  * last axis fastest and uses the prepared Direct plan's public AO basis.

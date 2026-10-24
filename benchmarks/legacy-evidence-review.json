@@ -381,6 +381,11 @@
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
+    },
+    "host-lr-eri-20261025": {
+      "owner": "opt-in host LR ERI endpoint experiment",
+      "reason": "Lossless receipts retain all six same-source formal A/B/C endpoints, separate primers and profiling populations, independent-reference qualification inputs, actual LR work and transfer counts, source/build/test provenance, and the 96-atom host-admission limitation. Large profiler databases remain ignored; no storage limit or default policy changes.",
+      "review_document": "benchmarks/results/host-lr-eri-20261025/README.md"
     }
   },
   "files": [
@@ -879,6 +884,14 @@
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
       "bytes": 865196,
       "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
+    },
+    {
+      "path": "benchmarks/results/host-lr-eri-20261025/measurements.json.xz",
+      "family": "host-lr-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-observables-lr-work-and-source-build-validation-receipts",
+      "bytes": 131828,
+      "sha256": "08fb25b3b7ef01f9c80a01a302cf473b97a4fa38deb389698d06f2af5ad2071c"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

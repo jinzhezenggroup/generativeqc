@@ -24,7 +24,8 @@ def _auxiliary_basis(fitted: bool) -> Any:
 
 
 @pytest.mark.parametrize(
-    "policy", ["full", "partial", "refused", "auto", "auto-refused"]
+    "policy",
+    ["full", "partial", "refused", "auto", "auto-refused", "host", "host-refused"],
 )
 @pytest.mark.parametrize("fitted", (False, True))
 def test_range_source_preserves_complete_geometry_and_warm_results(
@@ -63,7 +64,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", str(int(enabled)))
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
-            "0x1555" if policy == "partial" else "0xfffffff",
+            "0x1555" if policy in {"partial", "host", "host-refused"} else "0xfffffff",
         )
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
@@ -78,6 +79,15 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
                 monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", "1")
             else:
                 monkeypatch.delenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES")
+        monkeypatch.setenv(
+            "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
+            str(2 << 30)
+            if policy == "host"
+            else "1"
+            if policy == "host-refused"
+            else "0",
+        )
+        monkeypatch.setenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES", "4096")
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
@@ -114,6 +124,10 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         consumed = [
             r["value"] for r in rows if r.get("key") == "phase_resident_fock_actions"
         ]
+        host_bytes = [
+            r["value"] for r in rows if r.get("key") == "host_source_value_bytes"
+        ]
+        assert any(host_bytes) == (enabled and policy == "host")
         admitted = enabled and policy not in {"refused", "auto-refused"}
         # Fitted primary plus exact LR is an explicit composition candidate;
         # automatic selection must retain its existing fallback.
@@ -182,9 +196,15 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "1")
     monkeypatch.setenv(
         "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
-        "0x1555" if policy == "partial" else "0xfffffff",
+        "0x1555" if policy in {"partial", "host"} else "0xfffffff",
     )
     monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", str(8 << 30))
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
+        str(2 << 30) if policy == "host" else "0",
+    )
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES", "4096")
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK", "0xfffffff")
     if policy == "auto":
         for name in (
             "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
@@ -254,6 +274,9 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
             "capacity": ("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", "1"),
             "buckets": ("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK", "0x1"),
             "replay": ("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", "0"),
+            "host-capacity": ("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES", "0"),
+            "host-tile": ("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES", "8192"),
+            "host-buckets": ("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK", "0"),
         }[invalidate]
         monkeypatch.setenv(key, value)
         fallback, built, actions = execute(owner)
@@ -261,3 +284,13 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         assert fallback.iterations == 1 and abs(fallback.energy - cold.energy) < 1e-10
         np.testing.assert_allclose(fallback.forces, cold.forces, atol=1e-7, rtol=0)
     (tmp_path / "results.json").write_text(json.dumps(evidence, indent=2) + "\n")
+
+
+@pytest.mark.parametrize("invalidate", ["host-capacity", "host-tile", "host-buckets"])
+def test_host_range_policy_change_retires_warm_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, invalidate: str
+) -> None:
+    """Every host policy component participates in immutable warm-source identity."""
+    test_range_replay_reuses_values_and_falls_back_after_policy_change(
+        monkeypatch, tmp_path, "host", True, invalidate
+    )
