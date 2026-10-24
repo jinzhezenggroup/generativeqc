@@ -251,7 +251,7 @@ __global__ void canonical_jk_kernel(
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_census, double* range_exchange,
     std::conditional_t<MixedJ, float, double>* source_values, double* coulomb_correction,
-    double* exchange_correction, std::uint64_t* mixed_coulomb_work_count) {
+    double* exchange_correction, std::uint64_t* mixed_coulomb_work_count, std::size_t work_begin) {
   static_assert(!PairedRanges || Cartesian);
   static_assert(!MixedJ || !PairedRanges);
   const std::size_t dimension = static_cast<std::size_t>(batch.nbf);
@@ -259,13 +259,18 @@ __global__ void canonical_jk_kernel(
   const std::size_t physical_offset = static_cast<std::size_t>(system) * matrix;
   const std::size_t spin_offset = static_cast<std::size_t>(system) * 2U * matrix;
   const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
-  if (rows.prefix) work_count = rows.prefix[first_count - 1U];
+  // A host-cache tile owns only [work_begin, work_begin + work_count).
+  // Compact Schwarz rows must not expand it back to the entire bucket.
+  if (rows.prefix) {
+    const auto total = rows.prefix[first_count - 1U];
+    work_count = work_begin < total ? min(work_count, total - work_begin) : 0;
+  }
   unsigned long long candidates = 0, evaluated = 0;
   for (std::size_t work = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
        work < work_count; work += stride) {
     std::size_t first_local{}, second_local{};
-    canonical_pair_indices(work, first_count, second_count, same_bucket, rows, first_local,
-                           second_local);
+    canonical_pair_indices(work_begin + work, first_count, second_count, same_bucket, rows,
+                           first_local, second_local);
     if (first_local >= first_count) continue;
     if (work_census) ++candidates;
     const std::size_t first_pair =
@@ -378,7 +383,7 @@ __global__ void resident_canonical_jk_kernel(
     std::size_t second_count, bool same_bucket, std::size_t work_count, bool want_j, bool want_k,
     const SourceValue* source_values, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_census, double* coulomb_correction, double* exchange_correction,
-    double screening, const double* bounds) {
+    double screening, const double* bounds, std::size_t work_begin = 0) {
   const auto dimension = static_cast<std::size_t>(batch.nbf);
   const auto matrix = dimension * dimension;
   const auto physical_offset = static_cast<std::size_t>(system) * matrix;
@@ -388,8 +393,8 @@ __global__ void resident_canonical_jk_kernel(
   for (std::size_t work = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
        work < work_count; work += stride) {
     std::size_t first_local{}, second_local{};
-    canonical_pair_indices(work, first_count, second_count, same_bucket, rows, first_local,
-                           second_local);
+    canonical_pair_indices(work_begin + work, first_count, second_count, same_bucket, rows,
+                           first_local, second_local);
     const auto first_pair =
         rows.order ? rows.order[first_begin + first_local] : first_begin + first_local;
     const auto second_pair =
@@ -1083,7 +1088,7 @@ void launch_canonical_jk_source(
     std::conditional_t<MixedJ, float, double>* source_values = nullptr,
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max(),
-    std::uint64_t* mixed_coulomb_work_count = nullptr) {
+    std::uint64_t* mixed_coulomb_work_count = nullptr, std::size_t work_begin = 0) {
   const std::size_t work_count = std::min(
       same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count, work_limit);
   if (!work_count) return;
@@ -1099,7 +1104,7 @@ void launch_canonical_jk_source(
               same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
               exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
               range_exchange, source_values, coulomb_correction, exchange_correction,           \
-              mixed_coulomb_work_count);                                                        \
+              mixed_coulomb_work_count, work_begin);                                            \
     else                                                                                        \
       canonical_jk_kernel<order, false, Cartesian, PairedRanges, MixedJ>                        \
           <<<blocks, threads, 0, stream>>>(                                                     \
@@ -1107,7 +1112,7 @@ void launch_canonical_jk_source(
               same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
               exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
               range_exchange, source_values, coulomb_correction, exchange_correction,           \
-              mixed_coulomb_work_count);                                                        \
+              mixed_coulomb_work_count, work_begin);                                            \
     break
   switch (angular_order) {
     GENERATIVEQC_CANONICAL_JK_ORDER(0);
@@ -1167,29 +1172,27 @@ void launch_canonical_rsh_values_kernel(
       coulomb, full_exchange, work_census, range_exchange);
 }
 
-void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
-                                std::int32_t system, unsigned angular_order,
-                                const std::int32_t* pairs, CanonicalPairRows rows,
-                                std::size_t first_begin, std::size_t first_count,
-                                std::size_t second_begin, std::size_t second_count,
-                                bool same_bucket, bool want_j, bool want_k, bool unrestricted,
-                                DirectCoulombRange exchange_range, double exchange_omega,
-                                double screening, const double* bounds, const double* density,
-                                double* coulomb, double* exchange, std::uint64_t* work_census,
-                                double* source_values, double* coulomb_correction,
-                                double* exchange_correction, std::size_t work_limit) {
+void launch_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, bool want_j, bool want_k, bool unrestricted,
+    DirectCoulombRange exchange_range, double exchange_omega, double screening,
+    const double* bounds, const double* density, double* coulomb, double* exchange,
+    std::uint64_t* work_census, double* source_values, double* coulomb_correction,
+    double* exchange_correction, std::size_t work_limit, std::size_t work_begin) {
   if (cartesian)
     launch_canonical_jk_source<true>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,
         screening, bounds, density, coulomb, exchange, work_census, nullptr, source_values,
-        coulomb_correction, exchange_correction, work_limit);
+        coulomb_correction, exchange_correction, work_limit, nullptr, work_begin);
   else
     launch_canonical_jk_source<false>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,
         screening, bounds, density, coulomb, exchange, work_census, nullptr, source_values,
-        coulomb_correction, exchange_correction, work_limit);
+        coulomb_correction, exchange_correction, work_limit, nullptr, work_begin);
 }
 
 void launch_resident_canonical_jk_kernel(
@@ -1198,7 +1201,8 @@ void launch_resident_canonical_jk_kernel(
     std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
     bool unrestricted, const double* source_values, const double* density, double* coulomb,
     double* exchange, std::uint64_t* work_census, double* coulomb_correction,
-    double* exchange_correction, double screening, const double* bounds, std::size_t work_limit) {
+    double* exchange_correction, double screening, const double* bounds, std::size_t work_limit,
+    std::size_t work_begin) {
   const auto count = std::min(
       same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count, work_limit);
   if (!count) return;
@@ -1209,12 +1213,12 @@ void launch_resident_canonical_jk_kernel(
     resident_canonical_jk_kernel<true><<<blocks, threads, 0, stream>>>(
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
         same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
-        coulomb_correction, exchange_correction, screening, bounds);
+        coulomb_correction, exchange_correction, screening, bounds, work_begin);
   else
     resident_canonical_jk_kernel<false><<<blocks, threads, 0, stream>>>(
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
         same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
-        coulomb_correction, exchange_correction, screening, bounds);
+        coulomb_correction, exchange_correction, screening, bounds, work_begin);
 }
 
 void launch_canonical_mixed_resident_values_kernel(

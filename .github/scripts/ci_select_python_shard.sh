@@ -382,6 +382,12 @@ core_hotspots_a=(
   tests/python/test_cc_triples_tiles.py
 )
 core_hotspots_b=(
+  # Run 40127914199 completed core-c tests at 1798.9s. Moving these
+  # intact ~477-worker-second modules to core-a then exhausted its cold
+  # corrected-Lambda lane in run 40135163162; core-b finished in 14m37s.
+  # Keep their ordinary slots and all existing fresh-priority owners.
+  tests/python/test_correlation_convergence.py
+  tests/python/test_cpu_semilocal_force_contract.py
   tests/python/test_wb97mv_uks_hessian.py
   # The added restricted-CUDA test shifted this complete response file
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership

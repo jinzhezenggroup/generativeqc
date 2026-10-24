@@ -14,7 +14,13 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("displacement", [0.0, 0.001])
 @pytest.mark.parametrize(
     "mode,copies",
-    [("range-oracle", 1), ("range-mixed-oracle", 1), ("range-mixed-oracle", 4)],
+    [
+        ("range-oracle", 1),
+        ("range-mixed-oracle", 1),
+        ("range-mixed-oracle", 4),
+        ("range-host-oracle", 1),
+        ("range-host-oracle", 4),
+    ],
 )
 def test_resident_range_sources_match_independent_matrices(
     tmp_path: Path, native_cxx: NativeCxx, displacement: float, mode: str, copies: int
