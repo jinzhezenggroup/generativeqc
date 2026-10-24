@@ -346,6 +346,11 @@
       "owner": "bounded FP64 XC cross-product overflow proof",
       "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
       "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
+    },
+    "df-charge-partitions-20261024": {
+      "owner": "bounded automatic SM 12.0 DF charge-source partitions",
+      "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
+      "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
     }
   },
   "files": [
@@ -764,6 +769,14 @@
       "role": "source-build-test-and-execution-provenance",
       "bytes": 597596,
       "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
+    },
+    {
+      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "family": "df-charge-partitions-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
+      "bytes": 392256,
+      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

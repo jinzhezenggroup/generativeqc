@@ -2053,12 +2053,13 @@
         "src/scf/df_md_schedule_policy.hpp",
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "Candidate default permits at most 32 charge source partitions only on SM 12.0 angular classes with at least 8192 primitives. Complete partials must fit the existing dead orbital-potential allocation; other devices, short work and insufficient capacity retain one partition. Explicit 1..64 overrides remain owner-frozen. No new device allocation, screening, metric or precision change. Independent long-contraction, force, graph, sanitizer and complete endpoint qualification is pending.",
+      "rationale": "Candidate default permits at most 32 charge source partitions only on SM 12.0 angular classes with at least 8192 primitives. Complete partials must fit the existing dead orbital-potential allocation; other devices, short work and insufficient capacity retain one partition. Explicit 1..64 overrides remain owner-frozen. No new device allocation, screening, metric or precision change. Independent long-contraction, force, graph, resource and sanitizer gates pass. The retained SM 12.0 archive qualifies 242 complete calls; five paired water96 DF processes give r2SCAN-3c cold/warm gains of 18.817%/19.466%, while PBE/PBE0 have no measured gain. Both arms enable the optional validation GEMM feature. Seven-method Direct/DF Standard/Fast, moved and larger-size gates pass; no all-method GPU4 parity claim is made.",
       "revisit_condition": "Do not broaden devices, reduce the work threshold or promote performance claims without source-matched independent and complete endpoint qualification. Retain explicit rollback and constrained-capacity behavior.",
       "evidence": [
         "tests/python/test_df_md_schedule_policy.py",
         "tests/python/test_df_md_j_cuda.py",
-        ".agents/notes/proposed/2026-10-24-bounded-df-charge-partitions.md"
+        ".agents/notes/proposed/2026-10-24-bounded-df-charge-partitions.md",
+        "benchmarks:benchmarks/results/df-charge-partitions-20261024/README.md"
       ]
     }
   ]

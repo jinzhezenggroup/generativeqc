@@ -1,6 +1,6 @@
 # Candidate: bounded default DF charge partitions for long SM 12.0 traversals
 
-Status: proposed; default candidate under independent and endpoint qualification
+Status: proposed; bounded candidate qualified on the retained SM 12.0 domain
 Date: 2026-10-24
 
 ## Motivation and boundaries
@@ -38,3 +38,24 @@ Measured source and paired whole-endpoint evidence must remain explicit.
 Broader devices, shorter traversals or other partition counts require their own
 complete-endpoint evidence. Never infer useful speed from occupancy or a source
 count alone, and retain negative endpoints alongside successful observations.
+
+## Completed qualification
+
+The [retained archive](../../../benchmarks/results/df-charge-partitions-20261024/README.md)
+contains 242 independently qualified complete calls in 83 records. Five paired
+water96 DF processes per arm give r2SCAN-3c cold 48.213015 -> 39.140704 seconds
+and warm 13.893717 -> 11.189122 seconds, passing the 2%/MAD gate with matching
+iterations and Fock work. PBE/PBE0 do not improve; retain those negative results.
+Both arms enable the separate validation GEMM option, so these are not timings
+of GEMM-disabled defaults. Seven-method Standard/Fast Direct/DF, original/moved,
+and larger 108-atom endpoints all pass independent energy/full-force gates.
+The larger candidate remains slower than GPU4; all-method parity is unfinished.
+
+The full 188-case arithmetic suite and ten long-source partition/derivative
+cases pass. The final automatic-case racecheck uses the original scientific
+inputs and assertions with only the instrumentation child timeout extended to
+600 seconds; zero hazards/errors are reported. Original fixture-limit, timeout
+and overly strict diagnostic byte-comparison failures remain in the archive.
+Resource, graph, complete independent prepared/unprepared force and native
+sanitizer gates also pass. The production source is unchanged between the
+authenticated build and fixture-repair revisions.
