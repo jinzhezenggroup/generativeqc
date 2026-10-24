@@ -22,8 +22,10 @@ __pycache__/
 /benchmarks/results/**/*.log.gz
 /benchmarks/results/**/*.log.xz
 /benchmarks/results/**/*.log.zst
+/benchmarks/results/**/stdout
 /benchmarks/results/**/*.stdout
 /benchmarks/results/**/*.stdout.*
+/benchmarks/results/**/stderr
 /benchmarks/results/**/*.stderr
 /benchmarks/results/**/*.stderr.*
 /benchmarks/results/**/logs/
