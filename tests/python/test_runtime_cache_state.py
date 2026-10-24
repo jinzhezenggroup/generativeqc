@@ -24,13 +24,16 @@ class CacheStateTests(unittest.TestCase):
                 result = subprocess.run(
                     [
                         sys.executable,
-                        str(Path(driver.__file__)),
+                        "-m",
+                        "benchmarks.runtime_cache_state",
                         action,
                         option,
                         "missing-input.json",
                         "--output",
                         str(driver.ROOT / "benchmarks/results/forbidden-output"),
                     ],
+                    cwd=driver.ROOT,
+                    env={**os.environ, "PYTHONPATH": str(driver.ROOT / "python")},
                     capture_output=True,
                     text=True,
                     timeout=20,
