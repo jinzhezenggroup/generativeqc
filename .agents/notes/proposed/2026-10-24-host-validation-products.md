@@ -56,3 +56,28 @@ qualified as a whole. Compare selector 0/1 in the same binary, record build and
 dependency identities, and keep previous-build timings separate. Promotion still
 requires complete cold energy/analytic-force endpoints, work counts and repeated
 statistics on all relevant methods and geometries.
+
+## Independent stock-default qualification
+
+Frozen source `f088d3fcd30435c125a5b92422e4d91088884977` isolates this change
+on master `e85e5251e571f5b4a0008a19d83230d3ca8594e2`. It also fixes an existing
+resident KS test to query its diagnostic capability; no production behavior is
+added by that test repair. Main library SHA256 is
+`639ec53fd7786b909b53be2539724b3c1dc9ae6a85eb94578e4a29ec39bb1288`.
+
+All 328 calls pass independent energy and full-force gates: 240 paired calls,
+56 seven-method Standard/Fast Direct/DF matrix calls, and 32 PBE/3c moved and
+replay calls. Native ownership, resource, variational and graph checks pass;
+prepared/unprepared independent force tests and all prescribed sanitizer runs
+pass. Original build/harness failures remain distinct retained receipts.
+
+Five alternating stock-default pairs give cold gains of 2.122%/2.142% for PBE
+DF/Direct and 2.502%/2.777% for r2SCAN-3c DF/Direct. PBE0 improves
+1.421%/1.958%, below the predeclared 2%/MAD gate. No warm comparison passes.
+These are same-source/same-binary selector comparisons, independent of earlier
+combined AO/spatial/DF-partition experiments. The schedule stays default-off,
+and the wider Direct/DF cold goal against GPU4PySCF remains open.
+
+Complete byte-preserved receipts, source identities, reproduction commands and
+scope are in
+[`scf-validation-gemm-20261024`](../../../benchmarks/results/scf-validation-gemm-20261024/README.md).

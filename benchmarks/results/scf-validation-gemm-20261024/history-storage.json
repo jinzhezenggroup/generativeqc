@@ -1,0 +1,201 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "f088d3fcd30435c125a5b92422e4d91088884977",
+  "file_count": 24,
+  "total_bytes": 1331223,
+  "retention": "Complete original historical bytes retained losslessly. Original names can be restored from authenticated existing Git objects; no sample, work count, numerical gate, failure or exclusion changes.",
+  "files": [
+    {
+      "path": "benchmarks/results/generated-df-values-142/downselect.json",
+      "bytes": 25141,
+      "sha256": "d9330ab1a8c5da12fef901722bcaf94bd99d649bfa8e959b21938189792bcf92",
+      "stored_path": "benchmarks/results/generated-df-values-142/downselect.json.gz",
+      "stored_bytes": 3269,
+      "stored_sha256": "2e2a3bb5f6cb00549710f1487e2df3406d3809c8f16a853d7604500a80c5d810"
+    },
+    {
+      "path": "benchmarks/results/generated-df-values-142/source.json",
+      "bytes": 94586,
+      "sha256": "13ee79e8d59465dcdaf1f77a3f4e9d2a7f979aee2d8da15e53b35026fceeb956",
+      "stored_path": "benchmarks/results/generated-df-values-142/source.json.gz",
+      "stored_bytes": 8425,
+      "stored_sha256": "7ee591b1b97e1348b841a612ad00f15c9df149d3cb6f1994149fb29b5f9b49c0"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b1-none.json",
+      "bytes": 42260,
+      "sha256": "329c793d8880b5289a5134ddad1d9975c80706a5c08c254d1dd9cb547e8e8e1c",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b1-none.json.gz",
+      "stored_bytes": 9625,
+      "stored_sha256": "8b00793aa32cbc2c91ed9ac16c52cd5163a9e54a11dc851191dfbb464aff4f31"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-tetramer-def2-svp-spherical-b1-none.json",
+      "bytes": 30271,
+      "sha256": "68387974a3688ed18faf8f558ed658aa68550631ce5cca2c5cac4b2ea1cd86f7",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-tetramer-def2-svp-spherical-b1-none.json.gz",
+      "stored_bytes": 6748,
+      "stored_sha256": "2a47bd4afec6a7be2641bf6cd45914565475551f87aeab6ea8ac84909ec8c338"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/historical-prechange-direct/water-tetramer-def2-svp-spherical-b1-none.json",
+      "bytes": 30224,
+      "sha256": "61e2207f05dd61f03f49debd174ea0236e7e4df6a658ac9b5ec79887f95eff6d",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/historical-prechange-direct/water-tetramer-def2-svp-spherical-b1-none.json.gz",
+      "stored_bytes": 6664,
+      "stored_sha256": "e292728bee30de7a116f902c3b32d3c1e802dd63de4455a1ff86297672937182"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b1-forces-blas.json",
+      "bytes": 47386,
+      "sha256": "dd1cbe15e90a7ed120115361341a1c159ee1e59b28beed95225d5a247b1af9d1",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b1-forces-blas.json.gz",
+      "stored_bytes": 9098,
+      "stored_sha256": "4ae069c4bbdb951c3621f956af27e4f04985f74b44a74f93836a1bcd6e3d1b09"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b1-forces-serial.json",
+      "bytes": 47381,
+      "sha256": "8cd0a02dabd9b2a9ee37080833042e51d82c6b29988f333c76acbbbf75852738",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b1-forces-serial.json.gz",
+      "stored_bytes": 9117,
+      "stored_sha256": "3244b3d99f52f97446964216b00e218e479a6d59126f3f1a6b7a9c86f29d989b"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b1-energy-blas.json",
+      "bytes": 22118,
+      "sha256": "98d8ee25ddb13df1508b1ba926cfbed812e6755703b25ac53f973d3a297399a2",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b1-energy-blas.json.gz",
+      "stored_bytes": 3548,
+      "stored_sha256": "759b6dfb019a2843bb33ec1b50b5a0e5bb27fe95db72a830804a2df19a643af3"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b1-forces-blas.json",
+      "bytes": 24161,
+      "sha256": "3981a00e20e1684779035efef8f188730b2392cd82367a83b8a6e3ae2090074d",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b1-forces-blas.json.gz",
+      "stored_bytes": 3911,
+      "stored_sha256": "42cbb9036132b2a84a4f5f950946d7d993e78503b86e7d03f96ae8da2b157c37"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b4-energy-blas.json",
+      "bytes": 66103,
+      "sha256": "d1bb61f21f7b79346851bbd0c3d3173bd2bf8d6762c0d65fb7134061ca2a92f2",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/19ao-b4-energy-blas.json.gz",
+      "stored_bytes": 4550,
+      "stored_sha256": "161e5663304b43157a8574df6bafcd4e2764a4d7742642dedceedda5a49610db"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b1-forces-blas.json",
+      "bytes": 72709,
+      "sha256": "80d3a98eeb5f31df96b899d4292272c5c1dd05f5ab078abe253788e6d345ad44",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b1-forces-blas.json.gz",
+      "stored_bytes": 14735,
+      "stored_sha256": "ab6bf35e21923002b0b98ab0215bd7203cac82f32a86b82faed5efd58fa7bb79"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-energy-blas.json",
+      "bytes": 24070,
+      "sha256": "d8ca1f691606261c223e5a46b464f2646f4a9d7f70eb1153a07a88d43d34989d",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-energy-blas.json.gz",
+      "stored_bytes": 3831,
+      "stored_sha256": "17e2bbfeb8958457c933e7a80e6c4d9ffe136c7086dca62fbc3f1d1fff994141"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-forces-blas.json",
+      "bytes": 34726,
+      "sha256": "ef11ee0371939dc1c02dc189a283d4146158243c18fba544a0685036c7794260",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-forces-blas.json.gz",
+      "stored_bytes": 6192,
+      "stored_sha256": "f60e4cb35c4287ff87db024418b86509a77666feb977e03fe5bb7b708b39a61d"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-forces-serial.json",
+      "bytes": 34685,
+      "sha256": "8076ff97263cccdb95f01564675b2a5a86b75d818f1dfba51bb2b45b9e028a4f",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/96ao-b1-forces-serial.json.gz",
+      "stored_bytes": 6331,
+      "stored_sha256": "f5433f89ccfed639c71361e78448920fa4bb2f32b64d58ede7abf1c322f63a3a"
+    },
+    {
+      "path": "benchmarks/results/issue206-metric-gemv/measurements/input-qualification.json",
+      "bytes": 60215,
+      "sha256": "16f69121634c79469f56339094186624b729ae83d6cd41c425aa656f2d909989",
+      "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/input-qualification.json.gz",
+      "stored_bytes": 7520,
+      "stored_sha256": "ac241fcefb8ec6f59eb896c56562fd32036f6a16a8201a8b7df7e3f9e9b69f8f"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-hexadecamer-2s4-def2-svp-spherical.json",
+      "bytes": 86715,
+      "sha256": "cbd546f66d0b1001a805c33ec90e79eadff492d382a52ae57fb65261eccf90ad",
+      "stored_path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-hexadecamer-2s4-def2-svp-spherical.json.gz",
+      "stored_bytes": 15942,
+      "stored_sha256": "dc5f0453608832f57b96794d44e952adbbe2f68b22a1450c8d4b00366286ab8d"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-octamer-s4-def2-svp-spherical.json",
+      "bytes": 60488,
+      "sha256": "0cae965245b721378805130a7344a9bf0f47bbde9ee5f0eb004fd106023ef479",
+      "stored_path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-octamer-s4-def2-svp-spherical.json.gz",
+      "stored_bytes": 9694,
+      "stored_sha256": "bb14a3879d0a19b411ae2b45965359722e4acf7100ce4c41da3f73392479a2bd"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-tetramer-def2-svp-spherical.json",
+      "bytes": 47278,
+      "sha256": "6cc448cc449196b025b8cd0878044b021a113332990c22b1ff85e1adb08f1a0d",
+      "stored_path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-tetramer-def2-svp-spherical.json.gz",
+      "stored_bytes": 6947,
+      "stored_sha256": "45bf0bba7e5b3ea39423abf46926ab50f1875b8fe3e86f4d9155d56d5484f609"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/profiles/192-response-profile.json",
+      "bytes": 54129,
+      "sha256": "4a788a2e6a692f49019ae527dc0943b5cadfad373506f114c97c0ed408b40729",
+      "stored_path": "benchmarks/results/issue377-379-df/profiles/192-response-profile.json.gz",
+      "stored_bytes": 7810,
+      "stored_sha256": "393f045171b7df1dadb386a6d78eb8526260222d5507b95330670e16bbfcd748"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/profiles/384-response-profile.json",
+      "bytes": 61205,
+      "sha256": "cf76b2c3ab883f8bb80f0a2b1013a00ed3d9e1fe4e50be5b37207d873cdb3d68",
+      "stored_path": "benchmarks/results/issue377-379-df/profiles/384-response-profile.json.gz",
+      "stored_bytes": 10687,
+      "stored_sha256": "27917d07d581afe7e6d557f121830796507616741aa5e4b783da2d9e7e50e57e"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/profiles/768-exchange-profile.json",
+      "bytes": 74871,
+      "sha256": "06356960a40aee86388209358eba32b256426c79139a845957006435b79dcbe2",
+      "stored_path": "benchmarks/results/issue377-379-df/profiles/768-exchange-profile.json.gz",
+      "stored_bytes": 13514,
+      "stored_sha256": "4fee0d0861dd3ebf5df2a739df04babc26965d53b4a62f503f87f01786fcd75f"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/profiles/768-response-profile.json",
+      "bytes": 78785,
+      "sha256": "c6f77ed380328745411a851645803098460590a8797f158be40020339d03085b",
+      "stored_path": "benchmarks/results/issue377-379-df/profiles/768-response-profile.json.gz",
+      "stored_bytes": 13645,
+      "stored_sha256": "87efff48e072e081a5b302b5905661b84bc6f5505c4bef4680830245d13a3a97"
+    },
+    {
+      "path": "benchmarks/results/issue394-batch-rys/candidates.json",
+      "bytes": 97045,
+      "sha256": "827772f9145953c07640ffdf3e1cd06ba0bbf67da82b548447bbf526105d6b39",
+      "stored_path": "benchmarks/results/issue394-batch-rys/candidates.json.gz",
+      "stored_bytes": 11243,
+      "stored_sha256": "69758482249bc7b4c35b11b601f06bd638e62f79d7c580a333dc5f2aa49dcc43"
+    },
+    {
+      "path": "benchmarks/results/issue435-jkfit-rys/equal-768.json",
+      "bytes": 114671,
+      "sha256": "c49113d035ccf8632f501a1fceeb365d4d2f1522f927cccb5a713c2e78415d0b",
+      "stored_path": "benchmarks/results/issue435-jkfit-rys/equal-768.json.gz",
+      "stored_bytes": 17896,
+      "stored_sha256": "d5499fba644123a54e0f3ed97051181960f42f4d3eb876a310c07eafe7d49e3a"
+    }
+  ]
+}
