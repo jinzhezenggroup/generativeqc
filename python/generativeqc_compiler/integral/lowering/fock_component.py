@@ -425,9 +425,6 @@ __device__ __forceinline__ void generated_dppp_shell_class_fock_persistent(
   __shared__ std::uint32_t shared_task_index;
   while (true) {{
     if (threadIdx.x == 0U) shared_task_index = atomicAdd(task_head, 1U);
-    // Reconverge every warp before the CTA publishes its next queue claim.
-    // The component worker may return through lane-dependent control flow.
-    __syncwarp();
     __syncthreads();
     const std::uint32_t task_index = shared_task_index;
     if (task_index >= *task_count) return;
@@ -435,8 +432,6 @@ __device__ __forceinline__ void generated_dppp_shell_class_fock_persistent(
         tasks, primitive_pairs, primitive_pair_offsets, ao_coefficients,
         atom_positions, screening_tolerance, schwarz_bounds, density, fock,
         static_cast<std::size_t>(*task_offset + task_index));
-    // Keep inactive component lanes in the same dynamic queue iteration.
-    __syncwarp();
     __syncthreads();
   }}
 }}
