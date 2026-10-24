@@ -517,9 +517,18 @@ def test_no_checkpoint_cold_run_remains_available_after_clear(
     DEVICE != "cuda", reason="real-GPU cross-backend test runs under Slurm"
 )
 @pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("explicit_controls", [False, True])
 def test_backend_independent_cpu_cuda_restart_both_directions(
-    tmp_path: typing.Any, fitted: typing.Any
+    tmp_path: typing.Any, fitted: typing.Any, explicit_controls: bool
 ) -> None:
+    # CUDA RHF has qualified defaults distinct from the strict CPU defaults.
+    # Matching explicit controls permit exact restart; differing defaults must
+    # retain conservative classification and require an explicit warm import.
+    controls = (
+        {"energy_tolerance": 1e-10, "density_tolerance": 1e-8}
+        if explicit_controls
+        else {}
+    )
     path = tmp_path / "state"
     for source_device, target_device in (("cpu", "cuda"), ("cuda", "cpu")):
         for method, charge, mult in (("rhf", 0, 1), ("uhf", 1, 2)):
@@ -527,6 +536,7 @@ def test_backend_independent_cpu_cuda_restart_both_directions(
                 device=source_device,
                 method=method,
                 density_fitting=source_device if fitted else "none",
+                **controls,
             ).prepare_batch([H2], charges=[charge], multiplicities=[mult]) as source:
                 cold = source.execute(strict=True).items[0]
                 source.save_checkpoint(path)
@@ -534,11 +544,17 @@ def test_backend_independent_cpu_cuda_restart_both_directions(
                 device=target_device,
                 method=method,
                 density_fitting=target_device if fitted else "none",
+                **controls,
             ).prepare_batch([H2], charges=[charge], multiplicities=[mult]) as target:
-                assert (
-                    target.load_checkpoint(path)["items"][0]["compatibility"]
-                    == "exact_restart"
-                )
+                if explicit_controls or method == "uhf":
+                    report = target.load_checkpoint(path)
+                    expected = "exact_restart"
+                else:
+                    with pytest.raises(CheckpointError, match="numerical controls"):
+                        target.load_checkpoint(path)
+                    report = target.load_checkpoint(path, allow_warm=True)
+                    expected = "warm_start_compatible"
+                assert report["items"][0]["compatibility"] == expected
                 warm = target.execute(strict=True).items[0]
             assert warm.executed_backend == (
                 "cuda" if target_device == "cuda" else "cpu_reference"

@@ -174,7 +174,8 @@
         "tests/python/test_range_resident_ks_cuda.py",
         "issue:#2426",
         ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
-        ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md"
+        ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md",
+        ".agents/notes/proposed/2026-10-24-fitted-primary-exact-range-cache.md"
       ]
     },
     {
@@ -964,7 +965,7 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32\u20131024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
+      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32–1024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
       "revisit_condition": "Refine the bounded scatter and residency domain with additional devices, methods and complete endpoints rather than molecule/device whitelists. Do not infer large-system or universal profitability from the small-domain positive population; retain zero opt-out, original selected work, numerical gates and resource fallback.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-08-xc-compact-contraction-batches.md",
@@ -989,7 +990,7 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
       "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
@@ -2030,15 +2031,16 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/application_precision.hpp"
       ],
-      "rationale": "The qualified automatic policy selects a 1e-8 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64\u2013768 AOs and 2\u201396 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; 180 independent E/F endpoint checks pass.",
+      "rationale": "The qualified automatic policy selects a 1e-7 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64–768 AOs and 2–96 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; Two independently source-bound cohorts totaling 366 E/F endpoints pass against the 1e-8 parent policy, including repeated qualification after integrating master; source values fall further without increasing sampled cold strict work.",
       "revisit_condition": "Extend the automatic model, size or resource domain only with repeated complete cold/warm/moved/reset endpoints, independent energy/force gates, semantic source-work and precision counts, and bounded-resource fallbacks. Preserve fresh strict closure, opt-out and the measured gain/nonregression floors.",
       "evidence": [
         "tests/python/test_ks_mixed_source_policy.py",
         "docs:docs/developer/ks_diagnostics.md",
-        "note:.agents/notes/implemented/performance/2026-10-23-fast-provisional-source-screening.md",
+        "note:.agents/notes/implemented/performance/2026-10-24-fast-proposal-source-work.md",
         "tests/python/test_ks_mixed_source_cuda.py",
         "tests/python/test_ks_fast_strict_tail_cuda.py",
-        "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
+        "benchmarks:benchmarks/results/fast-source-floor-20261024/README.md",
+        "tests/python/test_fast_source_floor_replay.py"
       ]
     },
     {
@@ -2067,6 +2069,29 @@
         "tests/python/test_xc_occupied_default_cuda.py",
         "note:.agents/notes/implemented/performance/2026-10-24-automatic-occupied-xc.md",
         "benchmarks:benchmarks/results/occupied-xc-default-20261024/README.md"
+      ]
+    },
+    {
+      "id": "scf.df-md-charge-partitions",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_MD_CHARGE_SPLITS"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/cuda/df_md_owner.cu",
+        "src/scf/df_md_schedule_policy.hpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Candidate default permits at most 32 charge source partitions only on SM 12.0 angular classes with at least 8192 primitives. Complete partials must fit the existing dead orbital-potential allocation; other devices, short work and insufficient capacity retain one partition. Explicit 1..64 overrides remain owner-frozen. No new device allocation, screening, metric or precision change. Independent long-contraction, force, graph, resource and sanitizer gates pass. The retained SM 12.0 archive qualifies 242 complete calls; five paired water96 DF processes give r2SCAN-3c cold/warm gains of 18.817%/19.466%, while PBE/PBE0 have no measured gain. Both arms enable the optional validation GEMM feature. Seven-method Direct/DF Standard/Fast, moved and larger-size gates pass; no all-method GPU4 parity claim is made.",
+      "revisit_condition": "Do not broaden devices, reduce the work threshold or promote performance claims without source-matched independent and complete endpoint qualification. Retain explicit rollback and constrained-capacity behavior.",
+      "evidence": [
+        "tests/python/test_df_md_schedule_policy.py",
+        "tests/python/test_df_md_j_cuda.py",
+        ".agents/notes/proposed/2026-10-24-bounded-df-charge-partitions.md",
+        "benchmarks:benchmarks/results/df-charge-partitions-20261024/README.md"
       ]
     }
   ]
