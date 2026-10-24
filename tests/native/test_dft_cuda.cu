@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "dft/cuda_xc.hpp"
+#include "dft/grid_spatial_order.hpp"
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -896,7 +897,7 @@ void variational_and_state(const AoBasis& basis, const MolecularGrid& grid,
 void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned functional,
                    bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr,
                    std::size_t point_batch_tiles = 1, bool compact = false, bool ragged = false,
-                   bool spatial = false) {
+                   unsigned spatial = 0) {
   Fixture captured(basis, grid, functional, unrestricted, tile, CudaXcAoPrecision::Fp64, false, 1.0,
                    1.0, maps, spatial, spatial);
   if (spatial) {
@@ -904,13 +905,13 @@ void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned fun
     const auto host_bytes =
         bytes + (2 * grid.point_count() + 4 * basis.natom) * sizeof(std::size_t);
     const auto before = captured.plan->grid_view();
-    require(!captured.plan->prepare_spatial_grid(grid, host_bytes, bytes - 1),
+    require(!captured.plan->prepare_spatial_grid(grid, host_bytes, bytes - 1, spatial == 2),
             "spatial grid admitted insufficient device allowance");
-    require(!captured.plan->prepare_spatial_grid(grid, host_bytes - 1, bytes),
+    require(!captured.plan->prepare_spatial_grid(grid, host_bytes - 1, bytes, spatial == 2),
             "spatial grid admitted insufficient host allowance");
     require(captured.plan->grid_view().points == before.points,
             "refused spatial preparation changed the original grid");
-    require(captured.plan->prepare_spatial_grid(grid, host_bytes, bytes),
+    require(captured.plan->prepare_spatial_grid(grid, host_bytes, bytes, spatial == 2),
             "spatial grid exact resource admission failed");
     require(captured.plan->spatial_grid_device_bytes() == bytes &&
                 captured.plan->canonical_grid_view().points == before.points &&
@@ -921,7 +922,7 @@ void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned fun
             "spatial grid AO selection failed");
     bool rejected = false;
     try {
-      captured.plan->prepare_spatial_grid(grid, host_bytes, bytes);
+      captured.plan->prepare_spatial_grid(grid, host_bytes, bytes, spatial == 2);
     } catch (const std::logic_error&) {
       rejected = true;
     }
@@ -1125,9 +1126,27 @@ int main(int argc, char** argv) {
       const auto molecule = system(2, true);
       const AoBasis basis(molecule);
       const auto grid = MolecularGrid::from_cuda(molecule, {1, 5, 3, 7, 3, 1e-12}, 0, true);
+      // Exact permutation and repeatability cover one-point leaves, tails and
+      // an oversized tile independently of CUDA's numerical comparison below.
+      for (const auto tile : {std::size_t{1}, std::size_t{33}, grid.point_count() + 1}) {
+        auto order = bisected_grid_order(grid, tile);
+        require(order == bisected_grid_order(grid, tile), "unstable spatial permutation");
+        std::sort(order.begin(), order.end());
+        for (std::size_t p = 0; p < order.size(); ++p)
+          require(order[p] == p, "spatial permutation dropped or duplicated a point");
+      }
+      bool bad_tile = false;
+      try {
+        (void)bisected_grid_order(grid, 0);
+      } catch (const std::invalid_argument&) {
+        bad_tile = true;
+      }
+      require(bad_tile, "spatial permutation accepted a zero tile");
       for (unsigned functional : {1U, 2U})
         for (bool unrestricted : {false, true})
-          graph_capture(basis, grid, functional, unrestricted, 33, nullptr, 3, true, true, true);
+          for (unsigned spatial : {1U, 2U})
+            graph_capture(basis, grid, functional, unrestricted, 33, nullptr, 3, true, true,
+                          spatial);
       std::cout << "CUDA spatial grid: independent CPU E/V, changed-density replay, tails, "
                    "canonical force view and resource refusal passed\n";
       return 0;

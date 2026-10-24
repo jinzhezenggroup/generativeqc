@@ -1,5 +1,10 @@
 {
   "families": {
+    "h100-paper-environment-20261024": {
+      "owner": "#2726 H100 environment/setup source inventory",
+      "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
+      "review_document": "benchmarks/results/h100-paper-environment-20261024/README.md"
+    },
     "ks-resident-final-validation-default-20261011": {
       "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
@@ -89,6 +94,11 @@
       "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
       "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
       "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md"
+    },
+    "xc-spatial-bisection-20261023": {
+      "owner": "Explicit spatial bisection complete energy and force endpoints",
+      "reason": "Lossless all-repeat numerical vectors, paired and moved endpoints, authenticated source delta and compiler/cache/device validation. Historical endpoint receipts compact losslessly; caps unchanged.",
+      "review_document": "benchmarks/results/xc-spatial-bisection-20261023/README.md"
     },
     "spatial-density-sources": {
       "owner": "spatial-density-sources",
@@ -376,14 +386,25 @@
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
-    },
-    "h100-paper-environment-20261024": {
-      "owner": "#2726 H100 environment/setup source inventory",
-      "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
-      "review_document": "benchmarks/results/h100-paper-environment-20261024/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
+      "family": "h100-paper-environment-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
+      "bytes": 542228,
+      "sha256": "591f5808dccf9e5e8189744fb46d01995cc50986d7aa22b514cbec4241829bad"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/hf-source-inventory.json.xz",
+      "family": "h100-paper-environment-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
+      "bytes": 541844,
+      "sha256": "12b9b745a0cd36d737f0d910369e8c9fc83cfca4333e43f6a1fb4a7960c1ec25"
+    },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
       "family": "bounded-dft-schedules-2475-2479",
@@ -697,6 +718,14 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
+      "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",
+      "family": "xc-spatial-bisection-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 501368,
+      "sha256": "b9a165ea339ae5a3cfe7af3836a6ec6651b7c1eabd2d6ce68454c4dec6983750"
+    },
+    {
       "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
       "family": "r2scan3c-final-validation-20261015",
       "bytes": 185084,
@@ -863,22 +892,6 @@
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
       "bytes": 865196,
       "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
-    },
-    {
-      "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
-      "family": "h100-paper-environment-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
-      "bytes": 542228,
-      "sha256": "591f5808dccf9e5e8189744fb46d01995cc50986d7aa22b514cbec4241829bad"
-    },
-    {
-      "path": "benchmarks/results/h100-paper-environment-20261024/hf-source-inventory.json.xz",
-      "family": "h100-paper-environment-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
-      "bytes": 541844,
-      "sha256": "12b9b745a0cd36d737f0d910369e8c9fc83cfca4333e43f6a1fb4a7960c1ec25"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
