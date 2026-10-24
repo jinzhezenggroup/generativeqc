@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import lzma
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,22 @@ from generativeqc_compiler.common.evidence import (
 )
 
 from tools.generativeqc_validation.publication import validate_publication
+
+
+def require_unoptimized_python() -> None:
+    # Assertions are scientific gates; subprocesses also inherit this environment.
+    if (
+        not __debug__
+        or sys.flags.optimize
+        or os.environ.get("PYTHONOPTIMIZE", "") not in ("", "0")
+    ):
+        raise RuntimeError(
+            "Scientific verification requires unoptimized Python; "
+            "omit -O/-OO and unset PYTHONOPTIMIZE"
+        )
+
+
+require_unoptimized_python()
 
 HERE = Path(__file__).parent.resolve()
 
@@ -31,6 +48,7 @@ def compressed(path: Path, data: dict) -> None:
 
 
 def main() -> None:
+    require_unoptimized_python()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path, required=True)
     args = parser.parse_args()

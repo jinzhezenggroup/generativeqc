@@ -5,11 +5,29 @@ import hashlib
 import json
 import lzma
 import math
+import os
 import subprocess
+import sys
 import types
 from pathlib import Path
 
 import numpy as np
+
+
+def require_unoptimized_python() -> None:
+    # Assertions are scientific gates; subprocesses also inherit this environment.
+    if (
+        not __debug__
+        or sys.flags.optimize
+        or os.environ.get("PYTHONOPTIMIZE", "") not in ("", "0")
+    ):
+        raise RuntimeError(
+            "Scientific verification requires unoptimized Python; "
+            "omit -O/-OO and unset PYTHONOPTIMIZE"
+        )
+
+
+require_unoptimized_python()
 
 BASE = "334e7f489870dccc22ae8864c01f2353aa9689a4"
 ENERGY = "benchmarks/results/cbs-independent-energy-20261023"
@@ -259,6 +277,7 @@ def projection_errors(
 
 
 def main() -> None:
+    require_unoptimized_python()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)

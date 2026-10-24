@@ -57,6 +57,13 @@ failed executions and absent terminal proof cannot satisfy strict verification.
 
 Run host input/force-sign negative checks:
 
+Replay, verification and publication require unoptimized Python with
+`PYTHONOPTIMIZE` unset or `0`. They refuse `-O`, `-OO` and inherited optimization
+at import and before entry-point evidence I/O, because assertions enforce the
+scientific gates. Subprocess regressions cover these refusals before retained
+files can be read, restored or overwritten; this is an offline reader repair
+and requires no new scientific calls.
+
 ```powershell
 $env:PYTHONPATH='.;python'
 python benchmarks/results/cbs-independent-forces-20261024/test_replay.py

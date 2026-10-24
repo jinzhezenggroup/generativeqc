@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import json
 import lzma
+import os
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,98 @@ spec = importlib.util.spec_from_file_location(
 )
 replay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(replay)
+
+
+class OptimizedModeTests(unittest.TestCase):
+    def test_optimized_entry_import_and_inherited_environment_refuse_before_io(
+        self,
+    ) -> None:
+        family = Path(__file__).resolve().parent
+        repo = family.parents[2]
+        harness = """
+import importlib.util, os, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('guard_probe', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+if sys.argv[2] != 'import':
+    os.environ['PYTHONOPTIMIZE'] = sys.argv[2]
+    def forbidden(*args, **kwargs):
+        raise RuntimeError('Evidence I/O reached before optimization refusal')
+    Path.read_bytes = forbidden
+    import subprocess
+    subprocess.run = subprocess.check_output = forbidden
+    sys.argv = [sys.argv[1], *sys.argv[3:]]
+    module.main()
+"""
+        for name in ("replay.py", "verify.py", "publish.py"):
+            for mode, flag, optimize in (
+                ("direct", "-O", None),
+                ("direct", "-OO", None),
+                ("direct", None, "1"),
+                ("direct", None, "2"),
+                ("import", "-O", None),
+                ("import", "-OO", None),
+                ("import", None, "1"),
+                ("import", None, "2"),
+                ("late-env", None, "1"),
+                ("late-env", None, "2"),
+            ):
+                with (
+                    self.subTest(name=name, mode=mode, flag=flag, optimize=optimize),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    root = Path(directory)
+                    script = root / name
+                    script.write_bytes((family / name).read_bytes())
+                    for retained in (
+                        "publication.json",
+                        "comparison.json.xz",
+                        "evidence.json.xz",
+                        "inputs.json.xz",
+                    ):
+                        (root / retained).write_bytes(b"retained original sentinel\n")
+                    before = {p.name: p.read_bytes() for p in root.iterdir()}
+                    args = (
+                        ["--working-tree"]
+                        if name == "verify.py"
+                        else ["--raw", str(root / "raw")]
+                    )
+                    if name == "replay.py":
+                        args += ["--output", str(root / "comparison.json.xz")]
+                    env = os.environ.copy()
+                    env.pop("PYTHONOPTIMIZE", None)
+                    env["PYTHONDONTWRITEBYTECODE"] = "1"
+                    env["PYTHONPATH"] = os.pathsep.join(
+                        (str(repo), str(repo / "python"))
+                    )
+                    if optimize and mode != "late-env":
+                        env["PYTHONOPTIMIZE"] = optimize
+                    command = [sys.executable, "-B"] + ([flag] if flag else [])
+                    if mode == "direct":
+                        command += [str(script), *args]
+                    else:
+                        command += [
+                            "-c",
+                            harness,
+                            str(script),
+                            optimize if mode == "late-env" else "import",
+                            *args,
+                        ]
+                    process = subprocess.run(
+                        command,
+                        check=False,
+                        cwd=root,
+                        env=env,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    self.assertNotEqual(process.returncode, 0)
+                    self.assertIn(b"requires unoptimized Python", process.stderr)
+                    self.assertNotIn(b"PASS", process.stdout)
+                    self.assertEqual(
+                        {p.name: p.read_bytes() for p in root.iterdir()}, before
+                    )
 
 
 class ReplayTests(unittest.TestCase):

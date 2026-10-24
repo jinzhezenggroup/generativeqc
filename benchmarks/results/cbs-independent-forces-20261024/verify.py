@@ -5,6 +5,7 @@ import importlib.util
 import json
 import lzma
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,22 @@ from pathlib import Path
 
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.retention import safe_relative
+
+
+def require_unoptimized_python() -> None:
+    # Assertions are scientific gates; subprocesses also inherit this environment.
+    if (
+        not __debug__
+        or sys.flags.optimize
+        or os.environ.get("PYTHONOPTIMIZE", "") not in ("", "0")
+    ):
+        raise RuntimeError(
+            "Scientific verification requires unoptimized Python; "
+            "omit -O/-OO and unset PYTHONOPTIMIZE"
+        )
+
+
+require_unoptimized_python()
 
 PREFIX = "benchmarks/results/cbs-independent-forces-20261024"
 
@@ -32,6 +49,7 @@ def equivalent(actual: object, expected: object) -> bool:
 
 
 def main() -> None:
+    require_unoptimized_python()
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--revision", default="HEAD")
