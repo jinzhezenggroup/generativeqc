@@ -390,6 +390,10 @@ core_hotspots_b=(
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
+  # Runs 40096730696 / 40100233070 exhausted core-a while core-c
+  # finished in 19m16s / 25m46s. Preserve this complete ~250-worker-second
+  # module and its ordinary slot; only give it a stable lighter owner.
+  tests/python/test_range_separated_df.py
   # Run 39908441593 exhausted core-b at 99% while core-c finished in
   # 15m48s. Move the complete 296-worker-second Lambda reuse module and
   # the queue census that only started at minute 29; retain modulo slots.
