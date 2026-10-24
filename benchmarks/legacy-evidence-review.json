@@ -372,6 +372,11 @@
       "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
       "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
     },
+    "pbe0-ao-batch-capacity-20261024": {
+      "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
+      "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
+      "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
+    },
     "fast-source-floor-20261024": {
       "owner": "Fast hybrid proposal-source floor refinement",
       "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
@@ -850,6 +855,14 @@
       "role": "source-build-test-and-execution-provenance",
       "bytes": 597596,
       "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
+    },
+    {
+      "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
+      "family": "pbe0-ao-batch-capacity-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
+      "bytes": 865196,
+      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
     },
     {
       "path": "benchmarks/results/fast-source-floor-20261024/qualification.json.xz",

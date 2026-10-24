@@ -842,7 +842,7 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_point_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests up to 32 independent original XC tiles within an additional allowance of 32 MiB per density-product jet (32/128 MiB for one/four jets). Explicit byte caps are exact, and automatic allocation rejection retries the original 32-MiB allowance. Compiler residency admission and the shared numeric resource ledger retain one-tile execution on tiny/response/mixed/resource-rejected domains; explicit zero/one tile or zero-byte overrides retain the incumbent. Independent E/V and complete cold/warm/moved E/F gates qualify the policy without added per-build AO/jet/contraction work. Point algebra and ordered accumulation are unchanged.",
+      "rationale": "Ordinary native KS requests up to 32 independent original XC tiles within an additional allowance of 32 MiB times the larger AO/density-product jet count (32 MiB when both are one, 128 MiB when either is four). GGA AO panels therefore retain capacity even with one density-product jet. Explicit byte caps are exact, and automatic allocation rejection retries the original 32-MiB allowance. Compiler residency admission and the shared numeric resource ledger retain one-tile execution on tiny/response/mixed/resource-rejected domains; explicit zero/one tile or zero-byte overrides retain the incumbent. Independent E/V and complete cold/warm/moved E/F gates qualify the policy without added per-build AO/jet/contraction work. Point algebra and ordered accumulation are unchanged.",
       "revisit_condition": "Refine resource/profitability admission using additional devices and workloads, not device or molecule-size whitelists. Retain opt-out, constrained-memory fallback and ordered E/V semantics. The small cold population, differing cold trajectories, hardware-counter permissions and separate #2072 composition remain disclosed follow-up qualification, not claims of universal profitability.",
       "evidence": [
         "issue:#2073",
@@ -850,6 +850,7 @@
         "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batches.md",
         "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md",
         "note:.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md",
+        "note:.agents/notes/implemented/performance/2026-10-24-xc-capacity-by-live-panels.md",
         "docs:docs/developer/xc_native_cuda.md"
       ]
     },
