@@ -1,14 +1,37 @@
 """Execute native host admission with CUDA side effects explicitly stubbed out."""
 
 import re
-import shutil
 import subprocess
 import typing
 from pathlib import Path
 
 import pytest
 
+if typing.TYPE_CHECKING:
+    from conftest import NativeCxx
+
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _host_becke_dependencies() -> str:
+    """Keep extracted owners bound to the real generated representation and policy."""
+    from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
+    from generativeqc_compiler.xc.grid_native import (
+        emit_grid_adjoint,
+        emit_grid_partials,
+    )
+    from generativeqc_compiler.xc.grid_phased import emit_phased_becke
+
+    return (
+        "#include <cstdlib>\n"
+        + '#include "'
+        + (ROOT / "src/dft/becke_scaled_policy.hpp").as_posix()
+        + '"\n'
+        + emit_grid_adjoint()
+        + emit_grid_partials()
+        + emit_phased_becke()
+        + emit_binary_scaled_becke()
+    )
 
 
 def _block(source: str, marker: str) -> str:
@@ -27,16 +50,14 @@ def _block(source: str, marker: str) -> str:
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0"))
 def test_native_task_budget_is_per_page_not_cumulative(
-    tmp_path: Path, method: str
+    tmp_path: Path, method: str, native_cxx: "NativeCxx"
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler required")
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     pieces = [
         _block(header, "struct Owner {") + ";",
         "template <class F>\n" + _block(header, "int guarded("),
         _block(header, "void check("),
+        _block(header, "void discard_geometry("),
     ]
     launches = 0
     for name in ("stationary_reset", "stationary_tasks", "stationary_nuclear"):
@@ -63,19 +84,16 @@ def test_native_task_budget_is_per_page_not_cumulative(
     )
     layout = _runtime_layout_cuda(plan).replace("__host__ __device__", "")
     source.write_text(
-        PREAMBLE
+        _host_becke_dependencies()
+        + PREAMBLE
         + layout
         + "using namespace generativeqc_stationary_cuda;\n"
         + "\n".join(pieces)
         + MAIN
     )
     binary = tmp_path / "admission"
-    subprocess.run(
-        [compiler, "-std=c++17", "-O2", str(source), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    native_cxx.build_executable(
+        [source], binary, compile_args=["-std=c++17", "-O2"], compile_timeout=60
     )
     result = subprocess.run(
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
@@ -228,10 +246,12 @@ PREAMBLE = r"""
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <new>
 #include <stdexcept>
 using std::size_t;
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 namespace generativeqc_stationary_cuda {}
-namespace generativeqc_grid_adjoint { struct CenterPair; }
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
   explicit operator bool() const { return false; }
@@ -246,6 +266,7 @@ void error_text(char* out,size_t size,const char* message) {
 }
 void cuda_check(int) {}
 int cudaMemsetAsync(void*,int,size_t,void*) { return 0; }
+int cudaStreamSynchronize(void*) { return 0; }
 bool fail_finish=false;
 template<class T> void profile_record(T&,cudaEvent_t,void*) {}
 template<class T> void profile_elapsed(T&,double&,cudaEvent_t,cudaEvent_t) {}
@@ -265,9 +286,12 @@ int main() {
   int64_t task[9]{0,0,2,-1,0,1,-1,-1,9000000};
   auto reset=[&](){return stationary_reset(&p,xyz,density,weighted,0,error,sizeof(error));};
   auto page=[&](){return stationary_tasks(&p,task,charges,1,error,sizeof(error));};
+  p.geometry_pending=true;
+  p.geometry_stream=reinterpret_cast<void*>(1);
   if(reset() || page() || page()) {
     std::fprintf(stderr,"legal bounded pages rejected: %s\n",error); return 1;
   }
+  if(p.geometry_pending || p.geometry_stream || p.synchronizations!=1) return 17;
   if(p.primitive_count!=18000000) return 2;
   task[8]=16000001;
   if(page()==0 || !p.failed || p.primitive_count!=18000000) return 3;
@@ -294,5 +318,19 @@ int main() {
     task[1]=source;
     if(page()==0 || !p.failed || p.primitive_count!=0) return 13;
   }
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw DeviceAllocationError("device OOM");})!=2 || !p.failed)
+    return 14;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::bad_alloc();})!=3 || !p.failed) return 15;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw DeviceRuntimeError("driver failure");})!=4 || !p.failed)
+    return 16;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::range_error("invalid numerical source");})!=5 || !p.failed)
+    return 17;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::invalid_argument("stale proof");})!=1 || !p.failed)
+    return 18;
 }
 """

@@ -7,34 +7,38 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 597414,
-      "sha256": "871bf7a8f09c92fb08ab413e7048445c92c2f9ff9fbf676a74c7de4b079cbc16",
+      "bytes": 260076,
+      "sha256": "db62aeb3120ef84b8986101e83063104cf1b5e95d0c792929833379c215745d1",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete primary normalized 960-endpoint numerical/timing observations, individual process outputs and logs, all-repeat errors, provenance and frozen inputs; only the byte-exact reconstructible duplicate observations aggregate is omitted."
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 343092,
-      "sha256": "75854daee5495f7346cc4c8f2c110ea3ea6145caf2d73435cc371fe23f8f636c",
+      "bytes": 141068,
+      "sha256": "45f32b74c895322b951bb3c58ed1056247745273739f50f2009dcd3ff288892e",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
+      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign.",
+      "decoded_bytes": 6022366,
+      "decoded_sha256": "87b600377291255bf59c2ae76a0e8744090d05a9be22abd3e7b14b1e1cd5cde4"
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 311664,
-      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e",
+      "bytes": 72168,
+      "sha256": "38e9c1794af64b282f9ca344a674b31a98082065fdafd5ca9ef2dc8e1f84e8c6",
       "classification": "required-compact-accepted-evidence",
-      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing."
+      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing.",
+      "decoded_bytes": 1038931,
+      "decoded_sha256": "a815505bd236932150f96fdb0ab19b5a55da338b421f134dbe175aefb2b58b09"
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 425678,
-      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
+      "bytes": 195548,
+      "sha256": "f46dfb1eb56a74c14c32641924ff49f88b6da87894a44992bbe0d7e8b49b2a35",
       "classification": "required-compact-accepted-evidence",
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
     }

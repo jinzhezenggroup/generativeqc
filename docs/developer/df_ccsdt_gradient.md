@@ -77,8 +77,14 @@ Replay requires admission of both ordinary matrix execution and matrix audit.
 Its matrix arena shares storage with the later independent audit because their
 lifetimes are disjoint. Preflight charges the maximum of the two arenas, not
 their sum, plus all prepared descriptors. If the enlarged arena does not fit,
-preflight retries the original audit arena and retains scalar fresh replay.
-Dropping the shared arena or matrix provider also clears replay admission.
+preflight retains the original audit arena and completes core-cache admission,
+then tries successively halved replay batches inside the existing scratch lease.
+This independent replay batch cannot enlarge device storage or displace the
+selected operator batch, audit or core cache. A distinct replay tail descriptor
+is charged to the host budget and prepared before execution. If no replay batch
+fits, fresh replay remains scalar. Dropping the shared arena or matrix provider
+also clears replay admission. Progress traces expose the executed replay batch
+as `df_lambda_primal_batch_size`; the operator/audit batch remains unchanged.
 `lambda_primal_matrix_requested` and `lambda_primal_matrix` distinguish request
 from actual execution; `lambda_audit_arena_bytes` includes the admitted shared
 arena and is a capacity reservation, not measured peak VRAM.
@@ -247,21 +253,28 @@ sources always use the original unscreened Hamiltonian. Positive thresholds
 are experimental solver controls, not promoted force approximations.
 
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
-CUDA derivative providers. Its two-electron source `P:G'(D)` defaults to
-symmetric polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`. This
-retains the admitted shell consumer and its primitive/component reuse in two
-bounded passes. The identity requires the same fixed unscreened linear source
-for both operands. Set `symmetric_polarization=false` to retain the original
-three-pass identity `E2'(D+P)-E2'(D)-E2'(P)` for matched validation.
-
-The separate `bilinear_derivative` opt-in uses compiler-owned direct weights,
-Cartesian projection, symmetry-unique angular buckets and translation
-reconstruction. It can replace generic or bounded through-f consumers when
-canonical storage is admitted; specialized SPD leases retain their existing
-consumer. This experimental route requires a measured crossover: a single
-canonical AO pass can lose reuse present in a shell consumer. Neither route
-materializes a derivative ERI tensor, and both retain explicit capacity
-fallbacks. All routes are independent of orbital-response dimension.
+CUDA derivative providers. Its two-electron source `P:G'(D)` requests a single
+retained-shell traversal by default. It first differentiates the shared
+compiler-owned quadratic Coulomb/exchange products along `P`, including every
+distinct canonical permutation. It projects `D` and `P` through the existing
+two density slots and contracts those cross weights in one retained shell
+traversal, preserving class scheduling, primitive caching, component reuse and
+translation reconstruction. The borrowed Cartesian seed belongs only to a
+local launch view; the retained source identity is unchanged. Signed cross
+weights require zero density screening. Canonical residency alone does not
+admit the default schedule: missing shell storage preserves bounded symmetric
+polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`, rather than selecting
+the slower generic experiment solely to reduce traversal count. Numerical or
+submission errors do not trigger a retry. Shell and generic derivative passes
+are reported separately;
+the canonical quartet/jet census is not published for a shell launch.
+Set `bilinear_derivative=false` for a matched two-pass control. Also set
+`symmetric_polarization=false` to retain the original three-pass identity
+`E2'(D+P)-E2'(D)-E2'(P)`. The bounded canonical bilinear API remains available
+for explicit validation, not default admission. All identities require the same
+fixed unscreened linear source for both operands. No route materializes a
+derivative ERI tensor. All routes retain bounded resource admission and are independent of
+orbital-response dimension.
 The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
@@ -332,7 +345,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 [LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_AUTO_OR_0_LEGACY_1_BILINEAR_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_AUTO_OR_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 [LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1 [LAMBDA_SERIAL_SCRATCH_REUSE_AUTO_OR_0_OR_1 [LIFECYCLE_0_OR_1 [CCSD_MIXED_PRECISION_0_OR_1 [LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to thirty-two,
@@ -342,9 +355,11 @@ notation token in this position is rejected; it is never guessed to be a
 screening threshold. `CCSD_Q_BATCH_LIMIT` retains position nine. Both batch
 limits require complete unsigned integer tokens. Response controls follow at
 positions ten through twelve: `ORBITAL_SCHWARZ` defaults to
-zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
-`NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
-opts into the experimental canonical bilinear derivative.
+zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero,
+and `NUCLEAR` to `auto` (admitted retained-shell bilinear derivative with bounded
+symmetric fallback). Explicit `1` requests the retained-shell bilinear derivative,
+`2` selects symmetric two-pass polarization, and `0` selects the original
+three-pass validation schedule. Omitted/`auto` leaves the options defaults intact.
 `DERIVED_DENOMINATORS` follows all existing controls at argument thirteen and
 defaults to one. Zero retains the explicit CUDA denominator representation.
 It accepts only the complete token `0` or `1`; it does not change the meaning
@@ -366,15 +381,16 @@ not by itself block these defaults; its strict numerical gates remain unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 
-Argument twenty-two opts into bounded primal/W/V scalar-tile fusion (`0` or
-`1`, default `0`), after the existing RHF tolerance argument twenty-one. Use
+Argument twenty-two selects bounded primal/W/V scalar-tile fusion (`0`, `1`,
+or `auto`, default enabled), after the existing RHF tolerance argument twenty-one. Use
 `auto` at argument twenty-one to retain the ordinary `1e-12` energy / `1e-11`
 density criteria when selecting fusion. The internal complete-force owner
-forwards the same explicit
+forwards the same
 `fused_triples_scalar_response` control to the joint triples response owner.
 It applies only when argument twenty is `0`: a fixed-canonical consumer asking
-for epsilon cotangents retains the all-output schedule. Public method defaults
-are unchanged.
+for epsilon cotangents retains the all-output schedule. The complete molecular-force
+owner requests fusion by default; the lower-level response API remains an explicit
+unfused oracle unless requested otherwise.
 
 Argument twenty-three admits the compiler-owned FP32 forward-W experiment
 (`0` or `1`, default `0`). It preserves all prior positional controls and uses
@@ -384,6 +400,10 @@ and accumulation; W assembly, integral panels, reverse contractions, Fock
 products, RHF, CCSD, Lambda and orbital/nuclear response stay FP64. The emitted
 precision-schedule identity, actual arithmetic bits, FP32 GEMM count and cast
 element count identify the executed candidate rather than merely its request.
+
+The separately controlled CCSD and Lambda auxiliary warm starts do not enable
+this forward-W experiment. Their final strict FP64 solves/audits and derivative
+boundaries are documented in the [DF-CCSD(T) precision contract](df_ccsdt.md).
 
 This internal approximate-force candidate is not public mixed-precision method
 admission, and its FP64 reverse is not an exact derivative of discontinuous
@@ -436,7 +456,11 @@ unmaterialized.
 
 Fusion retains six V seed cubes instead of reusing one. Complete preflight
 charges the extra five virtual cubes and falls back to the unfused schedule
-before reducing admitted page/panel residency. The standalone energy,
+before reducing admitted page/panel residency. Free-device-memory refusal also
+preserves that original residency. A typed CUDA/provider allocation failure during
+preparation destroys the partial owner before one bounded unfused retry; driver,
+submission and numerical failures propagate without being classified as OOM.
+The standalone energy,
 pullback, and full-Fock APIs remain independent qualification controls.
 Endpoint JSON records requested/selected/fallback state, compiler schedule
 identity, actual scalar-region launches, seed workspace, modeled scalar input

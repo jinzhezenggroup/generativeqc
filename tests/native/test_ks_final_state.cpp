@@ -3,7 +3,9 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
+#include "cc/reference_input.hpp"
 #include "dft/ks_final_state.hpp"
 #include "dft/semilocal_family.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -117,6 +119,20 @@ void backend_product_policy() {
   require(failed, "KS silently fell back after a backend product failure");
 }
 
+void explicit_physical_stationarity_budget() {
+  Fixture fixture;
+  fixture.physical.physical_residual = 2e-6;
+  fixture.limits.density_tolerance = 1e-5;
+  require(!fixture.validate(), "loose density controls bypassed strict KS metadata gate");
+  fixture.limits.stationarity_tolerance = 1e-5;
+  VerifiedKsFinalState retained;
+  require(fixture.validate(true, &retained), "explicit KS physical allowance was ignored");
+  require(retained.stationarity_tolerance == fixture.limits.stationarity_tolerance,
+          "verified KS handoff lost its authenticated allowance");
+  fixture.physical.physical_residual = 2e-5;
+  require(!fixture.validate(), "KS physical allowance admitted an excessive residual");
+}
+
 void residual_norm_contract() {
   for (double tolerance : {1e-12, 1e-10, 1e-7}) {
     const double gate = std::min(1e-8, tolerance);
@@ -139,6 +155,74 @@ void residual_norm_contract() {
             "nonfinite maximum commutator did not fail closed");
 }
 
+void resident_evidence_contract() {
+  Fixture fixture;
+  fixture.limits.require_canonicality = true;
+  VerifiedKsFinalState detached;
+  require(fixture.validate(false, &detached), "resident evidence fixture failed");
+  const KsFinalStateEvidence evidence{fixture.id,
+                                      fixture.candidate.fock_density_generation,
+                                      true,
+                                      fixture.physical.components,
+                                      fixture.physical.reported_energy,
+                                      fixture.physical.physical_residual};
+  KsFinalStateDiagnostic accepted;
+  std::string detail;
+  const auto validate = [&](const auto& witness, const auto& products, const auto& limits) {
+    accepted.reported_energy_error = 99;
+    return validate_ks_final_state_evidence(fixture.id, 2, witness, limits, products, accepted,
+                                            detail);
+  };
+  require(validate(evidence, detached.diagnostic.determinant, fixture.limits), detail.c_str());
+  near(accepted.component_energy, detached.diagnostic.component_energy,
+       "resident evidence changed the KS energy convention");
+  const std::vector<std::function<void(KsFinalStateEvidence&)>> mutations{
+      [](auto& value) { ++value.identity.model.owner; },
+      [](auto& value) { value.physical_origin = false; },
+      [](auto& value) { --value.fock_density_generation; },
+      [](auto& value) { value.reported_energy += 1e-5; },
+      [](auto& value) { value.physical_residual = 2e-9; },
+      [](auto& value) { value.components.xc = std::numeric_limits<double>::quiet_NaN(); }};
+  for (const auto& mutation : mutations) {
+    auto invalid = evidence;
+    mutation(invalid);
+    require(!validate(invalid, detached.diagnostic.determinant, fixture.limits) &&
+                accepted.reported_energy_error == 0 && accepted.determinant.eigenframes.empty(),
+            "invalid resident evidence published diagnostics");
+  }
+  const std::vector<std::function<void(solver::FinalStateDiagnostic&)>> product_mutations{
+      [](auto& value) { value.eigenframes.clear(); },
+      [](auto& value) { value.eigenframes[0].solver_info = 1; },
+      [](auto& value) { value.eigenframes[0].maximum_metric_error = 1e-7; },
+      [](auto& value) { value.eigenframes[0].scaled_eigen_residual = 1e-11; },
+      [](auto& value) { value.maximum_trace_error = 1e-7; },
+      [](auto& value) { value.maximum_idempotency_error = 1e-7; },
+      [](auto& value) { value.maximum_density_error = 1e-7; },
+      [](auto& value) { value.maximum_canonical_error = 1e-7; },
+      [](auto& value) { value.maximum_commutator = 1e-7; },
+      [](auto& value) { value.density_rms = 1e-7; },
+      [](auto& value) { value.maximum_commutator = -1; },
+      [](auto& value) { value.energy = std::numeric_limits<double>::infinity(); }};
+  for (const auto& mutation : product_mutations) {
+    auto invalid = detached.diagnostic.determinant;
+    mutation(invalid);
+    require(!validate(evidence, invalid, fixture.limits), "invalid resident products passed");
+  }
+  auto limits = fixture.limits;
+  limits.require_canonicality = false;
+  require(!validate(evidence, detached.diagnostic.determinant, limits),
+          "resident evidence admitted noncanonical products");
+  limits = fixture.limits;
+  limits.density_tolerance = std::numeric_limits<double>::quiet_NaN();
+  require(!validate(evidence, detached.diagnostic.determinant, limits),
+          "resident evidence accepted a nonfinite tolerance");
+  auto boundary = detached.diagnostic.determinant;
+  boundary.maximum_commutator = std::min(1e-8, fixture.limits.density_tolerance);
+  require(validate(evidence, boundary, fixture.limits), "resident inclusive boundary failed");
+  boundary.maximum_commutator = std::nextafter(boundary.maximum_commutator, 1.0);
+  require(!validate(evidence, boundary, fixture.limits), "resident boundary widened");
+}
+
 void analytic_rks_and_uks() {
   Fixture rks;
   VerifiedKsFinalState energy, gradient;
@@ -153,6 +237,14 @@ void analytic_rks_and_uks() {
   require(core::electronic_reference_shape_valid(rks_reference) && rks_reference.restricted() &&
               rks_reference.channels[0].coefficients.data() == gradient.orbitals[0].vectors.data(),
           "RKS common electronic reference copied or changed orbital ownership");
+
+  const auto rks_input = cc::prepare_canonical_reference_input(rks_reference);
+  require(rks_input.occupied == 1 && rks_input.virtuals == 1 &&
+              rks_input.orbital_energies.data() == gradient.orbitals[0].values.data() &&
+              rks_input.reference_energy == gradient.diagnostic.component_energy,
+          "validated RKS reference did not satisfy the common canonical input contract");
+  near(rks_input.fock_mo[0], -1, "RKS common MO Fock occupied diagonal");
+  near(rks_input.fock_mo[3], 3, "RKS common MO Fock virtual diagonal");
 
   Fixture cpu;
   // Resolve the complete CPU strategy, including its schedule; relabeling a
@@ -186,6 +278,13 @@ void analytic_rks_and_uks() {
                 uks_reference.channels[1].occupied == beta,
             "UKS common electronic reference lost spin occupations");
 
+    bool restricted_only = false;
+    try {
+      (void)cc::prepare_canonical_reference_input(uks_reference);
+    } catch (const std::invalid_argument&) {
+      restricted_only = true;
+    }
+    require(restricted_only, "RCCSD accepted a two-spin UKS reference");
     Fixture cpu_uks = uks;
     cpu_uks.id.determinant.model =
         resolve_fock_build(cpu_uks.id.determinant.model.spec, FockBackend::Cpu);
@@ -228,9 +327,58 @@ void cuda_global_hybrid_identity() {
           hybrid = exact;
           hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
           hybrid.sync();
-          const bool admitted = j == k && (!b3lyp || j == FockApproximation::Exact);
+          const bool admitted = j == k;
           require(hybrid.validate() == admitted, "CUDA hybrid accepted an unqualified J/K pair");
           if (admitted) {
+            if (b3lyp && j == FockApproximation::DensityFitted) {
+              hybrid.limits.require_canonicality = true;
+              VerifiedKsFinalState force_ready;
+              require(hybrid.validate(true, &force_ready),
+                      "CUDA DF B3LYP rejected its weighted final state");
+              require(force_ready.identity == hybrid.id &&
+                          force_ready.identity.model.functional ==
+                              semilocal_family_code(SemilocalFamily::B3lyp) &&
+                          force_ready.identity.model.scf_domain_version ==
+                              semilocal_family_domain_version(SemilocalFamily::B3lyp) &&
+                          force_ready.identity.determinant.model.spec.coulomb.approximation ==
+                              FockApproximation::DensityFitted &&
+                          force_ready.identity.determinant.model.spec.exchange.approximation ==
+                              FockApproximation::DensityFitted &&
+                          force_ready.weighted_density.size() == hybrid.id.model.spins,
+                      "CUDA DF B3LYP force publication changed its functional, DF owner or W");
+
+              const KsFinalStateEvidence evidence{hybrid.id,
+                                                  hybrid.candidate.fock_density_generation,
+                                                  true,
+                                                  hybrid.physical.components,
+                                                  hybrid.physical.reported_energy,
+                                                  hybrid.physical.physical_residual};
+              KsFinalStateDiagnostic accepted;
+              std::string detail;
+              require(validate_ks_final_state_evidence(hybrid.id, 2, evidence, hybrid.limits,
+                                                       force_ready.diagnostic.determinant, accepted,
+                                                       detail),
+                      detail.c_str());
+              auto stale = evidence;
+              --stale.identity.model.scf_domain_version;
+              require(!validate_ks_final_state_evidence(hybrid.id, 2, stale, hybrid.limits,
+                                                        force_ready.diagnostic.determinant,
+                                                        accepted, detail) &&
+                          accepted.determinant.eigenframes.empty(),
+                      "CUDA DF B3LYP accepted stale functional evidence");
+              stale = evidence;
+              stale.identity.determinant.model.spec.exchange.approximation =
+                  FockApproximation::Exact;
+              require(!validate_ks_final_state_evidence(hybrid.id, 2, stale, hybrid.limits,
+                                                        force_ready.diagnostic.determinant,
+                                                        accepted, detail),
+                      "CUDA DF B3LYP accepted a switched final-state Hamiltonian");
+              auto wrong_version = hybrid;
+              --wrong_version.id.model.scf_domain_version;
+              wrong_version.sync();
+              require(!wrong_version.validate(true),
+                      "CUDA DF B3LYP accepted an unsupported functional version");
+            }
             spec.exchange.coefficient -= 0.01;
             hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
             hybrid.sync();
@@ -254,6 +402,93 @@ void cuda_global_hybrid_identity() {
   require(!scaled_pbe.validate(), "CUDA accepted an unqualified scaled PBE hybrid");
 }
 
+#if GENERATIVEQC_HAS_CUDA
+void cuda_split_hybrid_identity() {
+  struct Method {
+    std::uint32_t code;
+    double fraction;
+    bool fitted;
+  };
+  // Stable Libxc-encoded M06-2X/MN15 identities, with independent expectations.
+  for (const bool unrestricted : {false, true}) {
+    for (const auto method :
+         {Method{0x201c2U, 27.0 / 50.0, true}, Method{0x2010cU, 11.0 / 25.0, false}}) {
+      Fixture original;
+      original.id.determinant.model = cuda_global_hybrid_fock(
+          unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted, method.fraction);
+      original.id.model.functional = method.code;
+      original.id.model.scf_domain_version = 4;
+      if (unrestricted) {
+        original.id.determinant.occupied = {1, 0};
+        original.id.model.spins = 2;
+        original.physical.density = {{.5, 0, 0, 0}, {0, 0, 0, 0}};
+        original.physical.fock.push_back(original.physical.fock[0]);
+        original.candidate.spins.push_back(original.candidate.spins[0]);
+      }
+      original.limits.require_canonicality = true;
+      for (const auto j : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+        for (const auto k : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+          auto state = original;
+          auto spec = state.id.determinant.model.spec;
+          spec.coulomb.approximation = j;
+          spec.exchange.approximation = k;
+          state.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
+          state.sync();
+          const bool admitted = j == k && (j == FockApproximation::Exact || method.fitted);
+          VerifiedKsFinalState verified;
+          require(state.validate(true, &verified) == admitted,
+                  "split-hybrid final-state admission disagrees with its physical J/K model");
+          if (!admitted) continue;
+          require(verified.identity == state.id &&
+                      verified.weighted_density.size() == state.id.model.spins,
+                  "split-hybrid force snapshot lost provider identity or weighted density");
+          const KsFinalStateEvidence evidence{state.id,
+                                              state.candidate.fock_density_generation,
+                                              true,
+                                              state.physical.components,
+                                              state.physical.reported_energy,
+                                              0.0};
+          KsFinalStateDiagnostic accepted;
+          std::string detail;
+          require(
+              validate_ks_final_state_evidence(state.id, 2, evidence, state.limits,
+                                               verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid resident final-state evidence rejected");
+          auto stale = evidence;
+          --stale.identity.model.scf_domain_version;
+          require(
+              !validate_ks_final_state_evidence(state.id, 2, stale, state.limits,
+                                                verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid accepted stale functional evidence");
+          stale = evidence;
+          stale.identity.determinant.model.spec.exchange.approximation =
+              k == FockApproximation::Exact ? FockApproximation::DensityFitted
+                                            : FockApproximation::Exact;
+          require(
+              !validate_ks_final_state_evidence(state.id, 2, stale, state.limits,
+                                                verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid accepted switched physical provider evidence");
+          auto invalid = state;
+          invalid.id.determinant.model.spec.exchange.coefficient -= 0.01;
+          invalid.id.determinant.model =
+              resolve_fock_build(invalid.id.determinant.model.spec, FockBackend::Cuda, 0.0, 1e-10);
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted a modified exchange fraction");
+          invalid = state;
+          invalid.id.model.semilocal_exchange_scale = 0.9;
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted modified semilocal scaling");
+          invalid = state;
+          --invalid.id.model.scf_domain_version;
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted an unsupported domain version");
+        }
+      }
+    }
+  }
+}
+#endif
+
 void identity_rejection() {
   const std::vector<std::function<void(KsFinalStateIdentity&)>> changes{
       [](auto& id) { ++id.determinant.factor.basis; },
@@ -275,6 +510,30 @@ void identity_rejection() {
     a = Fixture{};
     change(a.candidate.identity);
     require(!a.validate(), "stale orbital KS identity passed");
+  }
+}
+
+void preflight_failure_diagnostics() {
+  const std::vector<std::pair<std::function<void(Fixture&)>, const char*>> changes{
+      {[](auto& a) { ++a.physical.identity.model.owner; }, "physical identity mismatch"},
+      {[](auto& a) { ++a.candidate.identity.model.owner; }, "orbital identity mismatch"},
+      {[](auto& a) { a.physical.physical = false; }, "physical state not established"},
+      {[](auto& a) { a.physical.density.clear(); }, "density spin shape mismatch"},
+      {[](auto& a) { a.physical.fock.clear(); }, "Fock spin shape mismatch"},
+      {[](auto& a) { a.candidate.spins.clear(); }, "orbital spin shape mismatch"},
+      {[](auto& a) { ++a.candidate.fock_density_generation; }, "Fock-density generation mismatch"}};
+  for (const auto& [change, expected] : changes) {
+    Fixture a;
+    change(a);
+    VerifiedKsFinalState output;
+    output.density = {{123.0}};
+    std::string detail;
+    require(!validate_ks_final_state(a.id, a.s, a.h, a.physical, a.candidate, a.limits, false,
+                                     output, detail),
+            "invalid preflight evidence passed");
+    require(detail.find(expected) != std::string::npos,
+            "KS rejection did not identify the failed preflight predicate");
+    require(output.density.empty(), "rejected KS evidence retained previous output");
   }
 }
 
@@ -319,11 +578,17 @@ void model_and_state_rejection() {
 
 int main() {
   try {
+    explicit_physical_stationarity_budget();
     residual_norm_contract();
+    resident_evidence_contract();
     backend_product_policy();
     analytic_rks_and_uks();
     cuda_global_hybrid_identity();
+#if GENERATIVEQC_HAS_CUDA
+    cuda_split_hybrid_identity();
+#endif
     identity_rejection();
+    preflight_failure_diagnostics();
     model_and_state_rejection();
     std::cout << "KS final-state contract tests passed\n";
     return 0;

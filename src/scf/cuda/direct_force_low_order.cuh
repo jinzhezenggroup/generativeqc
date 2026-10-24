@@ -116,7 +116,7 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task_scaled(
   }
   const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
       n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3], coulomb_coefficient,
-      exchange_coefficient);
+      exchange_coefficient, batch.direct_force_seed);
   if (density_coefficient == 0.0) return;
   const double component_weight =
       direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1],
@@ -211,7 +211,7 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task_scaled
     }
     const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-        coulomb_coefficient, exchange_coefficient);
+        coulomb_coefficient, exchange_coefficient, batch.direct_force_seed);
     component_weight[axis] =
         direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
                                       raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);

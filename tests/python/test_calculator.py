@@ -147,13 +147,12 @@ def test_cuda_energy_only_output_selection_omits_forces(
     assert energy_and_forces.forces is not None
 
 
-def test_wb97m_v_is_reserved_not_implemented() -> None:
-    try:
-        Calculator(method="wb97m-v")
-    except NotImplementedError:
-        pass
-    else:
-        raise AssertionError("wB97M-V must report that it is not implemented")
+def test_wb97mv_default_grid_resolves_registered_composition() -> None:
+    """The compatibility spelling shares the qualified default prescription."""
+    alias = Calculator(method="wb97m-v")
+    canonical = Calculator(method="wb97m-v-rks")
+    assert alias.ks_options.method_ir == canonical.ks_options.method_ir
+    assert alias.ks_options.grid == canonical.ks_options.grid == GridSpec.treutler(3)
 
 
 @pytest.mark.parametrize("method", ("wb97m-v-rks", "wb97m-v-uks"))
@@ -272,18 +271,24 @@ def test_ks_separate_physical_residual_is_published(method: typing.Any) -> None:
 
 
 @pytest.mark.parametrize("method", ("lda-uks", "pbe-uks"))
+@pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
 @pytest.mark.parametrize(
     ("charge", "multiplicity"),
     ((0, 2), (0, 4)),
     ids=("parity", "spin-excess"),
 )
 def test_uks_rejects_invalid_spin_occupations(
-    method: typing.Any, charge: typing.Any, multiplicity: typing.Any
+    method: typing.Any,
+    charge: typing.Any,
+    multiplicity: typing.Any,
+    properties: tuple[str, ...],
 ) -> None:
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     calculator = Calculator(method=method, basis="sto-3g", device="cpu")
     with pytest.raises(RuntimeError, match="integer nonnegative spin occupations"):
-        calculator.singlepoint(atoms, charge=charge, multiplicity=multiplicity)
+        calculator.singlepoint(
+            atoms, charge=charge, multiplicity=multiplicity, properties=properties
+        )
 
 
 @pytest.mark.parametrize(

@@ -106,15 +106,30 @@ def emit_direct_force_density_coefficient() -> str:
     """Emit the symmetry-reduced Direct force density contraction.
 
     The scaled form is the method-neutral primitive used by composed mean-field
-    methods. The compatibility wrapper preserves the historical HF convention.
+    methods. An optional seed differentiates the same quadratic products,
+    preserving the complete canonical orbit without a second ERI traversal.
+    The compatibility wrapper preserves the historical HF convention.
     """
 
-    return """template <bool Unrestricted>
+    return """/** Quadratic density product, or its directional derivative along seed.
+ * Apply scale before multiplication, preserving finite small-coefficient paths.
+ */
+__device__ __forceinline__ double direct_force_density_product(
+    const double* density, const double* seed, std::size_t offset,
+    std::size_t first, std::size_t second, double scale) {
+  if (seed != nullptr)
+    return scale * density[offset + first] * seed[offset + second] +
+           scale * seed[offset + first] * density[offset + second];
+  return scale * density[offset + first] * density[offset + second];
+}
+
+template <bool Unrestricted>
 __device__ __forceinline__ double direct_force_density_coefficient_scaled(
     std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
     const double* density,
     std::size_t i, std::size_t j, std::size_t k, std::size_t l,
-    double coulomb_coefficient, double exchange_coefficient) {
+    double coulomb_coefficient, double exchange_coefficient,
+    const double* seed = nullptr) {
   const std::size_t matrix_size = n * n;
   double coefficient = 0.0;
   for (unsigned permutation = 0; permutation < 8; ++permutation) {
@@ -138,8 +153,8 @@ __device__ __forceinline__ double direct_force_density_coefficient_scaled(
             density[spin_offset + cd] + density[spin_offset + matrix_size + cd];
         coefficient += 0.5 * coulomb_coefficient * total_ab * total_cd;
       } else {
-        coefficient += 0.5 * coulomb_coefficient *
-                       density[physical_offset + ab] * density[physical_offset + cd];
+        coefficient += direct_force_density_product(
+            density, seed, physical_offset, ab, cd, 0.5 * coulomb_coefficient);
       }
     }
     if (exchange_coefficient != 0.0) {
@@ -150,8 +165,8 @@ __device__ __forceinline__ double direct_force_density_coefficient_scaled(
              density[spin_offset + matrix_size + ac] *
                  density[spin_offset + matrix_size + bd]);
       } else {
-        coefficient += 0.5 * exchange_coefficient *
-                       density[physical_offset + ac] * density[physical_offset + bd];
+        coefficient += direct_force_density_product(
+            density, seed, physical_offset, ac, bd, 0.5 * exchange_coefficient);
       }
     }
   }
@@ -230,22 +245,47 @@ def emit_direct_bilinear_density_coefficient() -> str:
     """Emit P:G'(D) from the same ordered RHF J - K/2 scatter.
 
     Each canonical integral contributes through its distinct eightfold orbit.
-    This contracts the cross term directly, without subtracting three large
-    quadratic energies. The native consumer owns finite audits and traversal.
+    Polarize the shared quadratic coefficient, rather than maintaining a second
+    Coulomb/exchange formula. The native consumer owns finite audits/traversal.
     """
     return """/** Coefficient of one canonical derivative ERI in P:(J'(D)-K'(D)/2). */
 __device__ __forceinline__ double direct_bilinear_density_coefficient(
     std::size_t n, std::size_t offset, const double* density, const double* seed,
     std::size_t i, std::size_t j, std::size_t k, std::size_t l) {
-  double coefficient = 0.0;
-  for (unsigned permutation = 0; permutation < 8U; ++permutation) {
-    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
-    std::size_t a = 0, b = 0, c = 0, d = 0;
-    eri_symmetry_permutation(permutation, i, j, k, l, a, b, c, d);
-    coefficient += seed[offset + a*n+b] * density[offset + c*n+d]
-                 - 0.5 * seed[offset + a*n+c] * density[offset + b*n+d];
+  return direct_force_density_coefficient_scaled<false>(
+      n, offset, 0, density, i, j, k, l, 1.0, -0.5, seed);
+}
+"""
+
+
+def emit_direct_coulomb_density_admission() -> str:
+    """Admit an ERI only if its Coulomb orbit can contribute to a matrix.
+
+    Both pair orientations matter for nonsymmetric response densities. UKS
+    admission uses the same FP64 total-spin density as the scatter, including
+    exact alpha/beta cancellation; no magnitude screening is introduced.
+    """
+
+    return """/** Exact zero-work predicate for the Coulomb eightfold orbit. */
+template <bool Unrestricted>
+__device__ __forceinline__ bool direct_coulomb_density_active(
+    std::size_t dimension, std::size_t physical_offset, std::size_t spin_offset,
+    const double* density, std::size_t first, std::size_t second,
+    std::size_t third, std::size_t fourth) {
+  const std::size_t indices[]{matrix_index(first, second, dimension),
+                              matrix_index(second, first, dimension),
+                              matrix_index(third, fourth, dimension),
+                              matrix_index(fourth, third, dimension)};
+  for (const auto index : indices) {
+    if constexpr (Unrestricted) {
+      if (density[spin_offset + index] +
+              density[spin_offset + dimension * dimension + index] != 0.0)
+        return true;
+    } else if (density[physical_offset + index] != 0.0) {
+      return true;
+    }
   }
-  return coefficient;
+  return false;
 }
 """
 
@@ -299,6 +339,7 @@ def emit_direct_fock_accumulation_header() -> str:
 namespace generativeqc::scf::cuda_execution {{
 
 {function}
+{emit_direct_coulomb_density_admission()}
 {emit_direct_force_density_coefficient()}
 {emit_direct_force_component_weight()}
 {emit_direct_bilinear_density_coefficient()}

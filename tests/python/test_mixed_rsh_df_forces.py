@@ -12,7 +12,7 @@ import os
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -21,6 +21,7 @@ from generativeqc import Atom, Calculator, KsOptions
 from generativeqc.ks import (
     cuda_mixed_density_fitted_force_eligible,
     mixed_density_fitted_force_eligible,
+    split_hybrid_df_force_admitted,
 )
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.method import (
@@ -86,7 +87,10 @@ def test_mixed_df_requires_every_generated_provider_capability(
         ({"_precision_mode": "auto"}, False),
         ({"_basis": "def2-qzvp"}, False),
         ({"_automatic_libxc_name": "unqualified"}, False),
-        ({"_dispersion_method_ir": object()}, False),
+        (
+            {"_dispersion_method_ir": resolve_method("R2SCAN-D4(BJ-EEQ-ATM)")},
+            False,
+        ),
         ({"ecp": True}, False),
         ({"schedule": "host_unfused"}, False),
         ({"fitted": False}, False),
@@ -97,6 +101,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
 ) -> None:
     """Execute the actual public predicate without loading a CUDA library."""
     from generativeqc import _native
+    from generativeqc._df_precision import fitted_scf_budget_admitted
     from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
     method = resolve_method("WB97M-V", spin="unpolarized")
@@ -115,6 +120,9 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
     for attribute, value in override.items():
         if attribute.startswith("_"):
             setattr(owner, attribute, value)
+    owner._density_fitted_composite_force_eligible = MethodType(
+        Calculator._density_fitted_composite_force_eligible, owner
+    )
     source = (
         Path(__file__).resolve().parents[2] / "python/generativeqc/calculator.py"
     ).read_text()
@@ -130,6 +138,9 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
     namespace = {
         "self": owner,
         "_native": _native,
+        # This range-separated route requests no application budget. Use the
+        # admission helper to preserve the strict precision fallback boundary.
+        "fitted_budget": fitted_scf_budget_admitted(owner, None),
         "basis_has_ecp": override.get("ecp", False),
         "density_fitting_mode": (
             _native.DENSITY_FITTING_CUDA
@@ -139,6 +150,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
+        "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
     }
     exec(  # noqa: S102 - Only the local repository's public predicate is executed.
         compile(ast.Module(body=[assignment], type_ignores=[]), str(__file__), "exec"),
@@ -213,11 +225,17 @@ def test_mixed_df_lr_weights_use_the_shared_exchange_algebra(spin: str) -> None:
 
 
 def _mixed_pyscf_energy(
-    calc: Calculator, raw_atoms: list[tuple[str, tuple[float, ...]]], spin: int
+    calc: Calculator,
+    raw_atoms: list[tuple[str, tuple[float, ...]]],
+    spin: int,
+    *,
+    fitted_range: bool = False,
 ) -> float:
     """Rebuild both auxiliary centers and both moving quadratures for each call."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import df, dft, gto, scf
+
+    from tools._pyscf_vv10_domain import vv10_density_domain
 
     pyscf.lib.num_threads(1)
     atoms = tuple(Atom.from_value(atom) for atom in raw_atoms)
@@ -250,6 +268,32 @@ def _mixed_pyscf_energy(
     fitted = df.DF(mol, auxbasis=basis_dict(calc._auxiliary_basis)).build()
     mean_field = dft.UKS(mol) if spin else dft.RKS(mol)
     mean_field.xc = "WB97M_V"
+    range_providers: dict[float, Any] = {}
+
+    def fitted_range_provider(omega: float) -> Any:
+        """Match the declared relative cutoff in normalized auxiliary coordinates.
+
+        PySCF's default Cholesky keeps tiny Cartesian LR metric modes that the
+        native relative-eigenvalue contract discards. Build the reference from
+        libcint and NumPy, not native factors or a relaxed comparison tolerance.
+        """
+        if omega not in range_providers:
+            auxiliary = fitted.auxmol
+            scales = 1 / np.sqrt(np.diag(auxiliary.intor("int1e_ovlp")))
+            with mol.with_range_coulomb(omega), auxiliary.with_range_coulomb(omega):
+                metric = auxiliary.intor("int2c2e") * scales[:, None] * scales[None, :]
+                three_center = df.incore.aux_e2(mol, auxiliary, aosym="s2ij")
+            eigenvalues, eigenvectors = np.linalg.eigh(metric)
+            retained = eigenvalues > (
+                eigenvalues[-1] * calc._density_fitting_relative_threshold
+            )
+            whitening = (eigenvectors[:, retained] / np.sqrt(eigenvalues[retained])).T
+            provider = df.DF(mol)
+            provider._cderi = np.ascontiguousarray(
+                whitening @ (three_center * scales).T
+            )
+            range_providers[omega] = provider
+        return range_providers[omega]
 
     def get_jk(
         molecule: Any,
@@ -260,6 +304,10 @@ def _mixed_pyscf_energy(
         omega: float | None = None,
     ) -> Any:
         if omega is not None and omega != 0:
+            if fitted_range:
+                return fitted_range_provider(omega).get_jk(
+                    density, hermi, with_j, with_k
+                )
             return scf.hf.get_jk(
                 molecule, density, hermi, with_j=with_j, with_k=with_k, omega=omega
             )
@@ -275,9 +323,18 @@ def _mixed_pyscf_energy(
     mean_field.conv_tol = 1e-12
     mean_field.conv_tol_grad = 1e-10
     mean_field.max_cycle = 200
-    energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
+    # This is a matched-domain force oracle, including every displaced point.
+    # Preserve upstream CPU defaults outside this explicit qualification scope.
+    with vv10_density_domain(1e-10):
+        energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
     assert mean_field.converged
     return float(energy)
+
+
+@pytest.fixture(autouse=True)
+def explicit_legacy_mixed_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep qualifying the retained Direct-LR mode independently of full RI-K."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
 
 
 def test_cpu_mixed_snapshot_is_revoked_by_warm_replay() -> None:
@@ -352,7 +409,7 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
         calc.prepare_batch([atoms]) as batch,
         pytest.raises(ValueError, match="dense-export"),
     ):
-        batch._public_dft_cpu_force(0, atoms)
+        batch._public_dft_cpu_force(0, tuple(Atom.from_value(atom) for atom in atoms))
 
 
 @pytest.mark.parametrize(

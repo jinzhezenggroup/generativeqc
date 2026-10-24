@@ -67,6 +67,19 @@ def _fock_tasks_per_claim(selection: KernelSelection) -> int:
     return 1
 
 
+def _has_force_entrypoint(selection: KernelSelection) -> bool:
+    """Value-only Rys emits no force wrapper, unlike legacy Wick Fock rows.
+
+    Legacy bounded s/p/d force dispatch borrows dormant Wick wrappers even
+    when they have no force metadata. Do not extend that compatibility rule to
+    a value-only Rys artifact: its derivative decoder was never compiled.
+    """
+    return (
+        KernelConsumer.FORCE in selection.consumers
+        or not selection.recurrence.startswith("rys")
+    )
+
+
 def emit_registry_header(
     specifications: Iterable[ShellClassSpec | KernelSelection],
 ) -> str:
@@ -274,7 +287,7 @@ def emit_registry_source(
     """Emit environment-controlled dispatch without handwritten class switches."""
 
     selections = _stable_selection_order(specifications)
-    specs = tuple(item.spec for item in selections)
+    specs = tuple(item.spec for item in selections if _has_force_entrypoint(item))
     fock_specs = tuple(
         item.spec for item in selections if KernelConsumer.FOCK in item.consumers
     )
@@ -817,22 +830,18 @@ def emit_multi_registry_source(
             force_symbol = (
                 f"generativeqc_launch_{identifier}_generated_{selection.spec.name}"
             )
-            declarations.append(
-                f'extern "C" cudaError_t {force_symbol}('
-                "cudaStream_t, bool, unsigned, const void*, const std::uint32_t*, "
-                "const std::int64_t*, const void*, const double*, const void*, "
-                "double, const double*, const double*, double*, "
-                "const std::uint32_t*, std::uint32_t*);"
-            )
-            force_cases.append(
-                f"    case {shell_class}U:\n"
-                f"      return {force_symbol}({launch_arguments});"
-            )
-            # Fock-only rows deliberately retain a dormant force symbol: the
-            # bounded spd path can call the same exact recurrence without a
-            # generic integral fallback.  Keep those symbols out of ordinary
-            # force metadata so fixed-topology plans do not reserve descriptor
-            # storage for classes owned by their handwritten force routes.
+            if _has_force_entrypoint(selection):
+                declarations.append(
+                    f'extern "C" cudaError_t {force_symbol}('
+                    "cudaStream_t, bool, unsigned, const void*, const std::uint32_t*, "
+                    "const std::int64_t*, const void*, const double*, const void*, "
+                    "double, const double*, const double*, double*, "
+                    "const std::uint32_t*, std::uint32_t*);"
+                )
+                force_cases.append(
+                    f"    case {shell_class}U:\n"
+                    f"      return {force_symbol}({launch_arguments});"
+                )
             if KernelConsumer.FORCE in selection.consumers:
                 force_names.append(
                     f'    {{"{selection.spec.name}", {shell_class}U, '

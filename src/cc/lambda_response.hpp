@@ -65,6 +65,20 @@ struct LambdaOptions {
   // Re-evaluate the original virtual residual graph, never accepted residuals
   // or solver cuts. Optional shared-audit arena admission retains scalar replay.
   bool df_primal_matrix_gemm{true};
+  /** Default-off storage candidate; promote only after complete-endpoint A/B gates.
+   * Reuses stage-local scratch on the action owner's one stream, not persistent
+   * cuts, solver state, outputs or the optional invariant frontier.
+   */
+  bool serial_scratch_reuse{false};
+  // Experimental auxiliary-only warm start; publication always requires a
+  // separate original FP64 solve and the unchanged independent physical audit.
+  bool df_mixed_precision{false};
+  double df_mixed_precision_warmup_tolerance{1e-6};
+  std::size_t df_mixed_precision_max_iterations{16};
+  // Unpromoted CUDA schedule. Budget/allocation refusal retains
+  // the host-vector path with the same diagonal policy and physical audits.
+  bool cuda_resident_krylov{false};
+  core::CorrelationConvergence convergence;
 };
 
 struct LambdaDiagnostic {
@@ -83,6 +97,12 @@ struct LambdaDiagnostic {
   bool cuda_actions{};
   bool diagonal_preconditioned{};
   std::size_t preconditioner_actions{};
+  bool resident_krylov{}, resident_krylov_refused{};
+  std::size_t resident_krylov_bytes{};
+  std::size_t resident_provider_allowance_bytes{}, resident_provider_observed_bytes{};
+  std::size_t resident_device_admission_bytes{};
+  int resident_provider_version{}, resident_runtime_version{};
+  std::size_t krylov_h2d_bytes{}, krylov_d2h_bytes{}, krylov_synchronizations{};
   // Complete native DF actions, including primal and independent Lambda replay.
   std::size_t df_auxiliary_slices{}, df_contraction_terms{}, df_generated_kernels{};
   bool df_auxiliary_reduction{};
@@ -98,7 +118,15 @@ struct LambdaDiagnostic {
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  /** Shared allocation capacity and avoided separate scratch; not allocator peaks. */
+  std::size_t df_shared_scratch_bytes{}, df_scratch_avoided_bytes{};
   bool df_primal_matrix_gemm{};
+  bool df_mixed_precision{}, df_mixed_precision_refused{};
+  std::size_t df_mixed_storage_bytes{}, df_mixed_input_offset_bytes{};
+  std::size_t df_mixed_actions{}, df_strict_actions{}, df_precision_switches{};
+  std::size_t df_fp32_gemm_calls{}, df_fp32_gemm_summands{}, df_precision_cast_elements{};
+  std::size_t df_mixed_iterations{}, df_strict_iterations{};
+  const char* mixed_program_hash{};
   const char* audit_schedule_hash{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};
@@ -132,9 +160,10 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
 #if GENERATIVEQC_HAS_CUDA
 /** Solve RCCSD Lambda with generated RHS/J^T actions executed on CUDA.
  *
- * GMRES control and packed symmetry projection remain host-owned in this first
- * native residency slice. The generated scientific actions execute on the
- * selected CUDA device without a CPU response fallback.
+ * Scalar GMRES control remains host-owned. The opt-in resident
+ * schedule keeps vectors, weighted pair projection and right preconditioning
+ * on the existing action stream; budget/allocation refusal retains host vectors.
+ * Generated scientific actions never use a CPU response fallback.
  * Explicit DF problems use retained-core plus complete auxiliary actions, with
  * fresh physical replay and the same independent Lambda residual gates.
  */

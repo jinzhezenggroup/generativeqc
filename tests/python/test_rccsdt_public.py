@@ -19,15 +19,19 @@ GRADIENTS = ROOT / "tests/reference_data/cc/gradients"
 TRIPLES = ROOT / "tests/reference_data/cc/rccsd-t.json"
 
 
-def test_force_rejects_unqualified_larger_cluster() -> None:
-    """Larger reference fixtures do not silently broaden the public domain."""
+@pytest.mark.parametrize("method", ("rccsd", "ccsd(t)"))
+def test_larger_force_uses_resource_gate_instead_of_ao_cap(method: str) -> None:
+    """The 112-AO public request must reach bounded memory admission, not a size veto."""
     from benchmarks.readme_hf_scaling import scaling_cases
 
-    atoms = scaling_cases()["water-48"].atoms  # 112 AOs exceeds the 56-AO limit.
-    with pytest.raises(
-        NotImplementedError, match="force AO dimension exceeds its qualified domain"
-    ):
-        _calculator().singlepoint(atoms, properties=("energy", "forces"))
+    atoms = scaling_cases()["water-48"].atoms  # 112 AOs, beyond both old limits.
+    with pytest.raises(RuntimeError, match=r"error 7|memory budget|host budget"):
+        Calculator(
+            method=method,
+            basis="sto-3g",
+            device="cpu",
+            correlation_memory_budget_bytes=1024,
+        ).singlepoint(atoms, properties=("energy", "forces"))
 
 
 @pytest.mark.parametrize(

@@ -130,50 +130,21 @@ def test_cuda_host_unfused_resource_plan_moves_xc_out_of_device_arena(
     assert unfused_host["scf_workspace"] > fused_host["scf_workspace"]
 
 
+@pytest.mark.parametrize("method", ("uhf", "pbe-uks"))
 def test_estimate_resources_materializes_one_shot_charge_spin_inputs(
-    monkeypatch: pytest.MonkeyPatch,
+    method: str,
 ) -> None:
-    from generativeqc.ks import resolve_ks_options
-    from generativeqc_compiler.common import resources
-
-    calculator = Calculator.__new__(Calculator)
-    calculator._dispersion_method_ir = None
-    calculator._ks_options = resolve_ks_options("pbe-rks")
-    calculator._device_name = "cuda"
-    calculator._precision_mode = _native.PRECISION_FP64
-    calculator._ks_options_version = 1
-    calculator._resource_budget = None
-    calculator._library = SimpleNamespace()
-    captured: dict[str, typing.Any] = {}
-    request = object()
-    result = object()
-
-    def capture(systems: typing.Any, **kwargs: typing.Any) -> object:
-        captured["systems"] = systems
-        captured["charges"] = kwargs["charges"]
-        captured["multiplicities"] = kwargs["multiplicities"]
-        captured["ks_options"] = kwargs["ks_options"]
-        return request
-
-    def plan(requests: typing.Any, budget: typing.Any) -> object:
-        assert tuple(requests) == (request,)
-        captured["budget"] = budget
-        return result
-
-    monkeypatch.setattr(calculator, "_resource_request", capture)
-    monkeypatch.setattr(resources, "plan_resources", plan)
-
-    assert (
-        calculator.estimate_resources(
-            [H2],
-            charges=iter([0]),
-            multiplicities=iter([1]),
-        )
-        is result
+    calculator = Calculator(method=method)
+    systems = (H2, H2)
+    expected = calculator.estimate_resources(
+        systems, charges=(0, 1), multiplicities=(1, 2)
     )
-    assert captured["charges"] == (0,)
-    assert captured["multiplicities"] == (1,)
-    assert captured["ks_options"] == calculator.ks_options
+    observed = calculator.estimate_resources(
+        systems, charges=iter((0, 1)), multiplicities=iter((1, 2))
+    )
+    assert observed.to_dict() == expected.to_dict()
+    default = calculator.estimate_resources(systems)
+    assert observed.identity != default.identity
 
 
 @pytest.mark.parametrize("precision", ["fp32", "mixed", False, None])

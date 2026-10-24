@@ -12,6 +12,46 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_large_exact_pure_j_preserves_default_and_opt_out(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """The stationary-density repair retains pure-J admission at large sizes."""
+    source = tmp_path / "large_direct.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <initializer_list>
+#include <limits>
+#include "dft/cuda_ks_final_validation_policy.hpp"
+
+int main() {
+  using namespace generativeqc::dft;
+  for (std::size_t aos : {std::size_t{1088}, std::size_t{1089}, std::size_t{2176},
+                          std::numeric_limits<std::size_t>::max()}) {
+    const bool eligible = device_final_validation_default_eligible(aos, 1, false, true, true);
+    assert(eligible);
+    assert(device_final_validation_requested(nullptr, eligible));
+    assert(!device_final_validation_requested("0", eligible));
+    assert(device_final_validation_requested("1", eligible));
+  }
+  assert(device_final_validation_default_eligible(544, 1, false, true, true));
+  assert(device_final_validation_default_eligible(1087, 1, false, true, true));
+}
+""",
+        encoding="utf-8",
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "large_direct",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    completed = subprocess.run(
+        [executable], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 def test_default_and_explicit_selectors_preserve_the_qualified_scope(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
@@ -27,33 +67,40 @@ def test_default_and_explicit_selectors_preserve_the_qualified_scope(
 
 int main() {
   using namespace generativeqc::dft;
-  const double exact_exchange_fraction = 0.25;
-  const double restricted_coefficient = -exact_exchange_fraction / 2.0;
-  assert(pbe0_rks_final_validation_composition(true, restricted_coefficient, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, exact_exchange_fraction, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, -exact_exchange_fraction, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, 0.0, 1.0, 1.0));
-  assert(!pbe0_rks_final_validation_composition(false, restricted_coefficient, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, restricted_coefficient, 1.0, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, restricted_coefficient, 0.75, 0.5));
-  assert(!pbe0_rks_final_validation_composition(
-      true, std::numeric_limits<double>::quiet_NaN(), 0.75, 1.0));
-  for (std::size_t aos : {0U, 2U, 7U, 16U, 17U, 37U, 383U, 384U, 768U, 1024U}) {
+  // 20/25/54-percent RKS full-range exchange shares the same final-state
+  // validation matrix algebra; nonphysical/nonfinite weights must be refused.
+  for (double coefficient : {-0.1, -0.125, -0.27, -0.5}) {
+    assert(restricted_global_hybrid_exchange_coefficient(coefficient));
+  }
+  for (double coefficient : {0.0, 0.25, -0.500001,
+                             std::numeric_limits<double>::quiet_NaN(),
+                             std::numeric_limits<double>::infinity(),
+                             -std::numeric_limits<double>::infinity()}) {
+    assert(!restricted_global_hybrid_exchange_coefficient(coefficient));
+  }
+  for (std::size_t aos : {0U, 2U, 7U, 16U, 17U, 37U, 383U, 384U, 543U, 544U, 545U, 768U, 1087U, 1088U, 1089U}) {
     for (unsigned spins : {0U, 1U, 2U}) {
-      for (bool direct_pbe0 : {false, true}) {
+      for (bool direct_global_hybrid : {false, true}) {
         for (bool full_precision : {false, true}) {
-          const bool expected = aos >= 384 && spins == 1 && direct_pbe0 && full_precision;
-          const bool eligible = device_final_validation_default_eligible(
-              aos, spins, direct_pbe0, full_precision);
-          assert(eligible == expected);
-          assert(device_final_validation_requested(nullptr, eligible) == expected);
-          assert(!device_final_validation_requested("0", eligible));
-          assert(device_final_validation_requested("1", eligible));
-          for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
-            bool rejected = false;
-            try { device_final_validation_requested(invalid, eligible); }
-            catch (const std::invalid_argument&) { rejected = true; }
-            assert(rejected);
+          assert(device_final_validation_default_eligible(aos, spins, direct_global_hybrid,
+                                                          full_precision) ==
+                 (aos >= 384 && spins == 1 && direct_global_hybrid && full_precision));
+          for (bool full_range_coulomb_only : {false, true}) {
+            const bool expected = spins == 1 && full_precision &&
+                ((aos >= 384 && direct_global_hybrid) ||
+                 (aos >= 544 && full_range_coulomb_only));
+            const bool eligible = device_final_validation_default_eligible(
+                aos, spins, direct_global_hybrid, full_precision, full_range_coulomb_only);
+            assert(eligible == expected);
+            assert(device_final_validation_requested(nullptr, eligible) == expected);
+            assert(!device_final_validation_requested("0", eligible));
+            assert(device_final_validation_requested("1", eligible));
+            for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
+              bool rejected = false;
+              try { device_final_validation_requested(invalid, eligible); }
+              catch (const std::invalid_argument&) { rejected = true; }
+              assert(rejected);
+            }
           }
         }
       }
@@ -61,6 +108,8 @@ int main() {
   }
   assert(device_final_validation_default_eligible(
       std::numeric_limits<std::size_t>::max(), 1, true, true));
+  assert(device_final_validation_default_eligible(
+      std::numeric_limits<std::size_t>::max(), 1, false, true, true));
 }
 """,
         encoding="utf-8",

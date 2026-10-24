@@ -1,11 +1,11 @@
 """Method-neutral stationary second-order executor gates (#180/#932)."""
 
-import ast
+import subprocess
+import sys
 import typing
 from pathlib import Path
 from types import SimpleNamespace
 
-import generativeqc.second_order as production_second_order
 import numpy as np
 import pytest
 from generativeqc.second_order import (
@@ -14,6 +14,7 @@ from generativeqc.second_order import (
     StationaryPerturbationProvider,
     StationaryResponseDriver,
     StationarySecondOrderExecutor,
+    StationarySecondOrderResult,
 )
 from generativeqc_compiler.method import (
     StationaryHVPPlan,
@@ -24,18 +25,60 @@ from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 
 
 def test_production_second_order_owner_has_no_tools_dependency() -> None:
-    """Installed orchestration must not depend on repository-only tools modules."""
-    source = Path(production_second_order.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    imported = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            imported.append(node.module)
-    assert not tuple(
-        name for name in imported if name == "tools" or name.startswith("tools.")
+    """Import and execute the installed owner with repository tools unavailable."""
+    root = Path(__file__).resolve().parents[2]
+    code = """
+import importlib.abc
+import sys
+from types import SimpleNamespace
+
+# Isolated mode ignores PYTHONPATH and any previously imported test modules.
+sys.path.insert(0, sys.argv[1])
+attempts = []
+
+class BlockTools(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "tools" or fullname.startswith("tools."):
+            attempts.append(fullname)
+            raise AssertionError("production executor imported " + fullname)
+        return None
+
+sys.meta_path.insert(0, BlockTools())
+import numpy as np
+from generativeqc.second_order import (
+    StationaryHVPContributor,
+    StationaryPerturbationProvider,
+    StationaryResponseDriver,
+    StationarySecondOrderExecutor,
+    StationarySecondOrderResult,
+)
+
+executor = StationarySecondOrderExecutor(
+    SimpleNamespace(identity="cold-import-plan-v1", source_names=("a", "b")),
+    natoms=1,
+    perturbation=StationaryPerturbationProvider("rhs-v1", lambda direction: direction),
+    response=StationaryResponseDriver("solve-v1", lambda perturbation: perturbation),
+    contributors=(
+        StationaryHVPContributor("a", "a-v1", lambda context: context.response),
+        StationaryHVPContributor("b", "b-v1", lambda context: 2 * context.response),
+    ),
+)
+result = executor.apply([[1.0, -2.0, 3.0]])
+assert isinstance(result, StationarySecondOrderResult)
+np.testing.assert_array_equal(result.value, [[3.0, -6.0, 9.0]])
+assert tuple(result.components) == ("a", "b")
+assert result.diagnostics["complete_source_coverage"] is True
+# An optional import caught internally still violates this ownership boundary.
+assert not attempts, attempts
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(root / "python")],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
     )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_tools_compatibility_shim_reexports_production_owner() -> None:
@@ -49,6 +92,7 @@ def test_tools_compatibility_shim_reexports_production_owner() -> None:
     )
     assert compatibility.StationaryResponseDriver is StationaryResponseDriver
     assert compatibility.StationarySecondOrderExecutor is StationarySecondOrderExecutor
+    assert compatibility.StationarySecondOrderResult is StationarySecondOrderResult
 
 
 def _pbe_plan() -> StationaryHVPPlan:

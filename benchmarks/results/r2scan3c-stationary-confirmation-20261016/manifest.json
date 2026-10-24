@@ -1,0 +1,21 @@
+{
+  "schema": "generativeqc.stationary-pure-j-qualification.v1",
+  "date": "2026-10-16",
+  "native_source_identity": "c300965dbc535596b2310a23eecb741eabb51dc1dd158f468292c9147f554867",
+  "native_library_sha256": "21526c6c1a1ae5258282a92f942c37ddf9536e1094b81a85e4e7697942460e2f",
+  "complete_comparison_calls": 48,
+  "small_system_accuracy_calls": 24,
+  "energy_gate_eh": 1e-08,
+  "force_gate_eh_per_bohr": 1e-07,
+  "historical_failure_reclassified": false,
+  "files": {
+    "qualification.json.xz": {
+      "bytes": 84700,
+      "sha256": "c8ea192c08243e7870928799e21eeca7f611c1baef5afb18f75ac77c100071d1"
+    },
+    "source.patch.xz": {
+      "bytes": 5304,
+      "sha256": "dcf56ae2ff9d40118154075949fd585dd219fb9832463db1b95959e0a83db167"
+    }
+  }
+}

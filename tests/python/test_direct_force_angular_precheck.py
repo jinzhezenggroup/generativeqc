@@ -26,39 +26,23 @@ def test_angular_owner_is_exact_for_all_spdf_physical_quartets(
     subprocess.run([str(executable)], check=True, timeout=30)
 
 
-def test_partition_precheck_keeps_the_exact_scientific_gate_and_generic_route() -> None:
-    """No owning task bypasses screening; non-owning threads still reach CTA barriers."""
+def test_partition_precheck_keeps_the_exact_scientific_gate_and_generic_route(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Compile actual admission: nonowners never screen, owners retain its result."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
+    helper = _definition(source, "template <int AngularOrder>")
     kernel_begin = source.index("void bounded_direct_shell_quartet_kernel(")
-    kernel = source[
-        kernel_begin : source.index(
-            "template <bool Unrestricted, DirectRangeOperator Range, unsigned Order = 0U>",
-            kernel_begin,
-        )
-    ]
-    admission = kernel[kernel.index("const std::size_t first_pair = max(") :]
-    assert "bounded_direct_angular_owner<FixedAngularOrder>" in admission
-    assert (
-        "&&\n            direct_shell_quartet_survives_screening<Unrestricted, Purpose>"
-        in admission
+    begin = source.index("const std::size_t first_pair = max(", kernel_begin)
+    end = source.index("if (survives)", begin)
+    probe = tmp_path / "admission.cpp"
+    probe.write_text(
+        PREFIX + helper + ADMISSION_PREFIX + source[begin:end] + ADMISSION_DRIVER
     )
-    before_screen = admission[
-        : admission.index("direct_shell_quartet_survives_screening")
-    ]
-    assert "continue" not in before_screen
-    assert "candidate_order" not in admission
-    assert "if (!generated_class)" in admission
-    assert (
-        "profile_bounded_direct_shell_quartet(batch, queue[slot], profile)" in admission
+    executable = native_cxx.build_executable(
+        [probe], tmp_path / "admission", compile_args=["-std=c++20"]
     )
-    assert "__syncthreads();" in admission
-    packing = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
-    assert (
-        "*std::max_element(host.shell_angular.begin(), host.shell_angular.end())"
-        in packing
-    )
-    basis = (ROOT / "src/scf/cuda/packed_basis.hpp").read_text()
-    assert "direct_maximum_shell_angular{255U}" in basis
+    subprocess.run([executable], check=True, timeout=30)
 
 
 PREFIX = r"""
@@ -127,4 +111,58 @@ int main() {
       }
   }
 }
+"""
+
+
+ADMISSION_PREFIX = r"""
+#include <algorithm>
+#include <initializer_list>
+using std::max; using std::min;
+struct Work { unsigned long long candidates{}, angular_rejected{}, enumerated{}, shell_screened{}; } work;
+struct ActiveShellQuartetTile { unsigned first,second,tile; };
+enum class DirectScreeningPurpose { Force };
+unsigned screened{};
+bool accepted{};
+template<class T> T atomicAdd(T* target,T value) { const auto old=*target; *target+=value; return old; }
+Work* direct_force_task_work(const DeviceBatch&,ActiveShellQuartetTile task) {
+  assert(task.first==1 && task.second==0 && task.tile==0); return &work;
+}
+template<bool,DirectScreeningPurpose>
+bool direct_shell_quartet_survives_screening(const DeviceBatch&,std::size_t first,std::size_t second,
+ double threshold,const void* bounds,const void* density,const void* optional,bool exchange,bool coulomb) {
+  assert(first==1 && second==0 && threshold==1e-14);
+  assert(bounds==nullptr && density==nullptr && optional==nullptr && !exchange && coulomb);
+  ++screened; return accepted;
+}
+template<int FixedAngularOrder> bool admit(const DeviceBatch& batch) {
+  constexpr bool Force=true, Unrestricted=false;
+  constexpr auto Purpose=DirectScreeningPurpose::Force;
+  const unsigned first_candidate=0, second_candidate=1;
+  auto* traversal=&work;
+  const double screening_tolerance=1e-14;
+  const void *shell_pair_bounds=nullptr,*shell_pair_density_bounds=nullptr;
+  const bool exchange_only=false,coulomb_only=true;
+"""
+
+ADMISSION_DRIVER = r"""
+  return survives;
+}
+template<int Order> void exercise() {
+  const std::int32_t first[]{0,2},second[]{1,3};
+  std::uint8_t angular[4]{};
+  const DeviceBatch batch{angular,first,second};
+  for(unsigned assignment=0;assignment<256;++assignment) {
+    unsigned sum=0;
+    for(unsigned shell=0;shell<4;++shell) { angular[shell]=(assignment>>(2*shell))&3U; sum+=angular[shell]; }
+    const bool owns=Order==-1 || (Order==-2 ? sum!=8 : Order==-3 ? sum!=7 && sum!=8 : sum==Order);
+    for(bool pass:{false,true}) {
+      work={}; screened=0; accepted=pass;
+      assert(admit<Order>(batch)==(owns && pass));
+      assert(screened==unsigned(owns));
+      assert(work.candidates==1 && work.angular_rejected==unsigned(!owns));
+      assert(work.enumerated==unsigned(owns) && work.shell_screened==unsigned(owns && !pass));
+    }
+  }
+}
+int main(){exercise<-1>();exercise<-2>();exercise<-3>();exercise<6>();exercise<7>();exercise<8>();}
 """

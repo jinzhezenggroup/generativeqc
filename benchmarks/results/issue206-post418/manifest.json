@@ -9,12 +9,12 @@
   "records": [
     {
       "source": ".artifacts/issue206-post418/fresh-warm-v1/ammonia-def2-svp-spherical-b1-forces.json",
-      "retained": "raw/ammonia-def2-svp-spherical-b1-forces.json",
-      "encoding": "identity",
+      "retained": "raw/ammonia-def2-svp-spherical-b1-forces.json.gz",
+      "encoding": "gzip",
       "original_bytes": 60858,
       "original_sha256": "2f2e3a9e522803a85a3ea64f466e6a7973470dbdc5708d1c2956166fe338224a",
-      "stored_bytes": 60858,
-      "stored_sha256": "2f2e3a9e522803a85a3ea64f466e6a7973470dbdc5708d1c2956166fe338224a"
+      "stored_bytes": 7921,
+      "stored_sha256": "4f048e9f863ea6562478b35656ea17128fc233af530543a5c94005105581d6cd"
     },
     {
       "source": ".artifacts/issue206-post418/fresh-warm-v1/ammonia-def2-svp-spherical-b1-forces.progress.jsonl",
@@ -342,12 +342,12 @@
     },
     {
       "source": ".artifacts/issue206-post418/fresh-warm-v1/water-tetramer-def2-svp-spherical-b1-forces.json",
-      "retained": "raw/water-tetramer-def2-svp-spherical-b1-forces.json",
-      "encoding": "identity",
+      "retained": "raw/water-tetramer-def2-svp-spherical-b1-forces.json.gz",
+      "encoding": "gzip",
       "original_bytes": 90189,
       "original_sha256": "5d94e98ffb0309234516f5e07b9b8f05808fb159b5bdb2cd59b2d029c6f2ff71",
-      "stored_bytes": 90189,
-      "stored_sha256": "5d94e98ffb0309234516f5e07b9b8f05808fb159b5bdb2cd59b2d029c6f2ff71"
+      "stored_bytes": 12177,
+      "stored_sha256": "c414575b97c2e8773dc3f4dec90149e10c08c90e28ce38c4cf7770f29206ea44"
     },
     {
       "source": ".artifacts/issue206-post418/fresh-warm-v1/water-tetramer-def2-svp-spherical-b1-forces.progress.jsonl",

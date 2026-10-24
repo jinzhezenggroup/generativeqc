@@ -68,11 +68,12 @@ void read_shells(std::istream& input, System& system, std::size_t count) {
 int main(int argc, char** argv) {
   try {
     const bool source_derivatives = argc == 6 && std::string(argv[5]) == "--source-derivatives";
-    require(
-        argc == 5 || (argc == 6 && std::string(argv[5]) == "--derivatives") || source_derivatives,
-        "usage: probe input output-prefix pair-tile auxiliary-tile "
-        "[--derivatives|--source-derivatives]");
-    const bool derivatives = argc == 6;
+    const bool packed_values = argc == 6 && std::string(argv[5]) == "--packed-values";
+    require(argc == 5 || (argc == 6 && std::string(argv[5]) == "--derivatives") ||
+                source_derivatives || packed_values,
+            "usage: probe input output-prefix pair-tile auxiliary-tile "
+            "[--derivatives|--source-derivatives|--packed-values]");
+    const bool derivatives = argc == 6 && !packed_values;
     require(std::getenv("SLURM_JOB_ID") != nullptr, "native DF probe requires a Slurm allocation");
     const std::string prefix = argv[2];
     const std::size_t pair_tile = std::stoul(argv[3]), auxiliary_tile = std::stoul(argv[4]);
@@ -126,6 +127,7 @@ int main(int argc, char** argv) {
     const auto source_host_peak_bytes =
         cuda_density_fitting_integral_source_host_peak_bytes(source.get());
     const std::size_t pairs = nbf * nbf;
+    const auto source_pairs = packed_values ? nbf * (nbf + 1) / 2 : pairs;
     const std::size_t tile_elements =
         std::max(std::min(pairs, pair_tile) * std::min(naux, auxiliary_tile),
                  derivatives ? naux * std::min(naux, auxiliary_tile) : 0U);
@@ -146,6 +148,20 @@ int main(int argc, char** argv) {
         generate_cuda_density_fitting_raw_tile(source.get(), count, 0, 1, 0, 1, -1, stream, device,
                                                detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
         "invalid batch offset accepted");
+    if (packed_values) {
+      require(generate_cuda_density_fitting_packed_raw_tile(source.get(), 0, source_pairs, 0, naux,
+                                                            0, stream, device,
+                                                            detail) == GENERATIVEQC_STATUS_SUCCESS,
+              "empty packed tile rejected");
+      require(generate_cuda_density_fitting_packed_raw_tile(source.get(), 0, source_pairs, 1, 0, 1,
+                                                            stream, device, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "out-of-range packed pair accepted");
+      require(generate_cuda_density_fitting_packed_raw_tile(
+                  source.get(), 0, 1, std::numeric_limits<std::size_t>::max(), 0, 1, stream, device,
+                  detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "overflowing packed tile accepted");
+    }
     auto unsupported_auxiliary = auxiliary;
     unsupported_auxiliary[0].shells[0].angular_momentum = 5U;
     CudaDensityFittingIntegralSource* unsupported = nullptr;
@@ -168,20 +184,34 @@ int main(int argc, char** argv) {
     std::vector<double> values(count * pairs * naux), tile(tile_elements);
     start = Clock::now();
     for (std::size_t system = 0; system < count; ++system) {
-      for (std::size_t pair = 0; pair < pairs; pair += pair_tile) {
-        const auto pcount = std::min(pair_tile, pairs - pair);
+      for (std::size_t pair = 0; pair < source_pairs; pair += pair_tile) {
+        const auto pcount = std::min(pair_tile, source_pairs - pair);
         for (std::size_t aux = 0; aux < naux; aux += auxiliary_tile) {
           const auto acount = std::min(auxiliary_tile, naux - aux);
-          require(generate_cuda_density_fitting_raw_tile(source.get(), system, pair, pcount, aux,
-                                                         acount, -1, stream, device,
-                                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
-                  detail);
+          const auto status =
+              packed_values
+                  ? generate_cuda_density_fitting_packed_raw_tile(
+                        source.get(), system, pair, pcount, aux, acount, stream, device, detail)
+                  : generate_cuda_density_fitting_raw_tile(source.get(), system, pair, pcount, aux,
+                                                           acount, -1, stream, device, detail);
+          require(status == GENERATIVEQC_STATUS_SUCCESS, detail);
           check(cudaMemcpyAsync(tile.data(), device, pcount * acount * sizeof(double),
                                 cudaMemcpyDeviceToHost, stream));
           check(cudaStreamSynchronize(stream));
           for (std::size_t p = 0; p < pcount; ++p) {
-            std::copy_n(tile.data() + p * acount, acount,
-                        values.data() + (system * pairs + pair + p) * naux + aux);
+            if (packed_values) {
+              // Independent integer decoding deliberately differs from the
+              // device's corrected square-root estimate at triangular edges.
+              std::size_t row = 0;
+              while ((row + 1) * (row + 2) / 2 <= pair + p) ++row;
+              const auto column = pair + p - row * (row + 1) / 2;
+              for (const auto index : {row * nbf + column, column * nbf + row})
+                std::copy_n(tile.data() + p * acount, acount,
+                            values.data() + (system * pairs + index) * naux + aux);
+            } else {
+              std::copy_n(tile.data() + p * acount, acount,
+                          values.data() + (system * pairs + pair + p) * naux + aux);
+            }
           }
         }
       }
@@ -322,6 +352,9 @@ int main(int argc, char** argv) {
           const auto index = system * pairs + i * nbf + j;
           density[index] =
               (i == j ? 0.3 : 0.01 / (1.0 + std::abs(static_cast<double>(i) - j))) * (system + 1);
+          // Exercise D_mn+D_nm with signed nonsymmetric inputs. A mistaken
+          // factor of two on one triangular half must not pass this probe.
+          if (packed_values) density[index] += std::sin(1.0 + 3 * i + 5 * j + system) / 50.0;
           alpha[index] = 0.6 * density[index];
           beta[index] = 0.4 * density[index];
         }
@@ -331,17 +364,18 @@ int main(int argc, char** argv) {
     std::vector<double> warm_ms;
     for (unsigned sample = 0; sample < 5; ++sample) {
       start = Clock::now();
-      require(execute_cuda_density_fitting_rhf_jk(plan.get(), density, coulomb, exchange, detail) ==
+      require(execute_cuda_density_fitting_rhf_jk(plan.get(), density, coulomb, exchange, detail,
+                                                  {true, !packed_values}) ==
                   GENERATIVEQC_STATUS_SUCCESS,
               detail);
       if (sample > 0) warm_ms.push_back(milliseconds(start));
     }
     write_values(prefix + "-j.bin", coulomb);
     write_values(prefix + "-k.bin", exchange);
-    require(
-        execute_cuda_density_fitting_uhf_jk(plan.get(), alpha, beta, coulomb, alpha_exchange,
-                                            beta_exchange, detail) == GENERATIVEQC_STATUS_SUCCESS,
-        detail);
+    require(execute_cuda_density_fitting_uhf_jk(plan.get(), alpha, beta, coulomb, alpha_exchange,
+                                                beta_exchange, detail, {true, !packed_values}) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail);
     write_values(prefix + "-uj.bin", coulomb);
     write_values(prefix + "-ka.bin", alpha_exchange);
     write_values(prefix + "-kb.bin", beta_exchange);

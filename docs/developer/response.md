@@ -1,5 +1,31 @@
 # Shared orbital response and bounded Krylov solves
 
+## Native correlated RI-JK reference response
+
+The full-DF molecular owner supplies an immutable `hf::DFReference` to the
+same matrix-free RHF frame maps used by conventional correlation. It retains
+SCF's original RI-JK plan and metric cutoff through the same-basis companions.
+Its signed-density actions use dense linear J/K, never a positive occupied
+factor approximation. The independent final frame-map replay evaluates the
+same physical RI operator; switching it to four-center ERIs would be a model
+error, not a stronger residual check. External reconverged PySCF energies
+qualify the complete gradient independently of the CUDA J/K implementation.
+
+The nuclear cross term uses symmetric polarization of the existing generated
+DF energy derivative, including three-center and fixed-rank metric response.
+It differentiates the actual retained metric branch and rejects unresolved
+rank crossings. One-electron/Pulay and correlation source pullbacks remain
+separate. Exact-source recycled operator images are not reused for RI-JK.
+`PhysicalReference::density_fitted` and immutable frame identity prevent
+accidentally accepting a DF reference with an exact response (or vice versa).
+The generated response-map hash describes the frame equations, not the
+auxiliary basis or Hamiltonian; public model identity retains the DF selector.
+
+The explicit full-DF API and fitting-basis contract are documented in
+[the CBS guide](../user/ccsdt_cbs.md). Its source/response leases are charged
+through all correlation phases; no memory refusal authorizes CPU or exact-HF
+fallback. The SCF and correlation AO-factor builds are still separate owners.
+
 The installed runtime now owns the shared closed-shell response stack:
 `generativeqc.response_problem` owns problem/layout compatibility,
 `generativeqc.response_operator` owns RHF/CPKS matrix-free equations,
@@ -8,8 +34,10 @@ and `generativeqc.response_solver` owns bounded true-residual GMRES plus
 blocked/recycled multi-RHS execution. `generativeqc.rks_response` binds a live
 native LDA/PBE RKS state to those owners using an exact J-only `FockPlan`.
 `tools/generativeqc_response` retains compatibility exports, UKS/spin-specific
-adapters and response backends not yet migrated. The Krylov controller remains
-Python/host-controlled; selected operator backends execute native J/K. This split
+adapters and response backends not yet migrated. Eligible CPU host Krylov solves use the shared native GMRES controller; eligible
+CPU recycle-vector storage, projection and replacement use the native recycle
+owner described below. Python retains method callbacks and multi-RHS scheduling,
+and selected operator backends execute native J/K. This split
 lets downstream property, Hessian, and correlated-gradient code reuse one
 scientific owner without making installed runtime code depend on repository
 `tools.*`.
@@ -68,6 +96,12 @@ lease. Preparation time, retained values, replay reads and uncached integral
 evaluations are distinct diagnostics. The 64-AO gate is a conservative large-frame
 selection, not a claim of a universally optimal crossover. Changing the default
 policy requires renewed complete-endpoint qualification.
+Experimental packed partial residency shares the
+[RHF bucket-mask policy](scf_module_boundaries.md#optional-phase-local-exact-rhf-values).
+Cached and uncached angular buckets form a disjoint complete source partition;
+positive-screening and independent final scalar audits still recompute their
+whole requested source. The additional packed host descriptors are charged
+before admitting optional values.
 The [resident-source decision](../../.agents/notes/implemented/performance/2026-10-05-exact-response-resident-source.md)
 retains the rationale, measured evidence and conditions for revisiting it.
 
@@ -94,6 +128,19 @@ canonical storage retains the existing bounded value route. Resident-source
 refusal still recomputes the same compensated canonical action, and independent
 audits never borrow the resident source. The ordinary device J/K API, mixed
 precision paths and ordinary energy/force SCF dispatch remain unchanged.
+
+Compensated fixed-mask actions reuse the compiler-owned whole-shell Hermite and
+Coulomb recurrence through f shells when prepared shell rows are available.
+This avoids repeating primitive preparation for each Cartesian AO quartet;
+it does not retain a quartic global tensor or change the Schwarz predicate.
+Separate positive J and K destinations retain independent correction planes.
+Resident buckets still take precedence; missing prepared storage retains
+component-wise replay. A threshold tighter than the prepared rows is rejected
+before any action writer, as in the original fixed-mask API.
+`RHFFrameResponseOptions::materialized_jk=false` provides an internal ablation;
+the independent final scalar residual always disables both materialization and
+residency. Successful-attempt phase times and submitted materialized launch
+counts are available in the optional DF progress journal without extra fences.
 
 Restricted CUDA physical-reference exports also admit one canonical Fock
 correction plane. Bounded quartet references use the existing generic exact
@@ -187,15 +234,113 @@ and `finite_rotation_jvp` checks the same action against an explicit
 
 ## Solver and multi-RHS strategies
 
+### Native prepared-problem binding
+
+The C++ `response::prepare_response` returns a `ResponsePlan` bound to the
+logical `LinearResponseProblem` that prepared it. `solve_response` and
+`solve_response_batch` reject a different binding before solver allocation or
+operator execution, even when dimensions, symmetry and numeric options match.
+Batch validation also precedes empty-batch completion and workspace refusal.
+Problem and plan copies retain their binding; moving a problem transfers it.
+Reconstructing or replacing a problem requires a newly prepared plan. A raw
+`GmresPlan` cannot substitute for a bound `ResponsePlan` in these entry points;
+numeric resource estimators may still consume the inherited GMRES plan.
+
+The binding token retains neither method callbacks nor borrowed scientific
+storage. Method adapters must still validate terminal-state generations,
+provider/approximation identity and borrowed-state leases when invoking their
+actions. Plan binding is not a convergence certificate or a substitute for
+those method-owned checks. GMRES equations, residual gates, numeric-payload
+budgets and backend selection are unchanged.
+
+Sequential native batch admission includes prior retained solution vectors and,
+when enabled, the reserved history/basis diagnostic capacities. The result
+reports planned solution and diagnostic retention separately. An empty batch reserves
+neither; a one-byte-short numeric budget is rejected before callback work.
+
+Direct native JVP/VJP calls enforce the same FP64 input/output dimensions as
+solver actions, before invoking method callbacks. Explicit transpose actions
+and certified symmetric fallback actions use this same shape gate. The RHF
+frame adapter binds screened and exact actions to separate plans, while CC Z
+certifies symmetry only after its independent asymmetry/curvature checks.
+Callback right preconditioners pass through the shared solve request to existing
+GMRES; they cannot be combined with a diagonal preconditioner. Their descriptor
+storage is charged by batch admission and method-owned scratch is separate.
+
+### Installed solver policies
+
+Positive-dimensional CPU host-vector calls to `solve` use the shared C++
+`response::solve_gmres` controller when the installed library exposes the public
+response protocol. This also covers the individual solves in sequential and
+recycled `solve_many`. The C++ owner performs Arnoldi orthogonalization,
+right-preconditioned Givens solves, true-residual acceptance and bounded storage
+admission; method-specific physical actions and live-reference checks retain
+their existing owners. See the [native API](../reference/native_api.md#response-controller)
+for standalone C/C++ use without Python or an execution context.
+
+The admitted Python path accepts no preconditioner or `DiagonalPreconditioner`.
+Explicit vector engines, device providers, solution consumers, general
+preconditioners, zero-dimensional problems and blocked multi-RHS solves retain
+their existing controllers. An absent library/additive protocol also preserves
+compatibility. A selected library's load error or native solve failure is not
+permission to retry Python arithmetic. Eligible CPU `sequential` multi-RHS
+scheduling is also native: the controller streams an admitted prefix through
+the existing bound response owner, then publishes workspace refusals for the
+remaining tail without applying its operators. It validates live leases even
+for zero RHS and refused requests. Eligible CPU recycle-space projection and
+replacement use the native owner described below. Recycled/block scheduling
+and the value-only RHS-rank SVD remain Python-owned; this is not a complete
+native molecular Hessian/HVP endpoint.
+
+The sequence bridge borrows validated FP64 RHS storage read-only, supporting
+positive element-aligned strides and repeated columns. A noncontiguous column
+uses one bounded, tracked staging vector rather than a second whole-matrix
+copy; admission precedes its allocation. Foreign dtype, negative/unaligned
+strides and existing non-host domains retain the compatibility schedule.
+Native publication is synchronous: only detached solution/basis copies remain
+charged between requests; history copies and publisher object bookkeeping
+have separate budgets. Current solver/publication-copy overlap is covered by
+the GMRES workspace bound. The reported peak also includes required bytes for
+refused requests; it is not a full physical endpoint allocation measurement.
+
+Native and compatibility controllers solve the same scientific linear problem
+and require the true, unpreconditioned residual to meet the requested tolerance.
+Givens versus least-squares arithmetic and checkpoint scheduling can produce
+different iteration/action histories; diagnostics report actual work, not
+fabricated bit-identical counts. Native timings use a native monotonic clock.
+
+`benchmarks/cpu_cpks_endpoint.py` records complete CPU LDA/PBE RKS/UKS endpoint
+samples, including construction, SCF, response preparation, multi-RHS solves,
+true-residual checks and cleanup. Run with `PYTHONPATH=python:.`, an explicit
+`GENERATIVEQC_LIBRARY`, `--source-sha` and an ignored `--output` destination.
+Parent comparisons require the parent's Python tree **and** native library.
+Keep numerical residual/solution gates and actual semantic work alongside
+timings; per-case first-use samples share a process/cache and are not independent
+compiler-cold measurements. See [performance qualification](../maintainer/performance_engineering.md).
+
 `solve` implements restarted GMRES with a true residual at every configured
 checkpoint. It reports the actual residual, iteration count, operator actions,
 orthogonalization/operator/recycling timings, workspace bytes, and a non-success reason.
 It does not silently regularize a singular denominator or claim success after
 a workspace or stagnation failure.
 
+The native host GMRES workspace bounds simultaneously live numeric payload:
+the Arnoldi and preconditioned bases, iteration vectors, Hessenberg/Givens
+arrays and returned solution. Optional history and published-basis capacity is
+charged only when requested. The bound includes one extra vector of publication
+headroom; `measured_workspace_peak_bytes` separately reports actual tracked
+allocations. Input spans, callback-owned storage and allocator metadata are
+outside this controller's bound and belong to the caller's complete budget.
+Resource planners should query this bound instead of reserving unused Krylov
+bases; a budget one byte below the queried requirement refuses before allocation
+or any operator action.
+
 The operator, preconditioner and retained-subspace roles are separate.
 `DiagonalPreconditioner` is opt-in and rejects zero/near-zero diagonal entries;
 it is never selected implicitly.
+Its inputs and host operator/preconditioner callback outputs must have the
+declared real numeric vector shape; complex/string outputs are rejected before
+FP64 conversion rather than silently narrowed or broadcast during Krylov work.
 
 `solve_many` provides:
 
@@ -203,6 +348,19 @@ it is never selected implicitly.
 - `blocked`: a shared orthonormal block basis with projected least squares;
 - `recycled`: reference-bound retained vectors used as initial guesses and
   updated after each solve.
+
+All three strategies accept an empty real RHS of shape ``(dimension, 0)`` and
+return that same solution shape, no per-RHS results, zero operator actions and
+zero solver workspace. They still validate the live generation/provider lease,
+recycle identity/owner, options and consumer/preconditioner contracts. No vector
+engine workspace, SVD, transfer or scientific action runs for an empty request.
+Perturbation labels describe the exact column set: partial requests require
+their own matching labels; a labeled nonempty problem cannot silently be used
+for an empty/subset request. Ragged input is rejected before operator execution.
+The shared stationary nuclear adapter follows these same empty-request rules.
+Its real-FP64 metric/RHS algebra rejects complex inputs before conversion,
+including complex arrays with zero imaginary parts; it never discards response
+components to fit the real scientific domain.
 
 Rank-deficient RHS blocks are diagnosed. The workspace accounting includes the
 retained Arnoldi/block basis and solver vectors. A small `max_workspace_bytes`
@@ -218,6 +376,113 @@ before projection or operator application. A successful peak is a conservative
 bound within the requested budget; a workspace rejection reports the required
 bound. Operator/preconditioner storage and Python interpreter bookkeeping are
 outside this solver numeric-buffer budget and require separate accounting.
+
+### Native CPU recycle vectors
+
+Eligible positive-dimensional FP64 `KrylovRecycleSpace` instances own their
+retained directions in C++. Normal CPU solve projection/replacement does not
+publish those directions back into Python. Native projection uses the retained
+orthonormal directions; replacement preserves old-first, two-pass MGS and the
+existing `1e-12 * max(1, original_norm)` acceptance cutoff. It uses the existing
+scaled native norm and shared CPU linear algebra, not a different response
+operator or an operator-image projection.
+
+The additive [native recycle API](../reference/native_api.md#cpu-response-recycle-vectors)
+provides shape-only capacities, an opaque owner, generation checks, projection,
+atomic replacement and explicit diagnostic copies. Both signed and repeated
+element strides are borrowed without making an entire Arnoldi panel copy.
+Changing retained limits is an atomic native update; old vectors remain charged
+until replacement succeeds. Additional native capacity bounds reserve the
+replacement and bounded scratch, separately from existing retained bytes.
+
+Whole-solve admission precedes native handle acquisition and numerical work.
+Missing additive protocols, explicit host seeds/transport, foreign data and
+resident/device domains preserve explicit compatibility. If an existing native
+space enters a compatibility update, its old directions stream through one
+reusable column buffer; failure preserves the original native state. A smaller
+destination capacity never forces a copy of the complete old space. Explicit
+identity/transport diagnostics detach immutable copies. Selected native/load
+errors never retry Python arithmetic.
+
+Native telemetry measures owned numeric arrays, including failed attempts;
+caller copies, Python/allocator bookkeeping and physical provider storage have
+separate lifetimes and budgets. This is not complete physical endpoint resource
+authority. Eligible CPU host GMRES uses the shared native controller; outer
+RHS/recycled/block scheduling, value-only rank SVD, method-specific equations and
+full stationary molecular HVP assembly retain their documented Python/compatibility
+owners. CUDA/resident engines are not
+admitted by this CPU cutover.
+
+### Actual-path evidence and residency boundaries
+
+The [production-path inventory](../../manifests/maintenance/electronic_structure_production_paths.json)
+records response/force/HVP owners, bindings and evidence stages separately.
+Its coverage remains a pilot, not completion of #932/#934 or a capability table.
+Default CC Lambda, RHF frame Z and generic/multi-RHS CPKS compatibility adapters
+still have host-vector Krylov/orbital seams. The installed native RKS object's
+single-RHS `solve`/`solve_resident` endpoint now executes orbital transforms and
+the shared GMRES controller natively with resident vectors, as specified in
+[response backends](response_backends.md#native-cuda-cpks). This does not establish
+resident reconstruction or a complete molecular derivative endpoint.
+Generated CUDA actions or resident J/K storage alone do
+not establish a resident solver endpoint. The resident CPHF tooling is a
+qualification binding, not a public molecular-derivative cutover. Complete CUDA
+semilocal RKS HVP remains unsupported until its missing sources and endpoint
+gates are delivered; mixed integral stages and local ``fxc`` are insufficient.
+These exceptions retain their owners and explicit retirement conditions in the
+inventory. No new default algorithm or scientific capability is inferred from
+shared orchestration.
+
+### Native CUDA Lambda residency
+
+`LambdaOptions::cuda_resident_krylov` enables an internal, non-default binding
+of the existing conventional or DF RCCSD Lambda action to `solve_response_resident`.
+The corresponding native RCCSD/CCSD(T) force overloads accept the trailing
+`resident_lambda_krylov` execution option. Installed public calculators retain
+their existing schedule; this option does not add a scientific capability.
+The native DF complete force owner separately accepts a trailing
+`lambda_resident_krylov` option, also default-off.
+
+The same nonsymmetric logical response plan serves host and resident schedules.
+The method adapter owns weighted pair projection, denominators and both physical
+residual gates. Vectors, pair projection and optional right preconditioning stay
+on the action owner's existing stream; only Arnoldi/Givens scalars, error flags
+and the final solution return to the host. Unsafe denominators still select the
+unpreconditioned physical solve, not a different equation.
+
+Admission includes the generated action arena, resident vector/table arena,
+borrowed reference allowance and the existing tensor context's bounded provider
+allowance. That allowance includes its explicit BLAS workspace; do not add it
+again to the complete `resident_device_admission_bytes` diagnostic. Numeric owned
+bytes, observed provider preparation growth, versions and Krylov-phase transfer
+and fence counters are reported separately. Optional budget/provider-allocation
+refusal retains host-vector execution; stream, kernel and numerical failures do
+not trigger a scientific retry. All queued work drains before owner teardown.
+
+DF borrows its existing input/error view and stream. Both host and resident
+schedules call the same physical transpose dispatcher: expanded Q, scalar
+staged, or bounded matrix-tail actions retain their original equations and
+independent expanded audit. The internal device entry point returns borrowed
+outputs, valid until the next action; consumers enqueue on that same stream and
+check the sticky error before publication. Its opaque stream view does not add
+a CUDA header dependency to CPU/source-only clients.
+
+DF admission also charges the additional resident/provider allowance against
+its complete host-plus-device numeric budget and original available/device
+ceiling. The original action provider and vector provider are separate live
+owners; neither allowance can be omitted. Refusal must not disable the original
+right preconditioner or select a different physical/audit equation.
+
+`tests/native/test_cc_resident_endpoint.cpp` exercises same-backend complete
+RCCSD E+F pairs against pinned independent molecular references, process-cold,
+process-warm and changed geometry cases, and two valid endpoint budgets. These
+fresh-state calls do not claim prepared-plan or borrowed-lease warm reuse.
+`tests/python/test_df_lambda_resident_cuda.py` covers physical factor response,
+independent determinant finite differences, tail schedules and refusal/recovery.
+`tests/python/test_df_resident_force_cuda.py` pairs complete DF RCCSD/CCSD(T)
+E+F endpoints with independent molecular energy/force-direction references.
+Both residency bindings remain opt-in pending broader performance/resource and
+prepared-lifetime acceptance. These fixtures do not establish prepared reuse.
 
 ## CPKS boundary
 

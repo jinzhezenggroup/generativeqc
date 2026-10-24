@@ -2,6 +2,7 @@
 
 import gzip
 import json
+import lzma
 import typing
 from pathlib import Path
 
@@ -15,6 +16,39 @@ from tools.generativeqc_validation.record import (
     load_record,
 )
 from tools.generativeqc_validation.retention import digest
+
+
+def test_df_warm_reference_storage_and_shared_reader() -> None:
+    """Retained independent references remain complete and hash-bound offline."""
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "benchmarks/results/df-one-step-warm-20260926"
+    summary = load_json(directory / "summary.json")
+    parts = {part["path"]: part for part in summary["parts"]}
+    for name, part in parts.items():
+        stored = (directory / name).read_bytes()
+        assert len(stored) == part["bytes"]
+        assert digest(stored) == part["sha256"]
+
+    part = parts["references.json.gz"]
+    assert part["encoding"] == "gzip"
+    path = directory / part["path"]
+    stored = path.read_bytes()
+    assert stored[4:8] == bytes(4)  # No run timestamp in the gzip header.
+    raw = gzip.decompress(stored)
+    assert len(raw) == part["decoded_bytes"]
+    assert digest(raw) == part["decoded_sha256"]
+    references = load_json(path)
+    assert references == json.loads(raw)
+    assert {(row["aos"], row["route"]) for row in references} == {
+        (aos, route)
+        for aos in (24, 48, 96, 192, 384, 768)
+        for route in ("direct", "df")
+    }
+    assert all(len(row["independent_references"]) == 2 for row in references)
+    assert (
+        sum(len(row["samples"]) for row in references)
+        == summary["reference_endpoint_samples"]
+    )
 
 
 @pytest.mark.parametrize("reader", [load_json, load_record])
@@ -150,3 +184,38 @@ def test_gzip_json_and_record_parts_restore_exact_values(tmp_path: typing.Any) -
     (tmp_path / "water.json.gz").write_bytes(compressed_part)
     assert load_json(tmp_path / "evidence.json.gz") == main
     assert load_record(tmp_path / "evidence.json.gz")["timings"] == values
+
+
+def test_xz_json_preserves_exact_bytes_and_ordinary_reader(tmp_path: Path) -> None:
+    raw = b'{"negative":false,"values":[0.12345678901234567,1e-14,-0.0]}'
+    stored = lzma.compress(raw)
+    assert lzma.decompress(stored) == raw
+    assert decode_json(stored) == json.loads(raw)
+    assert decode_json(stored, path="evidence.json.xz") == json.loads(raw)
+    path = tmp_path / "evidence.json.xz"
+    path.write_bytes(stored)
+    assert load_json(path) == json.loads(raw)
+    assert load_record(path) == json.loads(raw)
+
+
+def test_xz_publication_uses_hash_bound_logical_record(tmp_path: Path) -> None:
+    stored = lzma.compress(b'{"negative":false,"timings":[1.2,1.3]}')
+    (tmp_path / "evidence.json.xz").write_bytes(stored)
+    manifest = {
+        "files": [
+            {
+                "path": "evidence.json.xz",
+                "role": "evidence",
+                "bytes": len(stored),
+                "sha256": digest(stored),
+            }
+        ]
+    }
+    (tmp_path / "publication.json").write_text(json.dumps(manifest))
+    assert load_publication_record(tmp_path, name="evidence.json") == {
+        "negative": False,
+        "timings": [1.2, 1.3],
+    }
+    (tmp_path / "evidence.json.xz").write_bytes(stored + b"changed")
+    with pytest.raises(ValueError, match="checksum/size"):
+        load_publication_record(tmp_path, name="evidence.json")

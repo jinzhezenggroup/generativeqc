@@ -50,8 +50,8 @@ class ResolvedModel:
     belongs to the fitted model: changing it changes the operator. Screening and
     iteration/arithmetic settings belong to the numerical experiment instead.
     DF's effective rank is recorded in evidence because it can vary by geometry.
-    UMP2 keeps unrestricted spin populations but admits conventional integrals
-    only. Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
+    UMP2, UCCSD and UCCSD(T) keep unrestricted spin populations but admit
+    conventional integrals only. Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
     conventional, closed-shell contract. These identities support portable HF
     checkpoints; they do not enable target-accuracy or progressive execution.
     DFT requires additional functional identities before this schema can represent it.
@@ -77,7 +77,16 @@ class ResolvedModel:
             or self.schema_version != SCHEMA_VERSION
         ):
             raise ValueError("unsupported resolved-model schema")
-        if self.method not in ("rhf", "uhf", "mp2", "ump2", "rccsd", "rccsd(t)"):
+        if self.method not in (
+            "rhf",
+            "uhf",
+            "mp2",
+            "ump2",
+            "rccsd",
+            "rccsd(t)",
+            "uccsd",
+            "uccsd(t)",
+        ):
             raise ValueError("unsupported HF/canonical correlated model")
         if self.hamiltonian != "all-electron-nonrelativistic-coulomb":
             raise ValueError("unsupported Hamiltonian/core treatment")
@@ -96,12 +105,20 @@ class ResolvedModel:
         unpaired = self.multiplicity - 1
         if unpaired > self.electron_count or (self.electron_count - unpaired) % 2:
             raise ValueError("inconsistent electron count and spin populations")
-        if self.method not in ("uhf", "ump2") and self.multiplicity != 1:
+        if (
+            self.method not in ("uhf", "ump2", "uccsd", "uccsd(t)")
+            and self.multiplicity != 1
+        ):
             raise ValueError(
                 "RHF and restricted canonical correlated models require a closed-shell singlet"
             )
         if self.method == "ump2" and self.approximation != "conventional":
             raise ValueError("UMP2 model requires conventional integrals")
+        if (
+            self.method in ("uccsd", "uccsd(t)")
+            and self.approximation != "conventional"
+        ):
+            raise ValueError("unrestricted CC model requires conventional integrals")
         if (
             self.method in ("rccsd", "rccsd(t)")
             and self.approximation != "conventional"
@@ -458,6 +475,55 @@ class AccuracyAssessment:
         return result
 
 
+def _observable_array(name: str, supplied: typing.Any) -> np.ndarray:
+    """Validate public scalar energy or Cartesian forces before measuring error."""
+    raw = np.asarray(supplied)
+    if raw.dtype.kind not in "fiu" or not np.isfinite(raw).all():
+        raise ValueError("observables must be finite real numeric values")
+    with np.errstate(over="ignore", invalid="ignore"):
+        value = np.asarray(raw, dtype=np.float64)
+    if not np.isfinite(value).all():
+        raise ValueError("observables exceed finite FP64 representation")
+    if name == "energy" and value.shape != ():
+        raise ValueError("energy must be a scalar")
+    if name == "forces" and (value.ndim != 2 or value.shape[1] != 3 or not len(value)):
+        raise ValueError("forces must have shape (Natom, 3)")
+    return value
+
+
+def _measure_observables(
+    target: TargetAccuracy, values: dict, reference_values: dict
+) -> tuple[tuple[ObservableTarget, float, float], ...]:
+    """Share finite-value, shape and scaled-RMS rules across endpoint audits.
+
+    This measures norms only. Model/scope admission and interpreting the strict
+    reference's unresolved uncertainty remain the caller's responsibility.
+    """
+    measurements = []
+    for requirement in target.observables:
+        name = requirement.observable
+        value = _observable_array(name, values[name])
+        reference = _observable_array(name, reference_values[name])
+        if value.shape != reference.shape:
+            raise ValueError("observable dimensions differ")
+
+        def norm(
+            array: typing.Any, norm_name: typing.Any = requirement.norm
+        ) -> typing.Any:
+            # Scaling avoids overflow when squaring large finite values.
+            maximum = float(np.max(np.abs(array)))
+            if not math.isfinite(maximum):
+                raise ValueError("observable difference overflowed")
+            if norm_name == "rms" and maximum:
+                return maximum * float(np.sqrt(np.mean((array / maximum) ** 2)))
+            return maximum
+
+        with np.errstate(over="ignore", invalid="ignore"):
+            difference = value - reference
+        measurements.append((requirement, norm(difference), norm(reference)))
+    return tuple(measurements)
+
+
 def compare_observables(
     model: ResolvedModel,
     evaluated_model: ResolvedModel,
@@ -477,53 +543,23 @@ def compare_observables(
     The resulting status describes observed agreement only, even for a strict
     reference: its residual/reference uncertainty still needs separate evidence.
     """
-    evidence = []
-    for requirement in target.observables:
-        name = requirement.observable
-        arrays = []
-        for mapping in (values, reference_values):
-            raw = np.asarray(mapping[name])
-            if raw.dtype.kind not in "fiu" or not np.isfinite(raw).all():
-                raise ValueError("observables must be finite real numeric values")
-            value = np.asarray(raw, dtype=np.float64)
-            if name == "energy" and value.shape != ():
-                raise ValueError("energy must be a scalar")
-            if name == "forces" and (
-                value.ndim != 2 or value.shape[1] != 3 or not len(value)
-            ):
-                raise ValueError("forces must have shape (Natom, 3)")
-            arrays.append(value)
-        value, reference = arrays
-        if value.shape != reference.shape:
-            raise ValueError("observable dimensions differ")
-
-        def norm(
-            array: typing.Any, norm_name: typing.Any = requirement.norm
-        ) -> typing.Any:
-            # Scaling avoids overflow when squaring large finite values.
-            maximum = float(np.max(np.abs(array)))
-            if not math.isfinite(maximum):
-                raise ValueError("observable difference overflowed")
-            if norm_name == "rms" and maximum:
-                return maximum * float(np.sqrt(np.mean((array / maximum) ** 2)))
-            return maximum
-
-        with np.errstate(over="ignore", invalid="ignore"):
-            difference = value - reference
-        evidence.append(
-            ErrorEvidence(
-                EvidenceKind.OBSERVED,
-                model.identity,
-                evaluated_model.identity,
-                reference_model.identity,
-                name,
-                requirement.norm,
-                requirement.unit,
-                norm(difference),
-                norm(reference),
-                "total_numerical",
-                scope,
-                provenance,
-            )
+    evidence = tuple(
+        ErrorEvidence(
+            EvidenceKind.OBSERVED,
+            model.identity,
+            evaluated_model.identity,
+            reference_model.identity,
+            requirement.observable,
+            requirement.norm,
+            requirement.unit,
+            difference_norm,
+            reference_norm,
+            "total_numerical",
+            scope,
+            provenance,
         )
-    return AccuracyAssessment(model, target, tuple(evidence), converged)
+        for requirement, difference_norm, reference_norm in _measure_observables(
+            target, values, reference_values
+        )
+    )
+    return AccuracyAssessment(model, target, evidence, converged)

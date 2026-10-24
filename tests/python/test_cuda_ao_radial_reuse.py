@@ -19,6 +19,7 @@ from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_scientific_kernels,
     emit_grid_source,
 )
+from test_ci_prose_workflow import assert_full_coverage_step, selected
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,8 +32,8 @@ def _ao_source() -> tuple[str, str, str]:
     end = policy.index(";", policy.index("__constant__ int derivatives")) + 1
     source = emit_grid_scientific_kernels(ao_radial_reuse=True)
     kernels = source[
-        source.index("__global__ void ao_kernel(") : source.index(
-            "__global__ void feature_kernel("
+        source.index("__global__ void ao_kernel(") : source.rfind(
+            "template <", 0, source.index("__global__ void feature_kernel(")
         )
     ]
     schedule_begin = source.index("void scheduled_ao(")
@@ -492,17 +493,19 @@ def test_resource_tool_rejects_mismatched_selector_before_compiling(
         )
 
 
-def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
+def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     import textwrap
 
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    cuda = workflow.split("\n  cuda-compile:\n", 1)[1].split(
-        "\n  cuda-resources:\n", 1
+    cuda = re.split(
+        r"\n  [A-Za-z0-9_-]+:\n",
+        workflow.split("\n  cuda-compile:\n", 1)[1],
+        maxsplit=1,
     )[0]
     marker = "      - name: Compile opted-in AO radial kernels with release resources\n"
     step = cuda.split(marker, 1)[1].split("      - name: ", 1)[0]
     assert "python3-pytest" in cuda
-    assert "if:" not in step and "continue-on-error:" not in step
+    assert_full_coverage_step(step)
+    assert "continue-on-error:" not in step
     assert 'test -x "$CUDACXX"' in step
     assert 'exec ccache "$CUDACXX" "$@"' in step
     assert "GENERATIVEQC_GRID_CUDA_ARCH: sm_120" in step
@@ -512,19 +515,136 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
         in step
     )
     assert "--basetemp build/ao-radial-compile" in step
-    assert cuda.index(marker) < cuda.index(
-        "      - name: Save CUDA ccache immediately after build"
+    # The required fast job is read-only. Its AO gate must finish successfully
+    # before the separate master CLI producer can publish a complete snapshot.
+    assert "uses: actions/cache/save@" not in cuda
+    assert cuda.index(
+        "      - name: Compile production CUDA and runtime CTest\n"
+    ) < cuda.index(marker)
+    producer = re.split(
+        r"\n  [A-Za-z0-9_-]+:\n",
+        workflow.split("\n  native-cli-artifact:\n", 1)[1],
+        maxsplit=1,
+    )[0]
+    header = producer.split("\n    steps:\n", 1)[0]
+    assert re.search(
+        r"needs:\s*(?:cuda-compile|\[[^\]]*\bcuda-compile\b[^\]]*\])", header
     )
+    assert "needs.cuda-compile.result == 'success'" in header
+    save_marker = "      - name: Save complete shared CUDA ccache on master\n"
+    save = producer.split(save_marker, 1)[1].split("      - name: ", 1)[0]
+    assert "uses: actions/cache/save@" in save
+    assert "github.event_name == 'push' && github.ref == 'refs/heads/master'" in save
+    assert "key: ${{ steps.cli_ccache.outputs.cache-primary-key }}" in save
+    assert "always()" not in save and "failure()" not in save
+    assert "continue-on-error: true" in save
+    # Tier-aware display labels may change without changing build admission.
+    assert producer.index(
+        "cmake --build --preset cuda-release-cli-sm120"
+    ) < producer.index(save_marker)
+    assert producer.index(
+        "      - name: Smoke-test release-mode native command\n"
+    ) < producer.index(save_marker)
+
     artifact = cuda.split(
         "      - name: Preserve opted-in AO radial resource reports\n", 1
     )[1].split("      - name: ", 1)[0]
     # Reports survive failed PR/merge-queue builds. Master push runs maintain
     # the trusted compiler cache and deliberately omit diagnostic artifacts.
-    assert "if: ${{ always() && github.event_name != 'push' }}" in artifact
+    for event in ("pull_request", "merge_group", "push"):
+        assert selected(
+            artifact,
+            {"github.event_name": event, "success()": False, "failure()": True},
+        ) == (event != "push")
     assert "build/ao-radial-compile" in artifact
     assert "name: ao-radial-release-compile" in artifact
     script = textwrap.dedent(step.split("        run: |\n", 1)[1])
     subprocess.run(["bash", "-n"], input=script, text=True, check=True, timeout=10)
+
+
+def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
+    _assert_cuda_ci_ao_gate((ROOT / ".github/workflows/ci.yml").read_text())
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (
+            "Compile opted-in AO radial kernels with release resources\n",
+            "Compile opted-in AO radial kernels with release resources\n        if: false\n",
+        ),
+        (
+            "Compile opted-in AO radial kernels with release resources\n",
+            "Compile opted-in AO radial kernels with release resources\n        continue-on-error: true\n",
+        ),
+        ('exec ccache "$CUDACXX" "$@"', 'exec "$CUDACXX" "$@"'),
+        ("needs: cuda-compile", "needs: merge_queue_liveness"),
+        (
+            "needs.cuda-compile.result == 'success'",
+            "needs.cuda-compile.result != 'cancelled'",
+        ),
+        (
+            "Save complete shared CUDA ccache on master\n        if:",
+            "Save complete shared CUDA ccache on master\n        if: always() &&",
+        ),
+        (
+            "github.event_name == 'push' && github.ref == 'refs/heads/master'",
+            "github.event_name == 'pull_request'",
+        ),
+        (
+            "always() && github.event_name != 'push'",
+            "success() && github.event_name != 'push'",
+        ),
+    ],
+)
+def test_cuda_ci_ao_gate_rejects_lifecycle_regressions(before: str, after: str) -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert before in workflow
+    with pytest.raises(AssertionError):
+        _assert_cuda_ci_ao_gate(workflow.replace(before, after))
+
+
+@pytest.mark.parametrize(
+    "label", ["Compile the native distribution", "Release or fast CLI build"]
+)
+def test_cuda_complete_cache_order_ignores_build_display_label(label: str) -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    command = workflow.index("cmake --build --preset cuda-release-cli-sm120")
+    start = workflow.rfind("      - name:", 0, command)
+    assert start >= 0
+    end = workflow.index("\n", start) + 1
+    renamed = workflow[:start] + f"      - name: {label}\n" + workflow[end:]
+    _assert_cuda_ci_ao_gate(renamed)
+
+
+def test_cuda_complete_cache_cannot_precede_cli_build() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    start = workflow.index("      - name: Save complete shared CUDA ccache on master\n")
+    end = workflow.index(
+        "      - name: Preserve partial master CUDA compiler work\n", start
+    )
+    save = workflow[start:end]
+    broken = workflow[:start] + workflow[end:]
+    command = broken.index("cmake --build --preset cuda-release-cli-sm120")
+    insertion = broken.rfind("      - name:", 0, command)
+    assert insertion >= 0
+    broken = broken[:insertion] + save + broken[insertion:]
+    with pytest.raises(AssertionError):
+        _assert_cuda_ci_ao_gate(broken)
+
+
+def test_cuda_complete_cache_cannot_precede_cli_smoke() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    start = workflow.index("      - name: Save complete shared CUDA ccache on master\n")
+    end = workflow.index(
+        "      - name: Preserve partial master CUDA compiler work\n", start
+    )
+    save = workflow[start:end]
+    broken = workflow[:start] + workflow[end:]
+    insertion = broken.index("      - name: Smoke-test release-mode native command\n")
+    broken = broken[:insertion] + save + broken[insertion:]
+    with pytest.raises(AssertionError):
+        _assert_cuda_ci_ao_gate(broken)
 
 
 @pytest.mark.parametrize(

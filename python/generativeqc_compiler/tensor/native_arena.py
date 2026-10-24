@@ -15,6 +15,12 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.storage import (
+    BufferOp,
+    BufferValue,
+    MemoryEffect,
+    analyze_lifetimes,
+)
 
 from .program import Program
 
@@ -26,34 +32,48 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SymbolicArenaPlan:
-    """Exclusive retained slots plus last-reader-colored dynamic FP64 storage.
+    """Exclusive retained slots plus uniformly typed last-reader-colored storage.
 
-    Slot capacities are products of runtime extent symbols, not representative
-    numeric shapes. Outputs stay live through return because native callers
+    Capacities are maxima of runtime extent products, not representative numeric
+    shapes. Outputs stay live through return because native callers
     borrow their pointers. Assignments use positions in the supplied node order.
     """
 
-    slots: tuple[tuple[str, ...], ...]
+    slots: tuple[tuple[tuple[str, ...], ...], ...]
     node_slots: Mapping[int, int]
+    storage_dtype: str = "float64"
 
     @property
     def identity(self) -> str:
         """Identify storage only; this is not scientific or numeric cache validity."""
         return canonical_hash(
             {
-                "schema": "generativeqc.tensor.symbolic-arena.v1",
+                "schema": "generativeqc.tensor.symbolic-arena.v2",
                 "slots": self.slots,
                 "assignments": tuple(self.node_slots.items()),
+                **(
+                    {"storage_dtype": self.storage_dtype}
+                    if self.storage_dtype != "float64"
+                    else {}
+                ),
             }
         )
 
     @property
     def sizes(self) -> tuple[str, ...]:
         """Emit checked element capacities for the existing CPU/CUDA native ABI."""
-        return tuple(
-            "checked_product({" + ",".join(shape) + "})" if shape else "1"
-            for shape in self.slots
-        )
+        sizes = []
+        for capacity in self.slots:
+            terms = tuple(
+                "checked_product({" + ",".join(shape) + "})"
+                if shape
+                else ("1" if len(capacity) == 1 else "std::size_t{1}")
+                for shape in capacity
+            )
+            sizes.append(
+                terms[0] if len(terms) == 1 else "std::max({" + ",".join(terms) + "})"
+            )
+        return tuple(sizes)
 
 
 @dataclass(frozen=True)
@@ -162,24 +182,35 @@ def plan_symbolic_arena(
     dimension_symbol: Callable[[Index], str],
     execution_nodes: Sequence[Node] | None = None,
     retained_nodes: Sequence[Node] = (),
+    storage_dtype: str = "float64",
+    cross_size_reuse: bool = False,
 ) -> SymbolicArenaPlan:
     """Plan the established materialized native schedule without backend policy.
 
     The caller deterministically binds each index to a runtime extent symbol and may
     supply an already-selected dependency order. Every live node must occur once;
     no operation is reordered, removed, fused, or rematerialized here. Lowering
-    must write each noninput node into distinct dense FP64 storage: views or
+    must write each noninput node into distinct dense uniform floating storage: views or
     opaque physical aliases require the separate common storage analysis.
 
     ``retained_nodes`` declares exclusive storage, not a proof of invariance.
     Use ``analyze_iteration_reuse`` to prove reuse and let the runtime establish
     its lifetime. Retained slots are reserved before any dynamic slot so a replay
     cannot overwrite a later invariant before its original graph position.
+
+    The opt-in cross-size candidate merges whole equal-capacity slots only when
+    all their owner intervals are disjoint. Their runtime maximum cannot exceed
+    the original sum for any admitted shape. Retained plans keep the established
+    coloring so optional-cache admission is unchanged.
     """
     if not isinstance(program, Program):
         raise TypeError("symbolic arena planning requires a TensorIR Program")
+    if storage_dtype not in ("float32", "float64"):
+        raise ValueError("native tensor arena requires a floating storage dtype")
     if not callable(dimension_symbol):
         raise TypeError("arena dimension symbols require an index binding")
+    if type(cross_size_reuse) is not bool:
+        raise TypeError("cross-size arena reuse must be bool")
     for label, values in (
         ("execution nodes", execution_nodes),
         ("retained nodes", retained_nodes),
@@ -197,18 +228,19 @@ def plan_symbolic_arena(
         or any(node not in numbers for node in expected_nodes)
     ):
         raise ValueError("arena execution order must contain every live node once")
-    last_use = list(range(len(nodes)))
     shapes: dict[int, tuple[str, ...]] = {}
     dimensions: dict[Index, str] = {}
     for number, node in enumerate(nodes):
         for source in node.inputs:
             if numbers[source] >= number:
                 raise ValueError("arena execution order must be dependency ordered")
-            last_use[numbers[source]] = number
         if node.op == "input":
             continue
-        if node.spec.dtype != "float64":
-            raise ValueError("native tensor arena requires FP64 intermediates")
+        if node.spec.dtype != storage_dtype:
+            label = "FP64" if storage_dtype == "float64" else "FP32"
+            raise ValueError(
+                f"native tensor arena requires uniform {label} intermediates"
+            )
         symbols = []
         for index in node.spec.indices:
             symbol = dimensions.get(index)
@@ -224,8 +256,28 @@ def plan_symbolic_arena(
                 dimensions[index] = symbol
             symbols.append(symbol)
         shapes[number] = tuple(sorted(symbols))
-    for node in program.outputs.values():
-        last_use[numbers[node]] = len(nodes)
+    # Unit capacities resolve materialized-owner lifetimes only; concrete sizes
+    # never participate in the symbolic capacity or slot assignment.
+    lifetimes = analyze_lifetimes(
+        [
+            BufferValue(number, 8, "native", compiler_owned=node.op != "input")
+            for number, node in enumerate(nodes)
+        ],
+        [
+            BufferOp(
+                number,
+                tuple(numbers[source] for source in node.inputs),
+                () if node.op == "input" else (number,),
+                MemoryEffect.EXPLICIT,
+            )
+            for number, node in enumerate(nodes)
+        ],
+        inputs=tuple(number for number, node in enumerate(nodes) if node.op == "input"),
+        outputs=tuple(
+            dict.fromkeys(numbers[node] for node in program.outputs.values())
+        ),
+    )
+    last_use = {item.owner: item.last_phase - 1 for item in lifetimes.ranges}
 
     releases: dict[int, list[int]] = defaultdict(list)
     available: dict[tuple[str, ...], list[int]] = defaultdict(list)
@@ -251,4 +303,31 @@ def plan_symbolic_arena(
         node_slots[number] = slot
         releases[last_use[number] + 1].append(slot)
 
-    return SymbolicArenaPlan(tuple(slots), MappingProxyType(node_slots))
+    capacities = tuple((shape,) for shape in slots)
+    if cross_size_reuse and not retained_nodes:
+        intervals: dict[int, list[tuple[int, int]]] = defaultdict(list)
+        for number, slot in node_slots.items():
+            intervals[slot].append((number, last_use[number]))
+        groups: list[list[int]] = []
+        group_intervals: list[list[tuple[int, int]]] = []
+        remap: dict[int, int] = {}
+        for slot in range(len(slots)):
+            for group, occupied in enumerate(group_intervals):
+                if all(
+                    last < first_other or last_other < first
+                    for first, last in intervals[slot]
+                    for first_other, last_other in occupied
+                ):
+                    groups[group].append(slot)
+                    occupied.extend(intervals[slot])
+                    remap[slot] = group
+                    break
+            else:
+                remap[slot] = len(groups)
+                groups.append([slot])
+                group_intervals.append(list(intervals[slot]))
+        capacities = tuple(
+            tuple(sorted({slots[slot] for slot in group})) for group in groups
+        )
+        node_slots = {number: remap[slot] for number, slot in node_slots.items()}
+    return SymbolicArenaPlan(capacities, MappingProxyType(node_slots), storage_dtype)

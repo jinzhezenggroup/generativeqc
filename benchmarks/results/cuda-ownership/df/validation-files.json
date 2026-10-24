@@ -1,9 +1,9 @@
 {
   "files": [
     {
-      "bytes": 10006,
+      "bytes": 10577,
       "path": "README.md",
-      "sha256": "9a81a46e446ae3c8ae5bc153f16e1d26289996316294e361995db6ebc129f711"
+      "sha256": "2d8a624d93d51ada1b11db2b8dfc5277950b8373942cf49200a6bd9c057b7d42"
     },
     {
       "bytes": 17733,
@@ -41,9 +41,11 @@
       "sha256": "28504b5f062df97d6112e952de5681d3c02efb7cb9e9a3ffaa7f21a5a57da061"
     },
     {
-      "bytes": 125980,
-      "path": "oh-diagnostic.json",
-      "sha256": "90a23962e51b76ef285e2aa1dc32f4b3d05864b4dc3bf855b35a6a5403357576"
+      "bytes": 11848,
+      "path": "oh-diagnostic.json.xz",
+      "sha256": "3e48687495a7ace27660346d106627b5e8a0bf7745b5aeb594a7eb6b50b77d09",
+      "decoded_bytes": 125980,
+      "decoded_sha256": "90a23962e51b76ef285e2aa1dc32f4b3d05864b4dc3bf855b35a6a5403357576"
     },
     {
       "bytes": 43792,
@@ -66,19 +68,21 @@
       "sha256": "22959bfd9f5c4009fd559de73a7cee3906d7bfd077fd8f47adbc1c25562a5aeb"
     },
     {
-      "bytes": 163067,
-      "path": "raw-source.json",
-      "sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
+      "bytes": 6084,
+      "path": "raw-source.json.xz",
+      "sha256": "6f31b16960a2a08c33f6af25cf8c0c4c48ce51f375703167a088c0522757ce3f",
+      "decoded_bytes": 163067,
+      "decoded_sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
     },
     {
-      "bytes": 3234,
+      "bytes": 3233,
       "path": "rejected-inventory-run.json",
-      "sha256": "453f37edefebd69e3553e1a74ca9f93c235fabf9296bfe053ea1a1c04f9d6277"
+      "sha256": "6d4ed96e1363dd21741369e29bb09c632d6ba3379328edb950c25f196966eaba"
     },
     {
-      "bytes": 270744,
-      "path": "rejected-inventory-run.json.gz",
-      "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
+      "bytes": 51340,
+      "path": "rejected-inventory-run.json.xz",
+      "sha256": "26bdeb2241e6a5a490ce76f91c5e41d9abb1dce1c0f2557104ff52c0f8bb9ee6"
     },
     {
       "bytes": 6174,
@@ -86,9 +90,11 @@
       "sha256": "21d97d427eae0221bc59d56d47cd248c9380156bc5e58189a00513d9fee0190d"
     },
     {
-      "bytes": 155087,
-      "path": "validation.json",
-      "sha256": "8d78b766ceb1eedf6bfa7338808a2647e89a96b023d3cd7ed19f06f09ee9ded6"
+      "bytes": 11516,
+      "path": "validation.json.xz",
+      "sha256": "3f95531ec285b8b879e82c1bb7ba9084952ca2b28596726d63039db1ac4f28ca",
+      "decoded_bytes": 155087,
+      "decoded_sha256": "8d78b766ceb1eedf6bfa7338808a2647e89a96b023d3cd7ed19f06f09ee9ded6"
     }
   ],
   "schema": "vibeqc.df-retirement-validation-files.v1"

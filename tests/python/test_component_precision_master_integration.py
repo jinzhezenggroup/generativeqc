@@ -71,10 +71,11 @@ runtime::ExecutionPrecisionSchedule test_precision_schedule(bool coulomb, bool d
 }
 struct Owner {
   scf::ScfOptions options;
+  scf::ScfResult output;
   runtime::ExecutionPrecisionSchedule precision_schedule;
   struct { CudaXcFastPathCapabilities fast_paths; } xc_layout;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
-  bool device_nonlocal{}, incremental_direct_jk{};
+  bool device_nonlocal{}, incremental_direct_jk{}, nonlocal_initialization{};
   void* nonlocal_correlation{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
@@ -164,6 +165,9 @@ int main() {
     rsh.device_nonlocal = true;
     assert(rsh.chunk() == (!coulomb && !density));
     assert(!rsh.replay());
+    rsh.nonlocal_initialization = true;
+    assert(!rsh.chunk() && !rsh.replay());
+    rsh.nonlocal_initialization = false;
     rsh.range_correction.reset();
     assert(!rsh.chunk());
   }
@@ -180,28 +184,33 @@ def test_native_global_hybrid_admission_combines_direct_auto_and_strict_df(
     tmp_path: Path,
     native_cxx: object,
 ) -> None:
-    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    source = (ROOT / "src/methods/dft_method_preparation.cpp").read_text()
     admission = _span(
-        source, "  const bool cuda_global_hybrid", "  bool cuda_split_hybrid"
+        source, "  const bool cuda_global_hybrid", "  if (scaled_or_hybrid"
     )
     _run(
         tmp_path,
         r"""
 #include <cassert>
 #include "generativeqc/generativeqc.h"
-#include "dft/semilocal_family.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "scf/types.hpp"
 using namespace generativeqc;
+struct Plan {
+  bool range_exchange{}, nonlocal_correlation{};
+  dft::SemilocalFamily semilocal_family;
+  std::uint32_t spin_channels;
+};
+std::uint32_t ks_xc_functional_code(const Plan& plan) {
+  return dft::semilocal_family_code(plan.semilocal_family);
+}
 bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
               unsigned excluded = 0) {
   const auto backend = excluded == 1 ? GENERATIVEQC_BACKEND_CPU_REFERENCE
                                      : GENERATIVEQC_BACKEND_CUDA;
-  struct Plan {
-    bool range_exchange{}, nonlocal_correlation{};
-    dft::SemilocalFamily semilocal_family;
-  } execution_plan{excluded == 2, excluded == 3,
-                   b3lyp ? dft::SemilocalFamily::B3lyp : dft::SemilocalFamily::Pbe};
-  const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
+  const Plan execution_plan{excluded == 2, excluded == 3,
+                            b3lyp ? dft::SemilocalFamily::B3lyp : dft::SemilocalFamily::Pbe,
+                            unrestricted ? 2U : 1U};
   scf::ScfOptions options;
   options.precision_mode = automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64;
   options.density_fitting_mode = fitted ? GENERATIVEQC_DENSITY_FITTING_AUTO
@@ -209,6 +218,7 @@ bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
   options.semilocal_exchange_scale = b3lyp ? 1.0 : 0.75;
   options.semilocal_correlation_scale = 1.0;
   scf::FockBuildSpec fock;
+  fock.derivative_order = 0;
   fock.spin = unrestricted ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
   fock.exchange.present = excluded != 4;
   fock.exchange.coefficient = (b3lyp ? -0.1 : -0.125) * (unrestricted ? 2 : 1);
@@ -218,7 +228,7 @@ bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
 """
         + admission
         + r"""
-  return cuda_curated_global_hybrid;
+  return cuda_matched_global_hybrid;
 }
 int main() {
   for (bool fitted : {false, true}) for (bool automatic : {false, true})

@@ -51,7 +51,9 @@ def reservation_probe(
     matches = public[public.index("  bool matches(") : public.index("\n private:")]
     validation_start = prepared.index("    const auto reserved_rank =")
     validation_end = prepared.index("    for (const auto* term", validation_start)
-    initializer_start = prepared.index("  Impl(const core::System&")
+    initializer_start = prepared.index(
+        "  Impl(const core::System& system, const core::System* aux,"
+    )
     initializer_end = prepared.index(
         "    validate_resolved_fock_build", initializer_start
     )
@@ -61,6 +63,8 @@ def reservation_probe(
         "      checked(create_cuda_density_fitting_jk_plan_from_source("
     )
     call_end = prepared.index("      cuda_df.reset", call_start)
+    packing_start = prepared.index("      const bool coulomb_only_packing =")
+    planning_start = prepared.index("      const auto plan_values =", packing_start)
     unit = r"""
 #include <cassert>
 #include <iostream>
@@ -84,6 +88,7 @@ struct Capture::Impl {
   std::size_t requested_budget;
   unsigned retained_fitted_derivative_order;
   FockOccupiedProjectionReservation projection_reservation;
+  bool external_integrals{};
   FockPreparationDiagnostic diagnostic;
   CudaDirectJkPlan* cuda_exact = nullptr;
 """
@@ -101,10 +106,12 @@ struct Capture::Impl {
     )
     unit += r"""
 DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reservation,
-    DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget) {
+    DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget,
+    bool automatic = false, ResolvedFockBuild strategy = {}) {
   const auto reserved_rank = reservation.restricted_rank;
   FockPreparationDiagnostic diagnostic;
   diagnostic.variant.df_pair_storage_request =
+      automatic ? DfPairStorageRequest::Automatic :
       storage == DfPairStorage::Dense ? DfPairStorageRequest::Dense :
       storage == DfPairStorage::SymmetricLower ? DfPairStorageRequest::SymmetricLower :
       DfPairStorageRequest::SymmetricLowerSingle;
@@ -113,6 +120,9 @@ DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reserva
   DfResolvedBudget resolved;
   resolved.requested_bytes = resolved.total_bytes = resolved.value_bytes = plan_budget;
 """
+    # Execute the production eligibility predicate captured by the planner.
+    # A constant stand-in would lose the J-only physical/spin boundary.
+    unit += prepared[packing_start:planning_start]
     unit += definition(prepared, "      const auto plan_values =") + ";\n"
     unit += "return plan_values(n,a,0); }\n"
     unit += r"""
@@ -144,12 +154,17 @@ void allocate(const DensityFittingTilePlan& tiles) {
     unit += prepared[call_start:call_end]
     unit += "}\n}\nusing namespace generativeqc;\n"
     unit += r"""
-struct NativeKsExecutionPlan { unsigned spin_channels=1; bool range_exchange=false; };
+struct NativeKsExecutionPlan {
+  unsigned spin_channels=1;
+  bool range_exchange=false;
+  bool density_fitted_range_exchange=false;
+};
 """
     unit += definition(
         method,
         "scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(",
     )
+    unit += definition(method, "std::size_t ks_fitted_provider_budget(")
     unit += r"""
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend) {
   assert(false); return 0;
@@ -226,9 +241,36 @@ int main(int argc, char** argv) {
     rsh.range_exchange=true;
     const auto rsh_method=method_prepare(system,rsh,strategy);
     assert(rsh_method.impl_->projection_reservation == reserved);
+    assert(rsh_method.impl_->retained_fitted_derivative_order == 1);
+    assert(rsh_method.matches(system,nullptr,strategy,0,1U<<30,0,1,reserved));
+    assert(!rsh_method.matches(system,nullptr,strategy,0,1U<<30,0,2,reserved));
+    rsh.density_fitted_range_exchange=true;
+    const auto fitted_rsh=method_prepare(system,rsh,strategy);
+    assert(fitted_rsh.impl_->projection_reservation == reserved);
+    assert(fitted_rsh.impl_->requested_budget == (1U<<29));
+    assert(fitted_rsh.matches(system,nullptr,strategy,0,1U<<29,0,1,reserved));
+    assert(!fitted_rsh.matches(system,nullptr,strategy,0,1U<<30,0,1,reserved));
+    ScfOptions budgets;
+    budgets.resolved_fock_build=strategy;
+    for (std::size_t bytes : {0U,2U,3U,1025U}) {
+      budgets.density_fitting_memory_budget_bytes=bytes;
+      const auto primary=ks_fitted_provider_budget(budgets,rsh,false);
+      const auto long_range=ks_fitted_provider_budget(budgets,rsh,true);
+      assert(primary+long_range == bytes);
+      assert(primary == bytes/2 && long_range == bytes-primary);
+    }
+    budgets.density_fitting_memory_budget_bytes=1;
+    bool small_rejected=false;
+    try { (void)ks_fitted_provider_budget(budgets,rsh,false); }
+    catch (const std::bad_alloc&) { small_rejected=true; }
+    assert(small_rejected); // Never reinterpret a zero half as automatic admission.
+    assert(ks_fitted_provider_budget(budgets,execution,false) == 1);
     const Capture generic(system,nullptr,strategy,0);
     assert(!generic.impl_->projection_reservation.restricted_rank);
     assert(generic.matches(system,nullptr,strategy,0,0));
+    generic.impl_->external_integrals = true;
+    assert(!generic.matches(system,nullptr,strategy,0,0));
+    generic.impl_->external_integrals = false;
     assert(!generic.matches(system,nullptr,strategy,0,0,0,0,reserved));
     assert(method.matches(system,nullptr,strategy,0,1U<<30,0,0,reserved));
     assert(!method.matches(system,nullptr,strategy,0,1U<<30));
@@ -251,6 +293,33 @@ int main(int argc, char** argv) {
       catch (const std::invalid_argument&) { rejected=true; }
       assert(rejected);
     }
+  } else if (mode == "coulomb_planning") {
+    const auto dense = DfPairStorage::Dense;
+    auto j_only = strategy;
+    j_only.spec.exchange.present = false;
+    constexpr std::size_t budget = 13685173124ULL;
+    const auto pure = plan_values_for({},dense,768,3712,budget,true,j_only);
+    assert(pure.value_storage.pairs == DfPairStorage::SymmetricLowerSingle);
+    assert(pure.stores_full_three_center && pure.value_storage.rank_capacity == 0);
+    assert(pure.automatic_rhf_rank == 0 && pure.peak_workspace_bytes <= budget);
+    allocate(pure);
+    assert(allocated_retained && allocated_storage.rank_capacity == 0);
+    for (int kind = 0; kind < 4; ++kind) {
+      auto excluded = j_only;
+      if (kind == 0) excluded.spec.spin = FockSpin::Unrestricted;
+      if (kind == 1) excluded.spec.coulomb.present = false;
+      if (kind == 2) excluded.spec.coulomb.approximation = FockApproximation::Exact;
+      if (kind == 3) excluded.spec.exchange.present = true;
+      const auto plan = plan_values_for({},dense,768,3712,budget,true,excluded);
+      assert(plan.value_storage.pairs == dense && !plan.stores_full_three_center);
+    }
+    const auto explicit_dense = plan_values_for({},dense,768,3712,budget,false,j_only);
+    assert(explicit_dense.value_storage.pairs == dense);
+    const auto roomy = plan_values_for({},dense,96,96,1U<<30,true,j_only);
+    assert(roomy.value_storage.pairs == dense && roomy.stores_full_three_center);
+    const auto bounded = plan_values_for({},dense,768,3712,4ULL<<30,true,j_only);
+    assert(bounded.value_storage.pairs == dense && !bounded.stores_full_three_center);
+    assert(bounded.peak_workspace_bytes <= (4ULL<<30));
   } else if (mode == "planning") {
     const auto packed=DfPairStorage::SymmetricLowerSingle;
     const auto generic=plan_values_for({},packed,24,24,1U<<30);
@@ -312,7 +381,9 @@ int main(int argc, char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", ["authorization", "forwarding", "planning"])
+@pytest.mark.parametrize(
+    "mode", ["authorization", "forwarding", "planning", "coulomb_planning"]
+)
 def test_method_owned_projection_reservation(
     reservation_probe: Path, mode: str
 ) -> None:

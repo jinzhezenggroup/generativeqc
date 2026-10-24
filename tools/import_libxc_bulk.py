@@ -113,6 +113,26 @@ def extract_archive(archive: Path, destination: Path) -> None:
                 target.write_bytes(stream.read())
 
 
+def independent_pointwise_fixtures() -> set[str]:
+    """Only both-spin, independently recorded reference cases admit bulk claims.
+
+    The source importer may learn a new Libxc primitive before its independent
+    E/vxc/fxc validation exists; do not silently publish that unqualified graph.
+    """
+    fixture_dir = ROOT / "tests/data/xc/libxc-bulk"
+    by_method: dict[str, set[str]] = {}
+    for path in sorted(fixture_dir.glob("*.json")):
+        for case in json.loads(path.read_text(encoding="utf-8"))["cases"]:
+            by_method.setdefault(case["name"], set()).add(case["spin"])
+    if not by_method:
+        raise ValueError("missing independent Libxc bulk fixtures")
+    return {
+        name
+        for name, spins in by_method.items()
+        if {"polarized", "unpolarized"} <= spins
+    }
+
+
 def make_catalog(root: Path) -> dict[str, Any]:
     """Regenerate the qualified bulk cohort without promoting split-only helpers."""
     paths = sorted(path for path in root.rglob("*") if path.is_file())
@@ -122,6 +142,7 @@ def make_catalog(root: Path) -> dict[str, Any]:
         raise ValueError("pinned source projection must contain regular files")
     files = {path.relative_to(root).as_posix(): digest(path) for path in paths}
     header = (root / "src/util.h").read_text(encoding="utf-8")
+    independently_qualified = independent_pointwise_fixtures()
     registrations: list[dict[str, Any]] = []
     source_inventory: list[dict[str, Any]] = []
     for entry in sorted(root.glob("maple/**/*.mpl")):
@@ -186,7 +207,12 @@ def make_catalog(root: Path) -> dict[str, Any]:
                             )
                             roots = program.roots(1)
                             nodes[spin] = len(program.graph.topological_order(roots))
-                        record.update(graph_status="imported", graph_nodes=nodes)
+                        if record["name"] in independently_qualified:
+                            record.update(graph_status="imported", graph_nodes=nodes)
+                        else:
+                            record["reason"] = (
+                                "independent both-spin E/vxc/fxc fixtures required"
+                            )
                     except (ValueError, ArithmeticError, RecursionError) as error:
                         record["reason"] = f"{type(error).__name__}: {error}".replace(
                             str(root), "<pinned>"
@@ -365,6 +391,7 @@ def register_product(catalog: dict[str, Any]) -> None:
         "canonical_inputs": {
             path: digest(ROOT / path)
             for path in (
+                "python/generativeqc_compiler/integral/expr.py",
                 "tools/libxc_bulk_metadata.py",
                 "python/generativeqc_compiler/xc/libxc_bulk.py",
                 "python/generativeqc_compiler/xc/libxc_maple.py",

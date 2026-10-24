@@ -7,11 +7,16 @@
 #include <stdexcept>
 
 #include "generated_rhf_frame_response_cuda.cuh"
+#include "hf/df_reference.hpp"
 #include "hf/rhf_frame_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "response/low_rank_preconditioner.hpp"
+#include "response/solve.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/df_progress_trace.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
+#include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "tensor/cuda_runtime.cuh"
@@ -82,51 +87,62 @@ class Owner {
   Owner(const core::System& system, const PhysicalReference& ref, int device,
         const RHFFrameResponseOptions& options, bool prepare, RHFFrameResponseResult& diagnostic,
         std::size_t direct_budget, std::size_t arena_elements, std::size_t resident_budget,
-        bool& resident_values_prepared)
+        bool& resident_values_prepared, std::size_t df_derivative_budget)
       : n(ref.nbf),
         o(ref.nocc),
         v(n - o),
         nn(checked_mul(n, n)),
         device(device),
         stats(diagnostic),
-        profile(options.profile_jk) {
+        profile(options.profile_jk),
+        materialized(options.materialized_jk),
+        fitted(options.df_reference),
+        fitted_derivative_budget(df_derivative_budget) {
     std::string detail;
-    scf::CudaDirectJkPlan* raw{};
-    scf::CudaDirectJkDiagnostic direct_stats;
-    // Immutable unscreened source permits both fixed-mask Krylov actions and
-    // zero-screening reference, final residual and nuclear derivative audits.
-    status(scf::create_cuda_direct_jk_plan(device, {system}, 1, 0.0, direct_budget, &raw,
-                                           direct_stats, detail),
-           detail);
-    direct.reset(raw);
-    stream = scf::cuda_direct_jk_stream(direct.get());
-    require(direct_stats.device_bytes <= direct_budget &&
-                direct_stats.host_preparation_bytes + direct_stats.host_bytes <=
-                    4 * direct_budget + 4 * posthf::source_capacity(system),
-            "RHF exact provider exceeded admitted setup inventory");
-    stats.direct_device_bytes = direct_stats.device_bytes;
-    if (resident_budget) {
-      const auto cache_started = Clock::now();
-      const auto cache_status =
-          scf::prepare_cuda_direct_jk_resident_values(direct.get(), resident_budget, detail);
-      stats.resident_jk_setup_seconds = seconds(cache_started);
-      if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
-          cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
-        status(cache_status, detail);
-      const auto cache_info = scf::cuda_direct_jk_plan_diagnostic(direct.get());
-      resident_values_prepared = cache_info.resident_value_bytes != 0;
-      stats.resident_jk_reason = detail;
-      stats.resident_jk_bytes = cache_info.resident_value_bytes;
-      stats.resident_jk_values = cache_info.resident_value_count;
-      stats.direct_device_bytes = cache_info.device_bytes;
+    if (fitted) {
+      stream = scf::cuda_density_fitting_stream(fitted->plan());
+    } else {
+      scf::CudaDirectJkPlan* raw{};
+      scf::CudaDirectJkDiagnostic direct_stats;
+      // Immutable unscreened source permits both fixed-mask Krylov actions and
+      // zero-screening reference, final residual and nuclear derivative audits.
+      status(scf::create_cuda_direct_jk_plan(device, {system}, 1, 0.0, direct_budget, &raw,
+                                             direct_stats, detail),
+             detail);
+      direct.reset(raw);
+      stream = scf::cuda_direct_jk_stream(direct.get());
+      require(direct_stats.device_bytes <= direct_budget &&
+                  direct_stats.host_preparation_bytes + direct_stats.host_bytes <=
+                      4 * direct_budget + 4 * posthf::source_capacity(system),
+              "RHF exact provider exceeded admitted setup inventory");
+      stats.direct_device_bytes = direct_stats.device_bytes;
+      if (resident_budget) {
+        const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+        require(bucket_policy.valid, "invalid resident bucket mask or byte ceiling");
+        const auto cache_started = Clock::now();
+        const auto cache_status = scf::prepare_cuda_direct_jk_selected_resident_values(
+            direct.get(), std::min(resident_budget, bucket_policy.ceiling), bucket_policy.mask,
+            detail);
+        stats.resident_jk_setup_seconds = seconds(cache_started);
+        if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+            cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+          status(cache_status, detail);
+        const auto cache_info = scf::cuda_direct_jk_plan_diagnostic(direct.get());
+        resident_values_prepared = cache_info.resident_value_bytes != 0;
+        stats.resident_jk_reason = detail;
+        stats.resident_jk_bytes = cache_info.resident_value_bytes;
+        stats.resident_jk_values = cache_info.resident_value_count;
+        stats.direct_device_bytes = cache_info.device_bytes;
+      }
+      stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
+      stats.linear_screening_available = scf::cuda_direct_jk_linear_available(direct.get());
+      compensation.allocate(device, scf::cuda_direct_jk_compensation_elements(direct.get()),
+                            stream);
     }
-    stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
-    stats.linear_screening_available = scf::cuda_direct_jk_linear_available(direct.get());
-    compensation.allocate(device, scf::cuda_direct_jk_compensation_elements(direct.get()), stream);
     stats.applied_screening =
         stats.linear_screening_available ? options.orbital_screening_tolerance : 0.0;
     stats.requested_screening = options.orbital_screening_tolerance;
-    stats.jk_timing_measured = profile;
+    stats.jk_timing_measured = profile && !fitted;
     if (profile) {
       census.allocate(device, 2, stream);
       jk_start.create(device);
@@ -240,6 +256,19 @@ class Owner {
     return result;
   }
   void potential(const double* d, double* out, double threshold = 0.0, bool uncached = false) {
+    if (fitted) {
+      // Both provisional and fresh-residual actions use the same fixed-rank
+      // RI operator. Switching the final audit to exact ERIs changes the model.
+      std::string detail;
+      status(scf::execute_cuda_density_fitting_rhf_jk_device(fitted->plan(), d, j, k, detail, {},
+                                                             scf::FockMatrixLayout::RowMajor),
+             detail);
+      combine_jk<<<blocks(nn), 256, 0, stream>>>(j, k, out, nn);
+      audit<<<blocks(nn), 256, 0, stream>>>(out, nn, error.get());
+      cuda_resource_check(cudaGetLastError());
+      ++stats.jk_actions;
+      return;
+    }
     // Profiling drains matrix-map work before measuring the integral consumer.
     // It is opt-in; ordinary response retains its asynchronous stream contract.
     if (profile) drain();
@@ -251,10 +280,13 @@ class Owner {
     const bool census_available = compensation.size() || linear ||
                                   scf::cuda_direct_jk_value_census_available(direct.get(), spec);
     std::string detail;
+    const auto previous_launches =
+        scf::cuda_direct_jk_plan_diagnostic(direct.get()).materialized_value_launches;
     if (compensation.size())
       status(scf::enqueue_cuda_direct_jk_compensated_device(
                  direct.get(), spec, d, nn, j, k, compensation.get(), compensation.size(),
-                 error.get() + 1, threshold, profile ? census.get() : nullptr, detail, !uncached),
+                 error.get() + 1, threshold, profile ? census.get() : nullptr, detail, !uncached,
+                 nullptr, nullptr, materialized && !uncached),
              detail);
     else if (linear)
       status(scf::enqueue_cuda_direct_jk_linear_device(direct.get(), spec, d, nn, j, k,
@@ -271,6 +303,11 @@ class Owner {
     cuda_resource_check(cudaGetLastError());
     if (profile) jk_stop.record(stream);
     ++stats.jk_actions;
+    const auto materialized_launches =
+        scf::cuda_direct_jk_plan_diagnostic(direct.get()).materialized_value_launches -
+        previous_launches;
+    stats.materialized_jk_launches += materialized_launches;
+    stats.materialized_jk_actions += materialized_launches != 0;
     if (stats.resident_jk_bytes && !linear) {
       ++stats.resident_jk_actions;
       stats.resident_jk_value_reads =
@@ -333,7 +370,7 @@ class Owner {
       residual = std::max(residual, std::abs(ref.fock[i] - ref.hcore[i] - g[i]));
     stats.reference_residual = residual;
     require(residual <= kReferenceTolerance,
-            "RHF response reference is not a consistent canonical exact RHF state");
+            "RHF response reference is inconsistent with its requested physical operator");
   }
   void weights(std::span<const double> bar_f, std::span<const double> bar_c) {
     FailureDrain fence{stream};
@@ -385,6 +422,11 @@ class Owner {
                                maps::orbital_action_contraction_terms(o, v);
   }
   std::vector<double> quadratic_derivative(const std::vector<double>& d) {
+    if (fitted) {
+      auto result = fitted->quadratic_gradient(d, fitted_derivative_budget);
+      ++stats.derivative_passes;
+      return result;
+    }
     FailureDrain fence{stream};
     upload(scratch, d);
     drain();
@@ -410,36 +452,31 @@ class Owner {
     fence.stream = nullptr;
     return result;
   }
-  std::vector<double> bilinear_derivative(std::span<const double> seed) {
+  bool bilinear_derivative(std::span<const double> seed, std::vector<double>& result) {
     FailureDrain fence{stream};
     upload(scratch, seed);
-    std::vector<double> result;
     std::string detail;
-    status(
-        scf::execute_cuda_direct_bilinear_derivative_device(
-            direct.get(), density, scratch, nn, result, profile ? census.get() : nullptr, detail),
-        detail);
-    if (profile) {
-      std::array<std::uint64_t, 2> counts{};
-      // Keep the host destination alive if either enqueue or synchronization fails.
-      FailureDrain download_fence{stream};
-      cuda_resource_check(cudaMemcpyAsync(counts.data(), census.get(), sizeof(counts),
-                                          cudaMemcpyDeviceToHost, stream));
+    const auto shell_code = scf::execute_cuda_direct_shell_bilinear_derivative_device(
+        direct.get(), density, scratch, nn, result, detail);
+    if (shell_code == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
       drain();
-      download_fence.stream = nullptr;
-      stats.derivative_quartet_visits = counts[0];
-      stats.derivative_jet_evaluations = counts[1];
-      stats.derivative_census_measured = true;
+      fence.stream = nullptr;
+      return false;
     }
+    status(shell_code, detail);
+    ++stats.shell_derivative_passes;
     ++stats.derivative_passes;
     stats.bilinear_derivative_used = true;
     fence.stream = nullptr;
-    return result;
+    return true;
   }
   std::size_t n, o, v, nn;
   int device;
   RHFFrameResponseResult& stats;
   bool profile;
+  bool materialized;
+  std::shared_ptr<DFReference> fitted;
+  std::size_t fitted_derivative_budget{};
   std::unique_ptr<scf::CudaDirectJkPlan, DirectDelete> direct;
   tensor::CudaContractionContext contractions;
   std::array<tensor::PreparedContractions, maps::prepared_stages> contraction_tables;
@@ -519,7 +556,14 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   require(std::isfinite(options.orbital_screening_tolerance) &&
               options.orbital_screening_tolerance >= 0,
           "invalid orbital Schwarz screening tolerance");
+  options.convergence.validate();
   const auto n = ref.nbf, o = ref.nocc;
+  require(ref.density_fitted == bool(options.df_reference),
+          "RHF response must preserve the reference integral model");
+  if (options.df_reference)
+    require(options.df_reference->matches(system, ref, device) &&
+                options.orbital_screening_tolerance == 0.0,
+            "DF response source/frame mismatch or unsupported Schwarz screening");
   require(device >= 0 && o && o < n && n == molecule::ao_count(system) &&
               system.ecp_terms.empty() && system.electron_count == int(2 * o) &&
               system.multiplicity == 1,
@@ -543,8 +587,9 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       require(ref.orbital_energies[a] - ref.orbital_energies[i] > 1e-8,
               "RHF occupied-virtual gap is unresolved");
   auto gmres_options = options.gmres;
-  gmres_options.absolute_tolerance = std::min(
-      gmres_options.absolute_tolerance > 0 ? gmres_options.absolute_tolerance : 1e-12, 1e-12);
+  gmres_options.absolute_tolerance =
+      std::min(gmres_options.absolute_tolerance > 0 ? gmres_options.absolute_tolerance : 1e-12,
+               options.convergence.response_solve());
   gmres_options.relative_tolerance = 0.0;
   const auto zplan = response::prepare_gmres(o * v, gmres_options);
   const auto arena =
@@ -558,8 +603,10 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     canonical_dimension =
         checked_add(canonical_dimension, checked_mul(angular + 1, angular + 2) / 2);
   }
-  const auto direct_bound = scf::cuda_direct_coulomb_device_bytes(
-      1, n, system.atoms.size(), system.shells.size(), primitives, 1);
+  const auto direct_bound =
+      options.df_reference ? 0
+                           : scf::cuda_direct_coulomb_device_bytes(
+                                 1, n, system.atoms.size(), system.shells.size(), primitives, 1);
   const auto source = posthf::source_capacity(system);
   // Includes all simultaneously live response/reference copies, scalar staging,
   // three polarization vectors, public outputs and provider host packing. This
@@ -576,11 +623,16 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       checked_add(checked_mul(4, source), checked_add(bytes(checked_mul(16, nn)), 1ULL << 20));
   total = checked_add(total, checked_mul(2, derivative_budget));
   total = checked_add(total, checked_add(zplan.workspace_bytes, 2 * sizeof(std::uint64_t)));
+  if (options.df_reference) total = checked_add(total, options.df_reference->storage_bytes());
   // An exact corrective solve owns fresh Krylov storage while its warm-start
   // span still borrows the previous solution. Admit that extra live vector.
   if (options.orbital_screening_tolerance > 0) total = checked_add(total, bytes(checked_mul(o, v)));
   if (total > options.maximum_bytes)
     throw std::length_error("RHF frame response exceeds complete numeric budget");
+  const auto df_derivative_budget =
+      options.df_reference ? std::min<std::size_t>((options.maximum_bytes - total) / 2, 1ULL << 30)
+                           : 0;
+  total = checked_add(total, df_derivative_budget);
   RHFFrameResponseResult result;
   const auto binding_bytes = checked_add(kProviderAllowance, maps::prepared_host_bytes());
   const bool prepare =
@@ -590,7 +642,10 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   // A caller-owned active cache is already live while optional inverse setup
   // copies its inputs. Retire stale/over-budget storage first, or reserve it
   // until the normal cache+image admission below replaces this temporary charge.
-  auto* recycling = options.relax_orbitals ? options.recycling : nullptr;
+  // Exact-source recycled images have no auxiliary-metric identity. Do not lend
+  // them to a different Hamiltonian merely because the orbital frame matches.
+  if (options.df_reference && options.recycling) options.recycling->clear();
+  auto* recycling = options.relax_orbitals && !options.df_reference ? options.recycling : nullptr;
   std::size_t retained_recycle_bytes = 0;
   if (recycling) {
     if (!recycling->matches(system, ref, device, prepare, maps::orbital_action_hash))
@@ -666,13 +721,26 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       recycling = nullptr;
     }
   }
-  const auto resident_budget = options.resident_jk_allowance(n, options.maximum_bytes - total);
+  const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+  require(bucket_policy.valid, "invalid resident bucket mask or byte ceiling");
+  auto resident_budget = std::min(options.resident_jk_allowance(n, options.maximum_bytes - total),
+                                  bucket_policy.ceiling);
+  if (options.df_reference) resident_budget = 0;
+  const auto layout_bytes =
+      resident_budget && bucket_policy.mask && bucket_policy.mask != (1U << 28) - 1
+          ? 28 * sizeof(std::size_t)
+          : 0;
+  if (!bucket_policy.mask || layout_bytes > options.maximum_bytes - total) resident_budget = 0;
+  if (resident_budget) {
+    total = checked_add(total, layout_bytes);
+    resident_budget = std::min(resident_budget, options.maximum_bytes - total);
+  }
   result.numeric_capacity_bytes = checked_add(total, resident_budget);
   attempted_capacity = result.numeric_capacity_bytes;
   result.operator_hash = maps::orbital_action_hash;
   runtime::CudaDeviceScope device_scope(device);
   Owner owner(system, ref, device, options, prepare, result, direct_bound, arena, resident_budget,
-              resident_values_prepared);
+              resident_values_prepared, df_derivative_budget);
   // Cache identity includes the admitted execution policy. Optional provider
   // setup can reject prepared execution after cache admission; do not reuse or
   // publish an image under that now-stale policy. The scalar solve remains valid.
@@ -697,7 +765,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       for (std::size_t q = 0; q < n; ++q)
         if ((p < o) == (q < o))
           same_space = std::max(same_space, std::abs(result.stationarity[p * n + q]));
-    require(same_space <= kStationarityTolerance, "RHF same-space source stationarity failed");
+    require(same_space <= options.convergence.stationarity(kStationarityTolerance),
+            "RHF same-space source stationarity failed");
     std::vector<double> diagonal(o * v);
     for (std::size_t i = 0; i < o; ++i)
       for (std::size_t a = 0; a < v; ++a)
@@ -705,21 +774,27 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     auto rhs = result.orbital_rhs;
     auto physical = [&](auto x, auto y) { owner.apply(x, y); };
     auto provisional = [&](auto x, auto y) { owner.apply(x, y, false, result.applied_screening); };
+    // Screening is an execution approximation, not a symmetry certificate.
+    const response::LinearResponseProblem provisional_problem(o * v, provisional);
+    const response::LinearResponseProblem physical_problem(o * v, physical);
+    const auto provisional_plan = response::prepare_response(provisional_problem, zplan.options);
+    const auto physical_plan = response::prepare_response(physical_problem, zplan.options);
     const auto initial = recycling ? recycling->initial_guess(rhs) : std::span<const double>{};
     result.recycled_guess = !initial.empty();
     phase = Clock::now();
     response::GmresResult z;
     if (inverse) {
-      z = response::solve_gmres(zplan, provisional, rhs, initial, {}, [&](auto x, auto y) {
-        try {
-          inverse->apply(x, y);
-        } catch (const std::runtime_error&) {
-          // Refuse only this optional numerical callback. Physical actions propagate.
-          std::fill(y.begin(), y.end(), std::numeric_limits<double>::quiet_NaN());
-        }
-      });
+      z = response::solve_response(
+          provisional_plan, provisional_problem, rhs, initial, {}, [&](auto x, auto y) {
+            try {
+              inverse->apply(x, y);
+            } catch (const std::runtime_error&) {
+              // Refuse only this optional numerical callback. Physical actions propagate.
+              std::fill(y.begin(), y.end(), std::numeric_limits<double>::quiet_NaN());
+            }
+          });
     } else {
-      z = response::solve_gmres(zplan, provisional, rhs, initial, diagonal);
+      z = response::solve_response(provisional_plan, provisional_problem, rhs, initial, diagonal);
     }
     result.solve_seconds += seconds(phase);
     const auto audit_solution = [&]() {
@@ -741,7 +816,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
         audit_solution();
         result.screened_residual = result.orbital_residual;
       }
-      exact_retry = !z.converged() || result.orbital_residual > kResidualTolerance;
+      exact_retry = !z.converged() ||
+                    result.orbital_residual > options.convergence.limit(kResidualTolerance, 1e-7);
     } else {
       exact_retry = !z.converged() && (inverse || !initial.empty());
     }
@@ -752,11 +828,11 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       if (result.applied_screening > 0 && z.converged()) {
         // Its warm-start vector is separately admitted. The replacement Krylov
         // workspace is the only live workspace because GMRES owns none on return.
-        z = response::solve_gmres(zplan, physical, rhs, z.solution, diagonal);
+        z = response::solve_response(physical_plan, physical_problem, rhs, z.solution, diagonal);
       } else {
         // Release a refused accelerator's result before the exact diagonal retry.
         z = {};
-        z = response::solve_gmres(zplan, physical, rhs, {}, diagonal);
+        z = response::solve_response(physical_plan, physical_problem, rhs, {}, diagonal);
       }
       result.solve_seconds += seconds(phase);
       z.operator_actions += actions;
@@ -770,7 +846,7 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     }
     if (!z.converged()) throw std::runtime_error("RHF matrix-free Z response did not converge");
     if (result.applied_screening == 0 || exact_retry) audit_solution();
-    if (result.orbital_residual > kResidualTolerance)
+    if (result.orbital_residual > options.convergence.limit(kResidualTolerance, 1e-7))
       throw std::runtime_error("RHF independent Z residual failed");
     for (std::size_t i = 0; i < o; ++i)
       for (std::size_t a = 0; a < v; ++a) seed[i * n + o + a] -= z.solution[i * v + a];
@@ -780,7 +856,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     result.weights_seconds += seconds(phase);
   }
   result.maximum_stationarity = maximum(result.stationarity);
-  if (options.relax_orbitals && result.maximum_stationarity > kStationarityTolerance)
+  if (options.relax_orbitals &&
+      result.maximum_stationarity > options.convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("RHF complete frame stationarity failed");
   std::string detail;
   scf::OneElectronGradientResources onee;
@@ -793,16 +870,30 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
           "RHF one-electron derivative exceeded admitted inventory");
   result.one_electron_seconds = seconds(phase);
   phase = Clock::now();
-  if (options.bilinear_derivative && scf::cuda_direct_jk_bilinear_preferred(owner.direct.get())) {
-    auto cross = owner.bilinear_derivative(result.fock_ao_weights);
-    require(cross.size() == result.gradient.size(), "RHF bilinear derivative dimensions differ");
-    for (std::size_t i = 0; i < cross.size(); ++i) result.gradient[i] += cross[i];
+  std::vector<double> bilinear_gradient;
+  if (!options.df_reference && options.bilinear_derivative &&
+      scf::cuda_direct_jk_bilinear_preferred(owner.direct.get()) &&
+      owner.bilinear_derivative(result.fock_ao_weights, bilinear_gradient)) {
+    require(bilinear_gradient.size() == result.gradient.size(),
+            "RHF bilinear derivative dimensions differ");
+    for (std::size_t i = 0; i < bilinear_gradient.size(); ++i)
+      result.gradient[i] += bilinear_gradient[i];
   } else {
     // G is the fixed unscreened linear provider, so E2 is homogeneous quadratic.
     // Symmetric polarization removes one source traversal while retaining the
     // admitted shell consumer's primitive/component reuse. Keep the old three
     // passes for independent schedule comparisons and bounded compatibility.
     auto combined = ref.density;
+    // Only the symmetric part couples to the symmetric physical Fock. This
+    // also keeps signed DF polarization inside its documented density domain.
+    if (options.df_reference)
+      for (std::size_t row = 0; row < n; ++row)
+        for (std::size_t column = 0; column < row; ++column) {
+          const auto value = 0.5 * (result.fock_ao_weights[row * n + column] +
+                                    result.fock_ao_weights[column * n + row]);
+          result.fock_ao_weights[row * n + column] = value;
+          result.fock_ao_weights[column * n + row] = value;
+        }
     for (std::size_t i = 0; i < nn; ++i) combined[i] += result.fock_ao_weights[i];
     auto cross = owner.quadratic_derivative(combined);
     require(cross.size() == result.gradient.size(), "RHF nuclear derivative dimensions differ");
@@ -827,6 +918,19 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   require(finite(result.gradient), "nonfinite RHF electronic gradient");
   if (recycling)
     result.recycle_published = recycling->capture(result.orbital_response.solution, exact_image);
+  // These successful-attempt phases are disjoint wall times, not kernel sums.
+  // Tracing must not add synchronization to the ordinary response endpoint.
+  using runtime::df_progress::Scope;
+  Scope::number("rhf_response_jk_actions", result.jk_actions);
+  Scope::number("rhf_response_materialized_actions", result.materialized_jk_actions);
+  Scope::number("rhf_response_materialized_launches", result.materialized_jk_launches);
+  Scope::number("rhf_response_setup_us", result.setup_seconds * 1e6);
+  Scope::number("rhf_response_reference_audit_us", result.reference_audit_seconds * 1e6);
+  Scope::number("rhf_response_weights_us", result.weights_seconds * 1e6);
+  Scope::number("rhf_response_solve_us", result.solve_seconds * 1e6);
+  Scope::number("rhf_response_independent_audit_us", result.independent_audit_seconds * 1e6);
+  Scope::number("rhf_response_one_electron_us", result.one_electron_seconds * 1e6);
+  Scope::number("rhf_response_two_electron_us", result.two_electron_seconds * 1e6);
   return result;
 }
 RHFFrameResponseResult rhf_frame_response_cuda(

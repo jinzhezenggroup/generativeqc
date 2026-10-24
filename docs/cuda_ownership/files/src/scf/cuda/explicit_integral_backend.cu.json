@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/explicit_integral_backend.cu",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Prepared device storage and generated raw HF contractions for externally supplied integrals; matrix products and eigensolves use shared Tensor and Solver providers.",
+  "regions": []
+}

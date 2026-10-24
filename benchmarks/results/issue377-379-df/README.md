@@ -1,5 +1,9 @@
 # Occupied DF execution and compact source qualification (#377–379)
 
+Storage-only compaction: `source-validation.json.gz` restores the exact original
+source-audit receipt with `gzip -dc`; encoded/decoded identities are recorded in
+`source-validation-storage.json`. No scientific record or acceptance changes.
+
 This bundle records current-master comparisons on NVIDIA GeForce RTX 5090
 (sm_120), production Release CUDA 12.9.1, spherical def2-SVP RHF water clusters,
 Naux=NAO and ranks 20/40/80/160. All real-device work uses finite Slurm jobs on
@@ -142,3 +146,33 @@ a pinned library can have an older reconstruction base.
 Compact endpoint files omit only repeated basis metadata, which is retained
 once, and record the full original JSON hash. Historical provisional probe
 results with an incorrect lane label are excluded from final causal counts.
+
+## Lossless storage
+
+The source-validation record and the GPU4PySCF water-32mer record are retained as
+`.json.gz` files to make room for subsequent DF qualification within the unchanged
+repository storage limit. `gzip -dc FILE.json.gz` restores the exact original JSON
+bytes. Their expanded SHA-256 values remain
+`08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569`
+and `33164661464fc63b15e277d97755053cec3188f7063e0219624a41676b955aa6`,
+respectively. No measured values, scientific decisions or source identities change.
+
+The 2026-10-23 storage-only update retains nine original endpoint records,
+including both rejected schedules, in `endpoint-receipts.json.xz`. The adjacent
+manifest authenticates every original byte, size and SHA-256. Restore the exact
+original filenames before using historical scripts:
+
+```bash
+python benchmarks/results/issue377-379-df/restore-endpoints.py \
+  --output .artifacts/issue377-379-df
+```
+
+No observation, failed gate, numerical array, source identity or storage cap
+changes. Other source/profile/reference records remain at their existing paths.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

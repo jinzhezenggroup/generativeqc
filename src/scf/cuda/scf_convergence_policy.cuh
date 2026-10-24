@@ -5,7 +5,9 @@
 #include <cmath>
 #include <cstddef>
 
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/scf_constants.hpp"
+#include "scf/cuda/scf_incremental_policy.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -28,12 +30,35 @@ __device__ inline double hf_energy_roundoff_guard(bool enabled, double energy,
 __device__ inline bool hf_iteration_converged(double energy, double previous_energy,
                                               double energy_tolerance, double density_tolerance,
                                               double density_rms, double physical_maximum,
-                                              bool guard_roundoff = true) {
+                                              bool guard_roundoff = true,
+                                              bool qualified_owner = false) {
   return isfinite(energy) && isfinite(previous_energy) && isfinite(density_rms) &&
          isfinite(physical_maximum) &&
          fabs(energy - previous_energy) <
              energy_tolerance + hf_energy_roundoff_guard(guard_roundoff, energy, previous_energy) &&
-         density_rms < density_tolerance && physical_maximum <= fmin(1e-8, density_tolerance);
+         density_rms < density_tolerance &&
+         physical_maximum <=
+             hf_stationarity_tolerance(energy_tolerance, density_tolerance, qualified_owner);
+}
+
+/** Lane zero may retire screened deltas once the physical gates pass. Screening
+ * makes full and reconstructed energies differ even at stationary density, so
+ * retain ordinary full builds for the rest of this item/solve. The caller must
+ * discard the cross-operator energy baseline and require two fresh full Focks;
+ * this transition is not convergence and never widens an acceptance tolerance.
+ * Null state leaves ordinary/unscreened callers and no-delta warm solves alone. */
+__device__ inline bool begin_hf_full_energy_refinement(
+    std::int32_t system, double energy, double density_tolerance, double density_rms,
+    double physical_maximum, bool physical_target, std::uint32_t* delta_updates,
+    const unsigned long long* delta_build_count) {
+  if (delta_updates == nullptr || delta_build_count == nullptr || !physical_target ||
+      delta_build_count[system] == 0ULL ||
+      delta_updates[system] == kIncrementalDirectJkFullEnergyRefinement || !isfinite(energy) ||
+      !isfinite(density_rms) || !isfinite(physical_maximum) || density_rms >= density_tolerance ||
+      physical_maximum > fmin(1e-8, density_tolerance))
+    return false;
+  delta_updates[system] = kIncrementalDirectJkFullEnergyRefinement;
+  return true;
 }
 
 /** One-warp maximum of the physical pre-DIIS FDS-SDF residual. Null is reserved

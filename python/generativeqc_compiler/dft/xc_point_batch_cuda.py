@@ -11,12 +11,12 @@ def emit_native_xc_point_batch_plan() -> str:
     return r"""
 bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   const std::vector<std::size_t>& offsets,
-                                  std::size_t first, std::size_t end) {
+                                  std::size_t first, std::size_t end, bool ragged = false) {
   if (end <= first || end - first < 2) return false;
   for (std::size_t tile = first; tile < end; ++tile) {
     const auto active = layout.local_ao ? offsets[tile + 1] - offsets[tile] : layout.nao;
     const auto count = std::min(layout.tile_points, layout.npoint - tile * layout.tile_points);
-    if (active && (active < 32 || active > 128 || count < 32)) return false;
+    if (active && (active < 32 || active > (ragged ? 1024 : 128) || count < 32)) return false;
   }
   return true;
 }
@@ -25,7 +25,7 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& offsets,
                                               std::size_t requested_tiles,
                                               std::size_t device_budget,
-                                              bool compact = false) {
+                                              bool compact = false, bool ragged = false) {
   if (!layout.npoint || !layout.tile_points || !layout.nao ||
       (layout.spins != 1 && layout.spins != 2) ||
       (layout.jets != 1 && layout.jets != 4) ||
@@ -62,11 +62,12 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
     const auto available_ao = numeric_capacity - 2 * features - totals;
     std::size_t max_ao = 0, max_work = 0, max_potential = 0;
     std::size_t compact_groups = 0, compact_tiles = 0, compact_nonempty_tiles = 0;
+    std::size_t compact_large_tiles = 0;
     bool fits = true;
     for (std::size_t first = 0; first < tile_count && fits; first += tiles) {
       std::size_t ao = 0, work = 0, potential = 0;
       const auto end = std::min(tile_count, first + tiles);
-      const bool grouped = compact && compact_point_batch_admitted(layout, offsets, first, end);
+      const bool grouped = compact && compact_point_batch_admitted(layout, offsets, first, end, ragged);
       if (grouped) {
         ++compact_groups;
         compact_tiles += end - first;
@@ -82,6 +83,7 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
         ao += count * active * layout.jets;
         if (grouped) {
           compact_nonempty_tiles += active != 0;
+          compact_large_tiles += active > 128;
           const auto left = available_ao - ao;
           if (active && (count > left / active / layout.spins / layout.work_jets ||
                          active > left / active / layout.spins)) {
@@ -114,7 +116,8 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
               (max_ao + 2 * features + totals + max_work + max_potential) * sizeof(double) +
                   descriptor_bytes,
               max_work, max_potential, descriptor_bytes, compact,
-              compact_groups, compact_tiles, compact_nonempty_tiles};
+              compact_groups, compact_tiles, compact_nonempty_tiles, ragged && compact,
+              compact_large_tiles};
     }
   }
   if (compact) return prepare_point_batch_plan(layout, offsets, requested_tiles, device_budget, false);

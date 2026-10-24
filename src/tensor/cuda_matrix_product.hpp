@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "generativeqc/generativeqc.h"
+#include "tensor/cuda_binding_resources.hpp"
 
 namespace generativeqc::runtime {
 struct NativeLoweringRequest;
@@ -25,7 +26,7 @@ namespace generativeqc::tensor {
  */
 class CudaMatrixProductBinding {
  public:
-  static constexpr std::size_t kPreparationHostBytes = 16U << 10;
+  static constexpr std::size_t kPreparationHostBytes = kCudaMatrixProductBindingHostBytes;
   struct PreparationFailure : std::runtime_error {
     generativeqc_status status;
     PreparationFailure(generativeqc_status code, const char* message)

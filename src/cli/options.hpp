@@ -5,10 +5,12 @@
 #include <stdexcept>
 #include <string>
 
-#include "cli_method_catalog.hpp"
 #include "generativeqc/ks.hpp"
+#include "methods/named_ks_catalog.hpp"
 
 namespace generativeqc::cli {
+
+namespace method_generated = methods::named_ks;
 
 class UsageError : public std::runtime_error {
  public:
@@ -53,7 +55,32 @@ struct RunOptions {
   std::uint32_t ccsd_max_iterations{100}, ccsd_diis_history{6};
   double ccsd_energy_tolerance{1e-11}, ccsd_residual_tolerance{1e-9};
   double ccsd_denominator_threshold{1e-10}, ccsd_damping{0}, ccsd_level_shift{0};
+  // Native Cartesian geometry optimization controls; ignored by singlepoints.
+  // Empty stages chooses the automatic GFN2 / PBE / target planner.
+  std::string optimization_stages;
+  std::string preopt_basis_name;
+  std::string optimization_output;
+  std::uint32_t optimization_max_steps{80};
+  double optimization_fmax{3e-4};      // Hartree/Bohr
+  double optimization_max_step{0.35};  // Bohr per atom
+  bool optimization_plan_only{false};
 };
+
+// One policy for run/optimize and resource planning; independent of numerical
+// screening, which retains its existing CLI defaults. Correlated methods
+// deliberately keep their tighter reference-orbital stopping conditions.
+struct ScfConvergenceControls {
+  double energy_tolerance;
+  double density_tolerance;
+};
+
+[[nodiscard]] inline ScfConvergenceControls resolve_scf_convergence(const RunOptions& options,
+                                                                    bool correlated) noexcept {
+  const double default_energy = correlated ? 1.0e-12 : 1.0e-10;
+  const double default_density = correlated ? 1.0e-10 : 1.0e-8;
+  return {options.energy_tolerance.value_or(default_energy),
+          options.density_tolerance.value_or(default_density)};
+}
 
 }  // namespace generativeqc::cli
 #endif

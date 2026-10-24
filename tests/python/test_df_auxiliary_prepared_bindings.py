@@ -22,7 +22,8 @@ def test_prepared_auxiliary_batch_variants_and_host_capacity(tmp_path: Path) -> 
         pytest.skip("host C++ compiler unavailable")
     source = cuda_source()
     binders = re.findall(r"static void bind_.*?\n}\n", source, flags=re.DOTALL)
-    assert len(binders) == 4
+    assert len(binders) == 5
+    binders = [binder for binder in binders if "bind_mixed_auxiliary(" not in binder]
     prepare = re.search(r"void prepare_contractions\(.*?\n}\n", source, flags=re.DOTALL)
     assert prepare is not None
     capacity = next(
@@ -38,6 +39,64 @@ def test_prepared_auxiliary_batch_variants_and_host_capacity(tmp_path: Path) -> 
         [str(binary)], capture_output=True, text=True, timeout=10, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_mixed_auxiliary_prepares_full_and_unit_tail_with_exact_charges(
+    tmp_path: Path,
+) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("host C++ compiler unavailable")
+    source = cuda_source()
+    binder = re.search(
+        r"static void bind_mixed_auxiliary\(.*?\n}\n", source, flags=re.DOTALL
+    )
+    prepare = re.search(
+        r"void prepare_mixed_contractions\(.*?\n}\n", source, flags=re.DOTALL
+    )
+    assert binder is not None and prepare is not None
+    capacity = next(
+        line
+        for line in cuda_header().splitlines()
+        if line.startswith("inline std::size_t mixed_contraction_host_bytes(")
+    )
+    unit = tmp_path / "mixed-bindings.cpp"
+    unit.write_text(
+        PREFIX + MIXED_STATE + capacity + "\n" + binder[0] + prepare[0] + MIXED_MAIN
+    )
+    binary = tmp_path / "mixed-bindings"
+    compile_owner(compiler, tmp_path, [unit], binary)
+    result = subprocess.run(
+        [str(binary)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+MIXED_STATE = r"""
+struct MixedAuxiliaryCudaState {
+  std::size_t o{},v{};
+  generativeqc::tensor::PreparedContractions contractions;
+};
+"""
+
+MIXED_MAIN = r"""
+int main() {
+  using generativeqc::tensor::PreparedContractions;
+  for(std::size_t occupied:{1,2,4}) for(std::size_t virtuals:{1,3,7})
+  for(std::size_t batch:{1,2,3,8}) for(std::size_t tail=0;tail<batch;++tail) {
+    MixedAuxiliaryCudaState state; state.o=occupied; state.v=virtuals;
+    generativeqc::tensor::CudaContractionContext context;
+    std::size_t calls=0,summands=0;
+    prepare_mixed_contractions(state,context,batch,tail,calls,summands);
+    if(calls || summands) return 1;
+    std::vector<std::size_t> variants{batch};
+    if(tail) variants.push_back(tail);
+    if(state.contractions.batches!=variants) return 2;
+    const auto expected=PreparedContractions::storage_bytes(state.contractions.requests,variants.size());
+    if(mixed_contraction_host_bytes(variants.size())!=expected) return 3;
+  }
+}
+"""
 
 
 PREFIX = r"""

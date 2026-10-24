@@ -1,0 +1,97 @@
+{
+  "schema": "generativeqc.ecp-raw-matrices.inputs.v1",
+  "source": {
+    "repository": "jinzhezenggroup/generativeqc",
+    "commit": "61a0e715fde35566722870389af8e137036232db",
+    "path": "tests/python/test_ecp.py",
+    "git_blob": "4cc83247f7a02b4cdfd019f635b2d6a06f05fe08",
+    "sha256": "c96db5045d1aad55af885018ec6a75dad3dff25c49e631989f9aa43ac369d817"
+  },
+  "audit_helper": {
+    "path": "tools/generate_cpu_hf_high_l_reference.py",
+    "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+    "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+  },
+  "atoms": [
+    [
+      "Na",
+      [
+        0.13,
+        -0.21,
+        0.17
+      ]
+    ],
+    [
+      "H",
+      [
+        0.43,
+        0.19,
+        3.2
+      ]
+    ]
+  ],
+  "unit": "Bohr",
+  "charge": 0,
+  "spin": 0,
+  "basis_libraries": {
+    "Na": "lanl2dz",
+    "H": "sto-3g"
+  },
+  "ecp_libraries": {
+    "Na": "lanl2dz"
+  },
+  "extra_d_shell": [
+    2,
+    [
+      0.35,
+      1
+    ]
+  ],
+  "representations": [
+    "spherical",
+    "cartesian"
+  ],
+  "d_shells": [
+    false,
+    true
+  ],
+  "precision": "float64",
+  "matrix_unit": "Hartree",
+  "overlap_unit": "dimensionless",
+  "normalization": "ECPscalar / sqrt(diag(int1e_ovlp))[:,None] / sqrt(diag(int1e_ovlp))[None,:]",
+  "expected_core_electrons": [
+    10,
+    0
+  ],
+  "python": "3.12.12",
+  "packages": {
+    "pyscf": "2.14.0",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "h5py": "3.16.0",
+    "threadpoolctl": "3.6.0"
+  },
+  "preserved_gates": {
+    "matrix_atol": 2e-9,
+    "matrix_rtol": 1e-9,
+    "derivative_atol": 2e-8,
+    "derivative_rtol": 1e-8,
+    "translation_atol": 2e-13
+  },
+  "basis_data_sources": [
+    {
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0",
+      "path": "pyscf/gto/basis/lanl2dz.dat",
+      "git_blob": "299e6de553243acc2a8909dce2cfc863840c64c6",
+      "sha256": "8271af43b895a6b2d2b47f2c958fe86c3c990f76e982a54ac03cc3c6dd196b64"
+    },
+    {
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0",
+      "path": "pyscf/gto/basis/sto-3g.dat",
+      "git_blob": "3872f2b96504636679a6f3ad79bb15697ec6dbae",
+      "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+    }
+  ]
+}

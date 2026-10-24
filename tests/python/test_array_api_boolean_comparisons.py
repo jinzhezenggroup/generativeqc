@@ -411,8 +411,8 @@ def test_optimizer_cse_and_backend_gates() -> None:
             ValueError, match="does not support bool data or comparisons"
         ):
             prepare_for_backend(program, backend)
-    with pytest.raises(ValueError, match="does not support bool data or comparisons"):
-        emit_cpu(program)
+    _, resources = emit_cpu(program)
+    assert resources["typed_bytes"] == 1
     with pytest.raises(ValueError, match="does not support bool data or comparisons"):
         plan_cuda(program, cuda_target_info("sm_80"))
 

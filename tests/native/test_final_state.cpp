@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/solver/final_state.hpp"
 #ifdef GENERATIVEQC_TEST_DEVICE_FINAL_STATE
 #include <cuda_runtime_api.h>
@@ -197,6 +198,64 @@ void stationary_uhf_determinant_reuse() {
       }
     }
   }
+}
+
+void explicit_stationarity_budget() {
+  Fixture fixture;
+  FinalStateDiagnostic diagnostic;
+  std::string detail;
+  require(validate_final_state(fixture.id, fixture.s, fixture.h, fixture.nuclear, fixture.d,
+                               fixture.f, fixture.c, fixture.limits, diagnostic, detail, backend),
+          "analytic final state failed before budget testing");
+  diagnostic.maximum_commutator = 2e-6;
+  diagnostic.density_rms = 1e-6;
+  diagnostic.maximum_density_error = 3e-6;
+  fixture.limits.density_tolerance = 1e-5;
+  fixture.limits.require_canonicality = true;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, diagnostic, detail),
+          "loose density alone weakened strict stationarity");
+  fixture.limits.stationarity_tolerance = 1e-5;
+  require(accept_final_state_products(fixture.id, 2, fixture.limits, diagnostic, detail),
+          "explicit physical stationarity allowance was ignored");
+  auto relaxed = diagnostic;
+  relaxed.maximum_commutator = 5e-5;
+  relaxed.density_rms = 3e-5;
+  relaxed.maximum_density_error = 6e-5;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "the tighter physical allowance accepted a relaxed state");
+  fixture.limits.stationarity_tolerance = 1e-4;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "physical allowance overrode the caller's stricter density tolerance");
+  fixture.limits.density_tolerance = 1e-4;
+  require(accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "authenticated relaxed final products required an unnecessary correction");
+  fixture.limits.density_tolerance = 1e-5;
+  for (const auto invalid : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+                             std::numeric_limits<double>::quiet_NaN()}) {
+    fixture.limits.stationarity_tolerance = invalid;
+    require(!accept_final_state_products(fixture.id, 2, fixture.limits, diagnostic, detail),
+            "invalid stationarity allowance was accepted");
+  }
+  fixture.limits.stationarity_tolerance = 1e-5;
+  for (auto member : {&FinalStateDiagnostic::maximum_trace_error,
+                      &FinalStateDiagnostic::maximum_idempotency_error,
+                      &FinalStateDiagnostic::maximum_canonical_error}) {
+    auto invalid = diagnostic;
+    invalid.*member = 1e-6;
+    require(!accept_final_state_products(fixture.id, 2, fixture.limits, invalid, detail),
+            "physical budget weakened determinant algebra or diagonalization");
+  }
+  auto legacy = diagnostic;
+  legacy.maximum_commutator = 0;
+  legacy.density_rms = 0;
+  legacy.maximum_density_error = 1e-9;
+  fixture.limits.density_tolerance = 1e-10;
+  fixture.limits.stationarity_tolerance.reset();
+  require(accept_final_state_products(fixture.id, 2, fixture.limits, legacy, detail),
+          "absent physical allowance changed the legacy canonical-density gate");
+  fixture.limits.stationarity_tolerance = 1e-10;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, legacy, detail),
+          "explicit physical allowance failed to constrain canonical density");
 }
 
 void identity_and_physical_origin() {
@@ -477,6 +536,23 @@ void provider_failure_and_nonlinear_exhaustion() {
                                              : FinalStateStatus::ProviderFailure),
             "invalid physical provider published a state or silently fell back");
   }
+  for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                            GENERATIVEQC_STATUS_OUT_OF_MEMORY}) {
+    const PhysicalFockOperation typed = [&](const auto&, const auto&) -> PhysicalFockFrame {
+      throw generativeqc::Error(status, "typed provider failure");
+    };
+    const auto result = select_final_state(a.id, a.s, a.h, a.x, a.nuclear, a.d, &a.c, typed,
+                                           a.eigen(), a.limits, true, false, backend);
+    require(!result.state && result.provider_exception && result.fock_evaluations == 1,
+            "typed provider failure lost its original exception or published a state");
+    try {
+      std::rethrow_exception(result.provider_exception);
+    } catch (const generativeqc::Error& error) {
+      require(error.status() == status, "provider failure changed its native status");
+      continue;
+    }
+    require(false, "typed provider failure did not survive selection");
+  }
   for (const bool throws : {false, true}) {
     const initial_guess::EigenOperation bad = [&](const auto&, const auto*, const auto*,
                                                   auto) -> reference::EigenResult {
@@ -553,6 +629,7 @@ int main() {
     analytic_spin_states();
     stationary_uhf_determinant_reuse();
     identity_and_physical_origin();
+    explicit_stationarity_budget();
     malformed_states_and_strict_gates();
     degenerate_gauge();
     malformed_candidates_and_provider_dimensions();

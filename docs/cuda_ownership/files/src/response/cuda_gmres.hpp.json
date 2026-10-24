@@ -1,0 +1,7 @@
+{
+  "path": "src/response/cuda_gmres.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Caller-owned native device-vector, workspace and borrowed-stream ABI for the generated generic FP64 GMRES schedule. No method-specific response or derivative algebra is defined here.",
+  "regions": []
+}

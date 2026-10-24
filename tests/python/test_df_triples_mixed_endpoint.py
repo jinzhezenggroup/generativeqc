@@ -52,14 +52,18 @@ def run_endpoint(
     mixed: bool,
     forces: bool = True,
     lambda_interval: int | None = 1,
+    ccsd_mixed: bool | None = False,
+    lambda_mixed: bool = False,
+    ccsd_switch_residual: float | None = None,
 ) -> dict:
     """Use a fresh process with matched controls and no recycled solver state."""
     assert os.environ.get("SLURM_JOB_ID")
     assert "CUDA_VISIBLE_DEVICES" in os.environ
+    ccsd_selector = "auto" if ccsd_mixed is None else str(int(ccsd_mixed))
     source = tmp_path / "input.txt"
     output = (
         tmp_path
-        / f"result-{int(mixed)}-forces-{int(forces)}-lambda-{lambda_interval}.json"
+        / f"result-{int(mixed)}-ccsd-{ccsd_selector}-forces-{int(forces)}-lambda-{lambda_interval}-lmp-{int(lambda_mixed)}.json"
     )
     write_input(source, metadata)
     command = [
@@ -90,11 +94,110 @@ def run_endpoint(
     ]
     if lambda_interval is not None:
         command.append(str(lambda_interval))
+    if lambda_interval is None:
+        command.append("30")
+    # Explicit FP64 comparators must not inherit the native auto warmup policy.
+    command.extend(("1", "1", "1", "0", "0", ccsd_selector))
+    if lambda_mixed or ccsd_switch_residual is not None:
+        command.append(str(int(lambda_mixed)))
+    if ccsd_switch_residual is not None:
+        command.append(str(ccsd_switch_residual))
     completed = subprocess.run(
         command, capture_output=True, text=True, check=False, timeout=120
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(output.read_text())
+
+
+@pytest.mark.parametrize("name", ["h2", "water", "lih"])
+def test_native_default_keeps_small_endpoints_strict(name: str, tmp_path: Path) -> None:
+    """The automatic policy must not impose warmup overhead on small molecules."""
+    metadata, _ = load_fixture(name)
+    strict = run_endpoint(tmp_path, metadata, mixed=False, ccsd_mixed=False)
+    automatic = run_endpoint(tmp_path, metadata, mixed=False, ccsd_mixed=None)
+    assert automatic["ccsd_mixed_precision_policy"] == "auto"
+    assert automatic["ccsd_mixed_precision_requested"] is None
+    assert automatic["ccsd_mixed_precision"] == 0
+    assert automatic["ccsd_mixed_evaluations"] == 0
+    np.testing.assert_allclose(
+        automatic["total_energy"], strict["total_energy"], atol=2e-12, rtol=0
+    )
+    np.testing.assert_allclose(
+        automatic["forces"], strict["forces"], atol=1e-10, rtol=0
+    )
+
+
+@pytest.mark.parametrize("name", ["h2", "water", "lih"])
+@pytest.mark.parametrize("lambda_mixed", [False, True])
+@pytest.mark.parametrize("switch_residual", [None, 1e-3, 1e-5])
+def test_ccsd_warmup_preserves_complete_fp64_energy_and_forces(
+    name: str, lambda_mixed: bool, switch_residual: float | None, tmp_path: Path
+) -> None:
+    """CCSD and optional Lambda warm starts retain complete FP64 force gates."""
+    metadata, _ = load_fixture(name)
+    strict = run_endpoint(tmp_path, metadata, mixed=False)
+    mixed = run_endpoint(
+        tmp_path,
+        metadata,
+        mixed=False,
+        ccsd_mixed=True,
+        lambda_mixed=lambda_mixed,
+        ccsd_switch_residual=switch_residual,
+    )
+    reference = independent(metadata, True)[0]
+    assert mixed["ccsd_mixed_precision_requested"] == 1
+    assert mixed["ccsd_mixed_precision"] == 1
+    assert mixed["ccsd_precision_switches"] == 1
+    assert mixed["ccsd_fp32_gemm_calls"] > 0
+    assert mixed["triples_fp32_gemms"] == 0
+    if lambda_mixed:
+        assert mixed["lambda_mixed_precision_requested"] == 1
+        if mixed["lambda_mixed_precision"]:
+            assert mixed["lambda_precision_switches"] == 1
+            assert mixed["lambda_fp32_gemm_calls"] > 0
+            assert mixed["lambda_strict_actions"] > 0
+        else:
+            assert mixed["lambda_mixed_precision_refused"] == 1
+            assert mixed["lambda_fp32_gemm_calls"] == 0
+    np.testing.assert_allclose(mixed["total_energy"], reference, atol=3e-9, rtol=0)
+    np.testing.assert_allclose(
+        mixed["total_energy"], strict["total_energy"], atol=3e-10, rtol=0
+    )
+    np.testing.assert_allclose(mixed["forces"], strict["forces"], atol=1e-8, rtol=0)
+    for field in ("lambda_residual", "z_residual", "stationarity"):
+        assert mixed[field] < 1e-8
+
+    forces = np.asarray(mixed["forces"]).reshape(-1, 3)
+    np.testing.assert_allclose(forces.sum(axis=0), 0, atol=3e-8, rtol=0)
+    direction = np.random.default_rng(1764).normal(size=forces.shape)
+    direction /= np.linalg.norm(direction)
+    analytic_force = float(np.sum(forces * direction))
+    direction_errors = []
+    for step in (1e-4, 3e-5):
+        energies = []
+        for sign in (-1, 1):
+            displaced = copy.deepcopy(metadata)
+            displaced["inputs"]["coordinates"] = (
+                np.asarray(metadata["inputs"]["coordinates"]) + sign * step * direction
+            ).tolist()
+            energies.append(independent(displaced, True)[0])
+        numeric_force = -(energies[1] - energies[0]) / (2 * step)
+        np.testing.assert_allclose(analytic_force, numeric_force, atol=3e-7, rtol=3e-7)
+        direction_errors.append(abs(numeric_force - analytic_force))
+    (
+        tmp_path / f"ccsd-warmup-{name}-lambda-{int(lambda_mixed)}-accuracy.json"
+    ).write_text(
+        json.dumps(
+            {
+                "oracle_total_energy": reference,
+                "native_total_energy": mixed["total_energy"],
+                "forces": forces.tolist(),
+                "direction_errors": direction_errors,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih"])

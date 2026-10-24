@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from generativeqc_compiler.common.evidence import canonical_hash
 
+from .density_work import DENSITY_WORK_DOMAIN
 from .libxc_bulk_capabilities import (
     STAGE_EVIDENCE_SCHEMA,
     BulkFunctionalCapability,
@@ -173,6 +174,21 @@ def _normalize_execution(
             raise ValueError(
                 "production-domain execution must cover complete E/vxc outputs"
             )
+        if raw["domain"] == DENSITY_WORK_DOMAIN:
+            from .bulk_runtime import build_bulk_runtime_program
+
+            current = build_bulk_runtime_program(
+                capability.name,
+                spin=spin,
+                order=1,
+                optimization=raw["optimization"],
+                domain=DENSITY_WORK_DOMAIN,
+            )
+            if (
+                raw["source_identity"] != current.spec.source_identity
+                or raw["expression_identity"] != current.expression_hash
+            ):
+                raise ValueError("production-domain density work execution is stale")
         records[spin] = {
             "spin": spin,
             "executor": EXECUTOR,
@@ -374,5 +390,14 @@ def stage_evidence(
         "evidence": evidence,
     }
     if status == "pass":
+        from .bulk_runtime import production_candidate_domain
+
+        if production_candidate_domain(name) == DENSITY_WORK_DOMAIN and any(
+            record["domain"] != DENSITY_WORK_DOMAIN
+            for record in normalized["execution"]["programs"]
+        ):
+            raise ValueError(
+                "production-domain LDA evidence requires density work recipe"
+            )
         payload["qualification"] = capability.production_domain_profile.to_payload()
     return payload

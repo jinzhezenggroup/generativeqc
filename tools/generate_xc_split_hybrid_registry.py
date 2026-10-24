@@ -23,6 +23,13 @@ MGGA_CODE_BASE = 0x20000
 PYTHON_OUTPUT = (
     ROOT / "python" / "generativeqc_compiler" / "xc" / "_generated_split_hybrids.py"
 )
+DFT_PYTHON_OUTPUT = (
+    ROOT
+    / "python"
+    / "generativeqc_compiler"
+    / "dft"
+    / "_generated_split_hybrid_consumers.py"
+)
 SPLIT_HYBRID_FAST_PATH_STATUSES = (
     "unavailable",
     "qualification-required",
@@ -58,6 +65,43 @@ def _manifest_methods(path: Path = MANIFEST) -> tuple[str, ...]:
     return tuple(methods)
 
 
+def _manifest_cuda_df_energy_force(path: Path = MANIFEST) -> frozenset[str]:
+    """Qualify CUDA fitted J/K and complete stationary-force composition."""
+    methods = _manifest_methods(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    selected = payload.get("cuda_df_energy_force", [])
+    if (
+        not isinstance(selected, list)
+        or any(not isinstance(name, str) or name not in methods for name in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        raise MapleImportError(
+            "CUDA DF split-hybrid qualification requires unique registered methods"
+        )
+    return frozenset(selected)
+
+
+def _manifest_cuda_fp64_local_ao(path: Path = MANIFEST) -> frozenset[str]:
+    """Select independently qualified FP64 indexed density/potential consumers.
+
+    AO truncation qualification is separate from fitted J/K, mixed precision,
+    response, and graph replay: none of those capabilities implies another.
+    """
+    methods = _manifest_methods(path)
+    selected = json.loads(path.read_text(encoding="utf-8")).get(
+        "cuda_fp64_local_ao", []
+    )
+    if (
+        not isinstance(selected, list)
+        or any(not isinstance(name, str) or name not in methods for name in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        raise MapleImportError(
+            "CUDA FP64 local-AO qualification requires unique registered methods"
+        )
+    return frozenset(selected)
+
+
 def _records() -> dict[str, dict]:
     return {
         record["name"]: record for record in libxc_bulk.read_catalog()["registrations"]
@@ -80,6 +124,8 @@ def _method_code(identifier: str, family: str, exchange_registration: str) -> in
 
 
 def registry_entries(path: Path = MANIFEST) -> tuple[dict[str, object], ...]:
+    qualified_df = _manifest_cuda_df_energy_force(path)
+    qualified_local_ao = _manifest_cuda_fp64_local_ao(path)
     entries = []
     codes = set()
     for identifier in _manifest_methods(path):
@@ -107,6 +153,8 @@ def registry_entries(path: Path = MANIFEST) -> tuple[dict[str, object], ...]:
                 "correlation_registration": method.correlation_registration,
                 "exact_exchange_numerator": method.exact_exchange.numerator,
                 "exact_exchange_denominator": method.exact_exchange.denominator,
+                "cuda_df_energy_force": identifier in qualified_df,
+                "cuda_fp64_local_ao": identifier in qualified_local_ao,
             }
         )
     return tuple(entries)
@@ -138,6 +186,16 @@ def emit_registry(path: Path = MANIFEST) -> str:
     )
     registration_cases = "\n".join(
         f"    case 0x{entry['code']:x}U:" for entry in entries
+    )
+    df_cases = "\n".join(
+        f"    case 0x{entry['code']:x}U:"
+        for entry in entries
+        if entry["cuda_df_energy_force"]
+    )
+    local_ao_cases = "\n".join(
+        f"    case 0x{entry['code']:x}U: return true;"
+        for entry in entries
+        if entry["cuda_fp64_local_ao"]
     )
     mgga_cases = "\n".join(
         f"    case 0x{entry['code']:x}U:"
@@ -185,7 +243,8 @@ def emit_registry(path: Path = MANIFEST) -> str:
         dispatch_cases.extend(
             [
                 f"    case 0x{entry['code']:x}U: {{",
-                f"      const auto raw = {entry['function_name']}({', '.join(args)});",
+                f"      const auto raw = equal_spin ? {entry['function_name']}_equal_spin({', '.join(args)})",
+                f"                                  : {entry['function_name']}({', '.join(args)});",
                 "      out.energy_density = raw.energy_density;",
                 f"      for (unsigned i = 0; i < {feature_count}; ++i)",
                 "        out.feature_derivative[i] = raw.feature_derivative[i];",
@@ -230,6 +289,15 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "      return false;",
             "  }",
             "}",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_cuda_df_energy_force(",
+            "    std::uint32_t functional) noexcept {",
+            "  switch (functional) {",
+            df_cases,
+            "      return true;",
+            "    default:",
+            "      return false;",
+            "  }",
+            "}",
             "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_is_mgga(",
             "    std::uint32_t functional) noexcept {",
             "  switch (functional) {",
@@ -237,6 +305,14 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "      return true;",
             "    default:",
             "      return false;",
+            "  }",
+            "}",
+            "// Qualification applies to FP64 physical density/potential only.",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_fp64_local_ao(",
+            "    std::uint32_t functional) noexcept {",
+            "  switch (functional) {",
+            local_ao_cases,
+            "    default: return false;",
             "  }",
             "}",
             "inline constexpr CudaXcFastPathCapabilities split_hybrid_fast_path_capabilities(",
@@ -269,7 +345,7 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "__device__ inline SplitHybridRegistryValue evaluate_split_hybrid(",
             "    std::uint32_t functional, double rho_a, double rho_b,",
             "    double sigma_aa, double sigma_ab, double sigma_bb,",
-            "    double tau_a, double tau_b) {",
+            "    double tau_a, double tau_b, bool equal_spin = false) {",
             "  SplitHybridRegistryValue out{};",
             "  switch (functional) {",
             *dispatch_cases,
@@ -287,8 +363,9 @@ def emit_registry(path: Path = MANIFEST) -> str:
 
 def emit_python_registry(path: Path = MANIFEST) -> str:
     """Emit typed immutable mappings without changing existing consumer APIs."""
+    entries = registry_entries(path)
     rows = []
-    for entry in registry_entries(path):
+    for entry in entries:
         rows.extend(
             [
                 f'    {json.dumps(entry["identifier"])}: cast("SplitHybridRecord", MappingProxyType({{',
@@ -299,6 +376,8 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
                 f'            ({json.dumps(entry["correlation_registration"])}, "1"),',
                 "        ),",
                 f'        "exact_exchange": "{entry["exact_exchange_numerator"]}/{entry["exact_exchange_denominator"]}",',
+                f'        "cuda_df_energy_force": {entry["cuda_df_energy_force"]},',
+                f'        "cuda_fp64_local_ao": {entry["cuda_fp64_local_ao"]},',
                 "    })),",
             ]
         )
@@ -317,6 +396,8 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
             "    functional_code: int",
             "    components: tuple[tuple[str, str], ...]",
             "    exact_exchange: str",
+            "    cuda_df_energy_force: bool",
+            "    cuda_fp64_local_ao: bool",
             "",
             "",
             "SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({",
@@ -328,7 +409,35 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
             "    for record in SPLIT_HYBRIDS.values()",
             '    for component, _ in record["components"]',
             ")",
+            "",
             "# fmt: on",
+            "",
+        ]
+    )
+
+
+def emit_dft_point_consumers(path: Path = MANIFEST) -> str:
+    """Project code/width bindings without a forbidden DFT-to-XC import edge.
+
+    This table and the XC registry share one authoritative manifest and the
+    same validated entries. DFT consumes only launch metadata, not method
+    composition or a second implementation of the scientific algebra.
+    """
+    widths = {"gga": 4, "mgga": 5}
+    rows = [
+        f"    ({entry['code']}, {widths[entry['family']]}),"
+        for entry in registry_entries(path)
+    ]
+    return "\n".join(
+        [
+            '"""Generated split-hybrid native point code/width bindings; do not edit."""',
+            "",
+            "# Generated by tools/generate_xc_split_hybrid_registry.py from",
+            "# manifests/cuda_split_hybrids.json.",
+            "",
+            "SPLIT_HYBRID_POINT_CONSUMERS: tuple[tuple[int, int], ...] = (",
+            *rows,
+            ")",
             "",
         ]
     )
@@ -345,10 +454,18 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--python-output", type=Path)
+    parser.add_argument("--dft-python-output", type=Path)
     parser.add_argument("--check-python", action="store_true")
     args = parser.parse_args()
-    if args.output is None and args.python_output is None and not args.check_python:
-        parser.error("provide --output, --python-output or --check-python")
+    if (
+        args.output is None
+        and args.python_output is None
+        and args.dft_python_output is None
+        and not args.check_python
+    ):
+        parser.error(
+            "provide --output, --python-output, --dft-python-output or --check-python"
+        )
     if args.output is not None:
         write_if_changed(args.output, emit_registry(args.manifest))
     if args.python_output is not None or args.check_python:
@@ -357,6 +474,14 @@ def main() -> None:
         if args.check_python:
             if not output.is_file() or output.read_text(encoding="utf-8") != content:
                 raise SystemExit(f"stale split-hybrid metadata: {output}")
+        else:
+            write_if_changed(output, content)
+    if args.dft_python_output is not None or args.check_python:
+        output = args.dft_python_output or DFT_PYTHON_OUTPUT
+        content = emit_dft_point_consumers(args.manifest)
+        if args.check_python:
+            if not output.is_file() or output.read_text(encoding="utf-8") != content:
+                raise SystemExit(f"stale split-hybrid point bindings: {output}")
         else:
             write_if_changed(output, content)
 

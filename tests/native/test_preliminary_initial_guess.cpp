@@ -5,8 +5,10 @@
 #include <new>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 #include "dft/xc.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/minao.hpp"
@@ -72,7 +74,12 @@ void check() {
   require(
       generativeqc_initial_guess_capabilities_v1() ==
           (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO),
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU),
       "native preliminary provider capability mask drifted");
   require(!preliminary_options(nullptr), "default must remain disabled");
   generativeqc_initial_guess_options descriptor{};
@@ -93,6 +100,24 @@ void check() {
   descriptor.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
   parsed = preliminary_options(&descriptor);
   require(parsed && parsed->kind == PreliminaryKind::Minao, "MINAO descriptor was not parsed");
+  descriptor.radial_points = 8;
+  invalid([&] { preliminary_options(&descriptor); });
+  descriptor.radial_points = 0;
+  descriptor.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+  parsed = preliminary_options(&descriptor);
+  require(parsed && parsed->kind == PreliminaryKind::Minao && parsed->automatic_cpu,
+          "automatic CPU descriptor was not parsed");
+  descriptor.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+  parsed = preliminary_options(&descriptor);
+  require(parsed && parsed->kind == PreliminaryKind::Huckel && !parsed->automatic_cpu,
+          "Huckel descriptor was not parsed");
+  descriptor.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
+  parsed = preliminary_options(&descriptor);
+  require(parsed && parsed->kind == PreliminaryKind::Huckel && parsed->automatic_cpu,
+          "automatic Huckel CPU descriptor was not parsed");
+  descriptor.max_iterations = 65;
+  invalid([&] { preliminary_options(&descriptor); });
+  descriptor.max_iterations = 0;
   descriptor.radial_points = 8;
   invalid([&] { preliminary_options(&descriptor); });
   descriptor.radial_points = 0;
@@ -269,19 +294,28 @@ void check() {
     require((calls == 1) == (seed != nullptr), "core retry retained candidate seed");
     auto r = baseline;
     r.converged = calls == 2;
+    r.dft_diagnostic.coulomb_exchange_work = {true, calls, 0};
     return r;
   });
   require(calls == 2 && retried.converged && retried.preliminary_guess.target_attempts == 2 &&
               retried.preliminary_guess.outcome == PreliminaryOutcome::TargetRetried &&
               retried.preliminary_guess.discarded_target_iterations == baseline.iterations,
           "nonconvergence retry was not bounded/counted");
+  require(retried.dft_diagnostic.coulomb_exchange_work.complete &&
+              retried.dft_diagnostic.coulomb_exchange_work.coulomb_applications == 3 &&
+              retried.dft_diagnostic.coulomb_exchange_work.exchange_applications == 0,
+          "discarded target provider work was lost");
   calls = 0;
   retried = run_with_preliminary_guess(plan, controls, nullptr, 0, [&](const auto*) {
     if (++calls == 1) throw std::runtime_error("synthetic numerical failure");
-    return baseline;
+    auto returned = baseline;
+    returned.dft_diagnostic.coulomb_exchange_work = {true, 2, 0};
+    return returned;
   });
   require(calls == 2 && !retried.preliminary_guess.work_counters_complete,
           "exception census was certified");
+  require(!retried.dft_diagnostic.coulomb_exchange_work.complete,
+          "cold retry repaired missing discarded target provider work");
   calls = 0;
   try {
     (void)run_with_preliminary_guess(plan, controls, nullptr, 0,
@@ -292,6 +326,43 @@ void check() {
     throw std::runtime_error("allocation failure swallowed");
   } catch (const std::bad_alloc&) {
     require(calls == 1, "allocation failure retried");
+  }
+  for (const auto kind : {PreliminaryKind::Minao, PreliminaryKind::Huckel}) {
+    auto typed_controls = controls;
+    typed_controls.preliminary_guess->kind = kind;
+    for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                              GENERATIVEQC_STATUS_NOT_IMPLEMENTED}) {
+      calls = 0;
+      try {
+        (void)run_with_preliminary_guess(
+            plan, typed_controls, nullptr, 0, [&](const auto*) -> scf::ScfResult {
+              ++calls;
+              throw generativeqc::Error(status, "typed target failure");
+            });
+        throw std::logic_error("typed target failure swallowed");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == status && calls == 1,
+                "terminal target status was changed or retried");
+      }
+      calls = 0;
+      const EigenOperation failed_eigen = [&](const auto&, const auto*, const auto*,
+                                              auto) -> scf::reference::EigenResult {
+        throw generativeqc::Error(status, "typed seed admission failure");
+      };
+      try {
+        (void)run_with_preliminary_guess(
+            plan, typed_controls, nullptr, 0,
+            [&](const auto*) {
+              ++calls;
+              return baseline;
+            },
+            failed_eigen);
+        throw std::logic_error("typed seed failure swallowed");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == status && calls == 0,
+                "terminal seed status started an Hcore target");
+      }
+    }
   }
   auto force = controls;
   force.compute_forces = true;
@@ -308,6 +379,14 @@ void check() {
   mixed.precision_mode = GENERATIVEQC_PRECISION_AUTO;
   invalid([&] { validate_preliminary_target(system, plan.strategy(), mixed); });
 
+  auto fitted = scf::resolve_fock_build(
+      scf::make_hf_fock_spec(scf::FockSpin::Restricted, scf::FockApproximation::DensityFitted),
+      scf::FockBackend::Cpu);
+  auto huckel = controls;
+  huckel.preliminary_guess->kind = PreliminaryKind::Huckel;
+  validate_preliminary_target(system, fitted, huckel);
+  invalid([&] { validate_preliminary_target(system, fitted, controls); });
+
   // The exact same optional policy is shared by the ordinary RHF target.
   spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
   spec.derivative_order = 0;
@@ -319,8 +398,184 @@ void check() {
   matched(cold_hf, scf::run_prepared_fock_strategy(hf, controls));
 }
 }  // namespace
+void check_automatic_policy() {
+  generativeqc_initial_guess_auto_policy request{};
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  request.restricted = 1;
+  uint32_t kind = 99;
+  const auto resolve = [&] {
+    require(generativeqc_initial_guess_auto_kind_v1(&request, &kind) == GENERATIVEQC_STATUS_SUCCESS,
+            "automatic policy query failed");
+    return kind;
+  };
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "CPU RHF model declined");
+  const int32_t water_numbers[] = {8, 1, 1};
+  request.atomic_numbers = water_numbers;
+  request.atom_count = 3;
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "H-Ar system declined");
+  const auto resolve_system = [&](int64_t electrons, uint32_t multiplicity) {
+    require(generativeqc_initial_guess_auto_system_kind_v1(&request, electrons, multiplicity,
+                                                           &kind) == GENERATIVEQC_STATUS_SUCCESS,
+            "automatic system policy query failed");
+    return kind;
+  };
+  require(resolve_system(10, 1) == GENERATIVEQC_INITIAL_GUESS_MINAO, "singlet population declined");
+  require(resolve_system(0, 1) == 0, "zero-electron MINAO admitted");
+  require(resolve_system(9, 2) == 0, "open-shell MINAO admitted");
+  require(resolve_system(10, 3) == 0, "triplet MINAO admitted");
+  for (const auto population : {std::pair<int64_t, uint32_t>{-1, 1}, {10, 0}}) {
+    kind = 99;
+    require(generativeqc_initial_guess_auto_system_kind_v1(&request, population.first,
+                                                           population.second, &kind) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                kind == 99,
+            "invalid system population changed output");
+  }
+  const int32_t mixed_numbers[] = {2, 20};
+  request.atomic_numbers = mixed_numbers;
+  request.atom_count = 2;
+  require(resolve() == 0, "heavy element admitted");
+  request.atomic_numbers = water_numbers;
+  request.atom_count = 3;
+  request.has_ecp = 1;
+  require(resolve() == 0, "ECP admitted");
+  request.has_ecp = 0;
+  request.restricted = 0;
+  require(resolve() == 0, "unrestricted spin admitted");
+  request.restricted = 1;
+  request.method = GENERATIVEQC_METHOD_UHF;
+  require(resolve() == 0, "UHF carrier admitted");
+  request.method = GENERATIVEQC_METHOD_MP2;
+  require(resolve() == 0, "correlated method admitted");
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.backend = GENERATIVEQC_BACKEND_CUDA;
+  require(resolve() == 0, "CUDA HF admitted");
+  request.method = GENERATIVEQC_METHOD_PBE_RKS;
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "CUDA KS policy declined");
+  request.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  require(resolve() == 0, "mixed precision admitted");
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+  require(resolve() == 0, "DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  require(resolve() == 0, "CPU DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_AUTO;
+  require(resolve() == 0, "automatic DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+
+  const auto failure = [&](generativeqc_status expected) {
+    kind = 99;
+    require(generativeqc_initial_guess_auto_kind_v1(&request, &kind) == expected,
+            "invalid automatic policy status");
+    require(kind == 99, "failed policy query modified output");
+  };
+  request.restricted = 2;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.restricted = 1;
+  request.has_ecp = 2;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.has_ecp = 0;
+  request.backend = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  request.precision_mode = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  const int32_t invalid_numbers[] = {0, 119};
+  request.atomic_numbers = invalid_numbers;
+  request.atom_count = 1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atomic_numbers = invalid_numbers + 1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atomic_numbers = nullptr;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atom_count = 0;
+  kind = 99;
+  require(generativeqc_initial_guess_auto_system_kind_v1(&request, 2, 1, &kind) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              kind == 99,
+          "system policy accepted model-only input");
+  request.struct_size = 0;
+  failure(GENERATIVEQC_STATUS_ABI_MISMATCH);
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION + 1;
+  failure(GENERATIVEQC_STATUS_ABI_MISMATCH);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = -1;
+  failure(GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+  require(generativeqc_initial_guess_auto_kind_v1(nullptr, &kind) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null policy request accepted");
+  require(generativeqc_initial_guess_auto_kind_v1(&request, nullptr) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null policy output accepted");
+  require(generativeqc_initial_guess_auto_system_kind_v1(nullptr, 2, 1, &kind) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null system policy request accepted");
+}
+
+void check_huckel_automatic_policy() {
+  generativeqc_initial_guess_auto_policy request{};
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.restricted = 1;
+  const int32_t numbers[] = {8, 1, 1};
+  request.atomic_numbers = numbers;
+  request.atom_count = 3;
+  uint32_t kind = 99;
+  for (auto backend : {GENERATIVEQC_BACKEND_CPU_REFERENCE, GENERATIVEQC_BACKEND_CUDA}) {
+    request.backend = backend;
+    for (auto fitting :
+         {GENERATIVEQC_DENSITY_FITTING_NONE, GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE,
+          GENERATIVEQC_DENSITY_FITTING_CUDA, GENERATIVEQC_DENSITY_FITTING_AUTO}) {
+      request.density_fitting_mode = fitting;
+      require(
+          generativeqc_initial_guess_auto_kind_v2(&request, &kind) == GENERATIVEQC_STATUS_SUCCESS &&
+              kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL,
+          "Huckel exact/DF model declined");
+      require(generativeqc_initial_guess_auto_system_kind_v2(&request, 10, 1, &kind) ==
+                      GENERATIVEQC_STATUS_SUCCESS &&
+                  kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL,
+              "Huckel closed-shell system declined");
+      require(generativeqc_initial_guess_auto_system_kind_v2(&request, 9, 2, &kind) ==
+                      GENERATIVEQC_STATUS_SUCCESS &&
+                  kind == 0,
+              "Huckel open-shell population admitted");
+    }
+  }
+  request.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  require(generativeqc_initial_guess_auto_kind_v2(&request, &kind) == GENERATIVEQC_STATUS_SUCCESS &&
+              kind == 0,
+          "Huckel mixed precision admitted");
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.has_ecp = 1;
+  require(generativeqc_initial_guess_auto_kind_v2(&request, &kind) == GENERATIVEQC_STATUS_SUCCESS &&
+              kind == 0,
+          "Huckel ECP admitted");
+  request.has_ecp = 0;
+  request.struct_size = 0;
+  kind = 99;
+  require(generativeqc_initial_guess_auto_kind_v2(&request, &kind) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
+              kind == 99,
+          "Huckel invalid request overwrote output");
+}
+
 int main() {
   try {
+    check_automatic_policy();
+    check_huckel_automatic_policy();
     check();
     std::cout << "preliminary SCF contracts passed\n";
     return 0;

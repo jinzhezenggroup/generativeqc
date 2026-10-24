@@ -12,9 +12,11 @@ The installed SDK places `generativeqc` directly in `bin/`. Wheels place the
 full C++ executable next to `generativeqc/lib/` and install a small **native**
 launcher into the environment's `bin/` (the wheel scripts directory).
 The launcher locates the matching packaged binary within its own installation
-prefix and replaces its process using `execv`; neither command launches or
-imports Python. A missing or ambiguous packaged binary fails closed. Python
-APIs remain available but do not supply any runtime console-script fallback.
+prefix and replaces its process using `execv`. Ordinary native commands never
+launch or import Python. A missing or ambiguous packaged binary fails closed.
+Python APIs remain available but do not supply any runtime console-script
+fallback. The opt-in `hessian`/`hvp` CUDA endpoint also executes linked native
+code only; its compiler AD runs during the build, not during a calculation.
 
 ## Install a native runtime
 
@@ -39,6 +41,190 @@ cmake --install build --prefix /opt/generativeqc
 The installed executable uses a relocatable RPATH to find the adjacent
 `libgenerativeqc`, so an ordinary prefix install does not require Python or a
 package-specific `LD_LIBRARY_PATH`.
+
+## Precompiled CUDA CLI distributions
+
+The [CI workflow](https://github.com/jinzhezenggroup/generativeqc/actions/workflows/ci.yml)
+builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
+`master` push, using the `cuda-release-cli-sm120` CMake preset:
+
+- Full `Release` code generation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`),
+  CLI-reachable AOT shell kernels and native CPU derivative shards, precompiled
+  C++ headers, ccache, and the pinned CUDA 12.9 toolchain.
+- `GENERATIVEQC_MONOLITHIC_CLI=ON`: links the GenerativeQC **core** statically
+  into `bin/generativeqc`, removing its `libgenerativeqc.so` dependency.
+  The normal shared-library C++ SDK and Python wheel are unchanged.
+- A smoke test checks CLI version, methods, basis catalog and ELF dependencies
+  before uploading an archive and `SHA256SUMS` to **GitHub Actions Artifacts**.
+  Download the artifact from the successful CI run for the desired commit.
+- When a `vX.Y.Z` tag is pushed **and exactly matches the CMake project version**
+  on a commit already on `master`, the same production build uploads a
+  previously unpublished version to [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
+  Ordinary `master` pushes do **not** create releases or tags. Existing
+  releases and their assets are never automatically overwritten.
+  Manual CI dispatches build Actions artifacts only, even when run on a tag.
+  Publication rechecks that the current remote tag still identifies the built
+  commit; a moved tag fails instead of receiving mismatched artifacts.
+
+### Pull-request packaging gate
+
+Relevant pull requests and merge groups must now **link, smoke-test, install
+and package a real monolithic CUDA CLI before passing CI**. Changes to CMake,
+CLI, packaging, or their CI configuration use the full release-mode
+code-generation settings. Other native/runtime/compiler changes use faster NVCC
+compilation, but still execute the static link, binary smoke tests, archive
+checksums and extracted-binary comparison. Documentation-only changes skip
+the expensive build; an unknown Git diff runs the full build rather than
+silently skipping it. PR archives are retained for seven days, without
+publishing any GitHub Release.
+
+The CI job summary reports exact unstripped ELF, a stripped ELF size estimate
+and `.tar.gz` byte counts. These compile-only checks are not a real-GPU runtime
+or performance qualification.
+
+After extracting the archive:
+
+```bash
+tar -xzf generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120.tar.gz
+./generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120/bin/generativeqc --version
+```
+
+The filename is an illustration; master branch artifacts additionally include
+a Git SHA suffix. A binary includes the compiled native core, but this is **not**
+a fully statically linked Linux executable: CUDA runtime/math libraries and the
+NVIDIA driver, plus normal host providers (such as OpenBLAS, OpenSSL and
+libarchive), still need to be installed. On a host with a nonstandard CUDA
+library location, configure the dynamic loader's library path. The archive
+contains **one GenerativeQC executable** (`bin/generativeqc`), with no
+GenerativeQC shared libraries or separate stationary AOT plug-ins. Existing
+native AOT shell and CPU derivative code is compiled into the C++ core. The Python-specific `stationary_*` CUDA derivative `.so` modules remain
+separate from the single-executable CLI. Instead, the release preset enables
+`GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA` while leaving
+`GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF`: generated native s/p stationary
+force graphs and their generated registry are statically linked into the core. Shared
+SDK and Python AOT artifact semantics remain unchanged.
+
+The monolithic distribution cannot replace its linked core with a local binary
+profile through loader interposition. Automatic discovery of a cached binary
+profile retains the official core and reports the rejection in `profile diagnose`.
+An explicitly requested binary profile (`GENERATIVEQC_PROFILE=/path/to/bundle`)
+is refused with guidance to use the shared-core CLI or set
+`GENERATIVEQC_PROFILE=off`. Installing such a profile is also refused without
+changing the active cache. Shared-core SDK and wheel commands keep their
+existing profile activation behavior. DFT schedule-only diagnostics are unchanged.
+
+The current distributable specifically targets **sm_120 (Blackwell)**. It does
+not support every CUDA architecture (for example, Ada sm_89) without a separate
+build. The packaging is **no-Python-at-runtime**, not no-Python-at-build-time:
+code generators still use Python on CI.
+
+To reproduce this build from source (with CUDA 12.9 and ccache installed):
+
+```bash
+cmake --preset cuda-release-cli-sm120
+cmake --build --preset cuda-release-cli-sm120 --parallel 3
+cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
+python3 tools/package_native_cli.py \
+  --prefix "$PWD/build/native-cli-prefix" --output-dir dist \
+  --version 0.1.0 --commit "$(git rev-parse HEAD)" \
+  --source-date-epoch "$(git log -1 --format=%ct)"
+```
+
+The explicit project version should match the one in `CMakeLists.txt`.
+Optional external providers and experimental optimizations are **not**
+implicitly enabled merely because this is a distribution build; existing
+production numerical fallbacks are retained.
+
+## Compiler-AD WB97M-V Hessian and HVP
+
+The C++ executable exposes native `hessian` and `hvp` commands for canonical
+`wb97m-v-rks` (the default) and `wb97m-v-uks`, in strict FP64 on CUDA. Build with
+`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON`. With no explicit inventory, CMake
+generates the complete factorized through-f orbital / through-g auxiliary
+integral-component closure at configure time. An existing cache that explicitly
+selected a partial inventory must clear `GENERATIVEQC_HESSIAN_AOT_INVENTORY`
+to use this default. Missing linked
+closure is an explicit error, never a request to compile or fall back at runtime.
+This opt-in path replaces the old Python/CuPy CLI worker, including the response
+solver and stationary assembly, rather than merely precompiling isolated leaves.
+`--compiler-python`, `--compiler-library`, `--cache` and `--timeout-seconds` are
+obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
+the separate Python API retains its existing CPU contract.
+
+For an independently retained inventory, the equivalent complete selection can
+also be generated before configuring CMake:
+
+```bash
+python tools/complete_hessian_aot_inventory.py \
+  --inventory manifests/hessian_aot_development.json \
+  --output .artifacts/wb97mv-f-gaux.json \
+  --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric \
+  --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized
+```
+
+Set `GENERATIVEQC_HESSIAN_AOT_INVENTORY` to that file's absolute path alongside
+the CUDA, CLI and Hessian-AOT build options. Smaller explicit development
+packages can lower the angular
+bounds. Enumeration alone is not numerical or performance qualification; see
+the [AOT package contract](../developer/dft_hessian.md#native-aot-package-selection)
+for compiler ownership, physical selectors and independent gates. All generation
+and compilation happen at build time; the executable never expands the inventory
+on demand. The public Python CUDA Hessian frontend uses the same linked native
+owner, without CuPy numerical work or a runtime compiler.
+
+For example, the following **small-grid smoke test is not a grid-converged
+scientific calculation**:
+
+```bash
+generativeqc hessian h2.xyz --method wb97m-v-rks --basis sto-3g \
+  --representation spherical --backend cuda --units bohr \
+  --grid-radial-points 8 --grid-polar-points 4 --grid-azimuth-points 8 --json
+
+generativeqc hvp h2.xyz --method wb97m-v-uks --charge 1 --multiplicity 2 \
+  --basis sto-3g --representation spherical --backend cuda \
+  --density-fitting cuda --auxiliary-basis auxiliary.json --units bohr \
+  --direction direction.json \
+  --grid-radial-points 8 --grid-polar-points 4 --grid-azimuth-points 8 --json
+```
+
+Run real GPU commands through the site scheduler. `direction.json` contains a
+finite real `natoms`-by-3 JSON array in atom/xyz order, for example
+`[[0,0,0.1],[0,0,-0.1]]` for H2. XYZ units follow `--units` (Angstrom by default);
+the direction is a Cartesian vector in the Bohr-coordinate Hessian space and is
+not rescaled with the XYZ input. Results use `hartree/bohr^2`, with `matrix` or
+`value`, identity and work/residency diagnostics in JSON. The matrix is raw, not
+post-hoc symmetrized. Canonical local orbital/ECP and independent auxiliary
+records use the same offline basis schema as `run`.
+
+The C++ frontend prepares one native SCF state and binds its actual immutable
+grid, canonical orbital frame and exact/fitted Hamiltonian sources. Generated
+CUDA computes reference W, nuclear RHS, coupled CPKS and all moving-density
+stationary contractions. A complete matrix is privately staged and checked for
+raw symmetry before publication; it is never repaired. No displaced SCF,
+interpreter, runtime compiler or reference engine executes in this path.
+Numerical intermediates remain device-resident; native input handling, bounded
+status receipts and final publication are not claimed to be GPU work.
+See [the Hessian contract](../developer/dft_hessian.md) for admitted basis,
+full-rank DF, ECP quadrature and response gates.
+
+Controls include `--device-budget-bytes` (2 GiB aggregate independently owned
+response arenas plus CLI output/direction storage; borrowed SCF storage is
+separate), `--integral-budget-bytes` (64 MiB per source), `--grid-budget-bytes` (128 MiB per grid owner),
+`--output-budget-bytes` (64 MiB for the full matrix),
+`--response-budget-bytes` (64 MiB), and `--max-nonlocal-pairs` (16,777,216 ordered
+pairs per action). The pair cap is independent of memory; raise it explicitly
+when qualifying a larger grid. Response controls are `--response-rtol` (`1e-10`),
+`--response-atol` (`0`), `--response-restart` (`30`) and
+`--response-max-iterations` (`200`). Use a finite scheduler time limit for real
+GPU runs. Missing closure, failed solves, exceeded limits and nonfinite output
+fail with no partial JSON result. Diagnostics distinguish native execution time
+from an external complete-process wall measurement and expose source/response
+work counts; these are not GPU4PySCF speed-comparison evidence.
+
+The extension admits FP64 only and rejects CUDA with an explicitly CPU DF
+provider. Native SCF convergence, screening, fitting and explicit grid controls
+are forwarded, not ignored. Unrelated force, correlation and global resource
+planning flags are rejected by these commands rather than silently discarded.
 
 ## Discover native methods
 
@@ -120,11 +306,20 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
 
-The unchanged defaults are 100 SCF iterations, energy tolerance `1e-12`
-Hartree for Gaussian methods (`1e-10` for GFN2-xTB), density tolerance
-`1e-10` for Gaussian methods (`1e-8` for GFN2-xTB), and screening
-tolerance `1e-14` for Gaussian methods. A larger iteration limit does not
-relax strict convergence or guarantee success.
+For ordinary Gaussian HF/KS methods, `run` and geometry `optimize` now use
+the same SCF stopping defaults as Python `Calculator`: 100 iterations,
+energy change `1e-10` Hartree and density RMS `1e-8`. The `resources`
+dry-run reports these same effective convergence controls. Explicit
+`--energy-tolerance` and `--density-tolerance` options take precedence
+in all three commands.
+
+Canonical correlated methods retain their stricter SCF reference-orbital
+defaults (`1e-12` Hartree / `1e-10` density). GFN2-xTB keeps its SCC
+defaults (`1e-10` / `1e-8`); the dedicated Hessian/HVP path retains
+its own stricter SCF controls. Gaussian CLI integral screening is unchanged
+at `1e-14` (distinct from the Python `Calculator` default of `1e-12`).
+These are solver stopping thresholds, not proven absolute energy/force errors.
+A larger iteration limit does not relax convergence or guarantee success.
 
 ## Run RHF/UHF with bundled Gaussian bases
 
@@ -243,12 +438,12 @@ Run `generativeqc methods --compositions --json` to see `cpu`, `cuda` and
 `reason` for each canonical name or generated alias; `--backend` mismatches
 fail **before** molecular execution.
 
-The default version-1 small-grid quadrature is a **reference** prescription
-(64 radial x 12 polar x 24 azimuth points per atom), not a converged
-production-grid policy. Positive `--grid-radial-points`,
-`--grid-polar-points` and `--grid-azimuth-points` are available only for
-compiler-generated compositions; the existing stable native-manifest method
-paths preserve their established controls.
+KS defaults to level-3 Treutler/Lebedev + NWChem quadrature; see
+[grid options](ks_options.md) for its partition and accuracy contract.
+Compiler-generated compositions accept `--grid-level 0..9`. Their existing
+`--grid-radial-points`, `--grid-polar-points` and `--grid-azimuth-points`
+select an explicit legacy version-1 tensor grid and cannot be combined with
+`--grid-level`. Native-manifest methods use the common native default.
 
 **Representation is not execution qualification.** Methods requiring
 unrepresented range-separated exchange, VV10/rVV10 nonlocal correlation,
@@ -259,7 +454,7 @@ native capability: preparation remains authoritative.
 
 ### Context-qualified native DFT analytic forces
 
-A narrow **CPU, density-fitted, all-electron RKS PBE** force path now composes
+A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0 RKS/UKS and B3LYP RKS** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -269,33 +464,68 @@ generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
   --backend cpu --density-fitting cpu --forces --json
 ```
 
-The generated **PBE0-RKS** composition can use this route only when its
-prepared full-range exact-exchange **and** Coulomb terms both admit the same
-CPU density-fitted derivative provider. Its H2/STO-3G native CLI analytic
-force is independently checked against central differences of fully
+Use `--density-fitting none` for the exact Direct source instead. Its packaged
+derivative and work-envelope prerequisites are documented in the
+[C++ SDK derivative contract](native_cpp.md#density-fitting-and-derivative-boundary).
+The generated **PBE0-RKS/UKS and B3LYP-RKS** compositions can use either route only when their
+prepared full-range exact-exchange **and** Coulomb terms admit the corresponding
+native derivative provider. Their H2/STO-3G native CLI analytic
+forces are independently checked against central differences of fully
 reconverged molecular energies at displaced geometries, while the C++ SDK
 test checks the exact prepared force-capability contract and translation
 invariance. These tests are a narrow admission gate, not evidence of general
-PBE0 gradients across bases, spins or backends. The installed C++ SDK queries the
+hybrid gradients across bases, spins or backends. The installed C++ SDK queries the
 actual prepared context through
 `generativeqc_calculation_get_supported_properties_v1`; the generic method
 registry remains energy-only because it cannot promise forces for every
 backend, grid, spin or approximation. Use `Calculation::supported_properties()`
 rather than the global method manifest to test this narrow admission.
 
-This is not support for native CUDA DFT forces, CPU Direct DFT forces, UKS,
-r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
-requests reject before execution and do not return a partial derivative.
-Native **prepared batches** also reuse that CPU density-fitted PBE/PBE0
-RKS force consumer only when every member has a qualified prepared
+For an open-shell cation, use `--method pbe-uks` or `pbe0-uks` with
+`--charge 1 --multiplicity 2`. Separate alpha/beta blocks, including an empty
+beta population, pass the same stationary-state gate. Direct s/p/d and DF
+orbital-through-f/auxiliary-through-g contexts retain their existing basis
+boundaries; see the SDK contract for qualification details.
+
+On builds containing linked native CUDA stationary profiles, complete *Direct*
+CUDA DFT forces also admit graph-matched LDA, PBE, PBE0, r²SCAN and B3LYP
+RKS/UKS in the qualified all-electron s/p, strict-FP64,
+three-partition-iteration domain. Matching uses the generated MethodIR graph,
+exact-exchange and XC coefficients, rather than a functional-name whitelist.
+The monolithic CUDA CLI includes the compiler-qualified graph inventory; CPU-only
+builds do not. CMake discovers that inventory at build time from MethodIR rather
+than maintaining a second ten-name list. Native graph wrappers now share one
+CUDA source-transport kernel and one ordered unit-source gradient-reduction
+kernel, instead of compiling those device routines separately for every graph.
+The compiler validates that a MethodIR source reduction is a complete ordered
+unit-coefficient sum before selecting the shared implementation. XC evaluation,
+Becke derivatives and AO pullback are still graph-specialized pending numerical
+and performance qualification of a common CUDA geometry executor.
+A method listing alone never certifies forces: exact preparation and available
+resource capacity remain authoritative.
+
+Strict PBE0/RKS also admits the native d-shell force consumer for 24–384 AOs
+and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
+the Python [application precision policy](application_precision.md) separately
+selects budget-qualified FP32 arithmetic.
+
+CUDA DF DFT forces, ECP, remaining d/f-shell force contexts, ωB97M-V and correction-bearing
+MethodIR forces are **not** enabled by this native CUDA path. CPU B3LYP UKS
+also remains unqualified. Unsupported `--forces` requests fail before execution
+rather than publishing incomplete gradients. Run
+`python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
+under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
+finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
+linked symbols, but has no GPU and cannot supply numerical device evidence.
+Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
+RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
 context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
 native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
-whitelist in Python. General native CUDA/UKS/Direct DFT batch forces
+whitelist in Python. Native CUDA and other Direct DFT batch forces
 remain work under #2151.
-This slice requires complete independent numeric/CI acceptance before being
-considered production-qualified. See [C++ SDK usage](native_cpp.md).
+See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation
 
@@ -331,7 +561,8 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:02:00 generativeqc profile install profile.zip
 ```
 
-On Linux, CUDA `run` honors `GENERATIVEQC_PROFILE=off`, an explicit bundle
+For shared-core SDK and wheel commands on Linux, CUDA `run` honors
+`GENERATIVEQC_PROFILE=off`, an explicit bundle
 directory, or the compatible active index. Complete kernel libraries are
 selected through native re-execution/loader interposition, with no Python or
 compilation. Device visibility is preserved and the binary is revalidated on

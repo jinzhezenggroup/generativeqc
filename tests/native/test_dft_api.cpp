@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -13,6 +15,7 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.h"
+#include "generativeqc/generativeqc.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/mman.h>
@@ -33,12 +36,16 @@ namespace {
 // executable-only interposition exercises real constructor unwinding without
 // adding fault controls to the production API or exhausting machine memory.
 thread_local std::size_t fail_allocation_bytes = 0;
+thread_local std::exception_ptr fail_allocation_error;
+thread_local unsigned fail_allocation_skip = 0;
 
 }  // namespace
 
 void* operator new(std::size_t bytes) {
-  if (bytes && bytes == fail_allocation_bytes) {
+  if (bytes && bytes == fail_allocation_bytes &&
+      (fail_allocation_skip == 0 || --fail_allocation_skip == 0)) {
     fail_allocation_bytes = 0;
+    if (fail_allocation_error) std::rethrow_exception(fail_allocation_error);
     throw std::bad_alloc();
   }
   if (void* pointer = std::malloc(bytes ? bytes : 1)) return pointer;
@@ -48,6 +55,14 @@ void operator delete(void* pointer) noexcept { std::free(pointer); }
 void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
+
+// Independent PySCF 2.14.0 / Libxc 7.0.0, the exact Fixture basis below,
+// H2 at +/-0.7 Bohr, level 3 Treutler-Ahlrichs/NWChem, original Becke with
+// Treutler radii adjustment, no density pruning, conv_tol=1e-14 and
+// conv_tol_grad=1e-11. Each H contributes 9808 grid points.
+constexpr std::size_t kDefaultH2GridPoints = 2 * 9808;
+constexpr double kDefaultH2LdaEnergy = -1.1210178610540238;
+constexpr double kDefaultH2PbeEnergy = -1.1520643724196136;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -398,9 +413,33 @@ void pbe0_composition_snapshot() {
             0,
             GENERATIVEQC_BACKEND_CPU_REFERENCE};
   require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
-              result.converged && std::abs(result.energy - (-1.1520643753396715)) < 2e-12,
+              result.converged && std::abs(result.energy - kDefaultH2PbeEnergy) < 2e-12,
           "plain PBE carrier inferred a hybrid composition without a semantic plan");
   generativeqc_calculation_destroy(calculation);
+  // Explicit v1 grids retain the historical LDA/PBE independent snapshots;
+  // changing the omitted default must not erase legacy numerical coverage.
+  auto legacy_options = options;
+  legacy_options.radial_points = 48;
+  legacy_options.angular_polar = 16;
+  legacy_options.angular_azimuth = 32;
+  legacy_options.exchange_terms = nullptr;
+  legacy_options.exchange_term_count = 0;
+  for (bool pbe : {false, true}) {
+    const std::array<generativeqc_ks_semilocal_component, 2> legacy_components{
+        {{pbe ? "GGA_X_PBE" : "LDA_X", 1.0}, {pbe ? "GGA_C_PBE" : "LDA_C_PW", 1.0}}};
+    legacy_options.semilocal_components = legacy_components.data();
+    method.method = pbe ? GENERATIVEQC_METHOD_PBE_RKS : GENERATIVEQC_METHOD_LDA_RKS;
+    method.ks_options = &legacy_options;
+    calculation = nullptr;
+    require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                             &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+            "legacy v1 semilocal preparation failed");
+    const double expected = pbe ? -1.1520643753396715 : -1.121017859421488;
+    require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+                result.converged && std::abs(result.energy - expected) < 2e-12,
+            "explicit legacy v1 semilocal energy changed");
+    generativeqc_calculation_destroy(calculation);
+  }
   calculation = nullptr;
   method.ks_options = &options;
   exchange[0].fock_coefficient = -0.25;
@@ -450,7 +489,7 @@ void force_preparation_failure_recovery() {
   }
   inputs[1].coordinates = changed.data();
   inputs[1].coordinate_count = changed.size();
-  fail_allocation_bytes = 2 * 48 * 16 * 32 * 3 * sizeof(double);
+  fail_allocation_bytes = 3 * kDefaultH2GridPoints * sizeof(double);
   require(execute(inputs.data()) == GENERATIVEQC_STATUS_SUCCESS && !fail_allocation_bytes &&
               results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
               results[1].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY,
@@ -528,9 +567,9 @@ void warm_preparation_failure(bool retained_plan) {
   require(generativeqc_batch_restore_hf_warm_states(target, seeds.data(), seeds.size()) ==
               GENERATIVEQC_STATUS_SUCCESS,
           "warm failure seed import failed");
-  // H2's default quadrature has two atoms times 48*16*32 points. Its xyz
-  // vector is allocated inside preparation, after the imported seed is ready.
-  fail_allocation_bytes = 3 * 2 * 48 * 16 * 32 * sizeof(double);
+  // The default H2 xyz vector is allocated inside preparation, after the
+  // imported seed is ready. Keep the independent point-count oracle above.
+  fail_allocation_bytes = 3 * kDefaultH2GridPoints * sizeof(double);
   const auto status = execute(target, true);
   const bool injected = fail_allocation_bytes == 0;
   fail_allocation_bytes = 0;
@@ -586,10 +625,114 @@ void warm_execution_allocation_failure() {
           "warm SCF allocation failure lost its last-good density/energy pair");
 }
 
-void mixed_df_rsh_cpu_endpoints() {
-  // This CPU-only gate must run even when no CUDA compiler/device is present.
-  // The paired CUDA qualification below cannot catch a broken CPU reference
-  // if the entire block is compiled out.
+void single_execution_allocation_failure() {
+  // The scalar facade must preserve a scheduler item's exact exception/status,
+  // revoke old diagnostics, and recover without publishing a partial result.
+  Fixture fixture;
+  const auto method = lda_method();
+  generativeqc_calculation* calculation = nullptr;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure preparation failed");
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> owner(
+      calculation, &generativeqc_calculation_destroy);
+  generativeqc_result_descriptor result{};
+  result.struct_size = sizeof(result);
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure source did not converge");
+  const auto energy = result.energy;
+  result.energy = 123.0;
+  fail_allocation_bytes = 4 * sizeof(double);
+  const auto status = generativeqc_calculation_execute(calculation, &result);
+  const bool injected = fail_allocation_bytes == 0;
+  fail_allocation_bytes = 0;
+  require(injected && status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && result.energy == 123.0,
+          "single prepared scheduler hid an allocation failure or published partial energy");
+  require(generativeqc_calculation_get_precision_provenance(calculation, nullptr) ==
+              GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE,
+          "single failed scheduler retained stale precision diagnostics");
+  require(generativeqc_context_get_last_detail(fixture.context) != nullptr,
+          "single failed scheduler lost its exception detail");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - energy) < 2e-10,
+          "single prepared scheduler did not recover after allocation failure");
+}
+
+void single_execution_retry_errors() {
+  // Inject at a real warm SCF allocation, after scheduler preparation. Untyped
+  // failures include CUDA graph launch errors and must not be mistaken for a
+  // numerical seed rejection, consumed by a cold retry, or replaced by success.
+  Fixture fixture;
+  const auto method = lda_method();
+  generativeqc_calculation* calculation = nullptr;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+          "single retry-error preparation failed");
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> owner(
+      calculation, &generativeqc_calculation_destroy);
+  generativeqc_result_descriptor result{};
+  result.struct_size = sizeof(result);
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single retry-error source did not converge");
+  const auto energy = result.energy;
+  unsigned failure_site = 1;
+  const auto injected = [&](std::exception_ptr error) {
+    result.energy = 123.0;
+    fail_allocation_error = std::move(error);
+    fail_allocation_skip = failure_site;
+    fail_allocation_bytes = 4 * sizeof(double);
+    const auto status = generativeqc_calculation_execute(calculation, &result);
+    const bool consumed = fail_allocation_bytes == 0;
+    fail_allocation_bytes = 0;
+    fail_allocation_error = nullptr;
+    fail_allocation_skip = 0;
+    require(consumed, "single retry-error injection did not reach the SCF solve");
+    return status;
+  };
+  // Locate an allocation inside the retryable solve rather than depending on
+  // the number of scheduler setup allocations preceding it. A typed numerical
+  // failure in setup is terminal; the first successful injected call proves
+  // that this site exercised the real seeded solve and its cold fallback.
+  for (;; ++failure_site) {
+    const auto status = injected(std::make_exception_ptr(
+        generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "locate numerical retry site")));
+    if (status == GENERATIVEQC_STATUS_SUCCESS) break;
+    require(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+            "numerical retry-site discovery lost its exact status");
+    require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+            "numerical retry-site discovery did not recover");
+  }
+  const char* detail = "injected untyped launch failure";
+  require(injected(std::make_exception_ptr(std::runtime_error(detail))) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              result.energy == 123.0,
+          "single scheduler retried an untyped failure or published partial energy");
+  const auto* actual_detail = generativeqc_context_get_last_detail(fixture.context);
+  require(actual_detail && std::strcmp(actual_detail, detail) == 0,
+          "single scheduler replaced the original untyped failure detail");
+  require(generativeqc_calculation_get_precision_provenance(calculation, nullptr) ==
+              GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE,
+          "single untyped failure retained stale precision diagnostics");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              std::abs(result.energy - energy) < 2e-10,
+          "single scheduler did not recover after an untyped failure");
+  require(injected(std::make_exception_ptr(generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                                               "injected typed device failure"))) ==
+                  GENERATIVEQC_STATUS_CUDA_ERROR &&
+              result.energy == 123.0,
+          "single scheduler retried a typed device failure");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single scheduler did not recover after a typed device failure");
+  require(injected(std::make_exception_ptr(generativeqc::Error(
+              GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "injected numerical seed failure"))) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - energy) < 2e-10,
+          "single scheduler lost the explicitly numerical cold retry");
+}
+
+void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
   for (const bool wb97mv : {false, true}) {
     double restricted_energy = 0.0;
     for (unsigned spin_case = 0; spin_case < 3; ++spin_case) {
@@ -636,6 +779,23 @@ void mixed_df_rsh_cpu_endpoints() {
       method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
       method.ks_options = &ks;
       method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      if (wb97mv) {
+        // An explicit LR-DF request cannot become an exact Hamiltonian merely
+        // because the primary provider has density fitting disabled.
+        auto exact_method = method;
+        exact_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+        generativeqc_calculation* exact_calculation = nullptr;
+        const auto status = generativeqc_calculation_prepare(fixture.context, fixture.system,
+                                                             &exact_method, &exact_calculation);
+        const std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+            exact_owner(exact_calculation, &generativeqc_calculation_destroy);
+        if (range_mode && std::strcmp(range_mode, "df") == 0)
+          require(status == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !exact_calculation,
+                  "explicit LR-DF silently accepted a non-DF primary");
+        else
+          require(status == GENERATIVEQC_STATUS_SUCCESS && exact_calculation,
+                  "default/direct LR rejected a valid non-DF primary");
+      }
       // The implicit auxiliary basis is the orbital basis for this bounded gate.
       generativeqc_calculation* calculation = nullptr;
       require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
@@ -654,12 +814,19 @@ void mixed_df_rsh_cpu_endpoints() {
           "mixed-DF CPU RSH execution failed");
       const double cold = result.energy;
       // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on this exact
-      // basis/grid: DF full-range J/K with the orbital basis as auxiliary,
-      // and unfitted get_k(omega=0.3) for the LR correction. Generic RSH uses
-      // PBE + 0.2*HF + 0.6*LR_HF(0.3); WB97M-V retains its complete VV10 term.
-      // Reproduce with tools/verify_mixed_df_rsh_cpu.py (H2 and H2- doublet).
-      const double oracle = wb97mv ? (open_shell ? -0.8191434240565644 : -1.2886176659087356)
-                                   : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
+      // basis/grid: DF full-range J/K with the orbital basis as auxiliary.
+      // WB97M-V fits its LR correction only with the explicit df selector;
+      // default/direct retain exact get_k(omega=0.3). The fitted oracle
+      // independently whitens libcint LR tensors in normalized auxiliary
+      // coordinates with relative eigenvalue cutoff 1e-10. Generic PBE-RSH
+      // remains exact-LR in all selector modes; WB97M-V retains complete VV10.
+      // Match rho >= 1e-10 via tools/verify_mixed_df_rsh_cpu.py
+      // --vv10-density-cutoff 1e-10 (H2 and H2- doublet).
+      const bool fitted_range = wb97mv && range_mode && std::strcmp(range_mode, "df") == 0;
+      const double oracle =
+          wb97mv ? (fitted_range ? (open_shell ? -0.8133366861625834 : -1.284926849692006)
+                                 : (open_shell ? -0.8191434237585024 : -1.2886176657015223))
+                 : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
       require(std::abs(cold - oracle) < 2e-10,
               "mixed-DF CPU RSH differs from its independent matched-grid oracle");
       if (!unrestricted) restricted_energy = cold;
@@ -682,9 +849,32 @@ void mixed_df_rsh_cpu_endpoints() {
                                                &rejected) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                   !rejected,
               "mixed-DF CPU RSH accepted unsupported AUTO precision");
-      std::cout << "mixed DF " << (wb97mv ? "WB97M-V" : "PBE-RSH") << ' ' << spin_case
+      std::cout << "mixed DF " << (range_mode ? range_mode : "default") << ' '
+                << (wb97mv ? "WB97M-V" : "PBE-RSH") << ' ' << spin_case
                 << " E=" << std::setprecision(17) << cold << '\n';
     }
+  }
+}
+
+void mixed_df_rsh_cpu_endpoints() {
+  // This CPU-only gate must run even when no CUDA compiler/device is present.
+  // Exercise the default and both explicit Hamiltonians without inheriting the
+  // caller's environment or leaking the selected mode into subsequent tests.
+  struct RestoreRangeMode {
+    const bool present = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE") != nullptr;
+    const std::string value = present ? std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE") : "";
+    ~RestoreRangeMode() {
+      if (present)
+        setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", value.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
+    }
+  } restore_range_mode;
+  for (const char* range_mode : {static_cast<const char*>(nullptr), "df", "direct"}) {
+    require(range_mode ? setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", range_mode, 1) == 0
+                       : unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE") == 0,
+            "cannot select the mixed-DF CPU RSH Hamiltonian");
+    mixed_df_rsh_cpu_endpoints_for_mode(range_mode);
   }
 }
 
@@ -702,6 +892,8 @@ int main() {
     warm_preparation_failure(false);
     warm_preparation_failure(true);
     warm_execution_allocation_failure();
+    single_execution_allocation_failure();
+    single_execution_retry_errors();
     generativeqc_method_capabilities_descriptor capabilities{
         sizeof(generativeqc_method_capabilities_descriptor),
         GENERATIVEQC_ABI_VERSION,
@@ -742,7 +934,7 @@ int main() {
                 result.converged == 1 && std::isfinite(result.energy) &&
                 result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
             "LDA RKS energy-only execution failed");
-    require(std::abs(result.energy - (-1.121017859421488)) < 2.0e-12,
+    require(std::abs(result.energy - kDefaultH2LdaEnergy) < 2.0e-12,
             "LDA RKS H2 regression energy changed");
 
     std::array<double, 6> forces{};
@@ -776,7 +968,7 @@ int main() {
                 result.converged == 1 && std::isfinite(result.energy) &&
                 result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
             "PBE RKS energy-only execution failed");
-    require(std::abs(result.energy - (-1.1520643753396715)) < 2.0e-12,
+    require(std::abs(result.energy - kDefaultH2PbeEnergy) < 2.0e-12,
             "PBE RKS H2 implementation regression energy changed");
     const double pbe_energy = result.energy;
     std::cout << std::setprecision(17) << "PBE RKS H2 energy: " << result.energy << "\n";
@@ -997,16 +1189,35 @@ int main() {
           "UKS singlet execution failed");
       const double expected =
           spin_method == GENERATIVEQC_METHOD_LDA_UKS
-              ? -1.121017859421488
-              : (spin_method == GENERATIVEQC_METHOD_PBE_UKS ? -1.1520643753396715
+              ? kDefaultH2LdaEnergy
+              : (spin_method == GENERATIVEQC_METHOD_PBE_UKS ? kDefaultH2PbeEnergy
                                                             : r2scan_rks_energy);
       require(std::abs(result.energy - expected) < 2.0e-12,
               "equal-spin UKS and RKS energies disagree");
+      generativeqc_property_flags available{};
+      require(generativeqc_calculation_get_supported_properties_v1(calculation, &available) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "UKS prepared force capability query failed");
+      const bool eligible = available & GENERATIVEQC_PROPERTY_FORCES;
+      require(!eligible || spin_method == GENERATIVEQC_METHOD_PBE_UKS,
+              "UKS widened the native force owner beyond canonical PBE");
+      forces.fill(1234.0);
       result.forces = forces.data();
       result.force_count = static_cast<uint32_t>(forces.size());
       require(generativeqc_calculation_execute(calculation, &result) ==
-                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "UKS force request exposed an unsupported buffer");
+                  (eligible ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+              "UKS force execution disagrees with its prepared capability");
+      if (eligible) {
+        require(result.converged && std::abs(result.energy - expected) < 2e-12,
+                "native UKS force execution changed the equal-spin energy");
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          require(std::isfinite(forces[axis]) && std::abs(forces[axis] + forces[3 + axis]) < 2e-5,
+                  "equal-spin UKS forces violate translation invariance");
+      } else {
+        require(
+            std::all_of(forces.begin(), forces.end(), [](double value) { return value == 1234.0; }),
+            "unqualified UKS context published partial forces");
+      }
       generativeqc_calculation_destroy(calculation);
     }
 
@@ -1519,11 +1730,19 @@ int main() {
         auto auto_method = method;
         auto_method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
         generativeqc_calculation* auto_calculation = nullptr;
-        require(generativeqc_calculation_prepare(cuda_context, cuda_system, &auto_method,
-                                                 &auto_calculation) ==
-                        GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                    auto_calculation == nullptr,
-                "split-global-hybrid public CUDA endpoint lost strict-FP64 admission");
+        require(
+            generativeqc_calculation_prepare(cuda_context, cuda_system, &auto_method,
+                                             &auto_calculation) == GENERATIVEQC_STATUS_SUCCESS &&
+                auto_calculation != nullptr,
+            "split-global-hybrid public CUDA endpoint lost shared AUTO admission");
+        auto auto_result = unconverged;
+        require(generativeqc_calculation_execute(auto_calculation, &auto_result) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    auto_result.converged &&
+                    auto_result.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
+                    std::abs(auto_result.energy - result.energy) < 2e-8,
+                "split-global-hybrid AUTO endpoint differs from strict physical energy");
+        generativeqc_calculation_destroy(auto_calculation);
 
         auto bad_exchange = exchange;
         bad_exchange[0].coefficient -= 0.01;
@@ -1546,7 +1765,7 @@ int main() {
       generativeqc_context_destroy(cuda_context);
     }
 #endif
-    std::cout << "Registered KS energy-only backend and force-rejection contract passed\n";
+    std::cout << "Context-qualified native KS energy and force contract passed\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "test failure: " << error.what() << '\n';

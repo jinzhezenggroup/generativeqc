@@ -40,7 +40,9 @@ from tools.generate_rccsd_native import (
     _packed_matrix_gemm,
     _required_function,
     _size,
+    add_cross_size_arena_argument,
     contraction_query,
+    cross_size_arena_candidate,
     ordered_batch_accumulation,
 )
 
@@ -415,16 +417,18 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for suffix, producer in (
-        ("cpu.hpp", cpu_header),
-        ("cuda.cuh", cuda_header),
-        ("cuda.cu", cuda_source),
-    ):
-        (args.output_dir / ("generated_df_ccsd_spectator_pairs_" + suffix)).write_text(
-            producer()
-        )
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, producer in (
+            ("cpu.hpp", cpu_header),
+            ("cuda.cuh", cuda_header),
+            ("cuda.cu", cuda_source),
+        ):
+            (
+                args.output_dir / ("generated_df_ccsd_spectator_pairs_" + suffix)
+            ).write_text(producer())
 
 
 if __name__ == "__main__":

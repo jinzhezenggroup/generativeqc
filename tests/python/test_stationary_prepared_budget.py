@@ -1,6 +1,8 @@
 """Resident reuse must obey each call's admission caps before any device work."""
 
 import inspect
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -24,24 +26,126 @@ def test_shared_tensor_artifact_is_bound_once_without_hiding_collisions() -> Non
         runtime._unique_prepared_artifacts((first, conflicting))
 
 
-def test_prepared_artifact_deduplication_is_inside_cleanup_scope() -> None:
-    source = inspect.getsource(runtime.PreparedStationaryCudaExecution.ensure)
-    artifacts_at = source.index("artifacts = _unique_prepared_artifacts(")
-    try_at = source.rfind("try:", 0, artifacts_at)
-    install_at = source.index("self._lease.install(", artifacts_at)
-    except_at = source.index("except Exception:", install_at)
-    close_at = source.index("stack.close()", except_at)
-    assert 0 <= try_at < artifacts_at < install_at < except_at < close_at
+@pytest.mark.parametrize(
+    "failure", ("artifact-collision", "lease-install", "force-memory")
+)
+def test_prepared_artifact_resources_close_when_publication_fails(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Refuse before allocation, or close acquired owners when publication fails."""
+    owner = runtime.PreparedStationaryCudaExecution()
+    monkeypatch.setattr(owner, "_request", lambda **_kwargs: object())
+    monkeypatch.setattr(runtime, "_layout", lambda _basis: (None, None, (), None))
+    monkeypatch.setattr(runtime, "_component_mode", lambda _expansions: False)
+    monkeypatch.setattr(runtime, "stationary_runtime_sources", lambda _plan: ())
+    stationary = SimpleNamespace(metadata={"key": "a" * 64, "binary_sha256": "b" * 64})
+    grid = SimpleNamespace(
+        metadata={
+            "key": "a" * 64 if failure == "artifact-collision" else "c" * 64,
+            "binary_sha256": "d" * 64,
+        }
+    )
+    monkeypatch.setattr(
+        runtime,
+        "compile_stationary_cuda",
+        lambda *_a, **_kw: (
+            pytest.fail("compilation before force-memory admission")
+            if failure == "force-memory"
+            else stationary
+        ),
+    )
+    monkeypatch.setattr(runtime, "compile_grid", lambda *_a, **_kw: grid)
+
+    events: list[str] = []
+    memory_requests: list[int] = []
+
+    def prepare_force_memory(size: int) -> dict[str, int]:
+        events.append("force-memory")
+        memory_requests.append(size)
+        if failure == "force-memory":
+            raise RuntimeError("injected force-memory refusal")
+        return {"requested_bytes": size}
+
+    @contextmanager
+    def resource(name: str) -> Iterator[SimpleNamespace]:
+        events.append(f"enter:{name}")
+        try:
+            yield SimpleNamespace()
+        finally:
+            events.append(f"exit:{name}")
+
+    monkeypatch.setattr(runtime, "CudaGrid", lambda *_a, **_kw: resource("grid"))
+    monkeypatch.setattr(runtime, "_CudaSources", lambda *_a, **_kw: resource("sources"))
+
+    if failure == "lease-install":
+
+        def reject_install(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("injected lease installation failure")
+
+        monkeypatch.setattr(owner._lease, "install", reject_install)
+
+    error = ValueError if failure == "artifact-collision" else RuntimeError
+    message = (
+        "conflicting binaries"
+        if failure == "artifact-collision"
+        else "injected lease"
+        if failure == "lease-install"
+        else "injected force-memory refusal"
+    )
+    with pytest.raises(error, match=message):
+        owner.ensure(
+            state=SimpleNamespace(
+                _source=SimpleNamespace(cuda_prepare_force_memory=prepare_force_memory)
+            ),
+            basis=SimpleNamespace(identity="geometry", natom=1, nao=1),
+            contract=SimpleNamespace(),
+            plan=SimpleNamespace(spin_blocks=1),
+            tensor_plans={},
+            compiler=SimpleNamespace(target=SimpleNamespace()),
+            cache="unused",
+            requests=(),
+            functional=0,
+            ecp=False,
+            device=0,
+            spec=SimpleNamespace(partition_iterations=1),
+            grid_plan=SimpleNamespace(
+                peak_bytes=1, allocation_bytes=1, active_ao_capacity=None
+            ),
+            source_bytes=1,
+            tile_points=8,
+            primitive_tile=16,
+            integral_terms=2,
+            page_work_budget=64,
+            max_device_bytes=100,
+            max_host_bytes=100,
+            host_bound=1,
+        )
+
+    assert memory_requests == [100]
+    assert events == ["force-memory"] + (
+        []
+        if failure == "force-memory"
+        else ["enter:grid", "enter:sources", "exit:sources", "exit:grid"]
+    )
+    assert owner._stack is None
+    assert owner._lease.contract is None
 
 
 @pytest.mark.parametrize(
     "failed,changed", [(False, False), (False, True), (True, False)]
 )
+@pytest.mark.parametrize("device_budget", [30, 45])
 def test_retained_host_budget_is_rechecked_before_rebind(
-    monkeypatch: pytest.MonkeyPatch, failed: bool, changed: bool
+    monkeypatch: pytest.MonkeyPatch, failed: bool, changed: bool, device_budget: int
 ) -> None:
     monkeypatch.setattr(runtime, "_basis_topology_identity", lambda basis: "topology")
-    source = SimpleNamespace(backend="cuda")
+    memory_requests = []
+    source = SimpleNamespace(
+        backend="cuda",
+        cuda_prepare_force_memory=lambda size: (
+            memory_requests.append(size) or {"requested_bytes": size}
+        ),
+    )
     identity = SimpleNamespace(
         method="pbe-rks", functional_identity="xc", regularization_identity="reg"
     )
@@ -76,13 +180,15 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "ecp": False,
         "device": 0,
         "spec": spec,
-        "grid_plan": SimpleNamespace(allocation_bytes=10, peak_bytes=10),
+        "grid_plan": SimpleNamespace(
+            allocation_bytes=10, peak_bytes=10, active_ao_capacity=None
+        ),
         "source_bytes": 20,
         "tile_points": 4,
         "primitive_tile": 5,
         "integral_terms": 6,
         "page_work_budget": 7,
-        "max_device_bytes": 30,
+        "max_device_bytes": device_budget,
         "max_host_bytes": 99,
         "host_bound": 80,
     }
@@ -118,6 +224,19 @@ def test_retained_host_budget_is_rechecked_before_rebind(
     )
     assert pruned_request.scientific_identity == request.scientific_identity
     assert pruned_request.schedule_identity != request.schedule_identity
+    mixed_request = owner._request(
+        **{
+            name: value
+            for name, value in kwargs.items()
+            if name in inspect.signature(owner._request).parameters
+        },
+        target=target,
+        aot_directory=None,
+        native_grid_library=None,
+        fp32_semilocal_geometry=True,
+    )
+    assert mixed_request.scientific_identity == request.scientific_identity
+    assert mixed_request.schedule_identity != request.schedule_identity
     owner._lease.install(
         request,
         (
@@ -132,10 +251,21 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         owner._lease.mark_failure()
     with pytest.raises(ValueError, match="host budget"):
         owner.ensure(**kwargs)
+    assert memory_requests == []
     # An admission failure must leave an unchanged compatible owner reusable.
     if owner._lease.failed:
         owner._lease.mark_refresh()
     kwargs["basis"] = SimpleNamespace(identity="old", packed=[], natom=0, nao=0)
     kwargs["max_host_bytes"] = 100
     owner.ensure(**kwargs)
+    assert owner._bound_basis_identity == "old"
+    assert memory_requests == [device_budget - 30]
+    assert owner.force_memory == {"requested_bytes": device_budget - 30}
+
+    def refuse_force_memory(_size: int) -> dict[str, int]:
+        raise RuntimeError("injected replay memory refusal")
+
+    source.cuda_prepare_force_memory = refuse_force_memory
+    with pytest.raises(RuntimeError, match="injected replay memory refusal"):
+        owner.ensure(**kwargs)
     assert owner._bound_basis_identity == "old"

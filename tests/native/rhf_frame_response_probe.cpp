@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "hf/rhf_frame_response.hpp"
@@ -15,6 +16,7 @@
 #include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 
 extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
@@ -39,10 +41,16 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     hf::RHFFrameResponseOptions options;
     options.orbital_screening_tolerance = screening;
     options.profile_jk = true;
+    if (const auto* materialized = std::getenv("GENERATIVEQC_TEST_RHF_MATERIALIZED_JK"))
+      options.materialized_jk = std::string_view(materialized) != "0";
     if (const auto* resident = std::getenv("GENERATIVEQC_TEST_RHF_RESIDENT_JK_BYTES"))
       options.resident_jk_maximum_bytes = std::stoull(resident);
-    options.bilinear_derivative = nuclear_schedule == 1;
-    options.symmetric_polarization = nuclear_schedule == 2;
+    if (nuclear_schedule < 3) {
+      options.bilinear_derivative = nuclear_schedule == 1;
+      options.symmetric_polarization = nuclear_schedule == 2;
+    } else if (nuclear_schedule != 3) {
+      throw std::invalid_argument("invalid nuclear derivative schedule");
+    }
     options.relax_orbitals = relax;
     options.maximum_bytes = budget;
     // This probe's scalar ablation uses a real resource constraint. The public
@@ -95,7 +103,9 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
                               result.screened_jk_actions,
                               result.prepared_contractions,
                               result.contraction_binding_bytes,
-                              result.prepared_contraction_summands};
+                              result.prepared_contraction_summands,
+                              result.shell_derivative_passes,
+                              result.generic_derivative_passes};
     std::copy(std::begin(stats), std::end(stats), counts);
     diagnostics[0] = result.orbital_residual;
     diagnostics[1] = result.maximum_stationarity;
@@ -125,8 +135,10 @@ extern "C" int rhf_linear_jk_probe(void* opaque, const double* density, double t
     const auto check = [&](generativeqc_status code) {
       if (code != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     };
-    check(scf::create_cuda_direct_jk_plan(0, {raw.orbital()}, 0, 0.0, 1ULL << 30, &plan, stats,
-                                          detail));
+    const auto* prepared = std::getenv("GENERATIVEQC_TEST_RHF_PREPARED_SCREENING");
+    const double prepared_threshold = prepared ? std::stod(prepared) : 0.0;
+    check(scf::create_cuda_direct_jk_plan(0, {raw.orbital()}, 0, prepared_threshold, 1ULL << 30,
+                                          &plan, stats, detail));
     const auto stream = scf::cuda_direct_jk_stream(plan);
     // These buffers die before their stream; a failure drains before releasing
     // the caller's host output and density pointers.
@@ -156,13 +168,20 @@ extern "C" int rhf_linear_jk_probe(void* opaque, const double* density, double t
                 plan, spec, d, nn, j, k, aliased, correction.size(), flag.get(), threshold,
                 census.get(), detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
           throw std::runtime_error("accepted aliased J/K correction plane");
+      const auto* materialized = std::getenv("GENERATIVEQC_TEST_RHF_MATERIALIZED_JK");
+      const bool use_materialized = !materialized || std::string_view(materialized) != "0";
+      // A null census permits profiling the ordinary, non-instrumented action.
       check(scf::enqueue_cuda_direct_jk_compensated_device(
           plan, spec, d, nn, j, k, correction.get(), correction.size(), flag.get(), threshold,
-          census.get(), detail));
+          counts ? census.get() : nullptr, detail, true, nullptr, nullptr, use_materialized));
+      if (materialized && (scf::cuda_direct_jk_plan_diagnostic(plan).materialized_value_launches !=
+                           0) != (use_materialized && threshold >= prepared_threshold))
+        throw std::runtime_error("requested response schedule was not exercised");
       runtime::cuda_resource_check(
           cudaMemcpyAsync(output, j, 2 * nn * sizeof(double), cudaMemcpyDeviceToHost, stream));
-      runtime::cuda_resource_check(cudaMemcpyAsync(counts, census.get(), 2 * sizeof(std::uint64_t),
-                                                   cudaMemcpyDeviceToHost, stream));
+      if (counts)
+        runtime::cuda_resource_check(cudaMemcpyAsync(
+            counts, census.get(), 2 * sizeof(std::uint64_t), cudaMemcpyDeviceToHost, stream));
       runtime::cuda_resource_check(
           cudaMemcpyAsync(&failure, flag.get(), sizeof(int), cudaMemcpyDeviceToHost, stream));
       runtime::cuda_resource_check(cudaStreamSynchronize(stream));
@@ -200,6 +219,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
     check(scf::create_cuda_direct_jk_plan(0, {raw.orbital()}, 0, 0.0, 1ULL << 30, &plan, stats,
                                           detail));
     counts[0] = scf::cuda_direct_jk_resident_value_bytes(plan);
+    const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+    if (!bucket_policy.valid) throw std::runtime_error("invalid resident bucket policy");
     const auto prepare_started = std::chrono::steady_clock::now();
     generativeqc_status prepared;
     {
@@ -219,7 +240,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
         }
         ~AdmissionScope() { runtime::active_device_resource_ledger = previous; }
       } admission;
-      prepared = scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail);
+      prepared = scf::prepare_cuda_direct_jk_selected_resident_values(
+          plan, std::min(maximum_cache_bytes, bucket_policy.ceiling), bucket_policy.mask, detail);
       if (admission.refused &&
           (prepared != GENERATIVEQC_STATUS_OUT_OF_MEMORY || admission.refused->rejected != 1 ||
            admission.refused->live != 0 || admission.refused->peak != 0))
@@ -237,13 +259,14 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
     counts[4] = counts[5] = 0;
     counts[6] = prepared;
     if (counts[1]) {
-      check(scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail));
+      check(scf::prepare_cuda_direct_jk_selected_resident_values(plan, maximum_cache_bytes,
+                                                                 bucket_policy.mask, detail));
       if (scf::cuda_direct_jk_plan_diagnostic(plan).device_bytes != stats.device_bytes)
         throw std::runtime_error("idempotent resident preparation changed ownership");
       const auto original_device = plan->device_id;
       plan->device_id = original_device + 1;
-      const auto mismatched =
-          scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail);
+      const auto mismatched = scf::prepare_cuda_direct_jk_selected_resident_values(
+          plan, maximum_cache_bytes, bucket_policy.mask, detail);
       plan->device_id = original_device;
       if (mismatched != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
         throw std::runtime_error("idempotent resident preparation accepted a foreign device");
@@ -287,7 +310,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
               if (correction.size())
                 check(scf::enqueue_cuda_direct_jk_compensated_device(
                     plan, spec, density, nn, coulomb, exchange, correction.get(), correction.size(),
-                    flag.get(), 0.0, counts[7] ? census.get() : nullptr, detail));
+                    flag.get(), 0.0, counts[7] ? census.get() : nullptr, detail, !uncached, nullptr,
+                    nullptr, !uncached));
               else
                 check(scf::enqueue_cuda_direct_jk_device(
                     plan, spec, density, unrestricted ? density + nn : nullptr, nn, coulomb,
@@ -339,12 +363,12 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
   }
 }
 
-// Force the canonical bilinear API even on SPD so small dense oracles qualify
-// the coefficient separately from production's specialized-shell preference.
-extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density,
-                                             const double* seed, double* output,
-                                             std::uint64_t* counts, char* error,
-                                             std::size_t error_size) noexcept {
+namespace {
+// Force each derivative API independently so a fallback cannot mask a broken
+// shell route when the same signed-density libcint oracle qualifies both.
+int run_bilinear_derivative_probe(void* opaque, const double* density, const double* seed,
+                                  double* output, std::uint64_t* counts, char* error,
+                                  std::size_t error_size, bool shell) noexcept {
   using namespace generativeqc;
   scf::CudaDirectJkPlan* plan = nullptr;
   try {
@@ -367,10 +391,16 @@ extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density
       runtime::cuda_resource_check(cudaMemcpyAsync(storage.get() + nn, seed, nn * sizeof(double),
                                                    cudaMemcpyHostToDevice, stream));
       std::vector<double> result;
-      check(scf::execute_cuda_direct_bilinear_derivative_device(
-          plan, storage.get(), storage.get() + nn, nn, result, census.get(), detail));
-      runtime::cuda_resource_check(cudaMemcpyAsync(counts, census.get(), 2 * sizeof(std::uint64_t),
-                                                   cudaMemcpyDeviceToHost, stream));
+      if (shell) {
+        check(scf::execute_cuda_direct_shell_bilinear_derivative_device(
+            plan, storage.get(), storage.get() + nn, nn, result, detail));
+        counts[0] = counts[1] = 0;
+      } else {
+        check(scf::execute_cuda_direct_bilinear_derivative_device(
+            plan, storage.get(), storage.get() + nn, nn, result, census.get(), detail));
+        runtime::cuda_resource_check(cudaMemcpyAsync(
+            counts, census.get(), 2 * sizeof(std::uint64_t), cudaMemcpyDeviceToHost, stream));
+      }
       runtime::cuda_resource_check(cudaStreamSynchronize(stream));
       std::copy(result.begin(), result.end(), output);
     }
@@ -381,4 +411,21 @@ extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
     return 1;
   }
+}
+}  // namespace
+
+extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density,
+                                             const double* seed, double* output,
+                                             std::uint64_t* counts, char* error,
+                                             std::size_t error_size) noexcept {
+  return run_bilinear_derivative_probe(opaque, density, seed, output, counts, error, error_size,
+                                       false);
+}
+
+extern "C" int rhf_shell_bilinear_derivative_probe(void* opaque, const double* density,
+                                                   const double* seed, double* output,
+                                                   std::uint64_t* counts, char* error,
+                                                   std::size_t error_size) noexcept {
+  return run_bilinear_derivative_probe(opaque, density, seed, output, counts, error, error_size,
+                                       true);
 }

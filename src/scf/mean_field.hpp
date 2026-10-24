@@ -7,6 +7,7 @@
 
 #include "core/types.hpp"
 #include "dft/semilocal_family.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
 #include "scf/initial_guess/eigen_operation.hpp"
@@ -36,6 +37,7 @@ namespace generativeqc::dft {
 class AoBasis;
 class MolecularGrid;
 struct SemilocalPointProgram;
+struct RestrictedSemilocalPointProgram;
 namespace nlc {
 class Vv10Plan;
 struct Vv10Parameters;
@@ -44,7 +46,8 @@ struct Vv10Parameters;
 
 namespace generativeqc::scf {
 
-/** Reject explicit preliminary guesses before resident CUDA DF resource allocation.
+/** Reject unqualified providers before resident CUDA DF resource allocation.
+ * Native Huckel changes only the cold density; other providers remain exact-only.
  * Applied by the common dispatch and direct native single/batch entry points. */
 void reject_cuda_df_preliminary_guess(const ScfOptions& options);
 
@@ -95,11 +98,18 @@ ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& ba
                             const dft::SemilocalPointProgram& program,
                             const std::vector<double>* initial_density = nullptr);
 
+/** Restricted total-density counterpart with a separately bound point ABI. */
+ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const dft::RestrictedSemilocalPointProgram& program,
+                            const std::vector<double>* initial_density = nullptr);
+
 /** Generic RSH lowering. Fractions are physical exact-exchange weights. */
 FockBuildSpec make_global_hybrid_fock_spec(FockSpin spin, double exact_exchange);
 FockBuildSpec make_rsh_primary_fock_spec(FockSpin spin, double short_range_exchange);
-FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_exchange,
-                                            double long_range_exchange, double omega);
+FockBuildSpec make_rsh_correction_fock_spec(
+    FockSpin spin, double short_range_exchange, double long_range_exchange, double omega,
+    FockApproximation approximation = FockApproximation::Exact);
 
 ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,

@@ -90,10 +90,90 @@ AO coefficients are never reconstructed by dividing Gaussian factors.
 
 The private workspace is bounded by the instantiated angular order and existing
 through-f Hermite limits; no global derivative tensor or retained lease is
-introduced. The L+1 simplex must fit the existing Coulomb order bound, so order
-twelve retains forward AD. Orders zero through six retain their specialized
-owners. Short-range production requests and separately selected reachable or
-convolved derivative algebra also retain their existing consumers.
+introduced. This shared owner's L+1 simplex must fit the existing primal Coulomb
+order bound, so order twelve retains generic forward AD. Orders zero through six
+retain their specialized owners. Short-range production requests and separately
+selected reachable or convolved derivative algebra also retain their existing
+consumers.
+
+## Generic high-order first responses
+
+The compiler lowers the generic order-7--12 `Dual3` Cartesian consumer to one
+FP64 scalar Coulomb simplex of degree `L+1`. First spatial derivatives are the
+next Cartesian states of the existing Coulomb recurrence; a lightweight view
+applies all nine product-center geometry seeds when the unchanged Hermite
+contraction reads a root. It does not retain three tangent simplexes. Exponents
+and the full/LR/SR radial boundary are fixed under these geometry derivatives.
+
+This lowering changes preparation/storage, not the six-loop contraction order,
+primitive traversal, scientific screening, force scatter, or thread geometry.
+The optional Hermite-convolution consumer also borrows the response view without
+changing its separate selection policy. Reachable preparation encloses the
+component box and its three raised faces, clips every bound to the `L+1` simplex,
+and falls back to complete preparation for invalid diagnostic extents. The extra
+response degree does not admit a higher-angular-momentum AO basis.
+
+The independent-center full/LR owner above already shares scalar states for
+orders seven through eleven and remains unchanged. This lowering covers its
+retained generic consumers, including order twelve, short-range requests and
+selected reachable/convolved derivative algebra.
+
+Low-order specializations, value-only arithmetic, single-direction `Dual`, mixed
+precision, and resident cooperative/materialized consumers retain their owners.
+In particular, an admitted s/p/d order-seven cooperative task already shares a
+scalar recurrence: it does not use this generic fallback. Generic preparation
+still repeats for each independently seeded atom unless another qualified owner
+shares it. Reduced storage alone is not proof of reduced endpoint work or time.
+
+`tests/python/test_reachable_coulomb.py` poisons unused scalar storage and checks
+every high-order response face against independent radial quadrature.
+`tests/python/test_hermite_convolution.py` and
+`tests/python/test_shared_rsh_preparation.py` check integral/jet semantics against
+independently raised/lowered Gaussian integrals. Real-device qualification uses
+`tests/python/test_direct_spatial_response_cuda.py`, enabled by
+`GENERATIVEQC_DIRECT_SPATIAL_RESPONSE_CUDA_TEST=1` only inside a finite Slurm GPU
+allocation. Its linked shell-pair probe resources and event intervals are not
+production-library resource or complete energy-plus-force endpoint receipts.
+
+The [lowering decision](../../.agents/notes/implemented/performance/2026-10-11-generic-coulomb-spatial-responses.md)
+records measured storage, retained fallbacks and remaining qualification gates.
+
+## Automatic stationary s/p/d force reuse
+
+An unset or empty `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS` selects the generated
+relative-response and density-first force consumers when the method supplies
+the existing authenticated full-range, full-precision Direct RKS eligibility
+hint. The admission policy remains in `src/dft/cuda_spd_force_policy.hpp` and
+`src/methods/dft_method.cpp`; this default does not widen its size, spin, source,
+precision or operator coverage. Generic HF and RSH consumers without that hint
+retain their previous defaults.
+
+The order-six owner shares primitive preparation and the relative Coulomb
+response DAG across Cartesian components and derivative centers. Pure-J
+order-six and order-seven consumers additionally project the density into
+Hermite coefficients before contraction. Nonzero exchange coefficients and
+seeded derivatives retain the component contraction; partial component masks or
+unsafe/nonfinite density reorderings decline density contraction before scatter.
+Missing coherent topology, unsupported angular domains, disabled caches or
+cooperative derivatives, and unsupported launch shapes keep the existing bounded
+fallbacks. No ERI tensor, new retained allocation, precision change or altered
+screening threshold is introduced by this default.
+
+Explicit selections are captured at force-owner preparation and remain stable
+after later environment changes:
+
+- `relative-density`: request the same guarded recurrence/density reuse directly.
+- `relative-reuse`: use relative recurrence reuse without density factorization.
+- `spatial-reuse` or `1`: retain the earlier spatial-reuse control.
+- `0` or an unrecognized nonempty value: retain the incumbent schedule, even
+  when the method supplies an eligible hint.
+
+`python -m benchmarks.direct_force_reuse OUTPUT` compares `spatial-reuse` with
+the actual unset default; it removes any inherited force-domain selector from
+the candidate environment. Explicit `--candidate relative-density` and
+`--candidate relative-reuse` remain available for reproducible comparisons.
+The [default-promotion decision](../../.agents/notes/implemented/performance/2026-10-17-direct-force-default-promotion.md)
+records the qualification boundary and retained rollback paths.
 
 ## Legacy HF and dddd qualification
 

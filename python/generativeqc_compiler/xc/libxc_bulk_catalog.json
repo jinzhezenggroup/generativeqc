@@ -5833,7 +5833,7 @@
       "flags": "XC_FLAGS_3D | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 237,
-        "unpolarized": 98
+        "unpolarized": 99
       },
       "graph_status": "imported",
       "id": 22,
@@ -5856,7 +5856,7 @@
       "flags": "XC_FLAGS_3D | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 237,
-        "unpolarized": 98
+        "unpolarized": 99
       },
       "graph_status": "imported",
       "id": 23,
@@ -7191,7 +7191,7 @@
       "name": "LDA_X_REL",
       "owner": "src/lda_x_rel.c",
       "parameter_setter": "NULL",
-      "reason": "MapleImportError: unknown Maple symbol 'lda_x_spin'"
+      "reason": "MapleImportError: unknown Maple symbol 'M_C'"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -7832,7 +7832,7 @@
       "flags": "XC_FLAGS_3D | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 1903,
-        "unpolarized": 607
+        "unpolarized": 608
       },
       "graph_status": "imported",
       "id": 241,
@@ -8030,7 +8030,7 @@
       "flags": "XC_FLAGS_3D | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 1808,
-        "unpolarized": 565
+        "unpolarized": 566
       },
       "graph_status": "imported",
       "id": 231,
@@ -8051,7 +8051,7 @@
       "flags": "XC_FLAGS_3D | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 1964,
-        "unpolarized": 620
+        "unpolarized": 621
       },
       "graph_status": "imported",
       "id": 247,
@@ -8084,7 +8084,7 @@
       "flags": "XC_FLAGS_3D | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
       "graph_nodes": {
         "polarized": 1808,
-        "unpolarized": 565
+        "unpolarized": 566
       },
       "graph_status": "imported",
       "id": 323,
@@ -8280,7 +8280,7 @@
       "name": "MGGA_XC_B97M_V",
       "owner": "src/mgga_xc_b97mv.c",
       "parameter_setter": "set_ext_params_cpy",
-      "reason": "MapleImportError: unknown Maple symbol 'lda_x_spin'"
+      "reason": "independent both-spin E/vxc/fxc fixtures required"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -8298,7 +8298,7 @@
       "name": "MGGA_XC_CC06",
       "owner": "src/mgga_xc_cc06.c",
       "parameter_setter": "NULL",
-      "reason": "MapleImportError: unknown Maple symbol 'lda_x_spin'"
+      "reason": "MapleImportError: unknown Maple symbol 'u_total'"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",

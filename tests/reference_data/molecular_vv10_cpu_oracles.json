@@ -1,0 +1,283 @@
+{
+  "schema": "generativeqc.independent-matched-vv10-oracles.v1",
+  "generated_utc": "2026-10-20T18:06:11Z",
+  "pyscf_version": "2.14.0",
+  "libxc_version": "7.0.0",
+  "upstream_vv10_function_sha256": "8669a43271291f7ac2d3ada4f234420645a277885c84c9b74d7be0f990d9f3bc",
+  "method": "Independently reconverged from a core Hamiltonian guess. Original upstream CPU cutoff exactly reproduces prior constants. Matched-domain variant changes only PySCF _vv10nlc thresh=1e-8 to thresh=1e-10. No native energies, densities or Fock values used to obtain constants. Exact C++ fixture geometry/basis/grid; full-range J/K fitted only for mixed-DF cases, LR correction unfitted.",
+  "unchanged_native_energy_gate": 2e-10,
+  "upstream_cutoff": 1e-08,
+  "matched_cutoff": 1e-10,
+  "reproduction": [
+    "PYTHONPATH=python python tools/verify_mixed_df_rsh_cpu.py",
+    "PYTHONPATH=python python tools/verify_mixed_df_rsh_cpu.py --vv10-density-cutoff 1e-10",
+    "test_wb97mv_scf /tmp/wb97mv-dump.jsonl",
+    "PYTHONPATH=python python tools/verify_wb97mv_scf.py /tmp/wb97mv-dump.jsonl --vv10-density-cutoff 1e-10"
+  ],
+  "mixed_df_original": [
+    {
+      "wb97mv": false,
+      "spin_case": 0,
+      "energy": -1.604930597562717
+    },
+    {
+      "wb97mv": false,
+      "spin_case": 1,
+      "energy": -1.604930597562717
+    },
+    {
+      "wb97mv": false,
+      "spin_case": 2,
+      "energy": -1.3309273866316103
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 0,
+      "energy": -1.2886176659087356
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 1,
+      "energy": -1.2886176659087356
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 2,
+      "energy": -0.8191434240565644
+    }
+  ],
+  "mixed_df_matched": [
+    {
+      "wb97mv": false,
+      "spin_case": 0,
+      "energy": -1.604930597562717
+    },
+    {
+      "wb97mv": false,
+      "spin_case": 1,
+      "energy": -1.604930597562717
+    },
+    {
+      "wb97mv": false,
+      "spin_case": 2,
+      "energy": -1.3309273866316103
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 0,
+      "energy": -1.2886176657015223
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 1,
+      "energy": -1.2886176657015223
+    },
+    {
+      "wb97mv": true,
+      "spin_case": 2,
+      "energy": -0.8191434237585024
+    }
+  ],
+  "direct_original": [
+    {
+      "kind": 0,
+      "unrestricted": false,
+      "cutoff": 1e-08,
+      "energy": -1.1419425514308108
+    },
+    {
+      "kind": 0,
+      "unrestricted": true,
+      "cutoff": 1e-08,
+      "energy": -1.1419425514308108
+    },
+    {
+      "kind": 1,
+      "unrestricted": true,
+      "cutoff": 1e-08,
+      "energy": -1.5764935673604203
+    },
+    {
+      "kind": 2,
+      "unrestricted": false,
+      "cutoff": 1e-08,
+      "energy": -2.328208266597829
+    },
+    {
+      "kind": 2,
+      "unrestricted": true,
+      "cutoff": 1e-08,
+      "energy": -2.3282082665978288
+    }
+  ],
+  "direct_matched": [
+    {
+      "kind": 0,
+      "unrestricted": false,
+      "cutoff": 1e-10,
+      "energy": -1.1419425513004193
+    },
+    {
+      "kind": 0,
+      "unrestricted": true,
+      "cutoff": 1e-10,
+      "energy": -1.1419425513004193
+    },
+    {
+      "kind": 1,
+      "unrestricted": true,
+      "cutoff": 1e-10,
+      "energy": -1.5764935671589775
+    },
+    {
+      "kind": 2,
+      "unrestricted": false,
+      "cutoff": 1e-10,
+      "energy": -2.328208262149223
+    },
+    {
+      "kind": 2,
+      "unrestricted": true,
+      "cutoff": 1e-10,
+      "energy": -2.328208262149223
+    }
+  ],
+  "subsequent_native_comparison": {
+    "note": "Only after independent constants were obtained, the separately compiled native five-case JSON was checked at its density and independently reconverged from a core guess. These results were not used to fit the oracle constants.",
+    "dump_sha256": "b986cd2ada552ca32e807e8a32718a003d08a8264a8a85f4287167e2973d6d59",
+    "rows": [
+      {
+        "name": "h2-rks",
+        "energy": -1.141942551300419,
+        "energy_error": 4.884981308350689e-15,
+        "fock_error": 3.164135620181696e-15,
+        "density_error": 4.440892098500626e-16
+      },
+      {
+        "name": "h2-uks",
+        "energy": -1.1419425513004193,
+        "energy_error": 4.440892098500626e-15,
+        "fock_error": 3.164135620181696e-15,
+        "density_error": 6.106226635438361e-16
+      },
+      {
+        "name": "h3-uks",
+        "energy": -1.5764935671589753,
+        "energy_error": 1.0880185641326534e-14,
+        "fock_error": 1.582067810090848e-14,
+        "density_error": 1.7252865802674933e-12
+      },
+      {
+        "name": "heh-rks",
+        "energy": -2.328208262149223,
+        "energy_error": 3.019806626980426e-14,
+        "fock_error": 4.496403249731884e-14,
+        "density_error": 8.47699688222292e-12
+      },
+      {
+        "name": "heh-uks",
+        "energy": -2.328208262149222,
+        "energy_error": 3.064215547965432e-14,
+        "fock_error": 4.551914400963142e-14,
+        "density_error": 8.497647030480948e-12
+      }
+    ],
+    "mixed_df_rows": [
+      {
+        "wb97mv": false,
+        "spin_case": 0,
+        "native_energy": -1.6049305975627355,
+        "absolute_error": 1.84297022087776e-14
+      },
+      {
+        "wb97mv": false,
+        "spin_case": 1,
+        "native_energy": -1.604930597562736,
+        "absolute_error": 1.887379141862766e-14
+      },
+      {
+        "wb97mv": false,
+        "spin_case": 2,
+        "native_energy": -1.3309273866316795,
+        "absolute_error": 6.927791673660977e-14
+      },
+      {
+        "wb97mv": true,
+        "spin_case": 0,
+        "native_energy": -1.2886176657015418,
+        "absolute_error": 1.9539925233402755e-14
+      },
+      {
+        "wb97mv": true,
+        "spin_case": 1,
+        "native_energy": -1.288617665701541,
+        "absolute_error": 1.865174681370263e-14
+      },
+      {
+        "wb97mv": true,
+        "spin_case": 2,
+        "native_energy": -0.8191434237585686,
+        "absolute_error": 6.628031457012185e-14
+      }
+    ],
+    "mixed_df_force_validation": {
+      "result": "4 passed, 42 deselected in 416.32s",
+      "cases": [
+        "cpu-0-spherical-def2-tzvp",
+        "cpu-0-cartesian-def2-tzvp",
+        "cpu-2-spherical-def2-svp",
+        "cpu-2-spherical-def2-tzvp"
+      ],
+      "scope": "Complete cold/warm energies and forces, independent PySCF reconverged central finite differences at every displaced geometry, translation, and rebound-versus-fresh gates. CPU only; no GPU run.",
+      "energy_gate": 2e-08,
+      "force_gate": 3e-06,
+      "translation_gate": 2e-09,
+      "finite_difference_step": 0.0002,
+      "note": "All original acceptance gates unchanged; independent oracle alone explicitly uses matched rho >= 1e-10 inside each SCF call."
+    }
+  },
+  "mixed_df_force_energy_oracles": [
+    {
+      "spin": 0,
+      "representation": "spherical",
+      "basis": "def2-tzvp",
+      "cutoff": 1e-08,
+      "energy": -77.22850425825953
+    },
+    {
+      "spin": 0,
+      "representation": "spherical",
+      "basis": "def2-tzvp",
+      "cutoff": 1e-10,
+      "energy": -77.22850421381105
+    },
+    {
+      "spin": 0,
+      "representation": "cartesian",
+      "basis": "def2-tzvp",
+      "cutoff": 1e-08,
+      "energy": -77.05304779253669
+    },
+    {
+      "spin": 0,
+      "representation": "cartesian",
+      "basis": "def2-tzvp",
+      "cutoff": 1e-10,
+      "energy": -77.05304777144863
+    },
+    {
+      "spin": 2,
+      "representation": "spherical",
+      "basis": "def2-svp",
+      "cutoff": 1e-08,
+      "energy": -76.8150693074218
+    },
+    {
+      "spin": 2,
+      "representation": "spherical",
+      "basis": "def2-svp",
+      "cutoff": 1e-10,
+      "energy": -76.81506919189738
+    }
+  ]
+}

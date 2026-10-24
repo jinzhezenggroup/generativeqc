@@ -1,0 +1,14 @@
+id: cuda-no-assert-api-status
+valid:
+  - |
+    void f(void* d, const void* s) { check(cudaMemcpy(d, s, 4, cudaMemcpyHostToDevice)); }
+  - |
+    void f(void* d, const void* s) {
+      cudaError_t status = cudaMemcpy(d, s, 4, cudaMemcpyHostToDevice);
+      assert(status == cudaSuccess);
+    }
+invalid:
+  - |
+    void f(void* d, const void* s) { assert(cudaMemcpy(d, s, 4, cudaMemcpyHostToDevice) == cudaSuccess); }
+  - |
+    void f(void** p) { assert(cudaSuccess == cudaMalloc(p, 100)); }

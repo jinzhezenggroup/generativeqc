@@ -52,6 +52,7 @@ def native() -> SimpleNamespace:
         "stationary_create": [ct.c_int] * 3 + [size] * 10 + [ct.POINTER(pointer)],
         "stationary_configure_becke": [pointer, size, size],
         "stationary_configure_phased_becke_v1": [pointer, size],
+        "stationary_grid_topology_v1": [pointer, pointer, pointer, size],
         "stationary_topology": [pointer] * 5,
         "stationary_geometry_reset": [pointer, pointer, ct.c_double],
         "stationary_geometry_enqueue": [pointer, ct.POINTER(GridTaskView)]
@@ -131,9 +132,10 @@ def test_restricted_point_binding_preserves_sources_and_reports_actual_selection
 ) -> None:
     """Qualify synthetic equal-spin owner routing, not a molecular endpoint.
 
-    The small-atom and nonphased cases must retain the general kernel despite
-    a valid proof. Independent point references and real producer publication
-    are separate gates; these supplied features/work panels are explicit mocks.
+    A valid density proof selects the restricted contraction for both inline
+    and bulk point evaluation. Only the bulk producer requires phased storage.
+    Independent point references and real producer publication are separate
+    gates; these supplied features/work panels are explicit mocks.
     """
     library = native.library
     enqueue = getattr(
@@ -293,7 +295,7 @@ def test_restricted_point_binding_preserves_sources_and_reports_actual_selection
                 after - earlier
                 for after, earlier in zip(metrics()[1:], before[1:], strict=True)
             )
-            selected = proof == 1 and bool(plan.phased_becke_bytes) and atoms >= 4
+            selected = proof == 1
             batches = (points + capacity - 1) // capacity
             assert delta == (
                 (batches, points, 0, 0) if selected else (0, 0, batches, points)
@@ -350,6 +352,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
     external: bool,
     primitive: bool | int | str,
     profiled: bool,
+    adjusted: bool = False,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
 
@@ -388,6 +391,16 @@ def test_shared_owner_phases_preserve_sources_and_work(
         if implicit
         else rng.integers(atoms, size=257, dtype=np.int64)
     )
+    # The adjusted grid uses real element-dependent extents. Exercise both
+    # explicit owners and the native prefix lookup, including the tile tail.
+    atom_offsets = np.concatenate(([0], np.cumsum(5 + np.arange(atoms) % 7))).astype(
+        np.uintp
+    )
+    radii = np.resize(np.array([0.35, 0.66, 1.4, 2.6]), atoms)
+    if adjusted and implicit:
+        owners = np.searchsorted(atom_offsets[1:], np.arange(257), side="right").astype(
+            np.int64
+        )
     offsets = rng.normal(size=(257, 3)) * 0.3
     selected = (
         np.arange(4, dtype=np.uintp)
@@ -459,6 +472,14 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 native.call("stationary_configure_becke_zero_seed_v1", handle, 0)
             if serial_normalize:
                 native.call("stationary_configure_becke_normalize_v1", handle, 0)
+            if adjusted:
+                native.call(
+                    "stationary_grid_topology_v1",
+                    handle,
+                    atom_offsets.ctypes.data,
+                    radii.ctypes.data,
+                    atoms,
+                )
             native.call(
                 "stationary_topology",
                 handle,
@@ -539,7 +560,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                             arguments = [
                                 device["work"].data.ptr,
                                 begin,
-                                7,
+                                0 if adjusted else 7,
                                 device["weights"].data.ptr,
                                 device["raw"].data.ptr,
                             ]

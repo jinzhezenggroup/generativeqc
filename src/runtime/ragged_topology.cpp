@@ -385,12 +385,14 @@ Diagnostic validate_topology_host(const TopologyView& topology) noexcept {
         }
       } else {
         AtomPairLayout previous{-1, -1};
+        // Compatible foreign POD arrays retain their own element type. Inspect
+        // their representation without forming AtomPairLayout array references.
+        const auto* pair_bytes = static_cast<const std::byte*>(topology.atom_pairs);
         for (std::int64_t pair = pair_begin; pair < pair_end; ++pair) {
           AtomPairLayout current{};
-          std::memcpy(&current,
-                      static_cast<const std::byte*>(topology.atom_pairs) +
-                          static_cast<std::size_t>(pair) * sizeof(current),
-                      sizeof(current));
+          // Binding already checked the complete count/byte/address extent.
+          const auto byte_offset = static_cast<std::size_t>(pair) * sizeof(current);
+          std::memcpy(&current, pair_bytes + byte_offset, sizeof(current));
           const bool in_system = current.first >= atom_begin && current.first < current.second &&
                                  current.second < atom_end;
           const bool sorted = pair == pair_begin || previous.first < current.first ||

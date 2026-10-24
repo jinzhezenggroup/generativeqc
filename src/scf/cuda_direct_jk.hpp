@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
+#include "scf/cuda_derivative_sources.hpp"
+#include "scf/direct_force_precision.hpp"
 #include "scf/fock_build.hpp"
 
 namespace generativeqc::scf {
@@ -21,6 +24,9 @@ struct CudaDirectJkDiagnostic {
   std::size_t direct_nbf{};
   std::size_t device_bytes{}, host_bytes{}, host_preparation_bytes{};
   std::size_t resident_value_count{}, resident_value_bytes{};
+  /** Submitted complete-shell value launches, including fixed-mask response.
+   * This is a launch count, not a completed-ERI census or a device timer. */
+  std::size_t materialized_value_launches{};
   /** Last optional construction: submitted values and stream-completed values,
    * including a finite-audit rejection. These are not published-cache counts. */
   std::size_t resident_values_submitted{}, resident_values_completed{};
@@ -42,11 +48,14 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
  * reserves the full-range shell J/K density/force lease used by stationary
  * consumers. Counts are totals as above. Optional MD capacity is requested only
  * by private unbudgeted KS preparation; public ledger plans retain normal J.
+ * When shell metadata is available, cartesian_nao supplies the exact per-item
+ * Cartesian dimension. Zero retains the conservative shape-only envelope.
  */
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
                                              unsigned derivative_order = 0,
-                                             bool reserve_optional_md = false);
+                                             bool reserve_optional_md = false,
+                                             std::size_t cartesian_nao = 0);
 
 /** Bind normalized, homogeneous public AO dimensions and coordinate counts.
  * Each item retains its own shell/geometry metadata. A geometry or basis change
@@ -122,7 +131,23 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail, bool separate_sources = true,
-    bool allow_spatial_default = false);
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
+
+/** Contract P:G'(D) in one retained shell traversal. Both public-AO matrices
+ * are borrowed on the owner's device through completion. Requires one
+ * unscreened derivative item; unavailable shell storage returns NOT_IMPLEMENTED
+ * without publishing output so callers can retain bounded compatibility. */
+generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
+    std::vector<double>& gradient, std::string& detail);
+
+/** Same scientific J/K traversal with callback-scoped resident force channels.
+ * The callback enqueues use on the provider stream; no host result is staged. */
+generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
  * explicit omega. The retained owner performs one density transform and three

@@ -112,6 +112,20 @@ systems. File writing is explicit through the relevant save operation; readers
 must not race a write to the same file. No basis-loading operation owns a GPU
 context or starts an electronic solve.
 
+With a supporting native library, exact bundled snapshots use the
+checksum-bound catalog constructor; other admitted `BasisSet` inputs marshal
+only selected unique element templates. Native code owns atom/general-row
+expansion and scalar ECP local-channel mapping. Both constructors use the same
+shell/primitive/AO-width preflight before allocating numeric expansion buffers;
+detached-buffer counts are not complete normalized-system or provider admission.
+Rejection by either constructor
+is not retried through a different basis path. Python retains schema/provenance
+validation and native-free resource/model metadata. Explicit `Shell` inputs,
+old libraries without the additive symbol and correlation-only auxiliary
+adapters retain the atom-expanded descriptor route; these compatibility paths
+do not broaden ECP, representation or method/backend eligibility. See the
+[native API](native_api.md) for template lifetime and identity limits.
+
 (python-accuracy-values)=
 ## Accuracy and adaptive numerical values
 
@@ -228,6 +242,31 @@ model. `KsOptions` snapshots the method, spin-resolved XC composition, grid and
 bounded tile schedule. Initial-guess options govern cold-start preparation and
 its budgets without changing the target method, basis, grid, precision or final
 tolerances. Existing explicit/imported/retained densities take precedence.
+
+`KsOptions(grid=xc_grid, nonlocal_grid=vv10_grid)` independently prescribes the
+semilocal and VV10/rVV10 quadratures. For Treutler v4 XC prescriptions, an
+omitted VV10/rVV10 grid defaults to level 3 even when XC uses another level
+(e.g. `grid_accuracy="tight"` selects XC level 4). Equal level-3 grids share
+the existing path. Explicitly supplying the same complete `GridSpec` for
+both also opts into sharing. Omitted nonlocal grids retain the previous shared
+path for explicitly selected legacy v1--v3 XC grids. This policy is resolved
+by Python `KsOptions`; native C/C++ descriptor callers retain their existing
+explicit-grid semantics. Equal total point counts do not establish equality:
+radial/angular rules, radii, partition and pruning also belong to the numerical
+model. Both prescriptions and their actual
+collocation sources are bound to the native stationary-state token.
+
+Independent grids support SCF energy and the existing supported first-derivative
+consumers; each grid carries its own moving-point and partition-weight response.
+Their current composite CUDA force consumer retains the existing uniform
+atom-major grid and per-grid point bounds. Hessians/HVPs, coupled response and
+explicit resource-ledger planning reject independent grids rather than using
+the XC grid for VV10. Existing equal-grid capabilities remain unchanged. A
+custom grid is not a convergence or FP64/Fast accuracy certification.
+
+The README endpoint driver accepts `--grid R P A --nonlocal-grid R P A` for
+WB97M-V and records both prescriptions for the native and GPU4PySCF populations.
+Omit `--nonlocal-grid` to retain the original benchmark protocol and path.
 
 (python-options-errors)=
 ## Option validation and fallback
@@ -388,6 +427,14 @@ supports Boolean/numeric casts. Complex-to-real conversion must first select
 `real` or `imag`. Compilation still admits only bool/float32/float64 inputs and
 qualified float32/float64 arithmetic, without implicit Boolean/numeric promotion.
 
+The `MolecularModel(method=...)` extension accepts float64 `(natoms, 3)` Bohr
+coordinates and returns scalar total Hartree energy. First-order public AD
+consumes complete analytic native nuclear gradients in Hartree/Bohr where the
+selected Calculator method supports them; unsupported force requests fail closed.
+`method="rhf"` selects the closed-shell exact-J/K operator. This is not a
+user-defined electronic-method compiler or a density/Fock derivative.
+Configuration and source-cut contracts are defined in the experimental guide.
+
 (python-array-errors)=
 ## Experimental array failures
 
@@ -403,6 +450,13 @@ publish a successful compiled result. Foreign device arrays
 are rejected before hidden host conversion, including nested host containers.
 DLPack protocol/device/copy failures raise `DLPackInteropError`; a failed handoff
 is never retried with weaker copy requirements.
+
+Molecular source capture validates immutable policy, dtype/geometry shape,
+matching backend/device and a 16-source limit without running SCF. Missing native
+libraries, unsupported basis/ECP/spin/derivative domains, resource failures or
+nonconvergence propagate; no successful partial molecular result is published.
+The compiler's tensor budgets do not replace native `ResourceBudget` preflight
+or the molecular iteration bound.
 
 (python-array-ownership)=
 ## Experimental arrays and DLPack ownership
@@ -420,6 +474,13 @@ consumer is supported; otherwise `copy=False` is required. Imported storage can
 be shared with the producer: keep the protocol owners alive and do not race
 writes across consumers. Device relocation needs a separate explicit copy.
 
+`MolecularModel` settings are immutable. Compiled source owners retain native method
+workspaces, not reusable energies for changed geometries. Eager molecular calls
+release owners before returning; compiled `close()` releases both method and
+algebra owners. Molecular VJP snapshots the forward geometry/energy/gradient and
+replays without solving SCF again. Lowered molecular tapes require the compiled
+owner's source bindings rather than being self-contained native method code.
+
 (python-array-backends)=
 ## Experimental array backend boundary
 
@@ -430,12 +491,24 @@ Reference compiled calls admit only CPU bool/float32/float64 arrays; comparisons
 consume finite real operands and return checked bool outputs.
 The experimental `compile` supports native CPU (default, float64), CUDA
 (explicit host staging) and reference execution. Native backends reject live
-Boolean data/comparisons rather than reinterpreting storage. Derivative and
+`where` before compiler discovery or allocation. Materializing native CPU admits
+its bounded Boolean input/constant/view and finite float64 comparison subset;
+CUDA/portable/scalar/bundle paths retain their Boolean restrictions. Captured
+`where` is a finite generic-real forward reference contract with explicit
+promotion/broadcasts and evaluation of all live operands. Scientific annotations,
+nonfinite branches and selection AD are unsupported. See the experimental array
+guide for the complete selection contract. Derivative and
 forward programs share resource/primitive admission. Unsupported backends
 fail rather than falling back. Capability
 reports separate frontend representation, execution and production qualification.
 DLPack interop verifies same-device transfer, but accepting a DLPack producer
 does not add that device to the eager namespace or native chemistry support.
+
+`MolecularModel` sources admit explicit CPU or CUDA, with the same backend/logical
+device as the surrounding compiled algebra. CUDA stages host coordinates and
+returns host values; no resident GPU-array or performance qualification follows.
+The native CPU method's ABI label `cpu_reference` is not the Array API
+`backend="reference"` interpreter; the latter cannot execute molecular sources.
 
 (python-fock-values)=
 ## Fock and fixed-density values
@@ -572,6 +645,10 @@ responses `(2, npoint)`, density gradients `(2, npoint, 3)` and sigma responses
 has no extra factor of two. Units follow the AO spatial derivatives and density
 convention, without conversion. Nuclear response records retain source identities
 and solver diagnostics; RHF-named records are aliases of the stationary owners.
+`NativeRKSResponse.solve_resident` accepts one RHS and an optional initial guess
+in the rotation layout, with `GMRESOptions` controlling native scalar GMRES.
+It returns an immutable solution in `SolveResult`; no Arnoldi history or basis
+is exported. Component timing fields are unmeasured, not performance evidence.
 
 (python-response-errors)=
 ## Response admission and failure
@@ -586,6 +663,11 @@ are control tools, not the production matrix-free operator. Native live-state
 changes invalidate the response owner; do not reuse a response snapshot after
 its batch/reference changes. Wrong XC spin/reference density or grid/model
 identity is rejected before claiming a compatible kernel.
+The native resident RKS endpoint reports host-workspace refusal as an
+unconverged `workspace_limit` result; `raise_on_failure=True` raises
+`ResponseSolveError`. Device-capacity admission raises `MemoryError`, and an
+unavailable resident solver or incomplete response sources fail explicitly
+without a CPU/Python solve retry.
 
 (python-response-ownership)=
 ## Response lifetime and concurrency
@@ -603,9 +685,16 @@ shared operator and do not race source replay or close.
 ## Response backend domains
 
 RHF and CPKS operators delegate method-specific Fock/XC actions to explicitly
-bound providers. `NativeRKSResponse` admits the checked live all-electron,
-unscaled LDA/PBE RKS state and installs the matching CPU/CUDA providers;
-this is not blanket support for arbitrary functionals/spin/ECP response.
+bound providers. `NativeRKSResponse` admits checked live all-electron RKS graphs
+with generated response capability and complete native sources, not method-name
+membership. The CPU point bridge remains unscaled semilocal; CUDA also requires
+generated component-scaling capability for non-unit X/C weights and admits
+authenticated full-range exact exchange. CUDA `solve` defaults to the native
+resident single-RHS endpoint; explicit `solve_resident` requires CUDA. Generic
+`solve(response, ...)` and blocked/recycled `solve_many` retain host vectors.
+Tau, range-separated exchange, nonlocal, DF and ECP response sources remain
+unsupported. This is not blanket support for arbitrary functionals or spin.
+See [native response backend boundaries](../developer/response_backends.md).
 `DenseMatrixResponseOperator` is explicit dense comparison evidence, not a
 matrix-free production implementation. Nuclear algebra helpers do not expand
 the injected operator/solver's physical domain. Low-level response support does
@@ -744,6 +833,18 @@ prepared batches, close them before return and detach any reported target
 density. A failed `run_progressive_hf` target has no retained target density. They borrow the supplied calculators and do not close or reconfigure
 them. Keep calculators and policy inputs unchanged throughout an invocation;
 do not share prepared/estimator state with concurrent workflows.
+
+`run_progressive_hf` uses the selected target library's additive native HF
+execution controller when available. It owns stage order, success-dependent
+projection/density export, reverse-order cleanup and post-cleanup physical-audit
+scheduling. Python callbacks marshal the existing prepared owners; they do not
+replace their scientific kernels. Exceptions never cross the C callback ABI:
+the original exception is re-raised after cleanup, including cancellation.
+`diagnostics["execution_owner"]` reports `native-v1` or the explicit
+`portable-compatibility` path for an older library lacking the symbol. A native
+refusal never retries that compatibility path or loads another library.
+This does not migrate the Python physical-audit assembly, final-verification
+equations, general coarse-to-fine planning or force-aware execution policies.
 
 (python-progressive-backends)=
 ## Progressive support boundary

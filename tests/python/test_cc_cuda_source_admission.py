@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -101,7 +102,15 @@ def test_cuda_reference_handoffs_preserve_single_source_owner(tmp_path: Path) ->
     helper = helper[
         helper.index("template <class Operation>") : helper.index("/** Method-layer")
     ]
-    _run(tmp_path, PREFIX + helper + body + MAIN)
+    warm = cpp_function_definition(
+        (ROOT / "src/methods/correlated_warm_reference.hpp").read_text(),
+        "solve_reference",
+        include_template=True,
+    )
+    # Execute the actual shared policy with real method errors and SCF result
+    # types. Only scientific providers and their counted storage are doubles.
+    warm = "namespace warm_reference {\n" + warm + "\n}\n"
+    _run(tmp_path, PREFIX + warm + helper + body + MAIN)
 
 
 def test_cuda_reference_resident_interaction_handoff_is_preferred() -> None:
@@ -126,14 +135,17 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <typeinfo>
 #include <vector>
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
+#include "methods/execution_failure.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/rhf_source_handoff.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,source_live=0,plan_live=0,native_calls=0,host_calls=0;
-int source_mode=0,warm_failure=0;
-bool converged=true,expect_source=true;
+int source_mode=0,warm_failure=0,df_calls=0,df_live=0;
+bool converged=true,expect_source=true,df_retryable=true;
 namespace generativeqc::integrals {
 struct ElectronInteractionSource {
   ElectronInteractionSource() { ++source_live; }
@@ -141,16 +153,8 @@ struct ElectronInteractionSource {
   std::shared_ptr<void> owner;
 };
 }
-namespace generativeqc::runtime {
-struct ExecutionContext {
-  bool cuda=true;
-  bool cuda_requested() const { return cuda; }
-  int device_id() const { return 0; }
-};
-}
 namespace generativeqc::cc { struct SolverOptions { std::size_t max_bytes=1024; }; }
 namespace generativeqc::scf {
-struct ScfOptions { int resolved_fock_build=0; };
 struct CudaRhfBucketPlan {
   CudaRhfBucketPlan() { ++plan_live; }
   ~CudaRhfBucketPlan() { --plan_live; }
@@ -162,17 +166,13 @@ void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete pla
 struct PreparedFockPlan {
   PreparedFockPlan() { ++live; }
   ~PreparedFockPlan() { --live; }
-  int strategy() const { return 0; }
-};
-struct ScfResult {
-  bool converged=false;
-  std::vector<double> density;
-  std::shared_ptr<const hf::PhysicalReference> reference;
+  ResolvedFockBuild strategy() const { return {}; }
 };
 ScfResult physical() {
   auto ref=std::make_shared<hf::PhysicalReference>(); ref->nbf=2; ref->nocc=1;
   ref->density.resize(4);
-  return {converged,{},converged ? ref : nullptr};
+  ScfResult result; result.converged=converged;
+  result.reference=converged ? ref : nullptr; return result;
 }
 ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&,
                                     const std::vector<double>*) {
@@ -200,7 +200,12 @@ ScfResult run_rhf_cuda(
     handoff->required_peak_bytes=2048;
     handoff->resource_fallback=true;
   }
-  if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");
+  if (seed && warm_failure==1) throw std::invalid_argument("injected warm reference failure");
+  if (warm_failure==3) throw std::runtime_error("injected terminal reference failure");
+  if (warm_failure==4) throw std::bad_alloc();
+  if (warm_failure==5) throw methods::MethodError(
+      GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "injected capability refusal");
+  if (warm_failure==6) throw std::length_error("injected reference capacity refusal");
   if (seed && warm_failure==2) return {};
   return physical();
 }
@@ -225,8 +230,21 @@ ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double
   ++host_calls; return physical();
 }
 }
+// This exact-source probe must never claim a successful RI-JK solve. A
+// counted refusal also checks that warm retries reconstruct the same model.
+namespace generativeqc::hf {
+struct DFReference {
+  DFReference() { if (df_live++) std::abort(); }
+  ~DFReference() { --df_live; }
+  scf::ScfResult solve(const core::System&, const core::System&, scf::ScfOptions,
+                       int, const std::vector<double>*) {
+    ++df_calls;
+    if (df_retryable) throw std::invalid_argument("injected RI-JK refusal");
+    throw std::runtime_error("injected RI-JK refusal");
+  }
+};
+}
 namespace generativeqc::methods::detail {
-struct MethodError : std::runtime_error { MethodError(int,const char* s):std::runtime_error(s){} };
 struct RccsdNativeState {
   bool prepared; std::size_t peak; bool borrowed; long owners; bool handoff_alias;
   std::size_t budget; bool reused;
@@ -238,7 +256,9 @@ MAIN = r"""
 int main() {
   using namespace generativeqc;
   core::System system,auxiliary;
-  runtime::ExecutionContext execution; scf::ScfOptions reference; cc::SolverOptions solver;
+  core::ContextState context; context.requested_backend=core::kCudaBackend;
+  runtime::ExecutionContext execution(context);
+  scf::ScfOptions reference; cc::SolverOptions solver;
   std::unique_ptr<scf::PreparedFockPlan> cache;
   const std::vector<double> seed(4,0.5);
   for (bool cached : {false,true}) {
@@ -273,7 +293,7 @@ int main() {
           execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
           nullptr,false,nullptr,cached ? &plan : nullptr);
       return 8;
-    } catch (const methods::detail::MethodError&) {}
+    } catch (const methods::MethodError&) {}
     if (native_calls!=1 || host_calls || source_live) return 9;
     scf::destroy_rhf_cuda_bucket_plan(plan);
   }
@@ -288,8 +308,74 @@ int main() {
     if (result.borrowed || result.peak || result.prepared || native_calls!=1 || host_calls) return 10;
     scf::destroy_rhf_cuda_bucket_plan(plan);
   }
+  // A full-DF refusal cannot fall through to the exact adapters. A seeded
+  // retry releases its previous fitted owner before constructing the next.
+  for (bool seeded : {false,true}) {
+    native_calls=host_calls=df_calls=0;
+    try {
+      (void)methods::detail::execute_rccsd_prepared(
+          execution,system,reference,solver,0,nullptr,seeded ? &seed : nullptr,
+          nullptr,&cache,&auxiliary,false,nullptr,nullptr,false,true);
+      return 12;
+    } catch (const std::invalid_argument& error) {
+      if (std::string(error.what())!="injected RI-JK refusal") return 13;
+    }
+    if (native_calls || host_calls || df_live || df_calls!=(seeded ? 2 : 1)) return 14;
+  }
+  // Untyped, resource and capability errors stay terminal even with a seed.
+  // The failing attempt may already own a source; unwinding must retire it.
+  converged=true; expect_source=true; source_mode=1;
+  for (bool cached : {false,true}) {
+    for (bool seeded : {false,true}) {
+      for (int failure=3;failure<=6;++failure) {
+        warm_failure=failure;
+        cache=std::make_unique<scf::PreparedFockPlan>();
+        auto* plan=cached ? new scf::CudaRhfBucketPlan : nullptr;
+        native_calls=host_calls=0;
+        bool fallback=true;
+        try {
+          (void)methods::detail::execute_rccsd_prepared(
+              execution,system,reference,solver,0,cache.get(),seeded ? &seed : nullptr,
+              &fallback,&cache,nullptr,false,nullptr,cached ? &plan : nullptr);
+          return 15;
+        } catch (const std::exception& error) {
+          const auto expected=failure==3 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
+              : failure==5 ? GENERATIVEQC_STATUS_NOT_IMPLEMENTED
+              : GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+          if (methods::item_exception_status()!=expected) return 16;
+          if (failure==3 && (typeid(error)!=typeid(std::runtime_error) ||
+              std::string(error.what())!="injected terminal reference failure")) return 17;
+          if (failure==4 && typeid(error)!=typeid(std::bad_alloc)) return 18;
+          if (failure==5 && (typeid(error)!=typeid(methods::MethodError) ||
+              std::string(error.what())!="injected capability refusal")) return 19;
+          if (failure==6 && (typeid(error)!=typeid(std::length_error) ||
+              std::string(error.what())!="injected reference capacity refusal")) return 20;
+        }
+        if (native_calls!=1 || host_calls || fallback || cache || live || source_live) return 21;
+        scf::destroy_rhf_cuda_bucket_plan(plan);
+        if (plan_live) return 22;
+      }
+    }
+  }
+  // An untyped fitted-provider refusal cannot authorize a cold retry either.
+  warm_failure=0; df_retryable=false;
+  for (bool seeded : {false,true}) {
+    native_calls=host_calls=df_calls=0;
+    bool fallback=true;
+    try {
+      (void)methods::detail::execute_rccsd_prepared(
+          execution,system,reference,solver,0,nullptr,seeded ? &seed : nullptr,
+          &fallback,&cache,&auxiliary,false,nullptr,nullptr,false,true);
+      return 23;
+    } catch (const std::runtime_error& error) {
+      if (typeid(error)!=typeid(std::runtime_error) ||
+          std::string(error.what())!="injected RI-JK refusal") return 24;
+    }
+    if (native_calls || host_calls || df_live || df_calls!=1 || fallback) return 25;
+  }
   // CPU preparation remains cached and never enters the CUDA adapters.
-  execution.cuda=false; cache=std::make_unique<scf::PreparedFockPlan>();
+  context.requested_backend=core::kCpuReferenceBackend;
+  execution=runtime::ExecutionContext(context); cache=std::make_unique<scf::PreparedFockPlan>();
   native_calls=host_calls=0;
   auto* original=cache.get();
   const auto result=methods::detail::execute_rccsd_prepared(

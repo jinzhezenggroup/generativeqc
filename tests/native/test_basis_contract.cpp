@@ -66,6 +66,23 @@ void source_capability_boundaries() {
   }
 }
 
+void representation_dimensions() {
+  const std::size_t cartesian[]{1, 3, 6, 10, 15};
+  const std::size_t spherical[]{1, 3, 5, 7, 9};
+  auto basis = system();
+  for (unsigned angular = 0; angular <= 4; ++angular) {
+    basis.shells[0].angular_momentum = angular;
+    basis.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+    require(generativeqc::molecule::ao_count(basis) == cartesian[angular],
+            "normalized system must retain each Cartesian shell dimension");
+    basis.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+    require(generativeqc::molecule::ao_count(basis) == spherical[angular],
+            "normalized system must retain each real-spherical shell dimension");
+    require(generativeqc::molecule::cartesian_ao_count(basis) == cartesian[angular],
+            "spherical systems must retain the distinct Cartesian work dimension");
+  }
+}
+
 void tensor_extent_boundary() {
   auto oversized = system();
   // O(65536) small shell records on 64-bit hosts, but nbf^4 overflows size_t.
@@ -118,6 +135,7 @@ void system_backend_boundary() {
 int main() {
   try {
     source_capability_boundaries();
+    representation_dimensions();
     tensor_extent_boundary();
     system_backend_boundary();
     std::string detail;

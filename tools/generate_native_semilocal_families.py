@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ PYTHON_COMPAT_OUTPUT = (
     ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
 )
 SCHEMA = "generativeqc.native-semilocal-families.v3"
+LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/xc/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
     "component_scaling",
     "mixed_ao_precision",
@@ -30,6 +33,55 @@ FAST_PATH_STATUS_CPP = {
 }
 
 
+@lru_cache(maxsize=1)
+def _pinned_libxc_hybrid_methods() -> Any:
+    """Read the pinned C-owner-extracted Libxc method metadata product."""
+    return runpy.run_path(str(LIBXC_HYBRIDS))["LIBXC_METHODS"]
+
+
+def _resolve_libxc_hybrid(item: dict[str, Any]) -> None:
+    """Replace curated XC/EXX duplicates with Libxc-authoritative fractions.
+
+    The generated product is separately checked against SHA-verified pinned
+    Libxc C files by tools/generate_libxc_methods.py --check.
+    Backend/force qualification remains owned by the native manifest.
+    """
+    identifier = item.get("libxc_hybrid_method")
+    if identifier is None:
+        return
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError("native Libxc hybrid identifier must be a nonempty string")
+    record = _pinned_libxc_hybrid_methods().get(identifier)
+    if record is None or record.get(
+        "registration"
+    ) != "HYB_GGA_XC_" + identifier.replace("-", "_"):
+        raise ValueError("native hybrid has no matching generated Libxc registration")
+    if (
+        record.get("family") != "hyb_gga"
+        or Fraction(record["range_omega"]) != 0
+        or Fraction(record["short_range_exchange"]) != 0
+        or Fraction(record["long_range_exchange"]) != 0
+        or Fraction(item["range_omega"]) != 0
+        or item["coefficient_policy"] != "exact"
+    ):
+        raise ValueError("native hybrid components disagree with pinned Libxc metadata")
+    if item["components"] != "libxc":
+        raise ValueError("native Libxc hybrid components must be source-derived")
+    item["components"] = [
+        [name, str(Fraction(weight))] for name, weight in record["components"]
+    ]
+    exact = Fraction(record["exact_exchange"])
+    if not 0 < exact <= 1 or item["cuda_global_hybrid_exact_exchange"] is not None:
+        raise ValueError("native Libxc hybrid must derive its exact-exchange fraction")
+    item["cuda_global_hybrid_exact_exchange"] = str(exact)
+    for profile in item.get("cpu_stationary_force_profiles", []):
+        if profile["exact_exchange"] != "libxc":
+            raise ValueError(
+                "native Libxc hybrid CPU force coefficient must be source-derived"
+            )
+        profile["exact_exchange"] = str(exact)
+
+
 def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema") != SCHEMA:
@@ -38,6 +90,8 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     if not isinstance(raw, list) or not raw:
         raise ValueError("native semilocal family manifest requires families")
     families = tuple(raw)
+    for item in families:
+        _resolve_libxc_hybrid(item)
     codes = [item.get("code") for item in families]
     if codes != list(range(len(families))):
         raise ValueError("native semilocal family codes must be contiguous from zero")
@@ -47,7 +101,15 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     allowed_coefficients = {"exact", "native-scales"}
     allowed_exchange = {"none", "any", "canonical"}
     allowed_stationary_kernels = {"lda", "pbe", "r2scan", "composed", "wb97mv"}
+    response_slots: set[int] = set()
     for item in families:
+        response_slot = item.get("legacy_cpu_point_response_slot")
+        if response_slot is not None:
+            if type(response_slot) is not int or response_slot not in (0, 1):
+                raise ValueError("legacy CPU XC response ABI slot must be 0 or 1")
+            if response_slot in response_slots:
+                raise ValueError("duplicate legacy CPU XC response ABI slot")
+            response_slots.add(response_slot)
         fast_paths = item.get("cuda_fast_paths")
         if not isinstance(fast_paths, dict) or set(fast_paths) != set(FAST_PATH_FIELDS):
             raise ValueError(
@@ -115,6 +177,35 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             Fraction(component[1])
         if item["exchange_policy"] == "canonical" and not item.get("canonical_method"):
             raise ValueError("canonical exchange policy requires canonical_method")
+        profiles = item.get("cpu_stationary_force_profiles", [])
+        if not isinstance(profiles, list) or len(profiles) > 2:
+            raise ValueError("CPU stationary force profiles must have at most two rows")
+        for profile in profiles:
+            if not isinstance(profile, dict) or set(profile) != {
+                "spins",
+                "exact_exchange",
+                "semilocal_exchange",
+                "semilocal_correlation",
+            }:
+                raise ValueError("invalid CPU stationary force profile contract")
+            if (
+                not isinstance(profile["spins"], list)
+                or not profile["spins"]
+                or (len(set(profile["spins"])) != len(profile["spins"]))
+                or any(
+                    type(spin) is not int or spin not in (1, 2)
+                    for spin in profile["spins"]
+                )
+            ):
+                raise ValueError(
+                    "CPU stationary force profile needs explicit RKS/UKS admission"
+                )
+            exact = Fraction(profile["exact_exchange"])
+            if not 0 <= exact <= 1:
+                raise ValueError("CPU stationary exact exchange must lie in [0,1]")
+            for key in ("semilocal_exchange", "semilocal_correlation"):
+                if not 0 <= Fraction(profile[key]) <= 1:
+                    raise ValueError("CPU stationary semilocal scale must lie in [0,1]")
     return families
 
 
@@ -142,6 +233,22 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
             "nullptr" if name is None else json.dumps(name) for name in ids
         )
         coeffs_cpp = ", ".join(_cpp_number(value) for value in coeffs)
+        force_profiles = item.get("cpu_stationary_force_profiles", [])
+        profile_rows = [
+            "{"
+            + ", ".join(
+                (
+                    f"{sum(1 << (spin - 1) for spin in profile['spins'])}U",
+                    _cpp_number(profile["exact_exchange"]),
+                    _cpp_number(profile["semilocal_exchange"]),
+                    _cpp_number(profile["semilocal_correlation"]),
+                )
+            )
+            + "}"
+            for profile in force_profiles
+        ]
+        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (2 - len(profile_rows))
+        force_profiles_cpp = "{{" + ", ".join(profile_rows) + "}}"
         records.append(
             "\n".join(
                 (
@@ -166,6 +273,8 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['molecular_nonlocal_domain'] else 'false'},",
                     f"     {'true' if item['incremental_xc'] else 'false'},",
                     f"     {'true' if item['stationary_second_order'] else 'false'},",
+                    f"     {force_profiles_cpp},",
+                    f"     {len(force_profiles)}U,",
                     f"     {{{cpp_fast_path_capabilities(item)}}},",
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
@@ -204,6 +313,13 @@ enum class SemilocalFamily : std::uint32_t {{
 {enum_rows}
 }};
 
+struct CpuStationaryForceProfile {{
+  std::uint32_t spin_mask;
+  double exact_exchange_fraction;
+  double semilocal_exchange_scale;
+  double semilocal_correlation_scale;
+}};
+
 struct SemilocalFamilyMetadata {{
   SemilocalFamily family;
   const char* name;
@@ -220,6 +336,8 @@ struct SemilocalFamilyMetadata {{
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
+  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -308,6 +426,24 @@ constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily
   return semilocal_family_metadata(family).stationary_second_order;
 }}
 
+constexpr bool semilocal_family_cpu_stationary_force_qualified(
+    SemilocalFamily family, std::uint32_t spin_channels, bool exact_exchange_present,
+    double exact_exchange_fraction, double semilocal_exchange_scale,
+    double semilocal_correlation_scale) noexcept {{
+  if (spin_channels < 1U || spin_channels > 2U) return false;
+  const auto& metadata = semilocal_family_metadata(family);
+  for (std::uint32_t i = 0; i < metadata.cpu_stationary_force_profile_count; ++i) {{
+    const auto& profile = metadata.cpu_stationary_force_profiles[i];
+    if ((profile.spin_mask & (1U << (spin_channels - 1U))) != 0 &&
+        (profile.exact_exchange_fraction != 0.0) == exact_exchange_present &&
+        profile.exact_exchange_fraction == exact_exchange_fraction &&
+        profile.semilocal_exchange_scale == semilocal_exchange_scale &&
+        profile.semilocal_correlation_scale == semilocal_correlation_scale)
+      return true;
+  }}
+  return false;
+}}
+
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {{
   if (const auto* metadata = semilocal_family_metadata_from_code(code)) return metadata->family;
   throw std::invalid_argument("unknown native KS semilocal family code");
@@ -364,6 +500,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            f'        "legacy_cpu_point_response_slot": {item.get("legacy_cpu_point_response_slot")!r},',
             f'        "aliases": {alias_text},',
             '        "cuda_fast_paths": {',
             *(
@@ -420,6 +557,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    legacy_cpu_point_response_slot: int | None\n"
         "    aliases: tuple[str, ...]\n"
         "    cuda_fast_paths: dict[str, str]\n"
         "    components: tuple[tuple[str, str], ...]\n"

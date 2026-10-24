@@ -7,6 +7,10 @@ function(generativeqc_set_cuda_compile_pool target pool)
 endfunction()
 
 macro(generativeqc_configure_cuda_backend target)
+  if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
+    generativeqc_add_hessian_aot(generativeqc_hessian_aot "${GENERATIVEQC_HESSIAN_AOT_INVENTORY}")
+    target_link_libraries(${target} PRIVATE generativeqc_hessian_aot)
+  endif()
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     if(_arch STREQUAL "native" OR _arch STREQUAL "all" OR _arch STREQUAL "all-major")
       message(FATAL_ERROR
@@ -50,6 +54,7 @@ macro(generativeqc_configure_cuda_backend target)
     "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${GENERATIVEQC_DIRECT_ORDER2_SHELL_HEADER}"
@@ -84,6 +89,7 @@ macro(generativeqc_configure_cuda_backend target)
                 "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
@@ -327,17 +333,24 @@ macro(generativeqc_configure_cuda_backend target)
     target_sources(${target} PRIVATE src/scf/aot_shell_registry_stub.cpp)
   endif()
   generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)
-  if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_stationary_names)
+  # Native C++/CLI force bindings and Python-only stationary DSOs are
+  # independent products. The monolithic CLI needs only the former.
+  if(_generativeqc_stationary_names AND
+     (GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA OR
+      GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT))
     # Preserve hashed source/asset identity separately from generator imports.
     set(_generativeqc_stationary_contract_assets
       "src/dft/stationary_gradient_cuda.cuh"
+      "src/dft/becke_scaled_policy.hpp"
       "src/dft/grid_task_view.cuh"
       "src/dft/xc_point.hpp"
+      "src/dft/xc_point_mixed.hpp"
       "src/integrals/eri_geometry.hpp"
       "src/integrals/range_moments.hpp"
       "src/tensor/cuda_runtime.cuh"
       "src/runtime/bounded_workspace.hpp"
       "src/runtime/cuda_resources.cuh"
+      "src/runtime/cuda_device_scope.hpp"
       "src/runtime/resource_cuda.cuh"
       "src/runtime/resource_ledger.hpp"
       "src/runtime/residency_boundaries.hpp"
@@ -405,6 +418,7 @@ macro(generativeqc_configure_cuda_backend target)
     generativeqc_set_cuda_compile_pool(
         generativeqc_stationary_sp_primitives "${_generativeqc_aot_compile_pool}")
 
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
     # Component-expanded s/p/d derivatives are shared compiler output: generate
     # the bounded primitive inventory once, then device-link it into each
     # method/spin wrapper. The 23 x 16 layout is part of the versioned v3
@@ -452,6 +466,91 @@ macro(generativeqc_configure_cuda_backend target)
     generativeqc_set_cuda_compile_pool(
         generativeqc_stationary_spd_primitives "${_generativeqc_aot_compile_pool}")
 
+    endif()  # GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT: Python s/p/d consumers
+
+    if(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA)
+    # Native composition uses the same scientific wrappers and shared primitive
+    # objects, but isolates their profile-local symbols before static linking.
+    # Availability does not promote any public force capability by itself.
+    set(_generativeqc_native_stationary_profiles)
+    set(_generativeqc_native_stationary_sources)
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+              --list-profiles
+      OUTPUT_VARIABLE _generativeqc_native_stationary_catalog
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      COMMAND_ERROR_IS_FATAL ANY)
+    foreach(_native_profile IN LISTS _generativeqc_stationary_names)
+      if(_native_profile IN_LIST _generativeqc_native_stationary_catalog AND
+         GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND
+         CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+        list(APPEND _generativeqc_native_stationary_profiles "${_native_profile}")
+        set(_native_source
+            "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/native_${_native_profile}.cu")
+        list(APPEND _generativeqc_native_stationary_sources "${_native_source}")
+      endif()
+    endforeach()
+    if(_generativeqc_native_stationary_profiles)
+      # One compiler process owns the complete selected MethodIR inventory.
+      # This reuses Python-side graph lowering/caches instead of executing the
+      # same import and independent source lowering once for every method.
+      generativeqc_register_generated_sources(
+        NAME generativeqc_native_stationary_codegen
+        GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+        OUTPUTS ${_generativeqc_native_stationary_sources}
+        DEPENDS ${_generativeqc_stationary_contract_inputs}
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_runtime.cuh"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.hpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.cu"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_stationary_binding.hpp"
+        ARGS --output-dir "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}" --all-profiles
+             --profiles ${_generativeqc_native_stationary_profiles}
+        COMMENT "Generating compiler-selected CUDA stationary force graphs")
+      add_library(generativeqc_native_stationary STATIC
+                  src/dft/native_stationary_shared_kernels.cu
+                  ${_generativeqc_native_stationary_sources}
+                  $<TARGET_OBJECTS:generativeqc_stationary_sp_primitives>)
+      add_dependencies(generativeqc_native_stationary generativeqc_native_stationary_codegen)
+      target_include_directories(generativeqc_native_stationary PRIVATE
+          "${CMAKE_CURRENT_SOURCE_DIR}/src")
+      target_compile_definitions(generativeqc_native_stationary PRIVATE GENERATIVEQC_HAS_CUDA=1)
+      target_compile_options(generativeqc_native_stationary PRIVATE
+          $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>
+          $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+      if(NOT GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS STREQUAL "1")
+        target_compile_options(generativeqc_native_stationary PRIVATE
+          $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:--split-compile=${GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS}>)
+      endif()
+      set_target_properties(generativeqc_native_stationary PROPERTIES
+          CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}"
+          CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON
+          CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS ON
+          POSITION_INDEPENDENT_CODE ON)
+      generativeqc_set_cuda_compile_pool(
+          generativeqc_native_stationary "${_generativeqc_aot_compile_pool}")
+      if(NOT GENERATIVEQC_PYTHON_WHEEL)
+        target_link_libraries(generativeqc_native_stationary PRIVATE CUDA::cudart CUDA::cublas)
+      endif()
+      target_link_libraries(${target} PRIVATE generativeqc_native_stationary)
+      set(_native_registry "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/native_registry.cpp")
+      generativeqc_register_generated_sources(
+        NAME generativeqc_native_stationary_registry_codegen
+        GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+        OUTPUTS "${_native_registry}"
+        ARGS --output "${_native_registry}" --registry ${_generativeqc_native_stationary_profiles}
+        COMMENT "Recording native stationary CUDA inventory")
+      target_sources(${target} PRIVATE "${_native_registry}")
+      add_dependencies(${target} generativeqc_native_stationary_registry_codegen)
+    else()
+      target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
+    endif()
+
+    else()
+      target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
+    endif()  # GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
+
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
     # Generated source weights are exact-plan-bound after #665/#689. Package
     # semilocal and admitted global-hybrid plans through one profile catalog;
     # runtime selection still verifies the exact StationaryGradientPlan identity.
@@ -624,6 +723,9 @@ macro(generativeqc_configure_cuda_backend target)
       install(FILES "${_generativeqc_stationary_spd_manifest}"
         DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endforeach()
+    endif()  # GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT: Python shared artifacts
+  else()
+    target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
   endif()
 
   if(GENERATIVEQC_PYTHON_WHEEL)

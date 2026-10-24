@@ -41,6 +41,8 @@ from generativeqc_compiler.integral.production_profile import resolve_production
 from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
+from tools import stationary_cpu_source_receipt as source_receipt
+
 
 def _source_statistics(sources: tuple[str, ...]) -> dict[str, int]:
     sizes = tuple(len(source.encode("utf-8")) for source in sources)
@@ -138,6 +140,7 @@ def audit(
     library: Path | None = None,
     production_manifest: Path | None = None,
     cuda_target: str = "sm_120",
+    cpu_source_directory: Path | None = None,
 ) -> dict[str, object]:
     payload = json.loads(radial_manifest.read_text(encoding="utf-8"))
     radials = radial_inventory_from_payload(payload, backend="cpu")
@@ -145,8 +148,9 @@ def audit(
         raise RuntimeError("CPU derivative AOT radial inventory is empty")
     cuda_radials = radial_inventory_from_payload(payload, backend="cuda")
 
-    full_units = derivative_cpu_aot_sources()
-    full_sources = tuple(source for _, source in full_units)
+    full_sources = source_receipt.load(cpu_source_directory)
+    if full_sources is None:
+        full_sources = tuple(source for _, source in derivative_cpu_aot_sources())
     range_records, range_sources = _range_programs(radials)
     full_key = DerivativeAotBundleKey(
         backend="cpu",

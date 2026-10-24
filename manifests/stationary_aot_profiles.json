@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.stationary-aot-build-profiles.v1",
+  "profiles": [
+    {
+      "name": "lda",
+      "family": "Lda",
+      "method": "LDA_XC_PW",
+      "legacy": true
+    },
+    {
+      "name": "pbe",
+      "family": "Pbe",
+      "method": "PBE",
+      "legacy": true
+    },
+    {
+      "name": "r2scan",
+      "family": "R2scan",
+      "method": "R2SCAN",
+      "legacy": true
+    },
+    {
+      "name": "pbe0",
+      "family": "Pbe",
+      "method": "PBE0",
+      "legacy": false
+    },
+    {
+      "name": "b3lyp",
+      "family": "B3lyp",
+      "method": "B3LYP",
+      "legacy": false
+    },
+    {
+      "name": "m06_2x",
+      "family": "split:M06-2X",
+      "method": "M06-2X",
+      "legacy": false
+    }
+  ]
+}

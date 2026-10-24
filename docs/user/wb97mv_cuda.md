@@ -82,6 +82,63 @@ The native manifest/registry remains conservative because the complete force is
 a Python-composed stationary endpoint rather than a public C force action. The
 private snapshot bridge is not a public C force API.
 
+## Hessian and HVP
+
+WB97M-V also exposes `Calculator.hessian()` and
+`Calculator.hessian_vector_product()` on **CPU or CUDA**, using compiler automatic
+differentiation and implicit CPKS, not finite differences of forces. It includes meta-GGA kinetic-density
+response, both range-exchange operators, self-consistent VV10 and moving-grid/
+partition and overlap/Pulay terms. RKS/UKS, Cartesian/real-spherical AOs through f,
+direct/full-rank DF, and all-electron/scalar-semilocal ECP combinations are
+supported in strict FP64. DF differentiates the fitting metric as well as
+three-center values; rank-truncated or near-cutoff metrics fail explicitly.
+CUDA Hessian numerical stages are device-resident, including moving-grid/VV10,
+DF metric response, ECP projector AD, first/second integrals and the coupled
+RKS/UKS response solve. Install `generativeqc[cuda-hessian]` for this endpoint;
+it fails explicitly rather than falling back to CPU differentiation. Host
+orchestration, fixed metadata/quadrature setup and scalar convergence checks
+remain normal host work. Completed HVPs/matrices are returned as detached NumPy
+arrays; intermediate numerical panels are not downloaded. This is not a speedup
+claim. Resident dense primal ERIs have a bounded device-streamed fallback when
+the integral budget does not admit their reuse.
+Return values are `result.matrix` with shape `(3N, 3N)`
+or `result.value` with shape `(N, 3)`, in Hartree/Bohr².
+
+For an explicitly bounded demonstration (this small grid is **not** a claim of
+quadrature-converged vibrational frequencies):
+
+```python
+from generativeqc import Calculator, GridSpec, KsOptions
+
+calculator = Calculator(
+    method="wb97m-v", basis="sto-3g", device="cpu",
+    ks_options=KsOptions(grid=GridSpec(
+        radial_points=12, angular_polar=4, angular_azimuth=8,
+    )),
+    energy_tolerance=1e-13, density_tolerance=1e-11,
+    max_iterations=240,
+)
+result = calculator.hessian(water)
+print(result.matrix, result.diagnostics["raw_symmetry_error"])
+```
+
+For open-shell CUDA use `method="wb97m-v-uks"`, `device="cuda"` and pass
+`multiplicity` and `charge` to the endpoint. Set `basis_representation="spherical"`
+for real spherical AOs. Enable fitted J/K with `density_fitting="cuda"` (or
+`"cpu"` on CPU) and an appropriate explicit `auxiliary_basis`; omitting it uses
+the orbital basis as the fitting basis. An ECP-bearing `BasisSet` retains its
+ECP Hamiltonian automatically. The auxiliary AO adapter currently supports
+through f. Inspect convergence and execution diagnostics and converge the
+orbital, fitting and quadrature choices for the observable of interest.
+
+Converge the grid and SCF/response tolerances for quantitative use. The grid
+workspace allowance defaults to 128 MiB and the ordered VV10 pair cap defaults
+to 16,777,216 **per action**. Fine/default grids can exceed this work cap;
+`max_nonlocal_pairs` is an explicit override, not an accuracy or performance
+guarantee. The full Hessian currently uses scalar columns. See the
+[second-order execution contract](../developer/dft_hessian.md) for complete
+resource scopes, raw-matrix behavior and independent validation gates.
+
 NVCC is required for the generated geometry and final-reduction modules;
 set `CUDA_PATH` or `CUDACXX` when it is not on `PATH`. Cold timing includes
 compilation when the artifact cache is empty. Prepared batches retain derivative
@@ -140,17 +197,18 @@ grid, density cutoff and FP64 response equations unchanged.
 These bounds exclude existing SCF state, compiler processes, CUDA modules and
 driver-managed recurrence stacks. Host work includes snapshot validation and
 exports, tiling, and total-density/VV10-active-domain packing. The VV10 cutoff
-is `rho >= 1e-8` on both pair legs, using the same active-branch convention as
+is `rho >= 1e-10` on both pair legs, using the same active-branch convention as
 SCF.
 
 Matched GPU4PySCF comparisons must configure the same VV10 density mask in both
-SCF and analytic forces. GPU4PySCF 1.8.1 defaults to `rho >= 1e-10`, while the
-native MolecularV1 and PySCF CPU contracts use `rho >= 1e-8`. The OMol25 runner
-scopes both imported comparator constants together, records this policy and
-GPU4PySCF's separate `|weight| > 1e-14` screening, and restores defaults after
-each reference call. Sharing grid coordinates alone does not match VV10 work.
-Neither native mathematics nor the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates
-are changed. See the
+SCF and analytic forces. Native MolecularV1 and GPU4PySCF 1.8.1 both use
+`rho >= 1e-10`; PySCF CPU uses `rho >= 1e-8`. GPU4PySCF additionally screens
+`|weight| <= 1e-14`, while native consumers retain nonzero signed weights and
+their derivatives. Matching the density cutoff and grid coordinates therefore
+does not match every screening operation. The live OMol25 runner binds the
+native density policy in its protocol and records the comparator's separate
+weight screening. Historical receipts retain their original density policy;
+the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates are unchanged. See the
 [OMol25 protocol](../../benchmarks/results/omol25-wb97mv-20261001/README.md).
 
 Finite memory bounds do not imply scalable endpoint work: the retained

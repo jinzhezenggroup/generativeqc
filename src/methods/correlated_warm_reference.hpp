@@ -10,7 +10,10 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
+#include "methods/execution_failure.hpp"
+#include "methods/geometry.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "scf/mean_field.hpp"
@@ -18,23 +21,39 @@
 
 namespace generativeqc::methods::warm_reference {
 
-inline std::vector<double> coordinates(const core::System& system) {
-  std::vector<double> result;
-  result.reserve(3 * system.atoms.size());
-  for (const auto& atom : system.atoms)
-    result.insert(result.end(), atom.position.begin(), atom.position.end());
+using geometry::coordinates;
+using geometry::set_coordinates;
+using geometry::valid_coordinates;
+
+/** Bind the same physical-reference acceptance and bounded seed policy to any
+ * existing CPU/CUDA reference provider. Retire an unsuccessful proposal before
+ * allocating its single cold replacement; never retry a resource/driver error. */
+template <class Operation>
+scf::ScfResult solve_reference(const std::vector<double>* seed, scf::FockSpin spin, bool* fallback,
+                               Operation&& operation, std::string_view failure_message) {
+  if (fallback) *fallback = false;
+  const auto valid = [spin](const scf::ScfResult& result) {
+    return result.converged &&
+           (spin == scf::FockSpin::Restricted ? static_cast<bool>(result.reference)
+                                              : static_cast<bool>(result.unrestricted_reference));
+  };
+  scf::ScfResult result;
+  bool retry = false;
+  try {
+    result = operation(seed);
+  } catch (...) {
+    const auto failure = std::current_exception();
+    if (!seed || !retryable_seed_failure(item_exception_status(failure), failure)) throw;
+    retry = true;
+  }
+  if (seed && (retry || !valid(result))) {
+    result = {};
+    if (fallback) *fallback = true;
+    result = operation(nullptr);
+  }
+  if (!valid(result))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED, std::string(failure_message));
   return result;
-}
-
-inline bool valid_coordinates(const std::vector<double>& values, const core::System& system) {
-  return values.size() == 3 * system.atoms.size() &&
-         std::all_of(values.begin(), values.end(),
-                     [](double value) { return std::isfinite(value); });
-}
-
-inline void set_coordinates(core::System& system, const std::vector<double>& values) {
-  for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
-    std::copy_n(values.begin() + 3 * atom, 3, system.atoms[atom].position.begin());
 }
 
 inline std::size_t payload_bytes(std::size_t density_count, std::size_t coordinate_count) {

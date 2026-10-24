@@ -4,11 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
+#include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -57,10 +61,14 @@ struct CudaKsTransfers {
   std::size_t phase_resident_value_bytes{}, phase_resident_numeric_peak_bytes{};
   std::uint64_t setup_h2d_bytes{}, density_h2d_bytes{}, scalar_d2h_bytes{}, matrix_d2h_bytes{};
   std::uint64_t final_state_d2h_bytes{}, final_state_reads{};
+  /** Resident canonical proofs transfer only bounded diagnostic packets, not
+   * detached D/F/C/epsilon. Repeated leases do not increment this count. */
+  std::uint64_t resident_final_validations{};
   std::uint64_t synchronizations{}, iterations{};
-  /** Intermediate orthonormal KS orbital frames retained entirely on device for
-   * a future #991 warm-subspace admission attempt. These are implementation
-   * diagnostics and are not part of the public C transport ABI. */
+  /** Intermediate KS orbital frames retained entirely on device. The restricted
+   * fitted warm-factor path retains exact density-generating AO coefficients;
+   * the incumbent retains the orthonormal frame for future subspace admission.
+   * These diagnostics are not part of the public C transport ABI. */
   std::uint64_t warm_orbital_frames_retained{}, warm_orbital_frame_invalidations{};
   /** Number of subsequent proposals using the CPU-compatible stationary-cycle
    * shift; cumulative across replays, independent of transfer counts. */
@@ -78,13 +86,24 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
-  /** Full-range density-fitted exchange provenance. Dense includes the first
-   * cold/warm-seed build where no canonical factor is available; occupied
+  /** Full-range density-fitted exchange provenance. Dense includes any first
+   * cold/warm-seed build without a verified density-generating factor; occupied
    * counts only builds whose Cocc generated the exact current device density. */
   std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
   /** Successful final RKS states that retained the exact density-generating Cocc
    * together with the already-computed complete resident U=B*Cocc projection. */
   std::uint64_t fitted_final_projection_leases{};
+  /** Opt-in inter-solve RKS reuse of the last-good exact factor, stored in the
+   * existing warm slot instead of D. No extra retained numeric storage. A warm
+   * density export materializes D in dead scratch, without modifying the seed. */
+  std::uint64_t fitted_warm_factor_publications{}, fitted_warm_factor_restores{};
+  std::uint64_t fitted_warm_factor_fallbacks{};
+  /** Successful fixed-anchor Fast J/K actions, cumulative across solves.
+   * Delta actions use the total current-minus-anchor density, not a chain of
+   * preceding iterates. Optional allocation misses retain the ordinary solve.
+   * These counters are internal and do not extend the public C transport ABI. */
+  std::uint64_t fast_anchor_builds{}, fast_delta_builds{}, fast_anchor_invalidations{};
+  std::uint64_t fast_anchor_allocation_fallbacks{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
@@ -237,6 +256,11 @@ class CudaKsPlan {
   bool finish_iteration();
   /** Terminal result; density export is optional and never used in an iteration. */
   scf::ScfResult result(bool export_density = true);
+  /** Count every physical build in a normally terminated, fully inventoried
+   * ordinary attempt, including nonconvergence and warm-energy rebasing.
+   * Failed/in-flight/chunk owners return no count. This does not certify a
+   * converged final state or the returned-state precision audit. */
+  std::optional<std::uint64_t> completed_fock_builds() const noexcept;
   /** Energy-only adapters leave the final density resident by disabling export. */
   scf::ScfResult run(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
                      bool export_density = true,
@@ -272,11 +296,43 @@ class CudaKsPlan {
   generativeqc_status resident_final_fitted_projection(
       const CudaKsFinalStateToken& expected, CudaKsResidentFittedProjectionBinding& binding,
       std::string& detail) const;
-  /** Borrow total stationary D/W already staged by a successful weighted
-   * final-state read. This performs no CUDA launch, transfer, or synchronization. */
+  /** Borrow total stationary D/W already staged by resident preparation or a
+   * successful weighted final-state read. This performs no CUDA launch,
+   * transfer, or synchronization. */
   generativeqc_status resident_final_stationary_weights(
       const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
       std::string& detail) const;
+  /** Validate the exact final physical frame on device and stage total D/W
+   * without exporting matrices or invoking host scientific algebra. Shared
+   * acceptance gates consume only scalar packets; all scratch is precharged.
+   * A previously validated weighted read may be borrowed unchanged. Repeated
+   * leases preserve published pointers; stale admission submits no work, and
+   * a failed proof revokes the final state without discarding last-good warm
+   * storage. This does not change energy-only/default validation policy. */
+  generativeqc_status prepare_resident_final_stationary_weights(
+      const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+      KsFinalStateDiagnostic& diagnostic, std::string& detail);
+  /** Zero-transfer complete-frame lease, available only after successful
+   * resident preparation or a canonical weighted final-state read. */
+  generativeqc_status resident_final_orbital_frame(const CudaKsFinalStateToken& expected,
+                                                   CudaKsResidentOrbitalFrameBinding& binding,
+                                                   std::string& detail) const;
+  /** Borrow actual immutable Fock sources plus accepted F/H on the producer
+   * stream. Requires the existing scalar-validated canonical-frame lease. */
+  generativeqc_status resident_final_fock_sources(const CudaKsFinalStateToken& expected,
+                                                  CudaKsResidentFockBinding& binding,
+                                                  std::string& detail) const;
+  /** Zero-transfer immutable basis/grid and accepted density lease. Requires
+   * the same canonical validation as resident_final_orbital_frame; host-unfused
+   * owners without a resident XC plan fail closed, without staging a copy. */
+  generativeqc_status resident_final_grid(const CudaKsFinalStateToken& expected,
+                                          CudaKsResidentGridBinding& binding,
+                                          std::string& detail) const;
+  /** Reuse the shared physical/canonical resident proof and then borrow C/eps.
+   * Stale/capturing/failed states never publish a partial frame binding. */
+  generativeqc_status prepare_resident_final_orbital_frame(
+      const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
+      KsFinalStateDiagnostic& diagnostic, std::string& detail);
   /** Borrow final total rho/grad-rho already produced by device-fused
    * nonlocal XC. The binding is available only for the exact current token
    * and performs no transfer, synchronization or numerical launch. */
@@ -297,6 +353,18 @@ class CudaKsPlan {
   generativeqc_status read_final_state(const CudaKsFinalStateToken& expected,
                                        bool compute_weighted_density, VerifiedKsFinalState& state,
                                        std::string& detail);
+  /** At an idle force boundary, retire the optional cold-SCF anchor first,
+   * then optional SCF ERIs only if the requested additional device envelope
+   * still exceeds free memory. D/W/XC, the
+   * exact final token and the last-good warm seed remain owned by this plan.
+   * Receipt: requested bytes, free before, free after, retired device bytes.
+   * This is not a reservation: the actual consumer still owns allocation and
+   * budget failure. A conservative upper bound must not reject a smaller fit. */
+  generativeqc_status prepare_force_memory(const CudaKsFinalStateToken& expected,
+                                           std::size_t additional_device_bytes,
+                                           std::array<std::uint64_t, 4>& receipt,
+                                           std::string& detail);
+
   const CudaKsResources& resources() const noexcept;
   /** Optional prepared-operation provenance; null means that the owner did
    * not admit a separate preparation budget. No selection happens here. */

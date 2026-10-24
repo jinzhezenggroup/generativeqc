@@ -14,6 +14,7 @@
 #include "api/handles.hpp"
 #include "dft/cuda_ks.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/direct_jk_source_lease.hpp"
@@ -33,8 +34,9 @@ void cuda_check(cudaError_t status) { require(status == cudaSuccess, cudaGetErro
 struct Fixture {
   core::System system;
   std::vector<double> density, coulomb, exchange;
+  std::array<std::vector<double>, 2> range_exchange;
 
-  explicit Fixture(const char* path, bool read_oracle = true) {
+  explicit Fixture(const char* path, bool read_oracle = true, bool read_range = false) {
     std::ifstream input(path);
     std::size_t atoms{}, shells{}, nao{};
     input >> atoms >> shells >> nao;
@@ -54,11 +56,16 @@ struct Fixture {
         matrix->resize(nao * nao);
         for (auto& value : *matrix) input >> value;
       }
+    if (read_range)
+      for (auto& matrix : range_exchange) {
+        matrix.resize(nao * nao);
+        for (auto& value : matrix) input >> value;
+      }
     std::string detail;
     require(bool(input) &&
                 molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
             "invalid independent fixture: " + detail);
-    require(nao == molecule::ao_count(system) && nao >= 64, "fixture source admission domain");
+    require(nao == molecule::ao_count(system) && nao >= 24, "fixture source admission domain");
   }
 };
 
@@ -96,7 +103,7 @@ void capacity(const Fixture& fixture) {
 }
 
 /** Exercise raw coefficients, signed density, screening and source teardown. */
-void raw_oracle(const Fixture& fixture) {
+void raw_oracle(const Fixture& fixture, bool mixed = false) {
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   double* matrices{};
@@ -104,57 +111,426 @@ void raw_oracle(const Fixture& fixture) {
   const auto elements = fixture.density.size();
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&matrices), 3 * elements * sizeof(double)));
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
-  for (const double preparation_mask : {0.0, 1e-12}) {
-    scf::cuda_execution::DirectJkSourceLease source(stream);
-    require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
-                           3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle",
-                           false, false, preparation_mask, 8ULL << 30,
-                           preparation_mask == 0.0) == GENERATIVEQC_STATUS_SUCCESS &&
-                source.active(),
-            source.reason());
-    require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
-                (source.exchange() != nullptr) == (preparation_mask == 0.0),
-            "borrowed outputs unexpectedly allocated duplicate J/K slots");
-    cuda_check(cudaMemcpyAsync(matrices, fixture.density.data(), elements * sizeof(double),
-                               cudaMemcpyHostToDevice, stream));
-    auto* coulomb = matrices + elements;
-    auto* exchange = coulomb + elements;
-    std::string detail;
-    for (const auto coefficient : {0.25, 0.20}) {
-      const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
-      require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask, detail) ==
+  for (const double preparation_mask : {0.0, 1e-12})
+    for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
+      scf::cuda_execution::DirectJkSourceLease source(stream, scf::FockOperator::FullRange, 0.0,
+                                                      mixed);
+      require(
+          source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                         3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle", false,
+                         false, preparation_mask, 8ULL << 30, preparation_mask == 0.0,
+                         molecule::ao_count(fixture.system) < 64
+                             ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
+                             : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                         buckets) == GENERATIVEQC_STATUS_SUCCESS &&
+              source.active(),
+          source.reason());
+      require(source.mixed_recurrence() == mixed &&
+                  source.value_bytes() ==
+                      source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
+              "resident source precision/storage inventory mismatch");
+      require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
+                  (source.exchange() != nullptr) == (preparation_mask == 0.0),
+              "borrowed outputs unexpectedly allocated duplicate J/K slots");
+      cuda_check(cudaMemcpyAsync(matrices, fixture.density.data(), elements * sizeof(double),
+                                 cudaMemcpyHostToDevice, stream));
+      auto* coulomb = matrices + elements;
+      auto* exchange = coulomb + elements;
+      std::string detail;
+      if (mixed) {
+        auto* prepared = const_cast<scf::CudaDirectJkPlan*>(
+            static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+        require(scf::prepare_cuda_direct_jk_resident_values(prepared, 8ULL << 30, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "strict construction reused a mixed source identity");
+      }
+      for (const auto coefficient : {0.25, 0.20})
+        for (const double density_scale : {1.0, -0.5, 0.0}) {
+          auto scaled = fixture.density;
+          for (auto& value : scaled) value *= density_scale;
+          cuda_check(cudaMemcpyAsync(matrices, scaled.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, stream));
+          const auto spec =
+              scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
+          require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask,
+                                 detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                  "raw phase J/K audit: " + detail);
+          std::vector<double> actual(elements);
+          for (const auto& pair :
+               {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
+            cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
+                                  cudaMemcpyDeviceToHost));
+            double maximum_error = 0.0;
+            for (std::size_t index = 0; index < elements; ++index)
+              maximum_error = std::max(
+                  maximum_error, std::abs(actual[index] - density_scale * (*pair.second)[index]));
+            require(maximum_error < (mixed ? 2e-6 : 2e-9), "independent PySCF raw J/K parity");
+            if (mixed)
+              std::cout << "{\"mixed_source\":true,\"maximum_jk_error\":" << maximum_error
+                        << ",\"density_scale\":" << density_scale
+                        << ",\"source_bytes\":" << source.value_bytes()
+                        << ",\"source_values\":" << source.value_count() << "}\n";
+          }
+        }
+      const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
+      if (mixed) {
+        auto pure_j = spec;
+        pure_j.exchange.present = false;
+        require(source.enqueue(pure_j, matrices, coulomb, nullptr, error, preparation_mask,
+                               detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                "zero-density mixed J-only replay lost its uncached-row census");
+      }
+      if (preparation_mask > 0.0)
+        require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "screened source accepted a lower replay threshold");
+      require(source.enqueue(spec, matrices, coulomb, exchange, error, 1e12, detail) ==
                       GENERATIVEQC_STATUS_SUCCESS &&
                   source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-              "raw phase J/K audit: " + detail);
-      std::vector<double> actual(elements);
-      for (const auto& pair :
-           {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
-        cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
-                              cudaMemcpyDeviceToHost));
-        double maximum_error = 0.0;
-        for (std::size_t index = 0; index < elements; ++index)
-          maximum_error = std::max(maximum_error, std::abs(actual[index] - (*pair.second)[index]));
-        require(maximum_error < 2e-9, "independent PySCF raw J/K parity");
-      }
+              "screened phase J/K audit");
+      std::vector<double> screened(2 * elements);
+      cuda_check(cudaMemcpy(screened.data(), coulomb, screened.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost));
+      require(
+          std::all_of(screened.begin(), screened.end(), [](double value) { return value == 0; }),
+          "resident replay bypassed the Direct Schwarz predicate");
     }
-    const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
-    if (preparation_mask > 0.0)
-      require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
-                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-              "screened source accepted a lower replay threshold");
-    require(source.enqueue(spec, matrices, coulomb, exchange, error, 1e12, detail) ==
-                    GENERATIVEQC_STATUS_SUCCESS &&
-                source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-            "screened phase J/K audit");
-    std::vector<double> screened(2 * elements);
-    cuda_check(cudaMemcpy(screened.data(), coulomb, screened.size() * sizeof(double),
-                          cudaMemcpyDeviceToHost));
-    require(std::all_of(screened.begin(), screened.end(), [](double value) { return value == 0; }),
-            "resident replay bypassed the Direct Schwarz predicate");
-  }
   cuda_check(cudaFree(error));
   cuda_check(cudaFree(matrices));
   cuda_check(cudaStreamDestroy(stream));
+}
+
+/** UKS shares ERIs, not spin weights: signed beta checks J(total), K(alpha),
+ * K(beta) against the independent fixture for full and partial residency. */
+void raw_oracle_uks(const Fixture& fixture) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 5 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  std::vector<double> beta_density = fixture.density;
+  for (auto& value : beta_density) value *= -0.5;
+  auto* alpha = matrices.get();
+  auto* beta = alpha + elements;
+  auto* coulomb = beta + elements;
+  auto* alpha_exchange = coulomb + elements;
+  auto* beta_exchange = alpha_exchange + elements;
+  cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  cuda_check(cudaMemcpyAsync(beta, beta_density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  const auto check_source = [&](double screening, std::uint32_t buckets) {
+    scf::cuda_execution::DirectJkSourceLease source(stream.get());
+    require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                           5 * elements * sizeof(double), 8ULL << 30, "1", "ks-uks-source-oracle",
+                           false, false, screening, 8ULL << 30, false,
+                           molecule::ao_count(fixture.system) < 64
+                               ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
+                               : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                           buckets, 2) == GENERATIVEQC_STATUS_SUCCESS &&
+                source.active(),
+            source.reason());
+    for (const bool has_exchange : {true, false}) {
+      auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Unrestricted, 0.25);
+      if (!has_exchange) spec.exchange.present = false;
+      std::string detail;
+      require(
+          source.enqueue(spec, alpha, coulomb, has_exchange ? alpha_exchange : nullptr, error.get(),
+                         screening, detail, beta,
+                         has_exchange ? beta_exchange : nullptr) == GENERATIVEQC_STATUS_SUCCESS &&
+              source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+          "UKS shared source audit: " + detail);
+      std::vector<double> actual(elements);
+      for (unsigned channel = 0; channel < (has_exchange ? 3U : 1U); ++channel) {
+        const auto* expected = channel == 0 ? &fixture.coulomb : &fixture.exchange;
+        const double scale = channel == 0 ? 0.5 : channel == 1 ? 1.0 : -0.5;
+        cuda_check(cudaMemcpy(actual.data(), coulomb + channel * elements,
+                              elements * sizeof(double), cudaMemcpyDeviceToHost));
+        for (std::size_t index = 0; index < elements; ++index)
+          require(std::abs(actual[index] - scale * expected->at(index)) < 2e-9,
+                  "independent PySCF UKS J/K parity");
+      }
+    }
+  };
+  for (const double screening : {0.0, 1e-12})
+    for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) check_source(screening, buckets);
+}
+
+/** Independent SR/LR matrices protect radial identity, both spins and partial
+ * caches. Invalid operator requests must fail before any retained value is used. */
+void raw_range_oracle(const Fixture& fixture, bool mixed = false) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 4 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  auto beta_density = fixture.density;
+  for (auto& value : beta_density) value *= -0.5;
+  auto* alpha = matrices.get();
+  auto* beta = alpha + elements;
+  auto* ka = beta + elements;
+  auto* kb = ka + elements;
+  cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  cuda_check(cudaMemcpyAsync(beta, beta_density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  unsigned checks = 0;
+  double maximum_error = 0.0;
+  for (unsigned range = 0; range < 2; ++range)
+    for (const unsigned spins : {1U, 2U})
+      for (const double screening : {0.0, 1e-12})
+        for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
+          if (mixed && spins != 1) continue;
+          const auto op = range == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
+          scf::cuda_execution::DirectJkSourceLease source(stream.get(), op, 0.3, mixed);
+          require(
+              source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                             4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
+                             false, false, screening, 8ULL << 30, false,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                             buckets, spins) == GENERATIVEQC_STATUS_SUCCESS &&
+                  source.active(),
+              source.reason());
+          require(source.value_bytes() ==
+                      source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
+                  "range source precision/storage inventory mismatch");
+          std::string detail;
+          if (mixed) {
+            auto* prepared = const_cast<scf::CudaDirectJkPlan*>(
+                static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(
+                        prepared, source.value_bytes(), detail, op, 0.3, buckets) ==
+                        GENERATIVEQC_STATUS_SUCCESS,
+                    "identical mixed range preparation was not idempotent");
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(
+                        prepared, source.value_bytes() - 1, detail, op, 0.3, buckets) ==
+                        GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                    "mixed range preparation bypassed its byte ceiling");
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(prepared, 8ULL << 30, detail,
+                                                                      op, 0.4, buckets) ==
+                            GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                        scf::prepare_cuda_direct_jk_mixed_resident_values(
+                            prepared, 8ULL << 30, detail,
+                            op == scf::FockOperator::ShortRange ? scf::FockOperator::LongRange
+                                                                : scf::FockOperator::ShortRange,
+                            0.3, buckets) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                        scf::prepare_cuda_direct_jk_mixed_resident_values(
+                            prepared, 8ULL << 30, detail, op, 0.3, buckets ^ 1U) ==
+                            GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "mixed range source changed its immutable radial/bucket identity");
+            require(scf::prepare_cuda_direct_jk_range_resident_values(prepared, 8ULL << 30, buckets,
+                                                                      op, 0.3, detail) ==
+                        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "strict range construction reused mixed source precision");
+          }
+          auto spec = scf::make_global_hybrid_fock_spec(
+              spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted, 0.25);
+          spec.coulomb.present = false;
+          spec.exchange.op = op;
+          spec.exchange.omega = 0.3;
+          const auto execute = [&](scf::FockBuildSpec request, double threshold) {
+            return source.enqueue(request, alpha, nullptr, ka, error.get(), threshold, detail,
+                                  spins == 2 ? beta : nullptr, spins == 2 ? kb : nullptr);
+          };
+          for (unsigned mismatch = 0; mismatch < 4; ++mismatch) {
+            auto wrong = spec;
+            // Keep each radial request valid in isolation so rejection tests
+            // the immutable lease identity, not ordinary argument validation.
+            if (mismatch == 0)
+              wrong.exchange.op =
+                  range == 0 ? scf::FockOperator::LongRange : scf::FockOperator::ShortRange;
+            if (mismatch == 1) wrong.exchange.omega = 0.4;
+            if (mismatch == 2) wrong.coulomb.present = true;
+            if (mismatch == 3) {
+              wrong.exchange.op = scf::FockOperator::FullRange;
+              wrong.exchange.omega = 0.0;
+            }
+            require(execute(wrong, screening) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "range source accepted a different radial consumer");
+          }
+          std::vector<double> actual(elements);
+          for (const double density_scale : {1.0, -0.5, 0.0}) {
+            auto density = fixture.density;
+            for (auto& value : density) value *= density_scale;
+            cuda_check(cudaMemcpyAsync(alpha, density.data(), elements * sizeof(double),
+                                       cudaMemcpyHostToDevice, stream.get()));
+            require(execute(spec, screening) == GENERATIVEQC_STATUS_SUCCESS &&
+                        source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                    "range resident finite/census audit: " + detail);
+            for (unsigned spin = 0; spin < spins; ++spin) {
+              cuda_check(cudaMemcpy(actual.data(), spin == 0 ? ka : kb, elements * sizeof(double),
+                                    cudaMemcpyDeviceToHost));
+              const double scale = spin == 0 ? density_scale : -0.5;
+              for (std::size_t index = 0; index < elements; ++index) {
+                maximum_error = std::max(
+                    maximum_error,
+                    std::abs(actual[index] - scale * fixture.range_exchange[range][index]));
+                require(std::isfinite(actual[index]) &&
+                            std::abs(actual[index] - scale * fixture.range_exchange[range][index]) <
+                                (mixed ? 8e-7 : 2e-9),
+                        "independent PySCF range-K parity");
+              }
+            }
+          }
+          cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, stream.get()));
+          require(execute(spec, 1e12) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                  "range replay changed the immutable screening predicate");
+          cuda_check(
+              cudaMemcpy(actual.data(), ka, elements * sizeof(double), cudaMemcpyDeviceToHost));
+          require(
+              std::all_of(actual.begin(), actual.end(), [](double value) { return value == 0.0; }),
+              "screened range replay retained nonzero values");
+          ++checks;
+        }
+  std::cout << (mixed ? "mixed resident range oracle checks " : "range oracle checks ") << checks
+            << " maximum_error " << maximum_error << "\n";
+}
+
+/** Qualify density-conditioned mixed J/K independently, including raw K's
+ * full weight. Each call changes the density or selected outputs so stale
+ * maxima and accidentally shared J-K/2 screening cannot pass by replay. */
+void raw_mixed_full_range_oracle(const Fixture& fixture) {
+  const auto elements = fixture.density.size();
+  unsigned checks = 0;
+  double maximum_error = 0.0;
+  for (const double screening : {0.0, 1e-12}) {
+    scf::CudaDirectJkPlan* raw{};
+    scf::CudaDirectJkDiagnostic diagnostic;
+    std::string detail;
+    require(scf::create_cuda_direct_jk_plan(0, {fixture.system}, 0, screening, 2ULL << 30, &raw,
+                                            diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "mixed full-range preparation: " + detail);
+    std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+        raw, scf::destroy_cuda_direct_jk_plan);
+    runtime::OwnedCudaBuffer<double> matrices(0, 3 * elements, plan->stream);
+    runtime::OwnedCudaBuffer<int> error(0, 1, plan->stream);
+    runtime::OwnedCudaBuffer<std::uint64_t> work(0, 1, plan->stream);
+    auto* ordered_pairs = plan->materialized_pair_order;
+    require(ordered_pairs != nullptr, "whole-shell J/K schedule was not admitted");
+    for (const bool materialized : {true, false})
+      for (unsigned channels = 1; channels <= 3; ++channels)
+        for (const double scale : {1.0, -0.5, 0.0}) {
+          auto density = fixture.density;
+          for (auto& value : density) value *= scale;
+          cuda_check(cudaMemcpyAsync(matrices.get(), density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, plan->stream));
+          auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.37);
+          spec.coulomb.present = (channels & 1U) != 0;
+          spec.exchange.present = (channels & 2U) != 0;
+          plan->materialized_pair_order = materialized ? ordered_pairs : nullptr;
+          const auto status = scf::enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, matrices.get(), nullptr, elements,
+              spec.coulomb.present ? matrices.get() + elements : nullptr,
+              spec.exchange.present ? matrices.get() + 2 * elements : nullptr, nullptr, error.get(),
+              detail, work.get(), spec.exchange.present);
+          plan->materialized_pair_order = ordered_pairs;
+          require(status == GENERATIVEQC_STATUS_SUCCESS, "mixed full-range execution: " + detail);
+          int failure = 0;
+          std::uint64_t recurrences = 0;
+          cuda_check(cudaMemcpyAsync(&failure, error.get(), sizeof(failure), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&recurrences, work.get(), sizeof(recurrences),
+                                     cudaMemcpyDeviceToHost, plan->stream));
+          cuda_check(cudaStreamSynchronize(plan->stream));
+          require(!failure && (scale == 0.0 || recurrences > 0),
+                  "mixed full-range failure or missing executed FP32 work");
+          for (unsigned channel = 0; channel < 2; ++channel) {
+            if (!(channels & (1U << channel))) continue;
+            std::vector<double> actual(elements);
+            cuda_check(cudaMemcpy(actual.data(), matrices.get() + (channel + 1) * elements,
+                                  elements * sizeof(double), cudaMemcpyDeviceToHost));
+            const auto& expected = channel == 0 ? fixture.coulomb : fixture.exchange;
+            for (std::size_t index = 0; index < elements; ++index) {
+              const double difference = std::abs(actual[index] - scale * expected[index]);
+              require(std::isfinite(actual[index]) && difference < 2e-6,
+                      "independent mixed full-range J/K parity");
+              maximum_error = std::max(maximum_error, difference);
+            }
+          }
+          ++checks;
+        }
+  }
+  std::cout << "mixed full-range oracle checks " << checks << " maximum_error " << maximum_error
+            << "\n";
+}
+
+/** Independent signed-density SR/LR K matrices qualify both mixed schedules.
+ * Turning off optional shell-pair ordering exercises its bounded AO fallback;
+ * no oracle participates in native preparation or contraction. */
+void raw_mixed_range_oracle(const Fixture& fixture) {
+  const auto elements = fixture.density.size();
+  unsigned checks = 0;
+  double maximum_error = 0.0;
+  for (const double screening : {0.0, 1e-12}) {
+    scf::CudaDirectJkPlan* raw{};
+    scf::CudaDirectJkDiagnostic diagnostic;
+    std::string detail;
+    require(scf::create_cuda_direct_jk_plan(0, {fixture.system}, 0, screening, 2ULL << 30, &raw,
+                                            diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "mixed range preparation: " + detail);
+    std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+        raw, scf::destroy_cuda_direct_jk_plan);
+    runtime::OwnedCudaBuffer<double> matrices(0, 2 * elements, plan->stream);
+    runtime::OwnedCudaBuffer<int> error(0, 1, plan->stream);
+    runtime::OwnedCudaBuffer<std::uint64_t> work(0, 1, plan->stream);
+    auto* ordered_pairs = plan->materialized_pair_order;
+    require(ordered_pairs != nullptr, "whole-shell range schedule was not admitted");
+    for (unsigned radial = 0; radial < 2; ++radial)
+      for (const bool materialized : {true, false})
+        for (const double scale : {1.0, -0.5, 0.0}) {
+          auto density = fixture.density;
+          for (auto& value : density) value *= scale;
+          cuda_check(cudaMemcpyAsync(matrices.get(), density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, plan->stream));
+          auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.37);
+          spec.coulomb.present = false;
+          spec.exchange.op =
+              radial == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
+          spec.exchange.omega = 0.3;
+          plan->materialized_pair_order = materialized ? ordered_pairs : nullptr;
+          const auto status = scf::enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, matrices.get(), nullptr, elements, nullptr,
+              matrices.get() + elements, nullptr, error.get(), detail, work.get(), true);
+          plan->materialized_pair_order = ordered_pairs;
+          require(status == GENERATIVEQC_STATUS_SUCCESS, "mixed range execution: " + detail);
+          std::vector<double> actual(elements);
+          int failure = 0;
+          std::uint64_t recurrences = 0;
+          cuda_check(cudaMemcpyAsync(actual.data(), matrices.get() + elements,
+                                     elements * sizeof(double), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&failure, error.get(), sizeof(failure), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&recurrences, work.get(), sizeof(recurrences),
+                                     cudaMemcpyDeviceToHost, plan->stream));
+          cuda_check(cudaStreamSynchronize(plan->stream));
+          require(!failure, "mixed range numerical failure: radial=" + std::to_string(radial) +
+                                " materialized=" + std::to_string(materialized) + " scale=" +
+                                std::to_string(scale) + " screening=" + std::to_string(screening) +
+                                " recurrences=" + std::to_string(recurrences));
+          // Both schedules must execute FP32 for nonzero density. A zero
+          // density may screen every quartet before recurrence work.
+          require(scale == 0.0 || recurrences > 0,
+                  "incorrect mixed SR/LR recurrence work evidence");
+          for (std::size_t index = 0; index < elements; ++index) {
+            const double difference =
+                std::abs(actual[index] - scale * fixture.range_exchange[radial][index]);
+            require(std::isfinite(actual[index]) && difference < 8e-7,
+                    "independent mixed SR/LR K parity");
+            maximum_error = std::max(maximum_error, difference);
+          }
+          ++checks;
+        }
+  }
+  std::cout << "mixed range oracle checks " << checks << " maximum_error " << maximum_error << "\n";
 }
 
 void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
@@ -211,9 +587,9 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
   require(bool(state), "independent energy assertion snapshot");
   require(plan.transfers().phase_resident_values_built > 0 &&
               plan.transfers().phase_resident_fock_actions > 0 &&
-              plan.resources().provider_device_bytes == base_bytes &&
+              plan.resources().provider_device_bytes > base_bytes &&
               !provider.diagnostic().direct.resident_value_count,
-          "phase source work/lifetime inventory");
+          "final-state source work/lifetime inventory");
   auto built = plan.transfers().phase_resident_values_built;
   const auto rebases = plan.transfers().warm_energy_rebase_fock_actions;
   require(rebases == 1 && resident.fock_builds == resident.iterations + 1 &&
@@ -226,6 +602,70 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
                              event.phase == scf::PrecisionWorkPhase::Finalization;
                     }) == 1,
       "warm handoff precision provenance");
+  dft::CudaKsFinalStateToken token;
+  dft::CudaKsResidentDensityBinding density_before, density_after;
+  std::string source_detail;
+  require(plan.final_state_token(token, source_detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              plan.resident_final_density(token, density_before, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+          "resident final-state value consumer binding: " + source_detail);
+  dft::CudaKsFixedDensityProfile profile;
+  require(plan.profile_fixed_density_components(token, profile, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              profile.present_mask == 11U &&
+              plan.resident_final_density(token, density_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              density_before.alpha == density_after.alpha &&
+              plan.transfers().phase_resident_values_built == built &&
+              plan.resources().provider_device_bytes > base_bytes,
+          "post-SCF value reuse lost the final density or rebuilt ERIs: " + source_detail);
+  // A force handoff must leave a roomy energy-only lease intact, but reclaim
+  // just the optional source when the next consumer needs more than free VRAM.
+  // Asking for free+1 exercises pressure deterministically without exhausting
+  // the physical device or changing the SCF source-selection policy.
+  std::array<std::uint64_t, 4> memory_receipt{};
+  const auto retained_bytes = plan.resources().provider_device_bytes;
+  const auto retained_host_bytes = plan.resources().retained_host_numeric_bytes;
+  const auto seed_before_handoff = plan.warm_density();
+  require(plan.prepare_force_memory(token, 0, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == 0 && plan.resources().provider_device_bytes == retained_bytes,
+          "roomy force handoff retired reusable SCF values");
+  auto stale_token = token;
+  stale_token.version = 0;
+  require(plan.prepare_force_memory(stale_token, memory_receipt[1] + 1, memory_receipt,
+                                    source_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              plan.resources().provider_device_bytes == retained_bytes,
+          "stale force handoff changed SCF ownership");
+  dft::CudaKsResidentStationaryWeightsBinding weights_before, weights_after;
+  dft::KsFinalStateDiagnostic weights_diagnostic;
+  require(
+      plan.prepare_resident_final_stationary_weights(token, weights_before, weights_diagnostic,
+                                                     source_detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "pre-handoff resident D/W proof: " + source_detail);
+  std::size_t free_bytes{}, total_bytes{};
+  cuda_check(cudaMemGetInfo(&free_bytes, &total_bytes));
+  require(plan.prepare_force_memory(token, free_bytes + 1, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == retained_bytes - base_bytes && memory_receipt[3] > 0 &&
+              plan.resources().provider_device_bytes == base_bytes &&
+              plan.resources().retained_host_numeric_bytes < retained_host_bytes &&
+              plan.resident_final_density(token, density_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              plan.resident_final_stationary_weights(token, weights_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              density_after.alpha == density_before.alpha &&
+              weights_after.density == weights_before.density &&
+              weights_after.weighted_density == weights_before.weighted_density &&
+              plan.warm_density() == seed_before_handoff,
+          "pressured force handoff lost state, token or resource accounting: " + source_detail);
+  dft::CudaKsFinalStateToken after_handoff;
+  require(plan.final_state_token(after_handoff, source_detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              after_handoff == token &&
+              plan.prepare_force_memory(token, total_bytes, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == 0,
+          "repeat force handoff changed the final token or double-retired values");
   setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "auto", 1);
   const auto warm = plan.run(nullptr, true);
   require(warm.converged && std::abs(warm.energy - baseline.energy) < 2e-9 &&
@@ -258,10 +698,12 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
   unsigned maximum_angular = 0;
   for (const auto& shell : fixture.system.shells)
     maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-  const bool auto_domain =
-      molecule::cartesian_ao_count(fixture.system) >= 128 &&
-      (maximum_angular <= 2 ||
-       scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec));
+  const bool auto_domain = !scf::cuda_execution::direct_jk_source_auto_refusal(
+      molecule::ao_count(fixture.system), molecule::cartesian_ao_count(fixture.system),
+      options.max_iterations, maximum_angular, true,
+      scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec),
+      scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+      options.screening_tolerance);
   require(automatic.converged && std::abs(automatic.energy - baseline.energy) < 2e-9 &&
               (plan.transfers().phase_resident_values_built > built) == auto_domain,
           "automatic cold Hybrid source domain");
@@ -319,6 +761,90 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
             << ",\"warm_energy_change\":" << warm.energy_change
             << ",\"warm_energy_rebases\":" << plan.transfers().warm_energy_rebase_fock_actions
             << ",\"source_bytes\":" << plan.transfers().phase_resident_value_bytes << "}\n";
+}
+
+/** Mixed epochs must not read strict values; refinement restores their bounded
+ * lease without admitting chunk scratch or changing warm/seed provenance. */
+void mixed_refinement(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
+  const auto strategy = scf::resolve_fock_build(
+      scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, b3lyp ? 0.20 : 0.25),
+      scf::FockBackend::Cuda, 1e-12);
+  scf::PreparedFockPlan provider(fixture.system, nullptr, strategy, 0);
+  const dft::AoBasis basis(fixture.system);
+  dft::GridSpec grid_spec;
+  grid_spec.radial_points = 24;
+  grid_spec.angular_polar = 6;
+  grid_spec.angular_azimuth = 12;
+  const dft::MolecularGrid grid(fixture.system, grid_spec);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.max_iterations = 100;
+  options.energy_tolerance = 1e-11;
+  options.density_tolerance = 1e-10;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.semilocal_exchange_scale = b3lyp ? 1.0 : 0.75;
+  const auto family = b3lyp ? dft::SemilocalFamily::B3lyp : dft::SemilocalFamily::Pbe;
+  setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "0", 1);
+  dft::CudaKsPlan strict(provider, basis, grid, options, family, 257);
+  const auto baseline = strict.run(nullptr, false);
+  require(baseline.converged, "mixed refinement strict baseline");
+  options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  setenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL", "1", 1);
+  setenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS", "1", 1);
+  for (const auto* selection : {"0", "1"}) {
+    setenv("GENERATIVEQC_KS_RESIDENT_VALUES", selection, 1);
+    dft::CudaKsPlan plan(provider, basis, grid, options, family, 257);
+    const bool cached = std::string(selection) == "1";
+    plan.begin(nullptr, false);
+    require(plan.transfers().phase_resident_values_built == 0,
+            "mixed epoch prepared a strict value lease");
+    plan.enqueue_iteration();
+    require(plan.finish_iteration(), "mixed observation omitted strict refinement");
+    require((plan.transfers().phase_resident_values_built > 0) == cached,
+            "precision handoff lost strict resident admission");
+    while (plan.active()) {
+      plan.enqueue_iteration();
+      plan.finish_iteration();
+    }
+    const auto result = plan.result();
+    require(result.converged && std::abs(result.energy - baseline.energy) < 2e-9 &&
+                result.precision.mixed_stage_fock_builds == 1 &&
+                result.precision.strict_stage_fock_builds >= 2 &&
+                result.precision.strict_refinement_applied &&
+                result.precision.operator_work_counters_valid &&
+                (plan.transfers().phase_resident_fock_actions > 0) == cached,
+            "mixed resident/fallback scientific or provenance gate");
+    if (cached) {
+      std::ofstream state(state_base + (b3lyp ? ".b3lyp.json" : ".pbe0.json"));
+      state << std::setprecision(17) << "{\"energy\":" << result.energy;
+      for (const auto& pair :
+           {std::pair{"density", &result.density}, std::pair{"points", &grid.points()},
+            std::pair{"weights", &grid.weights()}}) {
+        state << ",\"" << pair.first << "\":[";
+        for (std::size_t index = 0; index < pair.second->size(); ++index)
+          state << (index ? "," : "") << (*pair.second)[index];
+        state << "]";
+      }
+      state << "}";
+      require(bool(state), "mixed independent energy snapshot");
+      const auto built = plan.transfers().phase_resident_values_built;
+      setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "auto", 1);
+      const auto warm = plan.run(nullptr, true);
+      require(warm.converged && std::abs(warm.energy - baseline.energy) < 2e-9 &&
+                  plan.transfers().phase_resident_values_built == built,
+              "mixed handoff relabeled a warm seed as cold");
+      const auto external = plan.run(&result.density, false);
+      require(external.converged && plan.transfers().phase_resident_values_built == built,
+              "mixed handoff relabeled an external density as cold");
+    }
+  }
+  setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "1", 1);
+  options.reference_memory_budget_bytes = 1;
+  dft::CudaKsPlan bounded(provider, basis, grid, options, family, 257);
+  const auto fallback = bounded.run(nullptr, false);
+  require(fallback.converged && std::abs(fallback.energy - baseline.energy) < 2e-9 &&
+              bounded.transfers().phase_resident_values_built == 0,
+          "mixed strict lease bypassed its budget or lost fallback");
 }
 
 /** Time a complete public cold endpoint, including provider preparation.
@@ -421,20 +947,43 @@ void endpoint(const Fixture& fixture, bool b3lyp, bool compute_forces) {
 
 int main(int argc, char** argv) {
   try {
-    require(argc == 2 || (argc == 3 && (std::string(argv[2]) == "capacity" ||
-                                        std::string(argv[2]) == "endpoint" ||
-                                        std::string(argv[2]) == "endpoint-forces")),
-            "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces]");
-    const Fixture fixture(argv[1], argc == 2);
+    require(argc == 2 ||
+                (argc == 3 &&
+                 (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
+                  std::string(argv[2]) == "range-mixed-oracle" ||
+                  std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
+                  std::string(argv[2]) == "mixed-refinement" ||
+                  std::string(argv[2]) == "mixed-source")),
+            "usage: ks-phase-values-probe INPUT "
+            "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
+    const bool mixed_range_oracle = argc == 3 && std::string(argv[2]) == "range-mixed-oracle";
+    const bool range_oracle =
+        argc == 3 && (std::string(argv[2]) == "range-oracle" || mixed_range_oracle);
+    const Fixture fixture(argv[1],
+                          argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
+                              std::string(argv[2]) == "mixed-source" || range_oracle,
+                          range_oracle);
     std::cout << std::setprecision(17);
-    if (argc == 3 && std::string(argv[2]) == "capacity") {
+    if (mixed_range_oracle) {
+      raw_mixed_full_range_oracle(fixture);
+      raw_mixed_range_oracle(fixture);
+      raw_range_oracle(fixture, true);
+    } else if (range_oracle) {
+      raw_range_oracle(fixture);
+    } else if (argc == 3 && std::string(argv[2]) == "mixed-source") {
+      raw_oracle(fixture, true);
+    } else if (argc == 3 && std::string(argv[2]) == "capacity") {
       capacity(fixture);
+    } else if (argc == 3 && std::string(argv[2]) == "mixed-refinement") {
+      mixed_refinement(fixture, false, argv[1]);
+      mixed_refinement(fixture, true, argv[1]);
     } else if (argc == 3) {
       const bool compute_forces = std::string(argv[2]) == "endpoint-forces";
       endpoint(fixture, false, compute_forces);
       endpoint(fixture, true, compute_forces);
     } else {
       raw_oracle(fixture);
+      raw_oracle_uks(fixture);
       solve_parity(fixture, false, argv[1]);
       solve_parity(fixture, true, argv[1]);
     }

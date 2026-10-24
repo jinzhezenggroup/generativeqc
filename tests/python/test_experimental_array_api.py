@@ -530,11 +530,10 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
         lambda x: xp.mean(x, keepdims=0),
         lambda x: xp.mean(x, axis=[0]),
         lambda x: xp.mean(x, axis=(0, 0)),
-        lambda x: xp.sum(x, dtype=xp.float64),
         lambda x: xp.sum(x, axis=[0]),
         lambda x: xp.sum(x, axis=True),
         lambda x: xp.sum(x, axis=(0, 0)),
-        lambda x: xp.take(x, (-1,), axis=0),
+        lambda x: xp.take(x, (-3,), axis=0),
         lambda x: xp.take(x, (2,), axis=0),
         lambda x: xp.take(x, [0], axis=0),
         lambda x: xp.take(x, (True,), axis=0),
@@ -555,6 +554,26 @@ def test_compiled_rejects_controls_outside_its_static_subset(
     values = np.ones((2, 2), dtype=np.float64)
     with pytest.raises((TypeError, ValueError)):
         xp.compile(lambda x: operation(x), backend="reference").lower(values)
+
+
+def test_compiled_sum_explicit_same_dtype() -> None:
+    import array_api_strict as strict
+
+    strict.set_array_api_strict_flags(api_version="2025.12")
+    values = np.array([[1.25, -2.5], [3.75, 0.125]], dtype=np.float64)
+    source = xp.compile(lambda x: xp.sum(x, dtype=xp.float64), backend="reference")
+    plain = xp.compile(lambda x: xp.sum(x), backend="reference")
+    try:
+        actual = source(values)
+        assert actual.dtype == values.dtype and actual.shape == ()
+        np.testing.assert_array_equal(actual, np.sum(values, dtype=np.float64))
+        np.testing.assert_array_equal(
+            actual, np.asarray(strict.sum(strict.asarray(values), dtype=strict.float64))
+        )
+        assert source.lower(values).dumps() == plain.lower(values).dumps()
+    finally:
+        source.close()
+        plain.close()
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))

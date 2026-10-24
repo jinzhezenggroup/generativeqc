@@ -1,0 +1,223 @@
+{
+  "schema": "generativeqc.fast-warm-evidence.v1",
+  "source_revision": "798f9ddd7bfc91cbc791e51898e35c679651a2ab",
+  "gates": {
+    "energy_abs_per_atom": 1e-05,
+    "force_max_abs": 0.0001,
+    "force_rms": 3e-05
+  },
+  "results": {
+    "fast-pbe-96-default.json": {
+      "passed": true,
+      "cold_seconds": 34.4787209443748,
+      "warm_median_seconds": 6.709471561014652,
+      "all_sample_errors": [
+        {
+          "energy_abs_per_atom": 5.163917601673044e-07,
+          "force_max_abs": 3.7821851804814566e-05,
+          "force_rms": 1.510809497396277e-05
+        },
+        {
+          "energy_abs_per_atom": 5.164375285933905e-07,
+          "force_max_abs": 3.782127687360082e-05,
+          "force_rms": 1.5108000709819576e-05
+        },
+        {
+          "energy_abs_per_atom": 5.164375285933905e-07,
+          "force_max_abs": 3.782127687892989e-05,
+          "force_rms": 1.5108000711716744e-05
+        },
+        {
+          "energy_abs_per_atom": 5.164375285933905e-07,
+          "force_max_abs": 3.782127687892989e-05,
+          "force_rms": 1.5108000709983596e-05
+        }
+      ],
+      "reference_stability_and_cpu_spot_errors": [
+        {
+          "energy_abs_per_atom": 9.581232992180351e-08,
+          "force_max_abs": 1.7086240891472926e-05,
+          "force_rms": 5.285546156468161e-06
+        },
+        {
+          "energy_abs_per_atom": 5.156299683524897e-09,
+          "force_max_abs": 7.819150593668667e-07,
+          "force_rms": 4.17139840581424e-07
+        },
+        {
+          "energy_abs_per_atom": 2.652692880171041e-13,
+          "force_max_abs": 7.175506855361391e-09,
+          "force_rms": 3.9344433316224544e-09
+        }
+      ],
+      "source_revision": "798f9ddd7bfc91cbc791e51898e35c679651a2ab",
+      "reference_source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "reference_receipts": [
+        "cuda-pbe-96.json",
+        "cuda-pbe-3.json",
+        "cpu-pbe-3.json"
+      ]
+    },
+    "fast-pbe0-96-default.json": {
+      "passed": true,
+      "cold_seconds": 38.39332418516278,
+      "warm_median_seconds": 7.841750662773848,
+      "all_sample_errors": [
+        {
+          "energy_abs_per_atom": 2.9744938956355327e-07,
+          "force_max_abs": 2.2565401131297014e-05,
+          "force_rms": 1.0965343941369716e-05
+        },
+        {
+          "energy_abs_per_atom": 2.975019034086775e-07,
+          "force_max_abs": 2.2564628043925117e-05,
+          "force_rms": 1.0965268057789703e-05
+        },
+        {
+          "energy_abs_per_atom": 2.975019034086775e-07,
+          "force_max_abs": 2.2564628032378797e-05,
+          "force_rms": 1.0965268059006467e-05
+        },
+        {
+          "energy_abs_per_atom": 2.975019034086775e-07,
+          "force_max_abs": 2.256462804303694e-05,
+          "force_rms": 1.0965268056145676e-05
+        }
+      ],
+      "reference_stability_and_cpu_spot_errors": [
+        {
+          "energy_abs_per_atom": 6.49669781675281e-08,
+          "force_max_abs": 1.3081908487144744e-05,
+          "force_rms": 3.859503111383493e-06
+        },
+        {
+          "energy_abs_per_atom": 5.097694118679404e-09,
+          "force_max_abs": 6.36382889940279e-07,
+          "force_rms": 3.4184080270032334e-07
+        },
+        {
+          "energy_abs_per_atom": 2.4158453015843406e-13,
+          "force_max_abs": 1.1264684740552866e-08,
+          "force_rms": 6.568755029668502e-09
+        }
+      ],
+      "source_revision": "798f9ddd7bfc91cbc791e51898e35c679651a2ab",
+      "reference_source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "reference_receipts": [
+        "cuda-pbe0-96.json",
+        "cuda-pbe0-3.json",
+        "cpu-pbe0-3.json"
+      ]
+    },
+    "standard-pbe0-96-default.json": {
+      "passed": true,
+      "cold_seconds": 42.54645932838321,
+      "warm_median_seconds": 8.340470761060715,
+      "all_sample_errors": [
+        {
+          "energy_abs_per_atom": 2.974070317425988e-07,
+          "force_max_abs": 2.2545735557016888e-05,
+          "force_rms": 1.0896159604875677e-05
+        },
+        {
+          "energy_abs_per_atom": 2.974070317425988e-07,
+          "force_max_abs": 2.2545735531259714e-05,
+          "force_rms": 1.089615960353193e-05
+        },
+        {
+          "energy_abs_per_atom": 2.974070317425988e-07,
+          "force_max_abs": 2.2545735530371536e-05,
+          "force_rms": 1.0896159601678103e-05
+        },
+        {
+          "energy_abs_per_atom": 2.974070317425988e-07,
+          "force_max_abs": 2.2545735520601573e-05,
+          "force_rms": 1.089615960174987e-05
+        }
+      ],
+      "reference_stability_and_cpu_spot_errors": [
+        {
+          "energy_abs_per_atom": 6.49669781675281e-08,
+          "force_max_abs": 1.3081908487144744e-05,
+          "force_rms": 3.859503111383493e-06
+        },
+        {
+          "energy_abs_per_atom": 5.097694118679404e-09,
+          "force_max_abs": 6.36382889940279e-07,
+          "force_rms": 3.4184080270032334e-07
+        },
+        {
+          "energy_abs_per_atom": 2.4158453015843406e-13,
+          "force_max_abs": 1.1264684740552866e-08,
+          "force_rms": 6.568755029668502e-09
+        }
+      ],
+      "source_revision": "798f9ddd7bfc91cbc791e51898e35c679651a2ab",
+      "reference_source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "reference_receipts": [
+        "cuda-pbe0-96.json",
+        "cuda-pbe0-3.json",
+        "cpu-pbe0-3.json"
+      ]
+    },
+    "standard-pbe-96-default.json": {
+      "passed": true,
+      "cold_seconds": 41.16918617486954,
+      "warm_median_seconds": 6.775894209742546,
+      "all_sample_errors": [
+        {
+          "energy_abs_per_atom": 5.163133494079375e-07,
+          "force_max_abs": 3.3855214347761065e-05,
+          "force_rms": 1.5626668825721822e-05
+        },
+        {
+          "energy_abs_per_atom": 5.163132167732935e-07,
+          "force_max_abs": 3.385521503082578e-05,
+          "force_rms": 1.5626668842164974e-05
+        },
+        {
+          "energy_abs_per_atom": 5.163132167732935e-07,
+          "force_max_abs": 3.385521502016764e-05,
+          "force_rms": 1.5626668841723514e-05
+        },
+        {
+          "energy_abs_per_atom": 5.163132167732935e-07,
+          "force_max_abs": 3.385521499885136e-05,
+          "force_rms": 1.56266688411366e-05
+        }
+      ],
+      "reference_stability_and_cpu_spot_errors": [
+        {
+          "energy_abs_per_atom": 9.581232992180351e-08,
+          "force_max_abs": 1.7086240891472926e-05,
+          "force_rms": 5.285546156468161e-06
+        },
+        {
+          "energy_abs_per_atom": 5.156299683524897e-09,
+          "force_max_abs": 7.819150593668667e-07,
+          "force_rms": 4.17139840581424e-07
+        },
+        {
+          "energy_abs_per_atom": 2.652692880171041e-13,
+          "force_max_abs": 7.175506855361391e-09,
+          "force_rms": 3.9344433316224544e-09
+        }
+      ],
+      "source_revision": "798f9ddd7bfc91cbc791e51898e35c679651a2ab",
+      "reference_source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "reference_receipts": [
+        "cuda-pbe-96.json",
+        "cuda-pbe-3.json",
+        "cpu-pbe-3.json"
+      ]
+    }
+  },
+  "host_tests_passed": 198,
+  "gpu_tests_passed": 4,
+  "gpu_test_job": 11382,
+  "raw_sha256": "3621d9b92b4de4fb1b05e640fdca5ced31d4e61da7145e509b42c59d37abfdba",
+  "packed_sha256": "fa217a33fcc875d880d9eecd7104aece48922bb282205a675a778388daa4b964",
+  "raw_bytes": 578740,
+  "packed_bytes": 57476,
+  "scope": "PBE/PBE0 default-grid Direct cold and three frozen warm endpoints at 96 atoms; independent default-grid frozen/moved tests for PBE/PBE0/r2SCAN/M06-2X at 12 atoms. No DF/HF or universal Fast speed claim."
+}

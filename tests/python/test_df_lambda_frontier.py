@@ -29,7 +29,11 @@ from tools.generate_df_lambda import (
     header,
     matrix_programs,
 )
-from tools.generate_rccsd_native import _arena_plan, _cuda_program
+from tools.generate_rccsd_native import (
+    _arena_plan,
+    _cuda_program,
+    cross_size_arena_candidate,
+)
 
 
 @pytest.mark.parametrize("occupied,virtuals", [(1, 3), (2, 3), (3, 2), (3, 4)])
@@ -137,6 +141,38 @@ def test_frontier_native_slots_are_disjoint_and_scratch_is_already_bounded() -> 
     assert core_reuse_identity() != plan.identity
     assert core_reuse_identity() in header() and plan.identity in header()
     assert "staged_core_reuse_scratch_arena_elements" in header()
+
+
+def test_cross_size_matrix_candidate_preserves_the_frontier_scratch_floor() -> None:
+    """Uncached memory savings must not disable an already-admitted useful cache."""
+    program = matrix_programs()["staged_core"]
+    frontier = core_reuse_frontier()
+    baseline = _arena_plan(program)
+    retained = _arena_plan(program, retained_nodes=frontier)
+    with cross_size_arena_candidate():
+        candidate = _arena_plan(program)
+        assert _arena_plan(program, retained_nodes=frontier) == retained
+        source = header()
+    assert source.count("inline std::size_t staged_core_matrix_arena_elements(") == 1
+    assert (
+        "return std::max(staged_core_matrix_unretained_arena_elements(o,v,q),"
+        "staged_core_reuse_scratch_arena_elements(o,v));}"
+    ) in source
+    for occupied, virtuals in ((1, 3), (3, 1), (3, 3), (9, 221), (115, 115)):
+        extents = {"o": occupied, "v": virtuals}
+
+        def elements(capacities: tuple, extents: dict[str, int] = extents) -> int:
+            return sum(
+                max(
+                    math.prod(extents[dimension] for dimension in shape)
+                    for shape in slot
+                )
+                for slot in capacities
+            )
+
+        scratch_floor = elements(retained.slots[len(frontier) :])
+        admitted = max(elements(candidate.slots), scratch_floor)
+        assert scratch_floor <= admitted <= elements(baseline.slots)
 
 
 def test_unproved_or_duplicate_storage_nodes_are_rejected() -> None:

@@ -17,6 +17,21 @@ __pycache__/
 # small scientific fixture can still be force-added with a hash-pinned reason.
 /benchmarks/results/**/attempts/
 /benchmarks/results/**/*.log
+# Do not let compressed logs or stray per-run directories become publications
+# through a routine "git add -A". Historical tracked receipts are unaffected.
+/benchmarks/results/**/*.log.gz
+/benchmarks/results/**/*.log.xz
+/benchmarks/results/**/*.log.zst
+/benchmarks/results/**/stdout
+/benchmarks/results/**/*.stdout
+/benchmarks/results/**/*.stdout.*
+/benchmarks/results/**/stderr
+/benchmarks/results/**/*.stderr
+/benchmarks/results/**/*.stderr.*
+/benchmarks/results/**/logs/
+/benchmarks/results/**/retries/
+/benchmarks/results/**/profiling/
+/benchmarks/results/**/build/
 /benchmarks/results/**/*.xml
 /benchmarks/results/**/*.chk
 /benchmarks/results/**/*.checkpoint

@@ -19,40 +19,40 @@
       "sha256": "be34f148b525da41f358b95c52326ccd5b36e3c84d19b2ec436da1dbb3654e41"
     },
     {
-      "bytes": 10119,
+      "bytes": 10152,
       "path": "evidence.json",
       "role": "evidence",
-      "sha256": "3cd622d32bd562d5926a296e3d9b195588d7cbe29c20c74fd9c94a9feff826f1"
+      "sha256": "1bcedc3a476a9652d6bb599156ce3eae3c38d01fd9b932d755291dd300b9bcfb"
     },
     {
-      "bytes": 37288,
-      "path": "final-tetramer-0.json",
+      "bytes": 6613,
+      "path": "final-tetramer-0.json.gz",
       "role": "samples",
-      "sha256": "ef962cc38a9f79133a4ee95051b92323d25674c9516f7b767e1bcde1fe0c99cf"
+      "sha256": "bb1d3aaa54f1713e49eea62ffc03ba9763d154e7d987fb43123a15a36e8fd44d"
     },
     {
-      "bytes": 41167,
-      "path": "final-uhf-0.json",
+      "bytes": 7073,
+      "path": "final-uhf-0.json.gz",
       "role": "samples",
-      "sha256": "60258ef8103291341d572df24b1611c4faa27c36967f37d750dcb790bfe1bf1d"
+      "sha256": "78e13a12680c8c0bf905f375d9a999164b55062473e73de5404af12bebea25d9"
     },
     {
-      "bytes": 40795,
-      "path": "final-uhf-1.json",
+      "bytes": 6271,
+      "path": "final-uhf-1.json.gz",
       "role": "samples",
-      "sha256": "baa01ca80520c83169ec3c247a06f3a16cc1d23fd4046781b7b55f8fd22c9cbd"
+      "sha256": "86af8c1ee9a5433ed32282d6725988995ea6b7fac2761dfe7376990c2b68d17f"
     },
     {
-      "bytes": 52875,
-      "path": "final-uhf-2.json",
+      "bytes": 7739,
+      "path": "final-uhf-2.json.gz",
       "role": "samples",
-      "sha256": "5196048c1d10de65206d1e1f34056e72064cd1489a499204a8f57d3cc8ca603f"
+      "sha256": "a2b63e5f086b9ad150c774d1b5af464c3f424c2cfacb8e1a396bce848f9bdc82"
     },
     {
-      "bytes": 53032,
-      "path": "final-uhf-3.json",
+      "bytes": 7437,
+      "path": "final-uhf-3.json.gz",
       "role": "samples",
-      "sha256": "59118290f62410bb36f3cf9daa281472a44aa701ce5c233803b145d2dfd1db79"
+      "sha256": "f58270862f49e408c8f454e69740f7ac5f4faa64f43c5167523db5e6f231c4de"
     },
     {
       "bytes": 2450,
@@ -79,22 +79,22 @@
       "sha256": "e1b3bb93b0fdccc3641f3460f8c0dfa9a120685d675f8e20016d145d9ccb6761"
     },
     {
-      "bytes": 69703,
-      "path": "ragged-final-sto3g-b1-0.json",
+      "bytes": 11180,
+      "path": "ragged-final-sto3g-b1-0.json.gz",
       "role": "samples",
-      "sha256": "043b4c1ad17cc2585a920d18c982b0d7951cf3c839c28562ea74c12cba066cec"
+      "sha256": "50f4c32d62b5818bd7360657210f04f03b3d109a0f057239c0ab852f6fbd8203"
     },
     {
-      "bytes": 69989,
-      "path": "ragged-final-sto3g-b1-1.json",
+      "bytes": 10922,
+      "path": "ragged-final-sto3g-b1-1.json.gz",
       "role": "samples",
-      "sha256": "c27b8eda451db496b7521a4c0b62272acf457e5d3abd4d2ffa2e26cc16d25390"
+      "sha256": "0aac83809c6783ddd53b148de4059ccde549b992b24aaeead30a7665c4dc73d3"
     },
     {
-      "bytes": 69190,
-      "path": "ragged-final-sto3g-b1-2.json",
+      "bytes": 11055,
+      "path": "ragged-final-sto3g-b1-2.json.gz",
       "role": "samples",
-      "sha256": "2a7a87cf637407ee5e9bd4026d87b5483c2711187c6fff8eb18c91fed6820b63"
+      "sha256": "77b2cf8cf0e1c583ce126f536ce000965b902a32860369a4ce3a63214832a9ed"
     },
     {
       "bytes": 12467,
@@ -115,22 +115,22 @@
       "sha256": "ca17f40bdc8ca9c2d596b28b7800058de272058e5109aee09e842a056dfcad1a"
     },
     {
-      "bytes": 70321,
-      "path": "ragged-final-svp-b1-0.json",
+      "bytes": 11408,
+      "path": "ragged-final-svp-b1-0.json.gz",
       "role": "samples",
-      "sha256": "224f8499782127e63367469ffe1b7681e67a9a2a97447e01c1040ff0071f16b0"
+      "sha256": "420954a032e15440fcd027b0ff245d317cf7c6ab22bd3d2ec147b1a1bc5aa032"
     },
     {
-      "bytes": 68141,
-      "path": "ragged-final-svp-b1-1.json",
+      "bytes": 11225,
+      "path": "ragged-final-svp-b1-1.json.gz",
       "role": "samples",
-      "sha256": "3fddaacddfcb3d63b180f18935499ff08c4cd8b209573b6455ae7e060761c53c"
+      "sha256": "ff2805310bbef68fb6475f99956f3bdc46608f303ceca366a49106b9c97a9478"
     },
     {
-      "bytes": 68713,
-      "path": "ragged-final-svp-b1-2.json",
+      "bytes": 11173,
+      "path": "ragged-final-svp-b1-2.json.gz",
       "role": "samples",
-      "sha256": "c9cd49f5c600dc79b5d351cec374cc7b1eb4dd57673789e7677479a46665fd26"
+      "sha256": "cbed554d43926bd963ea26f8c00db601e74dce21562bd980e613bcc386f1d2d6"
     },
     {
       "bytes": 12783,
@@ -157,10 +157,10 @@
       "sha256": "cef52c3612d21c7936a5fdc6b0889327f9ddaf6b297d0e9af2dfbe582f9bdfd7"
     },
     {
-      "bytes": 35261,
-      "path": "regressions.json",
+      "bytes": 1756,
+      "path": "regressions.json.gz",
       "role": "samples",
-      "sha256": "8340dd1bf46586d6a49fd3a8e6387325558e0e960b34b9f21540b0c764c05cb3"
+      "sha256": "f894dbce31bbebd5e330f1660803dc20a453bdb4c2e45184e911548de0f74eb7"
     },
     {
       "bytes": 3554,

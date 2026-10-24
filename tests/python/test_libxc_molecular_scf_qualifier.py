@@ -76,6 +76,11 @@ def test_pbesol_reaches_exact_molecular_scf_evidence() -> None:
     details = molecular["details"]
     assert len(details) == 6
     assert all(row["status"] == "pass" for row in details)
+    for row in molecular["receipt"]["rows"]:
+        work = row["coulomb_exchange_work"]
+        assert work["complete"]
+        assert work["coulomb_applications"] > 0
+        assert work["exchange_applications"] == 0
     assert {(row["spin"], row["phase"]) for row in details} == {
         (spin, phase)
         for spin in ("polarized", "unpolarized")

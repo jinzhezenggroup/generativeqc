@@ -1,0 +1,202 @@
+{
+  "schema": "generativeqc.li-uhf-lambda.inputs.v1",
+  "sources": [
+    {
+      "path": "tests/python/test_uccsd_equations.py",
+      "git_blob": "15d8e042c04b54d61f0e8468f29114f4c5ca8637",
+      "sha256": "4a0cfa84dc54335933f3f36d75ab14307c9b3e1e705dfe48894e834f4e5e4024"
+    },
+    {
+      "path": "tests/python/test_uccsd_lambda.py",
+      "git_blob": "fbd74427a776826011406bb278843c12992822bf",
+      "sha256": "f66c869b9ed0fad3cfecc9140d6cebde777b96a428577cb136b075cf04d850b6"
+    },
+    {
+      "path": "tests/python/test_uccsd_solver.py",
+      "git_blob": "fdb8a9b0cb9eb62a99d0bad4740bbe2af99917cd",
+      "sha256": "064a3f0c26ca6470cdf0381f918be9b35506da1dcb8faa235d5ac74bd719638a"
+    },
+    {
+      "path": "tools/generate_cpu_hf_high_l_reference.py",
+      "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+      "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+    }
+  ],
+  "source_repository": "jinzhezenggroup/generativeqc",
+  "source_commit": "c7bf888361f57685b6c21cf7922c2f95df6c7bf8",
+  "atoms": [
+    [
+      "Li",
+      [
+        0,
+        0,
+        0
+      ]
+    ]
+  ],
+  "unit": "Angstrom",
+  "basis_name": "sto-3g",
+  "charge": 0,
+  "spin": 1,
+  "cart": false,
+  "scf": {
+    "method": "UHF",
+    "initial_guess": "minao",
+    "conv_tol": 1e-13,
+    "polish": {
+      "direct_scf": false,
+      "conv_tol_grad": 1e-10,
+      "max_cycle": 300,
+      "dm0": "converged initial density",
+      "newton_fallback": true
+    }
+  },
+  "populations": {
+    "oa": 2,
+    "ob": 1,
+    "va": 3,
+    "vb": 4
+  },
+  "precision": "float64",
+  "array_encoding": "base64 little-endian C-order FP64",
+  "basis_data": {
+    "path": "pyscf/gto/basis/sto-3g.dat",
+    "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+  },
+  "python": "3.12.12",
+  "packages": {
+    "pyscf": "2.14.0",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "h5py": "3.16.0",
+    "threadpoolctl": "3.6.0"
+  },
+  "preserved_gates": {
+    "lambda_atol": 2e-07,
+    "lambda_rtol": 0
+  },
+  "resolved_basis": {
+    "Li": [
+      [
+        0,
+        [
+          16.119575,
+          0.15432897
+        ],
+        [
+          2.9362007,
+          0.53532814
+        ],
+        [
+          0.7946505,
+          0.44463454
+        ]
+      ],
+      [
+        0,
+        [
+          0.6362897,
+          -0.09996723
+        ],
+        [
+          0.1478601,
+          0.39951283
+        ],
+        [
+          0.0480887,
+          0.70011547
+        ]
+      ],
+      [
+        1,
+        [
+          0.6362897,
+          0.15591627
+        ],
+        [
+          0.1478601,
+          0.60768372
+        ],
+        [
+          0.0480887,
+          0.39195739
+        ]
+      ]
+    ]
+  },
+  "ao_identity": {
+    "locations": [
+      0,
+      1,
+      2,
+      5
+    ],
+    "labels": [
+      [
+        0,
+        "Li",
+        "1s",
+        ""
+      ],
+      [
+        0,
+        "Li",
+        "2s",
+        ""
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "x"
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "y"
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "z"
+      ]
+    ]
+  },
+  "block_order": [
+    "t1a",
+    "t1b",
+    "t2aa",
+    "t2ab",
+    "t2bb"
+  ],
+  "coupled_cluster": {
+    "method": "UCCSD",
+    "conv_tol": 1e-13,
+    "conv_tol_normt": 1e-11,
+    "max_cycle": 400,
+    "lambda": "solve_lambda(eris=eris)"
+  },
+  "upstream_lambda": {
+    "version": "2.14.0",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "pyscf/cc/uccsd.py",
+        "sha256": "a06f2b0383d890eb388b9f689f6b3376784aaf0f0452e0ad82451ce9d5e362ad",
+        "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/uccsd.py"
+      },
+      {
+        "path": "pyscf/cc/uccsd_lambda.py",
+        "sha256": "150c3e53b7eb1661c1e833dc0641a72ce212b92d6bb838f5231c81f529d777eb",
+        "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/uccsd_lambda.py"
+      },
+      {
+        "path": "pyscf/cc/ccsd_lambda.py",
+        "sha256": "40ffde4e0c121469d65ce068fe8ef0d0538f2e7c486305e9b688464172348fcf",
+        "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/ccsd_lambda.py"
+      }
+    ]
+  }
+}

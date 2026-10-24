@@ -23,6 +23,8 @@ on:
       - "src/cli/wheel_launcher.cpp"
       - "python/generativeqc/tune_cli.py"
       - "python/ci/prepare-wheel-build.sh"
+      - ".github/actions/restore-wheel-ccache/**"
+      - "tools/ci_cpu_ccache_snapshot.py"
       - "python/ci/repair-wheel.sh"
       - "src/runtime/nvidia_host_api/**"
       - "tools/generate_cuda_implib.py"
@@ -41,6 +43,9 @@ concurrency:
 
 jobs:
   build_wheels:
+    permissions:
+      contents: read
+      actions: read
     name: Build CUDA manylinux wheel
     runs-on: ubuntu-24.04
     # Cold qualification reached only 275/637 build tasks at the former 60m cap.
@@ -69,6 +74,14 @@ jobs:
             ccache-wheel-v3-manylinux_x86_64-
             ccache-wheel-v2-manylinux_x86_64-
 
+      - name: Restore trusted wheel snapshot after primary miss
+        if: steps.wheel_ccache.outcome == 'success' && steps.wheel_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-wheel-ccache
+        with:
+          github-token: ${{ github.token }}
+
       - name: Restore cibuildwheel tool cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -78,6 +91,7 @@ jobs:
             cibw-${{ runner.os }}-manylinux_x86_64-
 
       - name: Build and test wheel
+        id: wheel_build
         timeout-minutes: 150
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
@@ -96,6 +110,7 @@ jobs:
             CCACHE_MAXSIZE=3G
             CCACHE_BASEDIR=/tmp
             CCACHE_COMPILERCHECK=content
+            GQC_WHEEL_SNAPSHOT_ID=${{ github.run_id }}-${{ github.run_attempt }}
         with:
           package-dir: .
           output-dir: wheelhouse
@@ -103,7 +118,7 @@ jobs:
 
       # ccache stores completed compiler outputs, so retain useful entries after
       # a compile failure/step timeout. Tool environments retain success-only saves.
-      # Unique snapshots use existing Actions cache scope and eviction, not artifacts.
+      # Keep ordinary Actions cache saves, including useful partial compiler work.
       - name: Save completed compiler cache entries
         if: ${{ always() && steps.wheel_ccache.outputs.cache-primary-key != '' }}
         timeout-minutes: 10
@@ -113,6 +128,7 @@ jobs:
           key: ${{ steps.wheel_ccache.outputs.cache-primary-key }}
 
       - name: Verify wheel payload and CUDA linkage
+        id: wheel_payload
         shell: bash
         run: |
           python - <<'PY'
@@ -190,6 +206,32 @@ jobs:
           name: generativeqc-wheel-manylinux_x86_64
           path: wheelhouse/*.whl
           if-no-files-found: error
+
+      - name: Decide whether the wheel snapshot needs refresh
+        id: wheel_snapshot_refresh
+        if: github.repository == 'jinzhezenggroup/generativeqc' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        timeout-minutes: 1
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: timeout --kill-after=2s 35s python3 tools/ci_cpu_ccache_snapshot.py refresh --profile wheel
+      - name: Package bounded wheel compiler snapshot
+        id: wheel_snapshot
+        if: github.repository == 'jinzhezenggroup/generativeqc' && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.wheel_build.outcome == 'success' && steps.wheel_payload.outcome == 'success' && steps.wheel_snapshot_refresh.outputs.publish != 'false'
+        timeout-minutes: 2
+        continue-on-error: true
+        run: python3 tools/ci_cpu_ccache_snapshot.py package --profile wheel
+      - name: Publish bounded wheel compiler snapshot
+        if: steps.wheel_snapshot.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: wheel-ccache-master-manylinux-cuda12.9-sm120-v1-${{ github.run_attempt }}
+          path: ${{ steps.wheel_snapshot.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   pass:
     name: Pass building wheels

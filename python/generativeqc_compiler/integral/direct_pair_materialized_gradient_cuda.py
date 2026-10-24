@@ -7,6 +7,8 @@ The bounded high-order component consumer stores one relative-center Dual per
 Hermite axis and reuses its primal geometry for all independent atomic responses.
 """
 
+from .direct_relative_response_cuda import emit_direct_relative_response_support
+
 
 def emit_direct_pair_materialized_gradient_support() -> str:
     """Emit shared dddd and bounded high-order independent-center force support.
@@ -17,10 +19,11 @@ def emit_direct_pair_materialized_gradient_support() -> str:
     Component-local order-seven-through-eleven responses need no resident cache
     or CTA synchronization; optional derivative schedules keep explicit fallback.
     """
-    return r"""
+    source = r"""
 #if defined(__CUDACC__)
 #include <limits>
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_profile.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_force_sources.hpp"
 
@@ -188,38 +191,10 @@ contracted_direct_shared_response_gradient(
   return result;
 }
 
-/** Bra Hermite responses for the N-1 independent atoms survive all ket products.
- * One scalar Coulomb simplex serves every atom, component and source response;
- * the ket Hermite response is retired before the next atom replaces it. */
-struct MaterializedDirectPairDerivativeRecurrence {
-  using Pair = ShellPairHermiteCoefficients<Dual3, 2, 2>;
-  Pair bra[3][3], ket[3];
-  CoulombAuxiliary<double, 9> coulomb;
-  Vec3<Dual3> first_product[3], second_product;
-  double p, q, coefficients[4];
-};
+/** Bra Hermite responses and scalar Coulomb states share the same bounded
+ * relative-pair response basis as order seven. */
+using MaterializedDirectPairDerivativeRecurrence = DirectRelativePairDerivativeRecurrence;
 static_assert(sizeof(MaterializedDirectPairDerivativeRecurrence) <= (32U << 10));
-
-/** Reuse cached primal geometry and seed the incumbent product-center algebra.
- * Individual primitive exponents seed the geometry response; neither combined
- * cache coefficients nor underflowed Gaussian factors are divided back out. */
-__device__ inline Vec3<Dual3> prepare_materialized_direct_pair_derivative(
-    const PrimitivePairData& cached, double alpha, double beta,
-    const Vec3<Dual3>& first, const Vec3<Dual3>& second,
-    MaterializedDirectPairDerivativeRecurrence::Pair (&coefficients)[3],
-    unsigned first_angular = 2U, unsigned second_angular = 2U,
-    unsigned axis_begin = 0U, unsigned axis_end = 3U) {
-  auto product = product_center(alpha, first, beta, second);
-  product.x.value = cached.product_center.x;
-  product.y.value = cached.product_center.y;
-  product.z.value = cached.product_center.z;
-  for (unsigned axis = axis_begin; axis < axis_end; ++axis) {
-    const auto a = vec_axis(first, axis), b = vec_axis(second, axis), ab = a - b;
-    fill_shell_pair_hermite_geometry<2, 2>(first_angular, second_angular, vec_axis(product, axis), a, b,
-        cached.exponent_sum, qexp(-cached.reduced_exponent * ab * ab), coefficients[axis]);
-  }
-  return product;
-}
 
 /** Uniform CTA entry; all six packets and atoms share each prepared pair product.
  * Separate preserves independent J'/K' outputs; Combined precontracts their
@@ -268,12 +243,24 @@ __device__ inline void contract_materialized_direct_pair_force(
           source, coulomb_coefficient, exchange_coefficient);
       weights[slot][source] = direct_force_density_coefficient_scaled<Unrestricted>(
           n, physical, spin, density, i[slot], j[slot], k[slot], l[slot],
-          coefficients.coulomb, coefficients.exchange);
+          coefficients.coulomb, coefficients.exchange, batch.direct_force_seed);
       admitted[slot] |= weights[slot][source] != 0.0;
     }
     any_admitted |= admitted[slot];
   }
   if (!__syncthreads_or(any_admitted)) return;
+  auto* diagnostic = direct_force_task_work(batch, task);
+  if (diagnostic) {
+    if (threadIdx.x == 0U) {
+      atomicAdd(&diagnostic->executed_shells, 1ULL);
+      profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+    }
+    unsigned components = 0;
+    for (unsigned slot = 0; slot < Slots; ++slot) components += admitted[slot];
+    if (components) atomicAdd(&diagnostic->executed_components,
+                               static_cast<unsigned long long>(components));
+    if (!work) work = &diagnostic->recurrence;
+  }
   const auto bra_begin = batch.shell_pair_primitive_offsets[first_pair];
   const auto ket_begin = batch.shell_pair_primitive_offsets[second_pair];
   const auto nb = batch.shell_primitive_offsets[sj + 1] - batch.shell_primitive_offsets[sj];
@@ -290,14 +277,15 @@ __device__ inline void contract_materialized_direct_pair_force(
       shared.p = cached.exponent_sum;
       shared.coefficients[0] = batch.primitive_coefficients[a];
       shared.coefficients[1] = batch.primitive_coefficients[b];
-      for (unsigned center = 0; center + 1 < centers; ++center) {
-        const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
-        shared.first_product[center] = prepare_materialized_direct_pair_derivative(cached,
+      shared.product_scales[0] = batch.primitive_exponents[a] / shared.p;
+      shared.product_scales[1] = batch.primitive_exponents[b] / shared.p;
+      shared.first_product = cached.product_center;
+      for (unsigned axis = 0; axis < 3U; ++axis)
+        prepare_direct_relative_pair(cached,
             batch.primitive_exponents[a], batch.primitive_exponents[b],
-            atom_position<Dual3>(batch, atoms[0], coordinate),
-            atom_position<Dual3>(batch, atoms[1], coordinate), shared.bra[center]);
-        if (work) atomicAdd(&work->bra_preparations, 1ULL);
-      }
+            atom_position<double>(batch, atoms[0], -1), atom_position<double>(batch, atoms[1], -1),
+            shared.bra, 2U, 2U, axis);
+      if (work) atomicAdd(&work->bra_preparations, 1ULL);
     }
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
@@ -308,29 +296,31 @@ __device__ inline void contract_materialized_direct_pair_force(
         shared.q = cached.exponent_sum;
         shared.coefficients[2] = batch.primitive_coefficients[c];
         shared.coefficients[3] = batch.primitive_coefficients[d];
-        const Vec3<double> first_product{shared.first_product[0].x.value,
-            shared.first_product[0].y.value, shared.first_product[0].z.value};
+        shared.product_scales[2] = batch.primitive_exponents[c] / shared.q;
+        shared.product_scales[3] = batch.primitive_exponents[d] / shared.q;
+        for (unsigned center = 0; center + 1U < centers; ++center) {
+          const auto atom = unique_atoms[center];
+          shared.response_scales[center][0] = double(atoms[0] == atom) - double(atoms[1] == atom);
+          shared.response_scales[center][1] = double(atoms[2] == atom) - double(atoms[3] == atom);
+          shared.response_scales[center][2] = shared.product_scales[0] * double(atoms[0] == atom) +
+              shared.product_scales[1] * double(atoms[1] == atom) -
+              shared.product_scales[2] * double(atoms[2] == atom) -
+              shared.product_scales[3] * double(atoms[3] == atom);
+        }
+        for (unsigned axis = 0; axis < 3U; ++axis)
+          prepare_direct_relative_pair(cached,
+              batch.primitive_exponents[c], batch.primitive_exponents[d],
+              atom_position<double>(batch, atoms[2], -1), atom_position<double>(batch, atoms[3], -1),
+              shared.ket, 2U, 2U, axis);
         fill_coulomb<9>(shared.p * shared.q / (shared.p + shared.q),
-                       first_product, cached.product_center, shared.coulomb);
-        if (work) atomicAdd(&work->coulomb_preparations, 1ULL);
+                       shared.first_product, cached.product_center, shared.coulomb);
+        if (work) {
+          atomicAdd(&work->coulomb_preparations, 1ULL);
+          atomicAdd(&work->ket_preparations, 1ULL);
+        }
       }
       __syncthreads();
-      for (unsigned center = 0; center + 1 < centers; ++center) {
-        if (threadIdx.x == 0) {
-          const auto& cached = batch.shell_primitive_pairs[ket];
-          const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
-          const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
-          const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
-          shared.second_product = prepare_materialized_direct_pair_derivative(cached,
-              batch.primitive_exponents[c], batch.primitive_exponents[d],
-              atom_position<Dual3>(batch, atoms[2], coordinate),
-              atom_position<Dual3>(batch, atoms[3], coordinate), shared.ket);
-          if (work) atomicAdd(&work->ket_preparations, 1ULL);
-        }
-        __syncthreads();
-        const MaterializedCoulombSpatialResponse response{shared.coulomb,
-            shared.first_product[center].x.derivative_x - shared.second_product.x.derivative_x};
-        for (unsigned slot = 0; slot < Slots; ++slot) {
+      for (unsigned slot = 0; slot < Slots; ++slot) {
           if (!admitted[slot]) continue;
           const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
               batch.direct_ao_coefficients[ao_begin + j[slot]] *
@@ -338,18 +328,22 @@ __device__ inline void contract_materialized_direct_pair_force(
               batch.direct_ao_coefficients[ao_begin + l[slot]];
           const double weight = coefficient * shared.coefficients[0] * shared.coefficients[1] *
                                 shared.coefficients[2] * shared.coefficients[3];
-          const auto component = weight * consume_cartesian_coulomb_states<8, Dual3>(
-              shared.p, shared.q, direct_ao_angular(batch, ao_begin + i[slot]),
+          double responses[3][3]{};
+          contract_direct_relative_response_basis(direct_ao_angular(batch, ao_begin + i[slot]),
               direct_ao_angular(batch, ao_begin + j[slot]),
               direct_ao_angular(batch, ao_begin + k[slot]),
-              direct_ao_angular(batch, ao_begin + l[slot]), shared.bra[center], shared.ket, response);
-          gradients[center][slot][0] += component.derivative_x;
-          gradients[center][slot][1] += component.derivative_y;
-          gradients[center][slot][2] += component.derivative_z;
+              direct_ao_angular(batch, ao_begin + l[slot]), shared, responses);
+          const double prefactor = weight * 2.0 * pow(kPi, 2.5) /
+              (shared.p * shared.q * sqrt(shared.p + shared.q));
+          for (unsigned center = 0; center + 1U < centers; ++center) {
+            const auto* scales = shared.response_scales[center];
+            for (unsigned axis = 0; axis < 3U; ++axis)
+              gradients[center][slot][axis] += prefactor * (scales[0] * responses[0][axis] +
+                  scales[1] * responses[1][axis] + scales[2] * responses[2][axis]);
+          }
           if (work) atomicAdd(&work->component_contractions, 1ULL);
         }
-        __syncthreads();
-      }
+      __syncthreads();
     }
   }
   for (unsigned center = 0; center + 1 < centers; ++center) {
@@ -385,3 +379,9 @@ __device__ inline void contract_materialized_direct_pair_force(
 }  // namespace generativeqc::scf::cuda_execution
 #endif
 """
+    namespace_marker = "namespace generativeqc::scf::cuda_execution {\n"
+    return source.replace(
+        namespace_marker,
+        namespace_marker + emit_direct_relative_response_support(),
+        1,
+    )

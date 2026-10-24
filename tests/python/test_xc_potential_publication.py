@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _cpp_source_support import cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,6 +70,7 @@ struct DeviceAllocationError : std::bad_alloc {};
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 }
 using runtime::PrecisionPhase;
+@OCCUPIED_DENSITY@
 struct CudaXcDensityBinding { runtime::NativeLoweringPrecision precision; };
 namespace tensor {
 struct PreparedPanelProduct { bool enabled() const { return true; } };
@@ -80,24 +82,37 @@ struct CudaXcPointBatchPlan {
 };
 using CudaXcPointBatchLauncher = void (*)();
 void batch_launcher() {}
+void mixed_batch_launcher() {}
 CudaXcPointBatchPlan expected_batch_plan;
 CudaXcPointBatchLauncher expected_batch_launcher{};
 double* expected_batch_arena{};
+enum class CudaXcAoPrecision { Fp64, Fp32ComputeFp64Storage };
+int expected_point_launcher{};
+bool expected_fp32_contractions{}, expected_fp32_point_totals{};
+CudaXcAoPrecision expected_ao_precision{CudaXcAoPrecision::Fp64};
 struct Layout {
-  std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
-  bool local_ao{}, response{};
+  std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2}, jets{4};
+  bool local_ao{}, response{}, fp32_contractions{}, fp32_point_totals{};
+  CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
   std::size_t feature_terms{5}, device_bytes{};
 };
 struct Capabilities { bool mixed_density_contraction{true}; };
 Capabilities cuda_xc_execution_capabilities(const Layout&) { return {}; }
 namespace cuda_xc_detail {
+int mixed_pbe_point_launcher() { return 19; }
+CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher() { return &mixed_batch_launcher; }
 template <class... T> void enqueue(T... args) {
   auto values = std::tie(args...);
-  assert(std::get<sizeof...(T)-5>(values) == expected_density_provider);
-  assert(std::get<sizeof...(T)-4>(values) == expected_potential_binding);
-  assert(std::get<sizeof...(T)-3>(values) == expected_batch_plan);
-  assert(std::get<sizeof...(T)-2>(values) == expected_batch_launcher);
-  assert(std::get<sizeof...(T)-1>(values) == expected_batch_arena);
+  assert(std::get<0>(values).fp32_contractions == expected_fp32_contractions);
+  assert(std::get<0>(values).fp32_point_totals == expected_fp32_point_totals);
+  assert(std::get<0>(values).ao_precision == expected_ao_precision);
+  assert(std::get<1>(values) == expected_point_launcher);
+  assert(std::get<sizeof...(T)-6>(values) == expected_density_provider);
+  assert(std::get<sizeof...(T)-5>(values) == expected_potential_binding);
+  assert(std::get<sizeof...(T)-4>(values) == expected_batch_plan);
+  assert(std::get<sizeof...(T)-3>(values) == expected_batch_launcher);
+  assert(std::get<sizeof...(T)-2>(values) == expected_batch_arena);
+  assert(!std::get<sizeof...(T)-1>(values).coefficients);
   ++bodies;
 }
 }
@@ -108,6 +123,7 @@ struct CudaXcPlan {
   cudaStream_t stream_{7};
   int device_{2}, point_launcher_{};
   bool evaluation_started_{};
+  bool mixed_pbe_points_{}, mixed_pbe_ao_{}, mixed_matrix_contractions_{};
   CudaXcPointBatchPlan point_batch_plan_;
   CudaXcPointBatchLauncher point_batch_launcher_{};
   double* point_batch_arena_{};
@@ -128,15 +144,30 @@ struct CudaXcPlan {
   void publish_submitted_generation(std::uint64_t);
   void publish_potential_work();
   void enqueue_impl(const double*, const double*, std::size_t, std::uint64_t,
-                    PrecisionPhase, double*, double*, bool);
+                    PrecisionPhase, double*, double*, bool, CudaXcOccupiedDensity occupied={});
 };
 """
     driver = r"""
 int main(int argc, char** argv) {
-  assert(argc == 7);
+  assert(argc == 8);
   const bool replay = std::atoi(argv[1]), local = std::atoi(argv[2]);
   const int mode = std::atoi(argv[3]);
   CudaXcPlan plan;
+  // Matrix-only arithmetic must leave point totals strict. Both mixed-points
+  // and matrix-only preparations remain disabled in StrictAudit; all modes
+  // retain the same publication transaction and physical work accounting.
+  const auto arithmetic = std::atoi(argv[7]);
+  const auto phase = arithmetic == 0 || arithmetic == 2 || arithmetic == 6
+                         ? PrecisionPhase::StrictAudit : PrecisionPhase::Admitted;
+  plan.mixed_pbe_points_ = arithmetic >= 2 && arithmetic <= 4;
+  plan.mixed_pbe_ao_ = arithmetic == 2 || arithmetic == 4;
+  plan.mixed_matrix_contractions_ = arithmetic == 2 || arithmetic >= 4;
+  const bool mixed = arithmetic == 3 || arithmetic == 4;
+  expected_point_launcher = mixed ? 19 : plan.point_launcher_;
+  expected_fp32_contractions = arithmetic == 4 || arithmetic == 5;
+  expected_fp32_point_totals = arithmetic == 4;
+  expected_ao_precision = arithmetic == 4 ? CudaXcAoPrecision::Fp32ComputeFp64Storage
+                                        : CudaXcAoPrecision::Fp64;
   double retained_panel{};
   if (std::atoi(argv[6])) {
     plan.point_batch_plan_ = {4, 19, 23, 29, 752};
@@ -144,7 +175,7 @@ int main(int argc, char** argv) {
     plan.point_batch_arena_ = &retained_panel;
   }
   expected_batch_plan = plan.point_batch_plan_;
-  expected_batch_launcher = plan.point_batch_launcher_;
+  expected_batch_launcher = mixed ? &mixed_batch_launcher : plan.point_batch_launcher_;
   expected_batch_arena = plan.point_batch_arena_;
   plan.layout_.spins = std::atoi(argv[4]);
   plan.layout_.local_ao = local;
@@ -167,13 +198,16 @@ int main(int argc, char** argv) {
     else {
       double density[18]{};
       plan.enqueue_impl(density, nullptr, 9 * plan.layout_.spins, generation,
-                        PrecisionPhase::StrictAudit, nullptr, nullptr, true);
+                        phase, nullptr, nullptr, true);
     }
   };
   bool rejected = false;
   try { submit(1); } catch (const std::exception&) { rejected = true; }
   assert(rejected == (mode == 1 || mode == 2));
   assert(bodies == (replay ? 0 : 1));
+  assert(!plan.layout_.fp32_contractions);
+  assert(!plan.layout_.fp32_point_totals);
+  assert(plan.layout_.ao_precision == CudaXcAoPrecision::Fp64);
   if (rejected) {
     assert(plan.generations_.published() == 0);
     assert(plan.transfers_.evaluations == 0);
@@ -193,11 +227,29 @@ int main(int argc, char** argv) {
 }
 """
     cpp, binary = directory / "publication.cpp", directory / "publication"
-    cpp.write_text(source + methods + driver)
+    occupied = cpp_record_definition(
+        (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
+    )
+    cpp.write_text(
+        source.replace("@OCCUPIED_DENSITY@", occupied + ";") + methods + driver
+    )
     compile_owner(compiler, directory, [cpp], binary)
     return binary
 
 
+@pytest.mark.parametrize(
+    "arithmetic",
+    range(7),
+    ids=(
+        "strict",
+        "admitted-strict",
+        "strict-mixed-disabled",
+        "mixed-points",
+        "mixed-full",
+        "mixed-matrix-only",
+        "strict-matrix-disabled",
+    ),
+)
 @pytest.mark.parametrize("batched", (False, True))
 @pytest.mark.parametrize("density_provider", (False, True))
 @pytest.mark.parametrize("spins", (1, 2))
@@ -214,6 +266,7 @@ def test_publication_is_atomic_and_counts_only_submitted_products(
     spins: int,
     density_provider: bool,
     batched: bool,
+    arithmetic: int,
 ) -> None:
     result = subprocess.run(
         [
@@ -224,6 +277,7 @@ def test_publication_is_atomic_and_counts_only_submitted_products(
             str(spins),
             str(int(density_provider)),
             str(int(batched)),
+            str(arithmetic),
         ],
         capture_output=True,
         text=True,

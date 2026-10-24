@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "response/native_gmres.hpp"
+#include "response/solve.hpp"
 
 namespace generativeqc::response {
 
@@ -33,6 +34,30 @@ class ResidentKrylovBackend {
   [[nodiscard]] virtual double dot(std::size_t left, std::size_t right) = 0;
   [[nodiscard]] virtual double norm(std::size_t slot) = 0;
   virtual void apply(std::size_t destination, std::size_t source) = 0;
+
+  /** Method-owned right action M^-1, with both vectors resident.
+   * Admission/setup belongs to the backend. False preserves the original
+   * unpreconditioned controller; the controller never stages this action.
+   */
+  [[nodiscard]] virtual bool has_right_preconditioner() const noexcept { return false; }
+  virtual void precondition(std::size_t destination, std::size_t source) {
+    copy(destination, source);
+  }
+};
+
+/** A resident implementation of one logical method-owned response action.
+ * This binding is not a scientific generation or a borrowed-state lease;
+ * concrete method owners must retain and validate their terminal state.
+ */
+class ResidentResponseBackend : public ResidentKrylovBackend {
+ public:
+  explicit ResidentResponseBackend(const ResponsePlan& plan) : binding_(plan) {}
+  [[nodiscard]] bool is_bound_to(const LinearResponseProblem& problem) const noexcept {
+    return binding_.is_bound_to(problem);
+  }
+
+ private:
+  ResponsePlan binding_;
 };
 
 struct ResidentGmresWorkspace {
@@ -95,13 +120,23 @@ inline ResidentGmresWorkspace validate_resident_gmres_backend(
 /** Execute restarted GMRES while keeping all dimension-sized iteration vectors
  * in backend-owned storage. The returned solution is downloaded exactly once.
  *
- * The current resident contract is intentionally unpreconditioned; it matches
- * the physical RHF Z-vector and current RCCSD Lambda consumers. Elementwise
- * preconditioners require a separate resident primitive rather than a hidden
- * host round trip.
+ * Optional right preconditioning is a backend resident primitive. Every
+ * candidate is still accepted only by the true, unpreconditioned residual.
  */
 ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBackend& backend,
                                          std::span<const double> rhs,
                                          std::span<const double> initial_guess = {});
+
+/** Reject mismatched logical actions before admission, upload or execution. */
+inline ResidentGmresResult solve_response_resident(const ResponsePlan& plan,
+                                                   const LinearResponseProblem& problem,
+                                                   ResidentResponseBackend& backend,
+                                                   std::span<const double> rhs,
+                                                   std::span<const double> initial_guess = {}) {
+  if (plan.dimension != problem.dimension() || !plan.is_bound_to(problem) ||
+      !backend.is_bound_to(problem))
+    throw std::invalid_argument("resident response plan/backend belongs to a different problem");
+  return solve_gmres_resident(plan, backend, rhs, initial_guess);
+}
 
 }  // namespace generativeqc::response

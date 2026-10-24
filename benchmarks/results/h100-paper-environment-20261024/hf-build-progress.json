@@ -1,0 +1,89 @@
+{
+  "observed_utc": "2026-10-24T08:01:49.260377+00:00",
+  "outcome": {
+    "scope": "CPU SDK engineering only; no H100 execution or scientific acceptance",
+    "cohort": "hf-dft-frozen-science-sm90.v1",
+    "configure_seconds_cap": 600,
+    "build_seconds_cap": 21600,
+    "cleanup_seconds_cap": 30,
+    "parallel_cap": 16,
+    "cuda_compile_cap": 4,
+    "aot_compile_cap": 2,
+    "memory_margin_bytes": 42949672960,
+    "commands": {
+      "configure": [
+        "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/cmake",
+        "-S",
+        "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/hf-dft-cbd4",
+        "-B",
+        "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/build/hf-sm90-portable-attempt1",
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_CXX_COMPILER=/usr/bin/g++-12",
+        "-DCMAKE_CUDA_COMPILER=/opt/generativeqc-reuse/cuda-12.9/bin/nvcc",
+        "-DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12",
+        "-DCMAKE_CUDA_ARCHITECTURES=90",
+        "-DGENERATIVEQC_CUDA_ARCHITECTURES=90",
+        "-DGENERATIVEQC_AOT_PROFILE=portable_cuda",
+        "-DGENERATIVEQC_BUILD_TESTS=OFF",
+        "-DGENERATIVEQC_BUILD_CLI=OFF",
+        "-DGENERATIVEQC_ENABLE_CXX_PCH=OFF",
+        "-DGENERATIVEQC_CPU_LINALG_PROVIDER=scalar",
+        "-DGENERATIVEQC_CUDA_COMPILE_JOBS=4",
+        "-DGENERATIVEQC_AOT_COMPILE_JOBS=2",
+        "-DPython3_EXECUTABLE=/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/sccache",
+        "-DCMAKE_CUDA_COMPILER_LAUNCHER=/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/sccache"
+      ],
+      "build": [
+        "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/cmake",
+        "--build",
+        "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/build/hf-sm90-portable-attempt1",
+        "--target",
+        "generativeqc",
+        "--parallel",
+        "16",
+        "--verbose"
+      ]
+    },
+    "supervisor_pid": 3316439,
+    "supervisor_start_ticks": "1708124993",
+    "started_utc": "2026-10-24T07:20:43.268818+00:00",
+    "configure_returncode": 0,
+    "build_returncode": 0,
+    "library": {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/build/hf-sm90-portable-attempt1/libgenerativeqc.so",
+      "sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+      "bytes": 1013114968
+    },
+    "status": "SDK_BUILT_NOT_DEVICE_QUALIFIED",
+    "finished_utc": "2026-10-24T08:01:02.055623+00:00"
+  },
+  "last_event": {
+    "utc": "2026-10-24T08:01:00.483817+00:00",
+    "phase": "build",
+    "returncode": 0,
+    "elapsed_seconds": 2407.058593567461
+  },
+  "ninja_step": [
+    "650",
+    "651"
+  ],
+  "error_tail": null,
+  "handle_checks": {
+    "3316439": {
+      "exists": false,
+      "start_ticks": null
+    },
+    "3316530": {
+      "exists": false,
+      "start_ticks": null
+    },
+    "3317328": {
+      "exists": false,
+      "start_ticks": null
+    }
+  }
+}

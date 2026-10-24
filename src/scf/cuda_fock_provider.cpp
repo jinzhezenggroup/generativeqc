@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/df_response_weights.hpp"
 
 namespace generativeqc::scf {
@@ -13,7 +14,7 @@ void require(bool condition, const char* detail) {
 void checked(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
 }
 }  // namespace
 
@@ -46,6 +47,10 @@ void CudaFockProviderView::validate(const ResolvedFockBuild& strategy) const {
                                                  strategy.metric_relative_threshold) &&
                 data_->metric_relative_threshold == strategy.metric_relative_threshold,
             "CUDA DF Fock item/dimensions/cutoff mismatch");
+    const auto& exchange = strategy.spec.exchange;
+    require(data_->range_omega ==
+                (exchange.present && exchange.op == FockOperator::LongRange ? exchange.omega : 0.0),
+            "CUDA DF value/response radial operator mismatch");
     if (strategy.spec.derivative_order)
       require(data_->df_gradient_orbital && data_->df_gradient_auxiliary &&
                   data_->df_gradient_budget > 0 &&

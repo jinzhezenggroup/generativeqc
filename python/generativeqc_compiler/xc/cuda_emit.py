@@ -53,6 +53,7 @@ def emit_cuda(program: typing.Any, schedule: typing.Any = None) -> typing.Any:
                 "src/tensor/cuda_runtime.cuh",
                 "src/runtime/bounded_workspace.hpp",
                 "src/runtime/cuda_resources.cuh",
+                "src/runtime/cuda_device_scope.hpp",
                 "src/runtime/resource_cuda.cuh",
                 "src/runtime/resource_ledger.hpp",
                 "src/runtime/residency_boundaries.hpp",
@@ -120,13 +121,20 @@ def emit_cuda(program: typing.Any, schedule: typing.Any = None) -> typing.Any:
                 "  for (size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < npoint; point += size_t(blockDim.x) * gridDim.x) {",
             )
         )
-        if program.order == 0:
+        density_threshold = getattr(program.spec, "density_threshold", None)
+        if program.order == 0 or density_threshold is not None:
             density = (
                 "input[point] + input[npoint + point]"
                 if program.spec.spin == "polarized"
                 else "input[point]"
             )
-            lines.append(f"    if ({density} == 0.0) {{")
+            screened = f"{density} == 0.0"
+            if density_threshold is not None:
+                screened = (
+                    f"({density}) == 0.0 || "
+                    f"({density}) < {float(density_threshold).hex()}"
+                )
+            lines.append(f"    if ({screened}) {{")
             lines.extend(f"      output[{i} * npoint + point] = 0.0;" for i in group)
             lines.extend(("      continue;", "    }"))
         lines.extend("  " + line for line in emitter.lines)
@@ -152,6 +160,7 @@ def emit_cuda(program: typing.Any, schedule: typing.Any = None) -> typing.Any:
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),
             asset_path("src/runtime/cuda_resources.cuh"),
+            asset_path("src/runtime/cuda_device_scope.hpp"),
             asset_path("src/runtime/resource_cuda.cuh"),
             asset_path("src/runtime/resource_ledger.hpp"),
             asset_path("src/runtime/residency_boundaries.hpp"),

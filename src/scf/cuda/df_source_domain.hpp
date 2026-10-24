@@ -12,6 +12,7 @@ namespace generativeqc::scf::cuda_execution {
 struct CudaDfSourcePolicy {
   unsigned requested_value_mapping{};
   unsigned value_math{};
+  double range_omega{};
 };
 
 /** Host-only policy resolution; leaves policy unchanged on failure. */

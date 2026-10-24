@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "37a7ca142064d65e2fca3411588b6eeb85c6ca8f",
+  "file_count": 2,
+  "total_bytes": 138132,
+  "files": [
+    {
+      "path": "benchmarks/results/range-df-scalar-layout-20261016/evidence.json.xz",
+      "bytes": 58184,
+      "sha256": "5aac694f7484236fd455e8a64b9e5d5ee6642ed05147efbd2ad2e545c80837f2"
+    },
+    {
+      "path": "benchmarks/results/range-separated-df-stable-20261015/evidence.json.xz",
+      "bytes": 79948,
+      "sha256": "f3489ef1b1a7db1f3de0684de8d4130fc570b8209ba18c376e9c2a2fc7a91b13"
+    }
+  ]
+}

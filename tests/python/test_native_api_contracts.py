@@ -81,9 +81,10 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 83)
-        self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 11)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 44)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 115)
+        self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
+        self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 53)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
@@ -150,6 +151,31 @@ class NativeContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ContractError, "inventory drift.*generativeqc_new"):
             validate(self.root)
+
+    def test_literal_c_callback_requires_its_own_reviewed_contract(self) -> None:
+        callback = "typedef generativeqc_status (*generativeqc_action)(void* data, const double* input, double* output, size_t count);"
+        declarations = scan_c(callback)
+        self.assertEqual(len(declarations), 1)
+        self.assertEqual(declarations[0].kind, "c-callback")
+        with self.assertRaisesRegex(ContractError, "missing exact.*native-contract"):
+            contract_facets(declarations[0])
+        self.mutate(HEADERS[0], C, C + callback)
+        with self.assertRaisesRegex(
+            ContractError, "inventory drift.*generativeqc_action"
+        ):
+            validate(self.root)
+
+    def test_nested_or_unmarked_callback_forms_remain_rejected(self) -> None:
+        for declaration in (
+            "typedef int (*generativeqc_action)(void*);",
+            "typedef generativeqc_status (*generativeqc_action)(void (*nested)(void));",
+            "generativeqc_status (*generativeqc_action)(void*);",
+        ):
+            with (
+                self.subTest(declaration=declaration),
+                self.assertRaises(ContractError),
+            ):
+                scan_c(declaration)
 
     def test_new_undocumented_cpp_operation_fails(self) -> None:
         self.mutate(HEADERS[1], "int count{};", "int count{};\n  void run() {}")

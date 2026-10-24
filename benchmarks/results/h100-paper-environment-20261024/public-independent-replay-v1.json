@@ -1,0 +1,231 @@
+{
+  "scope": "independent local CPU replay of exact device-returned IEEE bytes; no new native/GPU/reference execution",
+  "python": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+  "reader_sha256": "b8b003939523f0a56720544591923fcdb9556bfd188eeee239fb2e83a390e14a",
+  "oracle_reader_sha256": "f5a28b40d783f169bdfda3d9b49426ae4a2fd4a73cbb94a9029b4ef7749ac9c9",
+  "results": {
+    "cbs-c2": {
+      "integrity_and_finite_replay": {
+        "raw_sha256": "f8cff38b34bec7502b3e36f33749e20c882ca7c91aaff5b3a04afe11eec28bdb",
+        "arm": "cbs-c2",
+        "recorded_outcome": "FINITE_ENDPOINT_RETURNED",
+        "sample_count": 1,
+        "samples": [
+          {
+            "finite_complete_energy_forces": true,
+            "retained_original_bytes": true
+          }
+        ],
+        "scientific_acceptance": "INCOMPLETE",
+        "performance_result": false
+      },
+      "independent_reference_comparison": {
+        "scope": "CBS C2 constituent/composite comparison against retained independent reference",
+        "reference_sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414",
+        "constituents_and_composite": {
+          "low/df-ccsd(t)": {
+            "energy_error_eh": 4.021671884402167e-12,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 1.944451544222403e-13,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 1.6806942291884563e-09
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 4.522865172228857e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          },
+          "low/mp2": {
+            "energy_error_eh": 5.258016244624741e-13,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 1.292754965576126e-13,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 3.8516749392789734e-10
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 4.980010518437598e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          },
+          "low/rhf": {
+            "energy_error_eh": 1.9895196601282805e-13,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 5.903090516401477e-14,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 1.6205315354596642e-09
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 4.794289088557585e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          },
+          "high/mp2": {
+            "energy_error_eh": 7.958078640513122e-13,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 1.2518810857745089e-13,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 1.2749792189083262e-09
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 2.648695174715704e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          },
+          "high/rhf": {
+            "energy_error_eh": 1.7053025658242404e-13,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 1.2130232799126284e-13,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 1.0255288713503438e-09
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 2.2808210378959942e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          },
+          "composite": {
+            "energy_error_eh": 3.637978807091713e-12,
+            "independent_energy_gate": "PASS",
+            "translation_max_eh_bohr": 1.4589219589355995e-13,
+            "translation_gate": "PASS",
+            "retained_direction_comparisons": [
+              {
+                "step_bohr": 0.0001,
+                "error_eh_bohr": 4.800649231438692e-10
+              },
+              {
+                "step_bohr": 3e-05,
+                "error_eh_bohr": 5.4538640734645705e-09
+              }
+            ],
+            "retained_direction_gate": "PASS"
+          }
+        },
+        "gates": {
+          "energy_eh": 5e-08,
+          "direction_eh_bohr": 5e-06,
+          "translation_eh_bohr": 1e-06
+        },
+        "displaced_energy_originals": "UNAVAILABLE: #2705; derivatives were not reconstructed from nonexistent raw energies",
+        "independent_full_force_vector": "UNAVAILABLE for this C2 reference",
+        "scientific_acceptance": "INCOMPLETE: retained derivative comparison is not raw displaced-energy replay"
+      },
+      "actual_endpoint_seconds": 6.253496221033856,
+      "raw_endpoint_seconds": 6.252849305048585,
+      "sample_count": 1
+    },
+    "gpu4pyscf-hf": {
+      "integrity_and_finite_replay": {
+        "raw_sha256": "05a4bb2e76f5f14635b3e47dfdbdc8819b7009c607120655b0c4469f6c4f4939",
+        "arm": "gpu4pyscf-hf",
+        "recorded_outcome": "FINITE_ENDPOINT_RETURNED",
+        "sample_count": 1,
+        "samples": [
+          {
+            "finite_complete_energy_forces": true,
+            "retained_original_bytes": true
+          }
+        ],
+        "scientific_acceptance": "INCOMPLETE",
+        "performance_result": false
+      },
+      "independent_reference_comparison": {
+        "scope": "HF water-3 independent complete E/F comparison",
+        "errors": {
+          "energy_eh_per_atom": 2.5579538487363607e-12,
+          "force_max_eh_bohr": 5.991969596053082e-07,
+          "force_rms_eh_bohr": 3.906056089427911e-07
+        },
+        "gates": {
+          "energy_eh_per_atom": 1e-05,
+          "force_max_eh_bohr": 0.0001,
+          "force_rms_eh_bohr": 3e-05
+        },
+        "observable_gate": "PASS",
+        "cpu_gpu_spot_errors": {
+          "energy_eh_per_atom": 2.8421709430404007e-13,
+          "force_max_eh_bohr": 1.181303649344656e-08,
+          "force_rms_eh_bohr": 6.367603678356492e-09
+        },
+        "quarter_spot_gate": "PASS",
+        "grid_stability": "not applicable: HF has no XC/VV10 grid",
+        "reference_sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+        "scientific_acceptance": "INCOMPLETE: device/source/environment provenance requires separate review"
+      },
+      "actual_endpoint_seconds": 14.091164940036833,
+      "raw_endpoint_seconds": null,
+      "sample_count": 1
+    },
+    "native-hf": {
+      "integrity_and_finite_replay": {
+        "raw_sha256": "75cbef17740fd3376a01d9870401abadbfa09d173715da434c715d8336682e97",
+        "arm": "native-hf",
+        "recorded_outcome": "FINITE_ENDPOINT_RETURNED",
+        "sample_count": 1,
+        "samples": [
+          {
+            "finite_complete_energy_forces": true,
+            "retained_original_bytes": true
+          }
+        ],
+        "scientific_acceptance": "INCOMPLETE",
+        "performance_result": false
+      },
+      "independent_reference_comparison": {
+        "scope": "HF water-3 independent complete E/F comparison",
+        "errors": {
+          "energy_eh_per_atom": 3.694822225952521e-13,
+          "force_max_eh_bohr": 9.216779933013397e-09,
+          "force_rms_eh_bohr": 5.1885479868645845e-09
+        },
+        "gates": {
+          "energy_eh_per_atom": 1e-05,
+          "force_max_eh_bohr": 0.0001,
+          "force_rms_eh_bohr": 3e-05
+        },
+        "observable_gate": "PASS",
+        "cpu_gpu_spot_errors": {
+          "energy_eh_per_atom": 2.8421709430404007e-13,
+          "force_max_eh_bohr": 1.181303649344656e-08,
+          "force_rms_eh_bohr": 6.367603678356492e-09
+        },
+        "quarter_spot_gate": "PASS",
+        "grid_stability": "not applicable: HF has no XC/VV10 grid",
+        "reference_sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+        "scientific_acceptance": "INCOMPLETE: device/source/environment provenance requires separate review"
+      },
+      "actual_endpoint_seconds": 1.459631677949801,
+      "raw_endpoint_seconds": null,
+      "sample_count": 1
+    }
+  },
+  "all_finite_byte_replay": true,
+  "old_C2_displaced_energies": "UNAVAILABLE; #2705",
+  "independent_C2_full_force_vector": "UNAVAILABLE",
+  "parent_scientific_acceptance": "INCOMPLETE"
+}

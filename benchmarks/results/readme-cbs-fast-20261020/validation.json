@@ -1,0 +1,72 @@
+{
+  "scope": "Final mixed implementation; one public docstring corrected after frozen measurements without executable AST changes.",
+  "checks": [
+    {
+      "suite": "CBS controls, precision telemetry and README renderer",
+      "passed": 115,
+      "deselected": 2
+    },
+    {
+      "suite": "Native transport, API, precision policies and host forwarding",
+      "passed": 213,
+      "skipped": 5,
+      "deselected": 38,
+      "subtests_passed": 25
+    },
+    {
+      "suite": "Documentation and retained evidence recovery",
+      "passed": 108,
+      "subtests_passed": 55
+    },
+    {
+      "suite": "Scheduled CUDA conventional water and Standard/Fast exact/full DF CBS",
+      "passed": 5,
+      "deselected": 15
+    },
+    {
+      "suite": "Conventional CPU Fast water independent energy/full-force oracle",
+      "passed": 1,
+      "note": "Passed in the initial combined final-build run; its unrelated obsolete forwarding fixture was corrected and the remaining suite rerun."
+    },
+    {
+      "suite": "Exact measured production/analysis source reconstruction from pinned base",
+      "files_verified": 33
+    },
+    {
+      "suite": "Pre-commit before final publication",
+      "status": "passed"
+    }
+  ],
+  "build": {
+    "type": "Release",
+    "cuda": "12.9.1",
+    "architecture": 120,
+    "cache": "ccache 4.5.1"
+  },
+  "local_log_digests": {
+    "pytest-controls-final.log": {
+      "sha256": "6b9e30b1bf40a5ee3598902492b880a98e95703b663a25a34ee1193590540be7",
+      "summary": "115 passed, 2 deselected in 2.77s"
+    },
+    "pytest-native-controls-final.log": {
+      "sha256": "60ce6478b77ae860f92e36ee17c4e7a89a693f4c6a3f6838870b1fbb8f65f929",
+      "summary": "213 passed, 5 skipped, 38 deselected, 25 subtests passed in 221.11s (0:03:41)"
+    },
+    "pytest-docs-retention.log": {
+      "sha256": "8ca7144d2b33f7f0c723fb2d3a2bfab84ea39cba30d4815427b9c22c44d92573",
+      "summary": "108 passed, 55 subtests passed in 15.39s"
+    },
+    "pytest-gpu.log": {
+      "sha256": "3d852616967295522ce84a76f26dc3fa3f41b776054e0d23d09fc46a08bd16e3",
+      "summary": "5 passed, 15 deselected in 7.24s"
+    },
+    "pytest-native-forwarding.log": {
+      "sha256": "c34409ad58c1a60a0db6096c9d1de87b52b61689f935a1cf2c47c693e9f5dc00",
+      "summary": "3 passed in 2.09s"
+    },
+    "precommit-prepublication.log": {
+      "sha256": "6d30afa5153ef485807c9c5e5d0af132279c94a17e58730371f3ff4e8e5d2b0b",
+      "summary": "Test structural lint rules....................................(no files to check)Skipped"
+    }
+  }
+}

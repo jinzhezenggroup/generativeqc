@@ -14,7 +14,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _cpp_source_support import cpp_function_declaration, cpp_record_definition
+from _cpp_source_support import (
+    cpp_function_definition_signature,
+    cpp_record_definition,
+)
 from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +63,12 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "bool ordered_incremental_diis_gram_requested()",
         "cudaError_t launch_diis_pending_gram(",
     )
+    screening = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
+    selectors += between(
+        screening,
+        "bool direct_fp32_block_screening_requested()",
+        "void configure_direct_block_screening(",
+    )
     diis_policy = between(
         driver,
         "  const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);",
@@ -83,10 +92,10 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     bucket_header = (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text()
     owner = cpp_record_definition(bucket_header, "CudaRhfBucketPlan")
-    # Derive the fake driver's complete ABI from the production declaration.
-    # New optional driver arguments must not silently break every host probe.
-    driver_signature = cpp_function_declaration(
-        bucket_header, "execute_hf_cuda_bucket_driver"
+    # Derive the fake driver's complete ABI from its production definition.
+    # The included header checks the ABI and owns any optional-argument defaults.
+    driver_signature = cpp_function_definition_signature(
+        driver, "execute_hf_cuda_bucket_driver"
     )
     fields = re.findall(r"std::vector<[^>]+> (\w+);", topology)
     fields.remove("ecp_systems")
@@ -367,7 +376,7 @@ void short_budget() {
   require(refused,"one byte below mandatory reference admitted");
 }
 void scientific() {
-  for(int field=0;field!=11;++field) {
+  for(int field=0;field!=12;++field) {
     Owner owner; auto o=options(); run(owner,o); auto changed=o;
     switch(field) {
       case 0: changed.energy_tolerance*=2; break;
@@ -383,6 +392,7 @@ void scientific() {
       case 10:
         changed.resolved_fock_build=owner.p->options.resolved_fock_build;
         changed.resolved_fock_build->spec.exchange.coefficient=-0.25; break;
+      case 11: changed.reference_iteration_screening_tolerance=0; break;
     }
     require(!run(owner,changed).execution_plan_reused,"scientific option mismatch reused plan");
   }

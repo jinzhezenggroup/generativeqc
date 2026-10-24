@@ -321,12 +321,12 @@ def query_integral_capability(
                 integral.required_rys_roots not in (2, 3, 4, 5)
                 and not task_parallel_rys_eligible(integral)
             )
-            or max(integral.spec.angular) > 2
+            or max(integral.spec.angular) > 3
             or integral.spec.angular[3] > 1
         ):
             reasons.append(
                 "CUDA component-lane Rys values require two through five roots, "
-                "s/p/d centers and at most p angular momentum on the fourth center"
+                "s/p/d/f centers and at most p angular momentum on the fourth center"
             )
     return CapabilityCheck(not reasons, reasons=tuple(reasons))
 

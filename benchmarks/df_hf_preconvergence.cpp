@@ -63,11 +63,28 @@ unsigned iteration_limit(const char* text) {
 
 int main(int argc, char** argv) {
   try {
+    double reference_screening =
+        generativeqc::scf::ScfOptions{}.reference_iteration_screening_tolerance;
+    bool explicit_reference_screening = false;
+    if (argc > 1) {
+      const std::string flag(argv[argc - 1]);
+      const std::string prefix("--reference-screening=");
+      if (flag.starts_with(prefix)) {
+        const auto token = flag.substr(prefix.size());
+        std::size_t consumed{};
+        reference_screening = std::stod(token, &consumed);
+        if (consumed != token.size() || !std::isfinite(reference_screening) ||
+            reference_screening < 0.0 || reference_screening > 1e-6)
+          throw std::invalid_argument("invalid reference screening tolerance");
+        explicit_reference_screening = true;
+        --argc;
+      }
+    }
     if (argc < 6 || argc > 8)
       throw std::invalid_argument(
           "usage: df-hf-preconvergence INPUT JK_SHELLS OUTPUT direct|df-direct|auto-direct "
           "hf|energy|forces "
-          "[PRE_TOLERANCE [PRE_MAX_ITERATIONS]]");
+          "[PRE_TOLERANCE [PRE_MAX_ITERATIONS]] [--reference-screening=TOLERANCE]");
     const std::string mode(argv[4]), endpoint(argv[5]);
     if (mode != "direct" && mode != "df-direct" && mode != "auto-direct")
       throw std::invalid_argument("invalid mode");
@@ -75,6 +92,8 @@ int main(int argc, char** argv) {
       throw std::invalid_argument("auto-direct uses fixed policy controls");
     if (endpoint != "hf" && endpoint != "energy" && endpoint != "forces")
       throw std::invalid_argument("invalid endpoint");
+    if (explicit_reference_screening && endpoint != "hf")
+      throw std::invalid_argument("reference-screening override requires the hf endpoint");
     const double pre_tolerance = mode == "auto-direct" ? 1e-4
                                  : argc > 6            ? tolerance(argv[6])
                                                        : 1e-6;
@@ -114,6 +133,7 @@ int main(int argc, char** argv) {
     exact_options.energy_tolerance = 1e-12;
     exact_options.density_tolerance = 1e-11;
     exact_options.screening_tolerance = 0;
+    exact_options.reference_iteration_screening_tolerance = reference_screening;
     exact_options.precision_mode = GENERATIVEQC_PRECISION_FP64;
     exact_options.compute_forces = false;
     exact_options.export_physical_reference = true;
@@ -302,6 +322,12 @@ int main(int argc, char** argv) {
     };
     field("mode", std::quoted(mode == "auto-direct" ? "df-direct" : mode));
     field("reference_policy", std::quoted(mode));
+    field("reference_iteration_screening_tolerance", reference_screening);
+    field("unscreened_refinement_iterations", experiment.work.refinement_iterations);
+    field("screened_iterations",
+          experiment.work.strict_refinement_applied && experiment.work.effective_bits == 64U
+              ? direct_cycles - experiment.work.refinement_iterations
+              : 0U);
     field("endpoint", std::quoted(endpoint));
     field("nbf", nbf);
     field("naux_correlation", generativeqc::molecule::ao_count(correlation));

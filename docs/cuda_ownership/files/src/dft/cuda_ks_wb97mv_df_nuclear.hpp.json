@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_df_nuclear.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Actual accepted-state RKS/UKS raw DF nuclear-source adapter and lifetime/resource contracts. Separates raw-integral passes from fitted inverse/weight response and stationary molecular assembly; implements no scientific algebra.",
+  "regions": []
+}

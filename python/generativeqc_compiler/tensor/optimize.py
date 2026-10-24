@@ -623,6 +623,8 @@ def prepare_for_backend(
     preserve_reduction_order: bool = False,
     disabled_passes: typing.Any = (),
     stop_after: str | None = None,
+    allow_cpu_boolean: bool = False,
+    allow_cpu_where: bool = False,
 ) -> Program:
     """Prepare one production TensorIR program before backend-specific lowering.
 
@@ -638,12 +640,22 @@ def prepare_for_backend(
     the caller explicitly preserves the source reduction tree. Explicit
     precision-execution programs keep their original tree until precision for
     compiler-created intermediates is defined.
+    Boolean admission is opt-in for the materializing CPU owner. Shared CPU
+    preparation and other emitters retain their fail-closed default.
+    Forward where admission is a separate opt-in requiring that Boolean owner;
+    dtype and primitive qualification remain the emitter's responsibility.
     """
 
     if not isinstance(program, Program):
         raise TypeError("production preparation requires a TensorIR Program")
     if backend not in PRODUCTION_BACKENDS:
         raise ValueError(f"unsupported TensorIR production backend: {backend}")
+    if type(allow_cpu_boolean) is not bool or (allow_cpu_boolean and backend != "cpu"):
+        raise ValueError("Boolean admission is limited to the materializing CPU owner")
+    if type(allow_cpu_where) is not bool or (
+        allow_cpu_where and (backend != "cpu" or not allow_cpu_boolean)
+    ):
+        raise ValueError("where admission requires the materializing CPU Boolean owner")
     if type(preserve_reduction_order) is not bool:
         raise TypeError("preserve_reduction_order must be a Boolean")
     # Production emitters/planners prepare their input again. Carry an explicit
@@ -666,7 +678,9 @@ def prepare_for_backend(
         disabled_passes=disabled_passes,
         stop_after=stop_after,
     )
-    if any(
+    if not allow_cpu_where and any(node.op == "where" for node in prepared.live_nodes):
+        raise ValueError(f"{backend} TensorIR lowering does not support where")
+    if not allow_cpu_boolean and any(
         node.spec.dtype == "bool"
         or node.op
         in {"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"}

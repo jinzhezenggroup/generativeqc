@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "cc/df_source_response.hpp"
@@ -27,7 +28,7 @@ struct DFCCSDTReferenceExperiment {
   scf::PrecisionProvenance work;
 };
 
-/** Complete native endpoint on an unchanged conventional RHF reference with
+/** Complete native endpoint on the selected exact or RI-JK RHF reference with
  * a DF correlation Hamiltonian. The public DF-RCCSD(T) selector reuses this
  * owner for both energy and force requests. */
 struct DFCCSDTResult {
@@ -55,9 +56,17 @@ struct DFCCSDTResult {
   cc::triples::DFCudaFockResult triples_fock;
 };
 
-/** Cold normalized geometry -> exact native CUDA RHF -> DF source -> CCSD(T)
- * -> complete nuclear forces. Retains the exact source/frame only when forces
- * are requested, and consumes it before either input geometry can change.
+/** Scientific correlation demand; companions share the original frame/source. */
+struct DFCorrelationDemand {
+  bool mp2{};
+  unsigned companions{};
+  /** Explicit scientific model change, never inferred from resource refusal. */
+  bool df_reference{};
+};
+
+/** Cold normalized geometry -> selected native CUDA RHF -> DF source -> CCSD(T)
+ * -> complete nuclear forces. The reference model is explicit in demand;
+ * the matching source/frame is consumed before either input geometry changes.
  * Energy-only calls share the same scientific Hamiltonian and solver gates.
  * The optional CCSD-only mode omits triples and is an independent closure gate.
  * Disabling df_auxiliary_reduction retains expanded Lambda actions for matched
@@ -74,9 +83,14 @@ struct DFCCSDTResult {
  * reduction and omits diagonal gap cotangents because full-Fock response
  * replaces them. Serial/all-output execution remains available explicitly for
  * matched validation; neither selector weakens numerical acceptance gates.
- * fused_triples_scalar_response is an opt-in generated primal/W/V region for
+ * fused_triples_scalar_response defaults to a generated primal/W/V region for
  * gap-free force response. Optional seed storage is admitted before allocation;
- * a tight budget retains the original schedule without changing output demand.
+ * a tight budget or device allocation refusal retains the original schedule
+ * without changing output demand. Explicit false preserves the matched oracle.
+ * lambda_serial_scratch_reuse defaults to one stream-ordered scratch lease;
+ * persistent cuts, seeds, outputs and immutable core storage remain disjoint.
+ * Explicit false retains the separate-arena layout. Standalone Lambda defaults
+ * are unchanged by this complete-force policy.
  * admitted_triples_w is an internal experimental forward-W admission only;
  * RHF, CCSD, reverse contractions, Lambda and orbital/nuclear response remain
  * FP64. It never changes the public precision mode or numerical gates.
@@ -94,10 +108,15 @@ struct DFCCSDTResult {
  * Lambda defaults request batch 32 and original-graph matrix fresh replay.
  * Complete host/device budgets and currently free VRAM admit actual storage;
  * smaller batches and the original scalar replay remain bounded fallbacks.
- * ccsd_batch_limit=0 selects the endpoint default: 32 for energy-only calls,
- * eight for forces. Positive limits remain explicit overrides. The solver
+ * ccsd_batch_limit=0 selects the endpoint default: 32 for energy and forces.
+ * Positive limits remain explicit overrides. The solver
  * admits the actual tile under its existing full budget and dimension checks;
  * this does not change standalone CCSD or any response precision policy.
+ * lambda_resident_krylov is a default-off storage binding of the same physical
+ * Lambda actions. Its admission includes both providers and the DF device
+ * ceiling; refusal retains the existing host-vector response schedule.
+ * ccsd_mixed_precision defaults to the qualified native DF auto policy. Explicit
+ * true/false override shape selection but never physical convergence gates.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -106,11 +125,25 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 0,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
-    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
+    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = true,
     runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
-    DFCCSDTReferenceExperiment* reference_experiment = nullptr);
+    DFCCSDTReferenceExperiment* reference_experiment = nullptr,
+    bool lambda_serial_scratch_reuse = true,
+    std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
+    bool lambda_resident_krylov = false,
+    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
+    DFCorrelationDemand demand = {}, core::CorrelationConvergence convergence = {});
+
+/** Native DF-MP2 or DF-CCSD(T) group, never a DF-HF reference or an oracle replay.
+ * The CC parent inherits the complete owner's guarded fusion/scratch defaults;
+ * the MP2 demand omits both triples and Lambda regardless of those policies. */
+DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext&, const core::System&,
+                                              const core::System&,
+                                              const generativeqc_method_descriptor&, bool forces,
+                                              DFCorrelationDemand,
+                                              core::CorrelationConvergence convergence = {});
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

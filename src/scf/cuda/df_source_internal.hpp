@@ -9,6 +9,7 @@
 
 #include "molecule/basis_geometry_identity.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "scf/cuda/df_md_raw.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -31,6 +32,8 @@ struct CudaDensityFittingIntegralSourceImpl {
   // Freeze the generated schedule so a warm plan never mixes mapping policies.
   unsigned value_mapping{};
   unsigned raw_value_mapping{};
+  bool automatic_value_mapping{};
+  CudaDfMdRaw* raw_hermite{};  // optional immutable prepared E, charged below
   unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
   bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
                            // value/response lowering.
@@ -40,6 +43,7 @@ struct CudaDensityFittingIntegralSourceImpl {
   std::size_t cartesian_nbf{};
   std::size_t cartesian_naux{};
   std::size_t dummy_index{};
+  std::size_t orbital_shells{}, auxiliary_shells{}, basis_primitives{};
   DeviceBatch batch{};
   const DfPublicAoExpansion* orbital_to_cartesian{};
   const DfPublicAoExpansion* auxiliary_to_cartesian{};
@@ -57,6 +61,7 @@ struct CudaDensityFittingIntegralSourceImpl {
 
   ~CudaDensityFittingIntegralSourceImpl() {
     if (device_id >= 0) (void)cudaSetDevice(device_id);
+    destroy_cuda_df_md_raw(raw_hermite);
     for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
   }
 };

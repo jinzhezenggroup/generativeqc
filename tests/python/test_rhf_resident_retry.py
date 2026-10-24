@@ -48,6 +48,10 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
         "generativeqc_status prepare_cuda_direct_jk_resident_layout(",
         "std::size_t cuda_direct_jk_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
+        "std::size_t cuda_direct_jk_selected_resident_value_bytes(",
+        "generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(",
+        "generativeqc_status prepare_cuda_direct_jk_range_resident_values(",
+        "generativeqc_status prepare_cuda_direct_jk_selected_resident_values(",
         "bool cuda_direct_jk_linear_available(",
         "std::size_t cuda_direct_jk_compensation_elements(",
     ]
@@ -57,7 +61,11 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
     ]
     begin = owner.index("    if (resident_budget) {")
     end = owner.index("    state.o = o;", begin)
-    allocation = owner[begin:end]
+    # The source-selection outer else now encloses exact residency. Keep its
+    # real allocation body and following common setup, excluding only that
+    # surrounding brace from this deliberately exact-only probe.
+    exact_end = owner.index("\n    }\n    stats.applied_screening", begin)
+    allocation = owner[begin:exact_end] + owner[exact_end + len("\n    }") : end]
     policy = _definition(header, "std::size_t resident_jk_allowance(")
     wrapper = _definition(owner, "RHFFrameResponseResult rhf_frame_response_cuda(\n")
     probe = tmp_path / "resident_retry.cpp"
@@ -83,6 +91,7 @@ PREFIX = r"""
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -93,6 +102,7 @@ PREFIX = r"""
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "scf/cuda/reference_eri_policy.hpp"
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorLaunchFailure };
 enum generativeqc_status {
@@ -104,7 +114,16 @@ enum generativeqc_status {
   GENERATIVEQC_STATUS_INVALID_ARGUMENT
 };
 constexpr int cudaMemcpyDeviceToHost = 0;
-enum class DirectCoulombRange { Full };
+enum class DirectCoulombRange { Full, Short, Long };
+enum class FockOperator { FullRange, ShortRange, LongRange };
+struct CudaDirectJkPlan;
+// The extracted definition does not include the header's restricted-spin default.
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins = 1);
+// Match the shared API defaults used by exact full-range retry consumers.
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
+    CudaDirectJkPlan*, std::size_t, std::string&,
+    FockOperator = FockOperator::FullRange, double = 0.0,
+    std::uint32_t = (1U << 28) - 1);
 struct State {
   cudaError_t allocation{}, pending{}, sync{}, copy{};
   int current{};
@@ -147,6 +166,10 @@ namespace runtime {
 template <class Value>
 size_t vector_bytes(const std::vector<Value>& values) {
   return values.capacity() * sizeof(Value);
+}
+template <class Value>
+size_t vector_capacities(const std::vector<Value>& values) {
+  return vector_bytes(values);
 }
 bool checked_multiply(size_t a, size_t b, size_t& o) {
   if (b && a > SIZE_MAX / b) return false;
@@ -195,10 +218,15 @@ struct CudaDirectJkPlan {
   double screening_tolerance{};
   const std::uint64_t* canonical_row_prefix{};
   std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
+  std::vector<std::array<std::size_t, 28>> resident_bucket_offsets;
   std::vector<std::array<size_t, 8>> canonical_pair_offsets{{{0, 2, 2, 2, 2, 2, 2, 2}}};
   int device_id{};
   double* resident_values{};
+  float* resident_mixed_values{};
+  FockOperator resident_operator{FockOperator::FullRange};
+  double resident_omega{};
   size_t resident_value_count{}, device_bytes{16};
+  std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   Diagnostic diagnostic;
   cudaStream_t stream{reinterpret_cast<void*>(1)};
   int numerical_value{};
@@ -226,6 +254,21 @@ void launch_independent_jk_finite_kernel(cudaStream_t, const double* v, size_t n
   for (size_t i = 0; i < n; ++i)
     if (!std::isfinite(v[i])) *e = 1;
 }
+void launch_canonical_mixed_resident_values_kernel(
+    cudaStream_t, CanonicalBatch, int, std::int32_t, unsigned, const int*, int, size_t, size_t n,
+    size_t, size_t m, bool same, double, const double*, float* target, size_t work_limit,
+    DirectCoulombRange range, double omega) {
+  assert(range == DirectCoulombRange::Full && omega == 0.0);
+  const auto count=std::min(same ? n*(n+1)/2 : n*m,work_limit);
+  for(size_t index=0; index<count; ++index)
+    target[index]=state.nan ? std::numeric_limits<float>::quiet_NaN() : float(index+1);
+  if(count) ++state.launches;
+}
+void launch_independent_jk_mixed_finite_kernel(cudaStream_t, const float* values,
+                                              size_t count, int* error) {
+  for(size_t index=0; index<count; ++index)
+    if(!std::isfinite(values[index])) *error=1;
+}
 """
 
 ATTEMPT_PREFIX = r"""
@@ -242,6 +285,7 @@ void status(generativeqc_status c, const std::string& d) {
   if (c == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (c != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(d);
 }
+void require(bool condition, const char* detail) { direct_jk_require(condition, detail); }
 void cuda_resource_check(cudaError_t e) {
   if (e == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (e != cudaSuccess) throw std::runtime_error("CUDA execution fault");
@@ -259,6 +303,8 @@ size_t checked_mul(size_t a, size_t b) {
 size_t bytes(size_t n) { return checked_mul(n, sizeof(double)); }
 namespace scf {
 using ::prepare_cuda_direct_jk_resident_values;
+namespace cuda_execution = generativeqc::scf::cuda_execution;
+using ::prepare_cuda_direct_jk_selected_resident_values;
 Diagnostic cuda_direct_jk_plan_diagnostic(CudaDirectJkPlan* p) { return p->diagnostic; }
 using ::cuda_direct_jk_linear_available;
 using ::cuda_direct_jk_compensation_elements;
@@ -334,6 +380,7 @@ RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   std::string detail;
   int device = 0;
   bool profile = false;
+  const bool fitted = false;
   auto stream = direct->stream;
   size_t nn = 64 * 64, arena_elements = 0;
   Buffer<double> storage, compensation;
@@ -387,6 +434,47 @@ int main() {
     ++passed;
     std::cout << "PASS " << name << "\n";
   };
+  for(int failure=0; failure<8; ++failure) {
+    reset();
+    {
+      CudaDirectJkPlan mixed;
+      std::string detail;
+      if(failure==1) state.allocation=cudaErrorMemoryAllocation;
+      if(failure==2) state.nan=true;
+      if(failure==3) state.copy=cudaErrorLaunchFailure;
+      if(failure==4) state.sync=cudaErrorLaunchFailure;
+      if(failure==5) state.publication_fail=true;
+      if(failure==7) state.current=1;
+      const auto status=prepare_cuda_direct_jk_mixed_resident_values(
+          &mixed,(failure==0 ? 2 : 3)*sizeof(float),detail);
+      const auto expected=failure<2 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY :
+                          failure==2 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE :
+                          failure==3 || failure==4 ? GENERATIVEQC_STATUS_CUDA_ERROR :
+                          failure==5 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY :
+                          failure==6 ? GENERATIVEQC_STATUS_SUCCESS :
+                                       GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      check(status==expected,"mixed source failure classification");
+      check((mixed.resident_mixed_values!=nullptr)==(failure==6) && !mixed.resident_values,
+            "mixed source published incomplete or strict storage");
+      if(failure==2 || failure==5 || failure==6)
+        check(mixed.diagnostic.resident_values_completed==3,
+              "completed mixed construction was not preserved");
+      if(failure==6) {
+        check(mixed.diagnostic.resident_value_bytes==3*sizeof(float) &&
+                  mixed.resident_mixed_values[2]==3.0F,
+              "mixed source storage extent/content mismatch");
+        const auto launches=state.launches;
+        check(prepare_cuda_direct_jk_mixed_resident_values(&mixed,3*sizeof(float),detail)==
+                  GENERATIVEQC_STATUS_SUCCESS && state.launches==launches,
+              "mixed source rebuilt its immutable values");
+        check(prepare_cuda_direct_jk_resident_values(&mixed,3*sizeof(double),detail)==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT && !mixed.resident_values,
+              "strict construction reused a mixed source identity");
+      }
+    }
+    check(!state.live && sizes.empty(),"mixed source failure leaked storage");
+  }
+  reset();
   {
     CudaDirectJkPlan compact;
     compact.screening_tolerance = 1e-12;
@@ -399,6 +487,8 @@ int main() {
     compact.canonical_row_prefix = prefix.data();
     check(cuda_direct_jk_resident_value_bytes(&compact) == 0,
           "unfrozen screened layout exposed a value extent");
+    check(cuda_direct_jk_selected_resident_value_bytes(&compact, 1) == 0,
+          "unfrozen partial layout exposed a dense value extent");
     check(prepare_cuda_direct_jk_resident_layout(&compact, detail) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               cuda_direct_jk_resident_value_bytes(&compact) == 2 * sizeof(double),
@@ -408,6 +498,41 @@ int main() {
               GENERATIVEQC_STATUS_SUCCESS,
           "frozen layout downloaded rows again");
     state.copy = cudaSuccess;
+    {
+      CudaDirectJkPlan radial;
+      radial.screening_tolerance = 1e-12;
+      radial.canonical_row_prefix = prefix.data();
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, sizeof(double), 1, FockOperator::LongRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_OUT_OF_MEMORY && !radial.resident_values,
+            "range capacity refusal published an incomplete source");
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, 2 * sizeof(double), 1, FockOperator::LongRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "range source could not retry a refused lease");
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, 2 * sizeof(double), 1, FockOperator::ShortRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                prepare_cuda_direct_jk_range_resident_values(
+                    &radial, 2 * sizeof(double), 1, FockOperator::LongRange, 0.4, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "range cache changed its immutable radial identity");
+    }
+    {
+      CudaDirectJkPlan partial;
+      partial.screening_tolerance = 1e-12;
+      partial.canonical_row_prefix = prefix.data();
+      check(prepare_cuda_direct_jk_selected_resident_values(&partial, 2 * sizeof(double), 1,
+                                                           detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                partial.diagnostic.resident_value_count == 2 &&
+                partial.resident_bucket_offsets[0][0] == 0 &&
+                partial.resident_bucket_offsets[0][1] ==
+                    std::numeric_limits<std::size_t>::max(),
+            "screened partial builder did not pack only compact selected rows");
+      check(prepare_cuda_direct_jk_selected_resident_values(&partial, 2 * sizeof(double), 2,
+                                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "screened partial source accepted a replacement selection");
+    }
     check(prepare_cuda_direct_jk_resident_values(&compact, 2 * sizeof(double), detail) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               compact.diagnostic.resident_values_completed == 2 &&

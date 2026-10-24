@@ -1,0 +1,27 @@
+id: cuda-no-unchecked-runtime-call
+valid:
+  - |
+    void f(void* dst, void* src) { check(cudaMemcpy(dst, src, 8, cudaMemcpyDeviceToHost)); }
+  - |
+    void f(void* dst, void* src) { auto status = cudaMemcpyAsync(dst, src, 8, cudaMemcpyDeviceToHost, 0); }
+  - |
+    void f(void* dst, void* src) { if (cudaMemcpy(dst, src, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return; }
+  - |
+    void f(void* dst) { (void)cudaFree(dst); }
+  - |
+    void f(bool enabled, void* dst, cudaStream_t stream) {
+      if (enabled) check_md_j_cuda(cudaMemsetAsync(dst, 0, 16, stream));
+    }
+invalid:
+  - |
+    void f(bool enabled, void* dst, cudaStream_t stream) {
+      if (enabled) cudaMemsetAsync(dst, 0, 16, stream);
+    }
+  - |
+    void f(void* dst, void* src) { cudaMemcpy(dst, src, 8, cudaMemcpyDeviceToHost); }
+  - |
+    void f(void** ptr) { cudaMalloc(ptr, 4096); }
+  - |
+    void f(cudaGraphExec_t graph, cudaStream_t stream) { cudaGraphLaunch(graph, stream); }
+  - |
+    void f(cudaStream_t stream, cudaEvent_t event) { cudaEventRecord(event, stream); }

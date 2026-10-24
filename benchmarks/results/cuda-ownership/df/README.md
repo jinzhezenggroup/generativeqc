@@ -20,12 +20,16 @@ claim. All subsequent native/GPU, independent raw/source and sanitizer gates pas
 The first complete inventory-ordered comparison (Slurm 9229, source `635dc2c`)
 passed every numerical gate and 89/90 performance gates. OH/def2-SVP UHF,
 spherical, batch one, energy-only failed: ratio **1.033615423 > 1.02**. That
-complete rejected run is retained losslessly in `rejected-inventory-run.json.gz`,
+complete rejected run is retained losslessly in `rejected-inventory-run.json.xz`,
 with explicit rejection and per-file checksums in `rejected-inventory-run.json`.
 It is not accepted promotion evidence. The driver stopped at that failure, so
 its later native/GPU/oracle/sanitizer stages did not execute.
 
-`oh-diagnostic.json` retains every isolated worker, the diagnostic drivers and
+The storage-only gzip-to-XZ migration preserves every decoded byte and all
+original-file checksums. XZ uses LZMA2 preset 9 extreme, a 64 MiB dictionary,
+lc=3, lp=0, pb=0 and CRC64; the decoded archive remains 3,795,930 bytes.
+
+`oh-diagnostic.json.xz` retains every isolated worker, the diagnostic drivers and
 complete extracted profiler reports with checksums. An isolated five-sample
 diagnostic with the same OH preamble returned ratio 0.999955. Graph-node Nsight traces found unchanged cuSOLVER work accounting for
 about 76% of GPU time and DF bulk kernel times of 6.206/6.265 ms. These observations
@@ -47,7 +51,7 @@ The candidate's original optimized native library and objects were built at
 `635dc2c6e0314dd45656e5503754159dd8bd1794`. The measured child `3afbd95` changes
 only benchmark/publication tools and their tests. All native compilation inputs,
 the library checksum and retained object hashes are identical across these two
-revisions. `validation.json` records this original-build identity explicitly.
+revisions. `validation.json.xz` records this original-build identity explicitly.
 These objects are original timing artifacts, not reconstructions. CPU integration
 checks at `635dc2c` are reused only within that identical native-input scope.
 
@@ -78,12 +82,14 @@ estimates; separately budgeted force staging and opaque allocations are outside
 those diagnostics. Per-case whole-HF ledger limits and scope exceptions remain
 in the samples. Cases beyond the public AO inventory have no total-budget claim.
 
-`validation.json` retains exact CPU/GPU test logs and XML as text with their
+`validation.json.xz` retains exact CPU/GPU test logs and XML as text with their
 original checksums, suite totals, sanitizer conclusions and source identities.
-`raw-source.json` retains all 24 independent libcint/NumPy raw/source comparisons,
-including coordinate derivatives and public transforms. Physical input files
-are retained in `fixtures/`; the exact measured source regenerates the
-independent references. These checks use the same final library as the endpoint
+`raw-source.json.xz` retains all 24 independent libcint/NumPy raw/source comparisons,
+including coordinate derivatives and public transforms. These two XZ companions
+decode to the exact original JSON bytes, bound by stored and decoded sizes and
+SHA-256 in `validation-files.json`; use `xz -dc FILE.json.xz` to inspect them.
+Physical input files are retained in `fixtures/`; the exact measured source
+regenerates the independent references. These checks use the same final library as the endpoint
 workers. Historical opt-in derivative evidence remains in its original archive.
 
 ## Complete integration and checkpoint validation
@@ -110,8 +116,9 @@ changes. This test source is retained at `evidence/issue-231-df-validation`.
 Slurm 9238 reruns all 18 native CUDA tests and all 143 Python integration cases
 across the six complete modules. The collected and executed node inventories
 match exactly. Slurm 9239 completes the 24 independent raw/source cases and both
-sanitizer runs; stage-specific provenance retains both jobs. `validation.json` records its distinct test revision
-and the identical native source/library binding to the endpoint matrix.
+sanitizer runs; stage-specific provenance retains both jobs. `validation.json.xz`
+records its distinct test revision and the identical native source/library
+binding to the endpoint matrix.
 `checkpoint-validation-diagnostics.json` and its lossless compressed companion
 retain the earlier failed validations, memory samples and all 80 diagnostic
 bitwise trials. The diagnostic failures are not accepted integration evidence.
@@ -161,3 +168,6 @@ Publication independently recomputes numerical and all performance gates from
 the workers. It never trusts the comparison's accepted flag or overwrites an
 existing bundle. CPU integrity tests reconstruct both archived domains and
 reject corrupted samples and resource bindings.
+
+The OH diagnostic XZ companion restores the exact original JSON bytes; its
+stored and decoded identities are retained in `validation-files.json`.

@@ -1,0 +1,11 @@
+id: cpp-review-format-string
+valid:
+  - |
+    void log(FILE* f, const char* text) { fprintf(f, "%s", text); }
+  - |
+    void copy(char* dst, const char* text) { sprintf(dst, "%s", text); }
+invalid:
+  - |
+    void log(FILE* f, const char* text) { fprintf(f, text); }
+  - |
+    void copy(char* dst, const char* text) { sprintf(dst, text); }

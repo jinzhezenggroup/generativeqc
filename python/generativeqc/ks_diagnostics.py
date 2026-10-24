@@ -6,6 +6,10 @@ import typing
 from dataclasses import asdict, dataclass
 
 from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 from . import _native
@@ -56,6 +60,8 @@ class KsDiagnostic:
     the other. Electron counts use the AO overlap metric, not quadrature.
     A warm retry reports its final attempt; this is not a total-work counter
     for discarded attempts. Execution and transport profiling are separate.
+    The optional coulomb_exchange_work is a narrow, observed target-execution
+    census including discarded attempts; it does not certify full precision.
     """
 
     occupations: tuple[int, int]
@@ -70,6 +76,9 @@ class KsDiagnostic:
     density_change_max: float
     physical_residual_max: float
     history: tuple[KsIteration, ...]
+    coulomb_exchange_work: dict[str, typing.Any] | None = None
+    nonlocal_work: dict[str, int] | None = None
+    nonlocal_history_scopes: tuple[str, ...] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -78,7 +87,24 @@ class KsDiagnostic:
         numerical values remain visible for callers to reject, not hidden as
         missing stage baselines.
         """
-        return asdict(self)
+        payload = asdict(self)
+        # The optional native initial-density experiment keeps its work in the
+        # same history. Those rows describe the provisional operator, so they
+        # must never look like physical WB97M-V target checks to readers.
+        provisional = (self.nonlocal_work or {}).get("provisional_focks", 0)
+        if self.nonlocal_history_scopes is not None:
+            for row, scope in zip(
+                payload["history"], self.nonlocal_history_scopes, strict=True
+            ):
+                row["operator_scope"] = scope
+        elif provisional:
+            for row in payload["history"]:
+                row["operator_scope"] = (
+                    "provisional-semilocal-rsh"
+                    if row["iteration"] <= provisional
+                    else "full-target"
+                )
+        return payload
 
 
 @dataclass(frozen=True)
@@ -105,6 +131,36 @@ def _components(value: typing.Any) -> typing.Any:
         value.hartree_energy,
         value.xc_energy,
     )
+
+
+def _coulomb_exchange_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> dict[str, typing.Any] | None:
+    name = (
+        "generativeqc_calculation_get_ks_coulomb_exchange_work_v1"
+        if index is None
+        else "generativeqc_batch_get_ks_coulomb_exchange_work_v1"
+    )
+    query = getattr(library, name, None)
+    if query is None:
+        return None
+    record = _native.KsCoulombExchangeWorkDescriptor(
+        ctypes.sizeof(_native.KsCoulombExchangeWorkDescriptor), _native.ABI_VERSION
+    )
+    prefix = (handle,) if index is None else (handle, index)
+    status = query(*prefix, ctypes.byref(record))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    return {
+        "complete": bool(record.complete),
+        "coulomb_applications": record.coulomb_applications
+        if record.complete
+        else None,
+        "exchange_applications": record.exchange_applications
+        if record.complete
+        else None,
+    }
 
 
 def read_ks_diagnostic(
@@ -134,7 +190,11 @@ def read_ks_diagnostic(
         return None
     _native.check(library, status)
     # Domain IDs identify numerical policies, independently of method aliases.
-    if expected_domain == AUTOMATIC_SCF_DOMAIN:
+    if expected_domain == DENSITY_WORK_DOMAIN:
+        if summary.scf_domain_version != DENSITY_WORK_DOMAIN_VERSION:
+            raise RuntimeError("native density-work Libxc diagnostic domain mismatch")
+        domain = DENSITY_WORK_DOMAIN
+    elif expected_domain == AUTOMATIC_SCF_DOMAIN:
         if summary.scf_domain_version != LIBXC_WORK_DOMAIN_VERSION:
             raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
         domain = AUTOMATIC_SCF_DOMAIN
@@ -182,6 +242,60 @@ def read_ks_diagnostic(
         density_change_max=summary.density_change_max,
         physical_residual_max=summary.physical_residual_max,
         history=tuple(rows),
+        coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
+        nonlocal_work=_nonlocal_work(library, handle, index),
+        nonlocal_history_scopes=_nonlocal_history_scopes(
+            library, handle, index, len(history)
+        ),
+    )
+
+
+def _nonlocal_history_scopes(
+    library: typing.Any, handle: typing.Any, index: typing.Any, count: int
+) -> tuple[str, ...] | None:
+    """Distinguish interleaved inner problems from physical target evaluations."""
+    query = getattr(
+        library, "generativeqc_internal_batch_get_nonlocal_history_scopes_v1", None
+    )
+    if index is None or query is None or not count:
+        return None
+    values = (ctypes.c_uint64 * count)()
+    status = query(handle, index, values, count)
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    names = ("full-target", "provisional-semilocal-rsh", "provisional-frozen-vv10")
+    if any(value >= len(names) for value in values):
+        raise ValueError("invalid native nonlocal operator scope")
+    return tuple(names[value] for value in values)
+
+
+def _nonlocal_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> typing.Any:
+    """Read completed run-local VV10 counters; older libraries remain unavailable."""
+    query = getattr(library, "generativeqc_internal_batch_get_nonlocal_work_v1", None)
+    if index is None or query is None:
+        return None
+    values = (ctypes.c_uint64 * 6)()
+    status = query(handle, index, values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    if values[0] != 1:
+        raise ValueError("invalid native nonlocal work availability")
+    return dict(
+        zip(
+            (
+                "provisional_focks",
+                "target_focks",
+                "pair_cache_probes",
+                "pair_cache_hits",
+                "pair_sweeps",
+            ),
+            values[1:],
+            strict=True,
+        )
     )
 
 

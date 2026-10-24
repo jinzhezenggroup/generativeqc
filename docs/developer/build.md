@@ -93,6 +93,17 @@ available memory.
 The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.
 
+The distributable `cuda-release-cli-sm120` preset **always includes the
+entire structurally representable automatic CUDA XC catalog**. It explicitly
+sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` empty (full catalog, no name
+whitelist). Release CI compares generated dispatch cases against the live
+structural registry before packaging; a partial bundle must fail the build.
+This affects compilation and binary size, not scientific admission: unsupported
+KS/force endpoints still fail explicitly. Development builds can opt into
+smaller experimental bundles with a nonempty functional selection.
+
+
 `GENERATIVEQC_ENABLE_CXX_PCH=ON` is an opt-in clean-build experiment that
 precompiles only stable standard-library headers for host C++ sources; CUDA
 translation units remain outside that PCH. Keep it off with the default compiler
@@ -121,6 +132,16 @@ entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` only when the validated
 generic CUDA path is an intentional build choice.
 
 ## Compiler cache, generated shards, and compile units
+
+For calculation-time module triggers and the distinction between packaged AOT,
+Python artifacts and compiler caches, see the
+[runtime compilation inventory](../maintainer/runtime_compilation.md).
+
+```{toctree}
+:hidden:
+
+../maintainer/runtime_compilation
+```
 
 Builds automatically prefer `sccache` and fall back to `ccache` when either
 is on `PATH`. Runtime JIT compilation uses the same precedence on artifact

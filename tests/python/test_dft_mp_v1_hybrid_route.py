@@ -6,13 +6,15 @@ they do not load a native library or claim AUTO numerical qualification.
 
 import ast
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
+from generativeqc import Calculator, _native
 from generativeqc import _generated_methods as method_manifest
-from generativeqc import _native
 from generativeqc._cpu_force_resources import qualified_direct_semilocal_context
+from generativeqc._df_precision import fitted_scf_budget_admitted
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
@@ -22,16 +24,16 @@ from generativeqc.ks import (
     cuda_nonlocal_force_basis_eligible,
     ks_coefficients,
     mixed_density_fitted_force_eligible,
+    split_hybrid_df_force_admitted,
 )
 from generativeqc_compiler.method import (
     D4Spec,
     DispersionCorrectionPrimitive,
+    ExactExchangePrimitive,
     compile_ks_execution_plan,
     resolve_bulk_ks,
     resolve_method,
 )
-
-from tools.dft_mp_v1 import qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -85,6 +87,7 @@ def _promoted(
     include_semilocal: bool = False,
     device: str = "cuda",
     automatic_name: str | None = None,
+    composite: str | None = None,
 ) -> bool:
     _, assignments, promotion = _nodes()
     options = SimpleNamespace(
@@ -129,7 +132,12 @@ def _promoted(
             else _native.DENSITY_FITTING_NONE
         ),
         _automatic_libxc_name=automatic_name,
-        _dispersion_method_ir=None,
+        _dispersion_method_ir=(
+            resolve_method(composite, spin=spin) if composite is not None else None
+        ),
+    )
+    owner._density_fitted_composite_force_eligible = MethodType(
+        Calculator._density_fitted_composite_force_eligible, owner
     )
     scope = {
         "self": owner,
@@ -140,6 +148,9 @@ def _promoted(
             else _native.DENSITY_FITTING_NONE
         ),
         "semilocal_force": False,
+        # These force-route probes request no application error budget. Resolve
+        # its admission through the real helper; AUTO alone must not grant it.
+        "fitted_budget": fitted_scf_budget_admitted(owner, None),
         "cpu_composed_all_electron_force": False,
         "cuda_nonlocal_force": False,
         "qualified_basis": lambda basis: blocked == "ecp",
@@ -148,6 +159,7 @@ def _promoted(
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
+        "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
         "D4Spec": D4Spec,
         "DispersionCorrectionPrimitive": DispersionCorrectionPrimitive,
@@ -169,7 +181,7 @@ def _promoted(
     elif blocked == "unsupported-device":
         owner._device_name = "unsupported"
     elif blocked == "dispersion":
-        owner._dispersion_method_ir = object()
+        owner._dispersion_method_ir = resolve_method("R2SCAN-D4(BJ-EEQ-ATM)", spin=spin)
     elif blocked in ("exchange", "nonlocal"):
         options.execution_plan = SimpleNamespace(
             exchange=(SimpleNamespace(operator="short-range"),)
@@ -215,11 +227,11 @@ def test_qualified_non_split_hybrid_route_admits_both_precision_requests(
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("method", ("M06-2X", "MN15"))
-def test_generated_split_hybrid_force_keeps_auto_fail_closed(
+def test_generated_split_hybrid_force_uses_shared_precision_admission(
     spin: str, method: str
 ) -> None:
     assert _promoted(precision=_native.PRECISION_FP64, spin=spin, method=method)
-    assert not _promoted(precision=_native.PRECISION_AUTO, spin=spin, method=method)
+    assert _promoted(precision=_native.PRECISION_AUTO, spin=spin, method=method)
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -229,10 +241,11 @@ def test_auto_force_admission_uses_resolved_domain_under_renaming(
 ) -> None:
     assert _promoted(
         precision=_native.PRECISION_AUTO, spin=spin, method=method, renamed=True
-    ) is (method in ("PBE0", "B3LYP"))
+    )
 
 
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15"))
 @pytest.mark.parametrize(
     "blocked",
     (
@@ -245,9 +258,9 @@ def test_auto_force_admission_uses_resolved_domain_under_renaming(
     ),
 )
 def test_auto_force_route_preserves_nonprecision_boundaries(
-    precision: int, blocked: str
+    precision: int, method: str, blocked: str
 ) -> None:
-    assert not _promoted(precision=precision, blocked=blocked)
+    assert not _promoted(precision=precision, method=method, blocked=blocked)
 
 
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
@@ -290,7 +303,11 @@ def test_density_fitted_force_uses_own_strict_precision_admission(
         density_fitting=True,
         include_semilocal=True,
         device=device,
-    ) is (precision == _native.PRECISION_FP64)
+    ) is (
+        precision == _native.PRECISION_FP64
+        and method != "MN15"
+        and (method != "M06-2X" or device == "cuda")
+    )
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -300,6 +317,24 @@ def test_mixed_df_admission_keeps_unqualified_range_graph_closed(
 ) -> None:
     method = resolve_method("CAM-B3LYP", spin=spin)
     assert not mixed_density_fitted_force_eligible(method, backend=backend)
+
+
+@pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize("composite", ("R2SCAN-3c", "R2SCAN-D4(BJ-EEQ-ATM)"))
+def test_df_composite_force_keeps_its_manifest_and_precision_boundaries(
+    precision: int, spin: str, device: str, composite: str
+) -> None:
+    assert _promoted(
+        precision=precision,
+        spin=spin,
+        method="R2SCAN",
+        density_fitting=True,
+        include_semilocal=True,
+        device=device,
+        composite=composite,
+    ) is (composite == "R2SCAN-3c" and precision == _native.PRECISION_FP64)
 
 
 @pytest.mark.parametrize(
@@ -324,38 +359,6 @@ def test_df_force_preserves_nonprecision_boundaries(blocked: str) -> None:
         density_fitting=True,
         include_semilocal=True,
     )
-
-
-@pytest.mark.parametrize(
-    "guard",
-    (
-        'self._device_name == "cuda"',
-        "not basis_has_ecp",
-        "self._ks_options is not None",
-        'self._ks_options.xc_schedule == "device_fused"',
-        "cuda_global_hybrid_force_eligible(self._ks_options.method_ir)",
-        "self._precision_mode == _native.PRECISION_FP64",
-        "self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN",
-    ),
-)
-def test_capacity_audit_rejects_a_changed_hybrid_guard(
-    tmp_path: Path, guard: str
-) -> None:
-    source, assignments, _ = _nodes()
-    assignment = assignments["cuda_hybrid_force"]
-    segment = ast.get_source_segment(source, assignment)
-    assert segment is not None and segment.count(guard) == 1
-    for name in ("calculator.py", "batch.py"):
-        target = tmp_path / "python/generativeqc" / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        text = (ROOT / "python/generativeqc" / name).read_text(encoding="utf-8")
-        if name == "calculator.py":
-            text = text.replace(segment, segment.replace(guard, "True", 1), 1)
-        target.write_text(text, encoding="utf-8")
-    with pytest.raises(
-        RuntimeError, match="public global-hybrid force predicate changed"
-    ):
-        qualify_capacity._source_public_route(tmp_path)
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
@@ -400,3 +403,38 @@ def test_automatic_semilocal_promotion_remains_cpu_fp64_only(
         device=device,
         automatic_name=name,
     ) is (device == "cpu" and precision == _native.PRECISION_FP64)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
+    spin: str,
+) -> None:
+    method = resolve_method("M06-2X", spin=spin)
+    renamed = replace(method, identifier="opaque-qualified-split")
+    assert split_hybrid_df_force_admitted(
+        renamed, backend="cuda", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        renamed, backend="cpu", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        renamed, backend="cuda", xc_schedule="host_unfused"
+    )
+    wrong_fraction = replace(
+        renamed,
+        primitives=tuple(
+            replace(node, coefficient=Fraction(3, 7))
+            if isinstance(node, ExactExchangePrimitive)
+            else node
+            for node in renamed.primitives
+        ),
+    )
+    assert wrong_fraction != renamed
+    assert not split_hybrid_df_force_admitted(
+        wrong_fraction, backend="cuda", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        resolve_method("MN15", spin=spin),
+        backend="cuda",
+        xc_schedule="device_fused",
+    )

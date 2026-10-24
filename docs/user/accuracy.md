@@ -4,6 +4,11 @@
 requirements and evidence. It is an explicit comparison API. It does not yet
 select precision, screening or iteration tolerances inside `Calculator`.
 
+For a single optimized strict HF/KS endpoint or an explicit observable-error
+audit with bounded FP64 fallback, use
+[application precision policies](application_precision.md). FP64 without an
+explicit target does not claim an independently measured observable budget.
+
 `Calculator.resolved_model(atoms, charge=..., multiplicity=...)` hashes the
 actual ordered geometry, basis/representation, electron populations and
 Hamiltonian. It reuses the existing basis mathematical identity and canonical
@@ -151,3 +156,29 @@ diagnostic evidence only; they do not certify the estimator or change its
 method/basis admission and strict-fallback rules. See the
 [holdout-coverage decision](../../.agents/notes/implemented/numerics/2026-09-21-scf-holdout-coverage-reporting.md)
 for the edge-case semantics.
+
+## Native SCF effort decisions
+
+Eligible built-in `ForceAwareScfPolicy` values use the same native decision
+implementation as the installed C/C++ SDK. Native code owns empirical forecasting,
+strict precedence, first-admissible level selection, relaxation hysteresis and
+measured final verification. Python presents immutable policy, state, transition
+history and estimate records; ordinary native decisions do not call the Python
+predictor or repeat a failed native decision in Python.
+
+The policy remains opt-in, empirical and limited-domain. Calibration fitting and
+method/basis provenance are explicit metadata work, not hidden production oracle
+calls. Final success still needs the actual independently executed strict result,
+matching model/level metadata, SCF convergence and all measured observable gates.
+`verify_final` does not reconverge a calculation or certify an empirical envelope.
+
+Missing additive native protocols, subclassed policies/predictors/levels,
+nonstandard identity comparisons and integer states outside the installed ABI
+retain explicit compatibility. Selected-library load failures and native errors
+propagate. Loaded native library paths must remain immutable; a fresh library
+path selects a separate binding, not a hot replacement of a loaded shared object.
+
+This moves NUM03 policy decisions, not the geometry optimizer, physical SCF stage
+execution or the broader progressive/precision controller. The
+[native protocol reference](../reference/native_api.md#empirical-scf-effort-policy)
+defines call-local ownership, statuses and units.

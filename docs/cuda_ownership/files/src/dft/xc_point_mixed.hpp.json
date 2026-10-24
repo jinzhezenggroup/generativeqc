@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/xc_point_mixed.hpp",
+  "reason": "Budget-qualified FP32 point dispatch around the shared strict and typed semilocal equations, with representability guards and unchanged FP64 tail fallback. This is maintained precision policy, not a second XC equation implementation.",
+  "regions": [],
+  "role": "scientific",
+  "subsystem": "xc"
+}

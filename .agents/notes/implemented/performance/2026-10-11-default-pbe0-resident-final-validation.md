@@ -84,6 +84,10 @@ regression explicitly rejects positive `0.25` and unrestricted `-0.25`.
 
 ## Revisit when
 
+The later [pure-J extension](2026-10-15-pure-j-resident-final-validation.md)
+adds a separately bounded exact/fitted Coulomb-only policy; it does not relabel
+this historical PBE0 cohort or change its original evidence.
+
 Independent complete endpoints justify extending automatic admission to small
 owners, UKS, fitted providers or other functional compositions, or demonstrate
 a genuine resource/schedule cliff requiring a more precise lower/upper guard.

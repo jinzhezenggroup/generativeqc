@@ -204,6 +204,12 @@ def test_exchange_reservation_preserves_full_scratch_and_minimum_boundaries(
     library = Calculator()._library
     solver_reserve = 2 * (1 << 20) + 16 * 8 * 8 * 8
     solver_reserve += (9 * 8 * 8 + 8) * 8 + (3 * 1 + 1) * 128
+    # This small shape is SCF-peak dominated. The metric-only scaled matrix,
+    # scale vector and provider allowance expire before that live set; retain
+    # the same one-byte admission/fallback gates without adding disjoint peaks.
+    solver_reserve -= (1 << 20) + (17 * 8 * 8 + 8) * 8
+    # The execution-owned RHF Fock census is one uint64 per persistent plan.
+    solver_reserve += 8
     full_bytes += solver_reserve
     minimum_bytes = 1084719 + solver_reserve
     monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
@@ -550,7 +556,7 @@ def test_diis_reservation_precedes_retained_panel_selection() -> None:
     assert density_fitting_diis_bytes(library, 4, 768, 0) == 0
     assert density_fitting_diis_bytes(library, 4, 768, 1) == 0
     plans = []
-    for history in (2, 8, 12):
+    for history in (2, 8, 16):
         fixed = density_fitting_diis_bytes(library, 1, 768, history) + (1 << 20)
         plan = density_fitting_tile_plan(
             library,

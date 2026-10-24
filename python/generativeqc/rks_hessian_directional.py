@@ -174,6 +174,8 @@ def _validate_partition_provenance(
     point's large atomic measure must not amplify that partition roundoff into
     a false provenance failure. Actual AO integration still uses native weights.
     """
+    from generativeqc_compiler.common.array_execution import arrays as np
+
     raw, actual, expected = map(np.asarray, (atomic_weights, weights, fractions))
     if (
         raw.ndim != 1
@@ -181,19 +183,24 @@ def _validate_partition_provenance(
         or expected.shape != raw.shape
         or any(value.dtype.kind not in "iuf" for value in (raw, actual, expected))
         or any(not np.isfinite(value).all() for value in (raw, actual, expected))
-        or np.any(raw < 0)
-        or np.any(actual < 0)
         or np.any(expected < 0)
         or np.any(expected > 1)
     ):
         raise ValueError("invalid native grid partition measures")
-    live = raw > 0
+    # Signed Lebedev measures retain the same dimensionless ownership contract.
+    live = raw != 0
     if np.any(actual[~live] != 0):
         raise ValueError("zero atomic measure has nonzero grid weight")
+    # Check signs before division: an opposite-sign ratio can underflow to -0.
+    if np.any((actual != 0) & ((actual < 0) != (raw < 0))):
+        raise ValueError("native grid partition weights have inconsistent signs")
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
         observed = actual[live] / raw[live]
-    if not np.isfinite(observed).all() or not np.allclose(
-        expected[live], observed, atol=2e-14, rtol=2e-13
+    if (
+        not np.isfinite(observed).all()
+        or np.any(observed < 0)
+        or np.any(observed > 1)
+        or not np.allclose(expected[live], observed, atol=2e-14, rtol=2e-13)
     ):
         raise ValueError("native grid partition provenance does not reproduce weights")
 
@@ -241,6 +248,7 @@ def _native_rks_xc_geometry_direction(
         center_motion=direction,
         iterations=grid_spec.partition_iterations,
         coincident_tolerance=grid_spec.coincident_tolerance,
+        atomic_radii=grid_spec.partition_radii(basis.atoms),
     )
     selected = (np.arange(len(points)), owners)
     atomic_weights = np.asarray(source.atomic_weights)
@@ -376,6 +384,7 @@ def native_rks_xc_hvp_components(
         center_motion=vector,
         iterations=grid_spec.partition_iterations,
         coincident_tolerance=grid_spec.coincident_tolerance,
+        atomic_radii=grid_spec.partition_radii(basis.atoms),
     )
     _validate_partition_provenance(
         atomic_weights, grid.weights, right_partition.weights[selected]
@@ -488,6 +497,7 @@ def native_rks_xc_hvp_components(
                 center_motion=unit,
                 iterations=grid_spec.partition_iterations,
                 coincident_tolerance=grid_spec.coincident_tolerance,
+                atomic_radii=grid_spec.partition_radii(basis.atoms),
             )
             mixed_partition = partition_mixed_response(
                 points,
@@ -498,6 +508,7 @@ def native_rks_xc_hvp_components(
                 right_center_motion=vector,
                 iterations=grid_spec.partition_iterations,
                 coincident_tolerance=grid_spec.coincident_tolerance,
+                atomic_radii=grid_spec.partition_radii(basis.atoms),
             )
             for branch in (
                 left_partition.branch_identity,

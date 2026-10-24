@@ -1,11 +1,73 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-22 README comparison](readme-final-20261022/README.md)
+remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
+and one GPU4PySCF default SCF profile. Both engines include complete moving-grid
+force response. The report retains common independent accuracy gates, actual
+work, failed populations and the [remaining configuration differences](readme-final-20261022/conditions.md).
+The [previous repaired comparison](readme-repaired-20261021/README.md) and
+[earlier comparison](readme-unified-20261021/README.md) retain their original
+tables and verified published-Git snapshots.
+
+The [initial 2026-10-20 default-grid refresh](readme-defaults-20261020/README.md)
+retains 765 complete cold/warm E+F calls across all eight HF/DFT methods,
+including public Standard/Fast modes. That frozen native source rejected the
+reference's default g-shell auxiliary basis; those failures remain explicit. These are stock
+latencies with different force-response conventions, not qualified speedups.
+
+The [2026-10-20 CCSD(T)/CBS Fast campaign](readme-cbs-fast-20261020/README.md)
+compares complete Standard/Fast QM7 C1–C7 calls with the same binary and GPU
+within each pair. Fast combines relaxed convergence with default FP32 DF-CCSD
+preconvergence and FP64 physical checks/response. Constituent and
+composite energy/full-force differences pass the declared allowances; independent
+C2 directional checks and single-observation timing limits remain explicit.
+
+The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
+separates shared J/K, nonlocal packet and native-force gains from remaining
+small-system slowdowns, with source-bound independent accuracy and work counts.
+
+The [2026-10-15 combined #2531/#2532 HF/DFT refresh](readme-refresh-20261015/README.md)
+reports native Direct/DF E+F timings against unchanged historical GPU4PySCF
+references, with independent accuracy checks, SCF work and cache-priming receipts.
+Its 2026-10-17 native-only ωB97M-V DF/96 supplement adds a complete cold endpoint
+with explicit memory allowances; the five-repeat warm population timed out.
+
+The [2026-10-15 r²SCAN-3c qualification](r2scan3c-final-validation-20261015/README.md)
+records independent Direct/DF numerics and complete 3/12/48/96-atom cold/moved
+endpoints, including work-confounded results and the limits of default enablement.
+
+The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
+retains native direct cold/warm populations through 96 atoms and DF through
+48 atoms. Missing reference accuracy is explicit and does not suppress DF/48;
+only the incomplete DF/96 point is omitted, with negative evidence retained separately.
+The 2026-10-15 correction remeasures native 3/12-atom points after explicit
+compilation-cache priming in separate processes, retaining the original outliers.
+
+The [2026-10-14 full DF-HF/RI-JK CBS campaign](readme-cbs-full-20261014/README.md)
+measures complete QM7 C1–C7 E+F with consistent fitted analytic response and
+shared JKFIT/correlation auxiliaries. It follows independent small-system
+qualification and retains the earlier budget-refused campaign separately.
+
+The [2026-10-13 DF-CCSD(T)/CBS campaign](readme-cbs-20261013/README.md) measures
+complete GPU energy + analytic-force endpoints for fixed QM7 C1–C7 alkanes,
+with cc-pV[D,T]Z MP2 correlation extrapolation and a DZ DF-CCSD(T) correction.
+It retains exact RHF references, shared same-basis work, independent directional
+force checks, and explicit incomplete/unchecked outcomes.
+
+The [2026-10-13 HF/DFT comparison](readme-dft-20261013/README.md) measures complete
+cold/warm direct and density-fitted endpoints based on master `e0ad22036` for HF, PBE, PBE0,
+B3LYP, r2SCAN, r2SCAN-3c, M06-2X and ωB97M-V. The report distinguishes original
+master measurements from the force-memory fix reruns. It retains independent numerical
+checks, per-repeat SCF work and unsuccessful outcomes in unchanged live
+summaries. The superseded report, ancillary receipts, figures and tables are
+recoverable through its verified merged-Git snapshot.
+
 The [2026-09-22 endpoint investigation](readme-20260922/README.md) retains
 matched GPU HF, partial DFT and internal CCSD(T) measurements from master
-`572fbd6d`. It is diagnostic evidence, **not qualified for README publication**:
-large-system correctness, completeness and capability blockers remain open under
-[#1117](https://github.com/jinzhezenggroup/vibeqc/issues/1117). Its stopped
-and unsupported paths have no inferred native timings.
+`572fbd6d` through a verified merged-Git snapshot. It is historical diagnostic
+evidence, **not qualified for README publication**: correctness, completeness
+and capability blockers stopped that campaign. Its stopped and unsupported
+paths have no inferred native timings or later scientific qualification.
 
 ## Adding and maintaining evidence
 
@@ -81,8 +143,8 @@ This table is generated from the newest clean accepted artifacts with at least f
 | AO | Batch | Artifact | Source | Samples | Ordinary VibeQC / GPU4PySCF | Iteration-matched branch | Matched speedup | Max dE | Max dF |
 | ---: | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
 | 96 | 1 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b1`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b1.json) | `a5473bf` | 5 | 416.829 ms / 1948.937 ms | 3 | 3.579x | 1.71e-12 Eh | 1.76e-11 Eh/bohr |
-| 96 | 4 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json) | `a5473bf` | 5 | 1194.954 ms / 7260.944 ms | unavailable (unmatched) | n/a | 3.24e-12 Eh | 1.66e-11 Eh/bohr |
-| 192 | 1 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json) | `a5473bf` | 5 | 2495.702 ms / 2219.326 ms | unavailable (unmatched) | n/a | 8.75e-12 Eh | 5.49e-11 Eh/bohr |
+| 96 | 4 | [`rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4`](rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json.gz) | `a5473bf` | 5 | 1194.954 ms / 7260.944 ms | unavailable (unmatched) | n/a | 3.24e-12 Eh | 1.66e-11 Eh/bohr |
+| 192 | 1 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json.gz) | `a5473bf` | 5 | 2495.702 ms / 2219.326 ms | unavailable (unmatched) | n/a | 8.75e-12 Eh | 5.49e-11 Eh/bohr |
 | 192 | 4 | [`rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b4`](rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b4.json) | `a5473bf` | 5 | 10558.560 ms / 7401.350 ms | unavailable (unmatched) | n/a | 1.27e-11 Eh | 2.44e-10 Eh/bohr |
 
 When a shared branch exists, the speed gate uses its iteration-matched median. Otherwise the ordinary median is explicitly labeled unmatched and remains a timing observation rather than a parity claim.
@@ -99,7 +161,7 @@ passes the issue's `<=1.05x` gate. The maximum paired differences are
 A clean completion-audit replay from metadata-only commit `2335e71` leaves the
 native implementation unchanged and independently passes at `2.236320 s`
 versus `2.144024 s`, or `1.043048x`. Its
-[`raw artifact`](rtx5090-2335e71-issue-41-completion-evidence.json) publishes
+[`raw artifact`](rtx5090-2335e71-issue-41-completion-evidence.json.gz) publishes
 all five ABBA samples per engine, per-replay iterations and final residuals,
 the fixed engine-local warm-start policy, CUDA and host compiler versions, and
 the post-measurement GPU clocks, power, temperature, and performance state.

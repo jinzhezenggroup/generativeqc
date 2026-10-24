@@ -39,8 +39,8 @@ struct DensityFittingThreeCenter {
   // plans can preserve their indexing after dependent directions are removed.
   std::vector<double> values;
   // Optional provider-oriented cache: Q-major [Q][mu][nu]. Production CPU
-  // preparation materializes it only when the external dense-LA provider will
-  // use it, so repeated SCF exchange builds do not repack the immutable tensor.
+  // preparation retains it for the external dense-LA provider or within the
+  // bounded scalar-cache envelope. Absence retains the strided scalar fallback.
   std::vector<double> auxiliary_major_values;
 };
 
@@ -52,6 +52,9 @@ struct DensityFittingScfData {
   // The metric cutoff selects the retained Hamiltonian as well as its response.
   // Cached plans must be rebuilt when callers change this numerical control.
   double metric_relative_threshold{};
+  /** Zero is Coulomb; positive omega binds this owner to erf(omega*r)/r.
+   * Values, metric rank and response must retain the same radial operator. */
+  double range_omega{};
   // Resolved execution-resource identity for this prepared owner. A zero public
   // request is resolved once and replayed from this owner rather than probing
   // again during cache reuse.
@@ -90,6 +93,7 @@ struct DensityFittingRhfJk {
   std::size_t nbf{};
   std::vector<double> coulomb;
   std::vector<double> exchange;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 /**
@@ -110,6 +114,7 @@ struct DensityFittingUhfJk {
   std::vector<double> coulomb;
   std::vector<double> alpha_exchange;
   std::vector<double> beta_exchange;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 /**
@@ -166,14 +171,15 @@ struct DensityFittingUhfGradient {
 [[nodiscard]] DensityFittingRhfGradient build_density_fitting_rhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals, const std::vector<double>& density,
-    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {});
+    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {}, double omega = 0.0);
 
 /** UHF analogue of build_density_fitting_rhf_weighted_gradient. */
 [[nodiscard]] DensityFittingUhfGradient build_density_fitting_uhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals,
     const std::vector<double>& alpha_density, const std::vector<double>& beta_density,
-    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {1.0, -1.0});
+    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {1.0, -1.0},
+    double omega = 0.0);
 
 /**
  * Construct the thresholded Moore--Penrose inverse of a Coulomb metric.
@@ -306,10 +312,11 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t automatic_rhf_rank = 0, bool retain_raw = true);
 
 /** Resolve dense/packed value storage from the requested policy and executable
- * resource plan. Automatic promotion is bounded to singleton RHF or an explicit
- * method-owned restricted occupation reservation, not arbitrary-density callers:
- * retain dense whenever it is fully resident, otherwise use a single fitted
- * packed owner only when that owner fits the same value allowance.
+ * resource plan. Automatic promotion is bounded to singleton RHF, a
+ * method-owned restricted occupation reservation, or a restricted physical
+ * Coulomb-only Fock owner. The latter uses rank zero, with no occupied-factor
+ * lease. Arbitrary-density callers retain dense storage: only replace a
+ * streamed plan with one packed fitted owner that fits the same allowance.
  */
 [[nodiscard]] DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch_size, std::size_t nbf, std::size_t naux,
@@ -320,12 +327,16 @@ class DensityFittingBudgetError : public std::invalid_argument {
 /** Admit a method-owned singleton restricted resident B within the resolved
  * total envelope. Only live automatic budgets may rebalance value/response
  * capacity; explicit caps and probe-failure budgets retain their original split.
- * The caller must validate the restricted occupation and automatic selector.
- * Preserve a bounded occupied-response workspace and at least 20% for response;
- * return the original split if the native packed planner still cannot fit. */
+ * The caller must validate the restricted occupation and automatic selector;
+ * a restricted, physical J-only owner may explicitly admit rank zero without
+ * acquiring an occupied projection. Prefer the existing 20% response margin.
+ * If that loses B or the requested complete U, spend only the minimum extra
+ * fractional slack within observed free bytes minus reserved headroom, while
+ * retaining the complete shape-derived response floor. Explicit caps and
+ * unavailable complete storage retain their bounded fallback. */
 [[nodiscard]] DfResolvedBudget resolve_method_owned_df_resident_budget(
     const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
-    std::size_t source_device_bytes);
+    std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);
 
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native

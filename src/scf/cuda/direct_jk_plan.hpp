@@ -28,8 +28,7 @@ constexpr DirectJkValueDispatch direct_jk_value_dispatch(
     bool want_exchange, bool mixed_coulomb, bool canonical_available = false) noexcept {
   const bool generated_coulomb = generated_coulomb_available && want_coulomb && !mixed_coulomb;
   const bool generated_exchange = generated_exchange_available && want_exchange;
-  const bool canonical_coulomb =
-      canonical_available && want_coulomb && !generated_coulomb && !mixed_coulomb;
+  const bool canonical_coulomb = canonical_available && want_coulomb && !generated_coulomb;
   const bool canonical_exchange = canonical_available && want_exchange && !generated_exchange;
   return {generated_coulomb,
           generated_exchange,
@@ -118,11 +117,19 @@ struct CudaDirectJkPlan {
   /** Borrowed test/profiler census: candidate quartets and radial evaluations.
    * Null in production. The observer owns storage and stream-ordered lifetime. */
   std::uint64_t* canonical_work_count{};
-  /** Optional immutable, full-range symmetry-unique AO source values. Their
+  /** Optional immutable, operator-bound symmetry-unique AO source values. Their
    * order is exactly the geometry-bound canonical bucket traversal. This
    * lease never changes range, screening or derivative fallback semantics. */
   double* resident_values{};
+  float* resident_mixed_values{};
+  FockOperator resident_operator{FockOperator::FullRange};
+  double resident_omega{};
   std::size_t resident_value_count{};
+  /** Empty preserves the established complete-source traversal. Partial leases
+   * store packed offsets, with SIZE_MAX marking exactly the uncached buckets.
+   * These host-only descriptors are immutable before graph capture. */
+  std::vector<std::array<std::size_t, 28>> resident_bucket_offsets;
+  std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   /** Published screened bucket extents, frozen before optional ERI allocation.
    * Empty retains the unscreened RHF layout. No replay downloads row counts. */
   std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;

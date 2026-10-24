@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/hessian_aot.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Borrowed-device-pointer and borrowed-stream ABI plus immutable explicit leaf-package descriptors for build-time compiler AD. No handwritten scientific formulas, runtime compiler or complete molecular Hessian capability is defined here.",
+  "regions": []
+}

@@ -161,9 +161,19 @@ def independent_gradient(
     )
     mf = dft.RKS(mol)
     mf.xc = "PBE" if method == "pbe-rks" else "LDA_X,LDA_C_PW"
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for z, radius in spec.element_radii:
+            radii[z] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -179,6 +189,8 @@ def independent_gradient(
     mf.max_cycle = 150
     mf.kernel()
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     grad = mf.nuc_grad_method()
     grad.grid_response = True
     total = grad.kernel()
@@ -358,15 +370,32 @@ def test_production_grid_open_shell_converges_against_independent_dense_quadratu
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks"])
-def test_production_grid_light_element_energy_and_force(method: typing.Any) -> None:
-    """Production v2 survives the independent full-response water oracle."""
+@pytest.mark.parametrize("pruning", ["none", "radial-v1"])
+@pytest.mark.parametrize("displacement", [0.0, 0.001])
+def test_production_grid_light_element_energy_and_force(
+    method: typing.Any, pruning: str, displacement: float
+) -> None:
+    """Unpruned and opt-in pruned grids survive independent full-response SCF."""
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
-    calc = production_calculator(method, max_iterations=200)
-    with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
+    spec = GridPolicy(pruning="none").resolve(method)
+    if pruning != "none":
+        spec = replace(spec, version=3, pruning=pruning)
+    atoms = [
+        (
+            element,
+            tuple(
+                np.asarray(center) + ((0, 0, displacement) if index == 1 else (0, 0, 0))
+            ),
+        )
+        for index, (element, center) in enumerate(ATOMS)
+    ]
+    calc = calculator(method, ks_options=KsOptions(grid=spec), max_iterations=200)
+    with calc.prepare_batch([atoms]) as batch, NativeAO(atoms) as basis:
         energy = batch.execute(strict=True).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
-        assert state._source.grid_spec.version == 2
-        assert state._source.grid_provenance["policy_version"] == 2
+        assert state._source.grid_spec == spec
+        assert state._source.grid_provenance["policy_version"] == spec.version
+        assert len(state.grid.points) == len(atoms) * spec.points_per_atom
         result = complete_rks_gradient_diagnostic(
             state,
             basis,
@@ -380,13 +409,13 @@ def test_production_grid_light_element_energy_and_force(method: typing.Any) -> N
         assert energy == pytest.approx(reference_energy, abs=2e-9)
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
-        public = calc.singlepoint(ATOMS, properties=("energy", "forces"))
+        public = calc.singlepoint(atoms, properties=("energy", "forces"))
         assert public.energy == pytest.approx(reference_energy, abs=2e-9)
         np.testing.assert_allclose(public.forces, -reference, atol=1e-7, rtol=0)
 
 
 def test_production_grid_transition_metal_energy_and_force() -> None:
-    """Fe/H v2 grid resolves sourced Z=26 radii with an independent force oracle."""
+    """Fe/H production grid retains sourced radii and an independent force oracle."""
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
 
     atoms = [("Fe", (0.05, -0.02, 0.03)), ("H", (0.17, 0.11, 2.25))]
@@ -406,7 +435,8 @@ def test_production_grid_transition_metal_energy_and_force() -> None:
     ):
         energy = batch.execute(strict=True).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
-        assert state._source.grid_spec.version == 2
+        assert state._source.grid_spec.version == 4
+        assert state._source.grid_spec.level == 3
         assert dict(state._source.grid_spec.element_radii)[26] > 0
         assert max(shell.angular_momentum for shell in basis.shells) == 1
         assert basis_definition.provenance.source.startswith("inline issue-596")
@@ -853,12 +883,24 @@ def test_complete_open_shell_uks_analytic_and_reconverged_fd(
 
 
 def independent_global_hybrid_gradient(
-    basis: typing.Any, state: typing.Any, method: typing.Any, xc: typing.Any = "PBE0"
+    basis: typing.Any,
+    state: typing.Any,
+    method: typing.Any,
+    xc: typing.Any = "PBE0",
+    *,
+    density_fitting: bool = False,
+    auxiliary_shells: typing.Any = None,
+    return_mean_field: bool = False,
+    initial_density: typing.Any = None,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
     Preserve spherical versus Cartesian shells; their variational spaces differ
     from d onward, even when the atom-centered quadrature is identical.
+    DF fixtures default to identical primary and auxiliary shells, but may
+    supply a distinct expanded auxiliary basis. Optional mean-field state
+    supports independent final D/W comparisons after accounting for AO
+    normalization and ordering.
     """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
@@ -886,10 +928,33 @@ def independent_global_hybrid_gradient(
         verbose=0,
     )
     mf = dft.UKS(mol) if uks else dft.RKS(mol)
+    if density_fitting:
+        auxiliary = {label: [] for label in labels}
+        for shell in basis.shells if auxiliary_shells is None else auxiliary_shells:
+            auxiliary[labels[shell.atom_index]].append(
+                [
+                    shell.angular_momentum,
+                    *[(p.exponent, p.coefficient) for p in shell.primitives],
+                ]
+            )
+        mf = mf.density_fit(auxbasis=auxiliary)
     mf.xc = xc
+    # Configure the partition before installing the exact native quadrature:
+    # PySCF's radii_adjust setter invalidates previously assigned grid arrays.
+    # Full moving-grid response must also use the native Treutler radii.
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for z, radius in spec.element_radii:
+            radii[z] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -901,11 +966,89 @@ def independent_global_hybrid_gradient(
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, 1e-10, 200
-    energy = mf.kernel()
+    energy = mf.kernel(dm0=initial_density)
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
-    return energy, gradient.kernel()
+    derivative = gradient.kernel()
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
+    return (energy, derivative, mf) if return_mean_field else (energy, derivative)
+
+
+@pytest.mark.parametrize(
+    "method,xc",
+    [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0"), ("b3lyp-rks", "B3LYP")],
+)
+def test_native_direct_pbe_force_matches_independent_pyscf(
+    method: str, xc: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public native owner, not the Python diagnostic, supplies total forces."""
+    pytest.importorskip("pyscf", reason="independent native Direct force reference")
+    calc = calculator(method, max_iterations=200)
+    with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
+        assert batch._native_dft_force_eligible()
+
+        def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
+            pytest.fail(
+                "qualified native Direct forces invoked Python scientific orchestration"
+            )
+
+        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden_python_force)
+        result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        state = StationaryKsState.from_native(batch, basis)
+        reference_energy, reference = independent_global_hybrid_gradient(
+            basis, state, method, xc=xc
+        )
+        assert result.energy == pytest.approx(reference_energy, abs=2e-9)
+        np.testing.assert_allclose(result.forces, -reference, atol=1e-7, rtol=0)
+        np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=3e-10, rtol=0)
+
+
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize(
+    "method,xc",
+    [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0"), ("b3lyp-rks", "B3LYP")],
+)
+def test_native_direct_spd_force_matches_independent_pyscf(
+    method: str, xc: str, representation: str
+) -> None:
+    """Public s/p/d AO ordering and all shell/axis permutations survive cutover."""
+    pytest.importorskip("pyscf", reason="independent native angular force reference")
+    from generativeqc.profiles import canonical_hash
+
+    payload = (
+        (0, ("1.2",), (("1",),)),
+        (1, ("0.9",), (("1",),)),
+        (2, ("0.6",), (("1",),)),
+    )
+    basis_set = BasisSet(
+        "native-direct-spd",
+        (ElementBasis(1, tuple(BasisShell(*shell) for shell in payload)),),
+        BasisProvenance(
+            "inline native Direct s/p/d fixture",
+            "1",
+            "CC0-1.0",
+            canonical_hash(payload),
+        ),
+        representation=representation,
+    )
+    atoms = [("H", (0.13, -0.17, -0.71)), ("H", (-0.09, 0.11, 0.79))]
+    calc = calculator(method, basis=basis_set, max_iterations=200)
+    with (
+        calc.prepare_batch([atoms]) as batch,
+        NativeAO(atoms, basis=basis_set, representation=representation) as basis,
+    ):
+        assert batch._native_dft_force_eligible()
+        result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        state = StationaryKsState.from_native(batch, basis)
+        reference_energy, reference = independent_global_hybrid_gradient(
+            basis, state, method, xc=xc
+        )
+        assert result.energy == pytest.approx(reference_energy, abs=2e-9)
+        np.testing.assert_allclose(result.forces, -reference, atol=1e-7, rtol=0)
 
 
 @pytest.mark.parametrize("execution", ["reference", "native"])

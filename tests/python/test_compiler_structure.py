@@ -43,8 +43,11 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
     assert "__double2float_rn" in native_contractions
     assert "__fmul_rn" in native_contractions
     assert "__dadd_rn" in native_contractions
-    assert "template <bool Mixed>\n__global__ void tiled_density_product" in native
-    assert "tiled_density_product<Mixed>" in native
+    assert (
+        "template <bool Mixed, class Arithmetic = double>\n"
+        "__global__ void tiled_density_product" in native
+    )
+    assert "tiled_density_product<Mixed, Arithmetic>" in native
     assert "density_product<Mixed>" in native
     assert "launch_density_product<true,false>" in native
     assert "launch_density_product<true,true>" in native
@@ -95,6 +98,22 @@ def test_dependency_directions() -> None:
     assert audit_structure()["errors"] == []
 
 
+@pytest.mark.parametrize(
+    "target,allowed", (("expr", True), ("weighted_eri", False), ("cuda", False))
+)
+def test_stationary_grid_ad_may_only_consume_neutral_integral_algebra(
+    tmp_path: typing.Any,
+    target: str,
+    allowed: bool,
+) -> None:
+    method = tmp_path / "method"
+    method.mkdir()
+    (method / "stationary_grid_second.py").write_text(
+        f"import generativeqc_compiler.integral.{target}\n"
+    )
+    assert (not audit_structure(tmp_path)["errors"]) == allowed
+
+
 def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
     import importlib
 
@@ -124,7 +143,11 @@ def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
         assert importlib.import_module(legacy) is importlib.import_module(canonical)
 
 
-def test_method_composition_is_above_xc_and_dft(tmp_path: typing.Any) -> None:
+@pytest.mark.parametrize("owner", ("xc", "dft"))
+def test_method_composition_is_above_xc_and_dft(
+    tmp_path: typing.Any,
+    owner: str,
+) -> None:
     method = tmp_path / "method"
     method.mkdir()
     (method / "ok.py").write_text(
@@ -135,11 +158,11 @@ def test_method_composition_is_above_xc_and_dft(tmp_path: typing.Any) -> None:
     )
     assert audit_structure(tmp_path)["errors"] == []
 
-    dft = tmp_path / "dft"
-    dft.mkdir()
-    (dft / "bad.py").write_text("import generativeqc_compiler.method\n")
+    lower = tmp_path / owner
+    lower.mkdir()
+    (lower / "bad.py").write_text("import generativeqc_compiler.method\n")
     errors = audit_structure(tmp_path)["errors"]
-    assert any("forbidden dft -> method import" in error for error in errors)
+    assert any(f"forbidden {owner} -> method import" in error for error in errors)
 
 
 @pytest.mark.parametrize(
@@ -285,3 +308,26 @@ def test_rccsd_generator_imports_canonical_equations_without_tools_package() -> 
     } <= imports
     assert not any(name.startswith("tools.generativeqc_cc") for name in imports)
     assert 'types.ModuleType("tools.generativeqc_cc")' not in source
+
+
+def test_xc_source_metadata_import_is_independent_of_method_composition() -> None:
+    code = f"""
+import importlib.abc, sys
+sys.path.insert(0, {str(ROOT / "python")!r})
+class RejectMethod(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'generativeqc_compiler.method' or fullname.startswith('generativeqc_compiler.method.'):
+            raise AssertionError('XC metadata imported method composition: ' + fullname)
+sys.meta_path.insert(0, RejectMethod())
+from generativeqc_compiler.xc import spec, _generated_libxc_methods
+assert spec.LIBXC_METHODS is _generated_libxc_methods.LIBXC_METHODS
+assert spec.SOURCE_NONLOCAL_COMPONENTS
+assert all(isinstance(name, str) for name in spec.SOURCE_NONLOCAL_COMPONENTS)
+"""
+    subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        check=True,
+        cwd="/",
+        capture_output=True,
+        text=True,
+    )

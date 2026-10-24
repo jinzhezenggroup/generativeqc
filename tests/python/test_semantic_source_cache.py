@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from typing import TYPE_CHECKING, Any
@@ -17,6 +21,74 @@ if TYPE_CHECKING:
 
 def forbidden() -> tuple[str, ...]:
     raise AssertionError("a semantic source hit must not lower IR")
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "// first\n// second\n",
+        "// crlf\r\n",
+        "// mixed\r\n// lf\n// cr\r",
+        "// no final newline",
+        "// caf\u00e9 \u03bb \u4e2d\n",
+    ),
+)
+def test_utf8_manifest_and_fresh_process_replay(tmp_path: Path, source: str) -> None:
+    from pathlib import Path
+
+    expected = source.encode("utf-8")
+    budget = len(expected)
+    first, miss = cached_sources(
+        tmp_path, {}, lambda: (source,), max_unit_bytes=budget, max_total_bytes=budget
+    )
+    folder = tmp_path / "semantic-sources" / miss["key"]
+    data = (folder / "0.cu").read_bytes()
+    assert first == (source,)
+    assert data == expected
+    metadata = json.loads((folder / "sources.json").read_bytes())
+    assert metadata["sources"] == [
+        {"bytes": budget, "sha256": hashlib.sha256(expected).hexdigest()}
+    ]
+    disabled, work = cached_sources(None, {}, lambda: (source,))
+    assert disabled == first and work["key"] == miss["key"]
+    script = r"""
+import json, sys
+from pathlib import Path
+from generativeqc_compiler.common.semantic_source_cache import cached_sources
+def forbidden():
+    raise AssertionError('fresh process hit invoked source producer')
+sources, work = cached_sources(Path(sys.argv[1]), {}, forbidden,
+    max_unit_bytes=int(sys.argv[2]), max_total_bytes=int(sys.argv[2]))
+print(json.dumps({'sources': sources, 'work': work}))
+"""
+    run = subprocess.run(
+        [sys.executable, "-B", "-c", script, str(tmp_path), str(budget)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(Path("python").resolve())},
+    )
+    replay = json.loads(run.stdout)
+    assert replay["sources"] == [source]
+    assert replay["work"]["hit"] and replay["work"]["source_bytes"] == budget
+    assert replay["work"]["key"] == miss["key"]
+
+
+def test_legacy_windows_entry_remains_visible_and_rejected(tmp_path: Path) -> None:
+    source = "// first\n// second\n"
+    _, work = cached_sources(tmp_path, {}, lambda: (source,))
+    folder = tmp_path / "semantic-sources" / work["key"]
+    damaged = source.replace("\n", "\r\n").encode("utf-8")
+    unit, manifest = folder / "0.cu", folder / "sources.json"
+    unit.write_bytes(damaged)
+    metadata = json.loads(manifest.read_bytes())
+    metadata["sources"][0]["sha256"] = hashlib.sha256(damaged).hexdigest()
+    manifest.write_bytes(json.dumps(metadata).encode("utf-8"))
+    before = manifest.read_bytes()
+    with pytest.raises(ValueError, match="integrity"):
+        cached_sources(tmp_path, {}, forbidden)
+    assert unit.read_bytes() == damaged and manifest.read_bytes() == before
 
 
 def test_hit_recipe_invalidation_and_no_cache(tmp_path: Path) -> None:

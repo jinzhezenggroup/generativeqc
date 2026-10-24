@@ -50,6 +50,141 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+## Native composition authority
+
+With an already-loaded library exposing `generativeqc_resource_compose_v1`,
+runtime `plan_resources(..., library=library)`, calculator estimation and
+budgeted preparation use the shared C++ resource composition engine. The native
+CLI uses that same owner for effective caps, peak accounting and supported
+alternative selection; its `composition_inventory` metadata identifies the
+engine separately from the CLI's endpoint-inventory scope.
+
+The engine sweeps sparse inclusive-lifetime endpoints, accounts pageable plus
+pinned host storage and aggregate plus individual device caps simultaneously,
+and orders supported combinations by budget excess, total relative cost and
+lexical selection. Headroom uses the exact IEEE-754 rational value with upward
+rounding before fixed reserves. Cost and excess sums use wider integer
+arithmetic than individual byte capacities, so ranking cannot wrap int64 or
+uint64. Expired buffers retire before newly live buffers at an adjacent phase.
+
+The finite search limit remains explicit: exceeding it returns `unsupported`,
+not a false allocation failure. Every enumerated combination is checked,
+including overflow in a later alternative after a feasible prefix. For `P`
+combinations, at most `B` selected buffers and `S` memory spaces, native work is
+`O(P * (B log B + S))`, plus descriptor validation. Metadata scratch is linear
+in input buffers and spaces, not phase IDs or the Cartesian product. No
+scientific buffers, calculation contexts, backend probes or GPU allocations
+are created by the composition query.
+
+Supplied plans are checked by the native owner before scientific provider
+preparation, with their explicit selections held fixed. Validation does not
+silently replace a user-selected alternative with a cheaper one. Native
+authority also rechecks changed optional CPU force workspace before a
+force replay, preserving all live owners and selections. The revised plan is
+published only after successful execution; rejection leaves the energy plan
+and warm state usable. Discovered native errors propagate without retrying
+portable selection. Missing symbols
+or libraries retain provider-free portable planning; this adapter never loads a
+library itself. The compiler's separate portable planner remains available for
+offline generation without importing the runtime.
+
+`ResourcePlan` retains its portable data-only schema, independent derived-byte
+validation and serialization. A plan is not a native allocation receipt or
+execution lease. Method/provider inventories, allocation observation coverage,
+live provider reservations and session/lease lifecycle remain separately scoped;
+native composition alone does not establish complete endpoint/RSS accounting
+or complete the resource-authority cutover.
+
+`benchmarks/native_resource_composition.py` provides opt-in CPU endpoint timing:
+calculator construction, budgeted preparation, cold/warm/moved execution and
+prepared-owner close. Compare exact baseline/candidate Python trees in separate
+processes against the same compiled library, with the same thread settings and
+no competing benchmark load. The JSON retains every observation, energies,
+forces, convergence residuals, iteration/Fock counts (including unknown counts),
+iteration-branch histograms, source identity and the library checksum. A changed
+numerical/work signature invalidates a pooled timing comparison. This scoped
+procedure does not establish GPU performance or complete physical receipts.
+
+## CUDA DF bucket capacity ownership
+
+With `generativeqc_resource_hf_df_cuda_fleet_v1`, the Python CUDA HF DF planner
+and native CLI share one C++ numeric composition owner. It groups expanded
+topologies by orbital/electron/primitive compatibility, checks Cartesian,
+auxiliary and atom dimensions, and composes the existing source-upload, DIIS
+and tile-planner leaves. Python packs scalar metadata and renders labels;
+it does not choose tile capacities or recompute the fleet's numeric bounds.
+
+The owner preserves resident/recomputed alternatives, explicit packed and
+packed-single selection, occupied/automatic exchange reservations, requested
+or default DF sub-budgets, and RHF/UHF ragged fleets. Packed-single retains
+the conservative two-factor shape-query bound rather than claiming the
+executable single-factor allocation. All bucket caches remain simultaneously
+retained; preparation/setup/force workspace is serialized, and an independent
+singleton cold numerical retry receives its own reservation. The existing
+explicit CPU numerical-recovery contract is unchanged.
+
+The private ABI validates a complete inventory before either sizing or full
+publication. Invalid schemas, topology, byte-domain overflow, overlapping
+input/output/error buffers and insufficient sub-budgets leave capacity output
+unchanged. It allocates linear topology/plan metadata, not scientific arrays,
+and neither probes nor initializes CUDA. Only a missing fleet symbol enables
+the isolated old-library Python compatibility composer; native refusal or
+malformed output never retries Python capacity arithmetic. These declared
+bounds do not establish complete allocator/provider/lease/RSS authority or
+qualify a new scientific backend or property.
+
+## Native device ledger binding
+
+An already-loaded library exposing
+`generativeqc_resource_ledger_create_from_buffers_v1` derives a prepared owner's
+numeric ledger limit and visible device from its selected capacity records.
+The same native sparse-lifetime accounting used for global composition sweeps
+the full inventory and the subset excluding `runtime_allowance`. Allowances
+are withheld independently; they cannot fund tracked numeric allocations.
+Subtracting independently measured peaks is not equivalent when lifetimes differ.
+
+The metadata-only query creates a handle compatible with existing ledger
+binding, observation, retained-provider reservations, journals and destruction.
+It performs no CUDA operation or device selection by availability. Missing or
+multiple visible devices are unsupported for this single-device owner; ordinals
+outside the native signed-device domain are rejected rather than narrowed.
+Invalid/overflowing/aliased records leave both handle and receipt unchanged.
+
+`device_ledger.capacity_admission` identifies this native owner and reports the
+full declared device peak separately from `limit_bytes`, the explicit numeric
+admission cap. Neither is a physical allocation/RSS measurement. The Python
+adapter publishes the handle only after receipt validation, releases unpublished
+metadata on validation failure, and never retries native rejection with portable
+accounting. Older libraries retain explicit portable capacity derivation; an
+allowance-only inventory has a zero numeric limit, not a fabricated allocation.
+Retained native buffers/reservations continue to outlive observation scopes and
+closed frontend handles until their actual owners release them.
+
+## CUDA KS to force handoff
+
+CUDA KS keeps its admitted optional ERI value cache and Fast anchor matrices
+throughout SCF and after energy-only solves. Before a stationary force consumer
+allocates, the live final-state owner compares its additional device envelope
+with free memory on its bound device. Under pressure it drains the SCF producer
+and retires the idle anchor lease, then rechecks free memory before retiring the
+optional ERI lease and its graph borrowers if still needed. Resident density, stationary
+weights, XC state, the exact final-state token and the last-good warm seed stay
+valid. The force consumer still uses the prepared derivative provider.
+
+Native stationary, Python stationary and composite force owners request this
+handoff before allocation. Compatible replays exclude retained force arenas
+from the requested headroom. Python force work reports `scf_force_memory` with
+requested, free-before, free-after and reclaimed device bytes. Resource
+accounting drops retired anchor state capacity and the retired provider's device
+and host storage. Repeated handoffs cannot retire an allocation twice. Retired
+anchors remain disabled on this owner: later warm/cold solves and error recovery
+retain ordinary Fast without reacquiring optional memory ahead of the force owner.
+
+This check is advisory: it does not reserve global free memory, relax an
+explicit budget, evict other calculations, or promise that arbitrary mandatory
+storage will fit. Allocation failures remain explicit. Energy-only calls do
+not release caches for a hypothetical later force request.
+
 ## Accounting contract
 
 Host limits cover pageable plus pinned bytes; the pinned cap applies in
@@ -81,6 +216,114 @@ minima and dominant allocations. Per-space minima can come from different
 candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
+
+CPU HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
+query obtain public/Cartesian AO, shell, primitive and maximum-angular counts
+from native compact expanded-contraction rows. The AO rule is shared with
+normalized native systems. Count overflow or native refusal never retries
+Python arithmetic; failed queries leave native outputs unchanged. The query
+does not read coordinates or coefficients, allocate scientific arrays, load a
+provider, or qualify an otherwise unsupported method/basis. Missing-symbol,
+library-free and CUDA planning retain explicit portable shape arithmetic.
+Python still owns basis expansion and mathematical provenance in this planner;
+these counts are not complete allocation, provider, lease or RSS authority.
+
+CPU RHF/UHF calculator plans with a discovered
+`generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
+summed fleet retained capacity and maximum serialized workspace from the same
+allocation-free C++ owners as the native CLI. Direct and density-fitted
+inventories preserve Cartesian/public integral coexistence, forward-mode
+derivatives, SCF/DIIS matrices and analytic DF response storage. A single fleet
+query validates every item before publishing any capacities; invalid later
+items, overlapping buffers and aggregate signed-int64 overflow leave output
+unchanged. Native rejection propagates without a Python retry.
+
+Schedule identity records phase and fleet sizing owners separately. Libraries
+with only `generativeqc_resource_hf_cpu_host_v1` retain native phase sizing and
+portable fleet composition; library-free dry runs and older libraries retain
+portable metadata sizing without implicitly loading a provider. Declared-capacity
+selection and admission use the separately discovered native composition owner
+described above; prepared leases remain frontend-owned. Native fleet sizing is
+not complete endpoint/RSS allocation accounting.
+
+Direct CUDA RHF/UHF plans with a discovered
+`generativeqc_resource_hf_cuda_fleet_v1` obtain host bounds, retained device
+arenas and serialized retry composition from the same allocation-free C++ owner
+as the native CLI. The topology-aware allocator v2 and ECP queries remain the
+leaf authorities; composition never constructs a CUDA provider or context.
+Ragged fleets sum retained host/device capacities and preserve the conservative
+retry `max(arena) + max(ecp_workspace)`, including maxima from different items.
+The entire fleet is validated before publication, and homogeneous CLI batches
+apply multiplicity exactly once. Schedule identity names native fleet ownership;
+only an absent symbol permits portable compatibility. Native refusal, overflow
+or inconsistent publication never restarts Python arithmetic. This does not
+change density-fitted HF, scientific admission, prepared lease ownership or the
+exclusion of provider/allocator retention and complete simultaneously-live RSS.
+
+CPU KS calculator plans with a discovered
+`generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
+owners as the installed CLI for per-item diagnostics, twelve retained-owner
+totals and serialized preparation/SCF workspace. The query validates the entire
+fleet and the complete signed-int64 retained-plus-workspace peak before
+publication. A caller-supplied workspace floor preserves the existing CPU force
+consumer allowance without implying native admission of that consumer; its
+eligibility and allowance policy remain frontend-owned. Restricted AO caches
+remain transient, and nonlocal provider sub-budgets remain explicit.
+
+Native rejection never retries Python sizing. Schedule identity records item
+and fleet authority separately. Libraries exposing only
+`generativeqc_resource_ks_cpu_host_v1` keep native per-item sizing and portable
+fleet composition; old/no-library dry runs retain portable metadata sizing
+without implicitly loading a provider. Neither sizing query executes
+quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
+allocator/RSS receipts remain outside this bridge.
+
+CUDA KS host inventories use the same `scf::KsHostFleetResources` owner through
+the additive `generativeqc_resource_ks_cuda_host_fleet_v1` query. An item adds
+the XC host-unfused selector to the CPU query's seventeen scalar shape fields.
+The query shares the transaction, overflow and no-provider-discovery contract,
+and is available in CPU-only libraries. CUDA host bounds include independent
+solver, matrix and structured binding reservations; host-unfused XC matrices
+are retained, while setup and host XC tiles are serialized workspace. CUDA
+shapes do not inherit CPU integral fourth powers or through-g admission.
+
+Python supplies its snapshot-grid and force-consumer retained allowances once
+per fleet; they coexist with every preparation and replay. The energy-only
+native CLI supplies neither allowance. These are lifetime inputs, not new
+force eligibility or admission. Missing symbols retain portable host sizing;
+selected native refusal or inconsistent publication cannot retry that path.
+Schedule identity records CUDA host fleet authority separately from device
+inventory and ECP queries. Device fleet composition and complete
+provider/allocation/lease authority are outside this host bridge.
+
+HF/KS ECP workspace sizing uses the already loaded library's
+`generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.
+This allocation-free scalar owner uses generated two-grid policy and CUDA
+radial scheduling without constructing grids, scientific tensors or a CUDA
+context. Public AO counts select the radial batch; Cartesian counts determine
+storage. A discovered query's rejection propagates without portable retry.
+Old libraries and library-free dry runs retain explicit metadata-only sizing;
+all-electron inputs need no ECP query or policy import. ECP sizing provenance is
+separate from the enclosing HF/KS inventory in the schedule identity. KS records
+host and device ECP owners separately because old-library and portable host
+paths need not discover the same ECP query as device layout planning. This changes
+sizing ownership,
+not scientific qualification, native admission/leases or allocation receipts.
+
+D3(BJ) planning uses the already loaded library's private
+`generativeqc_resource_d3_layout_v1` query. This allocation-free shape query and
+`D3Plan::prepare()` share the same C++ retained plan/execution, workspace and
+actual compiled table-layout capacities. CPU uses the largest serialized
+system's workspace; CUDA uses aggregate ragged atom storage. A CUDA selector
+does not initialize CUDA and is available in CPU-only libraries. Native shape
+validation preserves the uint32 ragged-offset and per-system atom bounds.
+The request records native versus portable sizing in its schedule identity;
+old libraries and library-free dry runs retain explicit portable metadata
+sizing, never used after native rejection. Python presents the estimates and
+checks local budget eligibility; global declared-capacity selection uses the
+separately discovered native composition owner. The prepared native D3 owner
+continues to enforce its local retained-byte cap. These numeric capacities are
+not process RSS receipts or new CUDA scientific qualification.
 
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |

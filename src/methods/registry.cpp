@@ -3,6 +3,8 @@
 #include <string>
 #include <utility>
 
+#include "dft/application_precision.hpp"
+#include "methods/application_precision.hpp"
 #include "methods/df_rccsdt_method.hpp"
 #include "methods/dft_admission.hpp"
 #include "methods/dft_method.hpp"
@@ -12,9 +14,11 @@
 #include "methods/mp2_method.hpp"
 #include "methods/rccsd_method.hpp"
 #include "methods/rccsdt_method.hpp"
+#include "methods/uccsd_method.hpp"
 #include "methods/ump2_method.hpp"
 #include "methods/xtb_method.hpp"
 #include "runtime/provider_registry.hpp"
+#include "scf/initial_guess/automatic_policy.hpp"
 
 namespace generativeqc::methods {
 namespace {
@@ -23,11 +27,12 @@ using ValidateSystem = generativeqc_status (*)(generativeqc_method, const core::
                                                std::string&);
 using PrepareCalculation = std::unique_ptr<PreparedCalculation> (*)(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&);
+    const generativeqc_method_descriptor&, const core::System*);
 using PrepareBatch = std::unique_ptr<PreparedBatch> (*)(const Capabilities&, core::ContextState&,
                                                         std::vector<core::System>,
                                                         const generativeqc_method_descriptor&,
-                                                        generativeqc_batch_flags);
+                                                        generativeqc_batch_flags,
+                                                        const core::System*);
 
 using MethodProviderRegistration = runtime::ProviderDescriptor<Capabilities>;
 
@@ -67,6 +72,11 @@ constexpr MethodDefinition register_method(const generated::MethodManifestEntry&
       validate = detail::validate_rccsdt_system;
       prepare = detail::prepare_rccsdt_calculation;
       batch = detail::prepare_rccsdt_batch;
+      break;
+    case generated::PublicProvider::Uccsd:
+      validate = detail::validate_uccsd_system;
+      prepare = detail::prepare_uccsd_calculation;
+      batch = nullptr;
       break;
     case generated::PublicProvider::DfRccsdt:
       validate = detail::validate_df_rccsdt_system;
@@ -153,38 +163,84 @@ void validate_system(const MethodDefinition& definition, const core::System& sys
 void validate_preliminary_system(const generativeqc_method_descriptor& descriptor,
                                  const core::System& system) {
   if (!descriptor.initial_guess) return;
+  // Automatic domain misses belong to each prepared item, not shared batch admission.
+  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
+      descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU)
+    return;
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2 ||
       !system.ecp_terms.empty() ||
       std::any_of(system.atoms.begin(), system.atoms.end(),
                   [](const auto& atom) { return atom.ecp_core != 0; }))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "initial-density preparation requires an all-electron restricted singlet");
-  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO &&
+  if ((descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO ||
+       descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL) &&
       std::any_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
-        return atom.atomic_number < 1 || atom.atomic_number > 18;
+        return !scf::initial_guess::automatic_minao_element_eligible(atom.atomic_number);
       }))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MINAO initial guess is currently qualified for H-Ar");
+                      "MINAO/Huckel initial guess is currently qualified for H-Ar");
 }
 
 void validate_option_family(const MethodDefinition& definition,
                             const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend) {
+  const auto budget = detail::application_precision_budget(descriptor);
+  const auto family = definition.provider.domain.family;
+  const bool correlated_convergence = descriptor.method == GENERATIVEQC_METHOD_MP2 ||
+                                      descriptor.method == GENERATIVEQC_METHOD_RCCSD ||
+                                      descriptor.method == GENERATIVEQC_METHOD_RCCSD_T ||
+                                      descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T;
+  if (correlated_convergence && budget[0] > 0 && descriptor.method == GENERATIVEQC_METHOD_MP2 &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "correlated convergence budgets exclude legacy RI-MP2");
+  if (!correlated_convergence &&
+      ((budget[0] > 0.0 && backend != GENERATIVEQC_BACKEND_CUDA) ||
+       (descriptor.struct_size > sizeof(generativeqc_method_descriptor) &&
+        family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+        family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "application precision transport requires CUDA HF/KS");
   if (descriptor.initial_guess) {
-    const auto family = definition.provider.domain.family;
+    const bool automatic =
+        descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
+        descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
-    const bool cuda_minao = minao && backend == GENERATIVEQC_BACKEND_CUDA &&
-                            family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL;
-    if ((family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
-         family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) ||
-        (!cuda_minao && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE) ||
-        descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
-        descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
-        (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
-         descriptor.method != GENERATIVEQC_METHOD_RHF))
+    const bool huckel = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    const bool strict_application_seed =
+        (family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL ||
+         family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK) &&
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+        (budget[0] > 0.0 || dft::application_precision_requested(descriptor.ks_options));
+    const auto seed_precision =
+        strict_application_seed ? GENERATIVEQC_PRECISION_FP64 : descriptor.precision_mode;
+    const bool admitted =
+        automatic ? backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+                        (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                         family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+        : huckel  ? scf::initial_guess::automatic_huckel_model_eligible(
+                        descriptor.method, family, backend, seed_precision,
+                        descriptor.density_fitting_mode, true, false)
+        : minao   ? scf::initial_guess::automatic_minao_model_eligible(
+                        descriptor.method, family, backend, seed_precision,
+                        descriptor.density_fitting_mode, true, false)
+                  : (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                     family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) &&
+                        backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+                        descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+                        descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+                        (family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                         descriptor.method == GENERATIVEQC_METHOD_RHF);
+    if (!admitted)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        minao ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
-                              : "preliminary SCF requires CPU FP64 exact restricted HF/KS");
+                        automatic ? "automatic per-system initial guess requires CPU HF/KS"
+                        : huckel  ? "Huckel requires FP64 restricted CPU/CUDA HF/KS"
+                        : minao   ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
+                                  : "preliminary SCF requires CPU FP64 exact restricted HF/KS");
   }
   if (descriptor.ks_options &&
       definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
@@ -206,18 +262,20 @@ const Capabilities* find_capabilities(generativeqc_method method) noexcept {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
   validate_preliminary_system(descriptor, system);
-  return definition.prepare_calculation(definition.provider.domain, context, system, descriptor);
+  return definition.prepare_calculation(definition.provider.domain, context, system, descriptor,
+                                        auxiliary_basis);
 }
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags) {
+                                             generativeqc_batch_flags flags,
+                                             const core::System* auxiliary_basis) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   if (!definition.provider.domain.supports_batch || definition.prepare_batch == nullptr) {
@@ -229,7 +287,7 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
     validate_preliminary_system(descriptor, system);
   }
   return definition.prepare_batch(definition.provider.domain, context, std::move(systems),
-                                  descriptor, flags);
+                                  descriptor, flags, auxiliary_basis);
 }
 
 }  // namespace generativeqc::methods

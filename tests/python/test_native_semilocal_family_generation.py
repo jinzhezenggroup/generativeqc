@@ -1,7 +1,10 @@
 """Single-source generation gates for curated native semilocal metadata."""
 
+import json
+from fractions import Fraction
 from pathlib import Path
 
+import pytest
 from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
@@ -132,10 +135,16 @@ def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
     source = emit_native_xc_point_dispatch()
     for item in SEMILOCAL_FAMILIES:
         code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
-        assert f"return &launch_points<{code}, false>;" in source
-        assert (f"return &launch_points<{code}, true>;" in source) == (
+        assert f"&launch_points<{code}, false>;" in source
+        assert (f"&launch_points<{code}, true>;" in source) == (
             item["cuda_fast_paths"]["response"] == "qualified"
         )
+        for response in (False, True):
+            consumer = str(response).lower()
+            assert (f"&launch_points<{code}, {consumer}, true>" in source) == (
+                item["symbol"] == "Pbe"
+                and (not response or item["cuda_fast_paths"]["response"] == "qualified")
+            )
 
 
 def test_grid_jit_tracks_and_ships_capability_headers() -> None:
@@ -209,3 +218,91 @@ def test_grid_native_selector_matches_resolved_alias_data() -> None:
         legacy_grid_xc_selector(
             replace(functional("PBE"), components=(("GGA_X_PBE", Fraction(1)),))
         )
+
+
+def test_cpu_stationary_force_profiles_are_generated_admission_not_method_names() -> (
+    None
+):
+    families = generator.load_manifest()
+    profiles = {
+        item["symbol"]: item["cpu_stationary_force_profiles"] for item in families
+    }
+    assert profiles["Pbe"] == [
+        {
+            "spins": [1, 2],
+            "exact_exchange": "0",
+            "semilocal_exchange": "1",
+            "semilocal_correlation": "1",
+        },
+        {
+            "spins": [1, 2],
+            "exact_exchange": "1/4",
+            "semilocal_exchange": "3/4",
+            "semilocal_correlation": "1",
+        },
+    ]
+    assert profiles["B3lyp"] == [
+        {
+            "spins": [1],
+            "exact_exchange": "1/5",
+            "semilocal_exchange": "1",
+            "semilocal_correlation": "1",
+        }
+    ]
+    assert not any(profiles[item] for item in ("Lda", "R2scan", "Wb97mv"))
+    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    start = source.index("bool supports_native_gga_force() const noexcept")
+    end = source.index(
+        "[[nodiscard]] generativeqc_property_flags supported_properties()", start
+    )
+    gate = source[start:end]
+    assert "semilocal_family_cpu_stationary_force_qualified" in gate
+    assert "const bool pbe0" not in gate and "const bool b3lyp" not in gate
+
+
+def test_legacy_cpu_point_response_abi_slots_are_generated() -> None:
+    records = generator.load_manifest()
+    slots = {
+        record["code"]: record["legacy_cpu_point_response_slot"] for record in records
+    }
+    assert tuple(code for code, slot in slots.items() if slot is not None) == (0, 1)
+    assert {slot for slot in slots.values() if slot is not None} == {0, 1}
+    assert all(
+        SEMILOCAL_FAMILY_BY_CODE[code]["legacy_cpu_point_response_slot"] == slot
+        for code, slot in slots.items()
+    )
+
+
+def test_b3lyp_fractions_are_source_derived_from_pinned_libxc(tmp_path: Path) -> None:
+    from generativeqc_compiler.xc._generated_libxc_methods import LIBXC_METHODS
+
+    record = LIBXC_METHODS["B3LYP"]
+    assert Fraction(record["exact_exchange"]) == Fraction(1, 5)
+    assert tuple((name, Fraction(weight)) for name, weight in record["components"]) == (
+        ("LDA_X", Fraction(2, 25)),
+        ("GGA_X_B88", Fraction(18, 25)),
+        ("LDA_C_VWN_RPA", Fraction(19, 100)),
+        ("GGA_C_LYP", Fraction(81, 100)),
+    )
+    manifest = json.loads(generator.MANIFEST.read_text(encoding="utf-8"))
+    b3lyp = next(item for item in manifest["families"] if item["symbol"] == "B3lyp")
+    assert b3lyp["cuda_global_hybrid_exact_exchange"] is None
+    assert b3lyp["libxc_hybrid_method"] == "B3LYP"
+    assert b3lyp["components"] == "libxc"
+    assert b3lyp["cpu_stationary_force_profiles"][0]["exact_exchange"] == "libxc"
+
+    resolved = next(
+        item for item in generator.load_manifest() if item["symbol"] == "B3lyp"
+    )
+    assert resolved["components"] == [
+        [name, str(Fraction(weight))] for name, weight in record["components"]
+    ]
+    assert Fraction(resolved["cuda_global_hybrid_exact_exchange"]) == Fraction(1, 5)
+    assert Fraction(
+        resolved["cpu_stationary_force_profiles"][0]["exact_exchange"]
+    ) == Fraction(1, 5)
+    b3lyp["components"] = [["GGA_X_B88", "71/100"]]
+    invalid = tmp_path / "wrong-libxc-components.json"
+    invalid.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="must be source-derived"):
+        generator.load_manifest(invalid)

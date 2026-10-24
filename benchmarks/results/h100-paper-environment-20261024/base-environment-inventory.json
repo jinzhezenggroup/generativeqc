@@ -1,0 +1,42 @@
+{
+  "environment-manifest.json": {
+    "sha256": "90514696dc14bf0bfa87bb09296dc88b53cf1eb7f5d223adbeecec50706a646f",
+    "content": "{\n  \"schema_version\": 1,\n  \"name\": \"generativeqc-science-py311-cuda129\",\n  \"version\": \"20261015\",\n  \"visibility\": \"private\",\n  \"project\": \"原子级化学反应基座模型2.0\",\n  \"workspaces\": [\n    \"CPU资源空间\",\n    \"分布式训练空间\"\n  ],\n  \"architecture\": \"linux-x86_64\",\n  \"base_image\": \"ubuntu-inspire-base-xu:1\",\n  \"python_source\": \"env-assets/python/cpython-3.11.16-linux-x86_64-gnu\",\n  \"cuda_source\": \"projects/vibeqc-1873-matrix-20261010/cuda-12.9\",\n  \"requirements_source_commit\": \"5f80ba629b5f20412215cdc690f8fa458ac3fdf8\",\n  \"activation\": \"source /opt/generativeqc-reuse/activate.sh\",\n  \"python\": \"3.11.16\",\n  \"gcc\": \"12.3.0\",\n  \"cuda\": \"12.9.86\",\n  \"sccache\": \"0.16.0\",\n  \"requirements_lock_sha256\": \"d3a273aba96c30de075815651ac1696707ace3b284c7a20bea49596825da9994\",\n  \"includes_project_binary\": false,\n  \"gpu_device_execution\": \"NOT_RUN\",\n  \"scope\": \"Reusable scientific dependencies and build tools; each issue/PR must build and qualify its own exact source.\",\n  \"shared_restore_asset\": \"/inspire/qb-ilm/project/chemicalreaction/czxs25220150/env-assets/generativeqc-science-py311-cuda129-20261015\"\n}\n"
+  },
+  "requirements.lock.txt": {
+    "sha256": "d3a273aba96c30de075815651ac1696707ace3b284c7a20bea49596825da9994",
+    "content": "array-api-compat==1.15.0\narray_api_strict==2.6.1\ncfgv==3.5.0\nclang-format==22.1.8\ncmake==3.31.10\ncontourpy==1.3.3\ncoverage==7.16.0\ncycler==0.12.1\ndefusedxml==0.7.1\ndistlib==0.4.3\nexceptiongroup==1.3.1\nexecnet==2.1.2\nfilelock==3.32.5\nfonttools==4.67.0\nh5py==3.16.0\nhypothesis==6.169.3\nidentify==2.6.19\nimportlib_resources==7.1.0\niniconfig==2.3.0\nkiwisolver==1.5.1\nmatplotlib==3.11.2\nmpmath==1.3.0\nndindex==1.10.1\nninja==1.13.2\nnlohmann-json==3.11.3\nnodeenv==1.10.0\nnumpy==2.2.6\nnvidia-cublas-cu12==12.9.1.4\nnvidia-cuda-runtime-cu12==12.9.79\nnvidia-cusolver-cu12==11.7.5.82\nnvidia-cusparse-cu12==12.5.10.65\nnvidia-nvjitlink-cu12==12.9.86\npackaging==26.3\npathspec==1.1.1\npillow==12.3.0\npip==26.2.1\nplatformdirs==4.11.7\npluggy==1.6.0\npre_commit==4.6.2\nPygments==2.21.0\npyparsing==3.3.3\npyscf==2.14.0\npytest==9.1.1\npytest-cov==7.1.0\npytest-json-report==1.5.0\npytest-metadata==3.1.1\npytest-xdist==3.8.0\npython-dateutil==2.9.0.post0\npython-discovery==1.6.0\nPyYAML==6.0.3\nruff==0.16.2\nsccache==0.16.0\nscikit_build_core==1.1.1\nscipy==1.15.3\nscipy-openblas32==0.3.34.0.0\nsetuptools==84.0.0\nsix==1.17.0\nsortedcontainers==2.4.0\nsympy==1.14.0\nthreadpoolctl==3.6.0\ntomli==2.4.1\ntyping_extensions==4.16.0\nvirtualenv==21.7.8\nwheel==0.48.0\n"
+  },
+  "activate.sh": {
+    "sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+    "content": "export GENERATIVEQC_ENV_ROOT=/opt/generativeqc-reuse\nexport PATH=\"$GENERATIVEQC_ENV_ROOT/venv/bin:$GENERATIVEQC_ENV_ROOT/cuda-12.9/bin:$PATH\"\nexport CUDA_HOME=\"$GENERATIVEQC_ENV_ROOT/cuda-12.9\"\nexport CUDACXX=\"$CUDA_HOME/bin/nvcc\"\nexport CC=/usr/bin/gcc-12\nexport CXX=/usr/bin/g++-12\nexport CUDAHOSTCXX=/usr/bin/g++-12\nexport LD_LIBRARY_PATH=\"$CUDA_HOME/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\n"
+  },
+  "last-verification.json": {
+    "sha256": "99d22393b029777da53637de05b83c35547110c03cbb6546f84240c43694a41c",
+    "content": "{\n  \"status\": \"PASS\",\n  \"scope\": \"environment scientific-tool smoke; no GenerativeQC product or GPU qualification\",\n  \"python\": \"3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]\",\n  \"interpreter\": \"/opt/generativeqc-reuse/venv/bin/python\",\n  \"platform\": \"Linux-5.15.0-119-generic-x86_64-with-glibc2.35\",\n  \"hf_h2_sto3g_energy_Eh\": -1.1167593073964255,\n  \"mp2_h2_sto3g_energy_Eh\": -1.1298973809859585,\n  \"gradient_max_fd_error_Eh_per_Bohr\": 9.205396410416622e-09,\n  \"packages\": {\n    \"array-api-compat\": \"1.15.0\",\n    \"array_api_strict\": \"2.6.1\",\n    \"cfgv\": \"3.5.0\",\n    \"clang-format\": \"22.1.8\",\n    \"cmake\": \"3.31.10\",\n    \"contourpy\": \"1.3.3\",\n    \"coverage\": \"7.16.0\",\n    \"cycler\": \"0.12.1\",\n    \"defusedxml\": \"0.7.1\",\n    \"distlib\": \"0.4.3\",\n    \"exceptiongroup\": \"1.3.1\",\n    \"execnet\": \"2.1.2\",\n    \"filelock\": \"3.32.5\",\n    \"fonttools\": \"4.67.0\",\n    \"h5py\": \"3.16.0\",\n    \"hypothesis\": \"6.169.3\",\n    \"identify\": \"2.6.19\",\n    \"importlib_resources\": \"7.1.0\",\n    \"iniconfig\": \"2.3.0\",\n    \"kiwisolver\": \"1.5.1\",\n    \"matplotlib\": \"3.11.2\",\n    \"mpmath\": \"1.3.0\",\n    \"ndindex\": \"1.10.1\",\n    \"ninja\": \"1.13.2\",\n    \"nlohmann-json\": \"3.11.3\",\n    \"nodeenv\": \"1.10.0\",\n    \"numpy\": \"2.2.6\",\n    \"nvidia-cublas-cu12\": \"12.9.1.4\",\n    \"nvidia-cuda-runtime-cu12\": \"12.9.79\",\n    \"nvidia-cusolver-cu12\": \"11.7.5.82\",\n    \"nvidia-cusparse-cu12\": \"12.5.10.65\",\n    \"nvidia-nvjitlink-cu12\": \"12.9.86\",\n    \"packaging\": \"26.3\",\n    \"pathspec\": \"1.1.1\",\n    \"pillow\": \"12.3.0\",\n    \"pip\": \"26.2.1\",\n    \"platformdirs\": \"4.11.7\",\n    \"pluggy\": \"1.6.0\",\n    \"pre_commit\": \"4.6.2\",\n    \"Pygments\": \"2.21.0\",\n    \"pyparsing\": \"3.3.3\",\n    \"pyscf\": \"2.14.0\",\n    \"pytest\": \"9.1.1\",\n    \"pytest-cov\": \"7.1.0\",\n    \"pytest-json-report\": \"1.5.0\",\n    \"pytest-metadata\": \"3.1.1\",\n    \"pytest-xdist\": \"3.8.0\",\n    \"python-dateutil\": \"2.9.0.post0\",\n    \"python-discovery\": \"1.6.0\",\n    \"PyYAML\": \"6.0.3\",\n    \"ruff\": \"0.16.2\",\n    \"sccache\": \"0.16.0\",\n    \"scikit_build_core\": \"1.1.1\",\n    \"scipy\": \"1.15.3\",\n    \"scipy-openblas32\": \"0.3.34.0.0\",\n    \"setuptools\": \"84.0.0\",\n    \"six\": \"1.17.0\",\n    \"sortedcontainers\": \"2.4.0\",\n    \"sympy\": \"1.14.0\",\n    \"threadpoolctl\": \"3.6.0\",\n    \"tomli\": \"2.4.1\",\n    \"typing_extensions\": \"4.16.0\",\n    \"virtualenv\": \"21.7.8\",\n    \"wheel\": \"0.48.0\"\n  },\n  \"gpu_device_execution\": \"NOT_RUN\"\n}\n"
+  },
+  "uid_candidates": [
+    "03f4f4ab-f01d-4795-8da6-6dccc4421779"
+  ],
+  "tools": {
+    "/opt/generativeqc-reuse/venv/bin/python": {
+      "code": 0,
+      "output": "Python 3.11.16\n"
+    },
+    "/opt/generativeqc-reuse/cuda-12.9/bin/nvcc": {
+      "code": 0,
+      "output": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0\n"
+    },
+    "sccache": {
+      "code": 0,
+      "output": "sccache 0.16.0\n"
+    },
+    "ccache": {
+      "error": "FileNotFoundError"
+    }
+  },
+  "packages": {
+    "code": 1,
+    "output": "Traceback (most recent call last):\n  File \"/opt/generativeqc-reuse/python/lib/python3.11/importlib/metadata/__init__.py\", line 563, in from_name\n    return next(cls.discover(name=name))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"<string>\", line 1, in <dictcomp>\n  File \"/opt/generativeqc-reuse/python/lib/python3.11/importlib/metadata/__init__.py\", line 1009, in version\n    return distribution(distribution_name).version\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/generativeqc-reuse/python/lib/python3.11/importlib/metadata/__init__.py\", line 982, in distribution\n    return Distribution.from_name(distribution_name)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/generativeqc-reuse/python/lib/python3.11/importlib/metadata/__init__.py\", line 565, in from_name\n    raise PackageNotFoundError(name)\nimportlib.metadata.PackageNotFoundError: No package metadata was found for gpu4pyscf\n"
+  }
+}

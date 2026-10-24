@@ -7,6 +7,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+struct DirectForceWork;
+
 /** Borrowed device basis view and primitive-pair storage ABI. The owning plan outlives every
  * submitted kernel. */
 template <typename Scalar>
@@ -99,6 +101,41 @@ struct DeviceBatch {
   /** Restricted exported-reference Fock only. Null keeps legacy accumulation;
    * the owner resets and folds this canonical plane on its captured stream. */
   double* reference_fock_correction{};
+  /** Optional Cartesian RHF force direction, borrowed for one unscreened
+   * single-item derivative launch. Null preserves quadratic RHF/UHF weights.
+   * Set only on a local batch view; never mutate the retained source identity. */
+  const double* direct_force_seed{};
+  /** Borrowed only by an intrusive synchronous diagnostic invocation. The
+   * dispatcher drains before releasing it; retained geometry never owns it.
+   */
+  DirectForceWork* direct_force_work{};
+  /** Experimental acquisition preferences, frozen with the prepared owner.
+   * Defaults retain the qualified schedules; neither changes derivative math. */
+  unsigned direct_order_seven_page_size{32};
+  bool direct_dddd_force_class_major{};
+  /** Intrusive census-only split repeats enumeration to time low/6 separately. */
+  bool direct_force_split_low{};
+  /** Exact relative-coordinate AD; false retains the nuclear-coordinate graph. */
+  bool direct_force_relative_response{true};
+  /** Per-launch qualification candidate, never a process-global precision mode.
+   * Only full-range weighted order-0..5 sources consume it. Geometry, density
+   * weights and radial moments stay double; all other derivative owners stay
+   * strict. Optional counters contain three entries per physical system:
+   * mixed tasks, primitive/source evaluations and nonfinite strict retries.
+   * A standalone Coulomb consumer has one system; fused HF must not attribute
+   * the bucket total to each result. */
+  bool direct_force_fp32{};
+  unsigned long long* direct_force_precision_work{};
+  /** DF-only radial identity; zero preserves ordinary Coulomb consumers. */
+  double df_range_omega{};
+  /** Default-off conservative block prefilter, frozen before graph capture.
+   * Exact shell screening, generated stream ABI and ERI/J/K stay FP64. */
+  bool direct_fp32_block_screening{};
+  /** Optional owner-budgeted FP32 upper bounds. Geometry preparation refreshes
+   * block bounds; each density reduction refreshes system bounds on the same
+   * stream before any consumer. Null preserves the FP64 gate. */
+  float* direct_fp32_block_bounds{};
+  float* direct_fp32_density_bounds{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

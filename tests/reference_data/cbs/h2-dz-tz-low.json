@@ -1,0 +1,66 @@
+{
+  "checksum": "4914ba2f8434882dceaf402931291caf8459adebc8e38d65d2143c2d07ce1d4e",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "19685E-6",
+              "137977E-6",
+              "478148E-6"
+            ]
+          ],
+          "exponents": [
+            "1301E-2",
+            "1962E-3",
+            "4446E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "122E-3"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "727E-3"
+          ],
+          "source_group": 2
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "cc-pvdz",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "44480f0d2a2b40514ad84fbbf205e140e83cb8fa00ca84087ef99090aeec2e2a",
+    "license": "Apache-2.0",
+    "source": "PySCF packaged Dunning basis tables",
+    "version": "2.14.0"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 
 namespace generativeqc::molecule {
 
@@ -32,6 +33,15 @@ inline constexpr std::size_t kMaximumAuxiliaryAoExpansionTerms = 6;
 [[nodiscard]] constexpr std::size_t cartesian_count(unsigned l) noexcept {
   const std::uint64_t n = l;
   const std::uint64_t count = n % 2 == 0 ? (n + 1) * ((n + 2) / 2) : ((n + 1) / 2) * (n + 2);
+  return count > std::numeric_limits<std::size_t>::max() ? 0 : static_cast<std::size_t>(count);
+}
+
+/** Public shell dimension, shared by normalized systems and shape-only plans.
+ * Zero reports an unrepresentable dimension rather than wrapped size_t data. */
+[[nodiscard]] constexpr std::size_t shell_ao_count(
+    unsigned angular_momentum, generativeqc_basis_representation representation) noexcept {
+  if (representation != GENERATIVEQC_BASIS_SPHERICAL) return cartesian_count(angular_momentum);
+  const std::uint64_t count = 2 * static_cast<std::uint64_t>(angular_momentum) + 1;
   return count > std::numeric_limits<std::size_t>::max() ? 0 : static_cast<std::size_t>(count);
 }
 

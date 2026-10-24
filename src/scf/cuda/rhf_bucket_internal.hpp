@@ -91,6 +91,8 @@ struct CudaRhfBucketPlan {
   bool quartet_direct{};
   bool transformed_direct{};
   bool bounded_direct_streaming{};
+  /** Frozen with the optional arena regions and captured block predicates. */
+  bool fp32_block_screening{};
   bool unrestricted{};
   bool shell_class_profiling{};
   bool inactive_eigensolver_profiling{};
@@ -194,9 +196,12 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
          first.energy_tolerance == second.energy_tolerance &&
          first.density_tolerance == second.density_tolerance &&
          first.screening_tolerance == second.screening_tolerance &&
+         first.reference_iteration_screening_tolerance ==
+             second.reference_iteration_screening_tolerance &&
          first.compute_forces == second.compute_forces &&
          first.export_physical_reference == second.export_physical_reference &&
          first.precision_mode == second.precision_mode &&
+         first.application_precision_budget == second.application_precision_budget &&
          first.incremental_direct_jk == second.incremental_direct_jk &&
          first.incremental_direct_jk_rebuild_interval ==
              second.incremental_direct_jk_rebuild_interval &&
@@ -232,6 +237,7 @@ inline bool compatible_hf_bucket_options(const CudaRhfBucketPlan& plan,
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
-    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling);
+    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics = nullptr);
 
 }  // namespace generativeqc::scf

@@ -63,6 +63,8 @@ struct ArenaLayout {
   std::size_t bounded_stream_topology{};
   std::size_t bounded_direct_shell_pair_block_bounds{};
   std::size_t bounded_direct_system_density_bounds{};
+  std::size_t bounded_direct_fp32_block_bounds{};
+  std::size_t bounded_direct_fp32_density_bounds{};
   std::size_t bounded_direct_system_pair_density_bounds{};
   std::size_t bounded_direct_generated_tasks{};
   std::size_t bounded_direct_generated_task_counts{};
@@ -151,11 +153,14 @@ struct ArenaLayout {
   std::size_t energy_change{};
   std::size_t density_rms{};
   std::size_t forces{};
+  /** Three execution counters per physical item, never a bucket-wide census. */
+  std::size_t gradient_precision_work{};
   std::size_t active{};
   std::size_t converged{};
   std::size_t failed{};
   std::size_t final_fock_reuse_mask{};
   std::size_t final_fock_rebuild_count{};
+  std::size_t executed_fock_builds{};
   std::size_t spin_active{};
   std::size_t iterations{};
   std::size_t solver_info{};
@@ -167,19 +172,22 @@ struct ArenaLayout {
 /** Build offsets transactionally; publish a layout only if all sizes and alignment operations fit.
  * Optional workspace flags are owner-provided resource facts, not provider policy.
  */
-bool make_layout(
-    std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
-    std::size_t shell_count, std::size_t shell_pair_count, std::size_t shell_pair_block_count,
-    std::size_t bounded_generated_task_capacity, std::size_t shell_pair_primitive_count,
-    std::size_t psss_resident_task_count, std::size_t psss_resident_ket_pair_count,
-    std::size_t shell_quartet_tile_count, std::size_t fp32_shell_quartet_tile_count,
-    std::size_t generated_shell_task_capacity, std::size_t ppps_resident_ket_task_capacity,
-    std::size_t generic_order5_tile_capacity, std::size_t primitives, std::size_t diis_history,
-    std::size_t eigensolver_profile_capacity, std::size_t spin_count, bool persistent_eri,
-    bool transformed_direct, bool shell_class_profiling, bool inactive_eigensolver_profiling,
-    bool bounded_fock_class_timing, bool bounded_direct_streaming, bool mixed_precision_fock,
-    bool incremental_direct_jk, ArenaLayout& layout, bool incremental_diis_gram = false,
-    bool matrix_library_workspace = false, bool structured_matrix_workspace = false);
+bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
+                 std::size_t shell_count, std::size_t shell_pair_count,
+                 std::size_t shell_pair_block_count, std::size_t bounded_generated_task_capacity,
+                 std::size_t shell_pair_primitive_count, std::size_t psss_resident_task_count,
+                 std::size_t psss_resident_ket_pair_count, std::size_t shell_quartet_tile_count,
+                 std::size_t fp32_shell_quartet_tile_count,
+                 std::size_t generated_shell_task_capacity,
+                 std::size_t ppps_resident_ket_task_capacity,
+                 std::size_t generic_order5_tile_capacity, std::size_t primitives,
+                 std::size_t diis_history, std::size_t eigensolver_profile_capacity,
+                 std::size_t spin_count, bool persistent_eri, bool transformed_direct,
+                 bool shell_class_profiling, bool inactive_eigensolver_profiling,
+                 bool bounded_fock_class_timing, bool bounded_direct_streaming,
+                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout,
+                 bool incremental_diis_gram = false, bool matrix_library_workspace = false,
+                 bool structured_matrix_workspace = false, bool fp32_block_screening = false);
 
 /** Borrow an array from the already allocated and validated arena. */
 template <typename T>

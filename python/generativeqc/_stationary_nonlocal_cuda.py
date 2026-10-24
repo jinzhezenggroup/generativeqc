@@ -31,6 +31,7 @@ def resident_nonlocal_geometry(
     ingredients: tuple[str, ...],
     ao_maps: typing.Any = None,
     ao_domain: typing.Any = None,
+    nonlocal_only: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, float], dict[str, typing.Any]]:
     """Prefer live SCF features, retaining the bounded device collection fallback.
 
@@ -55,20 +56,28 @@ def resident_nonlocal_geometry(
         raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
     if not callable(getattr(nonlocal_owner, "seed_from_snapshot", None)):
         raise TypeError("resident nonlocal owner lacks the final-state feature handoff")
-    points = state.grid.points
+    quadrature = state._source.nonlocal_grid if nonlocal_only else state.grid
+    points = quadrature.points
     count = len(points)
     if count == 0 or nonlocal_owner.point_count != count:
         raise ValueError("resident nonlocal owner/grid point count differs")
-    resident_grid = state._source.cuda_resident_grid()
+    resident_grid = (
+        state._source.cuda_resident_grid(nonlocal_grid=True)
+        if nonlocal_only
+        else state._source.cuda_resident_grid()
+    )
     if resident_grid is None:
         raise NotImplementedError(
             "resident nonlocal geometry requires the CUDA molecular-grid lease"
         )
     if resident_grid.device != grid.device_id or resident_grid.point_count != count:
         raise ValueError("resident molecular-grid lease differs from stationary grid")
-    if count % sources.natom:
-        raise ValueError("molecular grid point count is not atom-major uniform")
-    points_per_atom = count // sources.natom
+    spec = (
+        state._source.nonlocal_grid_spec if nonlocal_only else state._source.grid_spec
+    )
+    points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+    if points_per_atom and count != sources.natom * points_per_atom:
+        raise ValueError("molecular grid point count differs from its prescription")
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
     if type(ao_count) is not int or ao_count <= 0:
@@ -88,7 +97,8 @@ def resident_nonlocal_geometry(
         ao_maps.reset_work()
 
     began = perf_counter()
-    diagnostic = nonlocal_owner.diagnostic()
+    diagnostic = nonlocal_owner.diagnostic(include_work=True)
+    initial_pair_work = diagnostic
     if diagnostic.executed:
         nonlocal_owner.reset()
     elif diagnostic.collected_points:
@@ -123,7 +133,7 @@ def resident_nonlocal_geometry(
                 )
             )
             with feature_lease as task:
-                weights = state.grid.weights[begin:end]
+                weights = quadrature.weights[begin:end]
                 device_weights = resident_grid.weights + begin * 8
                 device_raw = resident_grid.atomic_weights + begin * 8
                 host_raw = (
@@ -133,16 +143,17 @@ def resident_nonlocal_geometry(
                     else None
                 )
                 if phase == 0:
-                    sources.geometry_molecular_resident_weights(
-                        task,
-                        begin,
-                        points_per_atom,
-                        device_weights,
-                        weights,
-                        device_raw,
-                        host_raw,
-                        functional=functional,
-                    )
+                    if not nonlocal_only:
+                        sources.geometry_molecular_resident_weights(
+                            task,
+                            begin,
+                            points_per_atom,
+                            device_weights,
+                            weights,
+                            device_raw,
+                            host_raw,
+                            functional=functional,
+                        )
                     if begin == 0:
                         began = perf_counter()
                         try:
@@ -193,18 +204,20 @@ def resident_nonlocal_geometry(
                     seeds.stride,
                     begin,
                 )
-        if phase == 0:
+        if phase == 0 and not nonlocal_only:
             # Preserve individual source arrays/canonical final summation while
             # avoiding D2H publication of unused one-electron/Coulomb slots.
             local = sources.finish_span(
                 ("xc_ao", "xc_grid", "xc_weight", "overlap_pulay", "nuclear")
             )
 
-    if local is None or seeds is None:
+    if (local is None and not nonlocal_only) or seeds is None:
         raise RuntimeError("resident nonlocal geometry did not complete")
     nonlocal_parts = nonlocal_sources.finish_span(("xc_ao", "xc_grid", "xc_weight"))
     components = {
-        name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+        name: local[name]
+        for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+        if not nonlocal_only
     }
     for suffix in ("ao", "grid", "weight"):
         components["nonlocal_" + suffix] = nonlocal_parts["xc_" + suffix]
@@ -227,6 +240,7 @@ def resident_nonlocal_geometry(
         "vv10_pair_enqueue": pair_seconds,
         geometry_timing: geometry_and_drain_seconds,
     }
+    final_pair_work = nonlocal_owner.diagnostic(include_work=True)
     work = {
         "nonlocal_execution": "resident-full-grid-device-seeds",
         "nonlocal_feature_source": (
@@ -251,12 +265,23 @@ def resident_nonlocal_geometry(
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
         "ao_collocation_point_visits": geometry_passes * count,
-        "geometry_point_visits": 2 * count,
+        "geometry_point_visits": count if nonlocal_only else 2 * count,
         "stationary_source_d2h_policy": "contiguous-live-spans",
-        "semilocal_stationary_source_d2h_bytes": 5 * 3 * sources.natom * 8,
+        "semilocal_stationary_source_d2h_bytes": 0
+        if nonlocal_only
+        else 5 * 3 * sources.natom * 8,
         "nonlocal_stationary_source_d2h_bytes": 3 * 3 * sources.natom * 8,
         "stationary_source_full_arena_d2h_bytes_avoided": 6 * 3 * sources.natom * 8,
     }
+    for label, field in (
+        ("nonlocal_pair_cache_probes", "pair_cache_probes"),
+        ("nonlocal_pair_cache_hits", "pair_cache_hits"),
+        ("nonlocal_pair_sweeps", "pair_evaluations"),
+    ):
+        before = getattr(initial_pair_work, field)
+        after = getattr(final_pair_work, field)
+        if before is not None and after is not None:
+            work[label] = after - before
     if ao_maps is not None:
         work["active_ao_maps"] = ao_maps.work
     # Detailed profiling deliberately uses the retained explicit-owner / host
@@ -265,7 +290,9 @@ def resident_nonlocal_geometry(
     # per collocation pass. Points and nonlocal seeds remain resident either way.
     profiled = sum(
         bool(getattr(owner, "profile_device", False))
-        for owner in (sources, nonlocal_sources)
+        for owner in (
+            (nonlocal_sources,) if nonlocal_only else (sources, nonlocal_sources)
+        )
     )
     if profiled:
         work["grid_owner_source"] = (
@@ -287,4 +314,99 @@ def resident_nonlocal_geometry(
                 else "mixed-resident-and-profile-host-atomic-measures"
             )
             work["grid_atomic_measure_h2d_bytes"] = profiled * count * 8
+    return components, seconds, work
+
+
+def resident_split_nonlocal_geometry(
+    **arguments: typing.Any,
+) -> tuple[dict[str, typing.Any], dict[str, float], dict[str, typing.Any]]:
+    """Evaluate each quadrature on its own lease, sharing only bounded AO scratch.
+
+    The incumbent combined traversal remains untouched for identical rules.
+    Independent rules may have equal point counts but different points, weights
+    or partition response. Neither their AO tasks nor their active maps alias.
+    """
+    state = arguments["state"]
+    source = state._source
+    if source.nonlocal_grid is state.grid:
+        return resident_nonlocal_geometry(**arguments)
+    nonlocal_arguments = dict(arguments)
+    nonlocal_arguments.update(
+        nonlocal_only=True,
+        raw_weights=source.nonlocal_atomic_weights,
+        ao_maps=None,
+        ao_domain=None,
+    )
+    components, seconds, work = resident_nonlocal_geometry(**nonlocal_arguments)
+    grid, sources = arguments["grid"], arguments["sources"]
+    resident_grid = source.cuda_resident_grid()
+    count, tile_points = len(state.grid.points), arguments["tile_points"]
+    if (
+        resident_grid is None
+        or resident_grid.device != grid.device_id
+        or resident_grid.point_count != count
+    ):
+        raise ValueError(
+            "semilocal resident grid differs from its stationary quadrature"
+        )
+    # Each owner retains its own prefix topology: the XC and VV10 rules may
+    # have different element-dependent shell counts even at the same level.
+    spec = source.grid_spec
+    points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+    if points_per_atom and count != sources.natom * points_per_atom:
+        raise ValueError("molecular grid point count differs from its prescription")
+    ao_maps, ao_domain = arguments.get("ao_maps"), arguments.get("ao_domain")
+    if ao_maps is not None:
+        ao_maps.reset_work()
+    began = perf_counter()
+    for begin in range(0, count, tile_points):
+        end = min(begin + tile_points, count)
+        lease = (
+            grid.feature_task_device_points(
+                resident_grid.points + 3 * begin * 8,
+                end - begin,
+                None,
+                arguments["ingredients"],
+                block_layout=None,
+            )
+            if ao_maps is None
+            else ao_maps.feature_task(
+                grid, ao_domain, begin, end - begin, arguments["ingredients"]
+            )
+        )
+        with lease as task:
+            sources.geometry_molecular_resident_weights(
+                task,
+                begin,
+                points_per_atom,
+                resident_grid.weights + begin * 8,
+                state.grid.weights[begin:end],
+                resident_grid.atomic_weights + begin * 8,
+                source.atomic_weights[begin:end]
+                if getattr(sources, "profile_device", False)
+                else None,
+                functional=arguments["functional"],
+            )
+    local = sources.finish_span(
+        ("xc_ao", "xc_grid", "xc_weight", "overlap_pulay", "nuclear")
+    )
+    components.update(
+        (name, local[name]) for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+    )
+    seconds["independent_semilocal_geometry_and_drain"] = perf_counter() - began
+    work["quadrature_execution"] = "independent-xc-nonlocal-grids"
+    work["semilocal_grid_points"] = count
+    work["nonlocal_grid_points"] = len(source.nonlocal_grid.points)
+    work["ao_collocation_point_visits"] += count
+    work["geometry_point_visits"] += count
+    work["semilocal_stationary_source_d2h_bytes"] = 5 * 3 * sources.natom * 8
+    if ao_maps is not None:
+        work["active_ao_maps"] = ao_maps.work
+    if getattr(sources, "profile_device", False):
+        for field in (
+            "grid_owner_h2d_bytes",
+            "grid_weight_h2d_bytes",
+            "grid_atomic_measure_h2d_bytes",
+        ):
+            work[field] += count * 8
     return components, seconds, work

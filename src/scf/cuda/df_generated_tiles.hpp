@@ -6,6 +6,7 @@
 #include "scf/cuda/df_metric_kernels.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/df_streamed_k_policy.hpp"
 
@@ -31,8 +32,9 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
   // whitened auxiliary axis. E=A Q diag(lambda^-1/2) and the symmetric
   // C=E Q^T therefore give exactly the same K. Keep E here: rotating back
   // would project every eigendirection again for each tiny output panel.
-  // Streamed plans publish no resident C view and cannot lend their final
-  // projection to response; resident/packed owners keep their symmetric C.
+  // Streamed plans publish no resident view and cannot lend their final
+  // projection to response. Single packed owners separately retain E together
+  // with its explicit response gauge; other resident owners keep symmetric C.
   const bool eigen_basis = plan.streamed && plan.metric_full_rank[system];
   // Only fuse when neither buffer can hold two auxiliary directions. Here
   // both routes evaluate each source integral once for this Q; fusion avoids
@@ -50,7 +52,6 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
         reinterpret_cast<void*>(plan.stream), output, detail);
   }
   runtime::cuda_trace::trace_counter("raw_panel_source_auxiliary_evaluations", pairs * plan.naux);
-  const double one = 1, zero = 0;
   runtime::cuda_trace::TraceRegion transform("transformed_three_center_generation", plan.stream);
   for (std::size_t begin = 0; begin < plan.naux; begin += raw_tile) {
     const auto count = std::min(raw_tile, plan.naux - begin);
@@ -65,15 +66,12 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
                                            auxiliary_begin * plan.naux + begin
                                      : plan.inverse_square_roots + system * plan.naux * plan.naux +
                                            begin * plan.naux + auxiliary_begin;
-    const auto blas_status = runtime::cuda_trace::trace_call("tile_metric_gemm", plan.stream, [&] {
-      return cublasDgemm(plan.blas, eigen_basis ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N,
-                         static_cast<int>(auxiliaries), static_cast<int>(pairs),
-                         static_cast<int>(count), &one, factor, static_cast<int>(plan.naux),
-                         scratch, static_cast<int>(count), begin ? &one : &zero, output,
-                         static_cast<int>(auxiliaries));
+    const auto product = runtime::cuda_trace::trace_call("tile_metric_gemm", plan.stream, [&] {
+      return scf_matrix_product_view(plan, eigen_basis, false, auxiliaries, pairs, count, factor,
+                                     plan.naux, scratch, count, output, auxiliaries, 1.0,
+                                     begin ? 1.0 : 0.0, "transform bounded raw DF panel", detail);
     });
-    if (blas_status != CUBLAS_STATUS_SUCCESS)
-      return blas_failure(blas_status, "transform bounded raw DF panel", detail);
+    if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
     if (eigen_basis) runtime::cuda_trace::trace_counter("streamed_whitening_factor_gemms", 1);
   }
   if (eigen_basis) {

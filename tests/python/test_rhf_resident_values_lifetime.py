@@ -124,14 +124,17 @@ namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept { return system.shells.size(); }
 }
 namespace generativeqc::scf {
-struct CudaDirectJkPlan { bool resident=false; };
+struct CudaDirectJkPlan {
+  bool resident=false, mixed=false; std::uint32_t mask{(1U<<28)-1};
+  FockOperator source_operator{FockOperator::FullRange}; double omega{};
+};
 FockBuildSpec make_hf_fock_spec(FockSpin spin, FockApproximation approximation) {
   FockBuildSpec spec; spec.spin=spin;
   spec.coulomb.approximation=spec.exchange.approximation=approximation;
   return spec;
 }
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t,std::size_t,std::size_t,
-                                            std::size_t,std::size_t,unsigned,bool) { return 4096; }
+                                            std::size_t,std::size_t,unsigned,bool,std::size_t) { return 4096; }
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int, const std::vector<core::System>& systems, double screening,
     std::size_t budget, cudaStream_t value, CudaDirectJkPlan** output,
@@ -160,6 +163,9 @@ void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept {
   require(!graph_live && fences>0); teardown.push_back(2); delete plan; --plans;
 }
 std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan*) { return 800; }
+std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*, std::uint32_t mask) {
+  return !mask ? 0 : mask==(1U<<28)-1 ? 800 : 400;
+}
 generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
     std::size_t, std::size_t, std::size_t& bytes, std::string&) {
   ++layout_queries;
@@ -175,8 +181,8 @@ generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
 generativeqc_status prepare_cuda_direct_jk_resident_layout(CudaDirectJkPlan*, std::string&) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*) {
-  return 2*direct_dimension*direct_dimension;
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins) {
+  return 2*spins*direct_dimension*direct_dimension;
 }
 generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
                                                          std::size_t, std::string&) {
@@ -185,23 +191,73 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
   if(mode==8) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   plan->resident=true; ++fences; return GENERATIVEQC_STATUS_SUCCESS;
 }
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask, std::string& detail) {
+  const auto status=prepare_cuda_direct_jk_resident_values(plan, budget, detail);
+  if(status==GENERATIVEQC_STATUS_SUCCESS) plan->mask=mask;
+  return status;
+}
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask,
+    FockOperator, double, std::string& detail) {
+  return prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
+}
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::string& detail,
+    FockOperator source_operator, double omega, std::uint32_t mask) {
+  require((source_operator==FockOperator::FullRange && omega==0.0) ||
+          ((source_operator==FockOperator::ShortRange || source_operator==FockOperator::LongRange)
+           && omega==0.2));
+  require(mask==0x15U || mask==(1U<<28)-1);
+  const auto status=prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
+  if(status==GENERATIVEQC_STATUS_SUCCESS) {
+    plan->mixed=true; plan->source_operator=source_operator; plan->omega=omega;
+  }
+  return status;
+}
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept {
   CudaDirectJkDiagnostic diagnostic;
   if(plan && mode==12) {
     diagnostic.resident_values_submitted=100;
     diagnostic.resident_values_completed=100;
   }
-  if(plan && plan->resident) { diagnostic.resident_value_bytes=800; diagnostic.resident_value_count=100; }
+  if(plan && plan->resident) {
+    diagnostic.resident_value_count=plan->mask==(1U<<28)-1 ? 100 : 50;
+    diagnostic.resident_value_bytes=(plan->mixed ? 4 : 8)*diagnostic.resident_value_count;
+  }
   return diagnostic;
 }
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
     double*, double*, double*, std::size_t correction, int* error, double threshold,
-    std::uint64_t* census, std::string&, bool resident) {
+    std::uint64_t* census, std::string&, bool resident,
+    const double* beta, double* beta_exchange, bool materialized) {
+  require(materialized);
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
-          correction==2*64*64 && threshold==((mode==20 || mode==21) ? 1e-12 : 0.0));
+          (spec.spin==FockSpin::Unrestricted ? beta!=nullptr : beta==nullptr) &&
+          (spec.spin==FockSpin::Unrestricted && spec.exchange.present
+               ? beta_exchange!=nullptr : beta_exchange==nullptr) &&
+          correction==2*(spec.spin==FockSpin::Unrestricted ? 2U : 1U)*64*64 &&
+          threshold==((mode==30 || mode==31) ? 1e12 :
+                      (mode==20 || mode==21 || mode==32) ? 1e-12 : 0.0));
+  if(mode==32) require(plan->mask==0x15U);
   if(mode==20) require(spec.exchange.coefficient==-0.125);
-  *error=mode==9; census[0]=mode==10 ? 99 : 100; census[1]=mode==11;
+  *error=mode==9; census[0]=mode==10 ? 99 : 100;
+  census[1]=plan->mask==(1U<<28)-1 ? mode==11 : mode==11 ? 49 : 50;
+  if(mode==30) census[1]=0;
+  if(mode==31) census[1]=51;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+generativeqc_status enqueue_cuda_direct_jk_mixed_resident_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
+    double*, double*, double*, std::size_t correction, int* error, double threshold,
+    std::uint64_t* census, std::string&) {
+  require(plan->resident && plan->mixed && spec.spin==FockSpin::Restricted &&
+          elements==64*64 && correction==2*64*64 && threshold==1e-12);
+  require(spec.exchange.present && spec.exchange.op==plan->source_operator &&
+          spec.exchange.omega==plan->omega);
+  require(plan->source_operator==FockOperator::FullRange || !spec.coulomb.present);
+  *error=0; census[0]=100; census[1]=plan->mask==(1U<<28)-1 ? 0 : 50;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 }
@@ -251,6 +307,34 @@ int main(int argc, char** argv) {
               std::find(teardown.begin(),teardown.end(),2) || fatal || !admitted);
   }
   mode=0;
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
+  for(mode=0;mode<=11;++mode) {
+    if(mode!=0 && mode!=9 && mode!=10 && mode!=11) continue;
+    {
+      RhfResidentValues partial(stream);
+      require(partial.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_SUCCESS);
+      require(partial.active() && partial.value_bytes()==400);
+      double matrix[64*64]{};
+      require(partial.enqueue(matrix,matrix,matrix)==GENERATIVEQC_STATUS_SUCCESS);
+      require((partial.audit()==GENERATIVEQC_STATUS_SUCCESS)==(mode==0));
+    }
+    require(allocations==0 && plans==0);
+  }
+  mode=0;
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","0",1);
+  {
+    RhfResidentValues empty(stream);
+    require(empty.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_SUCCESS);
+    require(!empty.active() && empty.value_bytes()==0);
+  }
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","invalid",1);
+  {
+    const auto before=creates;
+    RhfResidentValues invalid(stream);
+    require(invalid.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    require(!invalid.active() && creates==before);
+  }
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
   for(const char* selection:{"0","bad"}) {
     setenv("GENERATIVEQC_RHF_RESIDENT_VALUES",selection,1);
     const auto before=creates;
@@ -286,7 +370,60 @@ int main(int argc, char** argv) {
       require(!refused_auto.active() && creates==before);
     }
   }
+  // Compose the real partial-value owner with both spin layouts. A nontrivial
+  // mask makes an accidental mask/spin argument interchange fail admission,
+  // while the enqueue double verifies beta forwarding and correction extent.
+  mode=32;
+  direct_dimension=64;
+  for(const unsigned spins : {1U, 2U}) {
+    for(const bool own_outputs : {false, true}) {
+      scf::cuda_execution::DirectJkSourceLease source(stream);
+      require(source.prepare(0,systems,100,64,1000,16ULL<<30,"1","spin-mask-compose",
+                             false,false,1e-12,16ULL<<30,own_outputs,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                             0x15U,spins)==GENERATIVEQC_STATUS_SUCCESS);
+      require(source.active() && source.value_bytes()==400);
+      const auto planes=2U*spins+(own_outputs ? 1U+spins : 0U);
+      require(source.device_bytes()==planes*64*64*sizeof(double)+sizeof(int)+
+                                     2*sizeof(std::uint64_t));
+      auto spec=scf::make_hf_fock_spec(spins==2 ? scf::FockSpin::Unrestricted
+                                             : scf::FockSpin::Restricted);
+      spec.derivative_order=0;
+      double matrices[5*64*64]{}; std::string detail;
+      for(const bool exchange : {false,true}) {
+        spec.exchange.present=exchange;
+        require(source.enqueue(spec,matrices,matrices+2*64*64,
+                               exchange ? matrices+3*64*64 : nullptr,nullptr,1e-12,detail,
+                               spins==2 ? matrices+64*64 : nullptr,
+                               spins==2 && exchange ? matrices+4*64*64 : nullptr)
+                ==GENERATIVEQC_STATUS_SUCCESS);
+        require(source.audit()==GENERATIVEQC_STATUS_SUCCESS);
+      }
+    }
+  }
+  require(allocations==0 && plans==0);
   setenv("GENERATIVEQC_RHF_RESIDENT_VALUES","1",1);
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
+  mode=0;
+  direct_dimension=64;
+  {
+    mode=21;
+    scf::cuda_execution::DirectJkSourceLease screened_partial(stream);
+    require(screened_partial.prepare(0,systems,100,64,1000,16ULL<<30,"1","partial-refusal",
+                                     false,false,1e-12,16ULL<<30,true,
+                                     scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,1)
+            ==GENERATIVEQC_STATUS_SUCCESS);
+    require(screened_partial.active() && screened_partial.value_bytes()==400);
+    auto spec=scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+    spec.derivative_order=0;
+    double matrix[64*64]{}; std::string detail;
+    for(mode=30;mode<=31;++mode) {
+      require(screened_partial.enqueue(spec,matrix,screened_partial.coulomb(),
+                                      screened_partial.exchange(),nullptr,1e12,detail)
+              ==GENERATIVEQC_STATUS_SUCCESS);
+      require((screened_partial.audit()==GENERATIVEQC_STATUS_SUCCESS)==(mode==30));
+    }
+  }
   mode=20;
   direct_dimension=64;
   {
@@ -301,6 +438,7 @@ int main(int argc, char** argv) {
             ==GENERATIVEQC_STATUS_SUCCESS);
     require(source.audit()==GENERATIVEQC_STATUS_SUCCESS && assemblies==before_assembly);
   }
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
   for(mode=21;mode<=25;++mode) {
     scf::cuda_execution::DirectJkSourceLease screened(stream);
     const auto before_queries=layout_queries;
@@ -332,6 +470,68 @@ int main(int argc, char** argv) {
     require(borrowed_outputs.device_bytes()==2*64*64*sizeof(double)+sizeof(int)+2*sizeof(std::uint64_t));
   }
   require(allocations==0 && plans==0);
+  mode=33;
+  auto mixed_systems=systems;
+  for(auto& shell:mixed_systems.front().shells) shell.angular_momentum=0;
+  for(const auto radial : {scf::FockOperator::FullRange, scf::FockOperator::ShortRange,
+                           scf::FockOperator::LongRange})
+    for(const std::uint32_t mask : {(1U<<28)-1, 0x15U}) {
+    const bool full=radial==scf::FockOperator::FullRange;
+    const double omega=full ? 0.0 : 0.2;
+    const std::size_t values=mask==(1U<<28)-1 ? 100 : 50;
+    scf::cuda_execution::DirectJkSourceLease mixed(stream,radial,omega,true);
+    require(mixed.mixed_recurrence());
+    require(mixed.prepare(0,mixed_systems,100,64,1000,16ULL<<30,"1","mixed-source-test",
+                          false,false,1e-12,values*sizeof(float),true,
+                          scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,mask)
+            ==GENERATIVEQC_STATUS_SUCCESS);
+    require(mixed.active() && mixed.value_bytes()==values*sizeof(float) &&
+            mixed.value_count()==values);
+    auto spec=scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+    spec.derivative_order=0; spec.coulomb.present=full;
+    spec.exchange.op=radial; spec.exchange.omega=omega;
+    double matrix[64*64]{}; std::string detail;
+    for(int replay=0; replay<3; ++replay) {
+      require(mixed.enqueue(spec,matrix,full ? mixed.coulomb() : nullptr,mixed.exchange(),
+                            nullptr,1e-12,detail)==GENERATIVEQC_STATUS_SUCCESS);
+      require(mixed.audit()==GENERATIVEQC_STATUS_SUCCESS);
+    }
+    auto wrong=spec;
+    wrong.exchange.op=full ? scf::FockOperator::ShortRange : scf::FockOperator::FullRange;
+    require(mixed.enqueue(wrong,matrix,mixed.coulomb(),mixed.exchange(),nullptr,1e-12,detail)
+            ==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    if(!full) {
+      wrong=spec; wrong.exchange.omega=0.3;
+      require(mixed.enqueue(wrong,matrix,nullptr,mixed.exchange(),nullptr,1e-12,detail)
+              ==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      wrong=spec; wrong.coulomb.present=true;
+      require(mixed.enqueue(wrong,matrix,mixed.coulomb(),mixed.exchange(),nullptr,1e-12,detail)
+              ==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    }
+    require(mixed.enqueue(spec,matrix,mixed.coulomb(),mixed.exchange(),nullptr,1e-12,detail,
+                          matrix,matrix)==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    require(mixed.prepare(0,systems,100,64,1000,16ULL<<30,"1","reprepare")
+            ==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  }
+  require(allocations==0 && plans==0);
+  for(int refusal=0; refusal<6; ++refusal) {
+    auto unsupported=mixed_systems;
+    if(refusal==2) unsupported.front().shells.front().angular_momentum=3;
+    const auto before_creates=creates;
+    {
+      scf::cuda_execution::DirectJkSourceLease mixed(
+          stream,scf::FockOperator::FullRange,refusal==3 ? 0.2 : 0.0,true);
+      const auto status=mixed.prepare(
+          0,unsupported,100,64,1000,16ULL<<30,"1","mixed-refusal-test",
+          false,false,1e-12,refusal==4 ? 399 : 400,true,
+          scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+          refusal==0 ? 0 : refusal==5 ? (1U<<28) : (1U<<28)-1,refusal==1 ? 2 : 1);
+      require(status==((refusal==3 || refusal==5) ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+                                                : GENERATIVEQC_STATUS_SUCCESS));
+      require(!mixed.active() && creates==before_creates+(refusal==4));
+    }
+    require(allocations==0 && plans==0);
+  }
   mode=21;
   direct_dimension=128;
   systems.front().shells.front().angular_momentum=2;

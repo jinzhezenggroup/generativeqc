@@ -1,13 +1,10 @@
 """One physical CUDA tile contract, independently of point mathematical policy."""
 
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
-from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
-from generativeqc_compiler.dft.xc_point_cuda import (
-    emit_device_point_value,
-    emit_point_traversal,
-)
 from generativeqc_compiler.xc.automatic_cuda import (
     emit_automatic_cuda_descriptor,
     emit_automatic_cuda_provider,
@@ -23,36 +20,16 @@ from tools import generate_libxc_semilocal_cuda_registry as cuda_registry
     ("name", "feature_terms"),
     (("LDA_C_VWN_4", 1), ("GGA_X_APBE", 4), ("MGGA_X_LTA", 5)),
 )
-def test_automatic_and_curated_consumers_share_one_physical_traversal(
+def test_automatic_provider_preserves_mathematics_and_physical_feature_contract(
     name: str, feature_terms: int
 ) -> None:
     provider = emit_automatic_cuda_provider(name)
-    curated = emit_native_xc_contraction_kernels()
     assert provider.point == emit_automatic_point(name, backend="cuda")
     assert (
         provider.point.expression_identity
         == emit_automatic_point(name).expression_identity
     )
     assert provider.feature_terms == feature_terms
-    assert provider.source.count(emit_device_point_value()) == 1
-    assert curated.count(emit_device_point_value()) == 1
-    assert provider.source.count(emit_point_traversal()) == 1
-    assert curated.count(emit_point_traversal()) == 1
-    assert (
-        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator>"
-        in curated
-    )
-    assert (
-        "evaluate_point_tiles<feature_terms, false, batched, PointEvaluator>"
-        in provider.source
-    )
-    assert "evaluate_semilocal_point(" not in provider.source
-    assert (
-        "response_point("
-        not in provider.source.split("struct " + provider.provider_name, 1)[1].split(
-            "};", 1
-        )[0]
-    )
     assert emit_automatic_cuda_provider(name) == provider
 
 
@@ -61,10 +38,11 @@ def test_provider_source_identity_covers_layout_and_emitted_contract() -> None:
     for altered in (
         replace(provider, source=provider.source + "\n"),
         replace(provider, provider_name="another_provider"),
-        replace(provider, feature_terms=1),
         replace(provider, point=replace(provider.point, expression_identity="0" * 64)),
     ):
         assert altered.source_identity != provider.source_identity
+    with pytest.raises(ValueError, match="restricted layout"):
+        replace(provider, feature_terms=1)
 
 
 def test_emission_does_not_grant_public_cuda_admission() -> None:
@@ -95,7 +73,7 @@ def test_aot_descriptor_binds_shared_science_and_exact_launcher_source() -> None
     assert provider.source in shard
     assert descriptor in shard
     assert provider.source_identity in descriptor
-    assert provider.point.expression_identity in descriptor
+    assert provider.expression_identity in descriptor
     assert f"0x{entry.code:x}U" in descriptor
     assert "7U," in descriptor
     assert "&launch, &launch_batch, {}" in descriptor
@@ -114,3 +92,75 @@ def test_disabled_bundle_has_no_scientific_entries_or_shard_dependencies() -> No
     assert "return nullptr;" in disabled
     assert "automatic_cuda_point_shard" not in disabled
     assert "automatic_evaluate_points" not in disabled
+
+
+def test_explicit_package_preserves_registration_order_and_identity() -> None:
+    """Packaging is not a named science branch or a provenance alias merge."""
+    names = ["MGGA_X_LTA", "GGA_X_APBE", "LDA_C_VWN_4", "GGA_X_APBE"]
+    expected = tuple(
+        entry for entry in automatic_registry_entries() if entry.name in names
+    )
+    assert cuda_registry.select_entries() == automatic_registry_entries()
+    assert cuda_registry.select_entries(names) == expected
+    assert cuda_registry.select_entries(list(reversed(names))) == expected
+    assert len(expected) == 3
+    for index, entry in enumerate(expected):
+        provider = emit_automatic_cuda_provider(entry.name)
+        shard = cuda_registry.emit_shard(index, expected)
+        assert provider.source in shard
+        assert emit_automatic_cuda_descriptor(provider) in shard
+        for absent in expected:
+            if absent != entry:
+                assert f"case 0x{absent.code:x}U:" not in shard
+    assert "automatic_evaluate_points" not in cuda_registry.emit_shard(3, expected)
+
+
+@pytest.mark.parametrize("names", ([], ["UNKNOWN"], ["GGA_X_APBE", "MGGA_X_BR89"]))
+def test_explicit_package_rejects_unknown_and_unrepresentable_names(
+    names: list[str],
+) -> None:
+    with pytest.raises(ValueError, match="unregistered automatic CUDA AOT"):
+        cuda_registry.select_entries(names)
+
+
+@pytest.mark.parametrize(
+    "options",
+    (("--functional", "UNKNOWN"), ("--disabled", "--functional", "GGA_X_APBE")),
+)
+def test_invalid_package_cli_writes_no_partial_outputs(
+    options: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["generate", "--output-directory", str(tmp_path / "output"), *options],
+    )
+    with pytest.raises(SystemExit) as failure:
+        cuda_registry.main()
+    assert failure.value.code == 2
+    assert not (tmp_path / "output").exists()
+
+
+def test_selected_cli_replaces_stale_shards_without_extra_point_programs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shrinking a package must remove omitted executable dispatch cases."""
+    output = tmp_path / "output"
+    output.mkdir()
+    for index in range(cuda_registry.SHARD_COUNT):
+        (output / f"generated_libxc_semilocal_cuda_{index}.cu").write_text("stale")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["generate", "--output-directory", str(output), "--functional", "GGA_X_APBE"],
+    )
+    cuda_registry.main()
+    selected = cuda_registry.select_entries(["GGA_X_APBE"])[0]
+    sources = [path.read_text() for path in sorted(output.glob("*.cu"))]
+    assert len(sources) == cuda_registry.SHARD_COUNT
+    assert sum(source.count("    case ") for source in sources) == 1
+    assert sum(f"case 0x{selected.code:x}U:" in source for source in sources) == 1
+    assert "stale" not in "".join(sources)
+    mtimes = {path: path.stat().st_mtime_ns for path in output.iterdir()}
+    cuda_registry.main()
+    assert {path: path.stat().st_mtime_ns for path in output.iterdir()} == mtimes

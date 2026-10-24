@@ -43,11 +43,15 @@ void launch_build_orthogonalizer_kernel(dim3 grid, dim3 block, std::size_t share
                                         const double* eigenvalues, const std::uint8_t* active,
                                         double* orthogonalizer, std::uint8_t* failed);
 
-/** Preserve launch geometry, stream and per-item state routing. */
+/** Preserve launch geometry, stream and per-item state routing. The optional
+ * right transpose and leading reduction rank serve resident final-state
+ * products with square-padded panels. Callers validate 0 <= rank <= nbf;
+ * the default -1 retains the complete incumbent SCF multiplication. */
 void launch_matrix_product_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                   cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
                                   const double* left, bool transpose_left, const double* right,
-                                  const std::uint8_t* active, double* output, double scale = 1.0);
+                                  const std::uint8_t* active, double* output, double scale = 1.0,
+                                  bool transpose_right = false, std::int32_t reduction_rank = -1);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_broadcast_spin_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -87,11 +91,12 @@ void launch_prepare_incremental_direct_jk_kernel(
     unsigned long long* full_build_count, unsigned long long* delta_build_count,
     double* max_abs_delta_density);
 
-/** Combine h+G(ΔD) with the retained full-Fock anchor, then advance the exact anchor. */
+/** Reconstruct h+G(D). Screened deltas leave the last full-density anchor intact. */
 void launch_finalize_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
-    std::int32_t spin_count, std::int32_t nbf, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
-    std::uint32_t* delta_updates, const std::uint8_t* full_build);
+    std::int32_t spin_count, std::int32_t nbf, bool fixed_full_density_anchor,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* fock, std::uint32_t* delta_updates,
+    const std::uint8_t* full_build);
 
 }  // namespace generativeqc::scf::cuda_execution

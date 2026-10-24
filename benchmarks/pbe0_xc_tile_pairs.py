@@ -7,6 +7,10 @@ priming are retained outside replay timing, and every timed solver call must
 perform one physical iteration and one Fock build without warm fallback.
 With --point-batch-tiles both arms retain 256-point AO maps/contractions and
 only the candidate batches independent point domains within an explicit cap.
+With --point-specialization both arms use identical tile and batch requests;
+both also use the same explicit equal-spin policy, defaulting to disabled. If
+equal-spin is enabled, its method-bound physical consumer supersedes the family
+toggle; that comparison cannot attribute its gain to physical family lowering.
 With --compact-xc-batches both arms request the same point batching; only the
 candidate batches mapped contractions. The 12-atom case covers small AO domains.
 """
@@ -18,6 +22,7 @@ import hashlib
 import json
 import os
 from contextlib import contextmanager
+from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -60,10 +65,27 @@ def main() -> None:
     parser.add_argument("--feasibility", action="store_true")
     parser.add_argument("--point-batch-tiles", type=int)
     parser.add_argument("--point-batch-bytes", type=int, default=32 * 1024 * 1024)
+    parser.add_argument("--point-specialization", action="store_true")
+    parser.add_argument(
+        "--equal-spin",
+        choices=("0", "1"),
+        help="same policy for both arms; family comparisons default to 0",
+    )
     parser.add_argument("--compact-xc-batches", action="store_true")
     args = parser.parse_args()
-    if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
-        parser.error("real-GPU execution requires a finite Slurm allocation")
+    equal_spin = (
+        args.equal_spin
+        if args.equal_spin is not None
+        else ("0" if args.point_specialization else None)
+    )
+    allocation = os.environ.get("SLURM_JOB_ID") or (
+        os.environ.get("INSPIRE_JOB_NAME") if args.point_specialization else None
+    )
+    if not allocation or not (
+        os.environ.get("CUDA_VISIBLE_DEVICES")
+        or (args.point_specialization and os.environ.get("NVIDIA_VISIBLE_DEVICES"))
+    ):
+        parser.error("real-GPU execution requires a recorded allocation and device")
     if args.repeats < 5 and not (args.feasibility and args.repeats == 1):
         parser.error("at least five pairs required unless explicitly feasibility-only")
     if args.point_batch_tiles is not None and (
@@ -71,6 +93,12 @@ def main() -> None:
     ):
         parser.error(
             "point batching needs at least two tiles and a nonnegative byte cap"
+        )
+    if args.point_specialization and args.point_batch_bytes < 0:
+        parser.error("point specialization needs a nonnegative batch byte cap")
+    if args.point_specialization and args.compact_xc_batches:
+        parser.error(
+            "point specialization and compact XC batching are separate comparisons"
         )
     os.environ["GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE"] = "off"
     if args.compact_xc_batches and args.point_batch_tiles is None:
@@ -85,23 +113,38 @@ def main() -> None:
     scientific = protocol(args.atoms, basis, grid, 5, benchmark=PBE0)
     reference = json.loads(args.reference.read_text())
     assert reference["protocol"] == scientific and reference["stage"] == "complete"
-    tiles = {"baseline": 256, "candidate": 256 if args.point_batch_tiles else 512}
+    tiles = {
+        "baseline": 256,
+        "candidate": 256
+        if args.point_specialization or args.point_batch_tiles
+        else 512,
+    }
 
     @contextmanager
     def point_batch_selection(arm: str) -> Any:
         """Reapply each arm when moved coordinates rebuild the native owner."""
+        batch_tiles = (
+            args.point_batch_tiles
+            if (
+                args.point_specialization
+                or args.compact_xc_batches
+                or arm == "candidate"
+            )
+            else None
+        )
         values = {
-            "GENERATIVEQC_CUDA_XC_BATCH_TILES": str(
-                args.point_batch_tiles
-                if args.point_batch_tiles
-                and (arm == "candidate" or args.compact_xc_batches)
-                else 1
-            ),
+            "GENERATIVEQC_CUDA_XC_BATCH_TILES": str(batch_tiles or 1),
             "GENERATIVEQC_CUDA_XC_BATCH_BYTES": str(args.point_batch_bytes),
             "GENERATIVEQC_CUDA_XC_COMPACT_BATCH": (
                 "1" if arm == "candidate" and args.compact_xc_batches else "0"
             ),
         }
+        if args.point_specialization:
+            values["GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION"] = (
+                "1" if arm == "candidate" else "0"
+            )
+        if equal_spin is not None:
+            values["GENERATIVEQC_CUDA_XC_EQUAL_SPIN"] = equal_spin
         previous = {name: os.environ.get(name) for name in values}
         os.environ.update(values)
         try:
@@ -116,9 +159,13 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     record: dict[str, Any] = {
         "schema": (
-            "generativeqc.pbe0-xc-point-batch-pairs.v1"
-            if args.point_batch_tiles
-            else "generativeqc.pbe0-xc-tile-pairs.v1"
+            "generativeqc.pbe0-xc-point-family-pairs.v3"
+            if args.point_specialization
+            else (
+                "generativeqc.pbe0-xc-point-batch-pairs.v1"
+                if args.point_batch_tiles
+                else "generativeqc.pbe0-xc-tile-pairs.v1"
+            )
         ),
         "protocol": scientific,
         "scf_tiles": tiles,
@@ -127,10 +174,29 @@ def main() -> None:
             if args.point_batch_tiles is not None
             else None
         ),
+        "point_consumer": (
+            {"baseline": "generic", "candidate": "pbe-specialized"}
+            if args.point_specialization
+            else None
+        ),
+        "point_equal_spin_policy": (
+            {"baseline": equal_spin, "candidate": equal_spin}
+            if args.point_specialization
+            else None
+        ),
+        "point_spin_channels": 1 if args.point_specialization else None,
+        "point_family_effect": (
+            "ordinary-physical-family-binding"
+            if equal_spin == "0"
+            else "shared-method-bound-equal-spin-physical"
+        )
+        if args.point_specialization
+        else None,
         "force_tile_points": 256,
         "compact_xc_batch_request": args.compact_xc_batches,
         "density_scope": "separate independently converged publicly frozen warm snapshots",
         "scope": "complete E+F replays; setup/prime excluded and retained; not cold/moved acceleration",
+        "point_specialization": args.point_specialization,
         "source_file_sha256": source_hashes()
         | {
             "benchmarks/pbe0_xc_tile_pairs.py": hashlib.sha256(
@@ -141,6 +207,8 @@ def main() -> None:
                 for path in (
                     "python/generativeqc/batch.py",
                     "python/generativeqc_compiler/dft/xc_point_batch_cuda.py",
+                    "python/generativeqc_compiler/dft/ao_cuda.py",
+                    "python/generativeqc_compiler/dft/xc_point_cuda.py",
                     "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py",
                     "python/generativeqc_compiler/dft/xc_compiled_resources.py",
                     "src/dft/cuda_xc.hpp",
@@ -152,8 +220,16 @@ def main() -> None:
         },
         "reference_sha256": hashlib.sha256(args.reference.read_bytes()).hexdigest(),
         "environment": environment_metadata(accelerator=cuda_accelerator_metadata(cp)),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "inspire_job_name": (
+            os.environ.get("INSPIRE_JOB_NAME") if args.point_specialization else None
+        ),
         "feasibility": args.feasibility,
+        "lifecycle_timing": {
+            "version": 1,
+            "scope": "own-work segments; interleaving and provenance gaps retained separately",
+            "continuous_cold_wallclock": False,
+        },
         "preparation": [],
         "setup": [],
         "priming": [],
@@ -162,6 +238,7 @@ def main() -> None:
     }
     owners: dict[str, Any] = {}
     force_work: dict[str, Any] = {}
+    preparation: dict[str, dict[str, Any]] = {}
 
     def save(stage: str) -> None:
         record["stage"] = stage
@@ -184,6 +261,7 @@ def main() -> None:
         assert all(error["passed"] for error in errors.values()), errors
         assert item.ks_diagnostic.tile_points == tiles[arm]
         return {
+            "requested_equal_spin_policy": equal_spin,
             "energy": item.energy,
             "forces": item.forces.tolist(),
             "errors": errors,
@@ -199,14 +277,48 @@ def main() -> None:
 
     def observe_force(arm: str, original: Any) -> Any:
         def observed(*values: Any) -> Any:
-            result = original(*values)
+            result = original(*values, tile_points=256)
             force_work[arm] = result[1]
             return result
 
         return observed
 
+    def completed_force_work(item: Any, arm: str) -> Any:
+        if item.status != 0 or not item.converged or item.forces is None:
+            raise RuntimeError(
+                f"{arm} E+F failed: status={item.status}, "
+                f"message={item.status_message}, converged={item.converged}"
+            )
+        try:
+            work = force_work.pop(arm)
+        except KeyError:
+            record["force_request_failure"] = {
+                "selection": arm,
+                "reason": "selected force route did not publish the requested receipt",
+            }
+            save("unsupported-force-route")
+            raise RuntimeError(
+                f"{arm} force request receipt unavailable on selected route"
+            ) from None
+        requested = work.get("grid_tile_points_requested")
+        if (
+            type(requested) is not int
+            or requested != 256
+            or work.get("grid_tile_schedule") != "explicit"
+        ):
+            record["force_request_failure"] = {
+                "selection": arm,
+                "required_tile_points": 256,
+                "native_force_work_raw": work,
+            }
+            save("unsupported-force-request")
+            raise RuntimeError(f"{arm} fixed force tile request was not honored")
+        return work
+
     try:
         for arm, tile in tiles.items():
+            cp.cuda.Stream.null.synchronize()
+            construction_started = perf_counter()
             calculator = Calculator(
                 method="pbe0-rks",
                 basis=basis,
@@ -218,8 +330,12 @@ def main() -> None:
                 screening_tolerance=1e-12,
                 max_iterations=100,
             )
+            cp.cuda.Stream.null.synchronize()
+            construction_ended = perf_counter()
             native_build = native_build_metadata(calculator)
-            require_tuned_native_build(native_build)
+            require_tuned_native_build(
+                native_build, allow_portable=args.point_specialization
+            )
             if "native_build" in record:
                 assert native_build == record["native_build"]
             record["native_build"] = native_build
@@ -231,9 +347,16 @@ def main() -> None:
                 )
             owners[arm] = owner
             cp.cuda.Stream.null.synchronize()
-            record["preparation"].append(
-                {"selection": arm, "seconds": perf_counter() - started}
-            )
+            preparation_ended = perf_counter()
+            preparation[arm] = {
+                "selection": arm,
+                # Keep the historical owner-preparation field's meaning.
+                "seconds": preparation_ended - started,
+                "calculator_seconds": construction_ended - construction_started,
+                "calculator_interval": [construction_started, construction_ended],
+                "preparation_interval": [started, preparation_ended],
+            }
+            record["preparation"].append(preparation[arm])
             owner._public_dft_cuda_force = observe_force(
                 arm, owner._public_dft_cuda_force
             )
@@ -251,17 +374,47 @@ def main() -> None:
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     item = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
                 cp.cuda.Stream.null.synchronize()
+                setup_ended = perf_counter()
+                execution_interval = [started, setup_ended]
+                segments = (
+                    [
+                        preparation[arm]["calculator_interval"],
+                        preparation[arm]["preparation_interval"],
+                        execution_interval,
+                    ]
+                    if geometry == 0
+                    else [execution_interval]
+                )
                 record["setup"].append(
                     {
                         "selection": arm,
                         "geometry": geometry,
-                        "seconds": perf_counter() - started,
+                        "seconds": setup_ended - started,
+                        "execution_interval": execution_interval,
+                        "lifecycle": {
+                            "segments": segments,
+                            "own_work_seconds": sum(
+                                end - begin for begin, end in segments
+                            ),
+                            "observed_span_seconds": segments[-1][1] - segments[0][0],
+                            "excluded_gap_seconds": sum(
+                                right[0] - left[1] for left, right in pairwise(segments)
+                            ),
+                            # Coordinate rebuilding is inside moved execute;
+                            # the initial constructor is not charged again.
+                            "continuous": geometry == 1,
+                        },
                         "diagnostics": diagnostics(
-                            item, arm, geometry, force_work[arm], read_ao_work(owner)
+                            item,
+                            arm,
+                            geometry,
+                            completed_force_work(item, arm),
+                            read_ao_work(owner),
                         ),
                     }
                 )
@@ -269,6 +422,7 @@ def main() -> None:
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     primed = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
@@ -279,7 +433,11 @@ def main() -> None:
                         "phase": phase,
                         "seconds": perf_counter() - started,
                         "diagnostics": diagnostics(
-                            primed, arm, geometry, force_work[arm], read_ao_work(owner)
+                            primed,
+                            arm,
+                            geometry,
+                            completed_force_work(primed, arm),
+                            read_ao_work(owner),
                         ),
                     }
                 )
@@ -295,6 +453,7 @@ def main() -> None:
             ) -> dict[str, int]:
                 assert owners[arm]._warm_updates is False
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     item = (
                         owners[arm]
                         .execute(
@@ -302,7 +461,9 @@ def main() -> None:
                         )
                         .items[0]
                     )
-                results.append((item, force_work[arm], read_ao_work(owners[arm])))
+                results.append(
+                    (item, completed_force_work(item, arm), read_ao_work(owners[arm]))
+                )
                 return {"call_index": len(results) - 1}
 
             inputs_hash = canonical_hash(

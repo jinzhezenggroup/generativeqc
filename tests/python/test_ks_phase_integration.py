@@ -2,59 +2,24 @@
 
 from __future__ import annotations
 
-import ast
 import ctypes
-import math
 import typing
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from generativeqc import GridSpec, KsOptions, _native, resources_ks
 
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def _tree() -> ast.Module:
-    return ast.parse((ROOT / "python/generativeqc/resources_ks.py").read_text())
+ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 
 
-def _function(name: str) -> ast.FunctionDef:
-    return next(
-        node
-        for node in _tree().body
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    )
+@pytest.fixture(autouse=True)
+def no_native_library_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resource discovery in this suite uses only explicit library doubles."""
 
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("shape-only inventory attempted to load a native library")
 
-def _environment() -> dict[str, typing.Any]:
-    # Dimensions are deliberately small: overflow/allocations are not mocked as
-    # qualified. These tests exercise the actual semantic and lifetime decisions.
-    return {
-        "typing": typing,
-        "ctypes": ctypes,
-        "byte_product": lambda *values: math.prod(values),
-        "checked_bytes": lambda value, *args: value,
-        "_ecp_workspace": lambda *args, **kwargs: 0,
-    }
-
-
-def _load(name: str) -> typing.Any:
-    namespace = _environment()
-    # Keep the real cache cap with the extracted function; do not replace it
-    # with an independent test value or skip the CPU inventory branch.
-    constants = [
-        node
-        for node in _tree().body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "_CPU_AO_GRID_CACHE_CAP"
-            for target in node.targets
-        )
-    ]
-    assert len(constants) == 1
-    module = ast.Module(body=[*constants, _function(name)], type_ignores=[])
-    exec(compile(module, "inventory", "exec"), namespace)  # noqa: S102
-    return namespace[name]
+    monkeypatch.setattr(_native, "load_library", forbidden)
 
 
 def _model() -> SimpleNamespace:
@@ -88,7 +53,7 @@ def _item(n: int) -> dict[str, typing.Any]:
 def test_host_inventory_preserves_current_model_and_solver_charge(
     backend: str, n: int
 ) -> None:
-    row = _load("_item_host_inventory")(
+    row = resources_ks._item_host_inventory(
         _item(n),
         diis_history=8,
         max_iterations=100,
@@ -126,7 +91,7 @@ def test_matrix_binding_host_envelope_is_independent_of_provider_and_xc(
 ) -> None:
     model = _model()
     model.xc_schedule = schedule
-    row = _load("_item_host_inventory")(
+    row = resources_ks._item_host_inventory(
         {**_item(n), "spins": spins},
         diis_history=8,
         max_iterations=100,
@@ -161,11 +126,13 @@ def _library(quadrature_status: int = 0) -> SimpleNamespace:
 
 
 def test_quadrature_setup_coexists_with_prepared_coulomb() -> None:
-    result = _load("_cuda_item_inventory")(
+    result = resources_ks._cuda_item_inventory(
         _library(),
         _item(32),
         diis_history=8,
         requires_first_ao_derivatives=True,
+        functional_code=1,
+        requires_tau=False,
         tile=16,
     )
     assert result["quadrature_setup"] == 320 << 20
@@ -178,53 +145,49 @@ def test_unavailable_quadrature_inventory_fails_closed(missing: bool) -> None:
     if missing:
         del library.generativeqc_resource_quadrature_cuda_v1
     with pytest.raises(NotImplementedError, match="quadrature"):
-        _load("_cuda_item_inventory")(
+        resources_ks._cuda_item_inventory(
             library,
             _item(32),
             diis_history=8,
             requires_first_ao_derivatives=True,
+            functional_code=1,
+            requires_tau=False,
             tile=16,
         )
+
+
+def _abi_library(version: int | None = 1) -> SimpleNamespace:
+    library = SimpleNamespace(generativeqc_ks_resource_inventory_version_v1=lambda: 1)
+    if version is not None:
+        library.generativeqc_ks_options_version = lambda: version
+    return library
 
 
 @pytest.mark.parametrize("version", [None, 0, 1, 3, 5])
 def test_native_semantic_abi_version_is_checked_even_for_default_model(
     version: int | None,
 ) -> None:
-    function = _function("ks_resource_request")
-    guard = next(
-        node
-        for node in ast.walk(function)
-        if isinstance(node, ast.If) and ast.unparse(node.test) == "library is not None"
-    )
-    library = SimpleNamespace(generativeqc_ks_resource_inventory_version_v1=lambda: 1)
-    if version is not None:
-        library.generativeqc_ks_options_version = lambda: version
-    namespace = _environment()
-    namespace.update(library=library, model=_model(), method="pbe-rks")
-    module = ast.Module(body=[guard], type_ignores=[])
-    code = compile(module, "inventory ABI", "exec")
+    request = resources_ks.ks_resource_request([ATOMS], library=_abi_library(version))
     if version == 1:
-        exec(code, namespace)  # noqa: S102
+        assert request.unsupported_reason is None
+        assert request.candidates
     else:
-        with pytest.raises(NotImplementedError, match="semantic KS execution-plan ABI"):
-            exec(code, namespace)  # noqa: S102
+        assert not request.candidates
+        assert "semantic KS execution-plan ABI" in request.unsupported_reason
 
 
-def test_request_does_not_read_retired_version_properties() -> None:
-    attributes = {
-        node.attr
-        for node in ast.walk(_function("ks_resource_request"))
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "model"
-    }
-    assert not attributes & {
-        "requires_nonlocal_v5",
-        "requires_composition_v2",
-        "requires_schedule_v3",
-    }
-    assert {"has_nonlocal_correlation", "has_nondefault_composition"} <= attributes
+@pytest.mark.parametrize("method", ["pbe-rks", "pbe0-rks", "b3lyp-rks"])
+def test_current_models_plan_without_retired_version_properties(method: str) -> None:
+    """Resolve actual models and complete planning through the supported ABI."""
+    request = resources_ks.ks_resource_request(
+        [ATOMS],
+        method=method,
+        library=_abi_library(),
+        ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
+    )
+    assert request.unsupported_reason is None
+    assert request.candidates
+    assert request.identity.method == method
 
 
 @pytest.mark.parametrize("delta", [-1, 0, 1])
@@ -235,8 +198,8 @@ def test_request_does_not_read_retired_version_properties() -> None:
 def test_cpu_ao_cache_boundary_keeps_exact_transient_charge(
     delta: int, backend: str, spins: int, requires_first_ao_derivatives: bool
 ) -> None:
-    inventory = _load("_item_host_inventory")
-    cap = inventory.__globals__["_CPU_AO_GRID_CACHE_CAP"]
+    inventory = resources_ks._item_host_inventory
+    cap = 64 << 20
     n = 8
     points = cap // 32 // n + delta
     item = {**_item(n), "grid_points": points, "spins": spins}
@@ -269,13 +232,61 @@ def test_cpu_ao_cache_boundary_keeps_exact_transient_charge(
 
 @pytest.mark.parametrize("symbol", [None, 1])
 def test_unusable_semantic_abi_symbol_is_explicitly_unsupported(symbol: object) -> None:
-    guard = next(
-        node
-        for node in ast.walk(_function("ks_resource_request"))
-        if isinstance(node, ast.If) and ast.unparse(node.test) == "library is not None"
+    library = _abi_library()
+    library.generativeqc_ks_options_version = symbol
+    request = resources_ks.ks_resource_request([ATOMS], library=library)
+    assert not request.candidates
+    assert "semantic KS execution-plan ABI" in request.unsupported_reason
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("n", [-1, True, 1 << 32])
+def test_host_inventory_rejects_invalid_or_overflowing_dimensions(
+    backend: str,
+    n: int,
+) -> None:
+    """Use the real checked arithmetic, without allocating the claimed arrays."""
+    with pytest.raises(ValueError, match="dimension|byte product"):
+        resources_ks._item_host_inventory(
+            _item(n),
+            diis_history=8,
+            max_iterations=100,
+            requires_first_ao_derivatives=True,
+            backend=backend,
+            model=_model(),
+        )
+
+
+def test_cuda_inventory_rejects_shape_overflow_before_native_query() -> None:
+    library = _library()
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        pytest.fail("overflowing shape reached the native inventory query")
+
+    library.generativeqc_resource_ks_cuda_v1 = forbidden
+    n = 1 << (8 * ctypes.sizeof(ctypes.c_size_t))
+    with pytest.raises(ValueError, match="host size_t ABI"):
+        resources_ks._cuda_item_inventory(
+            library,
+            _item(n),
+            diis_history=8,
+            requires_first_ao_derivatives=True,
+            functional_code=1,
+            requires_tau=False,
+            tile=16,
+        )
+
+
+@pytest.mark.parametrize("method", ["pbe0-rks", "b3lyp-rks"])
+def test_nondefault_cuda_composition_without_inventory_fails_closed(
+    method: str,
+) -> None:
+    request = resources_ks.ks_resource_request(
+        [ATOMS],
+        method=method,
+        backend="cuda",
+        library=_abi_library(),
+        ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
     )
-    namespace = _environment()
-    namespace["library"] = SimpleNamespace(generativeqc_ks_options_version=symbol)
-    module = ast.Module(body=[guard], type_ignores=[])
-    with pytest.raises(NotImplementedError, match="semantic KS execution-plan ABI"):
-        exec(compile(module, "inventory ABI", "exec"), namespace)  # noqa: S102
+    assert not request.candidates
+    assert "scaled/global-hybrid execution" in request.unsupported_reason

@@ -11,6 +11,7 @@
 
 #include "generated_eri_cpu.hpp"
 #include "generated_one_electron_st_cpu.hpp"
+#include "generated_stationary_cpu_derivative_dispatch.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/generated_df_cpu.hpp"
 #include "integrals/range_moments.hpp"
@@ -1240,6 +1241,16 @@ void require_matching_density_fitting_geometry(const core::System& orbital_syste
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> metric_weights, std::span<const double> three_center_weights) {
+  return contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, metric_weights, three_center_weights, 0.0);
+}
+
+std::vector<double> contract_weighted_range_density_fitting_derivative(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    std::span<const double> metric_weights, std::span<const double> three_center_weights,
+    double omega) {
+  if (!std::isfinite(omega) || omega < 0.0)
+    throw std::invalid_argument("DF range omega must be finite and nonnegative");
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
   const std::size_t public_nbf = molecule::ao_count(orbital_system);
   const std::size_t public_naux = molecule::ao_count(auxiliary_system);
@@ -1263,7 +1274,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   const std::size_t ncoord = checked_product(orbital_system.atoms.size(), std::size_t{3});
   if (!generated_supported) {
     const DensityFittingIntegralData full =
-        build_density_fitting_integrals(orbital_system, auxiliary_system, true);
+        build_density_fitting_integrals(orbital_system, auxiliary_system, true, omega);
     std::vector<double> result(ncoord, 0.0);
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
       const double* dm = full.metric_derivative.data() + coordinate * metric_size;
@@ -1322,7 +1333,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
                                 second_primitive.coefficient;
           const auto response = generated_df_cpu::metric_derivative(
               first_primitive.exponent, first_center, angular(first.angular),
-              second_primitive.exponent, second_center, angular(second.angular));
+              second_primitive.exponent, second_center, angular(second.angular), omega);
           scatter(first.shell->atom_index, weight, response.first);
           scatter(second.shell->atom_index, weight, response.third);
         }
@@ -1353,7 +1364,8 @@ std::vector<double> contract_weighted_density_fitting_derivative(
               const auto response = generated_df_cpu::three_center_derivative(
                   first_primitive.exponent, first_center, angular(first.angular),
                   second_primitive.exponent, second_center, angular(second.angular),
-                  auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular));
+                  auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular),
+                  omega);
               scatter(first.shell->atom_index, weight, response.first);
               scatter(second.shell->atom_index, weight, response.second);
               scatter(auxiliary.shell->atom_index, weight, response.third);
@@ -1367,7 +1379,9 @@ std::vector<double> contract_weighted_density_fitting_derivative(
 }
 DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
                                                            const core::System& auxiliary_system,
-                                                           bool include_derivatives) {
+                                                           bool include_derivatives, double omega) {
+  if (!std::isfinite(omega) || omega < 0.0)
+    throw std::invalid_argument("DF range omega must be finite and nonnegative");
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
 
   DensityFittingIntegralData cartesian;
@@ -1384,6 +1398,8 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                   [](const AoView& ao) { return ao.shell->angular_momentum <= 3; });
   const bool generated_derivatives = include_derivatives && generated_supported;
   const bool generated_values = !include_derivatives && generated_supported;
+  if (omega > 0.0 && !generated_supported)
+    throw std::invalid_argument("long-range DF requires generated s/p/d/f coverage");
   if (generated_derivatives) {
     using GeneratedAngular = generated_df_cpu::Angular;
     using GeneratedVec3 = generated_df_cpu::Vec3;
@@ -1419,7 +1435,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                 component_factor * first_primitive.coefficient * second_primitive.coefficient;
             const auto response = generated_df_cpu::metric_derivative(
                 first_primitive.exponent, first_center, angular(first.angular),
-                second_primitive.exponent, second_center, angular(second.angular));
+                second_primitive.exponent, second_center, angular(second.angular), omega);
             cartesian.metric[item] += weight * response.value;
             scatter(cartesian.metric_derivative, metric_size, item, first.shell->atom_index, weight,
                     response.first);
@@ -1455,7 +1471,8 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                 const auto response = generated_df_cpu::three_center_derivative(
                     first_primitive.exponent, first_center, angular(first.angular),
                     second_primitive.exponent, second_center, angular(second.angular),
-                    auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular));
+                    auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular),
+                    omega);
                 cartesian.three_center[item] += weight * response.value;
                 scatter(cartesian.three_center_derivative, tensor_size, item,
                         first.shell->atom_index, weight, response.first);
@@ -1496,9 +1513,10 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
             const double weight =
                 component_factor * first_primitive.coefficient * second_primitive.coefficient;
             cartesian.metric[item] +=
-                weight * generated_df_cpu::metric_value(
-                             first_primitive.exponent, first_center, angular(first.angular),
-                             second_primitive.exponent, second_center, angular(second.angular));
+                weight * generated_df_cpu::metric_value(first_primitive.exponent, first_center,
+                                                        angular(first.angular),
+                                                        second_primitive.exponent, second_center,
+                                                        angular(second.angular), omega);
           }
         }
       }
@@ -1530,7 +1548,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                                  first_primitive.exponent, first_center, angular(first.angular),
                                  second_primitive.exponent, second_center, angular(second.angular),
                                  auxiliary_primitive.exponent, auxiliary_center,
-                                 angular(auxiliary.angular));
+                                 angular(auxiliary.angular), omega);
               }
             }
           }
@@ -1659,7 +1677,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> three_center_weights, std::span<const double> metric_weights,
-    std::size_t maximum_bytes) {
+    std::size_t maximum_bytes, double omega) {
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
   if (!maximum_bytes)
     throw std::invalid_argument("density-fitting derivative contraction requires a memory budget");
@@ -1680,8 +1698,8 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   }
   // The canonical entry consumes generated derivatives directly. Preserve its
   // metric-first argument order; this compatibility overload is three-center-first.
-  return contract_weighted_density_fitting_derivative(orbital_system, auxiliary_system,
-                                                      metric_weights, three_center_weights);
+  return contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, metric_weights, three_center_weights, omega);
 }
 
 DensityFittingIntegralData transform_density_fitting_integrals(
@@ -2293,6 +2311,62 @@ std::vector<double> build_range_eri(const core::System& system, CoulombRange ran
 std::array<double, 12> contract_weighted_eri_shell_derivative(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
     std::span<const double> weights) {
+  const std::array<std::span<const double>, 1> channels{weights};
+  return contract_weighted_eri_shell_derivatives(system, shell_indices, channels).front();
+}
+
+bool has_packaged_cpu_eri_shell_derivatives() noexcept {
+  return generated_stationary_dispatch::available;
+}
+
+namespace {
+/** Restore compiler-canonicalized slots before channel weighting. A unit
+ * external weight evaluates the primitive once for every independent J/K
+ * channel; coefficients and public-AO normalization stay in the shared loop. */
+Jet packaged_eri_derivative(const std::array<const core::Primitive*, 4>& primitives,
+                            const std::array<const molecule::CartesianExpansionTerm*, 4>& terms,
+                            const std::array<Vec3, 4>& centers) {
+  std::size_t component_index = 0;
+  for (const auto* term : terms) {
+    const auto label =
+        std::find(std::begin(generated_stationary_dispatch::components),
+                  std::end(generated_stationary_dispatch::components), term->component);
+    if (label == std::end(generated_stationary_dispatch::components))
+      throw std::invalid_argument("packaged CPU ERI component is unsupported");
+    component_index = generated_stationary_dispatch::component_count * component_index +
+                      (label - std::begin(generated_stationary_dispatch::components));
+  }
+  const auto& binding =
+      generated_stationary_dispatch::bindings[generated_stationary_dispatch::eri_offset +
+                                              component_index];
+  std::array<double, 17> record{};
+  record[16] = 1.0;
+  for (std::size_t slot = 0; slot < 4; ++slot) {
+    const auto original_slot = static_cast<std::size_t>(binding[2 + slot]);
+    record[slot] = primitives[original_slot]->exponent;
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      record[4 + 3 * slot + axis] = centers[original_slot][binding[6 + axis]].value;
+  }
+  std::array<double, 12> values{};
+  if (generated_stationary_dispatch::evaluators[binding[0]](binding[1], record.data(), 1,
+                                                            values.data()) != 0)
+    throw std::runtime_error("packaged CPU ERI derivative failed");
+  Jet derivative(0.0, 12);
+  for (std::size_t slot = 0; slot < 4; ++slot)
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      derivative.derivative[3 * binding[2 + slot] + binding[6 + axis]] = values[3 * slot + axis];
+  return derivative;
+}
+}  // namespace
+
+std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
+    const core::System& system, const std::array<std::size_t, 4>& shell_indices,
+    std::span<const std::span<const double>> weights, std::uint64_t* primitive_evaluations,
+    WeightedEriDerivativeExecution execution) {
+  if (weights.empty()) throw std::invalid_argument("weighted ERI shell channels are empty");
+  const bool packaged = execution == WeightedEriDerivativeExecution::PackagedCpu;
+  if (packaged && !has_packaged_cpu_eri_shell_derivatives())
+    throw std::invalid_argument("packaged CPU ERI derivatives were disabled at build time");
   std::array<const core::Shell*, 4> shells{};
   std::array<std::vector<molecule::AoExpansion>, 4> expansions{};
   std::size_t expected = 1;
@@ -2300,13 +2374,17 @@ std::array<double, 12> contract_weighted_eri_shell_derivative(
     if (shell_indices[slot] >= system.shells.size())
       throw std::invalid_argument("weighted ERI shell index is out of range");
     shells[slot] = &system.shells[shell_indices[slot]];
+    if (packaged && shells[slot]->angular_momentum > 2)
+      throw std::invalid_argument("packaged CPU ERI derivatives require s/p/d shells");
     expansions[slot] =
         molecule::ao_expansions(shells[slot]->angular_momentum, system.basis_representation);
     expected = checked_product(expected, expansions[slot].size());
   }
-  if (weights.size() != expected || !std::all_of(weights.begin(), weights.end(),
-                                                 [](double value) { return std::isfinite(value); }))
-    throw std::invalid_argument("weighted ERI shell weights are inconsistent or nonfinite");
+  for (const auto channel : weights)
+    if (channel.size() != expected ||
+        !std::all_of(channel.begin(), channel.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::invalid_argument("weighted ERI shell weights are inconsistent or nonfinite");
 
   constexpr std::size_t coordinates = 12;
   std::array<Vec3, 4> centers{};
@@ -2319,47 +2397,63 @@ std::array<double, 12> contract_weighted_eri_shell_derivative(
           Jet::variable(system.atoms[atom].position[axis], coordinates, 3 * slot + axis);
   }
 
-  Jet contracted(0.0, coordinates);
+  std::vector<Jet> contracted(weights.size(), Jet(0.0, coordinates));
+  std::uint64_t evaluations = 0;
   std::size_t cursor = 0;
   for (const auto& ao_i : expansions[0])
     for (const auto& ao_j : expansions[1])
       for (const auto& ao_k : expansions[2])
         for (const auto& ao_l : expansions[3]) {
-          const double public_weight = weights[cursor++];
-          if (public_weight == 0.0) continue;
+          const auto weight_index = cursor++;
+          if (std::all_of(weights.begin(), weights.end(),
+                          [&](auto channel) { return channel[weight_index] == 0.0; }))
+            continue;
           for (const auto& ei : ao_i)
             for (const auto& ej : ao_j)
               for (const auto& ek : ao_k)
                 for (const auto& el : ao_l) {
                   const std::array<const molecule::CartesianExpansionTerm*, 4> terms{&ei, &ej, &ek,
                                                                                      &el};
-                  double component_weight = public_weight;
-                  for (const auto* term : terms)
-                    component_weight *=
-                        term->coefficient *
-                        molecule::cartesian_component_normalization(term->component);
                   for (const auto& pi : shells[0]->primitives)
                     for (const auto& pj : shells[1]->primitives)
                       for (const auto& pk : shells[2]->primitives)
                         for (const auto& pl : shells[3]->primitives) {
-                          const double primitive_weight = component_weight * pi.coefficient *
-                                                          pj.coefficient * pk.coefficient *
-                                                          pl.coefficient;
-                          contracted = contracted + primitive_weight *
-                                                        primitive_eri_cartesian(
-                                                            pi.exponent, centers[0], ei.component,
+                          if (evaluations == std::numeric_limits<std::uint64_t>::max())
+                            throw std::overflow_error("weighted ERI primitive count overflow");
+                          ++evaluations;
+                          const auto derivative =
+                              packaged
+                                  ? packaged_eri_derivative({&pi, &pj, &pk, &pl}, terms, centers)
+                                  : primitive_eri_cartesian(pi.exponent, centers[0], ei.component,
                                                             pj.exponent, centers[1], ej.component,
                                                             pk.exponent, centers[2], ek.component,
                                                             pl.exponent, centers[3], el.component);
+                          for (std::size_t channel = 0; channel < weights.size(); ++channel) {
+                            if (weights[channel][weight_index] == 0.0) continue;
+                            double component_weight = weights[channel][weight_index];
+                            for (const auto* term : terms)
+                              component_weight *=
+                                  term->coefficient *
+                                  molecule::cartesian_component_normalization(term->component);
+                            const double primitive_weight = component_weight * pi.coefficient *
+                                                            pj.coefficient * pk.coefficient *
+                                                            pl.coefficient;
+                            contracted[channel] =
+                                contracted[channel] + primitive_weight * derivative;
+                          }
                         }
                 }
         }
-  if (!std::isfinite(contracted.value) ||
-      !std::all_of(contracted.derivative.begin(), contracted.derivative.end(),
-                   [](double value) { return std::isfinite(value); }))
-    throw std::runtime_error("weighted ERI shell derivative is nonfinite");
-  std::array<double, coordinates> result{};
-  std::copy(contracted.derivative.begin(), contracted.derivative.end(), result.begin());
+  std::vector<std::array<double, coordinates>> result(weights.size());
+  for (std::size_t channel = 0; channel < weights.size(); ++channel) {
+    if (!std::isfinite(contracted[channel].value) ||
+        !std::all_of(contracted[channel].derivative.begin(), contracted[channel].derivative.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::runtime_error("weighted ERI shell derivative is nonfinite");
+    std::copy(contracted[channel].derivative.begin(), contracted[channel].derivative.end(),
+              result[channel].begin());
+  }
+  if (primitive_evaluations) *primitive_evaluations = evaluations;
   return result;
 }
 

@@ -99,3 +99,27 @@ python tools/restore_retained_evidence.py --all \
   --manifest benchmarks/results/retention-2026-09-25/migration.json \
   --output .artifacts/retention-2026-09-25
 ```
+
+
+## Lossless CUDA envelope storage (2026-10-15)
+
+The CUDA validation envelope is stored as `cuda/evidence.json.xz` (3,280
+bytes). XZ decoding restores all 33,829 original JSON bytes, preserving
+all observations, numerical gates, timing limitations and provenance. The
+shared publication reader decodes it offline and authenticates the stored
+member; the CPU envelope and both summaries are unchanged.
+
+Original SHA-256:
+`d35702fc9076dbdcad9d05b697188e9388f457dc9452db323ce888ed6d5a9538`.
+Stored XZ SHA-256:
+`93fbdf1e64c22da9f25d3f9b241cf380cf5d27f51d1801f92512fd5d2a50854f`.
+The [original envelope at the merged revision](https://github.com/jinzhezenggroup/generativeqc/blob/7530b9c185793f1cac0711642a39bf7151091dd3/benchmarks/results/incremental-low-rank/cuda/evidence.json)
+is an additional immutable recovery source. The original complete-sample
+Git-history recovery described above is unchanged. To decode without running
+any new benchmark:
+
+```bash
+decoded=$(mktemp "${TMPDIR:-/tmp}/incremental-low-rank-cuda-evidence.XXXXXX")
+xz -dc benchmarks/results/incremental-low-rank/cuda/evidence.json.xz > "$decoded"
+printf '%s\n' "$decoded"
+```

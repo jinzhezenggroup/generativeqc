@@ -189,6 +189,44 @@ template<unsigned Math=0> struct CompensatedValue {
         if derivatives
         else ""
     )
+    range_policy = ""
+    if derivatives:
+        range_policy = (
+            derivative.replace(
+                "struct Derivative {", "struct LongRangeDerivative {\n  double omega{};"
+            )
+            .replace("__device__ static void accumulate", "__device__ void accumulate")
+            .replace(
+                "const Angular* a, double weight) {",
+                "const Angular* a, double weight) const {",
+            )
+            .replace(
+                "e[1],second,second_angular);", "e[1],second,second_angular,omega);"
+            )
+            .replace("e[2],third,third_angular);", "e[2],third,third_angular,omega);")
+            + r"""
+/** Value-only erf kernel shares the exact center-response moment algebra. */
+struct LongRangeValue {
+  using Vec3=generated_df_derivatives::Vec3;
+  using Angular=generated_df_derivatives::Angular;
+  using Accumulator=double;
+  double omega{};
+  template<unsigned Rank>
+  __device__ void accumulate(double& out,const double* exponents,const Vec3* centers,
+                            const Angular* angular,double weight) const {
+    static_assert(Rank==2 || Rank==3);
+    const Vec3 zero_center=centers[0];
+    const Angular zero_angular{0,0,0};
+    if constexpr(Rank==2)
+      out+=weight*generated_df_derivatives::evaluate(true,exponents[0],centers[0],angular[0],
+          0.0,zero_center,zero_angular,exponents[1],centers[1],angular[1],omega,false).value;
+    else
+      out+=weight*generated_df_derivatives::evaluate(false,exponents[0],centers[0],angular[0],
+          exponents[1],centers[1],angular[1],exponents[2],centers[2],angular[2],omega,false).value;
+  }
+};
+"""
+        )
     return (
         "// Generated DF policy; runtime owns normalized basis traversal.\n"
         f"#ifndef {guard}\n#define {guard}\n"
@@ -197,5 +235,6 @@ template<unsigned Math=0> struct CompensatedValue {
         + "namespace generativeqc::scf::generated_df_policy {\n"
         + (derivative if derivatives else value)
         + g_policy
+        + range_policy
         + "} // namespace generativeqc::scf::generated_df_policy\n#endif\n"
     )

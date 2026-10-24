@@ -1,0 +1,11 @@
+{
+  "schema": "generativeqc.conservative-block-screening-comparisons.v3",
+  "source_base": "1e77b239e551856741abedc0b45a6e8461f261b9",
+  "source_identity": "cfb0d305f8537387a109eeab1ff5be4ab70d63f5da3c1061277bb8bde1564783",
+  "files": {
+    "receipts.json.xz": {
+      "bytes": 98768,
+      "sha256": "d807538ca6246e83f08cf9236746c8fcf6dbcc56f0a678442e0c3a697e4025bf"
+    }
+  }
+}

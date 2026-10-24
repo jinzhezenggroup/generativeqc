@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import selected
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,10 +19,6 @@ def _preparation() -> tuple[str, str]:
     name = "      - name: Prepare pinned GFN1 and D3 reference inputs\n"
     assert workflow.count(name) == 1
     step = workflow.split(name, 1)[1].split("      - name:", 1)[0]
-    assert (
-        "if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
-        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && " in step
-    )
     assert "steps.gfn1_reference_sources.outputs.cache-hit != 'true'" in step
     commands = step.split("        run: |\n", 1)[1]
     return workflow, "\n".join(line[10:] for line in commands.splitlines())
@@ -45,10 +42,6 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
     cache = python_job.split(
         "      - name: Restore pinned GFN1 and D3 reference inputs\n", 1
     )[1].split("      - name:", 1)[0]
-    assert (
-        "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
-        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy'" in cache
-    )
     assert "upstream/manifest.json" in cache and "tools/source_registry.py" in cache
     assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
     assert ".cache/generativeqc-sources/xtbloom-gfn1-d3" in cache
@@ -145,24 +138,19 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
         step = workflow.split(f"      - name: {name}\n", 1)[1].split(
             "      - name:", 1
         )[0]
-        expression = step.split("        if: ", 1)[1].splitlines()[0]
-        # These guards use the shared ==/!=/&&/|| boolean subset of Actions
-        # and Bash. Evaluate the actual checked-in expressions, not a copy.
-        expression = (
-            expression.replace("matrix.shard", '"$SHARD"')
-            .replace("steps.gfn1_reference_sources.outputs.cache-hit", '"$CACHE_HIT"')
-            .replace("github.event_name", '"$EVENT"')
-        )
-        completed = subprocess.run(
-            [
-                "bash",
-                "-c",
-                f"if [[ {expression} ]]; then printf run; else printf skip; fi",
-            ],
-            env={**os.environ, "SHARD": shard, "CACHE_HIT": cache_hit, "EVENT": event},
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert completed.stdout == ("run" if expected else "skip")
+        for outcome, scope in (
+            ("success", "full"),
+            ("success", "prose"),
+            ("success", ""),
+            ("failure", "prose"),
+        ):
+            assert selected(
+                step,
+                {
+                    "matrix.shard": shard,
+                    "steps.gfn1_reference_sources.outputs.cache-hit": cache_hit,
+                    "github.event_name": event,
+                    "steps.prose_scope.outcome": outcome,
+                    "steps.prose_scope.outputs.scope": scope,
+                },
+            ) == (expected and not (outcome == "success" and scope == "prose"))

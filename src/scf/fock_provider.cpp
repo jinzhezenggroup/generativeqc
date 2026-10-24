@@ -77,6 +77,10 @@ void CpuFockProviderView::validate(const ResolvedFockBuild& strategy) const {
             "DF Fock provider tensor shape/rank mismatch");
     require(fitted_->metric_relative_threshold == strategy.metric_relative_threshold,
             "DF value/response metric cutoff differs from the resolved provider");
+    const auto& exchange = strategy.spec.exchange;
+    require(fitted_->range_omega ==
+                (exchange.present && exchange.op == FockOperator::LongRange ? exchange.omega : 0.0),
+            "DF value/response radial operator differs from the resolved provider");
     finite(raw.metric);
     finite(raw.three_center);
     finite(b.values);
@@ -108,26 +112,30 @@ DirectJkMatrices CpuFockProviderView::build(FockBuildSpec spec, const std::vecto
       return build_exact_direct_jk(strategy, nbf(), exact_->eri, density, beta);
     DirectJkMatrices result;
     result.nbf = nbf();
+    result.coulomb_exchange_work = CoulombExchangeWork::empty();
     if (spec.coulomb.present) {
       auto j =
           build_exact_direct_jk(resolve_fock_build(selected(spec, true, false), FockBackend::Cpu),
                                 nbf(), exact_->eri, density, beta);
       result.coulomb = std::move(j.coulomb);
+      result.coulomb_exchange_work.add(j.coulomb_exchange_work);
     }
     auto k =
         build_exact_direct_jk(resolve_fock_build(selected(spec, false, true), FockBackend::Cpu),
                               nbf(), *range_eri_, density, beta);
     result.exchange_alpha = std::move(k.exchange_alpha);
     result.exchange_beta = std::move(k.exchange_beta);
+    result.coulomb_exchange_work.add(k.coulomb_exchange_work);
     return result;
   }
   const JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
   if (spec.spin == FockSpin::Restricted) {
     auto jk = build_density_fitting_rhf_jk(fitted_->three_center, density, terms);
-    return {jk.nbf, std::move(jk.coulomb), std::move(jk.exchange), {}};
+    return {jk.nbf, std::move(jk.coulomb), std::move(jk.exchange), {}, jk.coulomb_exchange_work};
   }
   auto jk = build_density_fitting_uhf_jk(fitted_->three_center, density, beta, terms);
-  return {jk.nbf, std::move(jk.coulomb), std::move(jk.alpha_exchange), std::move(jk.beta_exchange)};
+  return {jk.nbf, std::move(jk.coulomb), std::move(jk.alpha_exchange), std::move(jk.beta_exchange),
+          jk.coulomb_exchange_work};
 }
 
 std::vector<double> CpuFockProviderView::derivative(FockBuildSpec spec,
@@ -153,7 +161,7 @@ std::vector<double> CpuFockProviderView::derivative(FockBuildSpec spec,
     if (weighted)
       return build_density_fitting_rhf_weighted_gradient(
                  *fitted_->df_gradient_orbital, *fitted_->df_gradient_auxiliary, fitted_->raw,
-                 density, fitted_->metric_relative_threshold, coefficients)
+                 density, fitted_->metric_relative_threshold, coefficients, fitted_->range_omega)
           .derivative;
     return build_density_fitting_rhf_gradient(fitted_->raw, density,
                                               fitted_->metric_relative_threshold, coefficients)
@@ -162,7 +170,8 @@ std::vector<double> CpuFockProviderView::derivative(FockBuildSpec spec,
   if (weighted)
     return build_density_fitting_uhf_weighted_gradient(
                *fitted_->df_gradient_orbital, *fitted_->df_gradient_auxiliary, fitted_->raw,
-               density, beta, fitted_->metric_relative_threshold, coefficients)
+               density, beta, fitted_->metric_relative_threshold, coefficients,
+               fitted_->range_omega)
         .derivative;
   return build_density_fitting_uhf_gradient(fitted_->raw, density, beta,
                                             fitted_->metric_relative_threshold, coefficients)
@@ -219,12 +228,17 @@ DirectJkMatrices BasicFockPlanView<Provider>::build(const std::vector<double>& d
     return coulomb_->build(strategy_.spec, density, beta);
   DirectJkMatrices result;
   result.nbf = nbf_;
-  if (coulomb_)
-    result.coulomb = coulomb_->build(selected(strategy_.spec, true, false), density, beta).coulomb;
+  result.coulomb_exchange_work = CoulombExchangeWork::empty();
+  if (coulomb_) {
+    auto jk = coulomb_->build(selected(strategy_.spec, true, false), density, beta);
+    result.coulomb = std::move(jk.coulomb);
+    result.coulomb_exchange_work.add(jk.coulomb_exchange_work);
+  }
   if (exchange_) {
     auto jk = exchange_->build(selected(strategy_.spec, false, true), density, beta);
     result.exchange_alpha = std::move(jk.exchange_alpha);
     result.exchange_beta = std::move(jk.exchange_beta);
+    result.coulomb_exchange_work.add(jk.coulomb_exchange_work);
   }
   return result;
 }

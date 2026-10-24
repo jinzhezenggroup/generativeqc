@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("forces,budget_mib", [(False, 16), (True, 24)])
+@pytest.mark.parametrize("forces,budget_mib", [(False, 16), (True, 20)])
 @pytest.mark.parametrize(
     ("shared_policy", "expect_shared"),
     [(None, True), ("auto", True), ("1", True), ("0", False)],
@@ -35,6 +35,10 @@ def test_streamed_auto_cold_warm_and_changed_geometry(
     from pyscf import gto, scf
 
     assert os.environ.get("SLURM_JOB_ID")
+    # The automatic packed value owner can now fit within this old dense
+    # streaming budget. Use dense storage with enough scratch for occupied K,
+    # while keeping complete resident values outside each value-side allowance.
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     atoms = benchmark_cases()["water-tetramer-def2-svp-spherical"].atoms
     moved = [
         (symbol, tuple(np.array(xyz) + (0, 0, 0.025) if i == 1 else xyz))

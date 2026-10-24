@@ -1,0 +1,32 @@
+{
+  "scope": "CPU host tests/authentication only; no GPU/science",
+  "adapter_directory": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/adapter-prepared-v2",
+  "sha256": {
+    "replay.py": "b8b003939523f0a56720544591923fcdb9556bfd188eeee239fb2e83a390e14a",
+    "qz_smoke.py": "59343f4ab207f9157bbc92161a83316c4305d811df510c72021d9cc5cf0a09ed",
+    "test_qz_smoke.py": "8659d54087982dced3af8063bb5717f4f60459638a018aba1b7cbe979b55b488",
+    "protocol-manifest-v2.json": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761"
+  },
+  "results": [
+    {
+      "options": [],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "............\n----------------------------------------------------------------------\nRan 12 tests in 0.426s\n\nOK\n"
+    },
+    {
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "............\n----------------------------------------------------------------------\nRan 12 tests in 0.406s\n\nOK\n"
+    },
+    {
+      "scope": "real frozen CBS full source-tree hash/mode recheck only; no native library/device load",
+      "returncode": 0,
+      "stdout": "{\"inventory_sha256\": \"60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924\", \"verified_files\": 12145}\n",
+      "stderr": ""
+    }
+  ]
+}

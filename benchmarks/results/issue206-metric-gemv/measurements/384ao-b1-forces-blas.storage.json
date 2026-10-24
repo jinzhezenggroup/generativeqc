@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b1-forces-blas.json",
+  "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b1-forces-blas.json.gz",
+  "original_bytes": 72709,
+  "stored_bytes": 14735,
+  "original_sha256": "80d3a98eeb5f31df96b899d4292272c5c1dd05f5ab078abe253788e6d345ad44",
+  "stored_sha256": "ab6bf35e21923002b0b98ab0215bd7203cac82f32a86b82faed5efd58fa7bb79",
+  "original_git_blob": "769ddd9986840d520b7416106d0b6a36f60ac1c1",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage change only; every historical numerical value, sample, setting and gate is preserved."
+}

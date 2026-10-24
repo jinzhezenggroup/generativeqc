@@ -17,6 +17,9 @@ CLASSIFICATIONS = frozenset(
     {
         "diagnostic-test-only",
         "negative-evidence",
+        # A completed decision to require explicit selection, without asserting
+        # that every eligible workload is slower or still awaiting a default.
+        "retained-opt-in",
         "needs-qualification",
         "scientific-choice",
         "guarded-promotion-candidate",
@@ -31,6 +34,7 @@ AUDITED_PREFIXES = (
     "ks-runtime:",
     "tensor-schedule:",
     "tensor-execution:",
+    "tensor-ad:",
     "dft-policy:",
     "public-model:",
     "initial-guess:",
@@ -167,6 +171,34 @@ def _discover_tensor_execution(root: Path) -> dict[str, str]:
     return {"tensor-execution:cuda-graph": relative.as_posix()}
 
 
+def _discover_tensor_ad(root: Path) -> dict[str, str]:
+    """Register explicit Boolean API controls, without pinning derivative bodies."""
+    relative = Path("python/generativeqc_compiler/tensor/ad_program.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    result = {}
+    for function in tree.body:
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        for argument, default in zip(
+            function.args.kwonlyargs, function.args.kw_defaults, strict=True
+        ):
+            if (
+                isinstance(argument.annotation, ast.Name)
+                and argument.annotation.id == "bool"
+            ):
+                if (
+                    not isinstance(default, ast.Constant)
+                    or type(default.value) is not bool
+                ):
+                    raise ValueError(
+                        "Tensor AD Boolean control requires an explicit Boolean default"
+                    )
+                result[f"tensor-ad:{function.name}.{argument.arg}"] = (
+                    relative.as_posix()
+                )
+    return result
+
+
 def _discover_public_precision(root: Path) -> dict[str, str]:
     relative = Path("python/generativeqc/calculator.py")
     source = _read(root / relative)
@@ -187,42 +219,44 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
 
 
 def _discover_xc_point_batching(root: Path) -> dict[str, str]:
-    """Audit both limits of the promoted, resource-guarded native KS policy."""
+    """Inventory rollback controls; compiled resource tests qualify the policy."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_TILES",\s*32\)', source
-    ) or not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_BYTES",\s*32\s*\*\s*1024\s*\*\s*1024\)',
-        source,
+    for control in (
+        "GENERATIVEQC_CUDA_XC_BATCH_TILES",
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES",
+        "GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
+        "GENERATIVEQC_CUDA_XC_RAGGED_BATCH",
     ):
-        raise ValueError("XC point-batch default drifted from 32 tiles / 32 MiB")
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_COMPACT_BATCH",\s*1\)', source
-    ):
-        raise ValueError(
-            "XC compact contraction default drifted from resource-guarded enablement"
-        )
+        if f'"{control}"' not in source:
+            raise ValueError(f"XC point-batch rollback selector missing: {control}")
     return {
         "dft-policy:xc-point-batch-auto": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_CUDA_XC_RAGGED_BATCH": relative.as_posix(),
     }
 
 
 def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
-    """Keep default selection separate from explicit experimental admission."""
+    """Audit model/resource admission and opt-out; executable tests own arithmetic.
+
+    Final FP64 arithmetic may follow mixed proposals. Do not pin the spelling of
+    that state decision to the original requested SCF precision.
+    """
     relative = Path("src/dft/cuda_ks.cpp")
     source = re.sub(r"\s+", " ", _read(root / relative))
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+spins\s*==\s*1\s*&&\s*full_precision\s*&&\s*"
+        r"\(\(aos\s*>=\s*384\s*&&\s*\w+\)\s*\|\|\s*"
+        r"\(aos\s*>=\s*544\s*&&\s*full_range_coulomb_only\)\);",
         policy,
     ) or any(
         fragment not in policy
         for fragment in (
-            "fock_exchange_coefficient == -0.125",
-            "semilocal_exchange_scale == 0.75",
-            "semilocal_correlation_scale == 1.0",
+            "std::isfinite(coefficient)",
+            "coefficient < 0.0",
+            "coefficient >= -0.5",
             "if (!setting) return default_eligible;",
             'std::strcmp(setting, "0") == 0) return false;',
             'std::strcmp(setting, "1") == 0) return true;',
@@ -233,15 +267,34 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in source
         for fragment in (
-            "pbe0_rks_final_validation_composition(",
-            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
-            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
-            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
-            "!nonlocal_correlation;",
-            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
-            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
+            "!has_range_correction && !nonlocal_correlation",
+            "!nonlocal_correlation &&",
+            "provider.system().ecp_terms.empty()",
+            "atom.ecp_core != 0",
+            "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
+            "final_spec.coulomb.op == scf::FockOperator::FullRange",
+            "final_spec.exchange.approximation == final_spec.coulomb.approximation",
+            "final_spec.exchange.op == scf::FockOperator::FullRange",
+            "!has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation",
+            "!final_spec.exchange.present",
+            "final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted",
+            "device_final_validation_default_eligible(",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    # Resource guards must belong to this consumer's admission, not merely
+    # occur elsewhere (for example in the independent early-final SCF probe).
+    admission = re.search(r"\bconst bool device_validation\s*=\s*([^;]+);", source)
+    if admission is None or any(
+        fragment not in admission.group(1)
+        for fragment in (
+            "device_final_validation_requested(",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+            "default_device_validation)",
             "final_validation_partial && matrix_products.library_enabled()",
-            "!final_stationary_weights_ready;",
+            "!final_stationary_weights_ready",
         )
     ):
         raise ValueError("KS final-validation default owner or resource guard drifted")
@@ -249,14 +302,16 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
 
 
 def _discover_md_j_default(root: Path) -> dict[str, str]:
-    """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
+    """Keep the admitted domain and diagnostic opt-out reviewable.
+
+    Capacity is enforced by executable owner-budget and rollback probes in
+    test_md_j_resources, not by pinning a private shape-estimate constant.
+    """
     relative = Path("src/scf/cuda/direct_jk.cpp")
     source = _read(root / relative)
-    layout = _read(root / "src/scf/cuda/direct_md_j.hpp")
-    if not re.search(r"kMdJResidentCap\s*=\s*128U\s*<<\s*20", layout):
-        raise ValueError("MD-J default resident cap drifted from 128 MiB")
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
+        or 'std::getenv("GENERATIVEQC_MD_J_ENGINE")' not in source
         or 'std::strcmp(disabled, "1") == 0' not in source
         or "host.nbf < 8" not in source
         or "return angular > 2;" not in source
@@ -267,18 +322,23 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_MD_J_ENGINE": relative.as_posix(),
     }
 
 
 def _discover_spatial_force_default(root: Path) -> dict[str, str]:
-    """Audit method-owned scope without conflating explicit cache requests with auto."""
+    """Audit exact Direct capabilities; executable force tests own arithmetic.
+
+    The force invocation supplies precision independently of the SCF descriptor.
+    Keep model/resource boundaries here without duplicating its implementation.
+    """
     relative = Path("src/dft/cuda_spd_force_policy.hpp")
     policy = _read(root / relative)
     schedule = re.sub(
         r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
     )
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_full_range\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in schedule
@@ -287,7 +347,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             'selector == "1" || selector == "spatial-reuse"',
             "return DirectSpdForceSchedule::Incumbent;",
             "if (captured == DirectSpdForceSchedule::Automatic)",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse : DirectSpdForceSchedule::Incumbent;",
         )
     ):
         raise ValueError("Spatial force default scope or opt-out drifted")
@@ -295,16 +355,17 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in owner
         for fragment in (
-            "dft::pbe0_rks_final_validation_composition(",
+            "dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient)",
             "spec.coulomb.approximation == scf::FockApproximation::Exact",
             "spec.exchange.approximation == scf::FockApproximation::Exact",
             "spec.coulomb.op == scf::FockOperator::FullRange",
             "spec.exchange.op == scf::FockOperator::FullRange",
             "!execution_plan_.range_exchange && !range_strategy_",
-            "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
+            "!execution_plan_.nonlocal_correlation",
+            "spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "dft::spatial_spd_force_default_eligible(",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")
@@ -435,9 +496,10 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
         r'initial_guess:\s*InitialGuessSpec\s*\|\s*typing\.Literal\["auto"\]\s*\|\s*None\s*=\s*"auto"',
         calculator,
     ):
-        raise ValueError("initial-guess default drifted from guarded automatic MINAO")
+        raise ValueError("initial-guess default drifted from guarded automatic Huckel")
     result["initial-guess:preliminary-scf"] = calculator_relative.as_posix()
     result["initial-guess:minao-auto"] = calculator_relative.as_posix()
+    result["initial-guess:huckel-auto"] = calculator_relative.as_posix()
 
     progressive_relative = Path("python/generativeqc/progressive.py")
     progressive = _read(root / progressive_relative)
@@ -468,30 +530,41 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_options(root: Path) -> dict[str, str]:
-    relative = Path("src/cc/solver.hpp")
-    source = _read(root / relative)
-    match = re.search(
-        r"struct\s+SolverOptions\s*\{(?P<body>.*?)\n\};",
-        source,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        raise ValueError("missing audited cc::SolverOptions")
-    body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
-    names = re.findall(
-        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
-        body,
-    )
-    return {f"cc-option:{name}": relative.as_posix() for name in names}
+    """Discover default-off primal and Lambda controls in distinct namespaces."""
+    result = {}
+    for relative, structure, prefix in (
+        (Path("src/cc/solver.hpp"), "SolverOptions", "cc-option:"),
+        (Path("src/cc/lambda_response.hpp"), "LambdaOptions", "cc-option:lambda."),
+    ):
+        source = _read(root / relative)
+        match = re.search(
+            rf"struct\s+{structure}\s*\{{(?P<body>.*?)\n\}};",
+            source,
+            flags=re.DOTALL,
+        )
+        if match is None:
+            raise ValueError(f"missing audited cc::{structure}")
+        body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
+        names = re.findall(
+            r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+            body,
+        )
+        result.update({f"{prefix}{name}": relative.as_posix() for name in names})
+    return result
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:
-    """Audit bounded energy execution defaults without inventing user flags."""
+    """Audit bounded physical execution defaults without inventing user flags."""
     relative = Path("src/cc/df_triples_cuda.cu")
     source = _read(root / relative)
     energy_start = source.find("DFCudaResult evaluate_df_cuda(")
     response_start = source.find("static DFCudaResponseResult pullback_df_cuda_impl(")
-    if energy_start < 0 or response_start <= energy_start:
+    joint_start = source.find("DFCudaCombinedResponseResult pullback_and_fock_df_cuda(")
+    if (
+        energy_start < 0
+        or response_start <= energy_start
+        or joint_start <= response_start
+    ):
         raise ValueError("missing audited DF triples energy/response boundary")
     body = re.sub(
         r"//[^\n]*|/\*.*?\*/", " ", source[energy_start:response_start], flags=re.DOTALL
@@ -505,10 +578,35 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         "if(alias_tile)generated_df::energy_distinct_tile(o,v,i,j,k,degeneracy,threshold,in,moments,sources,p.blocks,partials,context.error,context.stream);elsegenerated_df::energy_tile(o,v,i,j,k,degeneracy,threshold,in,moments,p.blocks,partials,context.error,context.stream);",
     )
     if any(body.count(fragment) != 1 for fragment in required) or any(
-        fragment in source[response_start:]
+        fragment in source[response_start:joint_start]
         for fragment in ("MomentSourceMap", "energy_distinct_tile")
     ):
         raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
+    joint = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source[joint_start:], flags=re.DOTALL)
+    joint = re.sub(r"\s+", "", joint)
+    forward_required = (
+        "constbooldistinct_moments=d.w_contraction_storage_bits==64&&d.w_contraction_compute_bits==64&&d.w_contraction_accumulation_bits==64;",
+        "constautosources=distinct_moments?generated_df::occupied_moment_sources(i,j,k):generated_df::MomentSourceMap{};",
+        "constautosource=sources.index[perm];",
+        "if(source!=perm){",
+        "cudaMemcpyAsync(moments+perm*p.v3,moments+source*p.v3,bytes(p.v3),cudaMemcpyDeviceToDevice,context.stream)",
+        "++fock.w_copy_calls;",
+        "fock.w_copy_bytes=checked_add(fock.w_copy_bytes,bytes(p.v3));",
+    )
+    reverse = joint.split("constautorun_pullback=", 1)[-1].split(
+        "constbooldistinct_moments=", 1
+    )[0]
+    if (
+        any(joint.count(fragment) != 1 for fragment in forward_required)
+        or "MomentSourceMap" in reverse
+        or "sources.index" in reverse
+        or "energy_distinct_tile" in joint
+        or "bar_w+perm*p.v3,bar_panel,out,reverse_gemm" not in reverse
+        or "for(std::size_tperm=0;perm<6;++perm)" not in reverse
+    ):
+        raise ValueError(
+            "DF triples distinct-moment FP64 forward-only force admission drifted"
+        )
     traversal = (
         "detail::visit_occupied_tiles(o,distinct_moments&&p.panel_capacity==3,visit_tile);",
         "reduce<<<1,256,0,context.stream>>>(partials,p.blocks,energies+canonical_tile,context.error);",
@@ -556,7 +654,8 @@ def _discover_response_options(root: Path) -> dict[str, str]:
         raise ValueError("missing audited RHFFrameResponseOptions")
     body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
     names = re.findall(
-        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+        r"\bbool\s+([A-Za-z0-9_]+)\s*"
+        r"(?:\{\s*(?:false|true)?\s*\}|=\s*(?:false|true))\s*;",
         body,
     )
     result = {f"response-option:{name}": relative.as_posix() for name in names}
@@ -576,40 +675,26 @@ def _discover_response_options(root: Path) -> dict[str, str]:
 
 
 def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
-    """Keep the density-only default's qualified domain and finite work cap explicit."""
+    """Discover the rollback selector; compiled policy tests qualify admission."""
     relative = Path("src/methods/df_hf_guess.cpp")
     source = _read(root / relative)
     required = (
         'std::getenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS")',
         'value != "direct" && value != "auto"',
-        "reference_quartet_direct(functions, maximum_angular->angular_momentum)",
-        "guess.work_amortization_ratio < 1.0",
-        "cartesian * cartesian",
-        "guess.preparation_peak_bytes > guess.value_budget_bytes",
-        "scf::plan_requested_density_fitting_tiles(",
-        "!plan.stores_full_three_center",
-        "system.charge != 0",
-        "preliminary_iterations = 32",
-        "options.max_iterations = preliminary_iterations",
-        "options.energy_tolerance = 1e-4",
-        "options.density_tolerance = 1e-4",
-        "options.export_physical_reference = false",
-        "512ULL << 20",
     )
     if any(fragment not in source for fragment in required):
-        raise ValueError("DF-RHF preconvergence default or admission domain drifted")
+        raise ValueError("DF-RHF preconvergence rollback selector drifted")
     return {"initial-guess:df-rhf-preconvergence-auto": relative.as_posix()}
 
 
 def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
-    """Keep automatic source construction tied to its qualified bounded domain."""
+    """Discover the control; compiled source-policy tests own AO thresholds."""
     policy_relative = Path("src/scf/cuda/direct_jk_source_policy.hpp")
     policy = _read(root / policy_relative)
     required = (
         '!value || std::string_view(value) == "auto"',
         "if (!cold_phase)",
         "maximum_angular != 3 || !generic_fock",
-        "nbf < 64 || direct_nbf < 128",
         "maximum_iterations < 8",
     )
     owner_relative = Path("src/scf/cuda/rhf_resident_values.cpp")
@@ -636,48 +721,86 @@ def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_phase_values(root: Path) -> dict[str, str]:
-    """Default auto cannot broaden the cold domain or public resource plan."""
+    """Register stable KS controls; executable probes qualify their admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if any(
-        fragment not in source
-        for fragment in (
-            'std::getenv("GENERATIVEQC_KS_RESIDENT_VALUES")',
-            "const auto requested = direct_jk_source_selection(selection);",
-            "if (requested == DirectJkSourceSelection::disabled) return;",
-            "runtime::active_device_resource_ledger",
-            "runtime::active_device_resource_ledger ||",
-            "precision_schedule.any_lower_precision()",
-            "has_range_correction",
-            "spins != 1 || !has_exchange || fitted_coulomb || fitted_exchange || has_range_correction",
-            "nonlocal_correlation || incremental_direct_jk",
-            "strategy.spec.coulomb.op != scf::FockOperator::FullRange",
-            "strategy.spec.exchange.op != scf::FockOperator::FullRange",
-            "strategy.screening_tolerance,",
-            "constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;",
-            "direct_jk_source_auto_refusal(",
-            'trace("cuda_ks_resident_values_skip", "host_decision")',
-            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,",
+    # The environment name may be chosen by a conditional or read through a
+    # policy helper. Inventory ownership follows each live control literal,
+    # independently of that harmless call-site spelling. Admission semantics
+    # are covered by the executable source-policy and endpoint tests.
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source, flags=re.DOTALL)
+    names = re.findall(
+        r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
+    )
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_COLD_FACTOR)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_OCCUPIED_XC)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
+    names.extend(
+        re.findall(r'"(GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING)"', source)
+    )
+    names.extend(
+        re.findall(
+            r'"(GENERATIVEQC_KS_INCREMENTAL_(?:PROPOSALS|COARSE_SCREENING))"', source
         )
-    ):
-        raise ValueError("KS phase-value auto default or admission domain drifted")
-    if "if (!selection) return;" in source:
-        raise ValueError("KS phase-value auto default or admission domain drifted")
+    )
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
+    controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    method = Path("src/methods/dft_method.cpp")
+    if (root / method).is_file():
+        owner = re.sub(
+            r"//[^\n]*|/\*.*?\*/", " ", _read(root / method), flags=re.DOTALL
+        )
+        for name in re.findall(r'"(GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE)"', owner):
+            controls[f"ks-runtime:{name}"] = method.as_posix()
+    geometry = Path("python/generativeqc/_stationary_composite_cuda.py")
+    if (root / geometry).is_file():
+        for name in re.findall(
+            r'"(GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE)"', _read(root / geometry)
+        ):
+            controls[f"ks-runtime:{name}"] = geometry.as_posix()
+    return controls
+
+
+def _discover_partial_phase_values(root: Path) -> dict[str, str]:
+    """Experimental masks must not silently replace the full-resident default."""
     policy = _read(root / "src/scf/cuda/direct_jk_source_policy.hpp")
     if any(
         fragment not in policy
         for fragment in (
-            'if (!value || std::string_view(value) == "auto")',
-            "policy == DirectJkSourceAutoPolicy::screened_cold && maximum_angular <= 2",
-            "if (!(screening > 0.0))",
-            "return 16ULL << 30;",
-            "return 8ULL << 30;",
+            "std::uint32_t mask{(1U << 28) - 1}",
+            "policy.ceiling = default_ceiling;",
+            "if (!text) return true;",
+            "policy.mask < (1U << 28)",
         )
-    ) or source.index("direct_jk_source_auto_refusal(") > source.index(
-        "phase_source = std::make_unique<DirectJkSourceLease>"
     ):
-        raise ValueError("KS phase-value auto default or admission domain drifted")
-    return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
+        raise ValueError("experimental partial source default or admission drifted")
+    result = {}
+    for method, relative in (
+        ("RHF", "src/scf/cuda/reference_eri_policy.hpp"),
+        ("KS", "src/dft/cuda_ks.cpp"),
+    ):
+        source = _read(root / relative)
+        if "direct_jk_resident_bucket_policy(" not in source:
+            raise ValueError("experimental partial source parser drifted")
+        prefix = "hf-runtime" if method == "RHF" else "ks-runtime"
+        for suffix in ("BUCKET_MASK", "MAX_BYTES"):
+            control = f"GENERATIVEQC_{method}_RESIDENT_{suffix}"
+            if f'std::getenv("{control}")' not in source:
+                raise ValueError("experimental partial source controls drifted")
+            result[f"{prefix}:{control}"] = relative
+    return result
+
+
+def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
+    """Inventory optional prepared value owners without pinning their admission syntax."""
+    relative = Path("src/scf/fock_prepared.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"hf-runtime:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_DF_(?:MD|RAW)_COULOMB)"', source)
+    }
 
 
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
@@ -686,9 +809,12 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_scf_options(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
+        _discover_prepared_df_controls(root),
         _discover_ks_phase_values(root),
+        _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
+        _discover_tensor_ad(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_ks_final_validation_default(root),
@@ -770,6 +896,10 @@ def validate_inventory(
         ):
             errors.append(
                 f"{entry_id}: owner_issues must contain positive issue numbers"
+            )
+        elif classification == "needs-qualification" and set(owners) == {1598}:
+            errors.append(
+                f"{entry_id}: needs-qualification requires a narrower owner than #1598"
             )
         for field in ("rationale", "revisit_condition"):
             if not _nonempty_string(entry.get(field)):

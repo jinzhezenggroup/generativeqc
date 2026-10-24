@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -113,20 +114,26 @@ struct DirectValueCensus {
   CudaDirectJkPlan& plan;
   unsigned long long* device{};
   explicit DirectValueCensus(CudaDirectJkPlan& owner) : plan(owner) {
-    require(plan.generated_exchange && plan.generated_exchange->shared &&
-                !plan.canonical_work_count && !plan.generated_exchange->admitted_shell_counts &&
-                !plan.generated_exchange->shared->admitted_shell_counts,
-            "census requires an unobserved generated shell owner");
+    require(
+        !plan.canonical_work_count &&
+            (!plan.generated_exchange ||
+             (plan.generated_exchange->shared && !plan.generated_exchange->admitted_shell_counts &&
+              !plan.generated_exchange->shared->admitted_shell_counts)),
+        "census requires unobserved generated/canonical value owners");
     check(generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device),
                                                       (2 * classes + 2) * sizeof(*device)));
-    plan.generated_exchange->shared->admitted_shell_counts = device;
-    plan.generated_exchange->admitted_shell_counts = device + classes;
+    if (plan.generated_exchange) {
+      plan.generated_exchange->shared->admitted_shell_counts = device;
+      plan.generated_exchange->admitted_shell_counts = device + classes;
+    }
     plan.canonical_work_count = reinterpret_cast<std::uint64_t*>(device + 2 * classes);
   }
   ~DirectValueCensus() {
     cudaStreamSynchronize(plan.stream);
-    plan.generated_exchange->shared->admitted_shell_counts = nullptr;
-    plan.generated_exchange->admitted_shell_counts = nullptr;
+    if (plan.generated_exchange) {
+      plan.generated_exchange->shared->admitted_shell_counts = nullptr;
+      plan.generated_exchange->admitted_shell_counts = nullptr;
+    }
     plan.canonical_work_count = nullptr;
     generativeqc::runtime::resource_cuda_free(device);
   }
@@ -336,7 +343,8 @@ void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
   db.verify(b);
 }
 
-void mixed_coulomb_work_census(bool through_f = false) {
+void mixed_coulomb_work_census(bool through_f = false, bool canonical = true,
+                               bool materialized = true) {
   generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {{0, 0, {{0.8, 1.0}}}, {1, through_f ? 3U : 0U, {{0.6, 1.0}}}};
@@ -355,11 +363,16 @@ void mixed_coulomb_work_census(bool through_f = false) {
   }
   const std::vector<double> zero_density(matrix, 0.0), sentinel(matrix, 123.0);
   require(density.size() == matrix, "mixed-work fixture density shape changed");
+  std::size_t primitive_count = 0;
+  for (const auto& shell : system.shells) primitive_count += shell.primitives.size();
+  const auto minimum_budget = cuda_direct_jk_device_bytes(1, n, system.atoms.size(),
+                                                          system.shells.size(), primitive_count, 0);
 
   const auto make_plan = [&](double screening) {
     CudaDirectJkPlan* raw{};
     CudaDirectJkDiagnostic diagnostic;
-    require(create_cuda_direct_jk_plan(0, {system}, 0, screening, 32U * 1024U * 1024U, &raw,
+    require(create_cuda_direct_jk_plan(0, {system}, 0, screening,
+                                       canonical ? 32U * 1024U * 1024U : minimum_budget, &raw,
                                        diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail.c_str());
     return raw;
@@ -368,9 +381,9 @@ void mixed_coulomb_work_census(bool through_f = false) {
       make_plan(0.0), &destroy_cuda_direct_jk_plan);
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> screened(
       make_plan(std::numeric_limits<double>::max()), &destroy_cuda_direct_jk_plan);
-  if (through_f)
-    require(plan->canonical_pairs != nullptr,
-            "through-f mixed-work fixture must retain the competing FP64 canonical route");
+  require((plan->canonical_pairs != nullptr) == canonical,
+          "mixed-work fixture did not exercise its requested storage fallback");
+  if (!materialized) plan->materialized_pair_order = nullptr;
 
   auto spec = make_hf_fock_spec(FockSpin::Restricted);
   spec.derivative_order = 0;
@@ -389,14 +402,21 @@ void mixed_coulomb_work_census(bool through_f = false) {
               nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
-  require(count.get() == matrix * matrix,
-          "mixed Coulomb census did not count evaluated AO-ERI recurrences");
+  const auto pairs = n * (n + 1U) / 2U;
+  const auto expected_work = canonical ? pairs * (pairs + 1U) / 2U : matrix * matrix;
+  require(count.get() == expected_work,
+          ("mixed Coulomb census: actual=" + std::to_string(count.get()) +
+           " expected=" + std::to_string(expected_work) + " n=" + std::to_string(n) +
+           " materialized=" + std::to_string(plan->materialized_pair_order != nullptr))
+              .c_str());
   std::vector<double> first(matrix), second(matrix);
   check(cudaMemcpy(first.data(), uninstrumented.pointer, matrix * sizeof(double),
                    cudaMemcpyDeviceToHost));
   check(cudaMemcpy(second.data(), instrumented.pointer, matrix * sizeof(double),
                    cudaMemcpyDeviceToHost));
-  require(first == second, "mixed Coulomb instrumentation changed the J result");
+  for (std::size_t index = 0; index < matrix; ++index)
+    require(std::abs(first[index] - second[index]) < 1e-13,
+            "mixed Coulomb instrumentation changed J beyond FP64 scatter roundoff");
 
   check(cudaMemcpy(device_density.pointer, zero_density.data(), matrix * sizeof(double),
                    cudaMemcpyHostToDevice));
@@ -407,6 +427,7 @@ void mixed_coulomb_work_census(bool through_f = false) {
           detail.c_str());
   check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
   require(count.get() == 0, "mixed Coulomb replay leaked its prior recurrence count");
+  instrumented.verify(zero_density);
 
   check(cudaMemcpy(device_density.pointer, density.data(), matrix * sizeof(double),
                    cudaMemcpyHostToDevice));
@@ -417,6 +438,22 @@ void mixed_coulomb_work_census(bool through_f = false) {
           detail.c_str());
   check(cudaStreamSynchronize(cuda_direct_jk_stream(screened.get())));
   require(count.get() == 0, "screened mixed Coulomb recurrences were counted as executed");
+  instrumented.verify(zero_density);
+
+  std::vector<double> opposite_density = density;
+  for (auto& value : opposite_density) value = -value;
+  DeviceMatrix cancelling_beta(opposite_density);
+  auto unrestricted_spec = spec;
+  unrestricted_spec.spin = FockSpin::Unrestricted;
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), unrestricted_spec, device_density.pointer, cancelling_beta.pointer,
+              matrix, instrumented.pointer, nullptr, nullptr, failure, detail,
+              count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() == 0, "spin-cancelling density admitted mixed Coulomb recurrences");
+  instrumented.verify(zero_density);
 
   require(
       enqueue_cuda_direct_jk_device_mixed_j(
@@ -578,8 +615,15 @@ void mixed_coulomb_preserves_strict_exchange() {
         const auto work = census.totals();
         require(count.get() > 0 && work[0] == 0,
                 "mixed-J request changed its recurrence-only arithmetic route");
-        require(angular <= 2 ? (work[1] > 0 && work[2] == 0) : (work[1] == 0 && work[2] > 0),
-                "mixed J displaced strict generated/canonical K");
+        const bool generated_k = direct_jk_generated_exchange_value_available(*plan, spec);
+        const bool strict_k_route = generated_k ? (work[1] > 0 && work[2] == count.get())
+                                                : (work[1] == 0 && work[2] > count.get());
+        require(strict_k_route, ("mixed J displaced strict K: angular=" + std::to_string(angular) +
+                                 " generated=" + std::to_string(generated_k) +
+                                 " shell_work=" + std::to_string(work[1]) +
+                                 " canonical_work=" + std::to_string(work[2]) +
+                                 " mixed_work=" + std::to_string(count.get()))
+                                    .c_str());
         ka.verify(expected.exchange_alpha);
         if (unrestricted) kb.verify(expected.exchange_beta);
         std::vector<double> actual_j(matrix);
@@ -638,9 +682,14 @@ void direct_value_dispatch_selection() {
               !range_fallback.canonical_coulomb && !range_fallback.generic_exchange,
           "canonical range K displaced generated J");
   const auto mixed_fallback = direct_jk_value_dispatch(false, false, true, true, true, true);
-  require(mixed_fallback.generic_coulomb && mixed_fallback.canonical_exchange &&
-              !mixed_fallback.canonical_coulomb && !mixed_fallback.generic_exchange,
-          "mixed J displaced canonical strict K");
+  require(mixed_fallback.canonical_coulomb && mixed_fallback.canonical_exchange &&
+              !mixed_fallback.generic_coulomb && !mixed_fallback.generic_exchange,
+          "mixed J did not reuse canonical work independently of strict K");
+  const auto canonical_mixed = direct_jk_value_dispatch(true, true, true, true, true, true);
+  require(canonical_mixed.canonical_coulomb && canonical_mixed.generated_exchange &&
+              !canonical_mixed.generated_coulomb && !canonical_mixed.canonical_exchange &&
+              !canonical_mixed.generic_coulomb && !canonical_mixed.generic_exchange,
+          "canonical mixed J displaced generated strict K");
 }
 
 void device_selection() {
@@ -865,6 +914,28 @@ void spd_optional_allocation_fallback() {
  * density orientation. Count actual source work separately from endpoint time.
  */
 void spd_canonical_range_values() {
+  // This census observes the generated J/K channels, not the separately
+  // qualified MD-J producer. Select that contract explicitly so an automatic
+  // MD-J choice cannot look like lost J work; restore the default for all
+  // other provider tests, including their MD-J numerical coverage.
+  struct GeneratedJScope {
+    bool present{};
+    std::string previous;
+    GeneratedJScope() {
+      if (const auto* value = std::getenv("GENERATIVEQC_DISABLE_MD_J")) {
+        present = true;
+        previous = value;
+      }
+      require(setenv("GENERATIVEQC_DISABLE_MD_J", "1", 1) == 0,
+              "could not select generated J for its channel census");
+    }
+    ~GeneratedJScope() {
+      if (present)
+        setenv("GENERATIVEQC_DISABLE_MD_J", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DISABLE_MD_J");
+    }
+  } generated_j_scope;
   for (unsigned angular : {0U, 1U, 2U}) {
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       generativeqc::core::System first;
@@ -2567,25 +2638,170 @@ void generated_coulomb_budget() {
       std::size_t primitives = 0;
       for (const auto* system : {&first, &second})
         for (const auto& shell : system->shells) primitives += shell.primitives.size();
-      for (unsigned derivative_order : {0U, 1U}) {
-        const auto capacity =
-            cuda_direct_coulomb_device_bytes(2, dimension, 4, shells, primitives, derivative_order);
-        CudaDirectJkPlan* raw{};
-        CudaDirectJkDiagnostic diagnostic;
-        require(create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity,
-                                           &raw, diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
-                detail.c_str());
-        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
-            raw, destroy_cuda_direct_jk_plan);
-        require(diagnostic.device_bytes <= capacity,
-                "generated J density metadata exceeded the shape-only budget");
-        require((std::string(diagnostic.schedule).find("generated-shell") != std::string::npos) ==
-                    (angular <= 2),
-                "shape-only J budget lost generated admission or changed through-f fallback");
-      }
+      for (unsigned derivative_order : {0U, 1U})
+        for (const auto cartesian_nao :
+             {std::size_t{0}, generativeqc::molecule::cartesian_ao_count(first)}) {
+          const auto capacity = cuda_direct_coulomb_device_bytes(
+              2, dimension, 4, shells, primitives, derivative_order, false, cartesian_nao);
+          CudaDirectJkPlan* raw{};
+          CudaDirectJkDiagnostic diagnostic;
+          require(
+              create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity, &raw,
+                                         diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+          std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+              raw, destroy_cuda_direct_jk_plan);
+          require(diagnostic.device_bytes <= capacity,
+                  "generated J density metadata exceeded the shape-only budget");
+          FockBuildSpec value_spec;
+          value_spec.derivative_order = 0;
+          value_spec.exchange.present = false;
+          // The composite schedule label may describe canonical K while J
+          // still has its generated owner. Query the actual J capability.
+          require(
+              cuda_direct_jk_generated_coulomb_available(plan.get(), value_spec) == (angular <= 2),
+              ("J budget changed generated admission: l=" + std::to_string(angular) +
+               " representation=" + std::to_string(representation) + " derivative=" +
+               std::to_string(derivative_order) + " Cartesian=" + std::to_string(cartesian_nao) +
+               " capacity=" + std::to_string(capacity) + " schedule=" + diagnostic.schedule)
+                  .c_str());
+          if (derivative_order && angular <= 2)
+            require(plan->generated_exchange && plan->generated_exchange->force_capability,
+                    "metadata-aware derivative capacity lost its shell force lease");
+        }
     }
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }
+
+/** Exercise generated and native DDDD J with an independent CPU ERI oracle.
+ * Poison both planes before every build: clearing/folding must include the
+ * native/materialized writer, batch offsets, zero density and spin summation.
+ * Numerical gates deliberately do not promise bitwise-reproducible atomics.
+ */
+void compensated_generated_coulomb() {
+  const auto* previous = std::getenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES");
+  const bool had_policy = previous != nullptr;
+  const std::string saved_policy = previous ? previous : "";
+  for (const auto* policy : {"0", "1"}) {
+    require(setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", policy, 1) == 0,
+            "cannot select DDDD value schedule");
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL})
+      for (unsigned portfolio : {0U, 1U, 2U, 3U}) {
+        generativeqc::core::System first;
+        first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+        if (portfolio != 1U)
+          first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 1, {{0.6, 1.0}}}};
+        if (portfolio != 0U) {
+          first.shells.push_back({0, 2, {{0.9, 0.8}, {0.3, 0.2}}});
+          first.shells.push_back({1, 2, {{0.7, 1.0}}});
+        }
+        if (portfolio == 3U)
+          first.shells = {
+              {0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 2, {{0.7, 1.0}}}, {0, 3, {{0.6, 1.0}}}};
+        first.electron_count = 2;
+        first.basis_representation = representation;
+        auto second = first;
+        second.atoms[1].position[2] += 0.17;
+        second.shells.back().primitives[0].exponent *= 1.2;
+        std::string detail;
+        for (auto* system : {&first, &second})
+          require(generativeqc::molecule::validate_and_normalize(*system, detail) ==
+                      GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+        const std::array oracles{generativeqc::integrals::build_integrals(first, false),
+                                 generativeqc::integrals::build_integrals(second, false)};
+        const auto dimension = oracles[0].nbf;
+        const auto matrix = dimension * dimension;
+        std::vector<double> alpha(2 * matrix), beta(2 * matrix);
+        for (std::size_t item = 0; item < 2; ++item)
+          for (std::size_t index = 0; index < matrix; ++index) {
+            const double pair = static_cast<double>(index / dimension + index % dimension);
+            alpha[item * matrix + index] = std::cos(0.37 * pair + item) / dimension;
+            beta[item * matrix + index] = std::sin(0.23 * pair - item) / dimension;
+          }
+        CudaDirectJkPlan* raw{};
+        CudaDirectJkDiagnostic diagnostic;
+        require(create_cuda_direct_jk_plan(0, {first, second}, 0, 0.0, 64U << 20, &raw, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+            raw, destroy_cuda_direct_jk_plan);
+        auto* owner = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                               : plan->generated_coulomb.get();
+        require(owner && (owner->value_capability ||
+                          (plan->generated_exchange &&
+                           plan->generated_exchange->bounded_value_capability)),
+                "missing complete generated/native/bounded J owner");
+        const auto cartesian = static_cast<std::size_t>(owner->batch.batch_size) *
+                               owner->batch.direct_nbf * owner->batch.direct_nbf;
+        const auto* original_correction = owner->batch.reference_fock_correction;
+        DeviceMatrix device_alpha(alpha), device_beta(beta), zero(std::vector<double>(2 * matrix)),
+            result(std::vector<double>(2 * matrix, 123.0));
+        for (bool prepared : {false, true}) {
+          if ((prepared && !plan->generated_exchange) || (!prepared && !owner->value_capability))
+            continue;
+          for (bool unrestricted : {false, true})
+            for (bool empty : {false, true, false}) {
+              std::vector<double> expected;
+              for (std::size_t item = 0; item < 2; ++item) {
+                const auto begin = static_cast<std::ptrdiff_t>(item * matrix);
+                std::vector<double> item_alpha(alpha.begin() + begin,
+                                               alpha.begin() + begin + matrix);
+                std::vector<double> item_beta(beta.begin() + begin, beta.begin() + begin + matrix);
+                if (empty) {
+                  std::fill(item_alpha.begin(), item_alpha.end(), 0.0);
+                  std::fill(item_beta.begin(), item_beta.end(), 0.0);
+                }
+                auto spec =
+                    make_hf_fock_spec(unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted);
+                spec.exchange.present = false;
+                const auto oracle = build_exact_direct_jk(
+                    resolve_fock_build(spec, FockBackend::Cpu, 0.0), dimension, oracles[item].eri,
+                    item_alpha, unrestricted ? item_beta : std::vector<double>{});
+                expected.insert(expected.end(), oracle.coulomb.begin(), oracle.coulomb.end());
+              }
+              check(cudaMemsetAsync(owner->coulomb, 0xff, 2 * cartesian * sizeof(double),
+                                    owner->stream));
+              const auto* input_alpha = empty ? zero.pointer : device_alpha.pointer;
+              const auto* input_beta =
+                  unrestricted ? (empty ? zero.pointer : device_beta.pointer) : nullptr;
+              check(prepared ? generativeqc::scf::cuda_execution::enqueue_generated_coulomb(
+                                   *plan->generated_exchange, unrestricted, input_alpha, input_beta,
+                                   result.pointer)
+                             : generativeqc::scf::cuda_execution::enqueue_generated_coulomb(
+                                   *owner, input_alpha, input_beta, result.pointer));
+              std::vector<double> correction(cartesian);
+              check(cudaMemcpyAsync(correction.data(), owner->coulomb + cartesian,
+                                    cartesian * sizeof(double), cudaMemcpyDeviceToHost,
+                                    owner->stream));
+              check(cudaStreamSynchronize(owner->stream));
+              result.verify(expected);
+              require(owner->batch.reference_fock_correction == original_correction,
+                      "J changed the shared K/derivative batch binding");
+              bool recovered_low_word = false;
+              for (double value : correction) {
+                require(std::isfinite(value), "J correction plane was not cleared");
+                if (empty) require(value == 0.0, "zero density retained an old J correction");
+                recovered_low_word = recovered_low_word || value != 0.0;
+              }
+              if (!empty)
+                require(recovered_low_word, "generated/native J did not retain scatter low words");
+            }
+        }
+        device_alpha.verify(alpha);
+        device_beta.verify(beta);
+      }
+  }
+  require(
+      (had_policy ? setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", saved_policy.c_str(), 1)
+                  : unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")) == 0,
+      "cannot restore DDDD value schedule");
+  std::cout
+      << "CUDA compensated generated/native/bounded J, spins, projections and plane-reset gates "
+         "PASS\n";
+}
+
+#include "direct_public_schwarz_cases.hpp"
 
 void direct_providers(bool through_f_response, bool eri_tiles_only = false,
                       bool mixed_force_domains = false, unsigned force_domain_angular = 3U,
@@ -2856,6 +3072,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--public-schwarz-only") {
+      public_schwarz_preparation();
+      return 0;
+    }
     if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
                       std::string(argv[1]) == "--canonical-materialized-screened-only")) {
       canonical_screened_values(true);
@@ -2891,6 +3111,11 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
+      generated_coulomb_budget();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--compensated-j-only") {
+      compensated_generated_coulomb();
       generated_coulomb_budget();
       return 0;
     }
@@ -2934,8 +3159,13 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
+      direct_value_dispatch_selection();
       mixed_coulomb_work_census();
       mixed_coulomb_work_census(true);
+      mixed_coulomb_work_census(false, false);
+      mixed_coulomb_work_census(true, false);
+      mixed_coulomb_work_census(false, true, false);
+      mixed_coulomb_work_census(true, true, false);
       mixed_coulomb_preserves_strict_exchange();
       std::cout << "CUDA mixed Coulomb work census and strict exchange PASS\n";
       return 0;

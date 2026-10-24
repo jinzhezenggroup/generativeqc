@@ -13,12 +13,14 @@
 
 namespace generativeqc {
 
-/** Caller-selected molecular quadrature; no implicit production grid is promised. */
+/** Versioned molecular quadrature, defaulting to Treutler/Lebedev + NWChem level 3. */
 /** @native-contract generativeqc::KsGrid
- * @behavior Value descriptor for caller-selected molecular quadrature; defaults form a small
- * reference grid and do not promise production convergence.
- * @outputs version selects reference (1) or resolved production (2) grid semantics;
- * radial_points, angular_polar, and angular_azimuth set quadrature counts;
+ * @behavior Value descriptor for molecular quadrature; defaults select level-3
+ * Treutler/Ahlrichs radial, Lebedev angular, NWChem pruning and Treutler-adjusted Becke.
+ * @outputs version selects reference (1), explicit-radius unpruned (2), or
+ * explicit-radius radial-v1 pruned (3), or Treutler/Lebedev/NWChem (4) semantics;
+ * v4 encodes level 0..9 in radial_points and requires zero angular fields;
+ * earlier versions use radial_points, angular_polar and angular_azimuth as counts;
  * partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
  * coincident-center threshold; tile_points bounds the grid tile size.
  * @lifetime Owns only scalar values; copying preserves the complete descriptor.
@@ -26,10 +28,10 @@ namespace generativeqc {
  * @units coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
  */
 struct KsGrid {
-  std::uint32_t version{1};
-  std::uint32_t radial_points{64};
-  std::uint32_t angular_polar{12};
-  std::uint32_t angular_azimuth{24};
+  std::uint32_t version{4};
+  std::uint32_t radial_points{3};  // v4: Treutler level, not a radial node count.
+  std::uint32_t angular_polar{0};
+  std::uint32_t angular_azimuth{0};
   std::uint32_t partition_iterations{3};
   double coincident_tolerance{1.0e-12};
   std::uint64_t tile_points{256};

@@ -1,5 +1,8 @@
 """Link real and synthetic pkg-config providers through the production CMake owner."""
 
+import ctypes
+import importlib.util
+import json
 import os
 import re
 import shutil
@@ -52,7 +55,14 @@ def _configure(
         executable = f'"{ROOT / "tests/native/test_cpu_linalg.cpp"}"'
     else:
         (source / "provider.cpp").write_text(
-            '#include <cblas.h>\nextern "C" int provider_value() {\n'
+            "#include <cblas.h>\n"
+            "#if GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
+            'extern "C" int openblas_set_num_threads_local(int);\n#endif\n'
+            'extern "C" int provider_value() {\n'
+            "#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS\n"
+            "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX && !GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
+            "scipy_openblas_set_num_threads_local(1);\n#else\n"
+            "openblas_set_num_threads_local(1);\n#endif\n#endif\n"
             "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX\n"
             "return scipy_openblas_get_num_threads();\n#else\n"
             "return openblas_get_num_threads();\n#endif\n}\n"
@@ -117,8 +127,9 @@ def _synthetic_provider(
     scipy: bool,
     missing: str = "",
     extra_flags: str = "",
+    unprefixed_local: bool = False,
 ) -> Path:
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     prefix = "scipy_" if scipy else ""
     (root / "cblas.h").write_text(
         "#ifndef PROVIDER_COMPILE_FLAG\n#error missing provider compile option\n#endif\n"
@@ -136,7 +147,8 @@ def _synthetic_provider(
     value = "dependency()" if dependent else "1"
     code = 'extern "C" {\n' + ("int dependency();\n" if dependent else "")
     if missing != "local":
-        code += f"int {prefix}openblas_set_num_threads_local(int) {{return {value};}}\n"
+        local_prefix = "" if unprefixed_local else prefix
+        code += f"int {local_prefix}openblas_set_num_threads_local(int) {{return {value};}}\n"
     code += (
         f"int {prefix}openblas_get_num_threads() {{return {value};}}\n"
         f"void {prefix}openblas_set_num_threads(int) {{}}\n"
@@ -235,30 +247,71 @@ def test_pkgconfig_preserves_wrong_archive_order(
     assert "undefined reference" in result.stdout + result.stderr
 
 
+def _scipy_openblas_metadata() -> tuple[str, tuple[bool, ...]]:
+    # Importing this build-input package loads its OpenBLAS with RTLD_GLOBAL.
+    # Keep that process-wide side effect out of the persistent pytest worker:
+    # PySCF may later load another OpenBLAS with overlapping internal symbols.
+    if importlib.util.find_spec("scipy_openblas32") is None:
+        pytest.skip("scipy_openblas32 is required")
+    probe = _run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import scipy_openblas32 as scipy
+
+library = scipy.dll
+capabilities = (
+    any(hasattr(library, name) for name in (
+        "scipy_openblas_set_num_threads_local", "openblas_set_num_threads_local"
+    )),
+    all(
+        hasattr(library, name)
+        for name in (
+            "scipy_openblas_get_num_threads",
+            "scipy_openblas_set_num_threads",
+        )
+    ),
+    all(
+        hasattr(library, name)
+        for name in ("scipy_LAPACKE_dpotrf", "scipy_LAPACKE_dsyevd")
+    ),
+)
+print(json.dumps({"pkg_config": scipy.get_pkg_config(), "capabilities": capabilities}))
+""",
+        ],
+        env=dict(os.environ),
+    )
+    metadata = json.loads(probe.stdout)
+    return metadata["pkg_config"], tuple(metadata["capabilities"])
+
+
+def test_real_scipy_pkgconfig_preserves_process_blas_namespace() -> None:
+    def bindings() -> dict[str, int | None]:
+        process = ctypes.CDLL(None)
+        symbols = ("gotoblas", "dgemm_nn", "scipy_openblas_get_config")
+        return {
+            name: ctypes.cast(getattr(process, name), ctypes.c_void_p).value
+            if hasattr(process, name)
+            else None
+            for name in symbols
+        }
+
+    before = bindings()
+    _scipy_openblas_metadata()
+    assert bindings() == before
+
+
 def test_real_scipy_pkgconfig_links_native_owner(
     tmp_path: Path, native_cxx: object
 ) -> None:
-    scipy = pytest.importorskip("scipy_openblas32")
+    pkg_config, expected = _scipy_openblas_metadata()
     pcdir = tmp_path / "metadata"
     pcdir.mkdir()
-    (pcdir / "scipy-openblas.pc").write_text(scipy.get_pkg_config())
+    (pcdir / "scipy-openblas.pc").write_text(pkg_config)
     build, env = _configure(tmp_path, pcdir, native_cxx, real=True)
     # Symbol availability comes from the actual loaded library, not a version label.
-    library = scipy.dll
-    expected = (
-        hasattr(library, "scipy_openblas_set_num_threads_local"),
-        all(
-            hasattr(library, name)
-            for name in (
-                "scipy_openblas_get_num_threads",
-                "scipy_openblas_set_num_threads",
-            )
-        ),
-        all(
-            hasattr(library, name)
-            for name in ("scipy_LAPACKE_dpotrf", "scipy_LAPACKE_dsyevd")
-        ),
-    )
     assert _capabilities(build) == expected
     result = _run(["cmake", "--build", str(build), "--verbose"], env=env)
     (tmp_path / "build.log").write_text(result.stdout + result.stderr)
@@ -352,3 +405,26 @@ def test_pkgconfig_absolute_libraries_survive_reconfigure(
     assert _capabilities(build) == (True, True, True)
     _run(["cmake", "--build", str(build)], env=env)
     _run([str(build / "consumer")], env=env)
+
+
+def test_prefixed_provider_rechecks_local_thread_symbol(
+    tmp_path: Path, native_cxx: object
+) -> None:
+    """A stable header/metadata cannot hide changes to the actual linked ABI."""
+    provider = _synthetic_provider(
+        tmp_path / "metadata", native_cxx, spelling="shared", scipy=True
+    )
+    build, env = _configure(tmp_path, provider, native_cxx)
+    for unprefixed, missing in ((False, ""), (True, ""), (False, "local"), (False, "")):
+        _synthetic_provider(
+            provider,
+            native_cxx,
+            spelling="shared",
+            scipy=True,
+            unprefixed_local=unprefixed,
+            missing=missing,
+        )
+        _run(["cmake", "-S", str(tmp_path / "consumer"), "-B", str(build)], env=env)
+        assert _capabilities(build) == (missing != "local", True, True)
+        _run(["cmake", "--build", str(build)], env=env)
+        _run([str(build / "consumer")], env=env)

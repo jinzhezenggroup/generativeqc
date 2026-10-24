@@ -61,19 +61,81 @@ declared stored hashes and resolves the plain or gzip member. It verifies storag
 
 The shared compactor authenticates all original members, resolves child parts
 before parent records, and updates their attachment/part bindings together. It
-preserves numbers, sample ordering and scientific identities. It discovers tracked
-publication manifests, never untracked run directories. Pre-commit and CI require
-eligible large evidence/sample JSON members to use this shared representation:
+preserves scientific number tokens, sample ordering, strings and scientific
+identities, editing only declared storage paths, sizes and checksums. Leaves
+without metadata changes retain their exact decompressed bytes.
+
+The first local pre-commit hook automatically compacts touched, staged
+publications. Eligibility is an explicit storage contract, not a directory-wide
+rule: a tracked `publication.json` using `generativeqc.benchmark-publication.v1`
+(or its historical `vibeqc` spelling), a measured source revision/dirty state,
+and declared `evidence` or `samples` JSON members of at least 128 KiB. New members
+of an eligible publication need no per-file allowlist. Consumers must use the
+shared publication reader before adopting this contract. Gzip output has zero
+mtime and no original filename; existing compressed members are not recompressed
+unless their declared child-storage bindings must change.
+
+The hook runs before whitespace/JSON formatters, writes visible working-tree
+changes, and stops the commit with review/restaging instructions. It never stages,
+commits, measures, fetches or uploads anything. Apply normal source/JSON formatting before computing publication hashes; a later
+formatter edit invalidates those identities and requires explicit republication.
+The mutating hook stops immediately after a change so later formatters are not
+invoked with retired plain paths. Stage the complete publication
+(including removals/new companions and its manifest) and any updated legacy-review
+metadata, review the diff, then commit again. The tool refuses visible index versus
+working-tree differences and untracked dependencies; pre-commit's own unstaged-edit
+stashing/restoration still applies. Do not partially stage an evidence bundle.
+If that restoration conflicts, pre-commit restores the original tracked bytes and
+may leave an untracked generated gzip companion. A retry can reuse an exact,
+verified deterministic companion without rewriting it. A differing companion is
+preserved and requires inspection; the hook never deletes or overwrites it.
+
+Unsupported custom manifests and ordinary loose JSON are reported as outside
+automatic scope. README files, scripts, source, inputs, reproduction patches,
+summary-only data and unrelated compressed files are not selected. For example,
+a campaign-specific `references.json` is not automatically eligible just because
+it is large. Its consumers and any hash-pinned retention exceptions need an
+explicit storage migration first. Compression never establishes scientific
+acceptance or justifies retaining unnecessary reports or embedded logs.
+
+All selected bundles and legacy-review updates are planned before mutation.
+Unknown schemas/roles, unsafe or mixed paths, duplicate JSON keys, malformed or
+truncated JSON/compression, stale identities, incompatible record parts, cycles,
+companion collisions and unknown attachment targets fail closed when compaction
+is needed. Input limits bound each stored member to 16 MiB, each expanded JSON to 32 MiB,
+and a batch to 64 MiB stored / 256 MiB expanded / 4096 members (512 per bundle).
+JSON nesting is capped at 64 levels and two million structural tokens; XZ decoding
+has a 96 MiB memory limit (including the decoder overhead for existing 64 MiB dictionaries). Concatenated/trailing compressed streams are rejected.
+Large inputs outside these bounds require a separately reviewed storage layout.
+
+A batch write failure rolls back all files; original bytes are kept
+in a recovery directory until the new companions and metadata are verified.
+Each metadata replacement is atomic; the filesystem does not provide a single
+atomic multi-file rename. A hard interruption or failed rollback leaves a
+recovery directory and blocks another run until manually inspected. Never remove
+that directory without recovering or verifying its retained originals.
+
+CI retains a separate read-only check. Manual use is also available:
 
 ```bash
 python tools/compact_evidence_publications.py --check
-# Apply only to explicitly reviewed publications, then stage the resulting files:
+# Explicit source-archive/manual migration (no implicit staging):
 python tools/compact_evidence_publications.py \
   --publication benchmarks/results/my-campaign/publication.json
+# Local hook equivalent, restricted to publications containing these paths:
+python tools/compact_evidence_publications.py --pre-commit \
+  benchmarks/results/my-campaign/publication.json
 ```
 
 An explicit publication path also works in a source archive without Git metadata.
-Compression is not justification for retaining unnecessary reports or embedded logs.
+Historical `reproduction`, `source-patch`, `input` and `summary` members are
+opaque retained content: their file identities/JSON streams are checked, but
+historical attachment fields inside them are never interpreted or rebound as
+active storage metadata. Active dependency traversal belongs only to the declared
+`evidence` and `samples` records.
+
+Scientific acceptance remains the responsibility of `validate_publication` and
+source-bound campaign tests; the compactor verifies storage, not new measurements.
 
 ## Run, inspect, publish
 
@@ -163,7 +225,7 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-64 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
+80 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
 classification exceptions cannot waive it. Permanent fixtures under
 `tests/reference_data/`, `tests/data/`, audited `upstream/` sources and
 `manifests/` provenance are not counted. Changing the budget is an explicit policy review, not an automatic
@@ -339,7 +401,7 @@ identity. Availability of debugging archives is distinct from numerical truth.
 
 ## Baseline cleanup (#238)
 
-The [migration audit](../../benchmarks/results/retention-238/migration.json)
+The [migration audit](../../benchmarks/results/retention-238/migration.json.gz)
 records original hashes/bytes, extracted JSON measurements, compiler resource
 diagnostics, test totals/failures/skips and retained profiler CSV exports.
 It removes 161 transient files (3,482,611 bytes) from baseline

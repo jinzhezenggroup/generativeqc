@@ -21,9 +21,6 @@ class ElectronInteractionSource;
 
 namespace generativeqc::cc {
 
-/** Public conventional CCSD(T) force qualification; CCSD keeps its own limit. */
-inline constexpr std::size_t kRccsdtForceMaxAOs = 56;
-
 /** Conservative simultaneous numeric peaks for the serialized force phases.
  * Every phase includes borrowed molecule/CC/reference inputs once and all earlier
  * outputs still retained by the force owner. Object headers and allocator
@@ -98,8 +95,11 @@ struct RccsdtForceResult {
  * This is the native/public closure of the already-qualified #155 graph.  It
  * composes generated CC/(T)/Hamiltonian adjoints and the shared RHF orbital
  * response, then reuses the generic conventional derivative consumer.  The
- * public domain is bounded to conventional all-electron references, through
- * 56 AOs for CCSD(T) and 12 AOs for CCSD. The CPU owner evaluates the complete
+ * public domain is conventional all-electron RHF, with resource and numerical
+ * admission rather than a fixed AO count. Independent force oracles currently
+ * cover CCSD(T) through 56 AOs and standalone CCSD in the former 12-AO domain;
+ * these tests do not certify arbitrary larger systems. The CPU owner evaluates
+ * the complete
  * response and derivative on host. The CUDA owner runs generated Lambda,
  * triples, parameter and Hamiltonian/orbital actions on device; GMRES control
  * and the final MO-to-AO weight pullback retain their host ownership.
@@ -134,6 +134,8 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
 
 /** Publish the qualified conventional RCCSD(T) force through a CUDA derivative consumer.
  *
+ * The optional resident Lambda vector schedule is not a default promotion; its
+ * arena is admitted beside the generated action arena, with bounded fallback.
  * Generated triples/Lambda actions plus Hamiltonian/Fock/orbital TensorIR execute on
  * CUDA in the promoted response path, while the physical Z/GMRES control flow
  * remains host-owned. device_id selects the CUDA response/derivative device;
@@ -145,13 +147,15 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget);
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget);
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const integrals::ElectronInteractionSource& source,
@@ -159,13 +163,15 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold = 1e-10);
+                                    double denominator_threshold = 1e-10,
+                                    bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold = 1e-10);
+                                    double denominator_threshold = 1e-10,
+                                    bool resident_lambda_krylov = false);
 
 }  // namespace generativeqc::cc

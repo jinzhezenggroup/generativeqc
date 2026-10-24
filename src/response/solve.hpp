@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "response/linear_problem.hpp"
@@ -11,10 +13,43 @@
 
 namespace generativeqc::response {
 
+/** Bind numeric GMRES admission to one logical response problem.
+ *
+ * The inherited plan remains usable by existing numeric resource estimators.
+ * The private binding cannot be rewritten alongside public dimension/budget
+ * fields. It retains only an opaque token, not callbacks or borrowed method
+ * storage, and prevents address reuse from making an old plan look current.
+ */
+class ResponsePlan : public GmresPlan {
+ public:
+  ResponsePlan() = default;
+
+  [[nodiscard]] bool is_bound_to(const LinearResponseProblem& problem) const noexcept {
+    return binding_ && binding_ == problem.binding_;
+  }
+
+ private:
+  friend ResponsePlan prepare_response(const LinearResponseProblem&, const GmresOptions&);
+
+  ResponsePlan(GmresPlan solve_plan, const LinearResponseProblem& problem)
+      : GmresPlan(std::move(solve_plan)), binding_(problem.binding_) {
+    if (!binding_) throw std::invalid_argument("response problem has no live binding");
+  }
+
+  std::shared_ptr<const LinearResponseProblem::Binding> binding_;
+};
+
+/** Perturbation-specific inputs; preconditioners never change the physical action.
+ *
+ * The callback form is needed by the existing HF optional inverse. Its owned
+ * callable is descriptor storage; its workspace remains method-owned and must
+ * be admitted separately. Diagonal and callback forms are mutually exclusive.
+ */
 struct ResponseSolveRequest {
   std::span<const double> rhs;
   std::span<const double> initial_guess{};
   std::span<const double> diagonal_preconditioner{};
+  LinearOperator right_preconditioner{};
 };
 
 enum class ResponseBatchStatus { complete, workspace_limit };
@@ -23,17 +58,20 @@ enum class ResponseBatchStatus { complete, workspace_limit };
  *
  * Each solve may use the full GMRES workspace while solutions from earlier
  * requests remain live. `peak_numeric_bytes` therefore includes one active
- * solver workspace plus all previously retained solution vectors. It excludes
+ * solver workspace plus all previously retained solution/history/basis storage.
+ * Optional diagnostics retain their reserved capacities, not just used entries.
+ * It excludes
  * `std::vector`/allocator bookkeeping and any storage owned by the operator or
  * method adapter.
  */
 struct ResponseBatchPlan {
-  GmresPlan solve_plan;
+  ResponsePlan solve_plan;
   std::size_t request_count{};
   std::size_t retained_solution_bytes{};
   std::size_t peak_numeric_bytes{};
   std::size_t max_numeric_bytes{};
   bool admitted{};
+  std::size_t retained_diagnostic_bytes{};
 };
 
 struct ResponseBatchResult {
@@ -41,6 +79,7 @@ struct ResponseBatchResult {
   ResponseBatchStatus status{ResponseBatchStatus::complete};
   std::size_t planned_peak_numeric_bytes{};
   std::size_t retained_solution_bytes{};
+  std::size_t retained_diagnostic_bytes{};
 
   [[nodiscard]] bool complete() const noexcept { return status == ResponseBatchStatus::complete; }
 };
@@ -59,24 +98,30 @@ inline std::size_t response_checked_multiply(std::size_t first, std::size_t seco
 }
 }  // namespace detail
 
-inline GmresPlan prepare_response(const LinearResponseProblem& problem,
-                                  const GmresOptions& options) {
-  return prepare_gmres(problem.dimension(), options);
+inline ResponsePlan prepare_response(const LinearResponseProblem& problem,
+                                     const GmresOptions& options) {
+  return {prepare_gmres(problem.dimension(), options), problem};
 }
 
-inline GmresResult solve_response(const GmresPlan& plan, const LinearResponseProblem& problem,
-                                  ResponseSolveRequest request) {
-  if (plan.dimension != problem.dimension())
-    throw std::invalid_argument("response plan and problem dimensions do not match");
-  return solve_gmres(plan, problem.apply(), request.rhs, request.initial_guess,
-                     request.diagonal_preconditioner);
-}
-
-inline GmresResult solve_response(const GmresPlan& plan, const LinearResponseProblem& problem,
+/** Reject a different problem before allocating or invoking its operator. */
+inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
                                   std::span<const double> rhs,
                                   std::span<const double> initial_guess = {},
-                                  std::span<const double> diagonal_preconditioner = {}) {
-  return solve_response(plan, problem, {rhs, initial_guess, diagonal_preconditioner});
+                                  std::span<const double> diagonal_preconditioner = {},
+                                  const LinearOperator& right_preconditioner = {}) {
+  if (plan.dimension != problem.dimension())
+    throw std::invalid_argument("response plan and problem dimensions do not match");
+  if (!plan.is_bound_to(problem))
+    throw std::invalid_argument("response plan belongs to a different problem binding");
+  return solve_gmres(plan, problem.apply(), rhs, initial_guess, diagonal_preconditioner,
+                     right_preconditioner);
+}
+
+/** Borrow the descriptor's callback without copying method state before admission. */
+inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
+                                  const ResponseSolveRequest& request) {
+  return solve_response(plan, problem, request.rhs, request.initial_guess,
+                        request.diagonal_preconditioner, request.right_preconditioner);
 }
 
 inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& problem,
@@ -90,25 +135,40 @@ inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& pro
       detail::response_checked_multiply(problem.dimension(), sizeof(double));
   const auto retained_solution_bytes =
       detail::response_checked_multiply(request_count, solution_bytes);
-  const auto prior_solution_bytes =
-      detail::response_checked_multiply(request_count - 1, solution_bytes);
+  const auto history_bytes =
+      options.collect_history
+          ? detail::response_checked_multiply(
+                detail::response_checked_add(options.max_iterations, 2), sizeof(double))
+          : 0;
+  const auto basis_bytes =
+      options.collect_basis ? detail::response_checked_multiply(solve_plan.restart, solution_bytes)
+                            : 0;
+  const auto diagnostic_bytes = detail::response_checked_add(history_bytes, basis_bytes);
+  const auto retained_diagnostic_bytes =
+      detail::response_checked_multiply(request_count, diagnostic_bytes);
+  const auto prior_result_bytes = detail::response_checked_multiply(
+      request_count - 1, detail::response_checked_add(solution_bytes, diagnostic_bytes));
   const auto peak_numeric_bytes =
-      detail::response_checked_add(solve_plan.workspace_bytes, prior_solution_bytes);
+      detail::response_checked_add(solve_plan.workspace_bytes, prior_result_bytes);
   const bool admitted = solve_plan.options.max_workspace_bytes >= solve_plan.workspace_bytes &&
                         peak_numeric_bytes <= max_numeric_bytes;
-  return {solve_plan,         request_count,     retained_solution_bytes,
-          peak_numeric_bytes, max_numeric_bytes, admitted};
+  return {solve_plan,        request_count, retained_solution_bytes,  peak_numeric_bytes,
+          max_numeric_bytes, admitted,      retained_diagnostic_bytes};
 }
 
 inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
                                                 const LinearResponseProblem& problem,
                                                 std::span<const ResponseSolveRequest> requests) {
+  // Identity must fail closed even for empty batches and workspace refusals.
+  if (!plan.solve_plan.is_bound_to(problem))
+    throw std::invalid_argument("response batch plan belongs to a different problem binding");
   const auto expected = prepare_response_batch(problem, plan.solve_plan.options, plan.request_count,
                                                plan.max_numeric_bytes);
   if (plan.solve_plan.dimension != expected.solve_plan.dimension ||
       plan.solve_plan.restart != expected.solve_plan.restart ||
       plan.solve_plan.workspace_bytes != expected.solve_plan.workspace_bytes ||
       plan.retained_solution_bytes != expected.retained_solution_bytes ||
+      plan.retained_diagnostic_bytes != expected.retained_diagnostic_bytes ||
       plan.peak_numeric_bytes != expected.peak_numeric_bytes || plan.admitted != expected.admitted)
     throw std::invalid_argument("response batch plan does not match its problem and options");
   if (requests.size() != plan.request_count)
@@ -122,6 +182,7 @@ inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
   for (const auto& request : requests)
     result.responses.push_back(solve_response(plan.solve_plan, problem, request));
   result.retained_solution_bytes = plan.retained_solution_bytes;
+  result.retained_diagnostic_bytes = plan.retained_diagnostic_bytes;
   return result;
 }
 

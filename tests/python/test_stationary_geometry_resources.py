@@ -2,11 +2,11 @@
 
 import ast
 import re
-import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
 from types import CodeType, FunctionType, SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -16,6 +16,9 @@ from generativeqc_compiler.method.stationary_resources import (
     plan_stationary_cuda_resources,
     stationary_cuda_allocation_bytes,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = cuda_target_info("sm_120")
@@ -120,13 +123,9 @@ def test_geometry_budget_overflow_is_rejected(budget: int) -> None:
         plan_stationary_cuda_resources(**SHAPE, target=TARGET, budget_bytes=budget)
 
 
-def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
-    tmp_path: Path,
+def assert_native_allocation_contract(
+    header: str, tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-    header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     function = re.search(r"size_t allocation\([^)]*\) \{.*?\n\}", header, re.DOTALL)
     assert function is not None
     checks = []
@@ -154,7 +153,8 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
             )
     source = tmp_path / "allocation.cpp"
     source.write_text(
-        """#include <cstddef>
+        """#include <array>
+#include <cstddef>
 #include <stdexcept>
 #include <limits>
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
@@ -170,29 +170,44 @@ for (size_t lanes : {size_t(0),size_t(4097),std::numeric_limits<size_t>::max()})
 }
 try { allocation(128,96,240,4096,256,2,2048); return 3; }
 catch (const std::invalid_argument&) {}
+for (auto shape : {std::array<size_t,7>{129,96,240,256,256,2,256},
+                   {12,2049,240,256,256,2,256}, {12,96,16385,256,256,2,256},
+                   {12,96,240,4097,256,2,256}, {12,96,240,256,4097,2,256},
+                   {12,96,240,256,256,1,256}, {12,96,240,256,256,2,257}}) {
+  try { allocation(shape[0],shape[1],shape[2],shape[3],shape[4],shape[5],shape[6]); return 4; }
+  catch (const std::invalid_argument&) {}
+}
 return 0;
 }
 """
     )
     executable = tmp_path / "allocation"
-    subprocess.run(
-        [compiler, "-std=c++17", str(source), "-o", str(executable)],
-        check=True,
-        timeout=30,
-    )
+    native_cxx.build_executable([source], executable, compile_args=["-std=c++17"])
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
-    tmp_path: Path,
+def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
 ) -> None:
-    """Execute production allocation/create with explicit CUDA resource stubs."""
+    assert_native_allocation_contract(
+        (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text(),
+        tmp_path,
+        required_native_cxx,
+    )
+
+
+def assert_native_create_contract(
+    header: str, tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute create with real generated Becke dependencies and CUDA resource stubs."""
+    from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
+    from generativeqc_compiler.xc.grid_native import (
+        emit_grid_adjoint,
+        emit_grid_partials,
+    )
+    from generativeqc_compiler.xc.grid_phased import emit_phased_becke
     from test_stationary_task_work_budget import _block
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-    header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     body = "\n".join(
         (
             _block(header, "struct Owner {") + ";",
@@ -203,7 +218,14 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
     )
     source = tmp_path / "create.cpp"
     source.write_text(
-        r"""
+        emit_grid_adjoint()
+        + emit_grid_partials()
+        + emit_phased_becke()
+        + emit_binary_scaled_becke()
+        + '#include "'
+        + str(ROOT / "src/dft/becke_scaled_policy.hpp")
+        + '"\n'
+        + r"""
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -216,33 +238,55 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
 using cudaEvent_t=void*;
 using cudaStream_t=void*;
 namespace generativeqc_stationary_cuda {}
-namespace generativeqc_grid_adjoint { struct CenterPair { double values[6]; }; }
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
-  explicit operator bool() const { return false; }
+  bool active=false;
+  explicit operator bool() const { return active; }
 };
 }
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
 constexpr size_t stationary_becke_retained_max_atoms=32;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_threads=32;
-constexpr size_t stationary_geometry_max_scratch_bytes=8<<20, task_stride=9;
+constexpr size_t stationary_geometry_max_scratch_bytes=16<<20, task_stride=9;
 int allocations=0, owners=0, arenas=0, max_threads=1024;
-bool oom=false, runtime_failure=false;
+bool oom=false, runtime_failure=false, driver_failure=false;
 size_t oom_above=std::numeric_limits<size_t>::max();
+constexpr size_t arena_guard_bytes=256;
+unsigned char* tracked_arena=nullptr;
+size_t tracked_arena_bytes=0;
+void check_arena_canary(const unsigned char* arena,size_t bytes) {
+  if(!arena) return;
+  for(size_t index=bytes;index<bytes+arena_guard_bytes;++index)
+    if(arena[index]!=0xa5) {
+      std::fputs("stationary host arena canary overwritten\n",stderr);
+      std::abort();
+    }
+}
 struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 int cudaGetLastError() { return 0; }
 struct Context {
   unsigned char* arena{};
   int* error{};
   cudaStream_t stream{};
+  size_t logical_bytes{};
   Context() { ++owners; }
-  ~Context() { if(arena) --arenas; delete[] arena; --owners; }
+  ~Context() {
+    check_arena_canary(arena,logical_bytes);
+    if(arena) --arenas;
+    if(tracked_arena==arena) { tracked_arena=nullptr;tracked_arena_bytes=0; }
+    delete[] arena; --owners;
+  }
   void prepare(int,int,int,size_t bytes,size_t error_offset,size_t,size_t,size_t,bool) {
     ++allocations;
     if(error_offset != bytes-256) throw std::runtime_error("bad error boundary");
     if(oom) throw std::bad_alloc();
     if(runtime_failure) throw std::runtime_error("injected non-allocation failure");
-    arena=new unsigned char[bytes]; ++arenas;
+    if(driver_failure) throw DeviceRuntimeError("injected driver failure");
+    arena=new unsigned char[bytes+arena_guard_bytes]; ++arenas;
+    logical_bytes=bytes;
+    std::memset(arena,0xa5,bytes+arena_guard_bytes);
+    tracked_arena=arena;tracked_arena_bytes=bytes;
     error=reinterpret_cast<int*>(arena+error_offset);
     if(bytes>oom_above) throw DeviceAllocationError("injected post-allocation cache OOM");
   }
@@ -250,7 +294,15 @@ struct Context {
 struct cudaDeviceProp { int maxThreadsPerBlock{}, maxThreadsDim[3]{}, maxGridSize[3]{}; };
 int cudaGetDeviceCount(int* count) { *count=1; return 0; }
 int cudaMemsetAsync(void* destination,int value,size_t bytes,cudaStream_t) {
-  std::memset(destination,value,bytes); return 0;
+  const auto begin=reinterpret_cast<uintptr_t>(tracked_arena);
+  const auto address=reinterpret_cast<uintptr_t>(destination);
+  const size_t backing=tracked_arena_bytes+arena_guard_bytes;
+  if(!tracked_arena || address<begin || address-begin>backing ||
+     bytes>backing-(address-begin))
+    throw std::invalid_argument("stationary host write exceeds bounded backing");
+  std::memset(destination,value,bytes);
+  check_arena_canary(tracked_arena,tracked_arena_bytes);
+  return 0;
 }
 int cudaGetDeviceProperties(cudaDeviceProp* p,int) {
   p->maxThreadsPerBlock=max_threads; p->maxThreadsDim[0]=max_threads;
@@ -273,7 +325,7 @@ int main() {
   max_threads=16;
   if(!create(bytes) || result || allocations || owners) return 2;
   max_threads=1024; oom=true;
-  if(!create(bytes) || result || allocations!=1 || owners) return 3;
+  if(create(bytes)!=3 || result || allocations!=1 || owners) return 3;
   oom=false;
   if(create(bytes) || !result || allocations!=2 || owners!=1) return 4;
   auto* p=static_cast<Owner*>(result);
@@ -282,6 +334,10 @@ int main() {
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != bytes-256)
     return 7;
   if(p->center_pairs || p->center_geometry_bytes) return 8;
+  if(!p->becke_zero_seed_requested ||
+     reinterpret_cast<unsigned char*>(p->becke_zero_seed_points) !=
+        reinterpret_cast<unsigned char*>(p->context.error)+8 ||
+     *p->becke_zero_seed_points != 0) return 27;
   delete p;
   constexpr size_t cache_bytes=48*(12*11/2);
   if(create(bytes+cache_bytes-1) || !result) return 9;
@@ -293,7 +349,9 @@ int main() {
   if(p->bytes!=bytes+cache_bytes || !p->center_pairs || p->center_geometry_bytes!=cache_bytes) return 12;
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != p->bytes-256)
     return 13;
-  if(reinterpret_cast<double*>(p->center_pairs)!=p->centers+3*12 ||
+  if(p->atomic_radii != p->centers+3*12 ||
+     reinterpret_cast<double*>(p->atom_offsets) != p->atomic_radii+12 ||
+     reinterpret_cast<double*>(p->center_pairs) != reinterpret_cast<double*>(p->atom_offsets)+13 ||
      reinterpret_cast<double*>(p->center_pairs)+cache_bytes/8!=p->weights) return 14;
   delete p;
   oom_above=bytes;
@@ -304,8 +362,13 @@ int main() {
   if(arenas) return 17;
   runtime_failure=true;
   const int prior_allocations=allocations;
-  if(!create(bytes+cache_bytes) || result || owners || arenas || allocations!=prior_allocations+1) return 18;
+  if(create(bytes+cache_bytes)!=1 || result || owners || arenas || allocations!=prior_allocations+1) return 18;
   runtime_failure=false;
+  driver_failure=true;
+  const int before_driver=allocations;
+  if(create(bytes+cache_bytes)!=4 || result || owners || arenas ||
+     allocations!=before_driver+1) return 24;
+  driver_failure=false;
   oom_above=std::numeric_limits<size_t>::max();
   const size_t large_bytes=allocation(96,768,704,256,4096,2,256);
   auto large=[&](size_t budget) {
@@ -321,17 +384,78 @@ int main() {
     return 22;
   delete p;
   if(arenas || owners) return 23;
+  for(const char* setting : {"0","1"}) {
+    setenv("GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS",setting,1);
+    if(create(bytes) || !result) return 28;
+    p=static_cast<Owner*>(result);
+    if(p->becke_binary_scaled_requested != (setting[0]=='1') ||
+       p->becke_binary_scaled_automatic) return 29;
+    delete p;
+  }
+  unsetenv("GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS");
+  if(create(bytes) || !result) return 30;
+  p=static_cast<Owner*>(result);
+  if(!p->becke_binary_scaled_requested || !p->becke_binary_scaled_automatic) return 31;
+  delete p;
+  for(size_t atoms : {size_t(0),size_t(32),size_t(48),size_t(95),size_t(96),size_t(128),size_t(129)})
+   for(bool phase:{false,true}) for(bool center:{false,true}) for(bool primitive:{false,true})
+    for(bool adjusted:{false,true}) for(bool requested:{false,true}) for(bool automatic:{false,true}) {
+      Owner owner;generativeqc_grid_adjoint::CenterPair pair{};
+      owner.atoms=atoms;owner.phased_storage.active=phase;
+      owner.center_pairs=center?&pair:nullptr;owner.becke_primitive=primitive;
+      owner.adjusted_partition=adjusted;owner.becke_binary_scaled_requested=requested;
+      owner.becke_binary_scaled_automatic=automatic;
+      const bool expected=atoms>0 && atoms<=128 && phase && center && !primitive &&
+                          !adjusted && requested && (!automatic || atoms>=96);
+      if(owner.binary_scaled_becke_active()!=expected) return 32;
+    }
+  {
+    Owner owner;
+    owner.max_page_primitive_work=17;
+    owner.check_page_primitive_work(17);
+    try { owner.check_page_primitive_work(18); return 25; }
+    catch(const std::invalid_argument&) {}
+    owner.primitive_count=std::numeric_limits<uint64_t>::max()-1;
+    owner.count_primitive_work(1);
+    try { owner.count_primitive_work(1); return 26; }
+    catch(const std::invalid_argument&) {}
+  }
   return 0;
 }
 """
     )
     executable = tmp_path / "create"
+    native_cxx.build_executable([source], executable, compile_args=["-std=c++17"])
     subprocess.run(
-        [compiler, "-std=c++17", str(source), "-o", str(executable)],
-        check=True,
-        timeout=30,
+        [str(executable)], check=True, capture_output=True, text=True, timeout=10
     )
-    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    assert_native_create_contract(
+        (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text(),
+        tmp_path,
+        required_native_cxx,
+    )
+
+
+def test_native_create_guard_rejects_out_of_budget_write(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    """Compile the owner, then require an actual guard failure, not a build error."""
+    header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    old = "p->becke_zero_seed_points, 0, sizeof(unsigned long long)"
+    assert header.count(old) == 1
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        assert_native_create_contract(
+            header.replace(old, "p->becke_zero_seed_points, 0, 264"),
+            tmp_path,
+            required_native_cxx,
+        )
+    assert failure.value.returncode == -6
+    assert "stationary host arena canary overwritten" in failure.value.stderr
 
 
 def test_optional_lanes_preserve_existing_native_admission_budget() -> None:
@@ -435,14 +559,13 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
     assert minimum + allowance - plan.allocation_bytes == allowance
 
 
-def test_native_pair_reserve_matches_actual_native_admission(tmp_path: Path) -> None:
+def test_native_pair_reserve_matches_actual_native_admission(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
     from generativeqc_compiler.method.stationary_resources import (
         stationary_native_pair_reserve,
     )
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     native = (ROOT / "src/scf/cuda/one_electron_gradient_bridge.cu").read_text()
     pair = native.split(
         "generativeqc_status execute_cuda_stationary_one_electron_pair(", 1
@@ -481,10 +604,8 @@ def test_native_pair_reserve_matches_actual_native_admission(tmp_path: Path) -> 
         + "\n}\n"
     )
     executable = tmp_path / "native-reserve"
-    subprocess.run(
-        [compiler, "-std=c++17", str(source), "-o", str(executable)],
-        check=True,
-        timeout=30,
+    required_native_cxx.build_executable(
+        [source], executable, compile_args=["-std=c++17"]
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

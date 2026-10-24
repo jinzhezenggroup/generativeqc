@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "dft/ao_grid.hpp"
@@ -10,6 +11,8 @@
 #include "dft/grid.hpp"
 
 namespace generativeqc::dft {
+
+enum class SemilocalFamily : std::uint32_t;
 
 /** LDA tail-v1: exact positive-density formula, analytic zero-density limit,
  * and explicit rejection of negative or non-finite density. No clipping or
@@ -186,11 +189,41 @@ struct SemilocalPointProgram {
   SemilocalPointEvaluator evaluate{};
 };
 
+/** Restricted coefficients are derivatives with respect to original total
+ * density, total Cartesian gradient and total tau. No spin folding or worker
+ * normalization is implied by this ABI. kinetic retains the native vtau/2
+ * weak-form convention. */
+struct RestrictedSemilocalPointValue {
+  double energy{};
+  double rho{};
+  double gradient[3]{};
+  double kinetic{};
+};
+
+using RestrictedSemilocalPointEvaluator =
+    RestrictedSemilocalPointValue (*)(double rho, const double (&gradient)[3], double tau);
+
+/** A distinct restricted descriptor preserves the existing polarized ABI and
+ * links to an explicit total-density consumer rather than silently invoking a
+ * legacy polarized callback. The descriptor alone grants no qualification. */
+struct RestrictedSemilocalPointProgram {
+  const char* identifier{};
+  const char* expression_identity{};
+  unsigned ingredient_mask{};
+  unsigned domain_version{};
+  RestrictedSemilocalPointEvaluator evaluate{};
+};
+
 void validate_semilocal_point_program(const SemilocalPointProgram& program);
+void validate_semilocal_point_program(const RestrictedSemilocalPointProgram& program);
 
 XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
                                    const std::vector<double>& density,
                                    const SemilocalPointProgram& program,
+                                   std::size_t tile_points = 256, XcDensitySource source = {});
+XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
+                                   const std::vector<double>& density,
+                                   const RestrictedSemilocalPointProgram& program,
                                    std::size_t tile_points = 256, XcDensitySource source = {});
 SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid& grid,
                                        const std::vector<double>& alpha_density,
@@ -289,6 +322,21 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
     const AoBasis& basis, const MolecularGrid& grid,
     const std::vector<std::vector<double>>& density, std::size_t tile_points,
     double exchange_scale = 1.0, double correlation_scale = 1.0);
+
+/** The same analytic moving-grid GGA AO/Becke pullback with the canonical
+ * generated B3LYP semilocal point response used by the prepared CPU SCF. */
+PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points);
+
+/** Dispatch the mathematically bound stationary XC geometry source by the
+ * generated native family code. Missing or unqualified implementations reject
+ * explicitly; the prepared calculation independently admits scientific force
+ * capabilities and authenticates its final-state token. */
+PbeStationaryXcDerivative stationary_curated_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    SemilocalFamily family, double exchange_scale, double correlation_scale);
 
 }  // namespace generativeqc::dft
 

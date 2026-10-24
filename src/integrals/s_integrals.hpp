@@ -131,6 +131,27 @@ std::array<double, 12> contract_weighted_eri_shell_derivative(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
     std::span<const double> weights);
 
+enum class WeightedEriDerivativeExecution { Reference, PackagedCpu };
+
+/** Build-time capability only. Packaged execution is restricted to s/p/d and
+ * never initiates JIT or falls back silently to the reference recurrence. */
+bool has_packaged_cpu_eri_shell_derivatives() noexcept;
+
+/** Contract several independent weights through one shell primitive traversal.
+ * Results retain input-channel and independent shell-slot ordering. Reuses the
+ * default reference recurrence's single-channel accumulation order without molecular AO-rank-four
+ * or coordinate derivative storage. Empty channels are rejected. All-zero AO
+ * tuples skip recurrence work. The optional actual primitive evaluation count
+ * is published only on success, including zero for all-zero channels. Explicit
+ * packaged execution uses the shared generated primitive kernels, with restored
+ * shell/axis slots and the same public-AO normalization and channel order.
+ */
+std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
+    const core::System& system, const std::array<std::size_t, 4>& shell_indices,
+    std::span<const std::span<const double>> weights,
+    std::uint64_t* primitive_evaluations = nullptr,
+    WeightedEriDerivativeExecution execution = WeightedEriDerivativeExecution::Reference);
+
 /** Directly contract arbitrary public-AO overlap and hcore weights.
  *
  * The coordinate-sized result contains positive energy derivatives. When
@@ -157,11 +178,13 @@ void cross_overlap(const core::System& target, const core::System& source,
  * Orbital and auxiliary systems must describe the same atoms and geometry but
  * may use independent Cartesian or real-spherical shell sets. This host-only
  * implementation remains the independent correctness oracle for CUDA DF
- * integral-generation kernels.
+ * integral-generation kernels. omega=0 selects 1/r; positive finite omega
+ * selects erf(omega*r)/r for BOTH the metric and the three-center tensor.
  */
 DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
                                                            const core::System& auxiliary_system,
-                                                           bool include_derivatives = true);
+                                                           bool include_derivatives = true,
+                                                           double omega = 0.0);
 
 /** Contract public-basis DF derivative weights directly into nuclear coordinates.
  *
@@ -174,6 +197,12 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> metric_weights, std::span<const double> three_center_weights);
+
+/** Operator-matched weighted response; omega=0 retains the Coulomb contract. */
+std::vector<double> contract_weighted_range_density_fitting_derivative(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    std::span<const double> metric_weights, std::span<const double> three_center_weights,
+    double omega);
 
 /** Directly contract raw density-fitting A/M weights with nuclear derivatives.
  *
@@ -188,7 +217,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> three_center_weights, std::span<const double> metric_weights,
-    std::size_t maximum_bytes);
+    std::size_t maximum_bytes, double omega = 0.0);
 
 /**
  * Transform Cartesian density-fitting tensors into the public AO

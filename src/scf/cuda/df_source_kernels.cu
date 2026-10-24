@@ -54,6 +54,19 @@ __device__ auto contracted_df(const DeviceBatch& batch, std::int32_t system, std
     factors[1] = {basis, base + second};
     factors[2] = {basis, base + auxiliary};
   }
+  if (batch.df_range_omega > 0.0) {
+    if constexpr (Derivative) {
+      const auto result =
+          products::contract<generated_df_policy::LongRangeDerivative, kMaximumAoExpansionTerms>(
+              factors, batch.positions, lane, lanes, {batch.df_range_omega});
+      return products::coordinate(factors, result, coordinate);
+    } else {
+      const auto value =
+          products::contract<generated_df_policy::LongRangeValue, kMaximumAoExpansionTerms>(
+              factors, batch.positions, lane, lanes, {batch.df_range_omega});
+      return typename ValuePolicy::Accumulator(value);
+    }
+  }
   if constexpr (Derivative) {
     bool affected = false;
     for (unsigned slot = 0; slot < rank; ++slot)
@@ -146,7 +159,7 @@ __global__ void build_cuda_df_transformed_tile_kernel(
     const DfPublicAoExpansion* orbital_to_cartesian,
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
     bool apply_metric_transform, double* output, unsigned mapping = 0U,
-    double* low_output = nullptr) {
+    double* low_output = nullptr, bool packed_pairs = false) {
   using Value = std::conditional_t<Compensated, generated_df::fp64_expansion::Wide, double>;
   const unsigned lanes = !Derivative && mapping == 2U ? 32U : 1U;
   const unsigned lane = threadIdx.x % lanes;
@@ -159,8 +172,16 @@ __global__ void build_cuda_df_transformed_tile_kernel(
       pair_begin + (components_contiguous ? element % pair_count : element / auxiliary_count);
   const std::size_t auxiliary =
       auxiliary_begin + (components_contiguous ? element / pair_count : element % auxiliary_count);
-  const std::size_t public_first = pair / public_nbf;
-  const std::size_t public_second = pair % public_nbf;
+  std::size_t public_first = pair / public_nbf;
+  std::size_t public_second = pair % public_nbf;
+  if (packed_pairs) {
+    // This is a value-layout index, independent of Direct shell/task queues.
+    // Correct the floating inverse at row boundaries before using the index.
+    public_first = static_cast<std::size_t>(0.5 * (sqrt(8.0 * double(pair) + 1.0) - 1.0));
+    while ((public_first + 1) * (public_first + 2) / 2 <= pair) ++public_first;
+    while (public_first * (public_first + 1) / 2 > pair) --public_first;
+    public_second = pair - public_first * (public_first + 1) / 2;
+  }
   // The source stores transforms for every system contiguously.  A fleet can
   // legitimately mix different shell layouts while keeping the same public
   // AO dimensions, so never reuse system zero's transform for later items.
@@ -357,7 +378,7 @@ void launch_build_cuda_df_transformed_tile_kernel(
     const DfPublicAoExpansion* orbital_to_cartesian,
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
     bool apply_metric_transform, double* output, unsigned mapping, unsigned math,
-    double* low_output) {
+    double* low_output, bool packed_pairs) {
   if (low_output) {
     build_cuda_df_transformed_tile_kernel<false, 0, true><<<grid, block, shared_bytes, stream>>>(
         batch, cartesian_orbital_count, cartesian_auxiliary_count, public_nbf, public_naux,
@@ -375,7 +396,7 @@ void launch_build_cuda_df_transformed_tile_kernel(
           batch, cartesian_orbital_count, cartesian_auxiliary_count, public_nbf, public_naux,
           dummy_index, system, pair_begin, pair_count, auxiliary_begin, auxiliary_count,
           derivative_coordinate, orbital_to_cartesian, auxiliary_to_cartesian, inverse_square_root,
-          apply_metric_transform, output, mapping);
+          apply_metric_transform, output, mapping, nullptr, packed_pairs);
     };
     if (math == 1)
       launch.template operator()<1>();

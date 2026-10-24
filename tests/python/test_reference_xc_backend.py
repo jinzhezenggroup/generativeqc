@@ -1,11 +1,10 @@
 """Reference provenance reads runtime flags, not installation/package guesses."""
 
-import inspect
 from types import SimpleNamespace
 
 import pytest
 
-from benchmarks.readme_omol25 import main, reference_xc_backend
+from benchmarks.readme_omol25 import reference_endpoint_seconds, reference_xc_backend
 
 
 @pytest.mark.parametrize(
@@ -49,11 +48,34 @@ def test_missing_reference_interface_does_not_claim_cpu_fallback() -> None:
     assert result["unavailable_reason"].startswith("AttributeError:")
 
 
-def test_xc_probe_runs_after_the_complete_reference_endpoint_timer() -> None:
-    source = inspect.getsource(main)
-    begin = source.index("def execute_reference(")
-    end = source.index("baseline = execute_reference(", begin)
-    endpoint = source[begin:end]
-    assert endpoint.index("seconds = perf_counter() - started") < endpoint.index(
-        "reference_xc_backend(engine)"
+def test_reference_clock_waits_for_device_before_stopping() -> None:
+    events: list[str] = []
+
+    def synchronize() -> None:
+        events.append("synchronized")
+
+    def clock() -> float:
+        events.append("clock-read")
+        return 13.5
+
+    assert (
+        reference_endpoint_seconds(
+            started=4.0,
+            synchronize=synchronize,
+            clock=clock,
+        )
+        == 9.5
     )
+    assert events == ["synchronized", "clock-read"]
+
+
+def test_reference_clock_does_not_report_failed_synchronization() -> None:
+    def synchronize() -> None:
+        raise RuntimeError("device synchronization failed")
+
+    with pytest.raises(RuntimeError, match="device synchronization failed"):
+        reference_endpoint_seconds(
+            started=4.0,
+            synchronize=synchronize,
+            clock=lambda: pytest.fail("clock read before completed work"),
+        )

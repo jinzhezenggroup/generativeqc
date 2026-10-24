@@ -20,6 +20,7 @@ struct FockExecutionVariant {
   bool one_electron_value_override{}, one_electron_value_capability_fallback{};
   DfPairStorageRequest df_pair_storage_request{DfPairStorageRequest::Automatic};
   DfPairStorage df_pair_storage{DfPairStorage::Dense};
+  bool df_md_coulomb_requested{}, df_raw_coulomb_requested{};
   bool operator==(const FockExecutionVariant&) const = default;
 };
 
@@ -71,12 +72,23 @@ class PreparedFockPlan {
                    unsigned retained_direct_derivative_order = 0,
                    unsigned retained_fitted_derivative_order = 0,
                    FockOccupiedProjectionReservation projection_reservation = {});
+  /** Own explicit differentiable integral values for an unscreened HF solve.
+   * CUDA uses a retained dense integral provider; CPU uses the exact source view.
+   * No integral or force provider is evaluated during construction. Such a plan
+   * cannot match a geometry-only cache lookup: its tensors are part of its
+   * scientific identity, and its caller owns their differentiated provenance. */
+  PreparedFockPlan(const core::System& orbital, integrals::IntegralData values,
+                   FockSpin spin = FockSpin::Restricted, FockBackend backend = FockBackend::Cpu,
+                   int device = 0, std::size_t device_budget = 0);
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
 
   const ResolvedFockBuild& strategy() const noexcept;
   const core::System& system() const noexcept;
+  /** Actual immutable normalized auxiliary topology, or null for exact owners.
+   * Numerical consumers borrow device basis sources, not host reconstructions. */
+  const core::System* auxiliary_system() const noexcept;
   const integrals::IntegralData& one_electron() const noexcept;
   /** Materialize deferred CUDA H'/S' only for the exact host force fallback.
    * The ordinary stationary CUDA consumer contracts D/W directly and does not
@@ -112,7 +124,9 @@ class PreparedFockPlan {
   /** Borrow the fitted CUDA source on its own stream. Null for CPU/exact
    * sources; the immutable preparation and memory budget remain owned here. */
   CudaDensityFittingJkPlan* cuda_fitted_source() const noexcept;
-  /** Exact normalized scientific identity, independent of execution budget. */
+  /** Exact normalized scientific identity, independent of execution budget.
+   * Explicit-integral plans require their tensor provenance too and never match
+   * a system-only lookup. */
   bool matches_system(const core::System& system) const noexcept;
   DirectJkMatrices build(const std::vector<double>& density,
                          const std::vector<double>& beta = {}) const;

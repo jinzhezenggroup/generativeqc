@@ -78,7 +78,7 @@ The smaller endpoint gain is expected: current profiling places the remaining
 GenerativeQC/GPU4PySCF force-kernel gap across many exact shell classes rather than
 inside `dppp` alone. The raw evidence is the
 [isolated gate](../../../../benchmarks/results/rtx5090-26ef747-dppp-cooperative-rys4-isolated.json),
-[384-AO endpoint](../../../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json),
+[384-AO endpoint](../../../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json.gz),
 and [kernel summary](../../../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-kernel-summary.csv).
 
 The fixed-root component-lane emitter is now generalized across the measured
@@ -97,7 +97,7 @@ keeps `pppp` on subset/Wick. The accepted 384-AO median falls from 3.298 to
 energy and force disagreements of `1.68e-11 Eh` and `3.15e-8 Eh/bohr`. The
 remaining endpoint is `0.655x` GPU4PySCF, so this is an incremental force
 improvement rather than a claim that the large-system gap is closed. Raw
-evidence is retained in the [accepted endpoint](../../../../benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json)
+evidence is retained in the [accepted endpoint](../../../../benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json.gz)
 and [candidate kernel summary](../../../../benchmarks/results/rtx5090-259c256-384ao-cooperative-rys3-kernel-summary_cuda_gpu_kern_sum.csv).
 
 The force-only density contraction now algebraically collapses the generic

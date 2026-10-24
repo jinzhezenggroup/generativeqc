@@ -1,5 +1,6 @@
 """Generated native/public registry for split global hybrids."""
 
+import json
 from fractions import Fraction
 from pathlib import Path
 
@@ -15,10 +16,13 @@ from generativeqc.ks import (
 from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 from tools.generate_xc_split_hybrid_registry import (
     GGA_CODE_BASE,
     MGGA_CODE_BASE,
+    _manifest_cuda_fp64_local_ao,
+    emit_dft_point_consumers,
     emit_python_registry,
     emit_registry,
     registry_entries,
@@ -46,6 +50,10 @@ def test_split_hybrid_registry_uses_stable_libxc_encoded_codes() -> None:
             )
             == fraction
         )
+    assert entries["M06-2X"]["cuda_df_energy_force"] is True
+    assert entries["MN15"]["cuda_df_energy_force"] is False
+    assert entries["M06-2X"]["cuda_fp64_local_ao"] is True
+    assert entries["MN15"]["cuda_fp64_local_ao"] is False
     assert GGA_CODE_BASE != MGGA_CODE_BASE
 
 
@@ -64,6 +72,7 @@ def test_split_hybrid_registry_is_host_safe_and_device_generated() -> None:
         "split_hybrid_fast_path_capabilities",
         "CudaXcCapability::QualificationRequired",
         "split_hybrid_composition",
+        "split_hybrid_cuda_df_energy_force",
         "return {27U, 50U, true};",
         "return {11U, 25U, true};",
         "#if defined(__CUDACC__)",
@@ -99,6 +108,24 @@ def test_split_hybrid_fast_paths_follow_program_class_not_identifier() -> None:
 def test_split_hybrid_python_registry_is_fresh() -> None:
     committed = ROOT / "python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     assert emit_python_registry() == committed.read_text(encoding="utf-8")
+
+
+def test_split_hybrid_dft_point_bindings_share_registry_authority() -> None:
+    """Launch bindings remain fresh and contain no XC scientific dependencies."""
+    from generativeqc_compiler.dft._generated_split_hybrid_consumers import (
+        SPLIT_HYBRID_POINT_CONSUMERS,
+    )
+
+    committed = (
+        ROOT / "python/generativeqc_compiler/dft/_generated_split_hybrid_consumers.py"
+    )
+    assert emit_dft_point_consumers() == committed.read_text(encoding="utf-8")
+    assert SPLIT_HYBRIDS["M06-2X"]["cuda_df_energy_force"] is True
+    assert SPLIT_HYBRIDS["MN15"]["cuda_df_energy_force"] is False
+    assert SPLIT_HYBRID_POINT_CONSUMERS == tuple(
+        (record["functional_code"], {"gga": 4, "mgga": 5}[record["family"]])
+        for record in SPLIT_HYBRIDS.values()
+    )
 
 
 @pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
@@ -142,3 +169,24 @@ def test_generated_split_hybrid_records_remain_immutable_mappings() -> None:
     assert tuple(dict(record)["components"]) == record["components"]
     with pytest.raises(TypeError):
         record["functional_code"] = 0
+
+
+@pytest.mark.parametrize("selected", ["M06-2X", ["unknown"], ["M06-2X", "M06-2X"], [1]])
+def test_local_ao_qualification_rejects_invalid_registry_selection(
+    tmp_path: Path, selected: object
+) -> None:
+    """A malformed manifest cannot silently grant indexed execution."""
+    payload = json.loads((ROOT / "manifests/cuda_split_hybrids.json").read_text())
+    payload["cuda_fp64_local_ao"] = selected
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(MapleImportError, match="unique registered methods"):
+        _manifest_cuda_fp64_local_ao(path)
+
+
+def test_local_ao_qualification_is_independent_of_df(tmp_path: Path) -> None:
+    payload = json.loads((ROOT / "manifests/cuda_split_hybrids.json").read_text())
+    del payload["cuda_fp64_local_ao"]
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload))
+    assert not _manifest_cuda_fp64_local_ao(path)

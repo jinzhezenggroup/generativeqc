@@ -18,6 +18,7 @@ from generativeqc_compiler.dft.cuda import GridTaskView
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_cuda import _STATIONARY_SCIENTIFIC_KERNELS
 from generativeqc_compiler.xc.geometry_cuda import (
+    _emit_mixed_point,
     _emit_restricted_point_capability,
     _emit_stationary_point,
 )
@@ -34,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[2]
     [
         ("PBE0", "unpolarized", True),
         ("PBE0", "polarized", False),
-        ("PBE", "unpolarized", False),
+        ("PBE", "unpolarized", True),
     ],
 )
 def test_capability_requires_exact_components_not_a_functional_label(
@@ -45,7 +46,9 @@ def test_capability_requires_exact_components_not_a_functional_label(
     assert (
         f"stationary_pbe0_restricted_point_capable = {str(capable).lower()}" in source
     )
-    assert ("evaluate_pbe0_restricted_bound" in source) == capable
+    assert ("evaluate_pbe0_restricted_bound" in source) == (
+        method == "PBE0" and spin == "unpolarized"
+    )
     renamed = replace(semilocal, identifier="not-a-named-functional")
     assert source == _emit_restricted_point_capability(1, renamed)
     half_exchange = replace(
@@ -69,6 +72,7 @@ def test_restricted_point_policy_defaults_on_with_explicit_opt_out(
     from generativeqc import _stationary_cuda as runtime
 
     variable = "GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT"
+    monkeypatch.delenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", raising=False)
     monkeypatch.delenv(variable, raising=False)
     assert runtime._resolve_restricted_point_policy()
     monkeypatch.setenv(variable, "on")
@@ -82,6 +86,22 @@ def test_restricted_point_policy_defaults_on_with_explicit_opt_out(
         runtime._resolve_restricted_point_policy()
     with pytest.raises(TypeError, match="boolean"):
         runtime._resolve_restricted_point_policy(1)
+
+
+def test_generic_restricted_point_policy_overrides_legacy_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "off")
+    assert not runtime._resolve_restricted_point_policy()
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "off")
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "on")
+    assert runtime._resolve_restricted_point_policy()
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "yes")
+    with pytest.raises(ValueError, match="'off' or 'on'"):
+        runtime._resolve_restricted_point_policy()
 
 
 @pytest.mark.parametrize(
@@ -188,6 +208,12 @@ def test_native_consumer_rejects_stale_or_unknown_proofs(
             "int stationary_geometry_molecular_resident_weights_enqueue_v2(",
         )
     )
+    native = (
+        "namespace generativeqc_stationary_cuda {\n"
+        + _block(header, "bool stationary_grid_span(")
+        + "\n}\n"
+        + native
+    )
     native, count = re.subn(
         r"geometry_reduce\s*<<<.*?>>>\(.*?\);", "++reductions;", native, flags=re.DOTALL
     )
@@ -196,6 +222,93 @@ def test_native_consumer_rejects_stale_or_unknown_proofs(
     source.write_text(_NATIVE_PREFIX + native + _NATIVE_DRIVER)
     executable = native_cxx.build_executable(
         [source], tmp_path / "binding", compile_args=["-std=c++17", "-O2"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+@pytest.mark.parametrize("functional_code", (0, 917))
+@pytest.mark.parametrize("coefficient_count", (1, 4, 5))
+def test_emitted_point_inputs_follow_layout_not_functional_code(
+    tmp_path: Path,
+    native_cxx: NativeCxx,
+    functional_code: int,
+    coefficient_count: int,
+) -> None:
+    """Execute the real feature join with opaque rho/GGA/meta-GGA selectors."""
+    setup = _block(
+        _STATIONARY_SCIENTIFIC_KERNELS, "__device__ bool geometry_point_setup("
+    )
+    source = tmp_path / "ingredient-point.cpp"
+    source.write_text(
+        _POINT_PREFIX.replace(
+            "stationary_functional=1,stationary_coefficients=4",
+            f"stationary_functional={functional_code},stationary_coefficients={coefficient_count}",
+        )
+        + r"""
+#include <cassert>
+#include <limits>
+#include <type_traits>
+constexpr bool stationary_restricted_point_capable = true;
+struct StationaryPointValue {
+  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};
+  bool valid{true};
+};
+StationaryPointValue stationary_evaluate_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  StationaryPointValue output;
+  output.energy = 7;
+  for (size_t spin = 0; spin < 2; ++spin) {
+    output.rho[spin] = rho[spin];
+    output.kinetic[spin] = tau[spin];
+    for (size_t axis = 0; axis < 3; ++axis)
+      output.gradient[spin][axis] = gradient[spin][axis];
+  }
+  return output;
+}
+StationaryPointValue stationary_evaluate_restricted_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  return stationary_evaluate_point(rho, gradient, tau);
+}
+StationaryPointValue stationary_evaluate_point_fp32(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  return stationary_evaluate_point(rho, gradient, tau);
+}
+"""
+        + "template <bool restricted_point = false, class Arithmetic = double>\n"
+        + setup
+        + r"""
+int main() {
+  double features[20];
+  for (size_t index = 0; index < 20; ++index)
+    features[index] = double(index + 1);
+  for (size_t spin = 0; spin < 2; ++spin) {
+    if (stationary_coefficients == 1)
+      for (size_t axis = 0; axis < 3; ++axis)
+        features[(5 * spin + axis + 1) * 2 + 1] = std::numeric_limits<double>::quiet_NaN();
+    if (stationary_coefficients != 5)
+      features[(5 * spin + 4) * 2 + 1] = std::numeric_limits<double>::quiet_NaN();
+  }
+  generativeqc::dft::GridTaskView view{2, features, nullptr};
+  double raw[2]{3, 5}, gradient[6]{}, seed{};
+  int error{};
+  StationaryPointValue value;
+  assert(geometry_point_setup(view, 1, 0, 1, raw, nullptr, 0, 0,
+                              gradient, value, seed, &error));
+  assert(error == 0 && seed == 35);
+  for (size_t spin = 0; spin < 2; ++spin) {
+    assert(value.rho[spin] == double(10 * spin + 2));
+    for (size_t axis = 0; axis < 3; ++axis)
+      assert(value.gradient[spin][axis] ==
+             (stationary_coefficients > 1 ? double(10 * spin + 2 * axis + 4) : 0));
+    assert(value.kinetic[spin] == (stationary_coefficients == 5 ? double(10 * spin + 10) : 0));
+  }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [source],
+        tmp_path / "ingredient-point",
+        compile_args=["-std=c++17", "-O2", "-I", str(ROOT / "src")],
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
@@ -214,9 +327,11 @@ def test_emitted_bound_point_preserves_all_independent_references(
     source = tmp_path / "point.cpp"
     source.write_text(
         _POINT_PREFIX
+        + '#include "dft/xc_point_mixed.hpp"\n'
         + _emit_stationary_point(1, semilocal=semilocal)
         + _emit_restricted_point_capability(1, semilocal)
-        + "template <bool restricted_point=false>\n"
+        + _emit_mixed_point(1, semilocal)
+        + "template <bool restricted_point=false, class Arithmetic=double>\n"
         + setup
         + "\ntemplate <bool restricted_point=false>\n"
         + kernel
@@ -241,7 +356,6 @@ def test_emitted_bound_point_preserves_all_independent_references(
     library.emitted_point.argtypes = [ct.c_bool, pointer, pointer]
     fixture = np.loadtxt(ROOT / "tests/data/xc/pbe0_restricted_point.tsv")
     assert fixture.shape == (87, 17)
-    failures = []
     for index, row in enumerate(fixture):
         inputs = np.ascontiguousarray(row[:8])
         expected = row[8:]
@@ -262,9 +376,8 @@ def test_emitted_bound_point_preserves_all_independent_references(
         tolerance = 5e-10 * np.abs(expected) + 1e-322
         assert np.all(np.isfinite(bound))
         assert np.all(np.abs(bound - expected) <= tolerance), index
-        if not np.all(np.abs(general - expected) <= tolerance):
-            failures.append(index)
-    assert failures == [8, 9, 65, 66, 67, 68]
+        assert np.all(np.isfinite(general))
+        assert np.all(np.abs(general - expected) <= tolerance), index
 
 
 _NATIVE_PREFIX = r"""
@@ -285,7 +398,7 @@ int launches,reductions; bool proof_selected;
 namespace generativeqc_stationary_cuda {
 constexpr size_t stationary_ao_jets=10,stationary_xc_source=0;
 struct Owner {
-  size_t aos=4,atoms=12,points=8,geometry_lanes=8,geometry_peak_lanes{};
+  size_t aos=4,atoms=12,points=8,geometry_lanes=8,geometry_peak_lanes{},molecular_points{};
   bool geometry_pending{};
   int geometry_stream{};
   double *centers{},*partial{},*scratch{},*sources{};
@@ -294,7 +407,7 @@ struct Owner {
   struct { int* error{}; } context;
   size_t launches{},point_count{},pair_visits{},becke_pair_state_evaluations{},
       center_distance_evaluations{},geometry_batches{};
-  bool retains_becke_pair_state() const { return false; }
+  bool retains_becke_pair_state(bool = false) const { return false; }
 };
 template<class Function>
 int guarded(Owner*,char*,size_t,Function function) {
@@ -304,7 +417,7 @@ bool valid_geometry_ao_map(const generativeqc::dft::GridTaskView&,size_t) { retu
 void check(Owner&) {}
 void launch_geometry(Owner&,int,generativeqc::dft::GridTaskView,const double*,
     const int*,const int*,size_t,size_t,const double*,size_t,const double*,const double*,
-    const double*,size_t,size_t,size_t,double*,double*,const void*,int*,bool bound) {
+    const double*,size_t,size_t,size_t,double*,double*,const void*,int*,bool bound,bool=false) {
   ++launches; proof_selected=bound;
 }
 void cuda_check(int) {}
@@ -316,7 +429,7 @@ _NATIVE_DRIVER = r"""
 int main() {
   using namespace generativeqc_stationary_cuda;
   double value{}; int error{};
-  for(int mode=0;mode<7;++mode) {
+  for(int mode=0;mode<11;++mode) {
     Owner owner; owner.context.error=&error;
     generativeqc::dft::GridTaskView view;
     view.features=view.ao=view.points=&value;
@@ -325,15 +438,20 @@ int main() {
     const uint64_t flags=mode==3?2:mode==1?0:1;
     if(mode==4) view.features=nullptr;
     if(mode==5) view.npoint=0;
+    size_t offset=0,per_atom=4;
+    if(mode==7) { owner.molecular_points=2; per_atom=0; }
+    if(mode==8) per_atom=0;
+    if(mode==9) offset=48;
+    if(mode==10) per_atom=SIZE_MAX;
     const int status=mode==6
         ?stationary_geometry_molecular_resident_weights_enqueue(
-            &owner,&view,&value,0,4,&value,&value,nullptr,0)
+            &owner,&view,&value,offset,per_atom,&value,&value,nullptr,0)
         :stationary_geometry_molecular_resident_weights_enqueue_v2(
-            &owner,&view,&value,0,4,&value,&value,generation,flags,nullptr,0);
-    assert(status==int(mode==2 || mode==3 || mode==4));
-    const bool submitted=mode==0 || mode==1 || mode==6;
+            &owner,&view,&value,offset,per_atom,&value,&value,generation,flags,nullptr,0);
+    assert(status==int(mode==2 || mode==3 || mode==4 || mode>=8));
+    const bool submitted=mode==0 || mode==1 || mode==6 || mode==7;
     assert(launches==int(submitted) && reductions==int(submitted));
-    if(submitted) assert(proof_selected==(mode==0));
+    if(submitted) assert(proof_selected==(mode==0 || mode==7));
   }
 }
 """

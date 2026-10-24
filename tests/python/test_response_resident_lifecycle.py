@@ -23,6 +23,8 @@ def _owner(owner_type: typing.Any = CudaResidentRHFResponse) -> typing.Any:
     )
     owner._handle = ct.c_void_p(123)
     owner._closed = False
+    owner._backend = SimpleNamespace(_ensure_open=lambda: None)
+    owner.problem = SimpleNamespace(compatibility_identity="synthetic")
     owner._free = [0, 1]
     owner._live = set()
     owner._retained = set()
@@ -154,7 +156,7 @@ def test_solver_releases_temporaries_even_when_a_profiler_retains_them(
         return krylov._workspace_failure(1, 1, 1)[0]
 
     monkeypatch.setattr(krylov, "_solve_single", retaining_solver)
-    operator = SimpleNamespace(dimension=1, _krylov_engine=owner)
+    operator = SimpleNamespace(dimension=1, _krylov_engine=owner, problem=owner.problem)
     if raises:
         with pytest.raises(RuntimeError, match="retained solver frame"):
             krylov.solve(operator, np.ones(1))
@@ -163,4 +165,36 @@ def test_solver_releases_temporaries_even_when_a_profiler_retains_them(
     assert retained
     assert not owner._live
     assert retained[0]._released
+
+
+@pytest.mark.parametrize("strategy", ["sequential", "blocked", "recycled"])
+@pytest.mark.parametrize(
+    "owner_type", [CudaResidentRHFResponse, CudaResidentUHFResponse]
+)
+def test_empty_request_validates_real_owner_protocol_without_native_work(
+    strategy: str,
+    owner_type: typing.Any,
+) -> None:
+    import numpy as np
+
+    from tools.generativeqc_response import ResponseCompatibilityError, krylov
+
+    owner, _ = _owner(owner_type)
+    owner.dimension = 1
+    problem = SimpleNamespace(
+        compatibility_identity="synthetic", validate_rhs=lambda values: values
+    )
+    operator = SimpleNamespace(dimension=1, _krylov_engine=owner, problem=problem)
+    empty = np.empty((1, 0))
+    result = krylov.solve_many(operator, empty, strategy=strategy)
+    assert result.solution.shape == (1, 0)
+    assert not owner._live
+    assert not owner._retained
+    problem.compatibility_identity = "changed-generation"
+    with pytest.raises(ResponseCompatibilityError, match="mismatch"):
+        krylov.solve_many(operator, empty, strategy=strategy)
+    problem.compatibility_identity = "synthetic"
+    owner.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        krylov.solve_many(operator, empty, strategy=strategy)
     owner.close()

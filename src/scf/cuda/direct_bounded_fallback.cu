@@ -8,6 +8,7 @@
 #include <type_traits>
 
 #include "generated_derivative_cuda_shell_aot.cuh"
+#include "runtime/cuda_component_trace.hpp"
 #include "scf/cuda/direct_angular_force.hpp"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
@@ -15,6 +16,7 @@
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
 #include "scf/cuda/direct_force_class_domains.hpp"
+#include "scf/cuda/direct_force_diagnostic.hpp"
 #include "scf/cuda/direct_force_execution.cuh"
 #include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
@@ -99,7 +101,8 @@ __host__ __device__ bool bounded_direct_angular_owner(const DeviceBatch& batch,
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
           int FixedRadialOperator = -1, bool PairDerivatives = false,
-          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
+          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false,
+          unsigned MaximumAngularOrder = 12>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -113,6 +116,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only,
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
+  // A reduced call graph is admitted only by a proved host basis bound and a
+  // fixed LR operator. It changes neither the queue nor its angular ownership.
+  static_assert(MaximumAngularOrder == 12 ||
+                (MaximumAngularOrder == 8 && Force &&
+                 FixedRadialOperator == static_cast<int>(DirectRangeOperator::Long)));
   static_assert(!PairDerivatives || (Force && (FixedAngularOrder < 0 || FixedAngularOrder == 8)));
   static_assert(!CooperativeDerivatives ||
                 (Force && !PairDerivatives && (FixedAngularOrder == 6 || FixedAngularOrder == 7)));
@@ -148,6 +156,10 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     }
     __syncthreads();
     if (block_quartet >= total) return;
+    auto* traversal = Force && batch.direct_force_work
+                          ? &batch.direct_force_work->traversal[FixedAngularOrder == 8 ? 2 : 0]
+                          : nullptr;
+    if (traversal && threadIdx.x == 0U) atomicAdd(&traversal->pages, 1ULL);
 
     const std::size_t packed_block_quartet = static_cast<std::size_t>(block_quartet) / pages;
     std::int32_t system = 0;
@@ -169,14 +181,19 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       first_block += begin;
       second_block += begin;
     }
-    if (active != nullptr && active[system] == 0) continue;
+    if (active != nullptr && active[system] == 0) {
+      if (traversal && threadIdx.x == 0U) atomicAdd(&traversal->inactive_pages, 1ULL);
+      continue;
+    }
     const std::size_t system_block_begin =
         static_cast<std::size_t>(batch.system_shell_pair_block_offsets[system]);
     const auto first_block_local = first_block - system_block_begin;
     const auto second_block_local = second_block - system_block_begin;
     if (!bounded_direct_block_pair_survives_screening<Purpose>(
             first_block, second_block, system, screening_tolerance, shell_pair_block_bounds,
-            system_density_bounds)) {
+            system_density_bounds, batch.direct_fp32_block_bounds,
+            batch.direct_fp32_density_bounds)) {
+      if (traversal && threadIdx.x == 0U) atomicAdd(&traversal->block_rejected_pages, 1ULL);
       continue;
     }
 
@@ -224,10 +241,21 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         // Sorting changes scheduling, never the canonical scientific task orientation.
         const std::size_t first_pair = max(first_candidate, second_candidate);
         const std::size_t second_pair = min(first_candidate, second_candidate);
-        if (bounded_direct_angular_owner<FixedAngularOrder>(batch, first_pair, second_pair) &&
-            direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
-                batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
-                shell_pair_density_bounds, nullptr, exchange_only, coulomb_only)) {
+        if (traversal) atomicAdd(&traversal->candidates, 1ULL);
+        const bool owned =
+            bounded_direct_angular_owner<FixedAngularOrder>(batch, first_pair, second_pair);
+        auto* census = Force && owned ? direct_force_task_work(
+                                            batch, {static_cast<std::uint32_t>(first_pair),
+                                                    static_cast<std::uint32_t>(second_pair), 0U})
+                                      : nullptr;
+        if (census) atomicAdd(&census->enumerated, 1ULL);
+        if (!owned && traversal) atomicAdd(&traversal->angular_rejected, 1ULL);
+        const bool survives =
+            owned && direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
+                         batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
+                         shell_pair_density_bounds, nullptr, exchange_only, coulomb_only);
+        if (census && !survives) atomicAdd(&census->shell_screened, 1ULL);
+        if (survives) {
           const std::int32_t first_shell = batch.shell_pair_first[first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[first_pair];
           const std::int32_t third_shell = batch.shell_pair_first[second_pair];
@@ -240,6 +268,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
               bounded_generated_class_enabled(shell_class, enabled_mask_pointer, enabled_mask);
           // An angular pass owns an exact disjoint subset of the original
           // queue. Keep all scientific predicates and physical orientations.
+          if (census)
+            atomicAdd(generated_class ? &census->generated_owned : &census->admitted, 1ULL);
           if (!generated_class) {
             const std::uint32_t slot = atomicAdd(&queue_count, 1U);
             queue[slot] = {static_cast<std::uint32_t>(first_pair),
@@ -497,21 +527,22 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     // Exact shell-class package consumed this SR/LR subtile.
                   } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Long) {
                     contract_bounded_direct_force_subtile_range_aot_scaled<
-                        Unrestricted, generativeqc::integrals::CoulombRange::Long, 300>(
-                        batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                        schwarz_bounds, density, active, output, exchange_coefficient, subtile,
-                        lane);
+                        Unrestricted, generativeqc::integrals::CoulombRange::Long, 300,
+                        MaximumAngularOrder>(batch, angular_order, &queue_count, queue + slot,
+                                             screening_tolerance, schwarz_bounds, density, active,
+                                             output, exchange_coefficient, subtile, lane);
                   } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Short) {
                     contract_bounded_direct_force_subtile_range_aot_scaled<
-                        Unrestricted, generativeqc::integrals::CoulombRange::Short, 300>(
-                        batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                        schwarz_bounds, density, active, output, exchange_coefficient, subtile,
-                        lane);
+                        Unrestricted, generativeqc::integrals::CoulombRange::Short, 300,
+                        MaximumAngularOrder>(batch, angular_order, &queue_count, queue + slot,
+                                             screening_tolerance, schwarz_bounds, density, active,
+                                             output, exchange_coefficient, subtile, lane);
                   } else {
                     const auto range = radial_operator == DirectRangeOperator::Long
                                            ? generativeqc::integrals::CoulombRange::Long
                                            : generativeqc::integrals::CoulombRange::Short;
-                    contract_bounded_direct_force_subtile_range_scaled<Unrestricted>(
+                    contract_bounded_direct_force_subtile_range_scaled<Unrestricted,
+                                                                       MaximumAngularOrder>(
                         batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                         schwarz_bounds, density, active, output, exchange_coefficient, range, omega,
                         subtile, lane);
@@ -669,8 +700,34 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
     detail::BoundedDirectBlockDomain block_domain, const GeneratedShellPairStream* force_topology,
     DirectSpdForceSchedule spd_schedule) {
+  DirectForceDiagnostic diagnostic(stream);
+  diagnostic.set_schedules(batch.direct_order_seven_page_size, batch.direct_dddd_force_class_major,
+                           batch.direct_force_split_low);
+  diagnostic.set_complete_domain(
+      // The census is qualified for strict work. Mixed source attempts can
+      // retry in FP64 and need their separate precision-owner accounting.
+      purpose == DirectScreeningPurpose::Force && !batch.direct_force_fp32 &&
+      batch.direct_maximum_shell_angular == 2U && materialized_pair_derivative_available(batch) &&
+      cooperative_pair_derivative_available(batch) && force_topology &&
+      block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U && block_domain.prefix &&
+      (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
+       spd_schedule == DirectSpdForceSchedule::RelativeReuse ||
+       spd_schedule == DirectSpdForceSchedule::DensityReuse));
+  if (purpose == DirectScreeningPurpose::Force && !batch.direct_force_work) {
+    const auto status = diagnostic.prepare();
+    if (status != cudaSuccess) return status;
+    batch.direct_force_work = diagnostic.device();
+  }
+  runtime::cuda_trace::TraceOperation operation(
+      purpose == DirectScreeningPurpose::Force ? "direct_force_classes" : "direct_bounded_fock",
+      stream,
+      {static_cast<std::size_t>(batch.batch_size), static_cast<std::size_t>(batch.direct_nbf)});
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
+  // Pure-J derivatives must not retain shell tasks solely for unused K
+  // density products. Reuse the existing source-specific predicate and its
+  // unchanged force threshold; Fock-purpose compatibility callers keep theirs.
+  const bool coulomb_only = purpose == DirectScreeningPurpose::Force && exchange_coefficient == 0.0;
   auto split = [&]<bool Unrestricted>() {
     // The admitted resident s/p/d cache supports the existing order-seven
     // cooperative algebra without another retained allocation. Its producer
@@ -686,17 +743,22 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+              exchange_coefficient, radial_operator, 0.0, 0.0, coulomb_only, false, block_domain);
     };
     cudaError_t error;
+    runtime::cuda_trace::TraceRegion low("direct_force_low_and_order6", stream);
     if (cooperative_available && block_domain.prefix &&
-        spd_schedule == DirectSpdForceSchedule::SpatialReuse) {
+        (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
+         spd_schedule == DirectSpdForceSchedule::RelativeReuse ||
+         spd_schedule == DirectSpdForceSchedule::DensityReuse)) {
       error = launch_direct_force_spatial_spd_low(
           Unrestricted, grid, shared_bytes, stream, batch, screening_tolerance, shell_pair_bounds,
           shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
           system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
           schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
-          exchange_coefficient, separate_sources, block_domain);
+          exchange_coefficient, separate_sources, block_domain,
+          spd_schedule != DirectSpdForceSchedule::SpatialReuse, force_topology,
+          spd_schedule == DirectSpdForceSchedule::DensityReuse);
     } else {
       if (cooperative_available)
         generic.template operator()<-3>();
@@ -704,24 +766,37 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
         generic.template operator()<-2>();
       error = cudaPeekAtLastError();
     }
+    low.finish();
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
     if (error != cudaSuccess) return error;
     // The existing explicit cooperative disable retains the qualified
     // two-pass control, including the generic order-seven fallback.
     if (cooperative_available) {
+      runtime::cuda_trace::TraceRegion order7("direct_force_order7_cooperative", stream);
       error = launch_direct_order_seven_force(
           Unrestricted, grid, shared_bytes, stream, batch, force_topology, screening_tolerance,
           shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
           bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-          profile, coulomb_coefficient, exchange_coefficient, separate_sources);
+          profile, coulomb_coefficient, exchange_coefficient, separate_sources,
+          spd_schedule == DirectSpdForceSchedule::DensityReuse && block_domain.prefix);
+      order7.finish();
       if (error != cudaSuccess) return error;
       error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
       if (error != cudaSuccess) return error;
     }
     const auto workspace_bytes =
         std::max(shared_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence));
+    if (batch.direct_dddd_force_class_major && force_topology) {
+      runtime::cuda_trace::TraceRegion order8("direct_force_order8_class_major", stream);
+      return launch_direct_force_materialized_class(
+          Unrestricted, grid, shared_bytes, stream, batch, force_topology, screening_tolerance,
+          shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
+          bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+          profile, coulomb_coefficient, exchange_coefficient, separate_sources);
+    }
     auto materialized = [&]<DirectRangeOperator Range>() {
+      runtime::cuda_trace::TraceRegion order8("direct_force_order8_materialized", stream);
       bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, 8,
                                           static_cast<int>(Range), true, false, true>
           <<<grid, block, workspace_bytes, stream>>>(
@@ -729,7 +804,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, Range, 0.0, 0.0, false, false, block_domain);
+              exchange_coefficient, Range, 0.0, 0.0, coulomb_only, false, block_domain);
       return cudaPeekAtLastError();
     };
     return separate_sources ? materialized.template operator()<DirectRangeOperator::FullSources>()
@@ -752,7 +827,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
             global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
-            0.0, false, false, block_domain);
+            0.0, coulomb_only, false, block_domain);
     return cudaPeekAtLastError();
   };
   auto select = [&]<bool Unrestricted, DirectScreeningPurpose Purpose>() {
@@ -770,7 +845,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
                 shell_pair_order, shell_pair_block_bounds, system_density_bounds,
                 enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
                 density, active, output, global_cursor, profile, coulomb_coefficient,
-                exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+                exchange_coefficient, radial_operator, 0.0, 0.0, coulomb_only, false, block_domain);
         const auto error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
         return launch_direct_force_class_domains(
@@ -793,14 +868,14 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
   };
   if (unrestricted) {
     if (purpose == DirectScreeningPurpose::Fock)
-      return select.template operator()<true, DirectScreeningPurpose::Fock>();
+      return diagnostic.finish(select.template operator()<true, DirectScreeningPurpose::Fock>());
     else
-      return select.template operator()<true, DirectScreeningPurpose::Force>();
+      return diagnostic.finish(select.template operator()<true, DirectScreeningPurpose::Force>());
   } else {
     if (purpose == DirectScreeningPurpose::Fock)
-      return select.template operator()<false, DirectScreeningPurpose::Fock>();
+      return diagnostic.finish(select.template operator()<false, DirectScreeningPurpose::Fock>());
     else
-      return select.template operator()<false, DirectScreeningPurpose::Force>();
+      return diagnostic.finish(select.template operator()<false, DirectScreeningPurpose::Force>());
   }
 }
 
@@ -822,6 +897,29 @@ void launch_bounded_direct_range_exchange_force_kernel(
   // This consumer publishes only range-separated K derivatives. Select its
   // raw-K linear bound and same-spin force-product bounds; the mixed J/K
   // defaults would retain distant Coulomb-only shell quartets unnecessarily.
+  if (radial_operator == DirectRangeOperator::Long && batch.direct_maximum_shell_angular <= 2U) {
+    // CUDA backs the largest reachable device-call frame, even when high-order
+    // branches never run. A through-d basis proves total order <= 8, allowing
+    // this one-pass queue to omit unreachable f-order callees. Retain exact
+    // omega, generated-shell selection, screening, and every admitted subtile.
+    // Unknown/f bases keep the complete dispatcher below; no context-wide
+    // stack limit is lowered while another owner may still require it.
+    const auto launch = [&]<bool Unrestricted>() {
+      bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, -1,
+                                          static_cast<int>(DirectRangeOperator::Long), false, false,
+                                          false, 8><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+          bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+          nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true,
+          block_domain);
+    };
+    if (unrestricted)
+      launch.template operator()<true>();
+    else
+      launch.template operator()<false>();
+    return;
+  }
   if (unrestricted) {
     bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(

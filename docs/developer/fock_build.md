@@ -5,6 +5,50 @@ The internal C++ boundaries in `src/scf/fock_build.hpp` and
 resolved execution strategy and prepared integral sources. CPU and CUDA
 providers can be selected independently.
 
+CUDA Direct preparation evaluates public-AO Schwarz diagonals with specialized
+s/p/d shell-pair recurrences. The compiler shares the original contracted
+primitive and signed spherical-term summation with the generic evaluator;
+both oriented AO pairs are still evaluated, with unchanged FP64 storage,
+screening thresholds, capacity charges and nonfinite-value rejection. The
+scalar ssss shortcut and f-shell fallback remain available. Set
+`GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ=0` before preparation to use the
+generic recurrence for all public AO pairs. This selector affects preparation,
+not the prepared owner's later Fock or force contraction policy.
+
+`GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING=1` enables an experimental NVCC
+block prefilter for bounded Direct task compaction and its native force/fallback
+consumers. Set it before preparing an owner; unset, `0`, and other values keep
+the incumbent gate. Existing geometry/density reductions prepare upward-rounded
+FP32 block and system-density bounds once. The predecessor float supplies a
+lower endpoint; directed products and thresholds can prove either admission or
+rejection. Only overlapping intervals and nonfinite inputs read the original
+FP64 block metadata. Positive-underflow protection includes upward thresholds
+so both FTZ settings preserve the incumbent task set. Exact shell predicates
+remain FP64. Compatibility compilers retain FP64 block screening because their
+directed-rounding semantics are unqualified.
+Owners charge four additional bytes per block and system, refresh density in
+the existing reduction, and rebuild geometry metadata with its owner. HF replay
+freezes the selector. Shared J/K execution keeps K's spin-density cache separate
+from J's total-density reduction. No additional launch or synchronization is
+needed for preparation.
+Schwarz preparation, the 24-byte shell-density ABI, generated streaming gates,
+ERI, J/K and force arithmetic retain their existing precision.
+
+Qualification uses `benchmarks/direct_screening_endpoint.py` for complete
+strict-FP64 Direct PBE0/r2SCAN-3c water-96 and QM7 C7 RHF/def2-SVP E/F, with
+cold, frozen warm, optional changed geometry, and independent tighter references.
+`benchmarks/direct_screening_probe.cu` separately compares FP64, FP32,
+prepared FP32 rejection/interval gates, tile-scaled INT8 and actual INT8 WMMA on
+synthetic sorted bounds.
+The tiled scalar INT8 control uses the same warp/refinement mapping as WMMA.
+Its timers include packing and FP64 refinement; its task identities must match
+FP64 for both sparse and all-survive thresholds. INT8/Tensor Core experiments
+are not selectable molecular backends.
+Run every device qualification through a finite Slurm allocation. See the
+[screening decision](../../.agents/notes/implemented/performance/2026-10-23-prepared-block-screening.md)
+for evidence and limits; no default or endpoint speedup follows from synthetic
+throughput alone.
+
 Standard fitted CUDA RHF/UHF resolves to the `CudaDfResident` schedule. This
 names the existing preferred device-resident SCF (including its admitted host
 retry), not a second approximation or a new kernel implementation. CPU fitted
@@ -24,6 +68,18 @@ remains available for K, derivatives, mixed precision, unsupported classes, or
 insufficient optional capacity. KS planning charges both owners; warm J calls
 keep their density and result on the provider stream. Qualification rationale
 is tracked in the [pure-J candidate note](../../.agents/notes/proposed/2026-09-23-generated-pure-j-consumer.md).
+
+This pure-J owner retains a Cartesian FP64 correction plane alongside the sum.
+Generated shell scatter, native dddd, and any admitted bounded-shell completion
+write the same compensated output. Each build clears both planes and folds the
+correction once after all J writers, before public-AO projection. This reduces
+unordered-scatter roundoff without promising bitwise reproducibility or changing
+screening and SCF convergence thresholds. The additional plane is included in
+actual owner charges and shape-only admission bounds; insufficient capacity
+retains the existing explicit provider fallback. J binds the correction only to
+launch-local batch views, never to shared K or derivative metadata. See the
+[compensation decision](../../.agents/notes/implemented/numerics/2026-10-15-generated-direct-j-compensation.md)
+for qualification and tradeoffs.
 
 Complete generated/native full-range J/K coverage remains automatic. Through-f
 value requests use the retained canonical source by default, or the generic

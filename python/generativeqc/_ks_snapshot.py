@@ -18,22 +18,30 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_BY_CODE,
     SEMILOCAL_FAMILY_CODES,
 )
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_FUNCTIONAL_CODE_BASE,
     automatic_functional_ingredients,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN,
+    LIBXC_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
 from .ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
+    _canonical_grid_spec,
+    _native_semilocal_code,
     electronic_method_ir,
-    native_xc_functional_code,
-    scf_domain_for_method,
     uses_molecular_nonlocal_domain,
 )
 
@@ -87,10 +95,18 @@ def _scf_xc_points(
     gradient: typing.Any,
     tau: typing.Any = None,
     *,
+    spin: str = "polarized",
     scales: typing.Any = (1.0, 1.0),
     required_ingredients: tuple[str, ...] | None = None,
 ) -> typing.Any:
-    """Evaluate the exact native semilocal SCF point model."""
+    """Evaluate the SCF model for an explicit spin layout.
+
+    RKS retains equal half-feature channels for the stationary pullback, but
+    automatic density-work programs evaluate original total features through
+    the layout-aware native ABI. The default preserves legacy polarized calls.
+    """
+    if spin not in ("unpolarized", "polarized"):
+        raise ValueError("SCF point evaluator requires an explicit supported spin")
     if type(functional) is bool:
         functional = int(functional)
     automatic = type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
@@ -126,10 +142,21 @@ def _scf_xc_points(
     if np.iscomplexobj(raw_tau) or raw_tau.shape != rho.shape:
         raise ValueError("SCF point evaluator requires real tau[2,n]")
     tau = np.ascontiguousarray(raw_tau, dtype=np.float64)
+    if spin == "unpolarized" and not (
+        np.array_equal(rho[0], rho[1])
+        and np.array_equal(gradient[0], gradient[1])
+        and np.array_equal(tau[0], tau[1])
+    ):
+        raise ValueError(
+            "restricted SCF point transport requires equal half-feature channels"
+        )
+    restricted_bridge = automatic and spin == "unpolarized"
     output = np.empty((rho.shape[1], 11), dtype=np.float64)
     try:
         evaluate = (
-            library.generativeqc_xc_point_batch_v2
+            library.generativeqc_xc_point_batch_v4
+            if restricted_bridge
+            else library.generativeqc_xc_point_batch_v2
             if scales == (1.0, 1.0)
             else library.generativeqc_xc_point_batch_v3
         )
@@ -138,11 +165,19 @@ def _scf_xc_points(
             "native library lacks the required semilocal XC point bridge"
         ) from error
     prefix_types = (
-        [ct.c_uint32]
+        [ct.c_uint32, ct.c_uint32, ct.c_double, ct.c_double]
+        if restricted_bridge
+        else [ct.c_uint32]
         if scales == (1.0, 1.0)
         else [ct.c_uint32, ct.c_double, ct.c_double]
     )
-    prefix_values = [functional] if scales == (1.0, 1.0) else [functional, *scales]
+    prefix_values = (
+        [functional, 1, *scales]
+        if restricted_bridge
+        else [functional]
+        if scales == (1.0, 1.0)
+        else [functional, *scales]
+    )
     evaluate.argtypes = [
         *prefix_types,
         ct.POINTER(ct.c_double),
@@ -225,7 +260,11 @@ class NativeKsSnapshot:
         "metadata",
         "method_ir",
         "model_terms",
+        "nonlocal_atomic_weights",
         "nonlocal_density_policy",
+        "nonlocal_grid",
+        "nonlocal_grid_spec",
+        "stationarity_tolerance",
         "values",
     )
     _fixed = frozenset(__slots__)
@@ -287,12 +326,30 @@ class NativeKsSnapshot:
             )
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
-            method_name = self._batch._calculator._method_name
-            functional_code = native_xc_functional_code(method_name)
+            tolerance = getattr(
+                lib, "generativeqc_ks_snapshot_stationarity_tolerance_v1", None
+            )
+            allowance = ct.c_double(1e-8)
+            if tolerance is not None:
+                tolerance.argtypes = [ct.c_void_p, ct.c_void_p, ct.POINTER(ct.c_double)]
+                tolerance.restype = ct.c_int
+                _native.check(
+                    lib,
+                    tolerance(batch._batch, self._handle, ct.byref(allowance)),
+                    context=batch._context,
+                )
+            if not np.isfinite(allowance.value) or not 0 < allowance.value <= 1e-4:
+                raise ValueError("invalid native stationary force allowance")
+            self.stationarity_tolerance = allowance.value
+            options = self._batch._calculator.ks_options
+            functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
-                expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
+                expected_domain_version = {
+                    LIBXC_WORK_DOMAIN: LIBXC_WORK_DOMAIN_VERSION,
+                    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
+                }.get(options.scf_domain)
             else:
-                expected_domain = scf_domain_for_method(method_name)
+                expected_domain = options.scf_domain
                 expected_domain_version = (
                     4
                     if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
@@ -407,14 +464,40 @@ class NativeKsSnapshot:
         """Bind derivative fallback policy to the live native provider proof."""
         return "density-fitted" in self.fock_provider_proof()[:2]
 
-    def cuda_resident_grid(self) -> CudaResidentGrid | None:
+    @property
+    def range_density_fitted(self) -> bool:
+        """Read the LR owner's approximation, never the process environment."""
+        self.check_current()
+        read = getattr(
+            self._library, "generativeqc_ks_snapshot_range_provider_v1", None
+        )
+        if read is None:
+            raise NotImplementedError("native LR approximation proof is unavailable")
+        read.argtypes = [ct.c_void_p, ct.c_void_p, ct.POINTER(ct.c_uint32)]
+        read.restype = ct.c_int
+        approximation = ct.c_uint32()
+        _native.check(
+            self._library,
+            read(self._batch._batch, self._handle, ct.byref(approximation)),
+            context=self._batch._context,
+        )
+        self.check_current()
+        if approximation.value not in (0, 1, 2**32 - 1):
+            raise ValueError("unknown native LR approximation")
+        return approximation.value == 1
+
+    def cuda_resident_grid(
+        self, *, nonlocal_grid: bool = False
+    ) -> CudaResidentGrid | None:
         """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
         if self.backend != "cuda":
             return None
         self.check_current()
         binding = getattr(
             self._library,
-            "generativeqc_ks_snapshot_cuda_resident_grid_v2",
+            "generativeqc_ks_snapshot_cuda_nonlocal_grid_v1"
+            if nonlocal_grid and self.nonlocal_grid is not self.grid
+            else "generativeqc_ks_snapshot_cuda_resident_grid_v2",
             None,
         )
         if binding is None:
@@ -626,6 +709,53 @@ class NativeKsSnapshot:
             atoms=atoms, aos=aos, primitives=primitives
         )
 
+    def cuda_prepare_force_memory(self, additional_device_bytes: int) -> dict[str, int]:
+        """Release optional SCF caches under pressure, preserving this exact token.
+
+        The caller supplies its additional force envelope, excluding already live
+        owners. This is an advisory handoff, not a reservation or a force budget.
+        Older native libraries retain their allocation behavior.
+        """
+        if (
+            type(additional_device_bytes) is not int
+            or not 0 <= additional_device_bytes <= 1 << 40
+        ):
+            raise ValueError(
+                "additional force device bytes must be an integer in [0,2**40]"
+            )
+        self.check_current()
+        prepare = getattr(
+            self._library, "generativeqc_ks_snapshot_cuda_prepare_force_memory_v1", None
+        )
+        if prepare is None:
+            return {}
+        prepare.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_uint64,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        prepare.restype = ct.c_int
+        receipt = (ct.c_uint64 * 4)()
+        status = prepare(
+            self._batch._batch, self._handle, additional_device_bytes, receipt, 4
+        )
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        return dict(
+            zip(
+                (
+                    "additional_device_bytes",
+                    "free_before_bytes",
+                    "free_after_bytes",
+                    "reclaimed_device_bytes",
+                ),
+                map(int, receipt),
+                strict=True,
+            )
+        )
+
     def cuda_integral_gradient_additional_device_bytes(self) -> int:
         """Dry-query lazy derivative capacity without creating any CUDA owner.
 
@@ -723,11 +853,12 @@ class NativeKsSnapshot:
         *,
         lr_correction: typing.Any = None,
     ) -> typing.Any:
-        """Publish common mixed sources from one live, token-checked DF owner.
+        """Publish common RSH sources from live, token-checked radial owners.
 
-        CPU binds the compiler-generated (a_long-a_short) weighted LR gradient.
-        CUDA leaves it absent and executes the native resident derivative owner.
-        Neither backend substitutes exact full-range exchange for fitted K.
+        Full RI-K differentiates its own LR metric on either backend. Legacy
+        mixed CPU binds a compiler-generated weighted Direct LR gradient;
+        legacy mixed CUDA owns its resident Direct correction. No source may
+        substitute an exact derivative for a fitted Hamiltonian.
         """
         if not self.density_fitted:
             return None
@@ -736,14 +867,14 @@ class NativeKsSnapshot:
         if type(maximum_bytes) is not int or maximum_bytes < 1:
             raise ValueError("stationary derivative budget must be positive")
         correction = np.empty(0, dtype=np.float64)
-        if self.backend == "cpu":
+        if self.backend == "cpu" and not self.range_density_fitted:
             correction = np.ascontiguousarray(lr_correction, dtype=np.float64)
             if correction.shape != (atom_count, 3) or not np.isfinite(correction).all():
                 raise ValueError(
                     "mixed CPU source requires a finite compact LR correction"
                 )
         elif lr_correction is not None:
-            raise ValueError("CUDA mixed source owns its resident LR correction")
+            raise ValueError("native LR source owns its fitted or resident correction")
         self.check_current()
         evaluate = getattr(
             self._library,
@@ -786,7 +917,10 @@ class NativeKsSnapshot:
         _native.check(self._library, status, context=self._batch._context)
         self.check_current()
         return immutable(output), _integral_source_resources(
-            usage, mixed_rsh_df=True, lazy_lr_device_owner=self.backend == "cuda"
+            usage,
+            mixed_rsh_df=True,
+            lazy_lr_device_owner=self.backend == "cuda"
+            and not self.range_density_fitted,
         )
 
     def cuda_integral_derivatives(
@@ -864,7 +998,105 @@ class NativeKsSnapshot:
             usage,
             mixed_rsh_df=range_exchange
             and bool(getattr(self, "density_fitted", False)),
+            lazy_lr_device_owner=range_exchange and not self.range_density_fitted,
         )
+
+    def _decode_nonlocal_grid(self, options: typing.Any) -> None:
+        """Authenticate the independent prescription and exact collocation source.
+
+        A point-count collision is not equality. Legacy snapshots may retain
+        the primary grid only when the caller did not request a distinct rule.
+        """
+        from generativeqc_compiler.dft.grid import ExplicitGrid, GridSpec
+
+        requested = options.nonlocal_grid or options.grid
+        binding = getattr(
+            self._library, "generativeqc_ks_snapshot_nonlocal_grid_v1", None
+        )
+        count = ct.c_size_t()
+        if binding is not None:
+            binding.argtypes = [
+                ct.c_void_p,
+                ct.c_void_p,
+                ct.POINTER(ct.c_double),
+                ct.c_size_t,
+                ct.POINTER(ct.c_size_t),
+            ]
+            binding.restype = ct.c_int
+            _native.check(
+                self._library,
+                binding(self._batch._batch, self._handle, None, 0, ct.byref(count)),
+            )
+        if count.value == 0:
+            if options.has_separate_nonlocal_grid:
+                raise ValueError(
+                    "native snapshot omitted the requested independent VV10 grid"
+                )
+            self.nonlocal_grid = self.grid
+            self.nonlocal_grid_spec = self.grid_spec
+            self.nonlocal_atomic_weights = self.atomic_weights
+            return
+        if count.value < 126 or (count.value - 126) % 6:
+            raise ValueError("native nonlocal grid wire length mismatch")
+        values = np.empty(count.value, dtype=np.float64)
+        _native.check(
+            self._library,
+            binding(
+                self._batch._batch,
+                self._handle,
+                values.ctypes.data_as(ct.POINTER(ct.c_double)),
+                count.value,
+                ct.byref(count),
+            ),
+        )
+        points, version, radial, polar, azimuth, iterations, tolerance = values[:7]
+        points = int(points)
+        if points <= 0 or len(values) != 126 + 6 * points:
+            raise ValueError("native nonlocal grid point count mismatch")
+        actual_spec = GridSpec(
+            version=int(version),
+            **(
+                {
+                    "radial_rule": "treutler-ahlrichs",
+                    "angular_rule": "lebedev",
+                    "partition": "becke-treutler",
+                    "pruning": "nwchem",
+                    "ordering": "atom-radial-lebedev",
+                }
+                if int(version) == 4
+                else {
+                    "pruning": "radial-v1" if int(version) == 3 else "none",
+                }
+            ),
+            radial_points=int(radial),
+            angular_polar=int(polar),
+            angular_azimuth=int(azimuth),
+            partition_iterations=int(iterations),
+            coincident_tolerance=float(tolerance),
+            element_radii=tuple(
+                (atomic_number, float(radius))
+                for atomic_number, radius in enumerate(values[7:126])
+                if atomic_number and radius
+            ),
+        )
+        canonical_requested = _canonical_grid_spec(requested)
+        if actual_spec != canonical_requested or actual_spec == self.grid_spec:
+            raise ValueError("native nonlocal grid prescription mismatch")
+        coordinates = values[126 : 126 + 3 * points].reshape(points, 3)
+        weights = values[126 + 3 * points : 126 + 4 * points]
+        owners = values[126 + 4 * points : 126 + 5 * points]
+        if not np.all(owners == owners.astype(np.int64)):
+            raise ValueError("native nonlocal grid has nonintegral atom owners")
+        self.nonlocal_grid = ExplicitGrid(
+            coordinates,
+            weights,
+            tuple(map(int, owners)),
+            {"source": "native-ks-nonlocal-grid-v1"},
+        )
+        self.nonlocal_grid_spec = actual_spec
+        self.nonlocal_atomic_weights = values[126 + 5 * points :].copy()
+        self.nonlocal_atomic_weights.flags.writeable = False
+        self.check_current()
 
     def decode(self, basis: typing.Any, grid: typing.Any) -> typing.Any:
         """Verify actual AO/grid sources before deriving any Python identities."""
@@ -873,7 +1105,6 @@ class NativeKsSnapshot:
         from ._dft_gradient import (
             StationaryKsIdentity,
             native_ao_geometry_identity,
-            scf_regularization_identity,
             xc_geometry_topology_identity,
         )
 
@@ -936,6 +1167,19 @@ class NativeKsSnapshot:
             radii = take((119,))
             self.grid_spec = GridSpec(
                 version=int(version),
+                **(
+                    {
+                        "radial_rule": "treutler-ahlrichs",
+                        "angular_rule": "lebedev",
+                        "partition": "becke-treutler",
+                        "pruning": "nwchem",
+                        "ordering": "atom-radial-lebedev",
+                    }
+                    if int(version) == 4
+                    else {
+                        "pruning": "radial-v1" if int(version) == 3 else "none",
+                    }
+                ),
                 radial_points=int(radial),
                 angular_polar=int(polar),
                 angular_azimuth=int(azimuth),
@@ -1009,8 +1253,7 @@ class NativeKsSnapshot:
         if (
             options is None
             or options.coefficients != self.coefficients
-            or functional
-            != native_xc_functional_code(self._batch._calculator._method_name)
+            or functional != _native_semilocal_code(options.method_ir)
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
@@ -1107,6 +1350,7 @@ class NativeKsSnapshot:
         ):
             raise ValueError("native stationary grid source mismatch")
         self.grid = grid
+        self._decode_nonlocal_grid(options)
         self.grid_cache_work = MappingProxyType(
             {
                 "exact_grid_reused": reused,
@@ -1121,6 +1365,11 @@ class NativeKsSnapshot:
                 "method_ir": self.method_ir.identity,
                 "coefficients": self.coefficients,
                 **(
+                    {"nonlocal_grid": self.nonlocal_grid.identity}
+                    if self.nonlocal_grid is not grid
+                    else {}
+                ),
+                **(
                     {
                         "native_model_terms": self.model_terms,
                         "nonlocal_density_policy": self.nonlocal_density_policy,
@@ -1129,9 +1378,13 @@ class NativeKsSnapshot:
                     else {}
                 ),
             }
-            if self.coefficients != (1.0, 1.0, 0.0)
+            if self.coefficients != (1.0, 1.0, 0.0) or self.nonlocal_grid is not grid
             else {}
         )
+        if options.has_range_exchange:
+            composition_identity["range_exchange_approximation"] = (
+                "density-fitted" if self.range_density_fitted else "exact"
+            )
         basis_identity = basis.identity
         coulomb_approximation, exchange_approximation, metric_threshold = (
             self.fock_provider_proof()
@@ -1174,7 +1427,7 @@ class NativeKsSnapshot:
                 {
                     "native_owner": owner,
                     "functional": spec.identity,
-                    "scf_domain": scf_domain_for_method(method),
+                    "scf_domain": options.scf_domain,
                     "grid": grid.identity,
                     **(
                         {"grid_provenance": dict(self.grid_provenance)}
@@ -1207,7 +1460,7 @@ class NativeKsSnapshot:
             functional_identity=spec.identity,
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
-            regularization_identity=scf_regularization_identity(method),
+            regularization_identity=canonical_hash({"scf_domain": options.scf_domain}),
             provider_identity=canonical_hash(provider_payload),
             owner=owner,
             solve_epoch=epoch,
@@ -1251,6 +1504,7 @@ class NativeKsSnapshot:
             rho,
             gradient,
             tau,
+            spin=functional.spin,
             scales=self.coefficients[:2],
             required_ingredients=functional.ingredients,
         )
@@ -1290,7 +1544,7 @@ class NativeKsSnapshot:
     def prepare_cuda_response(
         self, *, tile_points: int, budget_bytes: int
     ) -> typing.Any:
-        """Copy this live state's exact sources into a bounded CUDA XC owner."""
+        """Borrow this live owner's D/grid in a bounded CUDA XC response arena."""
         return _NativeCudaXCPlan(
             self, tile_points=tile_points, budget_bytes=budget_bytes
         )
@@ -1329,13 +1583,19 @@ class NativeKsSnapshot:
             raise NotImplementedError(
                 "native point response requires matching CPU spin state"
             )
-        # The snapshot's functional wire code is not a boolean: newer SCF
-        # methods (for example r2SCAN=2) must never be interpreted as PBE.
-        if self.metadata[6] not in (0, 1) or self.coefficients != (1.0, 1.0, 0.0):
+        # The frozen v1 C ABI transports a two-slot LDA/PBE point-response
+        # kernel. Admit only the generated compatibility binding for this exact
+        # compiler-owned SCF family; do not interpret an arbitrary family code
+        # as a PBE boolean or promote new functional support silently.
+        family = SEMILOCAL_FAMILY_BY_CODE.get(self.metadata[6])
+        response_slot = (
+            family["legacy_cpu_point_response_slot"] if family is not None else None
+        )
+        if response_slot is None or self.coefficients != (1.0, 1.0, 0.0):
             raise NotImplementedError(
-                "native point response requires unscaled LDA/PBE only"
+                "native point response requires a qualified unscaled legacy XC plan"
             )
-        if type(pbe) is not bool or pbe != bool(self.metadata[6]):
+        if type(pbe) is not bool or int(pbe) != response_slot:
             raise ValueError("native response functional mismatch")
         values = [np.asarray(x) for x in (rho, gradient, delta_rho, delta_gradient)]
         n = values[0].size // spins
@@ -1374,7 +1634,7 @@ class NativeKsSnapshot:
         _native.check(
             self._library,
             evaluate(
-                int(pbe),
+                response_slot,
                 *(x.ctypes.data_as(pointer) for x in values),
                 n,
                 output.ctypes.data_as(pointer),
@@ -1454,7 +1714,8 @@ class _NativeCudaXCPlan:
 
     Only density directions and final AO matrices cross the host/device seam.
     AO values, base/directional features, point derivatives and assembly execute
-    on device. Preparation retains the native reference density once.
+    on device. Preparation borrows the native reference D and immutable grid;
+    every action checks the source token before using those resident buffers.
     """
 
     def __init__(

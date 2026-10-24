@@ -58,16 +58,16 @@ def test_corrected_streamed_response_preserves_force_oracle(
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", response_space)
     monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     monkeypatch.setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "auto")
+    # Compact auto storage now fits these budgets. Request dense values so
+    # this test continues to exercise the streamed fallback it qualifies.
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     calculator = Calculator(
         method="rhf",
         basis="def2-svp",
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
-        density_fitting_memory_budget_bytes=(
-            24 if case_name == "water-tetramer" else 18
-        )
-        << 20,
+        density_fitting_memory_budget_bytes=18 << 20,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         max_iterations=100,

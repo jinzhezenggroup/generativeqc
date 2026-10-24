@@ -6,6 +6,40 @@ methods. This document records the top-level dependency direction protected by
 
 ## Shared native owners
 
+### Compiled named KS programs
+
+`src/methods/named_ks_catalog.*` owns the build-time MethodIR catalog once in the
+native library. The native CLI borrows its listing and component/exchange arrays;
+it no longer instantiates a separate CLI-only table. Python `native_ks_options`
+queries the already-selected library for a matching complete MethodIR identity
+and numerical domain, preserving caller grid, tiling, schedule and precision
+controls. Components and spin-resolved Fock coefficients come from the existing
+compiler, not a second native scientific algebra implementation.
+
+A missing optional query retains explicit old-library metadata lowering. A
+successful zero selection declares a custom/noncatalog or unrepresented-domain
+compiler route; it does not replace a same-name custom model with a catalog
+default. Invalid arguments, native refusal and inconsistent publication never
+retry compiler lowering or discover another library. Selected pointers borrow
+immutable library storage until ordinary native preparation copies them.
+
+Catalog backend flags describe representability only. Existing prepared owners
+still admit basis, provider, backend, precision and requested properties. This
+does not qualify every catalog entry, retire custom MethodIR compilation or
+establish complete method/basis/CLI parity.
+
+### KS host capacity ownership
+
+`src/scf/ks_host_resources.hpp` owns CPU and CUDA KS host capacity and fleet
+lifetimes for Python metadata planning and the native CLI. Binding reservations
+come from the same CUDA-header-free constants used by the actual tensor
+bindings. Host sizing neither discovers providers nor admits new scientific
+domains. Consumer allowances and old-library compatibility are specified in
+[resource planning](../maintainer/resource_planning.md); device inventories,
+prepared leases and endpoint allocation receipts remain separate contracts.
+
+### Method-neutral infrastructure
+
 The following directories are method-neutral owners:
 
 - `src/core/`
@@ -50,6 +84,26 @@ backward without pretending the current migration is already complete.
 This cross-method gate complements, rather than replaces, the more detailed
 `tools/check_scf_structure.py` and `tools/check_compiler_structure.py`
 ownership checks.
+
+### CPU RCCSD reference-view handoff (#929)
+
+`cc::prepare_canonical_reference_input` consumes the existing immutable,
+borrowed `core::ElectronicReferenceView` contract. The RCCSD problem builder
+gets its occupied/virtual layout, reference energy, canonical orbital spectrum,
+and row-major `C^T F C` from this common view instead of independently reading
+`hf::PhysicalReference` fields. It rejects malformed matrices, nonfinite values
+and unsupported unrestricted occupations **before** generating transformed Fock
+data or requesting AO integral blocks.
+
+The producer owns the orbitals: `RccsdNativeState::reference` retains the HF
+reference through CC response and source retirement, while the synchronous
+adapter owns only its freshly transformed MO Fock matrix. Validated RKS final
+states can expose the same input shape without introducing an SCF-private
+dependency, but this contract check does **not** enable CCSD-on-KS or UCCSD.
+Conventional AO and CUDA DF providers still retain their existing HF-specific
+source binding; provider migration and persistent source/geometry/solve-epoch
+invalidation are separate #929/#930 follow-ups. No GPU performance or CUDA
+scientific acceptance is inferred from the CPU reference-view tests.
 
 ### HF reference ownership
 
@@ -101,6 +155,33 @@ replacing the shared host facilities, while infrastructure PR review remains
 responsible for identifying an additional or fundamentally different duplicate
 algorithm. The debt baseline is a ceiling, not a target: removing the remaining
 CUDA owner does not require a synchronized baseline update to keep CI green.
+
+## CUDA KS declared-capacity composition
+
+When the selected library exposes the additive CUDA KS fleet query,
+`scf::CudaKsDeviceFleetResources` composes the existing allocator-owned leaf
+inventories. It owns the value-only one-electron setup bound, alternative ECP
+scratch, quadrature/Coulomb overlap, retained state/XC/J and matrix-provider
+totals, serialized rebuild excess, and minimum/cached stationary candidate peaks.
+Successful composition is allocation-free and shape-only, including in a CPU-only build;
+obtaining CUDA leaf inventories still requires their independently supported
+native queries. Composition is not CUDA scientific execution or admission.
+The native CLI uses the same typed fleet owner for its independently supported
+ordinary energy dry runs; this does not expand CLI force/model admission.
+
+Python marshals compact topology and native leaf capacities, validates the wire
+publication and presents the existing resource labels. Only a missing fleet
+symbol permits explicit legacy per-item composition. An actual native refusal
+or inconsistent publication never retries Python sizing. The candidate decision
+`cuda_fleet_composition` records which route actually supplied the capacities.
+
+The shared resource-plan engine retains global lifetime composition, ranking and
+declared-budget admission. Scientific consumer eligibility, host force
+allowances, provider allocation receipts and complete simultaneously-live
+physical/RSS accounting remain separate contracts. No all-domain CUDA force or
+response/HVP capability follows from a capacity query. Native ABI transaction,
+overflow, aliasing and exact declared-budget tests protect this boundary; GPU
+execution and full endpoint performance require separate qualification.
 
 ## Regression inventory
 

@@ -9,6 +9,7 @@
 
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -25,6 +26,7 @@
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/queue_plan.hpp"
 #include "scf/cuda/structured_matrix.hpp"
+#include "scf/cuda_direct_jk.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -33,9 +35,34 @@ void check(cudaError_t error) {
 }
 std::size_t product(std::size_t a, std::size_t b) { return runtime::size_mul(a, b); }
 unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements + 127) / 128); }
+
+/** Both planes belong to the admitted J owner, never to a K/force borrower. */
+runtime::CompensatedOutput generated_coulomb_output(const GeneratedCoulombPlan& plan) {
+  const auto elements = product(product(static_cast<std::size_t>(plan.batch.batch_size),
+                                        static_cast<std::size_t>(plan.batch.direct_nbf)),
+                                static_cast<std::size_t>(plan.batch.direct_nbf));
+  return {plan.coulomb, plan.coulomb + elements};
+}
 }  // namespace
 
+void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
+  const auto* selector = std::getenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES");
+  batch.direct_force_relative_response =
+      select_direct_weighted_force_response(selector ? selector : "");
+}
+
+bool direct_fp32_block_screening_requested() noexcept {
+  const auto* selection = std::getenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING");
+  return selection && std::string_view(selection) == "1";
+}
+
+void configure_direct_block_screening(DeviceBatch& batch) noexcept {
+  batch.direct_fp32_block_screening = direct_fp32_block_screening_requested();
+}
+
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
+  configure_direct_block_screening(batch);
+  configure_direct_weighted_force_response(batch);
   batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
   batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();
   batch.direct_pair_materialized_values = cuda_policy::direct_pair_materialized_values_requested();
@@ -43,6 +70,13 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
       cuda_policy::direct_pair_materialized_derivatives_requested();
   batch.direct_pair_cooperative_derivatives =
       cuda_policy::direct_pair_cooperative_derivatives_requested();
+  const auto* page = std::getenv("GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE");
+  batch.direct_order_seven_page_size = select_direct_order_seven_page_size(page ? page : "");
+  const auto* dddd = std::getenv("GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR");
+  batch.direct_dddd_force_class_major = dddd && std::string_view(dddd) == "1";
+  const auto* census = std::getenv("GENERATIVEQC_DIRECT_FORCE_CENSUS");
+  const auto* split = std::getenv("GENERATIVEQC_DIRECT_FORCE_CENSUS_SPLIT_LOW");
+  batch.direct_force_split_low = census && *census && split && std::string_view(split) == "1";
 }
 
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {
@@ -146,7 +180,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   charge(projection_spans.size(), sizeof(std::int32_t));
   charge(order.size() + offsets.size(), sizeof(std::uint32_t));
   charge(primitive_pairs, sizeof(PrimitivePairData));
-  charge(cartesian, 3 * sizeof(double));  // Density, J and Cartesian Schwarz.
+  charge(cartesian, 4 * sizeof(double));  // Density, J, J correction and Cartesian Schwarz.
   charge(rectangular, sizeof(double));
   charge(matrix, 2 * sizeof(double));  // Total spin density and zero one-electron term.
   charge(pairs, sizeof(double));
@@ -160,7 +194,14 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     return {};
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
+  // This geometry owner must not write another owner's optional metadata.
+  // The exchange layer installs its own charged caches when it needs them.
+  plan->batch.direct_fp32_block_bounds = nullptr;
+  plan->batch.direct_fp32_density_bounds = nullptr;
   configure_direct_coulomb_recurrence(plan->batch);
+  if (!host.shell_angular.empty())
+    plan->batch.direct_maximum_shell_angular =
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
   plan->screening = screening;
@@ -175,10 +216,15 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   try {
     // Growing the optional recurrence stack can reserve device memory too.
     // Keep that failure on the same bounded fallback path as explicit buffers.
-    std::size_t stack_limit = 0;
-    check(cudaDeviceGetLimit(&stack_limit, cudaLimitStackSize));
-    if (stack_limit < schedule.cuda_stack_limit_bytes)
-      check(cudaDeviceSetLimit(cudaLimitStackSize, schedule.cuda_stack_limit_bytes));
+    // Through-d value and derivative consumers are qualified at 16 KiB. The
+    // larger f/unknown ceiling otherwise costs several GiB of driver backing
+    // on large GPUs, even when the selected recurrence never needs it.
+    const auto required_stack =
+        plan->batch.direct_maximum_shell_angular <= 2
+            ? std::min(schedule.cuda_stack_limit_bytes, std::size_t{16} << 10)
+            : schedule.cuda_stack_limit_bytes;
+    // CUDA limits are context-wide: never lower another live owner's limit.
+    check(runtime::cuda_ensure_stack_limit(required_stack));
     auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
       void* pointer{};
       const auto bytes = product(count, width);
@@ -212,7 +258,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
       return static_cast<double*>(allocate(count, sizeof(double)));
     };
     plan->density = doubles(cartesian);
-    plan->coulomb = doubles(cartesian);
+    plan->coulomb = doubles(product(cartesian, 2U));
     plan->schwarz = doubles(cartesian);
     plan->temporary = doubles(rectangular);
     plan->total_density = doubles(matrix);
@@ -325,6 +371,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (!shared) return {};
   const bool bounded_value_capability = allow_bounded_shell_fallback && !shared->value_capability;
   const bool bounded_resources = force_capability || bounded_value_capability;
+  const bool fp32_block_screening = bounded_resources && shared->batch.direct_fp32_block_screening;
   const bool angular_force = force_capability && cuda_policy::bounded_angular_force_requested();
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
@@ -356,7 +403,11 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (bounded_resources) {
     charge(pairs, sizeof(std::uint32_t));
     charge(pair_blocks, sizeof(double));
-    charge(1, sizeof(unsigned long long));
+    if (fp32_block_screening) {
+      charge(pair_blocks, sizeof(float));
+      charge(batch, sizeof(float));
+    }
+    charge(4, sizeof(unsigned long long));
     charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
     charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
   }
@@ -458,7 +509,15 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
                                     pair_blocks, bounded_schedule.block_prefix.back()};
     }
     plan->shell_pair_block_bounds = doubles(pair_blocks);
-    plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
+    if (fp32_block_screening) {
+      // The shared batch is private to this exchange owner. Its allocations
+      // carry both caches; existing reductions refresh them before consumption.
+      plan->shared->batch.direct_fp32_block_bounds =
+          static_cast<float*>(allocate(pair_blocks, sizeof(float)));
+      plan->shared->batch.direct_fp32_density_bounds =
+          static_cast<float*>(allocate(batch, sizeof(float)));
+    }
+    plan->force_cursor = static_cast<unsigned long long*>(allocate(4, sizeof(unsigned long long)));
     plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
         host.system_shell_pair_block_quartet_offsets.back();
@@ -633,10 +692,12 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb,
 cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool unrestricted,
                                                 double* alpha_exchange, double* beta_exchange,
                                                 DirectCoulombRange range, double omega,
+                                                double proposal_screening = -1.0,
                                                 const MatrixLibraryResources* matrices = nullptr) {
   const bool full_range = range == DirectCoulombRange::Full;
   cudaError_t error = cudaSuccess;
   auto& shared = *p.shared;
+  const double screening = proposal_screening >= 0.0 ? proposal_screening : shared.screening;
   const auto b = shared.batch;
   const std::size_t batch = static_cast<std::size_t>(b.batch_size);
   const std::size_t public_matrix = product(static_cast<std::size_t>(b.nbf), b.nbf);
@@ -665,7 +726,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       error = direct_fock_streaming_launcher(p.selection, cls, unrestricted)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
-          b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+          b.positions, screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
           p.heads + cls, p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr,
           nullptr);
       if (error != cudaSuccess) return error;
@@ -673,8 +734,8 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
     if (shared.class_mask & kNativeStreamingFockShellClassMask) {
       launch_bounded_direct_dddd_streaming_kernel(
           unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
-          shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
-          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr,
+          shared.stream, b, p.topology, screening, shared.schwarz, p.direct_spin, shared.active,
+          p.direct_exchange, p.heads + kDdddShellClass, nullptr,
           p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
@@ -683,11 +744,11 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
       if (error != cudaSuccess) return error;
       launch_bounded_shell_fock_source(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
-          p.bounded_value_overflow, shared.schwarz, p.direct_spin, shared.active, p.direct_exchange,
-          p.force_cursor, false, true);
+          unrestricted, shared.worker_blocks, shared.stream, b, screening, shared.shell_bounds,
+          p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+          p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow,
+          shared.schwarz, p.direct_spin, shared.active, p.direct_exchange, p.force_cursor, false,
+          true);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }
@@ -695,7 +756,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
     launch_bounded_shell_range_exchange_source(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        unrestricted, shared.worker_blocks, shared.stream, b, screening, shared.shell_bounds,
         p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
         p.system_density_bounds, p.bounded_value_overflow, shared.schwarz, p.direct_spin,
         shared.active, p.direct_exchange, p.force_cursor, range, omega);
@@ -757,12 +818,13 @@ cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool un
   if (p.bounded_value_capability) {
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
+    auto batch = shared.batch;
+    batch.reference_fock_correction = generated_coulomb_output(shared).correction;
     launch_bounded_shell_fock_source(
-        false, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
-        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-        p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
-        p.bounded_value_overflow, shared.schwarz, shared.density, shared.active, shared.coulomb,
-        p.force_cursor, true, false);
+        false, shared.worker_blocks, shared.stream, batch, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow, shared.schwarz,
+        shared.density, shared.active, shared.coulomb, p.force_cursor, true, false);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }
@@ -775,6 +837,7 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
                                        DirectCoulombRange range, double omega,
+                                       double proposal_screening,
                                        const MatrixLibraryResources* matrices) {
   const bool full_range = range == DirectCoulombRange::Full;
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
@@ -795,48 +858,63 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   runtime::cuda_trace::trace_counter("transform_span_elements", p.shared->projection_span_elements);
   runtime::cuda_trace::trace_counter("transform_dense_elements",
                                      p.shared->projection_dense_elements);
+  if (proposal_screening != -1.0 && (!full_range || !std::isfinite(proposal_screening) ||
+                                     proposal_screening < p.shared->screening))
+    return cudaErrorInvalidValue;
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta, matrices);
   return error == cudaSuccess
              ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
-                                                   range, omega, matrices)
+                                                   range, omega, proposal_screening, matrices)
              : error;
 }
 
-cudaError_t execute_generated_full_range_energy_derivatives(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources, bool allow_spatial_default) {
-  if (!p.force_capability || p.bounded_pair_order == nullptr ||
-      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
-      !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
+static cudaError_t validate_generated_full_range_derivative_inputs(
+    const GeneratedExchangePlan& plan, bool unrestricted, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources, bool bilinear) {
+  if (!plan.shared || !plan.force_capability || plan.bounded_pair_order == nullptr ||
+      plan.shell_pair_block_bounds == nullptr || plan.force == nullptr ||
+      plan.force_cursor == nullptr || !std::isfinite(coulomb_coefficient) ||
+      !std::isfinite(exchange_coefficient))
     return cudaErrorInvalidValue;
-  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (bilinear && (unrestricted || separate_sources || plan.shared->batch.batch_size != 1 ||
+                   plan.shared->screening != 0.0 || beta == nullptr))
+    return cudaErrorInvalidValue;
+  return cudaSuccess;
+}
+
+/** Both adapters validate before entering this queue and own the failure drain.
+ * Keeping preflight outside preserves zero-work refusal for borrowed inputs. */
+static cudaError_t enqueue_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
+    bool allow_spatial_default, bool bilinear, DirectForcePrecisionRequest* precision) {
+  // The two existing projection slots carry D and P, not spin densities.
+  // Density screening is disabled: spin bounds do not bound a signed cross term.
+  auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
   if (error != cudaSuccess) return error;
 
   auto& shared = *p.shared;
-  const auto b = shared.batch;
-  runtime::cuda_trace::TraceOperation trace(
-      "direct_jk_force", shared.stream,
-      {static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.nbf), 0, true, true});
+  auto b = shared.batch;
+  // A launch-local view keeps strict replay and other owners isolated. The
+  // candidate cannot enter the bilinear/range-separated response contracts.
+  b.direct_force_fp32 = precision && precision->mixed_weighted && !bilinear;
+  b.direct_force_precision_work =
+      b.direct_force_fp32 && precision->collect_work ? p.force_cursor + 1 : nullptr;
+  if (precision) precision->work = {};
+  if (bilinear)
+    b.direct_force_seed = p.direct_spin + product(static_cast<std::size_t>(b.direct_nbf),
+                                                  static_cast<std::size_t>(b.direct_nbf));
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   // Total-force consumers combine the compiler-owned cotangents before AD;
   // derivative exports retain independent channels on exactly the same domain.
-  std::vector<double> result((separate_sources ? 2U : 1U) * coordinates);
+  const auto output_elements = (separate_sources ? 2U : 1U) * coordinates;
   runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
-  // Drain any pending D2H before result is destroyed on failure or exception.
-  struct HostResultDrain {
-    cudaStream_t stream;
-    bool active{true};
-    ~HostResultDrain() {
-      if (active) (void)cudaStreamSynchronize(stream);
-    }
-  } drain{shared.stream};
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream);
+  error = cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+  error = cudaMemsetAsync(p.force_cursor, 0, 4 * sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
   if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
     if (p.angular_force_opt_in) {
@@ -859,9 +937,46 @@ cudaError_t execute_generated_full_range_energy_derivatives(
       if (error != cudaSuccess) return error;
     }
   }
+  return cudaSuccess;
+}
+
+cudaError_t execute_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources, bool allow_spatial_default, bool bilinear,
+    DirectForcePrecisionRequest* precision) {
+  // Reject inadmissible metadata before allocating output or installing a CUDA
+  // drain: no asynchronous work exists yet, so refusal must not synchronize.
+  auto error = validate_generated_full_range_derivative_inputs(
+      p, unrestricted, beta, coulomb_coefficient, exchange_coefficient, separate_sources, bilinear);
+  if (error != cudaSuccess) return error;
+  auto& shared = *p.shared;
+  const auto& batch = shared.batch;
+  runtime::cuda_trace::TraceOperation trace("direct_jk_force", shared.stream,
+                                            {static_cast<std::size_t>(batch.batch_size),
+                                             static_cast<std::size_t>(batch.nbf), 0, true, true});
+  std::vector<double> result((separate_sources ? 2U : 1U) * batch.total_atoms * 3U);
+  // Host and resident adapters submit precisely the same derivative traversal.
+  // Keep the host allocation alive through every exceptional/ordinary drain.
+  struct HostResultDrain {
+    cudaStream_t stream;
+    bool active{true};
+    ~HostResultDrain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  error = enqueue_generated_full_range_energy_derivatives(
+      p, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
+      allow_spatial_default, bilinear, precision);
+  if (error != cudaSuccess) return error;
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);
   if (error != cudaSuccess) return error;
+  if (precision && precision->mixed_weighted && precision->collect_work) {
+    error = cudaMemcpyAsync(precision->work.data(), p.force_cursor + 1, sizeof(precision->work),
+                            cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+  }
   error = cudaStreamSynchronize(shared.stream);
   if (error != cudaSuccess) return error;
   drain.active = false;
@@ -869,6 +984,65 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   // derivative convention used by the stationary integral-source reducer.
   for (double& value : result) value = -value;
   derivatives = std::move(result);
+  return cudaSuccess;
+}
+
+cudaError_t consume_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient,
+    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default,
+    DirectForcePrecisionRequest* precision) {
+  if (!plan.shared || !consumer) return cudaErrorInvalidValue;
+  const auto input_status = validate_generated_full_range_derivative_inputs(
+      plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, true, false);
+  if (input_status != cudaSuccess) return input_status;
+  auto& shared = *plan.shared;
+  int device{};
+  const auto device_status = cudaGetDevice(&device);
+  if (device_status != cudaSuccess) return device_status;
+  cudaStreamCaptureStatus capture{};
+  const auto capture_status = cudaStreamIsCapturing(shared.stream, &capture);
+  if (capture_status != cudaSuccess) return capture_status;
+  if (capture != cudaStreamCaptureStatusNone) {
+#if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL)
+    // CuMetal omits the capture-specific error enum. The public adapter has
+    // already refused capture as INVALID_ARGUMENT before submission or drain.
+    return cudaErrorInvalidValue;
+#else
+    return cudaErrorStreamCaptureUnsupported;
+#endif
+  }
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_jk_force_resident", shared.stream,
+      {static_cast<std::size_t>(shared.batch.batch_size),
+       static_cast<std::size_t>(shared.batch.nbf), 0, true, true});
+  struct SubmissionDrain {
+    cudaStream_t stream;
+    bool submitted{true};
+    ~SubmissionDrain() {
+      if (submitted) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  const auto error = enqueue_generated_full_range_energy_derivatives(
+      plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, true,
+      allow_spatial_default, false, precision);
+  if (error != cudaSuccess) return error;
+  // Generated Direct kernels publish forces; the stationary source inventory
+  // publishes energy derivatives. The consumer retains this explicit sign.
+  consumer({CudaDerivativeSourceKind::FullRangeJk, CudaDerivativeConvention::Force, device,
+            reinterpret_cast<void*>(shared.stream), plan.force,
+            static_cast<std::size_t>(shared.batch.total_atoms) * 3U, 2});
+  const bool collect = precision && precision->mixed_weighted && precision->collect_work;
+  if (collect) {
+    auto status = cudaMemcpyAsync(precision->work.data(), plan.force_cursor + 1,
+                                  sizeof(precision->work), cudaMemcpyDeviceToHost, shared.stream);
+    if (status == cudaSuccess) status = cudaStreamSynchronize(shared.stream);
+    if (status != cudaSuccess) return status;
+  }
+  drain.submitted = false;
+  runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+  runtime::cuda_trace::trace_counter("device_to_host_bytes", collect ? sizeof(precision->work) : 0);
+  runtime::cuda_trace::trace_counter("stream_synchronizations", collect ? 1 : 0);
   return cudaSuccess;
 }
 
@@ -1003,7 +1177,16 @@ namespace {
 cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
                                              const double* beta,
                                              const MatrixLibraryResources* matrices) {
-  const auto b = p.batch;
+  auto b = p.batch;
+  // J reduces the summed density into its own FP64 metadata. The optional
+  // cache belongs to K's spin-aware reduction: overwriting it here would mix
+  // bounds during combined J/K and range-separated prepared execution.
+  b.direct_fp32_density_bounds = nullptr;
+  const auto output = generated_coulomb_output(p);
+  // Native DDDD and materialized value consumers use this existing scatter
+  // contract. Keep the binding local so shared K/derivative launches cannot
+  // write into J's correction plane.
+  b.reference_fock_correction = output.correction;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto cartesian = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
   const auto rectangle = std::size_t(b.batch_size) * b.nbf * b.direct_nbf;
@@ -1051,7 +1234,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
-  error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
+  error = cudaMemsetAsync(p.coulomb, 0, product(cartesian, 2U * sizeof(double)), p.stream);
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           p.stream);
@@ -1065,7 +1248,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
-        p.schwarz, p.density, p.coulomb, p.heads + cls,
+        p.schwarz, p.density, output, p.heads + cls,
         p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr, nullptr);
     if (error != cudaSuccess) return error;
   }
@@ -1084,6 +1267,15 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb,
   const auto b = p.batch;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto rectangle = std::size_t(b.batch_size) * b.nbf * b.direct_nbf;
+  const auto cartesian = product(
+      product(static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.direct_nbf)),
+      static_cast<std::size_t>(b.direct_nbf));
+  // Fold once after all generated/native/bounded J writers, before projection
+  // can discard their recovered low words. The next build resets both planes.
+  launch_jk_compensation_fold(p.stream, p.coulomb, generated_coulomb_output(p).correction,
+                              cartesian);
+  const auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
   if (matrices) {
     // The transformed density and its screening reductions are dead after J.
     // Every value/derivative invocation reconstructs them before reuse.

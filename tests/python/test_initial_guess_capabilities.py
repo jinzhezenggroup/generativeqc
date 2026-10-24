@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 from generativeqc import _native
-from generativeqc.initial_guess import supports_automatic_minao
+from generativeqc.initial_guess import (
+    supports_automatic_huckel,
+    supports_automatic_minao,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -66,12 +69,25 @@ _Static_assert(_Generic(generativeqc_initial_guess_capabilities_v1(), uint32_t: 
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF == 1U, "HF bit drifted");
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA == 2U, "LDA bit drifted");
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO == 4U, "MINAO bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU == 8U, "AUTO_CPU bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_AUTO_CPU == 4, "published AUTO_CPU kind drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_HUCKEL == 5, "HUCKEL kind drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU == 6, "AUTO_HUCKEL_CPU kind drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL == 16U, "HUCKEL bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF == 32U, "CUDA RHF bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF == 64U, "DF bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU == 128U, "AUTO_HUCKEL bit drifted");
 int main(void) {
   if (generativeqc_initial_guess_options_version() != 1) return 1;
   const uint32_t capabilities = generativeqc_initial_guess_capabilities_v1();
   if (capabilities != (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF |
                        GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO)) return 2;
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU)) return 2;
   printf("%u", (unsigned) capabilities);
 }
 """)
@@ -97,6 +113,11 @@ int main(void) {
         _native.INITIAL_GUESS_CAPABILITY_HF
         | _native.INITIAL_GUESS_CAPABILITY_LDA
         | _native.INITIAL_GUESS_CAPABILITY_MINAO
+        | _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
+        | _native.INITIAL_GUESS_CAPABILITY_HUCKEL
+        | _native.INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF
+        | _native.INITIAL_GUESS_CAPABILITY_HUCKEL_DF
+        | _native.INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU
     )
 
 
@@ -114,3 +135,36 @@ def test_capability_binding_uses_uint32() -> None:
     assert supports_automatic_minao(library)
     assert library.generativeqc_initial_guess_capabilities_v1.restype is ctypes.c_uint32
     assert library.generativeqc_initial_guess_capabilities_v1.argtypes == []
+
+
+@pytest.mark.parametrize("bits", [0, 8, 16, 32, 48, 64, 80, 96, 112, (1 << 31) | 112])
+@pytest.mark.parametrize(
+    "cuda_rhf,density_fitting",
+    [(False, False), (True, False), (False, True), (True, True)],
+)
+def test_huckel_negotiates_target_domain_bits(
+    bits: int, cuda_rhf: bool, density_fitting: bool
+) -> None:
+    signature = ctypes.CFUNCTYPE(ctypes.c_uint32)
+
+    class Library:
+        generativeqc_initial_guess_options_version = signature(lambda: 1)
+        generativeqc_initial_guess_capabilities_v1 = signature(lambda: bits)
+
+    required = 16 | (32 if cuda_rhf else 0) | (64 if density_fitting else 0)
+    assert supports_automatic_huckel(
+        Library(), cuda_rhf=cuda_rhf, density_fitting=density_fitting
+    ) is (bits & required == required)
+
+
+def test_huckel_missing_schema_and_incompatible_schema_keep_legacy_default() -> None:
+    from types import SimpleNamespace
+
+    assert not supports_automatic_huckel(SimpleNamespace())
+    signature = ctypes.CFUNCTYPE(ctypes.c_uint32)
+    assert not supports_automatic_huckel(
+        SimpleNamespace(
+            generativeqc_initial_guess_options_version=signature(lambda: 2),
+            generativeqc_initial_guess_capabilities_v1=signature(lambda: 56),
+        )
+    )

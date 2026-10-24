@@ -1,0 +1,26 @@
+{
+  "production_revision": "e5fa4d2f0cd13775327261a0b6ced1eab6006c62",
+  "git_archive_sha256": "5eea2609b35b29dfdc1748a7791369c152cebab5e5c39920d4747f7f1d492830",
+  "measured_driver_revision": "39e2ebc05",
+  "measured_driver_sha256": "7e2ca83f7e77637b799fe54d5fab890dbc855a679507e5ad8b486a6f6e49163d",
+  "artifact_host": "n1",
+  "artifact_root": "/data/jzzeng/readme-defaults-20261020",
+  "logs": {
+    "build.log": {
+      "bytes": 1860891,
+      "sha256": "f98538d6e924607a785f34a263c48993ebb9e1293b2b5c7565fb3ba85c1c54ac"
+    },
+    "build-aot.log": {
+      "bytes": 74762,
+      "sha256": "a9b1406f602a06d6bf0f5aadc1f5981b37fbd5212ff9f072953e26b4bf88ae42"
+    },
+    "compiler-commands.txt": {
+      "bytes": 1656537,
+      "sha256": "848be0ee0b1c64524504585b073a4714f586983e2f75060b3f5374fdd5168782"
+    }
+  },
+  "figures": {
+    "readme-df-defaults.svg": "264edbf8ced6d6359d8733c9bb634b365e3215cd01c9c192ec72adf6e5e90323",
+    "readme-direct-defaults.svg": "e0162ef53f17061f2a9996113812099716c0113cfa990d76a8b53ac92462d747"
+  }
+}

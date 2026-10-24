@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from generativeqc_compiler.common.provenance import atomic_json, canonical_hash
-from generativeqc_compiler.xc.bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+from generativeqc_compiler.xc.bulk_runtime import production_candidate_domain
 from generativeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     available_capabilities,
@@ -34,7 +34,7 @@ from generativeqc_compiler.xc.libxc_bulk_capabilities import (
 
 from tools.qualify_libxc_production_domain import qualify_functional
 
-CATALOG_CAMPAIGN_SCHEMA = "generativeqc.libxc-production-domain-catalog-campaign/v1"
+CATALOG_CAMPAIGN_SCHEMA = "generativeqc.libxc-production-domain-catalog-campaign/v2"
 CATALOG_ROW_STATUSES = (
     "pass",
     "fail",
@@ -96,7 +96,6 @@ def _catalog_identity(
     return canonical_hash(
         {
             "schema": CATALOG_CAMPAIGN_SCHEMA,
-            "candidate_domain": PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
             "shard_count": shard_count,
             "shard_index": shard_index,
             "rtol": rtol,
@@ -106,6 +105,7 @@ def _catalog_identity(
                     "name": item.name,
                     "capability_identity": item.identity,
                     "profile_identity": item.production_domain_profile.identity,
+                    "candidate_domain": production_candidate_domain(item.name),
                 }
                 for item in capabilities
             ],
@@ -134,7 +134,9 @@ def summarize_rows(
     return {
         "schema": CATALOG_CAMPAIGN_SCHEMA,
         "identity": catalog_identity,
-        "candidate_domain": PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        "candidate_domains": sorted(
+            {row["candidate_domain"] for row in rows if "candidate_domain" in row}
+        ),
         "shard": {"count": shard_count, "index": shard_index},
         "tolerance": {"rtol": rtol, "atol": atol},
         "selected_functionals": len(rows),
@@ -187,6 +189,7 @@ def run_catalog(
             "required_ingredients": list(capability.required_ingredients),
             "capability_identity": capability.identity,
             "profile_identity": profile.identity,
+            "candidate_domain": production_candidate_domain(capability.name),
             "status": None,
             "blocker": None,
             "campaign": None,

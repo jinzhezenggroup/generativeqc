@@ -5,12 +5,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 #include <weighted_eri.cuh>
 
 #include "integrals/range_moments.hpp"
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_profile.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_force_sources.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -38,6 +40,28 @@ struct LowOrderSourceRoots {
       : ShellClass == kDspsShellClass || ShellClass == kDpssShellClass ? 18U
                                                                        : 9U;
 
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradientF32 evaluate_mixed(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kSsssShellClass)
+      return generated_weighted_eri::ssss_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kPsssShellClass)
+      return generated_weighted_eri::psss_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kPspsShellClass)
+      return generated_weighted_eri::psps_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kPpssShellClass)
+      return generated_weighted_eri::ppss_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kDsssShellClass)
+      return generated_weighted_eri::dsss_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kPppsShellClass)
+      return generated_weighted_eri::ppps_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kDspsShellClass)
+      return generated_weighted_eri::dsps_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kDpssShellClass)
+      return generated_weighted_eri::dpss_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kFsssShellClass)
+      return generated_weighted_eri::fsss_force_fp32(geometry, weights);
+  }
+
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate(
       const generated_weighted_eri::Geometry& geometry, const double* weights) {
     if constexpr (ShellClass == kSsssShellClass) {
@@ -59,6 +83,31 @@ struct LowOrderSourceRoots {
     } else {
       static_assert(ShellClass == kFsssShellClass);
       return generated_weighted_eri::fsss_force(geometry, weights);
+    }
+  }
+
+  /** The scalar ssss root is already smaller than a relative-frame rewrite. */
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kSsssShellClass)
+      return evaluate(geometry, weights);
+    else if constexpr (ShellClass == kPsssShellClass)
+      return generated_weighted_eri::psss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPspsShellClass)
+      return generated_weighted_eri::psps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPpssShellClass)
+      return generated_weighted_eri::ppss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDsssShellClass)
+      return generated_weighted_eri::dsss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPppsShellClass)
+      return generated_weighted_eri::ppps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDspsShellClass)
+      return generated_weighted_eri::dsps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDpssShellClass)
+      return generated_weighted_eri::dpss_force_relative(geometry, weights);
+    else {
+      static_assert(ShellClass == kFsssShellClass);
+      return generated_weighted_eri::fsss_force_relative(geometry, weights);
     }
   }
 };
@@ -84,21 +133,23 @@ struct LowOrderSourceRoots {
 // while retaining exactly this density, orientation and scatter contract.
 template <bool Unrestricted, unsigned ShellClass, bool LongRange = false,
           class Roots = LowOrderSourceRoots<ShellClass>,
-          DirectForceOutputMode Mode = DirectForceOutputMode::Separate, bool ResidentBra = false>
-__device__ inline __noinline__ void contract_two_electron_force_low_order_sources_task(
+          DirectForceOutputMode Mode = DirectForceOutputMode::Separate, bool ResidentBra = false,
+          bool Mixed = false, bool RelativeResponse = false>
+__device__ inline __noinline__ bool contract_two_electron_force_low_order_sources_impl(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     double coulomb_coefficient, double exchange_coefficient, double omega = 0.0,
     const PrimitivePairData* resident_first_pairs = nullptr,
     std::int64_t resident_first_pair_count = 0) {
+  static_assert(!Mixed || !RelativeResponse);
   using Sources = DirectForceSources<Mode>;
   constexpr unsigned source_count = LongRange ? 1U : Sources::count;
-  if (task.tile != 0U) return;
+  if (task.tile != 0U) return true;
   const std::size_t first_pair = task.first_pair;
   const std::size_t second_pair = task.second_pair;
   const std::int32_t system = batch.shell_pair_systems[first_pair];
-  if (active[system] == 0) return;
-  if ((LongRange || coulomb_coefficient == 0.0) && exchange_coefficient == 0.0) return;
+  if (active[system] == 0) return true;
+  if ((LongRange || coulomb_coefficient == 0.0) && exchange_coefficient == 0.0) return true;
 
   const std::int32_t raw_shell[4] = {
       batch.shell_pair_first[first_pair], batch.shell_pair_second[first_pair],
@@ -131,7 +182,7 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
   // Retain that order even when the canonical p shell moves to the first slot.
   const unsigned unique_center_count =
       direct_force_unique_center_atoms(unique_order_atoms, unique_center_atoms);
-  if (unique_center_count == 1U) return;
+  if (unique_center_count == 1U) return true;
 
   const DirectShellAoQuartetLayout layout =
       direct_shell_ao_quartet_layout(batch, first_pair, second_pair);
@@ -150,12 +201,12 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
 #pragma unroll
     for (unsigned center = 0; center < 4; ++center) {
       const std::size_t canonical_ao = raw_ao[canonical_raw_slot[center]];
-      if (canonical_ao < component_begin[center]) return;
+      if (canonical_ao < component_begin[center]) return true;
       const auto component = static_cast<unsigned>(canonical_ao - component_begin[center]);
-      if (component >= component_count[center]) return;
+      if (component >= component_count[center]) return true;
       output = output * component_count[center] + component;
     }
-    if (output >= Roots::component_count) return;
+    if (output >= Roots::component_count) return true;
 #pragma unroll
     for (unsigned source = 0; source < source_count; ++source) {
       const auto coefficients =
@@ -166,7 +217,7 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       if (coulomb == 0.0 && exchange == 0.0) continue;
       const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
           dimension, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2],
-          raw_ao[3], coulomb, exchange);
+          raw_ao[3], coulomb, exchange, batch.direct_force_seed);
       if constexpr (ShellClass != kPsssShellClass) {
         if (coefficient == 0.0) continue;
       }
@@ -192,7 +243,11 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
 #pragma unroll
   for (unsigned source = 0; source < source_count; ++source)
     any_source = any_source || source_active[source];
-  if (!any_source) return;
+  if (!any_source) return true;
+  if (auto* diagnostic = direct_force_class_work(batch, ShellClass)) {
+    atomicAdd(&diagnostic->executed_shells, 1ULL);
+    profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+  }
 
   const std::size_t canonical_pair[2] = {canonical_raw_slot[0] < 2U ? first_pair : second_pair,
                                          canonical_raw_slot[2] < 2U ? first_pair : second_pair};
@@ -210,7 +265,10 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
   // matching protects primitive indexing; partial storage never drops work.
   const bool use_resident = ResidentBra && resident_first_pairs != nullptr &&
                             resident_first_pair_count == first_end - first_begin;
-  generated_weighted_eri::IndependentGradient result[source_count]{};
+  using LocalGradient = std::conditional_t<Mixed, generated_weighted_eri::IndependentGradientF32,
+                                           generated_weighted_eri::IndependentGradient>;
+  LocalGradient result[source_count]{};
+  unsigned long long primitive_sources = 0;
   for (std::int64_t first_primitive = first_begin; first_primitive < first_end; ++first_primitive) {
     const PrimitivePairData first_data = use_resident
                                              ? resident_first_pairs[first_primitive - first_begin]
@@ -238,7 +296,15 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
 #pragma unroll
       for (unsigned source = 0; source < source_count; ++source) {
         if (!source_active[source]) continue;
-        const auto primitive = Roots::evaluate(geometry, weights[source]);
+        const auto primitive = [&] {
+          if constexpr (RelativeResponse)
+            return Roots::evaluate_relative(geometry, weights[source]);
+          else if constexpr (Mixed)
+            return Roots::evaluate_mixed(geometry, weights[source]);
+          else
+            return Roots::evaluate(geometry, weights[source]);
+        }();
+        if constexpr (Mixed) ++primitive_sources;
 #pragma unroll
         for (unsigned center = 0; center < 3; ++center) {
 #pragma unroll
@@ -249,13 +315,91 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       }
     }
   }
+  if constexpr (Mixed) {
+    auto* work = batch.direct_force_precision_work
+                     ? batch.direct_force_precision_work + 3 * static_cast<std::size_t>(system)
+                     : nullptr;
+    if (work) {
+      atomicAdd(work, 1ULL);
+      atomicAdd(work + 1, primitive_sources);
+    }
+  }
+  if constexpr (Mixed || RelativeResponse) {
+    bool finite = true;
+    for (unsigned source = 0; source < source_count; ++source)
+      for (unsigned center = 0; center < 3; ++center)
+        for (unsigned axis = 0; axis < 3; ++axis)
+          finite = finite && isfinite(result[source].center[center][axis]);
+    if (!finite) {
+      // Nothing has reached the atom arrays yet. Retry exactly this task once
+      // with the retained FP64 graph; never clip inputs or publish partial forces.
+      if constexpr (Mixed) {
+        auto* work = batch.direct_force_precision_work
+                         ? batch.direct_force_precision_work + 3 * static_cast<std::size_t>(system)
+                         : nullptr;
+        if (work) atomicAdd(work + 2, 1ULL);
+      }
+      return false;
+    }
+  }
 #pragma unroll
   for (unsigned source = 0; source < source_count; ++source) {
     if (!source_active[source]) continue;
+    generated_weighted_eri::IndependentGradient widened{};
+#pragma unroll
+    for (unsigned center = 0; center < 3; ++center)
+#pragma unroll
+      for (unsigned axis = 0; axis < 3; ++axis)
+        widened.center[center][axis] = result[source].center[center][axis];
     scatter_direct_force_independent_gradient(center_atoms, unique_center_atoms,
-                                              unique_center_count, result[source],
+                                              unique_center_count, widened,
                                               Sources::output(forces, batch.total_atoms, source));
   }
+  return true;
+}
+
+/** Select arithmetic per launch, outside the shared scientific task body.
+ * A failed candidate returns before the strict call so their large private
+ * recurrence/weight frames need not be live simultaneously on the CUDA stack. */
+template <bool Unrestricted, unsigned ShellClass, bool LongRange = false,
+          class Roots = LowOrderSourceRoots<ShellClass>,
+          DirectForceOutputMode Mode = DirectForceOutputMode::Separate, bool ResidentBra = false>
+__device__ inline void contract_two_electron_force_low_order_sources_task(
+    const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double coulomb_coefficient, double exchange_coefficient, double omega = 0.0,
+    const PrimitivePairData* resident_first_pairs = nullptr,
+    std::int64_t resident_first_pair_count = 0) {
+  if constexpr (!LongRange) {
+    if (batch.direct_force_fp32 && batch.direct_force_seed == nullptr) {
+      if (contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
+                                                             Roots, Mode, ResidentBra, true>(
+              batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+              coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
+              resident_first_pair_count))
+        return;
+    }
+    if constexpr (Roots::angular_order != 0U &&
+                  requires(const generated_weighted_eri::Geometry& geometry,
+                           const double* weights) {
+                    Roots::evaluate_relative(geometry, weights);
+                  }) {
+      // Retry the original nuclear graph before any atom scatter if the
+      // relative factorization or its primitive reduction becomes nonfinite.
+      if (batch.direct_force_relative_response && !batch.direct_force_fp32 &&
+          contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
+                                                             Roots, Mode, ResidentBra, false, true>(
+              batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+              coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
+              resident_first_pair_count))
+        return;
+    }
+  }
+  contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange, Roots,
+                                                     Mode, ResidentBra, false>(
+      batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+      coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
+      resident_first_pair_count);
 }
 
 /** Dispatch only the closed low-order domain for the selected radial owner. */

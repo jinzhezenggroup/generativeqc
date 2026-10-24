@@ -1,0 +1,464 @@
+{
+  "gates": {
+    "energy_abs_per_atom": 1e-05,
+    "force_max_abs": 0.0001,
+    "force_rms": 3e-05
+  },
+  "results": {
+    "standard-pbe-df-48.json": {
+      "passed": true,
+      "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 17.12865375354886,
+      "warm_median_seconds": 5.5554016418755054,
+      "baseline_cold_seconds": 30.577440191060305,
+      "baseline_warm_median_seconds": 19.13284309953451,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 7.315463795028639e-06,
+          "force_max_abs": 3.683414262573015e-05,
+          "force_rms": 1.5769558047253255e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.315463795028639e-06,
+          "force_max_abs": 3.6834142593311636e-05,
+          "force_rms": 1.5769558049602084e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.315463795028639e-06,
+          "force_max_abs": 3.683414260885476e-05,
+          "force_rms": 1.576955804697213e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.315463795028639e-06,
+          "force_max_abs": 3.683414258620621e-05,
+          "force_rms": 1.5769558046803257e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 9.61045335164575e-08,
+          "force_max_abs": 1.702873772480018e-05,
+          "force_rms": 5.2630752022923146e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 5.156299683524897e-09,
+          "force_max_abs": 7.819150593668667e-07,
+          "force_rms": 4.17139840581424e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.652692880171041e-13,
+          "force_max_abs": 7.175506855361391e-09,
+          "force_rms": 3.9344433316224544e-09,
+          "passed": true
+        }
+      ],
+      "baseline_errors": [
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 5.686118242920202e-12,
+          "force_rms": 1.2026221218494031e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 5.782041512247815e-12,
+          "force_rms": 1.2049972437221526e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 5.794476010123617e-12,
+          "force_rms": 1.1925261658012475e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 5.9117155615240335e-12,
+          "force_rms": 1.2079826969839137e-12,
+          "passed": true
+        }
+      ],
+      "references": [
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe-48.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe-3.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cpu-pbe-3.json"
+      ]
+    },
+    "standard-pbe-df-96.json": {
+      "passed": true,
+      "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 68.18011171370745,
+      "warm_median_seconds": 29.707644797861576,
+      "baseline_cold_seconds": 167.1935972198844,
+      "baseline_warm_median_seconds": 129.27005252614617,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 7.312549215043873e-06,
+          "force_max_abs": 3.701910545894638e-05,
+          "force_rms": 1.5815952133931546e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.312549215043873e-06,
+          "force_max_abs": 3.701910545272913e-05,
+          "force_rms": 1.581595213316933e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.312549215043873e-06,
+          "force_max_abs": 3.70191054704927e-05,
+          "force_rms": 1.581595213356044e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 7.312549215043873e-06,
+          "force_max_abs": 3.701910545717002e-05,
+          "force_rms": 1.5815952133263488e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 9.581232992180351e-08,
+          "force_max_abs": 1.7086240891472926e-05,
+          "force_rms": 5.285546156468161e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 5.156299683524897e-09,
+          "force_max_abs": 7.819150593668667e-07,
+          "force_rms": 4.17139840581424e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.652692880171041e-13,
+          "force_max_abs": 7.175506855361391e-09,
+          "force_rms": 3.9344433316224544e-09,
+          "passed": true
+        }
+      ],
+      "baseline_errors": [
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.6685319792486553e-11,
+          "force_rms": 2.1652751836410876e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.6704859717719955e-11,
+          "force_rms": 2.1742430956121486e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.6695977933522954e-11,
+          "force_rms": 2.1679234311196682e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.6617818232589343e-11,
+          "force_rms": 2.1682344257727827e-12,
+          "passed": true
+        }
+      ],
+      "references": [
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe-96.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe-3.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cpu-pbe-3.json"
+      ]
+    },
+    "standard-pbe0-df-48.json": {
+      "passed": true,
+      "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 23.379857327789068,
+      "warm_median_seconds": 10.896809078752995,
+      "baseline_cold_seconds": 50.468521647155285,
+      "baseline_warm_median_seconds": 38.166588854044676,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 8.972093705021204e-08,
+          "force_max_abs": 2.293817394166675e-05,
+          "force_rms": 1.0038367396196698e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 8.972093705021204e-08,
+          "force_max_abs": 2.293817390873476e-05,
+          "force_rms": 1.0038367392352172e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 8.972093705021204e-08,
+          "force_max_abs": 2.29381739334511e-05,
+          "force_rms": 1.0038367399266864e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 8.972093705021204e-08,
+          "force_max_abs": 2.2938173884975988e-05,
+          "force_rms": 1.0038367391884965e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 6.507694176131433e-08,
+          "force_max_abs": 1.3041521352175067e-05,
+          "force_rms": 3.844514112601923e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 5.097694118679404e-09,
+          "force_max_abs": 6.36382889940279e-07,
+          "force_rms": 3.4184080270032334e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.4158453015843406e-13,
+          "force_max_abs": 1.1264684740552866e-08,
+          "force_rms": 6.568755029668502e-09,
+          "passed": true
+        }
+      ],
+      "baseline_errors": [
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0354661572620216e-11,
+          "force_rms": 1.4001792195490835e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0331374644678704e-11,
+          "force_rms": 1.401554839810432e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0429684893509261e-11,
+          "force_rms": 1.3926739536580338e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0243375592189352e-11,
+          "force_rms": 1.3890121975240033e-12,
+          "passed": true
+        }
+      ],
+      "references": [
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe0-48.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe0-3.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cpu-pbe0-3.json"
+      ]
+    },
+    "standard-pbe0-df-96.json": {
+      "passed": true,
+      "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 104.99097912758589,
+      "warm_median_seconds": 56.308852192014456,
+      "baseline_cold_seconds": 304.19718800857663,
+      "baseline_warm_median_seconds": 255.25283018872142,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 9.082205565391632e-08,
+          "force_max_abs": 2.3093994159395503e-05,
+          "force_rms": 1.0072864542323456e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 9.082205565391632e-08,
+          "force_max_abs": 2.3093994166306642e-05,
+          "force_rms": 1.0072864541252879e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 9.082205565391632e-08,
+          "force_max_abs": 2.3093994167583398e-05,
+          "force_rms": 1.007286453839337e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 9.082205565391632e-08,
+          "force_max_abs": 2.3093994176145993e-05,
+          "force_rms": 1.0072864541776935e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 6.49669781675281e-08,
+          "force_max_abs": 1.3081908487144744e-05,
+          "force_rms": 3.859503111383493e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 5.097694118679404e-09,
+          "force_max_abs": 6.36382889940279e-07,
+          "force_rms": 3.4184080270032334e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.4158453015843406e-13,
+          "force_max_abs": 1.1264684740552866e-08,
+          "force_rms": 6.568755029668502e-09,
+          "passed": true
+        }
+      ],
+      "baseline_errors": [
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.5261188146542537e-11,
+          "force_rms": 2.369274552217641e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.541046977526772e-11,
+          "force_rms": 2.3726123667820007e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.524002452013562e-11,
+          "force_rms": 2.3697743796455873e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.5360603414227292e-11,
+          "force_rms": 2.372653162915976e-12,
+          "passed": true
+        }
+      ],
+      "references": [
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe0-96.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cuda-pbe0-3.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/aligned-live/accuracy/cpu-pbe0-3.json"
+      ]
+    },
+    "standard-r2scan-3c-df-48.json": {
+      "passed": true,
+      "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 57.032271299511194,
+      "warm_median_seconds": 26.898644853383303,
+      "baseline_cold_seconds": 101.39690973982215,
+      "baseline_warm_median_seconds": 70.63168985396624,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 2.0352097891418452e-06,
+          "force_max_abs": 5.596744739477799e-05,
+          "force_rms": 2.4703056072806243e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.0352097891418452e-06,
+          "force_max_abs": 5.5967447371241263e-05,
+          "force_rms": 2.4703056076060425e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.0352097891418452e-06,
+          "force_max_abs": 5.596744737301762e-05,
+          "force_rms": 2.470305607167462e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.0352097891418452e-06,
+          "force_max_abs": 5.596744741298565e-05,
+          "force_rms": 2.470305607578109e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.077928075375288e-08,
+          "force_max_abs": 3.0263203161240426e-06,
+          "force_rms": 1.3030592645605407e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.445385570761573e-08,
+          "force_max_abs": 4.178048333414175e-07,
+          "force_rms": 2.6210873133772507e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.979039320256561e-13,
+          "force_max_abs": 2.1552844842176455e-08,
+          "force_rms": 1.306039033699697e-08,
+          "passed": true
+        }
+      ],
+      "baseline_errors": [
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0262013461215247e-11,
+          "force_rms": 2.3834980274882382e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0270895245412248e-11,
+          "force_rms": 2.3721777417258618e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0224709967587842e-11,
+          "force_rms": 2.381775837797062e-12,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 0.0,
+          "force_max_abs": 1.0265566174894047e-11,
+          "force_rms": 2.3659594998783324e-12,
+          "passed": true
+        }
+      ],
+      "references": [
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/settings-audit/remote/denser-references/cuda-r2scan-3c-48.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/settings-audit/remote/denser-references/cuda-r2scan-3c-3.json",
+        "/home/jzzeng/codes/qc-readme-default-benchmarks-20261020/.artifacts/settings-audit/remote/denser-references/cpu-r2scan-3c-3.json"
+      ]
+    }
+  }
+}

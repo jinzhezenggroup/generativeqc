@@ -1,0 +1,7 @@
+id: cuda-review-device-reset
+valid:
+  - |
+    void f() { int device = 0; cudaGetDevice(&device); }
+invalid:
+  - |
+    void f() { cudaDeviceReset(); }

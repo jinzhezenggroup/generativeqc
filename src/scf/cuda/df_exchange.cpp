@@ -16,6 +16,7 @@
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 
 namespace generativeqc::scf::cuda_df {
 using runtime::cuda_trace::trace_call;
@@ -26,6 +27,10 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
                                    double* exchange, std::string& detail,
                                    bool density_is_column_major, std::size_t system_begin,
                                    std::size_t system_end) {
+  if (plan.resident_raw_coulomb) {
+    detail = "pure-J raw storage cannot supply a fitted exchange tensor";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   system_end = std::min(system_end, plan.batch_size);
   if (system_begin >= system_end) return GENERATIVEQC_STATUS_SUCCESS;
   plan.revoke_projection_leases();
@@ -104,17 +109,24 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
               return cuda_failure(cuda_error, "transpose source-backed DF exchange row tile",
                                   detail);
             }
-            cublasStatus_t blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
-              return cublasDgemmStridedBatched(
-                  plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(plan.nbf),
-                  static_cast<int>(row_count), static_cast<int>(plan.nbf), &one,
-                  density_column_major, static_cast<int>(plan.nbf), 0, plan.exchange_intermediate,
-                  static_cast<int>(plan.nbf), static_cast<long long>(pair_count), &zero,
-                  plan.exchange_contributions, static_cast<int>(plan.nbf),
-                  static_cast<long long>(pair_count), static_cast<int>(auxiliary_count));
+            generativeqc_status blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
+              return scf_matrix_product_batched_view(
+                  plan,
+                  {{density_column_major, plan.nbf, 0},
+                   {plan.exchange_intermediate, plan.nbf, pair_count},
+                   {plan.exchange_contributions, plan.nbf, pair_count},
+                   plan.nbf,
+                   row_count,
+                   plan.nbf,
+                   auxiliary_count,
+                   true,
+                   false,
+                   one,
+                   zero},
+                  "source-backed DF exchange row GEMM", detail);
             });
-            if (blas_status != CUBLAS_STATUS_SUCCESS) {
-              return blas_failure(blas_status, "source-backed DF exchange row GEMM", detail);
+            if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+              return blas_status;
             }
             // Consume the row's own transposed values before another column
             // overwrites them. Output blocks are disjoint, so this visitation
@@ -142,17 +154,23 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
               }
               const std::size_t output_stride = row_count * column_count;
               blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
-                return cublasDgemmStridedBatched(
-                    plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(row_count),
-                    static_cast<int>(column_count), static_cast<int>(plan.nbf), &one,
-                    plan.exchange_contributions, static_cast<int>(plan.nbf),
-                    static_cast<long long>(pair_count), plan.exchange_intermediate,
-                    static_cast<int>(plan.nbf), static_cast<long long>(column_pair_count), &zero,
-                    plan.exchange_tile_output, static_cast<int>(row_count),
-                    static_cast<long long>(output_stride), static_cast<int>(auxiliary_count));
+                return scf_matrix_product_batched_view(
+                    plan,
+                    {{plan.exchange_contributions, plan.nbf, pair_count},
+                     {plan.exchange_intermediate, plan.nbf, column_pair_count},
+                     {plan.exchange_tile_output, row_count, output_stride},
+                     row_count,
+                     column_count,
+                     plan.nbf,
+                     auxiliary_count,
+                     true,
+                     false,
+                     one,
+                     zero},
+                    "source-backed DF exchange column GEMM", detail);
               });
-              if (blas_status != CUBLAS_STATUS_SUCCESS) {
-                return blas_failure(blas_status, "source-backed DF exchange column GEMM", detail);
+              if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+                return blas_status;
               }
               launch_reduce_exchange_row_tile_kernel(blocks_for(output_stride), kThreads, 0,
                                                      plan.stream, plan.nbf, row_begin, row_count,
@@ -239,17 +257,24 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
 
           // T_A = D^T * B_A^T, stored as nbf x row_count column-major.  The
           // transpose is B_A * D, which is the left factor of K_AB.
-          cublasStatus_t blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
-            return cublasDgemmStridedBatched(
-                plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(plan.nbf),
-                static_cast<int>(row_count), static_cast<int>(plan.nbf), &one, density_column_major,
-                static_cast<int>(plan.nbf), 0, plan.auxiliary_tile_values,
-                static_cast<int>(plan.nbf), static_cast<long long>(row_stride), &zero,
-                plan.exchange_contributions, static_cast<int>(plan.nbf),
-                static_cast<long long>(row_stride), static_cast<int>(auxiliary_count));
+          generativeqc_status blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
+            return scf_matrix_product_batched_view(
+                plan,
+                {{density_column_major, plan.nbf, 0},
+                 {plan.auxiliary_tile_values, plan.nbf, row_stride},
+                 {plan.exchange_contributions, plan.nbf, row_stride},
+                 plan.nbf,
+                 row_count,
+                 plan.nbf,
+                 auxiliary_count,
+                 true,
+                 false,
+                 one,
+                 zero},
+                "streamed DF exchange row GEMM", detail);
           });
-          if (blas_status != CUBLAS_STATUS_SUCCESS) {
-            return blas_failure(blas_status, "streamed DF exchange row GEMM", detail);
+          if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+            return blas_status;
           }
 
           for (std::size_t column_begin = 0; column_begin < plan.nbf;
@@ -284,17 +309,23 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
             // reduction kernel transposes that view while scattering.
             const std::size_t output_stride = row_count * column_count;
             blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
-              return cublasDgemmStridedBatched(
-                  plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(row_count),
-                  static_cast<int>(column_count), static_cast<int>(plan.nbf), &one,
-                  plan.exchange_contributions, static_cast<int>(plan.nbf),
-                  static_cast<long long>(row_stride), plan.exchange_intermediate,
-                  static_cast<int>(plan.nbf), static_cast<long long>(column_stride), &zero,
-                  plan.exchange_tile_output, static_cast<int>(row_count),
-                  static_cast<long long>(output_stride), static_cast<int>(auxiliary_count));
+              return scf_matrix_product_batched_view(
+                  plan,
+                  {{plan.exchange_contributions, plan.nbf, row_stride},
+                   {plan.exchange_intermediate, plan.nbf, column_stride},
+                   {plan.exchange_tile_output, row_count, output_stride},
+                   row_count,
+                   column_count,
+                   plan.nbf,
+                   auxiliary_count,
+                   true,
+                   false,
+                   one,
+                   zero},
+                  "streamed DF exchange column GEMM", detail);
             });
-            if (blas_status != CUBLAS_STATUS_SUCCESS) {
-              return blas_failure(blas_status, "streamed DF exchange column GEMM", detail);
+            if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+              return blas_status;
             }
             launch_reduce_exchange_row_tile_kernel(blocks_for(output_stride), kThreads, 0,
                                                    plan.stream, plan.nbf, row_begin, row_count,
@@ -320,8 +351,8 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  const int nbf = static_cast<int>(plan.nbf);
-  const long long matrix_stride = static_cast<long long>(plan.matrix_elements);
+  const auto nbf = plan.nbf;
+  const auto matrix_stride = plan.matrix_elements;
   for (std::size_t system = system_begin; system < system_end; ++system) {
     const double* system_density = density + system * plan.matrix_elements;
     double* transposed_density = plan.exchange_density_column_major + system * plan.matrix_elements;
@@ -346,22 +377,31 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
       // which is precisely the public row-major K. No symmetry of D or B
       // is assumed. Only one full scratch tensor is written, leaving the
       // response owner's immutable raw tensor untouched across dense seeds.
-      const auto a = static_cast<int>(plan.naux), an = a * nbf;
+      const auto a = plan.naux, an = a * nbf;
       const auto* b = plan.three_center + system * plan.tensor_elements_per_system;
       auto* x = plan.auxiliary_tile_values;
       auto status = trace_call("ri_k_density_projection_gemm", plan.stream, [&] {
-        return cublasDgemmStridedBatched(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, a, nbf, nbf, &one, b,
-                                         a, plan.naux * plan.nbf, density_column_major, nbf, 0,
-                                         &zero, x, a, plan.naux * plan.nbf, nbf);
+        return scf_matrix_product_batched_view(plan,
+                                               {{b, a, plan.naux * plan.nbf},
+                                                {density_column_major, nbf, 0},
+                                                {x, a, plan.naux * plan.nbf},
+                                                a,
+                                                nbf,
+                                                nbf,
+                                                nbf,
+                                                false,
+                                                false,
+                                                one,
+                                                zero},
+                                               "resident DF density projection", detail);
       });
-      if (status != CUBLAS_STATUS_SUCCESS)
-        return blas_failure(status, "resident DF density projection", detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       status = trace_call("ri_k_exchange_gemm", plan.stream, [&] {
-        return cublasDgemm(plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, nbf, nbf, an, &one, b, an, x, an,
-                           &zero, exchange + system * plan.matrix_elements, nbf);
+        return scf_matrix_product_view(plan, true, false, nbf, nbf, an, b, an, x, an,
+                                       exchange + system * plan.matrix_elements, nbf, one, zero,
+                                       "resident DF exchange contraction", detail);
       });
-      if (status != CUBLAS_STATUS_SUCCESS)
-        return blas_failure(status, "resident DF exchange contraction", detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       continue;
     }
     // Three simultaneous legacy operands fit two full scratch tensors when
@@ -397,28 +437,47 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
         return cuda_failure(cuda_error, "gather DF exchange tile", detail);
       }
 
-      const int tile_count = static_cast<int>(auxiliary_count);
-      cublasStatus_t blas_status =
+      const auto tile_count = auxiliary_count;
+      // The gathered AO-pair tile is B^T in column-major layout. D^T
+      // contributes the left factor; reduction below maps the result
+      // back to the row-major public exchange matrix, yielding B D B^T.
+      generativeqc_status blas_status =
           trace_call(retain_raw ? "ri_k_density_projection_gemm" : "ri_k_gemm", plan.stream, [&] {
-            return cublasDgemmStridedBatched(
-                // The gathered AO-pair tile is B^T in cuBLAS layout.  Use D^T as
-                // the first factor; the reduction below maps the column-major
-                // result back to row-major public storage, yielding B D B^T.
-                plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, nbf, nbf, nbf, &one, density_column_major, nbf,
-                0, plan.auxiliary_tile_values, nbf, matrix_stride, &zero,
-                plan.exchange_intermediate, nbf, matrix_stride, tile_count);
+            return scf_matrix_product_batched_view(
+                plan,
+                {{density_column_major, nbf, 0},
+                 {plan.auxiliary_tile_values, nbf, matrix_stride},
+                 {plan.exchange_intermediate, nbf, matrix_stride},
+                 nbf,
+                 nbf,
+                 nbf,
+                 tile_count,
+                 true,
+                 false,
+                 one,
+                 zero},
+                "DF exchange first GEMM", detail);
           });
-      if (blas_status != CUBLAS_STATUS_SUCCESS) {
-        return blas_failure(blas_status, "DF exchange first GEMM", detail);
+      if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+        return blas_status;
       }
       blas_status = trace_call(retain_raw ? "ri_k_exchange_gemm" : "ri_k_gemm", plan.stream, [&] {
-        return cublasDgemmStridedBatched(plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, nbf, nbf, nbf, &one,
-                                         plan.auxiliary_tile_values, nbf, matrix_stride,
-                                         plan.exchange_intermediate, nbf, matrix_stride, &zero,
-                                         contributions, nbf, matrix_stride, tile_count);
+        return scf_matrix_product_batched_view(plan,
+                                               {{plan.auxiliary_tile_values, nbf, matrix_stride},
+                                                {plan.exchange_intermediate, nbf, matrix_stride},
+                                                {contributions, nbf, matrix_stride},
+                                                nbf,
+                                                nbf,
+                                                nbf,
+                                                tile_count,
+                                                true,
+                                                false,
+                                                one,
+                                                zero},
+                                               "DF exchange second GEMM", detail);
       });
-      if (blas_status != CUBLAS_STATUS_SUCCESS) {
-        return blas_failure(blas_status, "DF exchange second GEMM", detail);
+      if (blas_status != GENERATIVEQC_STATUS_SUCCESS) {
+        return blas_status;
       }
       runtime::cuda_trace::TraceRegion reduction("ri_k_exchange_reduce", plan.stream);
       launch_reduce_exchange_tile_kernel(blocks_for(plan.matrix_elements), kThreads, 0, plan.stream,

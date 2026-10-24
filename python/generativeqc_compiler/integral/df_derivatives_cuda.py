@@ -8,14 +8,27 @@ from .df_derivatives import axis_polynomial, build_df_derivative_ir
 from .ir_serialization import integral_to_payload
 
 
-def df_derivative_inventory(*, auxiliary_g: bool = False) -> typing.Any:
+def df_derivative_inventory(
+    *, auxiliary_g: bool = False, scalar_type: str = "double"
+) -> typing.Any:
     """Separate the external-response contract from native tiling decisions."""
-    return {
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    inventory = {
         "schema": "generativeqc.df_derivatives",
         "version": 1,
         "precision": "fp64",
         "maximum_boys_order": 11 if auxiliary_g else 10,
         "lowering": "gaussian_moment_polynomials",
+        "radial_kernels": {
+            "coulomb": {"omega": "zero", "kernel": "1/r"},
+            "long_range": {
+                "omega": "positive-finite-runtime",
+                "kernel": "erf(omega*r)/r",
+                "moment_substitution": "t=omega/hypot(omega,sqrt(rho))*u",
+                "center_response": "fixed-exponents-and-omega",
+            },
+        },
         "programs": [
             integral_to_payload(
                 build_df_derivative_ir(family, angular, weighted=weighted)
@@ -28,6 +41,20 @@ def df_derivative_inventory(*, auxiliary_g: bool = False) -> typing.Any:
             for weighted in (False, True)
         ],
     }
+    if scalar_type == "float":
+        inventory.update(
+            precision="mixed-fp32-polynomials",
+            arithmetic={
+                "geometry": "fp64",
+                "boys": "fp64",
+                "moment_polynomials": "fp32",
+                "moment_convolution": "fp32",
+                "primitive_derivative": "fp32",
+                "returned_channels": "fp64",
+                "contracted_accumulation": "consumer-owned",
+            },
+        )
+    return inventory
 
 
 def emit_df_geometry_cuda(
@@ -35,6 +62,7 @@ def emit_df_geometry_cuda(
     *,
     moments: typing.Any = "boys_values(total+1,rho*distance,g.f,work);",
     compensated: bool = False,
+    range_separated: bool = False,
 ) -> typing.Any:
     """Share primitive geometry between polynomial and Rys derivative lowering.
 
@@ -44,6 +72,8 @@ def emit_df_geometry_cuda(
     The emitted function lives where Vec3, Geometry, BoysWork and component
     already name the scalar derivative contract; no native equations are copied.
     """
+    if range_separated and moments != "boys_values(total+1,rho*distance,g.f,work);":
+        raise ValueError("range-separated DF geometry does not support custom moments")
     source = r"""__device__ __forceinline__ void prepare_geometry(double alpha,Vec3 A,double beta,Vec3 B,
     double gamma,Vec3 C,unsigned total,Geometry& g,BoysWork* work=nullptr) {
   const double p=alpha+beta,q=gamma,rho=p*q/(p+q);
@@ -58,6 +88,22 @@ def emit_df_geometry_cuda(
   boys_values(total+1,rho*distance,g.f,work);
   g.prefactor=34.986836655249725694/(p*q*sqrt(p+q))*exp(-alpha*beta/p*ab2);
 }"""
+    if range_separated:
+        source = (
+            source.replace(
+                "BoysWork* work=nullptr)", "BoysWork* work=nullptr,double omega=0.0)"
+            )
+            .replace(
+                "  boys_values(total+1,rho*distance,g.f,work);",
+                """  // t=sqrt(theta)*u maps the erf kernel to the same moment polynomials.
+  // Exponents are fixed under center differentiation, including theta.
+  double scale=1.0,theta=1.0;
+  if(omega>0.0) { scale=omega/hypot(omega,sqrt(rho));theta=scale*scale; }
+  g.sx*=theta;g.sy*=theta;
+  boys_values(total+1,(rho*theta)*distance,g.f,work);""",
+            )
+            .replace("*exp(-alpha*beta/p*ab2);", "*exp(-alpha*beta/p*ab2)*scale;")
+        )
     source = source.replace("prepare_geometry(", name + "(", 1).replace(
         "boys_values(total+1,rho*distance,g.f,work);", moments, 1
     )
@@ -121,9 +167,11 @@ __device__ __forceinline__ void boys_values(unsigned order,double argument,doubl
     return source
 
 
-def emit_df_polynomial_dot_cuda() -> str:
+def emit_df_polynomial_dot_cuda(*, scalar_type: str = "double") -> str:
     """Integrate the common axis polynomials against exact Boys moments."""
-    return r"""/** Integrate the product of three polynomials using exact Boys moments. */
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    source = r"""/** Integrate the product of three polynomials using exact Boys moments. */
 __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
     unsigned dc,const double* c,const double* f) {
   double value=0.0;
@@ -133,9 +181,16 @@ __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
   return value;
 }
 """
+    return (
+        source
+        if scalar_type == "double"
+        else source.replace("double", "float").replace("0.0", "0.0f")
+    )
 
 
-def emit_df_derivatives_cuda(*, auxiliary_g: bool = False) -> typing.Any:
+def emit_df_derivatives_cuda(
+    *, auxiliary_g: bool = False, scalar_type: str = "double"
+) -> str:
     """Share base axis moments and Boys values across all independent centers.
 
     The derivative of an unnormalized basis factor is
@@ -145,7 +200,20 @@ def emit_df_derivatives_cuda(*, auxiliary_g: bool = False) -> typing.Any:
     The explicit auxiliary-g variant shares this algebra but owns twelve slots,
     F_11 and role-checked internal raising. It is emitted into a separate
     namespace; requesting it does not promote any public force capability.
+
+    Positive omega selects the same radial kernel in the metric and the
+    three-center response. Zero preserves Coulomb. Long-range production uses
+    only the FP64 policy; other emitted candidates need separate qualification.
+
+    The optional float candidate narrows polynomial inputs, DAG temporaries,
+    moment products and derivative sums, not just the output storage. Gaussian
+    geometry and Boys preparation retain FP64 before an explicit narrowing
+    boundary. Returned channels widen once into the existing response ABI.
+    This compiler candidate alone does not admit a production force path; its
+    consumer must own qualification and pre-scatter strict recovery.
     """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
     prefix = r"""// Generated DF metric/three-center first derivatives.
 #ifndef GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
 #define GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
@@ -160,7 +228,7 @@ __device__ __forceinline__ double component(Vec3 a,unsigned i) { return i==0?a.x
 __device__ __forceinline__ unsigned power(Angular a,unsigned i) { return i==0?a.x:i==1?a.y:a.z; }
 __DF_BOYS__/** Exact coefficients in u=t^2 of the shared Gaussian-moment value DAG. */
 __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
-    double pa,double pb,double dx,double sx,double sy,double ip,double iq,double* out) {
+    __DF_ARITHMETIC__ pa,__DF_ARITHMETIC__ pb,__DF_ARITHMETIC__ dx,__DF_ARITHMETIC__ sx,__DF_ARITHMETIC__ sy,__DF_ARITHMETIC__ ip,__DF_ARITHMETIC__ iq,__DF_ARITHMETIC__* out) {
   switch(a*20U+b*4U+c) {
 """
     lines = [prefix.replace("__DF_BOYS__", emit_df_boys_cuda())]
@@ -170,7 +238,7 @@ __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
         if a == b == 4 or (a == 5 and b != 0):
             continue
         graph, roots = axis_polynomial(a, b, c, auxiliary_g_derivative=auxiliary_g)
-        emitter = CudaEmitter(graph, {})
+        emitter = CudaEmitter(graph, {}, scalar_type=scalar_type)
         emitter.emit(roots)
         key = a * 25 + b * 5 + c if auxiliary_g else a * 20 + b * 4 + c
         lines += [f"    case {key}U: {{", *emitter.lines]
@@ -189,17 +257,17 @@ struct Geometry {
 };
 __DF_GEOMETRY_PREPARATION__
 __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angular a,
-    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0,bool responses=true) {
   const double invalid=NAN;
   if (order(a)>3 || order(b)>3 || order(c)>3 || !(alpha>0) || !(gamma>0) ||
       (!metric && !(beta>0))) return {invalid,{invalid,invalid,invalid},{invalid,invalid,invalid},{invalid,invalid,invalid}};
   Geometry geometry;
-  prepare_geometry(alpha,A,beta,B,gamma,C,order(a)+order(b)+order(c),geometry);
+  prepare_geometry(alpha,A,beta,B,gamma,C,order(a)+order(b)+order(c),geometry,nullptr,omega);
   const auto& pa=geometry.pa;const auto& pb=geometry.pb;const auto& dx=geometry.dx;
-  const auto& f=geometry.f;
-  const double sx=geometry.sx,sy=geometry.sy,ip=geometry.ip,iq=geometry.iq;
-  const double prefactor=geometry.prefactor;
-  double base[3][11];
+  __DF_MOMENT_INPUTS__
+  const __DF_ARITHMETIC__ sx=geometry.sx,sy=geometry.sy,ip=geometry.ip,iq=geometry.iq;
+  const __DF_ARITHMETIC__ prefactor=geometry.prefactor;
+  __DF_ARITHMETIC__ base[3][11];
   unsigned degree[3];
   for(unsigned axis=0;axis<3;++axis) {
     degree[axis]=power(a,axis)+power(b,axis)+power(c,axis);
@@ -207,11 +275,12 @@ __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angula
   }
   Response result{};
   result.value=prefactor*dot(degree[0],base[0],degree[1],base[1],degree[2],base[2],f);
-  double first[3]{},second[3]{};
+  if(!responses) return result;
+  __DF_ARITHMETIC__ first[3]{},second[3]{};
   for(unsigned axis=0;axis<3;++axis) {
     const unsigned other=(axis+1)%3,last=(axis+2)%3;
     const unsigned na=power(a,axis),nb=power(b,axis),nc=power(c,axis),d=degree[axis];
-    double raised[11],lowered[11];
+    __DF_ARITHMETIC__ raised[11],lowered[11];
     for(unsigned center=0;center<(metric?1U:2U);++center) {
       const unsigned n=center==0?na:nb;
       axis_polynomial(na+(center==0),nb+(center==1),nc,pa[axis],pb[axis],dx[axis],sx,sy,ip,iq,raised);
@@ -219,8 +288,8 @@ __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angula
       // Fuse the analytically differentiated Gaussian factor before integrating
       // the remaining axes; exponents and supplied response weights stay fixed.
       for(unsigned i=0;i<=d+1;++i)
-        raised[i]=2*(center==0?alpha:beta)*raised[i]-(n && i<d ? n*lowered[i] : 0.0);
-      const double response=prefactor*dot(d+1,raised,degree[other],base[other],degree[last],base[last],f);
+        raised[i]=2*(center==0?__DF_ALPHA__:__DF_BETA__)*raised[i]-(n && i<d ? n*lowered[i] : __DF_ZERO__);
+      const __DF_ARITHMETIC__ response=prefactor*dot(d+1,raised,degree[other],base[other],degree[last],base[last],f);
       if(center==0) first[axis]=response; else second[axis]=response;
     }
   }
@@ -230,12 +299,12 @@ __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angula
   return result;
 }
 /** A metric has two real auxiliary centers; the internal absent B has no basis normalization. */
-__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c) {
-  return evaluate(true,alpha,A,a,0.0,A,{0,0,0},gamma,C,c);
+__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c,double omega=0.0) {
+  return evaluate(true,alpha,A,a,0.0,A,{0,0,0},gamma,C,c,omega);
 }
 __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
-    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
-  return evaluate(false,alpha,A,a,beta,B,b,gamma,C,c);
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0) {
+  return evaluate(false,alpha,A,a,beta,B,b,gamma,C,c,omega);
 }
 } // namespace generativeqc::scf::generated_df_derivatives
 #endif
@@ -245,8 +314,27 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
     # Device functions need internal linkage, including their NVCC host stubs.
     source = (
         "\n".join(lines)
-        .replace("__DF_POLYNOMIAL_DOT__", emit_df_polynomial_dot_cuda())
-        .replace("__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda())
+        .replace(
+            "__DF_POLYNOMIAL_DOT__",
+            emit_df_polynomial_dot_cuda(scalar_type=scalar_type),
+        )
+        .replace("__DF_ARITHMETIC__", scalar_type)
+        .replace("__DF_ZERO__", "0.0f" if scalar_type == "float" else "0.0")
+        .replace(
+            "__DF_MOMENT_INPUTS__",
+            "float f[11];\n  for(unsigned index=0;index<=order(a)+order(b)+order(c)+1;++index)\n"
+            "    f[index]=static_cast<float>(geometry.f[index]);\n"
+            "  const float primitive_alpha=alpha,primitive_beta=beta;"
+            if scalar_type == "float"
+            else "const auto& f=geometry.f;",
+        )
+        .replace(
+            "__DF_ALPHA__", "primitive_alpha" if scalar_type == "float" else "alpha"
+        )
+        .replace("__DF_BETA__", "primitive_beta" if scalar_type == "float" else "beta")
+        .replace(
+            "__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda(range_separated=True)
+        )
         .replace("__device__", "static __device__")
     )
     if auxiliary_g:
@@ -267,10 +355,16 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
                 "order(a)>(metric?4U:3U) || order(b)>3 || order(c)>4",
             )
         )
+    if scalar_type == "float":
+        source = source.replace(
+            "GENERATIVEQC_GENERATED_DF_", "GENERATIVEQC_GENERATED_DF_FP32_"
+        ).replace("generated_df_", "generated_df_fp32_")
     return source
 
 
-def emit_df_derivatives_cpu(*, auxiliary_g: bool = False) -> str:
+def emit_df_derivatives_cpu(
+    *, auxiliary_g: bool = False, scalar_type: str = "double"
+) -> str:
     """Lower the same generated DF derivative algebra to ordinary host C++.
 
     Keep one scientific expression source for CUDA and CPU.  The CUDA emitter
@@ -278,7 +372,7 @@ def emit_df_derivatives_cpu(*, auxiliary_g: bool = False) -> str:
     device-only qualifiers/includes without changing any generated arithmetic.
     """
 
-    source = emit_df_derivatives_cuda(auxiliary_g=auxiliary_g)
+    source = emit_df_derivatives_cuda(auxiliary_g=auxiliary_g, scalar_type=scalar_type)
     if auxiliary_g:
         source = source.replace(
             "GENERATIVEQC_GENERATED_DF_AUXILIARY_G_DERIVATIVES_CUH",
@@ -287,6 +381,13 @@ def emit_df_derivatives_cpu(*, auxiliary_g: bool = False) -> str:
     source = source.replace(
         "GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH",
         "GENERATIVEQC_GENERATED_DF_DERIVATIVES_CPU_HPP",
+    )
+    source = source.replace(
+        "GENERATIVEQC_GENERATED_DF_FP32_DERIVATIVES_CUH",
+        "GENERATIVEQC_GENERATED_DF_FP32_DERIVATIVES_CPU_HPP",
+    ).replace(
+        "GENERATIVEQC_GENERATED_DF_FP32_AUXILIARY_G_DERIVATIVES_CUH",
+        "GENERATIVEQC_GENERATED_DF_FP32_AUXILIARY_G_DERIVATIVES_CPU_HPP",
     )
     source = source.replace("#include <cuda_runtime.h>\n", "")
     source = source.replace("static __device__ __forceinline__", "inline")

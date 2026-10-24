@@ -7,9 +7,35 @@
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
+#include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
+#include "dft/cuda_stationary_capacity.hpp"
+#include "dft/cuda_stationary_controller.hpp"
+#include "dft/grid.hpp"
 #include "methods/method.hpp"
 
 namespace generativeqc::methods::detail {
+
+/** Context-qualified additional CUDA force capacity without any CUDA operation.
+ * Shapes are atoms, AOs, primitives, grid points, maximum shell l, ECP terms
+ * and total ECP core electrons. Model admission is shared with prepared owners;
+ * this metadata alone neither supplies a final token nor evaluates science. */
+generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descriptor& descriptor,
+                                                 std::span<const std::uint64_t> shape,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail);
+
+/** Read the same capacity from an authenticated prepared item, before SCF. */
+generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail);
+
+/** Bound one retained consumer, including future geometry rebuilds. Admission
+ * remains scientific/context-specific; this only selects optional AO caching. */
+generativeqc_status dft_cuda_stationary_limit(PreparedBatch& batch, std::size_t index,
+                                              std::size_t maximum_device_bytes,
+                                              std::string& detail);
 
 /** Detached derivative inputs copied from the same owner as the #162 state.
  * The token remains authoritative: this copy alone never proves freshness. */
@@ -24,12 +50,24 @@ struct KsDerivativeSnapshot {
   std::vector<double> overlap, packed_basis, points, weights;
   std::vector<std::uint32_t> grid_owners;
   std::vector<double> atomic_weights;
+  dft::CudaMolecularGridView resident_grid;
+  std::vector<double> nonlocal_points, nonlocal_weights, nonlocal_atomic_weights;
+  std::vector<std::uint32_t> nonlocal_grid_owners;
+  dft::CudaMolecularGridView nonlocal_resident_grid;
   std::uint64_t export_d2h_bytes{}, export_reads{}, export_synchronizations{};
 };
 
 generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t index,
                                               const dft::CudaKsFinalStateToken& expected,
                                               KsDerivativeSnapshot& output, std::string& detail);
+
+/** Borrow the current owner's immutable XC/integral geometry sources without
+ * exporting D/F/C/W again. Callers must already own a verified stationary
+ * snapshot and use its D/W, or the same token's resident device weights. This
+ * checks freshness but never supplies a new final-state proof by itself. */
+generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                const dft::CudaKsFinalStateToken& expected,
+                                                KsDerivativeSnapshot& output, std::string& detail);
 
 /** Private #2151 single-calculation stationary integral-source bridge.
  * Reuses the exact converged owner and the already qualified DF (CPU/CUDA)
@@ -55,15 +93,37 @@ generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::size_t& bytes, std::string& detail);
 
-/** Five explicit CUDA stationary sources: hcore, overlap/Pulay, J, SR-K,
- * LR-K. The live token binds D/W, geometry, radial parameters and spin.
- * XC, nonlocal correlation and nuclear repulsion are separate consumers. */
+/** Conditional SCF-cache reclamation before a complete force consumer allocates.
+ * Receipt is requested/free-before/free-after/retired device bytes; no scientific
+ * state or final-state identity changes. This does not reserve device memory. */
+generativeqc_status dft_cuda_prepare_force_memory(PreparedBatch& batch, std::size_t index,
+                                                  const dft::CudaKsFinalStateToken& expected,
+                                                  std::size_t additional_device_bytes,
+                                                  std::array<std::uint64_t, 4>& receipt,
+                                                  std::string& detail);
+
+/** CUDA stationary integral sources: hcore, overlap/Pulay, J and full-range K,
+ * or separate SR-K/LR-K for range-separated models. Direct consumers validate
+ * and stage resident D/W without exporting a detached frame; the retained DF
+ * response contract still requires its explicit host snapshot. The live token
+ * binds geometry, radial parameters and spin. XC, nonlocal correlation and
+ * nuclear repulsion remain separate consumers, not a complete force. */
 generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                std::vector<double>& output,
                                                std::size_t maximum_bytes,
                                                std::array<std::uint64_t, 9>& work,
                                                std::string& detail);
+
+/** Private complete-source CUDA Direct qualification endpoint, not public
+ * force admission. PBE/PBE0 RKS/UKS only. The additional device allowance
+ * excludes the already charged SCF/Fock frame. Failure preserves output; the
+ * exact final token gates both submission and terminal publication. */
+generativeqc_status dft_cuda_native_stationary_gradient(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::size_t maximum_device_bytes, std::vector<double>& output,
+    dft::CudaStationaryResources& resources, std::string& detail,
+    scf::DirectForcePrecisionRequest* precision = nullptr);
 
 /** Snapshot-backed variant for a consumer that already exported and validated
  * D/W under the exact same live token. The native owner still revalidates the
@@ -99,6 +159,34 @@ generativeqc_status dft_mixed_density_fitted_integral_gradient_cached(
 generativeqc_status dft_cuda_full_range_integral_derivatives(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::vector<double>& output, std::string& detail);
+
+/** Borrow the exact native canonical frame without detached numerical export.
+ * With prepare=true, run/reuse the shared scalar-only physical/canonical proof.
+ * With prepare=false, perform only a zero-transfer token/storage check; this
+ * mode is suitable for reauthentication around a native response consumer.
+ * CPU owners, missing/unconverged items and stale tokens fail closed and clear
+ * binding. The caller retains the prepared batch and its execution exclusion.
+ */
+generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::size_t index,
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                                    std::string& detail, bool prepare = false);
+
+/** Borrow actual prepared Fock sources and accepted F/H after canonical
+ * validation. No numerical work or provider scratch mutation is authorized. */
+generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   dft::CudaKsResidentFockBinding& binding,
+                                                   std::string& detail);
+
+/** Borrow the actual XC owner's packed basis/quadrature and the exact accepted
+ * density after resident canonical preparation. No device/panel allocation, transfer or
+ * scientific work; stale/missing/CPU/host-unfused owners clear the binding.
+ * The enclosing endpoint retains the batch and excludes concurrent calls. */
+generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     dft::CudaKsResidentGridBinding& binding,
+                                                     std::string& detail);
 
 /** Borrow the accepted spin density directly from the exact CUDA KS
  * final-state owner. No transfer or synchronization is performed. source_stream
@@ -161,13 +249,15 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags);
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods::detail
 

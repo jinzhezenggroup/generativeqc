@@ -76,6 +76,42 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Cache FP32 recurrence values in FP32 storage, never strict ERIs.
+ * Restricted through-d sources share full/SR/LR identity and bounded angular
+ * selection with strict sources. Unselected buckets evaluate mixed recurrences
+ * on replay. Publication follows finite validation; strict callers cannot borrow
+ * this precision lease or change its immutable operator, omega or bucket mask.
+ */
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail,
+    FockOperator source_operator = FockOperator::FullRange, double omega = 0.0,
+    std::uint32_t bucket_mask = (1U << 28) - 1);
+
+/** Retain exact values of one immutable radial operator, with bounded partial
+ * residency. SR/LR values can serve only matching pure-exchange requests; full
+ * J/K and a different omega keep their ordinary exact provider. A successful
+ * lease never changes operator identity, even when preparation is repeated.
+ */
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDirectJkPlan* plan,
+                                                                 std::size_t maximum_bytes,
+                                                                 std::uint32_t bucket_mask,
+                                                                 FockOperator source_operator,
+                                                                 double omega, std::string& detail);
+
+/** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
+ * The mask is shared across batch items. Unselected buckets retain the native
+ * canonical evaluator, not a second whole-source action. Selection affects
+ * storage/scheduling only; the full-range FP64 equation and Schwarz predicate
+ * are unchanged. Screened inventories require the frozen resident layout.
+ * A zero mask retains Direct without allocation. Published leases cannot be
+ * replaced in place, since captured consumers may borrow their pointers. */
+std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan* plan,
+                                                         std::uint32_t bucket_mask);
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJkPlan* plan,
+                                                                    std::size_t maximum_bytes,
+                                                                    std::uint32_t bucket_mask,
+                                                                    std::string& detail);
+
 /** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
  * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
  * last axis fastest and uses the prepared Direct plan's public AO basis.
@@ -112,10 +148,26 @@ generativeqc_status enqueue_cuda_direct_jk_device(
     int* numerical_error, std::string& detail, std::uint64_t* census = nullptr,
     const cuda_execution::MatrixLibraryResources* matrix_resources = nullptr);
 
+/** Enqueue an explicitly provisional, coarser screened full-range RKS J/K.
+ * Only existing MD-J and generated K owners are admitted. Unsupported consumers
+ * return NOT_IMPLEMENTED before submission, so the caller can use ordinary J/K.
+ * Screening may only be coarser than the immutable prepared source. This is not
+ * a physical Fock certificate: the solver must close with its original operator.
+ */
+generativeqc_status enqueue_cuda_direct_jk_proposal_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, int* numerical_error, double screening, std::string& detail);
+
 /** Whether an ordinary value action has complete canonical census coverage.
  * Generated/generic channels do not silently report zero as measured work. */
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
                                            FockBuildSpec spec) noexcept;
+
+/** Whether J can use the generated strict shell consumer for this operator.
+ * Used by the KS proposal scheduler to prefer profitable FP64 work over the
+ * generic mixed recurrence. This query does not change K or allocate storage. */
+bool cuda_direct_jk_generated_coulomb_available(const CudaDirectJkPlan* plan,
+                                                FockBuildSpec spec) noexcept;
 
 /** Whether the immutable canonical quartet source can supply a density-independent
  * linear action. This optional schedule retains no four-index integral tensor. */
@@ -135,29 +187,43 @@ generativeqc_status enqueue_cuda_direct_jk_linear_device(
     double* coulomb, double* exchange, int* numerical_error, double threshold,
     std::uint64_t* census, std::string& detail);
 
-/** Required caller-owned elements for two restricted canonical correction
+/** Required caller-owned elements for the J/K canonical correction
  * planes. The canonical Cartesian dimension may exceed the public AO count.
  * Zero denotes unavailable canonical storage; no CUDA work or allocation. */
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan);
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan, unsigned spins = 1);
 
-/** Accuracy-qualified restricted full-range fixed-mask action. Same stream,
+/** Accuracy-qualified full-range fixed-mask action. Same stream,
  * lifetime, census and finite-error contract as the linear action above.
- * correction must have exactly cuda_direct_jk_compensation_elements(plan)
+ * correction must have exactly cuda_direct_jk_compensation_elements(plan, spins)
  * doubles, disjoint from all inputs, outputs and diagnostic slots. It is reset
  * per action and folded before canonical-to-public projection. A compatible mask
- * may reuse admitted resident values unless allow_resident is false (the
- * independent exact-audit contract); no allocation or success-path fence.
+ * may reuse admitted resident values unless allow_resident is false;
+ * no allocation or success-path fence.
+ * Prepared whole-shell recurrence preserves the same AO Schwarz mask and
+ * compensation planes. Disable allow_materialized for an independent
+ * per-component replay, also disabling allow_resident for an independent audit.
+ * Missing prepared storage retains that bounded replay.
  * Unavailable canonical storage returns NOT_IMPLEMENTED without enqueueing.
  */
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident = true);
+    bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr,
+    bool allow_materialized = true);
 
-/** Eligibility for the explicitly requested canonical bilinear experiment.
- * Specialized SPD derivative leases retain the caller's bounded polarization
- * schedule until a measured crossover is qualified. This is not a default. */
+/** Replay an authenticated full-range FP32 source with FP64 products/scatter.
+ * Requires complete mixed residency; no recurrence or strict-source fallback
+ * can masquerade as this action. Correction/output lifetime matches FP64.
+ */
+generativeqc_status enqueue_cuda_direct_jk_mixed_resident_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
+    int* numerical_error, double threshold, std::uint64_t* census, std::string& detail);
+
+/** Eligibility for the default reuse-preserving shell bilinear derivative.
+ * Canonical residency alone does not admit this schedule. No device work is
+ * submitted; unavailable shell storage preserves bounded polarization. */
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept;
 
 /** One unscreened canonical traversal of P:(J'(D)-K'(D)/2).
@@ -183,12 +249,14 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
 
 /** Experimental value-only variant: evaluate Coulomb ERI recurrences in FP32
  * while retaining FP64 density reads, screening, accumulation and output.
- * Exchange remains FP64. The optional caller-owned device counter is cleared
+ * Exchange remains FP64 unless mixed_exchange selects restricted full/SR/LR
+ * J/K sharing the same FP32 recurrence. The optional device counter is cleared
  * on the provider stream and counts only AO-ERI values actually evaluated by
  * the mixed recurrence after screening and zero-density rejection. The caller
  * must perform a strict FP64 target audit before publishing a converged state. */
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr);
+    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr,
+    bool mixed_exchange = false);
 }  // namespace generativeqc::scf

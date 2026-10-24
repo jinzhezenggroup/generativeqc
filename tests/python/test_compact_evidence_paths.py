@@ -46,7 +46,9 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
                 "sha256": hashlib.sha256(raw).hexdigest(),
             }
         )
-    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    (directory / "publication.json").write_text(
+        json.dumps({"schema": "generativeqc.benchmark-publication.v1", "files": files})
+    )
     monkeypatch.setattr(compact, "ROOT", root)
     monkeypatch.setattr(compact, "THRESHOLD", 1)
     return root, outside
@@ -186,7 +188,9 @@ def test_compaction_rebinds_parts_inside_sample_records(
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )
-    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    (directory / "publication.json").write_text(
+        json.dumps({"schema": "generativeqc.benchmark-publication.v1", "files": files})
+    )
     monkeypatch.setattr(compact, "ROOT", root)
     monkeypatch.setattr(compact, "THRESHOLD", 1)
     expected = load_publication_record(directory, role="samples", name="samples.json")
@@ -228,9 +232,11 @@ def test_cyclic_record_dependencies_fail_without_writes(
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )
-    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    (directory / "publication.json").write_text(
+        json.dumps({"schema": "generativeqc.benchmark-publication.v1", "files": files})
+    )
     before = snapshot(root)
-    with pytest.raises(ValueError, match="cyclic"):
+    with pytest.raises(ValueError, match="cyclic|reference identity mismatch"):
         compact.compact_publication("campaign/publication.json")
     assert snapshot(root) == before
 

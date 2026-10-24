@@ -1,0 +1,284 @@
+{
+  "schema": "generativeqc.readme-wb97mv-publication.v1",
+  "date": "2026-10-15",
+  "campaign_started": "2026-10-14",
+  "cache_primed_small_refresh": {
+    "date": "2026-10-15",
+    "atoms": [
+      3,
+      12
+    ],
+    "native_populations": 4,
+    "priming_calls": 48,
+    "measurement_calls": 48,
+    "protocol": "Prime the shared disk compilation cache, then launch fresh measurement processes and calculators; no density or resident allocations are reused. Priming calls are excluded from published timings, not subtracted from them.",
+    "unprimed_evidence": "unprimed-small-points.json.xz",
+    "references": "Unchanged historical reference populations; not remeasured or claimed to have the new native cache policy.",
+    "large_points": "Retained original 48/96-atom native observations with existing compiler caches; no new large-system timing campaign."
+  },
+  "native_source_commit": "810f081ef293256ebe20beb7298f9d21996fec81",
+  "source_archive": {
+    "bytes": 53323743,
+    "sha256": "c3b2767215bf3b73d7fd9e99342c0046ede768df7203a350de8fd9d360d1e79a"
+  },
+  "source_archive_creation": "git archive --format=tar.gz --prefix=source/ 810f081ef293256ebe20beb7298f9d21996fec81",
+  "native_library_sha256": "ca7212502f61ba252a6ab4038f380d06d7dacbc0e048518a867eec1a69dd1602",
+  "native_source_file_sha256": {
+    "python/generativeqc/calculator.py": "1c22aac93aa25a5c26263c1675adce6fb1a7158dff73a5eaf4a7e9286518e882",
+    "python/generativeqc/ks.py": "6139c1f6601ab0a03fad3d33a932be3f17d31a98dc40483d6ee9a1d4262edcfc",
+    "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+    "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+    "python/generativeqc/resources_ks.py": "2d2e2bd6448b37c17c7547de00c7704833ddaca6aa25c7d9cf70d5baa7bc7304",
+    "python/generativeqc/_stationary_cuda.py": "401e6c521f0c3af7073f514c9b7441abf94ca8e887b095834d82dbc5d3242940",
+    "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+    "python/generativeqc/batch.py": "1d6329e9e348cb45d514c3176b0d5925a5f4e7187d598d9c3c5ade7cb92c9c91",
+    "python/generativeqc/precision_policy.py": "bc2f59840ae6ee928f065e8ff314e7a26283d098739136019e306a94ece870c6",
+    "python/generativeqc/_precision_batch.py": "15c06a72c4e5c668afb163c73038527e2b18bb43f5f2e50988d24fee798c1ba3",
+    "python/generativeqc/_precision_work.py": "24546cccace60fdd139d0e65be2ff2edb8830e87091f89f80275a7f7a1faf7b1",
+    "python/generativeqc/_df_precision.py": "1326ec357d918d84632986c4b31a294a13fc44e84911d429c2de25c3cdb63435",
+    "python/generativeqc/_composite_precision.py": "71980a21974592118087e0fed0d15609d35476b28c2baff4b55c9e1e59738821",
+    "python/generativeqc_compiler/dft/ao_cuda.py": "6a63b262e7eb75c0993a21e1e8c002d317fb8b191481b422b5d0b717ec16c381",
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "6b454bf4a444ccad721bbcbfee06673aa6739d30d3132d81743aa9332210c2eb",
+    "python/generativeqc_compiler/method/stationary_cuda.py": "9187c98a820156c2b5c5b64b61bd1f55235476fdf30c8597cbc8c4836ef1e8f4",
+    "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+    "python/generativeqc_compiler/method/stationary_composite_resources.py": "f893caa7bfc94b935755bd775573095d477cdbeb6a9e9700dad6aadaa880e7a8",
+    "python/generativeqc/_stationary_composite_cuda.py": "1563682c8fb6faace1fe28e2bcb97a558a34ad20f99826da426a06ea9de89b0a",
+    "python/generativeqc/_geometry_response_cache.py": "fb2c2468bb1aa0ff1b1dea95a200f59f0d7a52d738bbb07ac58ee6dda0e0b010",
+    "benchmarks/readme_omol25.py": "e8aa25d9cbe9cbdcedcaea4b458ab05fc75a8d0b7c641790c6569d1ece27c3f6",
+    "benchmarks/readme_accuracy_oracle.py": "d6b8bfd5ced40606cc080315deccf6bb8772650cb46826eca728b2d435f89151",
+    "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+    "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+    "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+    "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+    "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65",
+    "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+    "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+    "src/scf/cuda/direct_jk.cpp": "0e98485cb3945a1ee52afc975404e09c87506ba14d6aff87e6963002bbf6ec8f",
+    "src/scf/cuda/direct_jk_kernels.cu": "c78391b4d035bc9d6fcb08af566a1276d7c67dc64445ebbe821fcd6497bf0276",
+    "src/scf/cuda/direct_jk_kernels.hpp": "01c13b95ea3de44644dd53b7d581f4c787759f341f4f0196e766d498f1e77d6b",
+    "src/scf/cuda/direct_jk_plan.hpp": "9c9390aa3cdb61443eeee19e6a18306e41bcd2283178e78ceef2fde269bdf1e2",
+    "src/scf/cuda/direct_angular_fock.cu": "a4ed04c7245abf0d8ca210f1bf75319b3b23cf5c6c0d83bf528501b98355a63c",
+    "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+    "src/scf/cuda/direct_bounded_fallback.cu": "0ce4bdd0511476bed1ab89e89793b8869627587c1c8fb7e1aefcd3d5d99142b0",
+    "src/scf/cuda/direct_coulomb.cpp": "158c825c5ccb2b32814ee5d1e177db484959b22dd32ec294ba2bcc11d95bb539",
+    "src/scf/cuda/packed_basis.hpp": "dddcef51e8dc5766bb7762f6f3b970f3279af37e37471aeaa7c28a6be72e874f",
+    "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+    "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+    "src/scf/rhf.cpp": "1f23ff55b23b5d16b3cce8f9e698a78f5e6e19c18933336d7f374fc629d362fe",
+    "src/scf/application_precision.hpp": "2cc8e102ea36b4fbfe58e6600ccf357b45c1f9c95574ab20ff97d564a575d28e",
+    "src/scf/cuda/df_force_response.cpp": "724b2087ca133a97cdb4f5f455266d7dc3fee0ffbaefccd639fbba0c76b0fc5b",
+    "src/scf/cuda/df_gradient_bridge.cu": "b5b1cb5a38ef53d65a5e9a96a26b92197a8e5005036e0df907fb28277a1671cc",
+    "src/scf/cuda/df_shell_kernel.cuh": "5e0d71fb0dd7c7d931d345bf513a29415aaae6dc5482e35e00789163305e6055",
+    "src/scf/cuda/df_shell_launch.cuh": "9b4c49cf35072528b73fb7c30dc34a4234902764d5e5a2bbf07d43308924d510",
+    "src/scf/cuda/df_shell_dispatch.cuh": "a03e8ef285d51da1bd5adb893dc908f4073207c08e590faecd287591f178b64a",
+    "src/scf/cuda/df_shell_derivatives.cu": "6e8235dd06fa5c7bb575f5546c99b2c70d929a9edf1a16550355669c1a61a5e6",
+    "python/generativeqc_compiler/integral/df_shell_derivatives.py": "59d85ecbd80a7e1634f30db0332e31acc7869db53e270b4fd663b715428580db",
+    "python/generativeqc_compiler/integral/df_rys_shell.py": "c5739eec6e4b81c927c546cf312208764bf457127f2afd8f79bca90afc1fa5b1",
+    "python/generativeqc_compiler/integral/df_shell_units.py": "56cb37975cca7fed4ea012065f1ad3db53e8830c3d2ccc606196e12a5e62b581",
+    "tools/generate_df_kernels.py": "2a58f52873ad1716daa0620037621b6bea1ac8031bf2bfbc8f0bc652013b2580",
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "3f1b3bd114bc26d975a68c486147011dd752aeec4383931e90d686335623d0f2",
+    "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+    "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+    "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+    "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+    "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+    "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+    "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+    "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+    "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22"
+  },
+  "build": {
+    "configuration": "Release",
+    "cuda_toolkit": "12.9.86",
+    "aot_profile": "sm_120",
+    "cuda_compile_architectures": "120",
+    "cuda_fast_compile": false,
+    "native_stationary_cuda": true,
+    "stationary_force_aot": true,
+    "compiler_cache_version": "ccache version 4.5.1",
+    "compiler_cache_statistics_scope": "shared cache, not isolated per-build hits",
+    "compiler_cache_before": "Summary:\n  Hits:             95885 / 290223 (33.04 %)\n    Direct:         80319 / 291544 (27.55 %)\n    Preprocessed:   15566 / 211150 (7.37 %)\n  Misses:          194338\n    Direct:        211225\n    Preprocessed:  195584\n  Errors:             926\n  Uncacheable:       9582\nPrimary storage:\n  Hits:            200348 / 583015 (34.36 %)\n  Misses:          382667\n  Cache size (GB):  10.71 /  12.00 (89.22 %)\n  Cleanups:           630\n\nUse the -v/--verbose option for more details.\n",
+    "compiler_cache_after": "Summary:\n  Hits:             96147 / 290779 (33.07 %)\n    Direct:         80581 / 292100 (27.59 %)\n    Preprocessed:   15566 / 211444 (7.36 %)\n  Misses:          194632\n    Direct:        211519\n    Preprocessed:  195878\n  Errors:             926\n  Uncacheable:       9582\nPrimary storage:\n  Hits:            201056 / 584127 (34.42 %)\n  Misses:          383071\n  Cache size (GB):  10.86 /  12.00 (90.47 %)\n  Cleanups:           631\n\nUse the -v/--verbose option for more details.\n"
+  },
+  "completion": {
+    "native_points": 7,
+    "native_observations": 84,
+    "atoms": {
+      "direct": [
+        3,
+        12,
+        48,
+        96
+      ],
+      "DF": [
+        3,
+        12,
+        48
+      ]
+    },
+    "point_time_limit_seconds": {
+      "3": 1800,
+      "12": 1800,
+      "48": 1800,
+      "direct/96": 3600
+    },
+    "phase_counts_per_point": {
+      "cold": 1,
+      "warm": 5,
+      "moved": 1,
+      "moved-warm": 5
+    }
+  },
+  "accuracy": {
+    "checked_observations": 72,
+    "unchecked_observations": 12,
+    "unchecked_points": [
+      "DF/48"
+    ],
+    "energy_tolerance_hartree": 1e-08,
+    "force_tolerance_hartree_per_bohr": 1e-07,
+    "maximum_checked_energy_error_hartree": 1.1823431123048067e-11,
+    "maximum_checked_force_error_hartree_per_bohr": 5.5294435696850996e-11,
+    "reference_population": "Retained independent GPU4PySCF timing records and accuracy-only geometry receipts; no new reference timing samples.",
+    "boundary": "Unchecked completion is not a numerical accuracy pass or an unmatched-reference speedup."
+  },
+  "omitted_native_points": {
+    "DF/96": {
+      "reason": "No complete native E+F record before user-requested cancellation on 2026-10-15; omitted from reduction and figure, not a measured timeout.",
+      "slurm_job_id": "938",
+      "completed_records_at_cancellation": 0,
+      "final_attempt_limits": {
+        "additional_device_bytes": 4294967296,
+        "host_bytes": 4294967296,
+        "df_workspace_bytes": 12884901888,
+        "lr_resident_cache_bytes": 2147483648
+      },
+      "public_default_changed": false
+    }
+  },
+  "negative_resource_evidence": {
+    "default_failure_evidence": "df96-default-force-probe.json.xz",
+    "device_only_failure_evidence": "df96-device4-host2-probe.json.xz",
+    "automatic_df_failure_evidence": "df96-device4-host4-probe.json.xz",
+    "dry_capacity_evidence": "df96-capacity.json",
+    "meaning": "Additional force allowance, excluding the native DF/SCF owner; no physics or acceptance-gate change."
+  },
+  "raw_run_storage": {
+    "cache_primed_small": {
+      "hosts": {
+        "none": "n5",
+        "cuda": "n1"
+      },
+      "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/attempts/cache-primed-small-20261015",
+      "priming_subdirectory": "compiler-cache-priming"
+    },
+    "direct": {
+      "host": "n5",
+      "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/measurements/none"
+    },
+    "df": {
+      "host": "n1",
+      "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/measurements/cuda"
+    },
+    "cancelled_df96": {
+      "host": "n4",
+      "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/measurements/cuda/wb97m-v/96"
+    },
+    "attempts": "Setup-only failures and interrupted initial 96-atom work are quarantined under attempts/ on the same hosts; no observations from them are pooled."
+  },
+  "plotting": {
+    "matplotlib_version": "3.10.9",
+    "svg_optimizer": {
+      "name": "Scour",
+      "version": "0.38.2",
+      "coordinate_significant_digits": 8
+    },
+    "presentation_compaction": "Repeated SVG presentation attributes share CSS classes; original plot pixels were verified identical before the data refresh.",
+    "renderer_sources": {
+      "tools/render_readme_dft.py": {
+        "bytes": 16639,
+        "sha256": "1e5fbc65c4c042069786b735125b2bb1535caa0415be9286e7a26c370ecf3965"
+      },
+      "tools/render_omol25_benchmarks.py": {
+        "bytes": 19341,
+        "sha256": "c21cdc36232882ed7886e231689e7c09edc3ad65f938f3db218566fc8aec7844"
+      }
+    }
+  },
+  "baseline_files": {
+    "summary.json.xz": {
+      "bytes": 428796,
+      "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06"
+    },
+    "df-summary.json.xz": {
+      "bytes": 298072,
+      "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952"
+    }
+  },
+  "files": {
+    "README.md": {
+      "bytes": 10105,
+      "sha256": "8a45c19dffc9871dc2f48931950c15a527a5af8d4d65ad5a96a9a46ac0948e54"
+    },
+    "df-summary.json.xz": {
+      "bytes": 33832,
+      "sha256": "6c76eafcf806045aa5c1fa198c8c20b775bb5f854c681f3ba209074acf2cb29c"
+    },
+    "df-timings.md": {
+      "bytes": 4689,
+      "sha256": "5133a6dad819e22fd7e9e78898bbc85529abe63e533d651be66c8951fc36a617"
+    },
+    "df96-capacity.json": {
+      "bytes": 1282,
+      "sha256": "d20d68416674b2a7716702c7c4f74dde21687e43c4ca0d13c1fa33f1cee963a0"
+    },
+    "df96-default-force-probe.json.xz": {
+      "bytes": 10320,
+      "sha256": "5b526ec615e9c74cbb10e2441447bc2eee9ffd7ae064fe48afdb4e37500ed985"
+    },
+    "df96-device4-host2-probe.json.xz": {
+      "bytes": 10356,
+      "sha256": "30f85c24096b7ed59fe861771668ecd5c1b18e4afd25d86ba0e13dd5c89414ed"
+    },
+    "df96-device4-host4-probe.json.xz": {
+      "bytes": 10316,
+      "sha256": "8f8778b0390de0080d47be53cf5a25d7f47cf036c59371e4c1f9e89006db7254"
+    },
+    "refresh.py": {
+      "bytes": 13383,
+      "sha256": "e742801310cc9d89586361f37f712116cf95e47818cce793edca2335377fd5c4"
+    },
+    "reproduce.sh": {
+      "bytes": 1560,
+      "sha256": "015df22aca2cd6f591ed3e152374d12b7ed9c266810ba02346d80710acbd552a"
+    },
+    "summary.json.xz": {
+      "bytes": 50616,
+      "sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519"
+    },
+    "timings.md": {
+      "bytes": 4763,
+      "sha256": "4a23f19e35cf8d236e144ece8560abcb609bdf11d34714dd50353c73b8bdecda"
+    },
+    "unprimed-small-points.json.xz": {
+      "bytes": 20812,
+      "sha256": "d81eb1d05011fe7241688fc59482466d8cdf16e351d36fdc9cf8bbc4c7296936"
+    },
+    "dft-cold-warm.svg.xz": {
+      "bytes": 8400,
+      "sha256": "cf13d3a45aff8c0e429a90f79ddcf53f1752043975053137088d4227ca5791d8",
+      "uncompressed": {
+        "bytes": 83736,
+        "sha256": "6e9f20402c1a4925251d1296c022d0d9f35ca2c67d1ae06da746c0208e080db5"
+      }
+    },
+    "df-cold-warm.svg.xz": {
+      "bytes": 8544,
+      "sha256": "8f753cc50d1fd71d8d5200c212ab497a65d938202d0b1cb9cd69899a91a44542",
+      "uncompressed": {
+        "bytes": 84935,
+        "sha256": "47e0b51a147ec4838785fc0a27dfb9cdae201165d5a01784506f5989f30d527b"
+      }
+    }
+  }
+}

@@ -58,7 +58,7 @@ formaldehyde pooled warm median is still **3.72× PySCF's** on this campaign.
 `summary.json` is the readable reduction, including ranges, iteration/energy/work
 inventories, and every process pair. `paired-process-confidence.json` retains all
 ratios and intervals. The full original summaries and every process output/log
-are retained in the gzip capsules; `confidence.py` recomputes the intervals from
+are retained in the compressed capsules; `confidence.py` recomputes the intervals from
 the underlying per-process calls rather than trusting the summary.
 
 ## Scientific contract and bytecode control
@@ -83,7 +83,7 @@ the underlying per-process calls rather than trusting the summary.
   a process-namespace scan alone cannot prove exclusive access to this shared host
 
 The first nine-round, **432-endpoint** campaign is retained in
-`pilot-campaign.json.gz` under `matched-endpoints-attempt-01`. Its baseline source
+`pilot-campaign.json.xz` under `matched-endpoints-attempt-01`. Its baseline source
 snapshot had 57 Python bytecode files while the candidate had 289. The apparently
 large cold improvement was confounded and is **not a causal cold-speedup result**.
 No baseline scientific source or native library was changed to remedy this.
@@ -92,7 +92,7 @@ Before the fixed twenty-round campaign, all three source trees were compiled to
 477 bytecode files each (`repo`: 174 → 477, detached baseline: 57 → 477, candidate:
 289 → 477). The normalized campaign selected the actual baseline build's `repo`
 Python/source tree. `bytecode-control.json`, full inventories, imported paths,
-and binary hashes are retained in `supporting-evidence.json.gz` and the campaign.
+and binary hashes are retained in `supporting-evidence.json.xz` and the campaign.
 Both campaigns use the same frozen endpoint inputs and native libraries. The
 earlier pilot remains visible but is not pooled into the primary estimator.
 
@@ -256,7 +256,7 @@ path-default ambiguity for the main runner. The restored historical setup README
 describes preparation before these runs and is not the current result summary;
 this README and the timestamped campaign records take precedence.
 
-The capsules use deterministic gzip (`mtime=0`) around JSON with per-member
+The capsules use deterministic gzip (`mtime=0`) or XZ around JSON with per-member
 SHA256 and byte counts. Canonical JSON members are compactly stored and restore
 their original indentation/newline bytes exactly. All observations, outliers,
 failures, scientific settings, provenance, and original scripts are retained.
@@ -271,3 +271,13 @@ is changed. The dependency record distinguishes initial Ruff 0.16.10 setup from
 Ruff 0.16.9 used for final qualification. `manifest.json` binds the compact
 publication. No native binary, object/build tree, full generated scientific header,
 or reconstruction patch is included; no Release/tag is needed.
+
+## Lossless storage update (2026-10-12)
+
+The normalized campaign now uses `normalized-campaign.json.xz` (XZ preset 6),
+reducing stored bytes from 597,414 to 260,076. Its 16,289,226 decoded bytes are
+identical to the former gzip member, including every original record, observation,
+outlier, failure, source identity and numerical value. `manifest.json` records
+the decoded byte count and SHA256; stored identities and reader links are updated.
+The offline verifier and confidence reconstruction above read both gzip and XZ.
+This is storage-only; no experiment was rerun or reclassified.

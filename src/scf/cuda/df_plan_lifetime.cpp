@@ -13,6 +13,7 @@
 #include "scf/cuda/df_final_validation.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_plan_setup.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 
 namespace generativeqc::scf::cuda_df {
@@ -33,6 +34,7 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   destroy_persistent_scf_state(plan.persistent_scf_state);
   destroy_ordinary_eigensystem(plan.ordinary_eigensystem);
   destroy_final_validation(plan.final_validation);
+  cuda_execution::destroy_cuda_df_md_owner(plan.md_coulomb);
   plan.charge_contraction.reset();
   plan.coulomb_contraction.reset();
   plan.metric_project.reset();
@@ -60,7 +62,7 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   (void)runtime::resource_cuda_free(plan.exchange_tile_output);
   (void)runtime::resource_cuda_free(plan.exchange_density_column_major);
   plan.eigen_handles.reset();
-  if (plan.blas != nullptr) (void)cublasDestroy(plan.blas);
+  release_df_blas(plan);
   if (plan.stream != nullptr) (void)cudaStreamDestroy(plan.stream);
   plan = {};
 }

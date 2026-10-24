@@ -1,61 +1,65 @@
-"""Execute the actual constructor expressions before any topology upload."""
+"""Exercise real cold/prepared construction before topology or device work."""
 
-import ast
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from _stationary_artifact_test_support import stationary_route
+from generativeqc import _stationary_cuda as runtime
 
-ROOT = Path(__file__).resolve().parents[2]
 
-
-@pytest.mark.parametrize("call_index", (0, 1))
+@pytest.mark.parametrize("entrypoint", ("cold", "prepared"))
 @pytest.mark.parametrize("profile_device", (False, True))
 @pytest.mark.parametrize("integral_derivatives", (False, True))
-def test_cold_constructor_receives_requested_profile(
-    call_index: int, profile_device: bool, integral_derivatives: bool
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_constructor_receives_requested_profile_and_admitted_derivatives(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    entrypoint: str,
+    profile_device: bool,
+    integral_derivatives: bool,
+    spin: str,
 ) -> None:
-    tree = ast.parse((ROOT / "python/generativeqc/_stationary_cuda.py").read_text())
-    calls = sorted(
-        (
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "_CudaSources"
-        ),
-        key=lambda node: node.lineno,
+    class ConstructionReached(Exception):
+        pass
+
+    probe = stationary_route(
+        monkeypatch,
+        tmp_path,
+        entrypoint,
+        native_integrals=not integral_derivatives,
+        spin=spin,
     )
-    assert len(calls) == 2
-    call = calls[call_index]
-    names = {node.id for node in ast.walk(call) if isinstance(node, ast.Name)}
-    context = {name: None for name in names}
-    context.update(
-        plan=SimpleNamespace(spin_blocks=1),
-        profile_device=profile_device,
-        integral_derivatives=integral_derivatives,
-        primitive_demand=SimpleNamespace(integral_derivatives=integral_derivatives),
-    )
+    artifact = object()
+    monkeypatch.setattr(runtime, "compile_stationary_cuda", lambda *a, **k: artifact)
 
     def construct(
-        *args: object,
+        basis: object,
+        selected_artifact: object,
+        compiler: object,
+        device: int,
+        points: int,
+        records: int,
+        budget: int,
+        *,
         profile_device: bool = False,
         integral_derivatives: bool = True,
+        spin_blocks: int = 1,
         **kwargs: object,
-    ) -> tuple[bool, bool]:
-        # The real constructor performs topology work before it returns.
-        return profile_device, integral_derivatives
+    ) -> None:
+        assert selected_artifact is artifact
+        captured.update(
+            profile=profile_device, derivatives=integral_derivatives, spins=spin_blocks
+        )
+        raise ConstructionReached
 
-    def argument(node: ast.expr) -> object:
-        if isinstance(node, ast.Name):
-            return context[node.id]
-        if isinstance(node, ast.Attribute):
-            return getattr(argument(node.value), node.attr)
-        if isinstance(node, ast.Constant):
-            return node.value
-        raise AssertionError("unexpected constructor argument expression")
-
-    positional = [argument(node) for node in call.args]
-    keywords = {item.arg: argument(item.value) for item in call.keywords}
-    result = construct(*positional, **keywords)
-    assert result == (profile_device, integral_derivatives)
+    captured = {}
+    monkeypatch.setattr(runtime, "_CudaSources", construct)
+    with pytest.raises(ConstructionReached):
+        probe.run(aot=False, profile_device=profile_device)
+    assert captured == {
+        "profile": profile_device,
+        "derivatives": integral_derivatives,
+        "spins": 2 if spin == "polarized" else 1,
+    }
+    # Source-construction failure must release the borrowed grid owner.
+    assert probe.grid_closed

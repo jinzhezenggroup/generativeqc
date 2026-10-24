@@ -1,0 +1,387 @@
+{
+  "host": "i2679-cbs-energy-1023--f31870b307aa-eesqb2quac",
+  "uid_candidates": [],
+  "cgroup": {
+    "cpu.max": "5500000 100000",
+    "memory.max": "322122547200",
+    "memory.current": "282730496"
+  },
+  "pid": 2674542,
+  "samples": [
+    [
+      {
+        "pid": 1,
+        "comm": "sh",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "pid": 7,
+        "comm": "launch_jupyterl",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "2130",
+          "5109"
+        ]
+      },
+      {
+        "pid": 86,
+        "comm": "launch_jupyterl",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 88,
+        "comm": "jupyter-lab",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "7276",
+          "551"
+        ]
+      },
+      {
+        "pid": 89,
+        "comm": "launch_jupyterl",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 91,
+        "comm": "node",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "39",
+          "10"
+        ]
+      },
+      {
+        "pid": 109,
+        "comm": "node",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "342",
+          "34"
+        ]
+      },
+      {
+        "pid": 656157,
+        "comm": "rtunnel",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "379",
+          "179"
+        ]
+      },
+      {
+        "pid": 656166,
+        "comm": "sshd",
+        "cwd": "/",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "8",
+          "32"
+        ]
+      },
+      {
+        "pid": 2674513,
+        "comm": "sleep",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 2674527,
+        "comm": "sshd",
+        "cwd": "/",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "pid": 2674539,
+        "comm": "bash",
+        "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 2674542,
+        "comm": "python3",
+        "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "1",
+          "1"
+        ]
+      },
+      {
+        "pid": 2674543,
+        "comm": "bash",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      }
+    ],
+    [
+      {
+        "pid": 1,
+        "comm": "sh",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "pid": 7,
+        "comm": "launch_jupyterl",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "2130",
+          "5109"
+        ]
+      },
+      {
+        "pid": 86,
+        "comm": "launch_jupyterl",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 88,
+        "comm": "jupyter-lab",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "7276",
+          "551"
+        ]
+      },
+      {
+        "pid": 89,
+        "comm": "launch_jupyterl",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 91,
+        "comm": "node",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "39",
+          "10"
+        ]
+      },
+      {
+        "pid": 109,
+        "comm": "node",
+        "cwd": "/root",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "342",
+          "34"
+        ]
+      },
+      {
+        "pid": 656157,
+        "comm": "rtunnel",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "379",
+          "179"
+        ]
+      },
+      {
+        "pid": 656166,
+        "comm": "sshd",
+        "cwd": "/",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "8",
+          "32"
+        ]
+      },
+      {
+        "pid": 2674527,
+        "comm": "sshd",
+        "cwd": "/",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "pid": 2674539,
+        "comm": "bash",
+        "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 2674542,
+        "comm": "python3",
+        "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "1",
+          "1"
+        ]
+      },
+      {
+        "pid": 2674851,
+        "comm": "launch_jupyterl",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 2674856,
+        "comm": "launch_jupyterl",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 2674857,
+        "comm": "sort",
+        "cwd": "/inspire/hdd/project/chemicalreaction/czxs25220150",
+        "science_or_compile": false,
+        "shared_fd": [],
+        "ticks": [
+          "0",
+          "0"
+        ]
+      }
+    ]
+  ],
+  "new_root_exists": false,
+  "reuse_top": [
+    "activate.sh",
+    "cuda-12.9",
+    "environment-manifest.json",
+    "last-verification.json",
+    "python",
+    "recipe",
+    "requirements.lock.txt",
+    "venv"
+  ],
+  "shared_project_top": [
+    "ssh-dev",
+    "issue2296-evidence-context-20261022-701a",
+    "issue2296-resident-abi-1020",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f",
+    "issue2296-benchmark-report-20261021-c31d",
+    "i2679-runner-check-20261023-a1",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f-terminal.tar.gz",
+    "pr935-rsh-final-head",
+    "issue-1874-gram-20261009",
+    "num03-evidence",
+    "issue1882-apt-install.log",
+    "pr935-latest-replay",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f.tar",
+    "issue2111-reduction-extrema-20261021-ed64",
+    "pr2444-clang-20261013-c330f089",
+    "issue-1890-df-validation-20261012",
+    "issue-1987-ump2-native-20261008",
+    "i2679-cbs-forces-20261024-5def",
+    "i2681-cbs-cpu-20261023-66e7",
+    "vv10-reuse-h100-control-20261023-2130-3e2f",
+    "issue-1882-stage-20261008",
+    "issue-1877-rankk-1010",
+    "experiments",
+    "issue2111-reduction-extrema-20261021-ed64\r",
+    "issue2137-cpu-bool-20261013",
+    "issue1882-endpoint-20261014",
+    "nvcc129-probe.py",
+    "issue2111-variance-20261021-a94d",
+    "vv10-reuse-ablation-20261023-3e2f",
+    "codex",
+    "i2679-cbs-energy-20261023-a1",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f-sealed.tar",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f-ready.tar",
+    "issue-1874-gram-20261009\r",
+    "i1123-nvcc129-20261014",
+    "issue2111-reduction-dtype-20261021-c761",
+    "vv10-reuse-single-cold-diag-20261024-0325-3e2f-final.tar",
+    "issue2111-prod-20261021-6cdc",
+    ".cache"
+  ]
+}

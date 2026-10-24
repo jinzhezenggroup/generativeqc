@@ -71,8 +71,9 @@ def test_bulk_opt_in_stays_distinct_and_cannot_claim_production(name: str) -> No
         cpu.replace(
             "inline BulkValue bulk_point", "__device__ inline BulkValue bulk_point"
         )
-        == cuda
+        == cuda.split("inline constexpr const char* kBulkIdentityEqualSpin", 1)[0]
     )
+    assert "bulk_point_equal_spin(" in cuda
     with pytest.raises(ValueError, match="cannot claim production"):
         emit_polarized_semilocal(spec, production=True, **options)
     _, default_roots, default_identity = build_roots(spec, ((),))

@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <optional>
 
 #include "cc/df_source.hpp"
 #include "cc/solver.hpp"
@@ -10,13 +11,19 @@
 namespace generativeqc::integrals {
 class ElectronInteractionSource;
 }
+namespace generativeqc::hf {
+class DFReference;
+}
 namespace generativeqc::scf {
 class PreparedFockPlan;
 struct CudaRhfBucketPlan;
 }  // namespace generativeqc::scf
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
+  core::CorrelationConvergence convergence;
   std::shared_ptr<const hf::PhysicalReference> reference;
+  /** Present only for the explicitly requested full RI-JK reference model. */
+  std::shared_ptr<hf::DFReference> df_reference;
   // Sole source owner from this exact RHF: resident storage when eligible,
   // otherwise compact immutable metadata. Shared retirement covers all CC stages.
   std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
@@ -24,6 +31,9 @@ struct RccsdNativeState {
   cc::SolverResult solved;
   // Opt-in immutable DF source/frame owner, retained across CC response.
   cc::DFSourceResult df_source;
+  // Correlation-only MP2 bypasses CC iteration and retains only its demanded VJP.
+  cc::DFMP2Result df_mp2;
+  bool df_mp2_mode{};
   std::vector<double> eps_o, eps_v;
   generativeqc_correlation_diagnostic diagnostic{};
   CcPerformanceDiagnostic performance{};
@@ -41,9 +51,13 @@ struct RccsdNativeState {
 };
 
 // The optional auxiliary selects the internal correlation-only DF Hamiltonian.
-// The descriptor/reference remain conventional FP64 RHF. Response retention
+// The descriptor remains conventional; df_reference explicitly selects RI-JK
+// and retains its immutable owner. Otherwise the reference is exact FP64 RHF.
+// Response retention
 // keeps the original source/frame alive and charges it beside the CC solve;
 // energy-only calls release it normally. Public method registration is separate.
+// An absent mixed request selects the qualified native DF auto policy; explicit
+// true/false retain diagnostic warmup and exact-FP64 ablations at every size.
 RccsdNativeState run_rccsd_native_state(
     runtime::ExecutionContext&, const core::System&, const generativeqc_method_descriptor&,
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache = nullptr,
@@ -52,13 +66,18 @@ RccsdNativeState run_rccsd_native_state(
     bool retain_df_response = false, bool df_matrix_gemm = true,
     scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr,
     std::size_t df_auxiliary_batch_limit = 8, bool derived_denominators = true,
-    bool packed_diis = false);
+    bool packed_diis = false, std::optional<bool> df_mixed_precision = std::nullopt,
+    double df_mixed_precision_switch_residual =
+        cc::SolverOptions{}.df_mixed_precision_switch_residual,
+    bool df_mp2_mode = false, bool df_reference = false,
+    core::CorrelationConvergence convergence = {});
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&);
+    const generativeqc_method_descriptor&, const core::System* auxiliary_basis = nullptr);
 std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities&, core::ContextState&,
                                                    std::vector<core::System>,
                                                    const generativeqc_method_descriptor&,
-                                                   generativeqc_batch_flags);
+                                                   generativeqc_batch_flags,
+                                                   const core::System* auxiliary_basis = nullptr);
 }  // namespace generativeqc::methods::detail

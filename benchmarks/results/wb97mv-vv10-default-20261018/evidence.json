@@ -1,0 +1,320 @@
+{
+  "schema": "generativeqc.wb97mv-frozen-inner-default.v1",
+  "base_revision": "e4aff7810b0462204831eb5168f19b6e217ef520",
+  "native_source_identity": "4082c8548753ae72043983fc1d52291f4431f8a4e9fd2a8453cecde5c7bf178f",
+  "native_input_inventory_size": 1887,
+  "native_input_changes_from_master": [
+    "src/dft/application_precision.hpp"
+  ],
+  "library_sha256": "e72f86bb073b2e02b8e1d9a2a5b7288c3d793899819af1f4991bf1f2027ae010",
+  "slurm_job_id": 1123,
+  "production_defaults_changed": true,
+  "experiment_selector_present": false,
+  "reference12_sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+  "reference_binding": {
+    "publication": "benchmarks/results/readme-wb97mv-20261014/summary.json.xz",
+    "publication_sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519",
+    "original_raw_sha256": "488dd190c8721efc4dc3de3429ec3661d3cc09d0109cfb021146fef26e8126d4",
+    "reference_not_reexecuted": true
+  },
+  "water96_independent_reference_available": false,
+  "timing_scope": "Default-source validation observations, not a new matched speedup campaign.",
+  "records": [
+    {
+      "iterations": 30,
+      "fock_builds": 31,
+      "energy": -305.3449861186317,
+      "energy_change": 6.943795624757965e-15,
+      "density_rms": 1.0739366944366527e-13,
+      "physical_residual_rms": 1.6344594096770463e-13,
+      "prepare_seconds": 0.7347807809710503,
+      "execute_seconds": 44.127504818025045,
+      "cold_endpoint_seconds": 44.86229361500591,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.01029869
+      },
+      "native_build": {
+        "library_path": "/data/jzzeng/wb97mv-default-20261018/library/libgenerativeqc.so",
+        "library_sha256": "e72f86bb073b2e02b8e1d9a2a5b7288c3d793899819af1f4991bf1f2027ae010",
+        "probe": {
+          "source_identity": "4082c8548753ae72043983fc1d52291f4431f8a4e9fd2a8453cecde5c7bf178f",
+          "native_abi": 0,
+          "schema": 1,
+          "policy": {
+            "precision": "fp64",
+            "spin": [
+              "rhf",
+              "uhf"
+            ],
+            "consumers": [
+              "fock",
+              "force"
+            ]
+          },
+          "host": {
+            "system": "Linux",
+            "machine": "x86_64",
+            "libc": [
+              "glibc",
+              "2.39"
+            ]
+          },
+          "device": {
+            "name": "NVIDIA GeForce RTX 5090",
+            "official_profile": "sm_120",
+            "major": 12,
+            "minor": 0,
+            "warp_size": 32,
+            "maximum_threads_per_block": 1024,
+            "maximum_threads_per_sm": 1536,
+            "maximum_blocks_per_sm": 24,
+            "registers_per_sm": 65536,
+            "maximum_registers_per_thread": 255,
+            "sm_count": 170,
+            "shared_memory_per_block": 49152,
+            "shared_memory_per_block_optin": 101376,
+            "shared_memory_per_sm": 102400,
+            "runtime_version": 12090,
+            "driver_version": 13000,
+            "toolkit_version": 12090,
+            "release_build": 1,
+            "fast_compile": 0,
+            "portable": 0
+          }
+        }
+      },
+      "atoms": 12,
+      "physical_gate": true,
+      "raw_path": "job1123/water12/result.json",
+      "raw_sha256": "4b594a9fcd734c14247e207eb17fbca556236c8d630b90d30a555afa9e174880",
+      "density_sha256": "c141e857b12911f9c50a8155c4308104ceec18325378714b10f1f99e45628069",
+      "baseline_raw_path": "screen-job1120/baseline/water12.json",
+      "baseline_raw_sha256": "132bae0e19a07097ed18075de34e07812261cf74f58db1754e7d76b8f6a60e24",
+      "baseline_density_sha256": "0980f71094faf7ec170f125e7838d12d19269a10d8b3abc3a82236555be5cf3f",
+      "nonlocal_work": {
+        "provisional_focks": 25,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 1,
+      "paired_energy_error": 5.684341886080802e-14,
+      "paired_force_error": 1.660005466419534e-12,
+      "paired_density_error": 2.9812124990868938e-12,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 6
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "paired_gate": true,
+      "oracle_energy_error": 2.8421709430404007e-12,
+      "oracle_force_error": 1.1950440637065185e-11
+    },
+    {
+      "iterations": 28,
+      "fock_builds": 28,
+      "energy": -2443.2164193689628,
+      "energy_change": 1.188163091330146e-13,
+      "density_rms": 2.1749182831544752e-13,
+      "physical_residual_rms": 2.1692262541812695e-13,
+      "prepare_seconds": 5.038866655086167,
+      "execute_seconds": 990.6378055700334,
+      "cold_endpoint_seconds": 995.6766817520838,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.555823648
+      },
+      "native_build": {
+        "library_path": "/data/jzzeng/wb97mv-default-20261018/library/libgenerativeqc.so",
+        "library_sha256": "e72f86bb073b2e02b8e1d9a2a5b7288c3d793899819af1f4991bf1f2027ae010",
+        "probe": {
+          "source_identity": "4082c8548753ae72043983fc1d52291f4431f8a4e9fd2a8453cecde5c7bf178f",
+          "native_abi": 0,
+          "schema": 1,
+          "policy": {
+            "precision": "fp64",
+            "spin": [
+              "rhf",
+              "uhf"
+            ],
+            "consumers": [
+              "fock",
+              "force"
+            ]
+          },
+          "host": {
+            "system": "Linux",
+            "machine": "x86_64",
+            "libc": [
+              "glibc",
+              "2.39"
+            ]
+          },
+          "device": {
+            "name": "NVIDIA GeForce RTX 5090",
+            "official_profile": "sm_120",
+            "major": 12,
+            "minor": 0,
+            "warp_size": 32,
+            "maximum_threads_per_block": 1024,
+            "maximum_threads_per_sm": 1536,
+            "maximum_blocks_per_sm": 24,
+            "registers_per_sm": 65536,
+            "maximum_registers_per_thread": 255,
+            "sm_count": 170,
+            "shared_memory_per_block": 49152,
+            "shared_memory_per_block_optin": 101376,
+            "shared_memory_per_sm": 102400,
+            "runtime_version": 12090,
+            "driver_version": 13000,
+            "toolkit_version": 12090,
+            "release_build": 1,
+            "fast_compile": 0,
+            "portable": 0
+          }
+        }
+      },
+      "atoms": 96,
+      "physical_gate": true,
+      "raw_path": "job1123/water96/result.json",
+      "raw_sha256": "205932f784e5c21953adb52da38996f9d15edd38d6147fc68fe797137d901d8a",
+      "density_sha256": "01607b77e59dc14ab3b2682aa9fe34590b063e8422c367461d1c6bc817217c68",
+      "baseline_raw_path": "endpoint-baseline-job1121/water96.json",
+      "baseline_raw_sha256": "17f7a0ae31976669af8de5fefdd5e2679a6cf24505d2a94a8d25ea7887b4903d",
+      "baseline_density_sha256": "20e4b5552a9b43a907fd5caf9a16b4fad9f53076eb58f9d13190ddf8f9ffcc36",
+      "nonlocal_work": {
+        "provisional_focks": 23,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 0,
+      "paired_energy_error": 1.3642420526593924e-12,
+      "paired_force_error": 8.258282946371764e-12,
+      "paired_density_error": 8.508797832984527e-12,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 4
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": null,
+      "paired_gate": true
+    }
+  ],
+  "receipt_hashes": {
+    "build-receipts/build.log": "8956374467f5632bb09ff4e074984cec30716fc96d1a612937239f1b37351a67",
+    "build-receipts/compiler-cache-after.txt": "91641b239d7ab415f9df65619ed77ba56af84012f8c1676132beaa838db35657",
+    "build-receipts/compiler-cache-before.txt": "348b3f5a92c97e833db21425262be05d123d023017585ca82e8d333dda1f5f5e",
+    "build-receipts/compiler-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+    "build-receipts/compiler-commands.txt": "bb942b7931d2e73ac5e32900996a886a52e625aca39df332c758c195399e47c2",
+    "build-receipts/experiment-restored-code.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-receipts/experiment-restored.txt": "2c4671312d751ef69d46065cefc56957cc15906cc08be22edb18bbfeec2fbd74",
+    "build-receipts/library.sha256": "990ce01c5007bc3ffa414784f9c99368bfa2e0f4317ae7c50c61ff9abee4d02f",
+    "build-receipts/restore-build.log": "99b1a99e575bef2e6e7b5b7993a48256a3b8e375ac97ddb34aa486c46ba5ebe8",
+    "build-receipts/restore-cache-after.txt": "2c976dc0bc858d982d289df273f2e7f543dda28fb93d5519136b60ec7a9d0550",
+    "build-receipts/restore-cache-before.txt": "730a973a0bdd7872496d459dca2efd08d57697ddecc9c406c71859c46486bbb2",
+    "build-receipts/restore-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+    "build-receipts/restored-library.sha256": "95deeb595bffdd679739076776ba2a57b9641ff13bbd5edbbbcf7764d765a375",
+    "build-receipts/source-authentication.json": "e4ad25bdd1aa0ba68405487669cf8e1df4916a2cf8f0c801489a16b67e58ecf4",
+    "build-receipts/source-difference.txt": "9cacf12170fcb81c1e74572f971c4c4bb1bc2333ee6848eae3059320b4bbb33f",
+    "job1123/allocation.txt": "384e9753244db70bdaac84f93f65a0008241af3f151d65825088581efa62ae64",
+    "job1123/compiler-cache-after.txt": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b",
+    "job1123/compiler-cache-before.txt": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b",
+    "job1123/compiler-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+    "job1123/completed.txt": "b540d77e6c43f6d147e40d62de04b0df73b638a55450928ba36367899841cf38",
+    "job1123/input-hashes.txt": "bbb5f0d6680d97596bbcd5fd0cb0c01b6dd0a506c5ebb0c0af225c4f3d2c3523",
+    "job1123/library-after.sha256": "990ce01c5007bc3ffa414784f9c99368bfa2e0f4317ae7c50c61ff9abee4d02f",
+    "job1123/pytest.log": "3b056212d120a02c4a0f226072b8fddf456a10e9ecdda1e4724e2696e7436b5e",
+    "job1123/started.txt": "47e4520fd84251ae92f119b2ebb896cf5810ec18274605019b9c1b435c16afa8",
+    "job1123/visibility.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "expanded-tests-allocation.txt": "d81e86d0417a011cbbea1768cc47ad292775417e1f7b92bb566da355cc9e9814",
+    "expanded-tests-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+    "expanded-tests-exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "expanded-tests.log": "a6c3c62d5ce42d17e2dfbb36412d1c4eb339001a5e24f33c8c3b0019b5a6582d",
+    "restore-exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "validation": {
+    "local_focused_tests": "82 passed, 8 GPU tests deferred to Slurm",
+    "device_schedule_tests": ".............                                                            [100%]\n13 passed in 10.00s",
+    "expanded_tests": "........................................................................ [ 32%]\n........................................................................ [ 65%]\n........................................................................ [ 97%]\n.....                                                                    [100%]\n221 passed in 86.68s (0:01:26)",
+    "expanded_tests_source": "n1 actual default library, Slurm job 10075"
+  }
+}

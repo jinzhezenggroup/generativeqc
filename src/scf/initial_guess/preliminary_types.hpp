@@ -6,7 +6,7 @@
 
 namespace generativeqc::scf::initial_guess {
 
-enum class PreliminaryKind : std::uint32_t { HartreeFock = 1, Lda = 2, Minao = 3 };
+enum class PreliminaryKind : std::uint32_t { HartreeFock = 1, Lda = 2, Minao = 3, Huckel = 5 };
 enum class PreliminaryOutcome : std::uint32_t {
   Disabled = 0,
   ExplicitDensity = 1,
@@ -19,6 +19,8 @@ enum class PreliminaryOutcome : std::uint32_t {
 /** Execution-only cold-start policy. Never changes the target method or controls. */
 struct PreliminaryOptions {
   PreliminaryKind kind{PreliminaryKind::HartreeFock};
+  /** Resolve per target before cold execution or warm retry bookkeeping. */
+  bool automatic_cpu{};
   unsigned max_iterations{32};
   unsigned diis_history{8};
   double energy_tolerance{1.0e-6};

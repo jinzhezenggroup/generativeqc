@@ -51,12 +51,20 @@ def basis_capability(
     derivative_order: typing.Any = 0,
     role: typing.Any = "orbital",
     representation: typing.Any = None,
+    consumer: str | None = None,
 ) -> typing.Any:
     """Inspect every supplied orbital/auxiliary shell without device execution.
 
     ``eligible`` means an implemented generic mathematical route exists. It
     does not imply a GPU is present, an AOT schedule is promoted, a particular
     SCF state converges, or the chemical model has been validated for an element.
+    ``consumer="correlation_df"`` selects the native CUDA correlation source
+    and nuclear sink's auxiliary-through-g contract for DF-MP2/DF-CCSD(T).
+    ``consumer="wb97mv_df_values"`` admits only the CUDA KS source's auxiliary
+    values through g; native Hessian derivatives require their own linked closure.
+    ``consumer="scf_df"`` admits CUDA HF/KS fitting auxiliaries through g for
+    values and first derivatives, using the bounded six-term nuclear sink.
+    Neither widens generic CUDA DF exports, orbital shells or higher derivatives.
     """
     from .calculator import Atom
 
@@ -68,6 +76,19 @@ def basis_capability(
     backend = "cpu" if backend == "cpu_reference" else backend
     reasons, rows = [], []
     maximum = LIMITS.get(backend, {}).get(operator, {}).get(derivative_order)
+    if consumer is not None:
+        if (
+            consumer not in ("correlation_df", "wb97mv_df_values", "scf_df")
+            or backend != "cuda"
+            or role != "auxiliary"
+            or operator not in ("df_metric", "df_three_center")
+            or derivative_order
+            not in ((0,) if consumer == "wb97mv_df_values" else (0, 1))
+        ):
+            raise ValueError(
+                "source-only consumer requires CUDA auxiliary DF values or qualified first derivatives"
+            )
+        maximum = 4
     if maximum is None:
         reasons.append(
             f"{backend}/{operator}: derivative order {derivative_order} has no registered execution route"

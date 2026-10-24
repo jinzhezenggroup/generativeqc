@@ -1,0 +1,273 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8d031efe4e4bebcff66169c8629750694230089b",
+  "file_count": 33,
+  "total_bytes": 1475645,
+  "retention": "Complete original historical bytes retained losslessly in deterministic gzip. Existing Git objects restore original names; no observation, work count, numerical gate, failure or exclusion changes.",
+  "files": [
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-384-final.json",
+      "bytes": 58471,
+      "sha256": "3ca3bc06c4edea4ccf293fd7efa16ee7d154aaf560155e3f24df7e2afa4603c3",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-384-final.json.gz",
+      "stored_bytes": 5396,
+      "stored_sha256": "b473c0f708c096ce3407a89155bce18267a1186fc2ec5188d16d878df7930e9a"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-384-seed.json",
+      "bytes": 56095,
+      "sha256": "9289ad21f302d2ed6e9699984c382ba6fd10273ecb856feffd78e68838f290e4",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-384-seed.json.gz",
+      "stored_bytes": 5273,
+      "stored_sha256": "f609e42c51058f283e340abd9171e09d934f4d1ce9fc05c440d83479259689fa"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-384-verification.json",
+      "bytes": 29390,
+      "sha256": "71009553ca75ec740c571276a0bc5c19fe04d1dd6be9e2a8d149f203dac5e231",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-384-verification.json.gz",
+      "stored_bytes": 4029,
+      "stored_sha256": "a82ccee1f7a8c21992f2f05726d7bdb5909d8e946fe17cca302c3284505ab727"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-768-final.json",
+      "bytes": 63817,
+      "sha256": "60bdafb0d78dcc9118e6ee1d9efa9a0bb151c2f513804baeabe29535d95ff630",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-768-final.json.gz",
+      "stored_bytes": 5925,
+      "stored_sha256": "575ad33c56d8ad5960a950415a2cfeb83820ea588d93ea26977e662679e442eb"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-768-seed.json",
+      "bytes": 63166,
+      "sha256": "2ae1839e454d78ff29a87967fef235271e06e72091dfac65498dceb76d64610b",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-768-seed.json.gz",
+      "stored_bytes": 6095,
+      "stored_sha256": "9f3acb9c31673050511bf8203851310029b6142761985cb906fd9f1d3054e010"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v1-768-verification.json",
+      "bytes": 32071,
+      "sha256": "8f06da07e8e13e5c1c0f4e0e79cc2e598eef162abba7f29967967d38587d1295",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v1-768-verification.json.gz",
+      "stored_bytes": 4462,
+      "stored_sha256": "45b2b7384c673aaa93cc44ff949085e500134b5f80267ceee8df8e130fa7ae73"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/components/v2-768-default.json",
+      "bytes": 63130,
+      "sha256": "11b203c64b296b3fd3b8db0bf623145714d050b597155609e731c829c5002ec5",
+      "stored_path": "benchmarks/results/issue399-density-seed/components/v2-768-default.json.gz",
+      "stored_bytes": 6039,
+      "stored_sha256": "ef87b8b180ecedd8ca843365269ee5ea375606dbb41f2626a5af48062ef8e8bf"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v1-384-final-energy.json",
+      "bytes": 24126,
+      "sha256": "7c082cfac1a1489012fa32d971817f48d03546dbc08573d30828cdbfcc03f6c1",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v1-384-final-energy.json.gz",
+      "stored_bytes": 3616,
+      "stored_sha256": "6fab5895d6dcc0d74087128934599aed645b0560de0ccb1550f35c1d624c4664"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v1-384-seed-energy.json",
+      "bytes": 24123,
+      "sha256": "62ebc39d240605ee92de6c4916eb172ef405aaf23b623e3659c063620134abde",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v1-384-seed-energy.json.gz",
+      "stored_bytes": 3635,
+      "stored_sha256": "83448ff29097f576d2011f9095a87c567a77c3a28eb1731d461b14943c3c6567"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v1-768-final-energy.json",
+      "bytes": 29708,
+      "sha256": "3391909467822c2123934227b52432197e83e7519c7c9edf2ed63381991dcf09",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v1-768-final-energy.json.gz",
+      "stored_bytes": 3826,
+      "stored_sha256": "0d1171a7fd3068540be72c6844dcba5a3217ad8dee146b41c5248be1ce5a73b3"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v1-768-seed-energy.json",
+      "bytes": 29426,
+      "sha256": "9a2d5215e4545d8dbf34c956088e2e8c536e0ad632db46714a9fa325f09c1522",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v1-768-seed-energy.json.gz",
+      "stored_bytes": 3827,
+      "stored_sha256": "6d6d5e0d0f4f4fb173ab0465c398c500089b3dcd64034e4f08d9628a2463ece7"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v1-768-verification.json",
+      "bytes": 26351,
+      "sha256": "2b4e1ad257ffd31cfbceea3a106b7815cac3b10ca9ecdd4309273e80b5268fd7",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v1-768-verification.json.gz",
+      "stored_bytes": 6628,
+      "stored_sha256": "62720067340ee645f19c68a49d91c91456e22ee63e2adb0ae07e5d4c6fc63c03"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/measurements/v2-768-default-energy.json",
+      "bytes": 29566,
+      "sha256": "384000f104dcf4c68d7d4b3275558dcd5acc82d2c0ae37c844c44bb896daeb27",
+      "stored_path": "benchmarks/results/issue399-density-seed/measurements/v2-768-default-energy.json.gz",
+      "stored_bytes": 3859,
+      "stored_sha256": "79c629fe2dbfce0fc51980257a0823c08fa62d020fa7754cccb9c85a6bee351c"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/384.0-dense.journal.json",
+      "bytes": 61945,
+      "sha256": "868f3a6743d89a4e15aea7404fa344f5bf0eaf1de3b7abc0b06baa9c43eddf49",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/384.0-dense.journal.json.gz",
+      "stored_bytes": 4998,
+      "stored_sha256": "93ca43a483ccffb496115ae63b400c871fc9885741363d6f61d4d3d1eb760ed5"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/384.json",
+      "bytes": 30045,
+      "sha256": "762db1a970a4284d820c6955e7c870f431e92c9eadef3024ecf02c3ef27503ab",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/384.json.gz",
+      "stored_bytes": 6640,
+      "stored_sha256": "2f3a7379ae177eed7942b311fc2a77aadf8fd6295edaa4cf99077db18d6e81d2"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/768.json",
+      "bytes": 57676,
+      "sha256": "1d39a6363f19a43fcf3db64dfb08cda73383810f9321dca4ce5355265728566f",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/768.json.gz",
+      "stored_bytes": 11179,
+      "stored_sha256": "e8e7ffc90b9866c6e8c9ea10a6567b6d74355b3423ca69ff5a488eca0b975079"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/seed-final.1.json",
+      "bytes": 41759,
+      "sha256": "72930830ea2f1859e7c45eaba6aacff7b42fa34bd5b0e49acd5127c2cfd796d1",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/seed-final.1.json.gz",
+      "stored_bytes": 4121,
+      "stored_sha256": "0ae87dcfca7745cc65d9ca6fcca806a082d822473c254af5d4f3d9e1cc85ed0c"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/seed-final.2.json",
+      "bytes": 42401,
+      "sha256": "32125b0a148ab04e7ce43d6f03b0423333935a41e91dcf54652f75d27ae762e7",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/seed-final.2.json.gz",
+      "stored_bytes": 4144,
+      "stored_sha256": "8fdfa3b8cf8b0f2f337fb656f2c3c52c1fb1885b5333bf846e507545fe2a1942"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/seed-final.3.json",
+      "bytes": 41453,
+      "sha256": "051f9a4cf03b7adcdfef6018e492ad4749877ae1d4b94d237a82756ff855ac12",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/seed-final.3.json.gz",
+      "stored_bytes": 4102,
+      "stored_sha256": "0657261aa23495c4a772bbc7ca04da00d0b6dd8bc4d3b7e973c667b781bb21f1"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/seed-final.4.json",
+      "bytes": 40771,
+      "sha256": "3e29bd85738840ad0a42299b0b6167f9bca4884ceafa1131f967f3247b6156ff",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/seed-final.4.json.gz",
+      "stored_bytes": 4047,
+      "stored_sha256": "54ba0314151efcc8aaf1c31179c0a46bb34d08a17699dde500c32d685ba7804f"
+    },
+    {
+      "path": "benchmarks/results/issue399-density-seed/profiles/seed-final.5.json",
+      "bytes": 40521,
+      "sha256": "f84b6303924a0251803b67398f304bfa3671dc58ab55e779d53229f24cccd75e",
+      "stored_path": "benchmarks/results/issue399-density-seed/profiles/seed-final.5.json.gz",
+      "stored_bytes": 4012,
+      "stored_sha256": "bfd9629d493de1405c1173ecba554a0c342eac1a22f1b8d9289c9e4774b9d4cc"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/ablations/384-VIBEQC_DF_DIIS_DOTS-energy.json",
+      "bytes": 60647,
+      "sha256": "3d75d2a1dfe3b9cff74c056874e60c33d902f8d30b15c7c4478d69ba7a90380b",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/ablations/384-VIBEQC_DF_DIIS_DOTS-energy.json.gz",
+      "stored_bytes": 3713,
+      "stored_sha256": "2f0e86fabdd3ae26c2d002d74da96a96303d3d91729b20b01d73ce79efeb97d6"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/ablations/384-VIBEQC_DF_RESIDENT_EXCHANGE-energy.json",
+      "bytes": 60650,
+      "sha256": "3be1d9adfbb68e26570d3f6683e793979de0f95b8d3166b6c59ca92aca83361a",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/ablations/384-VIBEQC_DF_RESIDENT_EXCHANGE-energy.json.gz",
+      "stored_bytes": 3682,
+      "stored_sha256": "d1ca0e6fe2ca66390abf08d63eba39ebc51e30ea6fc730809b0f06a0cc6febc0"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/baseline/384-clean.json",
+      "bytes": 52425,
+      "sha256": "8fb5286820d8b917c3157f135fe73288732c2ae9256d48baf79449c410d7eea7",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/baseline/384-clean.json.gz",
+      "stored_bytes": 7629,
+      "stored_sha256": "056647c904419e0fa96985e093b5a002416753de3361c5efc7e57188a2576fc4"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/baseline/384-components.json",
+      "bytes": 51123,
+      "sha256": "7e61317b25352650419f909e921e5d0192d59531872be34a18fdce2224ad7035",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/baseline/384-components.json.gz",
+      "stored_bytes": 8357,
+      "stored_sha256": "0c2b3a6fb5667743ca2f93ffcf3e1415f591af963c3a453590c6b253bbd8e0cb"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-center.json",
+      "bytes": 39387,
+      "sha256": "ceb92f8a7d391bf65c1f22fe6405205ac78f151731112ad34fdc0e52c0ffd854",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-center.json.gz",
+      "stored_bytes": 6364,
+      "stored_sha256": "ae239c5ee24764bbdbc5c6fbd7cd8e156dbaf4ae344a79472f448b557c54d159"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-legacy.json",
+      "bytes": 39385,
+      "sha256": "f9dcfc3c053dad7f8b61e7e341357cc1e9d4c5b897d1a6d5529678c40aa655f8",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-legacy.json.gz",
+      "stored_bytes": 6270,
+      "stored_sha256": "aa65c11474cd2b0e7b8c10c6d4988dbe4a30a9900e9ce7c6063075003aa20b8a"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-shared.json",
+      "bytes": 39392,
+      "sha256": "9f775f8b9d0999a48905323f5c27b1bdc5c6cbdc99122ca790931c990b01907e",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/384-reverse-shared.json.gz",
+      "stored_bytes": 6350,
+      "stored_sha256": "bd68a63047b63e79fd427c85348e9b8a3157eacc77bbed3c000ebd33f97b5e44"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-center.json",
+      "bytes": 59937,
+      "sha256": "a0b6be75e987c94b7a64079bafcb055fd8caac9c5bb9a40f4709a44b995e1267",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-center.json.gz",
+      "stored_bytes": 9537,
+      "stored_sha256": "7fd83c8b8d5c269f60bb7cc7a1de481b15f55a626b775644355996ce9f03c046"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-legacy.json",
+      "bytes": 59947,
+      "sha256": "80c757b6b55cba0f1caea2242721d12ed2e462ed14d8695a0f19973b508fbaee",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-legacy.json.gz",
+      "stored_bytes": 9455,
+      "stored_sha256": "e6f46abac219c4361424d207f1041d1dc7ec8ffed817d29da6afe95e589ad0c7"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-shared.json",
+      "bytes": 59967,
+      "sha256": "66085634dd88ac246ab338c5474e518363e7b57035c58b00664639ed179b930b",
+      "stored_path": "benchmarks/results/issues388-391-df/measurements/derivatives/768-reverse-shared.json.gz",
+      "stored_bytes": 9506,
+      "stored_sha256": "2143a53bab06462386baa49a4c56befcee4358b3ebe3d6f40ee66fdfba8984c6"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/rejected/768-VIBEQC_DF_DIIS_DOTS-energy.json",
+      "bytes": 25570,
+      "sha256": "82f5bccc66c67983369e3fff5d1135edc6efeb123665c2c385fa72ae2795685b",
+      "stored_path": "benchmarks/results/issues388-391-df/rejected/768-VIBEQC_DF_DIIS_DOTS-energy.json.gz",
+      "stored_bytes": 3257,
+      "stored_sha256": "eaf58aff301106282d7390621f604522a33175205848a4f864e66d982e00bf30"
+    },
+    {
+      "path": "benchmarks/results/issues388-391-df/timings.json",
+      "bytes": 41204,
+      "sha256": "0098c41ef194d51593b45ae46303997b55ccdf49d4ba64ee7b6c036aa19be735",
+      "stored_path": "benchmarks/results/issues388-391-df/timings.json.gz",
+      "stored_bytes": 4762,
+      "stored_sha256": "a8278365ac6ff43d6c2e3e0bc3572f56031398316d6e3a6e91f8acb4886468e1"
+    }
+  ]
+}

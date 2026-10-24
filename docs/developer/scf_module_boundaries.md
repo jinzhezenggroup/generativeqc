@@ -19,13 +19,14 @@ For the rationale and pinned historical receipts, see the
 | Dense reference linear algebra and mean-field arithmetic | `src/scf/reference/linalg.*`, `reference/mean_field.*` | Independent CPU reference numerics; no CUDA or method-driver dependencies |
 | Initial density and occupation preparation | `src/scf/initial_guess/` | Validated input state, orbital occupations and initial guesses; consumer owns system validation |
 | Method-neutral iteration limits and convergence bookkeeping | `src/solver/iteration_control.hpp`, `self_consistent.hpp` | Reusable solver control, not an HF-specific density or device policy |
+| HF fleet item lifecycle across CPU/CUDA | `src/scf/fleet.cpp`, `fleet_item.hpp` | Shared coordinate/seed binding, bounded cold retry, exception isolation and successful warm-state publication; backend schedules retain their native owners |
 | RHF/UHF CPU iteration, DIIS and proposal control | `src/scf/solver/mean_field_driver.*`, `solver/diis.*` | Consumes explicit prepared-provider and proposal contracts; scientific finalization remains method-owned |
 | Prepared CPU Fock construction and resource accounting | `src/scf/fock_prepared.*` | Owns direct/DF provider composition and shared capacity observation |
 | HF stationary gradient assembly | `src/scf/gradient/hf_gradient.*` | Consumes provider derivative contributions; does not own or mutate an SCF solver |
 | Direct CUDA public plan and cache lifetime | `src/scf/cuda/rhf_bucket.*` | Topology/options identity, admission, invalidation, retry, diagnostics and warm cache |
 | Direct CUDA Graph lifetime | `src/scf/cuda/rhf_graph.*` | Capture, instantiate/upload, replay and teardown |
 | Optional exact-reference value lease | `src/scf/cuda/rhf_resident_values.*` | One-call admission, common Direct provider borrowing, local graphs and retirement before correlation |
-| Common phase-local ERI source | `src/scf/cuda/direct_jk_source_lease.*` | Bounded immutable full-range FP64 values and raw compensated restricted J/K; no method assembly or graph ownership |
+| Common immutable ERI value source | `src/scf/cuda/direct_jk_source_lease.*` | Bounded full-range FP64 values and raw compensated RKS/UKS J/K; no method assembly, derivative integrals or graph ownership |
 | Coupled direct CUDA execution | `src/scf/cuda_rhf.cpp` and bounded `src/scf/cuda/direct_*` owners | Host launch/dataflow orchestration is separate from scientific device kernels |
 | CUDA generic numeric services | `src/scf/cuda/eigensolver.*`, `src/solver/cuda/symmetric_eigen_handles.*` and `src/scf/cuda/resources.*` | Solver/library/stream/workspace lifetime; borrowers retain their method-specific policies |
 | CUDA structured matrix execution | `src/scf/cuda/structured_matrix.*`, `src/tensor/cuda_structured_product.hpp` | Borrowed immutable Gram/inverse-root/basis bindings; device masks, charged scratch and publication, not method/provider selection policy |
@@ -72,6 +73,14 @@ rather than a claim that every file passes that target.
 
 ## Direct CUDA execution and density-fitting scope
 
+Prepared Direct and ordinary HF request a 16 KiB CUDA call stack when source
+metadata proves that every shell is at most d. F-containing and unknown domains
+retain the schedule's larger request. The shared runtime serializes the limit
+query and increase; it never lowers a larger limit belonging to another live
+consumer. Driver stack backing is outside explicit tensor allocations, so
+optional value caches and response panels also check actual free device memory.
+See the [resource-policy rationale](../../.agents/notes/implemented/performance/2026-10-23-through-d-stack-headroom.md).
+
 ### Optional phase-local exact RHF values
 
 Unset or `GENERATIVEQC_RHF_RESIDENT_VALUES=auto` selects a bounded automatic
@@ -83,12 +92,27 @@ f-containing domain with uncovered generic Fock work, at least 128 Cartesian
 AOs and an iteration limit of at least eight. Known warm/reused buckets,
 smaller sources and fully generated/lower-angular routes retain their existing
 schedule without rebuilding a phase source or recapturing ordinary graphs.
-Ordinary HF/UHF, mixed/incremental Fock schedules and shell-work diagnostics do
-not silently acquire this lease. Small references (fewer than 64 public AOs),
+Ordinary unrestricted HF, mixed/incremental Fock schedules and shell-work
+diagnostics do not acquire this lease. Small references (fewer than 64 public AOs),
 iteration limits below four and incompatible canonical domains retain fallback.
 The automatic policy is a conservative cold/domain heuristic, not a universal
 profitability model or a promise of eight actual iterations. A supplied seed
 in a fresh bucket is not assumed to be an already converged reference.
+
+Ordinary restricted FP64 cold solves also use this owner automatically in a
+separate bounded domain: at least 64 public AOs, at most 128 Cartesian AOs,
+through-d shells, positive screening and at least eight permitted iterations.
+Only a fresh single-system bucket with an internally owned initial guess is
+eligible. External/warm seeds, reused buckets and active public resource ledgers
+retain the streamed schedule. Larger domains are rejected before source cloning
+or sorting, since their setup cost does not amortize in the qualified cold
+workloads. Optional values default to a 512-MiB ceiling in this ordinary domain;
+`0` restores the streamed schedule and `1` remains a bounded diagnostic override.
+The final derivative consumer explicitly rebuilds its Cartesian density, pair
+bounds and queue metadata when its Fock used resident values. This preserves the
+same final density for energy, Pulay and integral-derivative terms.
+The [domain decision](../../.agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md)
+records the qualification and larger-domain crossover rationale.
 
 The common Direct provider builds immutable full-range canonical values once
 and applies its existing compensated FP64 J/K consumer for each physical Fock
@@ -98,12 +122,55 @@ No fitted reference, CPU integral oracle or molecule-specific dispatch is added.
 
 Admission first charges the complete mandatory reference peak, conservative
 provider device/host preparation, Cartesian compensation, two public raw
-matrices and diagnostics. Optional values have an 8-GiB ceiling and must also
+matrices and diagnostics. Reference values have an 8-GiB ceiling and must also
 fit available device memory with a 256-MiB runtime reserve. Resource/capability
 refusals retain the already admitted exact evaluator; driver/numerical failures
 propagate instead of masquerading as pressure. Preparation finite-audits values
-before publication. A completed action must report zero recurrence evaluations
-and a canonical census matching the source inventory before reference export.
+before publication. A completed action must report a canonical census matching
+the entire source inventory before reference export. Complete residency reports
+zero recurrence evaluations; partial residency reports exactly the uncached
+inventory at the frozen predicate, never a second whole-source Direct pass.
+A stricter consumer predicate can reduce uncached evaluations, but cannot omit
+canonical row visits or exceed that inventory.
+
+Two experimental controls can apply an externally measured partial plan without
+changing the automatic eligibility or default full-cache behavior:
+
+- `GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK` selects among the 28 canonical AO-pair
+  angular-sum buckets. For `0 <= second <= first < 7`, the bit index is
+  `first * (first + 1) / 2 + second`. Unset means all 28 bits; zero retains Direct.
+- `GENERATIVEQC_RHF_RESIDENT_MAX_BYTES` caps the optional FP64 value storage
+  after complete mandatory admission. Unset retains the owner’s ceiling; zero
+  disables optional storage. It cannot enlarge the complete reference budget.
+
+Both accept unsigned decimal or lowercase `0x` hexadecimal, with no whitespace,
+sign or trailing characters. Out-of-range masks and malformed values are rejected
+by an eligible owner. The policy is frozen once per phase owner. The common
+provider packs only selected values and dispatches every remaining bucket through
+the same compensated canonical Direct consumer. A published selection cannot
+change, and moved geometry rebuilds values rather than borrowing stale integrals.
+Packed layout metadata is included in complete numeric admission. Allocation or
+capacity refusal preserves whole-source exact Direct fallback.
+
+The analogous `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` and
+`GENERATIVEQC_KS_RESIDENT_MAX_BYTES` controls apply to eligible full-range
+strict-FP64 Direct RKS/UKS owners, including Coulomb-only, global-hybrid and
+compatible nonlocal compositions. Their unset mask retains complete residency;
+the unset ceiling retains KS's existing method/domain policy. These controls
+do not bypass the complete resource planner, enable RSH/DF, or widen cold
+automatic eligibility. Screened partial sources freeze and share the incumbent
+Schwarz row layout and compact bucket extents before choosing storage. They do
+not cache density-dependent masks or regenerate a full source per action.
+RHF and KS forward their separate controls to the common `DirectJkSourceLease`.
+The native RHF frame-response owner uses
+the same partial policy; its independently recomputed scalar audits remain
+uncached. The profiler and bounded additive selector in
+`benchmarks/selective_eri_cache.py` supply candidate masks, not universal
+profitability predictions. Complete E+F comparison uses
+`benchmarks/selective_eri_rhf_endpoint.py` and the independent oracle/paired
+acceptance gates in `benchmarks/selective_eri_rhf_acceptance.py`. Reference export
+itself does not return forces; this endpoint composes the existing native
+`rhf_frame_response_cuda` electronic gradient with nuclear repulsion.
 
 The RHF adapter borrows the stream and owns separate iteration graphs; its
 method-neutral `DirectJkSourceLease` owns values and compensation only. Every
@@ -118,15 +185,17 @@ submitted/built source work, completed Fock actions, refused admission and the
 mandatory versus complete phase capacity; graph-capture callbacks are not
 counted as completed actions.
 
-### Optional phase-local Global-Hybrid KS values
+### Optional prepared-owner KS values
 
 Unset or `GENERATIVEQC_KS_RESIDENT_VALUES=auto` selects bounded phase-source
-reuse for restricted exact-FP64 full-range Global-Hybrid solves.
+reuse for exact-FP64 full-range Direct RKS/UKS solves, including pure
+semilocal Coulomb-only and compatible nonlocal compositions. Eligibility
+depends on the integral/precision/resource contract, not the functional name.
 Explicit `0` retains the incumbent schedule; `1` requests a source without
 bypassing scientific or resource admission; other values are rejected.
-Automatic selection includes screened through-d cold
-candidates as well as the incumbent generic f-shell domain, with at least
-64 public/128 Cartesian AOs and eight permitted iterations. Through-d
+Automatic selection includes screened through-d cold hybrid candidates with at least
+24 public/24 Cartesian AOs, as well as the incumbent generic f-shell domain
+with at least 64 public/128 Cartesian AOs. Both need eight permitted iterations. Through-d
 candidates require a positive prepared Schwarz threshold; actual compact
 census and complete capacity admission decide whether values fit. These
 eligibility gates do not predict profitability or actual iteration count.
@@ -136,8 +205,12 @@ candidate; a moved solve carrying a warm snapshot is not. Native cold initial
 guesses retain explicit owner provenance through `CudaKsSeedOrigin`; a non-null
 density pointer alone does not distinguish a production cold guess from a
 user seed. Seed normalization and the initial-guess mathematics are unchanged.
-Forced selection still requires at least 64 public AOs, four permitted
+Pure-Coulomb KS keeps its original 64-public/128-Cartesian automatic thresholds.
+Forced hybrid KS selection requires at least 24 public AOs, four permitted
 iterations, a compatible canonical source and complete capacity admission.
+Pure KS and generic RHF source policies retain their 64-AO allowance floor. Source reuse is exact
+FP64 work reduction for ordinary Calculator calls, not a separate precision
+profile or an FP32 kernel qualification.
 
 KS keeps its prepared mathematical specification, exact-exchange coefficient,
 XC, DIIS, convergence and final-state consumers. Source replay preserves the
@@ -148,7 +221,12 @@ geometry-only Schwarz row tails and stores only their compact canonical values.
 Construction and replay use identical bucket offsets and bounded work extents;
 a replay threshold below the frozen preparation mask is rejected. This does
 not introduce a different screening approximation or density-dependent cache.
-No ERI recurrence is evaluated during replay, and no derivative ERIs are cached.
+Retained buckets evaluate no new ERI recurrence during replay. With an explicit
+partial mask, every other bucket uses the same compensated Direct traversal once;
+the frozen-predicate census requires exactly its uncached inventory. No derivative
+ERIs are cached. `benchmarks/selective_eri_pbe0.py` observes the unchanged official
+PBE0 Cold/Warm/Moved E+F protocol, independent gates and emitted source receipts;
+it does not supply an oracle density or replace the force consumer.
 The source-only Direct factory skips unrelated generated/MD/range leases and
 releases sort staging after the row-construction fence. KS supplies its existing
 raw J/K outputs; only compensation and audits need additional source scratch.
@@ -168,17 +246,20 @@ Public resource-ledger requests retain the original exact route until their
 complete resource planner explicitly reserves optional source storage. This
 includes forced selection; a diagnostic cannot bypass a public memory budget.
 
-UKS, fitted J/K, range/nonlocal corrections, lower precision and incremental
-J/K retain their existing paths. Resource/capability refusal preserves exact
-fallback; driver or numerical failure propagates. KS retires compiled/graph
-borrowers before releasing the phase source at terminal completion, restart,
-failure or destruction. Values never persist into force/response evaluation,
-another solve or another geometry. Existing Hybrid graph qualification is not
+Fitted J/K, range corrections, lower precision and incremental J/K retain
+their existing paths. Resource/capability refusal preserves exact fallback;
+driver or numerical failure propagates. KS retires compiled/graph borrowers
+and audits completed actions at successful terminal completion, but retains
+the immutable value lease with the converged prepared owner for post-SCF value
+consumers. Restart, failure or destruction releases it; it never crosses a
+new solve or geometry. Gradients continue to borrow the primary provider's
+first-derivative metadata and evaluate derivative integrals: ordinary ERI
+values are not derivative integrals. Existing Hybrid graph qualification is not
 widened. `CudaKsTransfers` reports source construction, completed submitted Fock
 actions and numeric/source peaks separately from SCF iterations.
 
-After a successful source-backed solve that updates the warm cache, KS retires
-the source and evaluates incumbent J/K once at the unchanged final density.
+After a successful source-backed solve that updates the warm cache, KS bypasses
+the retained value source and evaluates incumbent J/K once at the unchanged final density.
 The compensated energy uses the retained XC at that density and anchors the
 next warm solve to its actual provider, rather than comparing different FP64
 summation schedules. This cache-only handoff leaves the returned energy,
@@ -222,6 +303,23 @@ the coupled numerical launch sequence. The separately built angular-force
 kernel has its own device-link constraints: do not change standalone versus
 relocatable compilation without checking the real NVCC build graph and endpoint.
 
+The opt-in `GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK=1` lets a retained
+first-derivative s/p/d Direct owner prepare its existing bounded shell program
+even when streaming value kernels do not cover the complete shell domain.
+An unset variable or `0` retains the incumbent preparation; other values are
+rejected when the derivative-owner candidate is requested. The policy is read
+at preparation, not execution. Value-only, borrowed resident-source, and
+through-f plans keep their existing ownership rules.
+
+This candidate does not select bounded SCF values: their independent capability
+and qualification opt-in gates remain unchanged. It uses the original optional
+provider allowance and charges retained buffers to the existing diagnostic.
+Insufficient budget or unavailable preparation retains the complete bounded
+force fallback. No functional-name gate, precision change, integral formula,
+public ABI, or new default is introduced. Complete endpoint, work-count and
+independent force qualification remain required before promoting this candidate.
+See the [ownership decision](../../.agents/notes/implemented/performance/2026-10-11-orthogonal-direct-derivative-ownership.md).
+
 Full-range nuclear derivatives can partition a mixed f basis by the borrowed
 class-major topology: the 21 s/p/d quartet classes use separate low-order,
 weighted order-four/five, cooperative order-six/seven and materialized dddd
@@ -240,10 +338,15 @@ and orbital-energy weighted-density expression. The optional
 from authenticated resident D/F/C/energies with borrowed matrix-library resources
 and the shared tensor primitive. It reuses four phase-local iteration matrices
 and an arena-charged bounded reduction packet array; it does not upload detached
-host matrices or allocate another dense arena/handle. The default is `0`; other
-values are errors. Small or unavailable-library owners, and repeated exports
-with a published stationary-weight lease, retain reference validation without
-recycling leased storage. An admitted provider failure is explicit, not a silent
+host matrices or allocate another dense arena/handle. An unset selector admits
+strict final RKS matrices for all-electron, full-range exact/fitted global
+hybrids at 384 AOs or more and pure-J exact/fitted models at 544 AOs or more.
+Range corrections, nonlocal correlation, incremental J/K and ECP models retain
+their existing default. Explicit `0` restores host validation; `1` requests
+device proof subject to resource and identity guards; other values are errors.
+Small or unavailable-library owners, and repeated exports with a published
+stationary-weight lease, retain reference validation without recycling leased
+storage. An admitted provider failure is explicit, not a silent
 reference retry. See the
 [resident final-validation decision](../../.agents/notes/implemented/performance/2026-10-10-ks-resident-final-validation.md)
 for layout, lifetime and qualification rationale.

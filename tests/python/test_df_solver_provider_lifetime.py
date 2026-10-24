@@ -17,9 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module")
 def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if compiler is None or cache is None:
-        pytest.skip("requires ccache and a host C++ compiler")
+        pytest.skip("requires sccache/ccache and a host C++ compiler")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/cc/cuda_solver.cu").read_text()
     begin = source.index("  void cleanup() noexcept {")
@@ -79,6 +80,7 @@ def test_provider_release_waits_for_other_owner_measurement(
 
 
 PREFIX = r"""
+#include "cc/phase_observation.hpp"
 #include <chrono>
 #include <algorithm>
 #include <cstddef>

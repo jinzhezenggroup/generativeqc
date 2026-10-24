@@ -145,6 +145,7 @@ class TensorSchedule:
     recompute: bool = False
     stream_reductions: bool = field(default=False, kw_only=True)
     streamed_gemm_reduction: bool = field(default=False, kw_only=True)
+    shared_streamed_reductions: bool = field(default=False, kw_only=True)
     inplace_donation: bool = field(default=False, kw_only=True)
     direct_gemm: bool = True
     layouts: bool = False
@@ -168,6 +169,7 @@ class TensorSchedule:
             "recompute",
             "stream_reductions",
             "streamed_gemm_reduction",
+            "shared_streamed_reductions",
             "inplace_donation",
             "direct_gemm",
             "layouts",
@@ -176,6 +178,8 @@ class TensorSchedule:
                 raise TypeError(f"{name} must be boolean")
         if self.streamed_gemm_reduction and not self.stream_reductions:
             raise ValueError("streamed_gemm_reduction requires stream_reductions")
+        if self.shared_streamed_reductions and not self.stream_reductions:
+            raise ValueError("shared_streamed_reductions requires stream_reductions")
 
 
 @dataclass(frozen=True)
@@ -276,6 +280,13 @@ class TensorPlan:
             for node in self.program.live_nodes
             if names[node] in values
         }
+
+    @cached_property
+    def executable_reduction_groups(self) -> tuple:
+        """Immutable launch partition derived from allocated lifetime proofs."""
+        from .cuda_reduction import executable_streamed_reduction_groups
+
+        return executable_streamed_reduction_groups(self)
 
     @property
     def batch_schedule(self) -> BatchScheduleIR:
@@ -566,9 +577,13 @@ def estimated_cuda_launches(plan: TensorPlan) -> int:
     """Count the emitted endpoint launch sequence without executing CUDA."""
 
     launches = 1  # per-run arithmetic-error reset
-    for step in plan.steps:
+    skipped = {
+        index for group in plan.executable_reduction_groups for index in group.steps[1:]
+    }
+    for index, step in enumerate(plan.steps):
         if (
-            step.virtual
+            index in skipped
+            or step.virtual
             or step.node.op in ("input", "constant")
             or not step.node.spec.size
         ):
@@ -784,6 +799,9 @@ def plan_cuda(
     preserve the original contraction tree. Programs carrying an explicit
     precision-execution contract keep their original tree until intermediate
     precision propagation through reassociation is defined.
+
+    Scalar functions retain each value's float32/float64 type and the shared
+    finite-domain diagnostics; their CUDA spelling is owned by the scalar emitter.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
@@ -830,10 +848,6 @@ def plan_cuda(
     if any(n.op in TRANSCENDENTALS for n, _ in nodes) and len(nodes) > INT_MAX // 2:
         raise ValueError("too many steps for transcendental domain diagnostics")
     for node, _ in nodes:
-        if node.op in TRANSCENDENTALS and node.spec.dtype != "float64":
-            raise ValueError(
-                "CUDA transcendental primitives are qualified only for float64"
-            )
         scalar = None if node.spec.dtype == "int64" else scalar_type(node.spec.dtype)
         checked_size(node.spec.size * node.spec.itemsize, "tensor bytes")
         for stride in strides(node.spec.shape):

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "integrals/s_integrals.hpp"
 
 namespace generativeqc::scf {

@@ -1,5 +1,15 @@
 # Source-bound ECP projector review qualification
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/ecp-projector-171/review-qualification/raw-evidence.zip
+```
+
+
 This fresh RTX 5090 record supersedes the incomplete provenance of the
 historical RTX 4090 measurements for the merge qualification gate.
 
@@ -34,7 +44,7 @@ and Compute Sanitizer memcheck reported **0 errors**. The original CPU ECP
 implementation remains the independent numerical oracle/fallback.
 
 Restore and verify the archive with `python -m tools.unpack_evidence
-benchmarks/results/ecp-projector-171/review-qualification --output /tmp/ecp-review`.
+benchmarks/results/ecp-projector-171/review-qualification --archive .artifacts/retention-archives-20261024/ecp-projector-171/review-qualification/raw-evidence.zip --output /tmp/ecp-review`.
 The restored `native_validation.py` records provenance and runs the checks.
 After building each recorded source with the flags above, invoke it inside
 `srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00`,

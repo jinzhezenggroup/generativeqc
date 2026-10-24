@@ -101,8 +101,9 @@ def check_resource_status(
 class NativeDeviceLedger:
     """Persist charges across warm calls and release them with native buffers.
 
-    Driver, graph, pool and library-internal allocations are outside this
-    numeric-buffer ledger; the common plan reports their allowances/exclusions.
+    Driver, graph, pool and library-internal numeric allocations remain outside
+    the ledger. Native retained-provider reservations share its admission limit
+    and v3 reports them separately from actual allocations and requested bytes.
     Each ledger belongs to one prepared request on one visible CUDA device.
     """
 
@@ -116,30 +117,20 @@ class NativeDeviceLedger:
             raise ValueError("native device ledger requires a CUDA request")
         selected = dict(plan.selections)[owner]
         candidate = next(c for c in request.candidates if c.name == selected)
-        devices = {
-            e.space for e in candidate.estimates if e.space.startswith("device:")
-        }
-        if len(devices) != 1:
-            raise NotImplementedError(
-                "one native prepared owner must use one visible CUDA device"
-            )
-        self.device = int(devices.pop().split(":")[1])
-        numeric = tuple(
-            e for e in candidate.estimates if e.accounting != "runtime_allowance"
-        )
-        self.limit = _account(numeric)[0][f"device:{self.device}"]
         self.library = library
         self.handle = None
-        for name in ("create", "destroy", "bind", "read"):
+        self._capacity_admission = None
+        create = getattr(
+            library, "generativeqc_resource_ledger_create_from_buffers_v1", None
+        )
+        required = ("destroy", "bind", "read")
+        if create is None:
+            required = ("create", *required)
+        for name in required:
             if not hasattr(library, f"generativeqc_resource_ledger_{name}_v1"):
                 raise NotImplementedError(
                     "native library has no persistent allocation ledger v1"
                 )
-        library.generativeqc_resource_ledger_create_v1.argtypes = [
-            ctypes.c_size_t,
-            ctypes.c_int,
-        ]
-        library.generativeqc_resource_ledger_create_v1.restype = ctypes.c_void_p
         library.generativeqc_resource_ledger_destroy_v1.argtypes = [ctypes.c_void_p]
         library.generativeqc_resource_ledger_destroy_v1.restype = None
         library.generativeqc_resource_ledger_bind_v1.argtypes = [ctypes.c_void_p]
@@ -157,14 +148,115 @@ class NativeDeviceLedger:
                 ctypes.c_size_t,
             ]
             self._read_v2.restype = ctypes.c_int
-        self.handle = library.generativeqc_resource_ledger_create_v1(
-            self.limit, self.device
+        self._read_v3 = getattr(library, "generativeqc_resource_ledger_read_v3", None)
+        if self._read_v3 is not None:
+            self._read_v3.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            self._read_v3.restype = ctypes.c_int
+        if create is not None:
+            self._create_from_inventory(create, candidate.estimates)
+        else:
+            devices = {
+                estimate.space
+                for estimate in candidate.estimates
+                if estimate.space.startswith("device:")
+            }
+            if len(devices) != 1:
+                raise NotImplementedError(
+                    "one native prepared owner must use one visible CUDA device"
+                )
+            self.device = int(devices.pop().split(":")[1])
+            if self.device > 2**31 - 1:
+                raise ValueError(
+                    "device ledger ordinal exceeds the native device domain"
+                )
+            admitted = tuple(
+                estimate
+                for estimate in candidate.estimates
+                if estimate.accounting != "runtime_allowance"
+            )
+            self.limit = _account(admitted)[0].get(f"device:{self.device}", 0)
+            library.generativeqc_resource_ledger_create_v1.argtypes = [
+                ctypes.c_size_t,
+                ctypes.c_int,
+            ]
+            library.generativeqc_resource_ledger_create_v1.restype = ctypes.c_void_p
+            self.handle = library.generativeqc_resource_ledger_create_v1(
+                self.limit, self.device
+            )
+            if not self.handle:
+                raise MemoryError("could not allocate native resource ledger metadata")
+
+    def _create_from_inventory(self, create: typing.Any, estimates: typing.Any) -> None:
+        """Bind only a complete native receipt, never retrying rejected metadata."""
+        rows = []
+        for estimate in estimates:
+            device = estimate.space.startswith("device:")
+            rows.extend(
+                (
+                    estimate.bytes,
+                    4 if device else {"pinned": 2, "pageable": 3}[estimate.space],
+                    int(estimate.space.split(":")[1]) if device else 0,
+                    estimate.first_phase,
+                    estimate.last_phase,
+                    int(estimate.accounting == "runtime_allowance"),
+                )
+            )
+        buffers = (ctypes.c_uint64 * len(rows))(*rows)
+        handle = ctypes.c_void_p()
+        receipt = (ctypes.c_uint64 * 3)()
+        create.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        create.restype = ctypes.c_int
+        status = create(
+            buffers, len(buffers), ctypes.byref(handle), receipt, len(receipt)
         )
-        if not self.handle:
-            raise MemoryError("could not allocate native resource ledger metadata")
+        if status or not handle.value:
+            if handle.value:
+                self.library.generativeqc_resource_ledger_destroy_v1(handle)
+            if status == 3:
+                raise MemoryError("could not allocate native resource ledger metadata")
+            if status == 4:
+                raise NotImplementedError(
+                    "one native prepared owner must use one visible CUDA device"
+                )
+            raise ValueError("native resource ledger rejected the selected inventory")
+        try:
+            device_labels = {
+                rows[index + 2]
+                for index in range(0, len(rows), 6)
+                if rows[index + 1] == 4
+            }
+            if (
+                device_labels != {receipt[0]}
+                or receipt[0] > 2**31 - 1
+                or not receipt[1] <= receipt[2] <= 2**63 - 1
+            ):
+                raise ValueError(
+                    "native resource ledger returned an invalid capacity receipt"
+                )
+            device, limit = int(receipt[0]), int(receipt[1])
+            admission = {
+                "source": "native-device-ledger-plan-v1",
+                "declared_device_peak": int(receipt[2]),
+            }
+        except BaseException:
+            self.library.generativeqc_resource_ledger_destroy_v1(handle)
+            raise
+        self.device, self.limit = device, limit
+        self._capacity_admission = admission
+        self.handle = handle.value
 
     def to_dict(self) -> typing.Any:
-        """Read owned capacities and, with v2, successful requested bytes.
+        """Read numeric capacities, v2 requested bytes and additive v3 admission.
 
         Older libraries retain the exact v1 shape: absent requested-byte
         evidence must not be inferred from the peak or outstanding storage.
@@ -190,8 +282,28 @@ class NativeDeviceLedger:
             "owner": self.owner,
             "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
         }
+        if self._capacity_admission is not None:
+            result["capacity_admission"] = dict(self._capacity_admission)
         if self._read_v2 is not None:
             result["requested_bytes"] = values[4]
+        if self._read_v3 is not None:
+            admission = (ctypes.c_uint64 * 6)()
+            if self._read_v3(self.handle, admission, len(admission)):
+                raise RuntimeError("native resource admission ledger is unavailable")
+            result["admission"] = dict(
+                zip(
+                    (
+                        "limit_bytes",
+                        "numeric_live_bytes",
+                        "numeric_peak_bytes",
+                        "provider_reserved_bytes",
+                        "provider_reservation_peak_bytes",
+                        "combined_peak_bytes",
+                    ),
+                    admission,
+                    strict=True,
+                )
+            )
         return result
 
     def close(self) -> None:

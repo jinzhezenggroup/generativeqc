@@ -1,6 +1,7 @@
 """Prevent interrupted clean timing from being relabeled or pooled on collection."""
 
 import copy
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -8,6 +9,8 @@ import typing
 from pathlib import Path
 
 import pytest
+
+from tools.generativeqc_validation.record import load_record
 
 
 @pytest.fixture
@@ -171,3 +174,35 @@ def test_different_scf_branch_is_retained_and_labeled(
     assert joined["diagnostic_companion"][
         "diagnostic_iterations_observed_in_clean"
     ] == {"dense": False, "packed": True}
+
+
+def test_storage_dataflow_restores_its_hash_bound_original() -> None:
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "benchmarks/results/issue409-packed-values"
+    metadata = json.loads((directory / "storage-dataflow.storage.json").read_text())
+    stored_path = directory / "storage-dataflow.json.gz"
+    original_path = directory / "storage-dataflow.json"
+    assert metadata["stored_path"] == stored_path.relative_to(root).as_posix()
+    assert metadata["original_path"] == original_path.relative_to(root).as_posix()
+    stored = stored_path.read_bytes()
+    original = gzip.decompress(stored)
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert len(original) == metadata["original_bytes"] == 135548
+    expected_sha256 = "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
+    assert hashlib.sha256(original).hexdigest() == expected_sha256
+    assert metadata["original_sha256"] == expected_sha256
+    expected_blob = "181bda3a865f07c7aaac8080773d7017a00c6357"
+    assert metadata["original_git_blob"] == expected_blob
+    assert hashlib.sha1(b"blob 135548\0" + original).hexdigest() == expected_blob
+    value = json.loads(original)
+    assert load_record(stored_path) == value
+    assert len(value["cells"]) == 8
+    assert {cell["policy"] for cell in value["cells"]} == {"dense", "packed"}
+    assert "not a device-memory observation" in value["scope"]
+    assert value["unmeasured"] == [
+        "No full hardware DRAM or whole-endpoint H2D/D2H/D2D total is inferred from overlapping semantic counters; CUPTI reports remain required.",
+        "Raw-integral recurrence FLOPs are not counted by these records; raw output bytes and producer calls are retained instead.",
+        "BLAS FLOPs use the conventional 2mnk count, not hardware instruction counts or padded SIMT lane operations.",
+        "Plan reservation/peak metadata is distinct from sampled process peaks and the separate native-allocation ledger.",
+    ]

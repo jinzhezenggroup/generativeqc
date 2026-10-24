@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "generated_scf_density_cuda.cuh"
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/scf_convergence_policy.cuh"
 
@@ -145,10 +146,13 @@ void launch_validate_device_occupied_kernel(dim3 grid, dim3 block, std::size_t s
 // Existing DF arithmetic and reduction order; host orchestration compiles separately.
 __global__ void assemble_rhf_fock_kernel(std::size_t elements, const double* hcore,
                                          const double* coulomb, const double* exchange,
-                                         double* fock) {
+                                         double* fock, std::uint64_t* completed_builds) {
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= elements) return;
   fock[element] = hcore[element] + coulomb[element] - 0.5 * exchange[element];
+  // Exactly one thread records the physical pass on the owning stream. Graph
+  // capture does not execute this store; every actual replay/tail does.
+  if (element == 0 && completed_builds) ++*completed_builds;
 }
 
 __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hcore,
@@ -159,35 +163,6 @@ __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hco
   if (element >= elements) return;
   alpha_fock[element] = hcore[element] + coulomb[element] - alpha_exchange[element];
   beta_fock[element] = hcore[element] + coulomb[element] - beta_exchange[element];
-}
-
-__global__ void build_device_density_kernel(std::size_t batch_size, std::size_t nbf,
-                                            const std::int32_t* occupied,
-                                            const double* coefficients, double occupation_weight,
-                                            double* density) {
-  const std::size_t matrix_elements = nbf * nbf;
-  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (element >= batch_size * matrix_elements) return;
-  const std::size_t system = element / matrix_elements;
-  const std::size_t local = element % matrix_elements;
-  const std::size_t row = local % nbf;
-  const std::size_t column = local / nbf;
-  // Production RHF/UHF use exact power-of-two occupation weights (2 or 1).
-  // In that domain the density is symmetric, so contract each AO pair once.
-  // Mirroring can only replace a lower-triangle worker when the complete
-  // flat domain is launched. A clipped launch must retain every original write.
-  const auto launched = static_cast<std::uint64_t>(gridDim.x) * blockDim.x;
-  const bool symmetric_density = (occupation_weight == 1.0 || occupation_weight == 2.0) &&
-                                 launched >= batch_size * matrix_elements;
-  if (symmetric_density && row > column) return;
-  const std::size_t offset = system * matrix_elements;
-  double value = 0.0;
-  for (std::int32_t orbital = 0; orbital < occupied[system]; ++orbital) {
-    value += occupation_weight * coefficients[offset + row + orbital * nbf] *
-             coefficients[offset + column + orbital * nbf];
-  }
-  density[element] = value;
-  if (symmetric_density && row != column) density[offset + column + row * nbf] = value;
 }
 
 __global__ void compute_device_energy_kernel(std::size_t batch_size, std::size_t nbf,
@@ -235,7 +210,7 @@ __global__ void update_device_convergence_kernel(
     std::size_t batch_size, std::size_t nbf, double energy_tolerance, double density_tolerance,
     const double* energy, double* previous_energy, const double* next_density, double* density,
     std::uint8_t* active, std::uint8_t* converged, std::uint32_t* iterations, double* energy_change,
-    double* density_rms, const double* physical_residual) {
+    double* density_rms, const double* physical_residual, bool qualified_owner) {
   const std::size_t system = blockIdx.x;
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_elements = nbf * nbf;
@@ -260,7 +235,7 @@ __global__ void update_device_convergence_kernel(
     energy_change[system] = change;
     density_rms[system] = rms;
     if (hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
-                               density_tolerance, rms, physical_maximum)) {
+                               density_tolerance, rms, physical_maximum, true, qualified_owner)) {
       converged[system] = 1;
       active[system] = 0;
     } else {
@@ -341,9 +316,10 @@ __global__ void update_device_uhf_convergence_kernel(
 
 void launch_assemble_rhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
-                                     const double* coulomb, const double* exchange, double* fock) {
+                                     const double* coulomb, const double* exchange, double* fock,
+                                     std::uint64_t* completed_builds) {
   assemble_rhf_fock_kernel<<<grid, block, shared_bytes, stream>>>(elements, hcore, coulomb,
-                                                                  exchange, fock);
+                                                                  exchange, fock, completed_builds);
 }
 void launch_assemble_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
@@ -358,8 +334,10 @@ void launch_build_device_density_kernel(dim3 grid, dim3 block, std::size_t share
                                         std::size_t nbf, const std::int32_t* occupied,
                                         const double* coefficients, double occupation_weight,
                                         double* density) {
-  build_device_density_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, occupied, coefficients, occupation_weight, density);
+  // Bind DF's existing unmasked scalar-weight view to the common TensorIR
+  // density schedule; stream, launch domain and publication remain caller-owned.
+  generated::occupied_density_kernel<0><<<grid, block, shared_bytes, stream>>>(
+      batch_size, 1, nbf, occupied, coefficients, nullptr, density, occupation_weight);
 }
 void launch_compute_device_energy_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, std::size_t batch_size,
@@ -384,10 +362,11 @@ void launch_update_device_convergence_kernel(
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual) {
+    const double* physical_residual, bool qualified_owner) {
   update_device_convergence_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, energy_tolerance, density_tolerance, energy, previous_energy, next_density,
-      density, active, converged, iterations, energy_change, density_rms, physical_residual);
+      density, active, converged, iterations, energy_change, density_rms, physical_residual,
+      qualified_owner);
 }
 void launch_tail_cuda_density_fitting_scf_graph_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,

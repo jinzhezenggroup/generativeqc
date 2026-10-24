@@ -2,6 +2,24 @@
   "schema_version": 2,
   "methods": [
     {
+      "name": "uccsd",
+      "symbol": "UCCSD",
+      "abi_id": 21,
+      "family": "coupled_cluster",
+      "provider": "uccsd",
+      "properties": ["energy"],
+      "supports_batch": false
+    },
+    {
+      "name": "uccsd(t)",
+      "symbol": "UCCSD_T",
+      "abi_id": 22,
+      "family": "coupled_cluster",
+      "provider": "uccsd",
+      "properties": ["energy"],
+      "supports_batch": false
+    },
+    {
       "name": "rhf",
       "symbol": "RHF",
       "abi_id": 1,
@@ -59,7 +77,8 @@
       "family": "perturbation",
       "provider": "ump2",
       "properties": [
-        "energy"
+        "energy",
+        "forces"
       ],
       "supports_batch": true
     },

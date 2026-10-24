@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <optional>
 #include <string>
@@ -64,6 +65,10 @@ struct FinalStateLimits {
   // only that original candidate to prove stationarity; correction steps,
   // forced rebuilds and physical-reference export remain canonical.
   bool allow_stationary_reuse{};
+  /** Explicit method-owner budget for physical stationarity and density
+   * consistency. Absence preserves strict historical gates. This never
+   * relaxes electron trace, idempotency or canonical diagonalization. */
+  std::optional<double> stationarity_tolerance;
 };
 
 struct FinalStateDiagnostic {
@@ -75,6 +80,14 @@ struct FinalStateDiagnostic {
   double maximum_fixed_point_density_error{}, fixed_point_density_rms{};
   std::vector<EigenFrameDiagnostic> eigenframes;
 };
+
+/** Accept authenticated backend products without materializing matrix inputs.
+ * The caller proves the physical frame's identity and lifetime; this shared
+ * policy checks determinant metadata and exactly the detached-state numerical
+ * gates. It does not compute products, repair a frame, or authorize cached W. */
+bool accept_final_state_products(const FinalStateIdentity& current, std::size_t dimension,
+                                 const FinalStateLimits& limits,
+                                 const FinalStateDiagnostic& diagnostic, std::string& detail);
 
 /** Synchronous backend algebra beneath the shared identity, acceptance and
  * correction policy. An installed provider must supply every operation;
@@ -137,6 +150,9 @@ enum class FinalStateStatus {
 struct FinalStateSelection {
   FinalStateStatus status{FinalStateStatus::NumericalFailure};
   std::string detail;
+  /** Original provider failure, retained without depending on a backend error type.
+   * Execution owners may rethrow it to preserve terminal device/resource status. */
+  std::exception_ptr provider_exception;
   unsigned fock_evaluations{}, eigen_solves{}, density_updates{}, candidate_rejections{};
   // Eigen solves above include these physical fixed-point probes. A rejected
   // probe is reused for correction, never solved twice at the same density.

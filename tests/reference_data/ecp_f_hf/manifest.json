@@ -1,0 +1,2620 @@
+{
+  "inputs_sha256": "20f95e88f94c8598e62a20456290b2ceeaf2d2bdb4715341305c58596ab61676",
+  "profiles": [
+    {
+      "arrays": {
+        "coefficients": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "cc3a9b0f4aa82ff4a554b209f4d32afa9c800cf18c30009ae01b63c521afad5c",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "commutator_residual": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "8ad0b20f8f40d00c7a40ce8c7198c0fc5ea2bb5a8ba79081bdb7c04f2f45db69",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "density": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "6f4679c00910db5afabca63e295476ccae039abf873777f73df9948acb8aa91c",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "ecp_normalized": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "3f47fb35de599b31f5a6b34ef2e2ea9f389561073d37e277a70dd4c03d6d7ec3",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "ecp_raw": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "31806664ad461d03477197d9ee371db7b95bb83ca472e3b974c9e835c69e70d0",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "9717a29d24ad03cf0ad04266e2dca57d1b2b2d3832871333c1665c41de782fb2",
+          "shape": []
+        },
+        "fock": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "91de54af6d78c45d2337e8baf19c5ce77339dd04434ac906791ec811600c2e3c",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "forces": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "8e6685d90900a84085582d06582adfed44434c82a3c4ae05026a2dccada66aaf",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "gradient": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "514e737f783acae601f33064a3f84507812aac76d9a86e6fd5a03b3fbe122f55",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "hcore": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "45d575d051fad497e7ced16963f4e4619807da71cd6c9dac31674ecc03c8f079",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "normalization": {
+          "bytes": 152,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "9ea8aa6c46dcf4b46772b8312f763bf05e30ab86f7ea9aa930e21d862b96ac06",
+          "shape": [
+            19
+          ]
+        },
+        "nuclear_energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "ad972c07640361446ced0d128aa7b7c007e2a90e0026a9584d613b68a676db77",
+          "shape": []
+        },
+        "occupations": {
+          "bytes": 152,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "b09bceddd2739f0dd74cb2ceabdeaa8ce71eae3797beef774c4d209e6ce14771",
+          "shape": [
+            19
+          ]
+        },
+        "orbital_energies": {
+          "bytes": 152,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "d674a8bccada2a3bbfbcee0c8d4dabce089c9b23e2613079dcc9edc985a0d9dc",
+          "shape": [
+            19
+          ]
+        },
+        "orbital_gradient": {
+          "bytes": 144,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "3aaf938a7f4c8ba6a621aa7ae4f790c10a28ac78717f71383f698758f2e10b1a",
+          "shape": [
+            18
+          ]
+        },
+        "overlap": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "9e5ac99ea3d2aec2803b8d6305f46e1a859d879f3ff04803f0b2f09a61801cb0",
+          "shape": [
+            19,
+            19
+          ]
+        }
+      },
+      "molecule": {
+        "ao_labels": [
+          "0 Na 3s    ",
+          "0 Na 4s    ",
+          "0 Na 3px   ",
+          "0 Na 3py   ",
+          "0 Na 3pz   ",
+          "0 Na 4px   ",
+          "0 Na 4py   ",
+          "0 Na 4pz   ",
+          "0 Na 4fxxx ",
+          "0 Na 4fxxy ",
+          "0 Na 4fxxz ",
+          "0 Na 4fxyy ",
+          "0 Na 4fxyz ",
+          "0 Na 4fxzz ",
+          "0 Na 4fyyy ",
+          "0 Na 4fyyz ",
+          "0 Na 4fyzz ",
+          "0 Na 4fzzz ",
+          "1  H 1s    "
+        ],
+        "ao_labels_structured": [
+          [
+            0,
+            "Na",
+            "3s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "4s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxx"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xyy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xyz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xzz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yyy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yyz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yzz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "zzz"
+          ],
+          [
+            1,
+            "H",
+            "1s",
+            ""
+          ]
+        ],
+        "ao_locations": [
+          0,
+          1,
+          2,
+          5,
+          8,
+          18,
+          19
+        ],
+        "atom_ao_slices": [
+          [
+            0,
+            5,
+            0,
+            18
+          ],
+          [
+            5,
+            6,
+            18,
+            19
+          ]
+        ],
+        "atoms_bohr": [
+          [
+            "Na",
+            [
+              0.13,
+              -0.21,
+              0.17
+            ]
+          ],
+          [
+            "H",
+            [
+              0.43,
+              0.19,
+              3.2
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                3.42525091,
+                0.15432897
+              ],
+              [
+                0.62391373,
+                0.53532814
+              ],
+              [
+                0.1688554,
+                0.44463454
+              ]
+            ]
+          ],
+          "Na": [
+            [
+              0,
+              [
+                0.4972,
+                -0.2753574
+              ],
+              [
+                0.056,
+                1.0989969
+              ]
+            ],
+            [
+              0,
+              [
+                0.0221,
+                1.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.6697,
+                -0.0683845
+              ],
+              [
+                0.0636,
+                1.014055
+              ]
+            ],
+            [
+              1,
+              [
+                0.0204,
+                1.0
+              ]
+            ],
+            [
+              3,
+              [
+                0.55,
+                0.81
+              ],
+              [
+                0.17,
+                0.23
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 0,
+        "core_electrons": [
+          10,
+          0
+        ],
+        "ecp": {
+          "Na": [
+            10,
+            [
+              [
+                -1,
+                [
+                  [],
+                  [
+                    [
+                      175.550259,
+                      -10.0
+                    ]
+                  ],
+                  [
+                    [
+                      35.0516791,
+                      -47.4902024
+                    ],
+                    [
+                      7.906027,
+                      -17.2283007
+                    ],
+                    [
+                      2.3365719,
+                      -6.0637782
+                    ],
+                    [
+                      0.7799867,
+                      -0.7299393
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                0,
+                [
+                  [
+                    [
+                      243.3605846,
+                      3.0
+                    ]
+                  ],
+                  [
+                    [
+                      41.5764759,
+                      36.2847626
+                    ]
+                  ],
+                  [
+                    [
+                      13.2649167,
+                      72.930488
+                    ],
+                    [
+                      3.6797165,
+                      23.8401151
+                    ],
+                    [
+                      0.9764209,
+                      6.0123861
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                1,
+                [
+                  [
+                    [
+                      1257.2650682,
+                      5.0
+                    ]
+                  ],
+                  [
+                    [
+                      189.624881,
+                      117.4495683
+                    ]
+                  ],
+                  [
+                    [
+                      54.5247759,
+                      423.3986704
+                    ],
+                    [
+                      13.7449955,
+                      109.3247297
+                    ],
+                    [
+                      3.6813579,
+                      31.3701656
+                    ],
+                    [
+                      0.9461106,
+                      7.1241813
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ]
+            ]
+          ]
+        },
+        "effective_nuclear_charges": [
+          1,
+          1
+        ],
+        "nao": 19,
+        "nelec": [
+          1,
+          1
+        ],
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "profile": "rhf-cartesian",
+      "replay": {
+        "absolute_tolerance": 1e-13,
+        "max_absolute_difference_by_array": {
+          "coefficients": 0.0,
+          "commutator_residual": 0.0,
+          "density": 0.0,
+          "ecp_normalized": 0.0,
+          "ecp_raw": 0.0,
+          "energy": 0.0,
+          "fock": 0.0,
+          "forces": 0.0,
+          "gradient": 0.0,
+          "hcore": 0.0,
+          "normalization": 0.0,
+          "nuclear_energy": 0.0,
+          "occupations": 0.0,
+          "orbital_energies": 0.0,
+          "orbital_gradient": 0.0,
+          "overlap": 0.0
+        }
+      },
+      "replicas": [
+        {
+          "bytes": 56777,
+          "path": "rhf-cartesian-first.json",
+          "process_id": 2459,
+          "replica": "first",
+          "sha256": "00f7c0262d24f242e48df5b416eab995eb31c1306d4a85fc4a26f46c62dee773",
+          "timings": {
+            "gradient_seconds": 1.0995132890000008,
+            "scf_seconds": 0.044547421000004306
+          }
+        },
+        {
+          "bytes": 56778,
+          "path": "rhf-cartesian-second.json",
+          "process_id": 2467,
+          "replica": "second",
+          "sha256": "18ee13a4007ea533a9d00a0fe280bd9cd2d50a939c26f9724a6debbfb40becdf",
+          "timings": {
+            "gradient_seconds": 0.13282500500000083,
+            "scf_seconds": 0.04272163400000295
+          }
+        }
+      ],
+      "scf": {
+        "actual_class": "pyscf.scf.hf.RHF",
+        "converged": true,
+        "cycles": 8,
+        "initial_guess_used": true,
+        "method": "RHF",
+        "resolved": {
+          "conv_check": true,
+          "conv_tol": 1e-12,
+          "conv_tol_cpscf": 1e-08,
+          "conv_tol_grad": null,
+          "damp": 0,
+          "diis": true,
+          "diis_class": "pyscf.scf.diis.CDIIS",
+          "diis_damp": 0,
+          "diis_file": null,
+          "diis_space": 8,
+          "diis_space_rollback": 0,
+          "diis_start_cycle": 1,
+          "direct_scf": true,
+          "direct_scf_tol": 1e-13,
+          "init_guess": "minao",
+          "level_shift": 0,
+          "max_cycle": 50,
+          "max_memory": 4000
+        }
+      }
+    },
+    {
+      "arrays": {
+        "coefficients": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "e20b901c937f678e6d55cfaa9211ff33c65171070ec3b9a3fbb9779580c1832a",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "commutator_residual": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "b33e2e09abcc3c546a72986efcb38714929491854d8a282d9c3fe23f0acfc838",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "density": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "a868017846d53f2a6c12fdb3d25118b55dc931841f93e7c4464fd2708bcdec16",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "ecp_normalized": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "90b6bb4f9a887c0467c16641ef2da7c9ee14577c6cd9b1c516afdb6cb2967704",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "ecp_raw": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "62d202e3a5c4d07da7f3548b397cd61bef4284ee4f4aed206d9107b3ac77696c",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "aa4e30c3999d83867292c1782eba85925bf5532982ff523cf6a9e266e0cb4fef",
+          "shape": []
+        },
+        "fock": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "c1635374a5466f73598b69a182f021b27a5e7a58548f2ce1e84409abb10d88ae",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "forces": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "7f6b8c3ada1a7af018ba9d11650d3397b69ac045b6dee0a2bae3bce747b5f71e",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "gradient": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "373167791f4007024e0828cccf86c02c3145c179a54c3ebdacae8f4dc2dca8df",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "hcore": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "14d8bbc6216f3611212698ea2744bec1b009d03860fa0bcf11365f93d35efb78",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "normalization": {
+          "bytes": 128,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "e0a2c207c08e0e1597ce2ee9246579172718732202119b515199a0c0fb95c737",
+          "shape": [
+            16
+          ]
+        },
+        "nuclear_energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "ad972c07640361446ced0d128aa7b7c007e2a90e0026a9584d613b68a676db77",
+          "shape": []
+        },
+        "occupations": {
+          "bytes": 128,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "39c7bb5f73698c600ac54e703aa08139f68714887f09b9c19fe05cc2484810d9",
+          "shape": [
+            16
+          ]
+        },
+        "orbital_energies": {
+          "bytes": 128,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "a382d74de2479c487bdebf1c2c9c94111ad682cee4b494402be2beab75a010ab",
+          "shape": [
+            16
+          ]
+        },
+        "orbital_gradient": {
+          "bytes": 120,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "93183df559521916b38751c6bdc7d27a8941489b0708c945644acc3850ec7a19",
+          "shape": [
+            15
+          ]
+        },
+        "overlap": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "c95a9d8c918c83b160c5e0ea0cc606f955b7baa51b0e1fffe17ae5906af073fe",
+          "shape": [
+            16,
+            16
+          ]
+        }
+      },
+      "molecule": {
+        "ao_labels": [
+          "0 Na 3s    ",
+          "0 Na 4s    ",
+          "0 Na 3px   ",
+          "0 Na 3py   ",
+          "0 Na 3pz   ",
+          "0 Na 4px   ",
+          "0 Na 4py   ",
+          "0 Na 4pz   ",
+          "0 Na 4f-3  ",
+          "0 Na 4f-2  ",
+          "0 Na 4f-1  ",
+          "0 Na 4f+0  ",
+          "0 Na 4f+1  ",
+          "0 Na 4f+2  ",
+          "0 Na 4f+3  ",
+          "1 H 1s    "
+        ],
+        "ao_labels_structured": [
+          [
+            0,
+            "Na",
+            "3s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "4s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-3"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-2"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-1"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+0"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+1"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+2"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+3"
+          ],
+          [
+            1,
+            "H",
+            "1s",
+            ""
+          ]
+        ],
+        "ao_locations": [
+          0,
+          1,
+          2,
+          5,
+          8,
+          15,
+          16
+        ],
+        "atom_ao_slices": [
+          [
+            0,
+            5,
+            0,
+            15
+          ],
+          [
+            5,
+            6,
+            15,
+            16
+          ]
+        ],
+        "atoms_bohr": [
+          [
+            "Na",
+            [
+              0.13,
+              -0.21,
+              0.17
+            ]
+          ],
+          [
+            "H",
+            [
+              0.43,
+              0.19,
+              3.2
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                3.42525091,
+                0.15432897
+              ],
+              [
+                0.62391373,
+                0.53532814
+              ],
+              [
+                0.1688554,
+                0.44463454
+              ]
+            ]
+          ],
+          "Na": [
+            [
+              0,
+              [
+                0.4972,
+                -0.2753574
+              ],
+              [
+                0.056,
+                1.0989969
+              ]
+            ],
+            [
+              0,
+              [
+                0.0221,
+                1.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.6697,
+                -0.0683845
+              ],
+              [
+                0.0636,
+                1.014055
+              ]
+            ],
+            [
+              1,
+              [
+                0.0204,
+                1.0
+              ]
+            ],
+            [
+              3,
+              [
+                0.55,
+                0.81
+              ],
+              [
+                0.17,
+                0.23
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 0,
+        "core_electrons": [
+          10,
+          0
+        ],
+        "ecp": {
+          "Na": [
+            10,
+            [
+              [
+                -1,
+                [
+                  [],
+                  [
+                    [
+                      175.550259,
+                      -10.0
+                    ]
+                  ],
+                  [
+                    [
+                      35.0516791,
+                      -47.4902024
+                    ],
+                    [
+                      7.906027,
+                      -17.2283007
+                    ],
+                    [
+                      2.3365719,
+                      -6.0637782
+                    ],
+                    [
+                      0.7799867,
+                      -0.7299393
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                0,
+                [
+                  [
+                    [
+                      243.3605846,
+                      3.0
+                    ]
+                  ],
+                  [
+                    [
+                      41.5764759,
+                      36.2847626
+                    ]
+                  ],
+                  [
+                    [
+                      13.2649167,
+                      72.930488
+                    ],
+                    [
+                      3.6797165,
+                      23.8401151
+                    ],
+                    [
+                      0.9764209,
+                      6.0123861
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                1,
+                [
+                  [
+                    [
+                      1257.2650682,
+                      5.0
+                    ]
+                  ],
+                  [
+                    [
+                      189.624881,
+                      117.4495683
+                    ]
+                  ],
+                  [
+                    [
+                      54.5247759,
+                      423.3986704
+                    ],
+                    [
+                      13.7449955,
+                      109.3247297
+                    ],
+                    [
+                      3.6813579,
+                      31.3701656
+                    ],
+                    [
+                      0.9461106,
+                      7.1241813
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ]
+            ]
+          ]
+        },
+        "effective_nuclear_charges": [
+          1,
+          1
+        ],
+        "nao": 16,
+        "nelec": [
+          1,
+          1
+        ],
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "profile": "rhf-spherical",
+      "replay": {
+        "absolute_tolerance": 1e-13,
+        "max_absolute_difference_by_array": {
+          "coefficients": 0.0,
+          "commutator_residual": 0.0,
+          "density": 0.0,
+          "ecp_normalized": 0.0,
+          "ecp_raw": 0.0,
+          "energy": 0.0,
+          "fock": 0.0,
+          "forces": 0.0,
+          "gradient": 0.0,
+          "hcore": 0.0,
+          "normalization": 0.0,
+          "nuclear_energy": 0.0,
+          "occupations": 0.0,
+          "orbital_energies": 0.0,
+          "orbital_gradient": 0.0,
+          "overlap": 0.0
+        }
+      },
+      "replicas": [
+        {
+          "bytes": 47409,
+          "path": "rhf-spherical-first.json",
+          "process_id": 2474,
+          "replica": "first",
+          "sha256": "a5e8672396b944250934f55412de09f59d57df0be0b88601adc0c22cb3fc1dc6",
+          "timings": {
+            "gradient_seconds": 0.13124504400000347,
+            "scf_seconds": 0.04096466099999674
+          }
+        },
+        {
+          "bytes": 47410,
+          "path": "rhf-spherical-second.json",
+          "process_id": 2482,
+          "replica": "second",
+          "sha256": "161c64eac804aebfa718dedb44c64549c6e964d2e40215337fb5bbcd719b42a0",
+          "timings": {
+            "gradient_seconds": 0.12949642699999941,
+            "scf_seconds": 0.04144952700000459
+          }
+        }
+      ],
+      "scf": {
+        "actual_class": "pyscf.scf.hf.RHF",
+        "converged": true,
+        "cycles": 8,
+        "initial_guess_used": true,
+        "method": "RHF",
+        "resolved": {
+          "conv_check": true,
+          "conv_tol": 1e-12,
+          "conv_tol_cpscf": 1e-08,
+          "conv_tol_grad": null,
+          "damp": 0,
+          "diis": true,
+          "diis_class": "pyscf.scf.diis.CDIIS",
+          "diis_damp": 0,
+          "diis_file": null,
+          "diis_space": 8,
+          "diis_space_rollback": 0,
+          "diis_start_cycle": 1,
+          "direct_scf": true,
+          "direct_scf_tol": 1e-13,
+          "init_guess": "minao",
+          "level_shift": 0,
+          "max_cycle": 50,
+          "max_memory": 4000
+        }
+      }
+    },
+    {
+      "arrays": {
+        "coefficients": {
+          "bytes": 5776,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "a4f2397dc0806d241f7cc3b47c989cd19328de6634a417bf64c91b78e16b0edf",
+          "shape": [
+            2,
+            19,
+            19
+          ]
+        },
+        "commutator_residual": {
+          "bytes": 5776,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "887d03468b11c618c685b09f746fb1dd707d3e274527880d95eaad8cb61f05d8",
+          "shape": [
+            2,
+            19,
+            19
+          ]
+        },
+        "density": {
+          "bytes": 5776,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "61cb99ecba28251a997489826c12fe569903191f01e1d0e4330bca254bf194af",
+          "shape": [
+            2,
+            19,
+            19
+          ]
+        },
+        "ecp_normalized": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "3f47fb35de599b31f5a6b34ef2e2ea9f389561073d37e277a70dd4c03d6d7ec3",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "ecp_raw": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "31806664ad461d03477197d9ee371db7b95bb83ca472e3b974c9e835c69e70d0",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "dfec65b4c6befa5e0ca4880827f7f1b573f10932b34e6abc4a89bf5336d14166",
+          "shape": []
+        },
+        "fock": {
+          "bytes": 5776,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "c6ff1aee1a45a0b07d22e67ecd142c6c8c8b3f73308c33523d70643335993f8e",
+          "shape": [
+            2,
+            19,
+            19
+          ]
+        },
+        "forces": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "1cea513cc13812ebc5995083973c3b7ad7314892700440a50dc6bf8ac07d25eb",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "gradient": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "5b010dd4843dd63ba67ca996abc025482575fe8e93ad6099e04621b9eb217f1e",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "hcore": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "45d575d051fad497e7ced16963f4e4619807da71cd6c9dac31674ecc03c8f079",
+          "shape": [
+            19,
+            19
+          ]
+        },
+        "normalization": {
+          "bytes": 152,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "9ea8aa6c46dcf4b46772b8312f763bf05e30ab86f7ea9aa930e21d862b96ac06",
+          "shape": [
+            19
+          ]
+        },
+        "nuclear_energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "ad972c07640361446ced0d128aa7b7c007e2a90e0026a9584d613b68a676db77",
+          "shape": []
+        },
+        "occupations": {
+          "bytes": 304,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "4a00d625132df39a9eb18cdc7bbf8aa621dd5faa83073d1d461118d7b70eaa32",
+          "shape": [
+            2,
+            19
+          ]
+        },
+        "orbital_energies": {
+          "bytes": 304,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "3e0c3013df15df826f3b6132d33e44725ab7dddb884a572a651717c3412ec293",
+          "shape": [
+            2,
+            19
+          ]
+        },
+        "orbital_gradient": {
+          "bytes": 144,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "cbe428891291f4c467909d1d9cde97f504a5d0c2d886e223ef4d17ff53e7d86f",
+          "shape": [
+            18
+          ]
+        },
+        "overlap": {
+          "bytes": 2888,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "9e5ac99ea3d2aec2803b8d6305f46e1a859d879f3ff04803f0b2f09a61801cb0",
+          "shape": [
+            19,
+            19
+          ]
+        }
+      },
+      "molecule": {
+        "ao_labels": [
+          "0 Na 3s    ",
+          "0 Na 4s    ",
+          "0 Na 3px   ",
+          "0 Na 3py   ",
+          "0 Na 3pz   ",
+          "0 Na 4px   ",
+          "0 Na 4py   ",
+          "0 Na 4pz   ",
+          "0 Na 4fxxx ",
+          "0 Na 4fxxy ",
+          "0 Na 4fxxz ",
+          "0 Na 4fxyy ",
+          "0 Na 4fxyz ",
+          "0 Na 4fxzz ",
+          "0 Na 4fyyy ",
+          "0 Na 4fyyz ",
+          "0 Na 4fyzz ",
+          "0 Na 4fzzz ",
+          "1  H 1s    "
+        ],
+        "ao_labels_structured": [
+          [
+            0,
+            "Na",
+            "3s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "4s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxx"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xxz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xyy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xyz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "xzz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yyy"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yyz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "yzz"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "zzz"
+          ],
+          [
+            1,
+            "H",
+            "1s",
+            ""
+          ]
+        ],
+        "ao_locations": [
+          0,
+          1,
+          2,
+          5,
+          8,
+          18,
+          19
+        ],
+        "atom_ao_slices": [
+          [
+            0,
+            5,
+            0,
+            18
+          ],
+          [
+            5,
+            6,
+            18,
+            19
+          ]
+        ],
+        "atoms_bohr": [
+          [
+            "Na",
+            [
+              0.13,
+              -0.21,
+              0.17
+            ]
+          ],
+          [
+            "H",
+            [
+              0.43,
+              0.19,
+              3.2
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                3.42525091,
+                0.15432897
+              ],
+              [
+                0.62391373,
+                0.53532814
+              ],
+              [
+                0.1688554,
+                0.44463454
+              ]
+            ]
+          ],
+          "Na": [
+            [
+              0,
+              [
+                0.4972,
+                -0.2753574
+              ],
+              [
+                0.056,
+                1.0989969
+              ]
+            ],
+            [
+              0,
+              [
+                0.0221,
+                1.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.6697,
+                -0.0683845
+              ],
+              [
+                0.0636,
+                1.014055
+              ]
+            ],
+            [
+              1,
+              [
+                0.0204,
+                1.0
+              ]
+            ],
+            [
+              3,
+              [
+                0.55,
+                0.81
+              ],
+              [
+                0.17,
+                0.23
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 1,
+        "core_electrons": [
+          10,
+          0
+        ],
+        "ecp": {
+          "Na": [
+            10,
+            [
+              [
+                -1,
+                [
+                  [],
+                  [
+                    [
+                      175.550259,
+                      -10.0
+                    ]
+                  ],
+                  [
+                    [
+                      35.0516791,
+                      -47.4902024
+                    ],
+                    [
+                      7.906027,
+                      -17.2283007
+                    ],
+                    [
+                      2.3365719,
+                      -6.0637782
+                    ],
+                    [
+                      0.7799867,
+                      -0.7299393
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                0,
+                [
+                  [
+                    [
+                      243.3605846,
+                      3.0
+                    ]
+                  ],
+                  [
+                    [
+                      41.5764759,
+                      36.2847626
+                    ]
+                  ],
+                  [
+                    [
+                      13.2649167,
+                      72.930488
+                    ],
+                    [
+                      3.6797165,
+                      23.8401151
+                    ],
+                    [
+                      0.9764209,
+                      6.0123861
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                1,
+                [
+                  [
+                    [
+                      1257.2650682,
+                      5.0
+                    ]
+                  ],
+                  [
+                    [
+                      189.624881,
+                      117.4495683
+                    ]
+                  ],
+                  [
+                    [
+                      54.5247759,
+                      423.3986704
+                    ],
+                    [
+                      13.7449955,
+                      109.3247297
+                    ],
+                    [
+                      3.6813579,
+                      31.3701656
+                    ],
+                    [
+                      0.9461106,
+                      7.1241813
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ]
+            ]
+          ]
+        },
+        "effective_nuclear_charges": [
+          1,
+          1
+        ],
+        "nao": 19,
+        "nelec": [
+          1,
+          0
+        ],
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "profile": "uhf-cartesian",
+      "replay": {
+        "absolute_tolerance": 1e-13,
+        "max_absolute_difference_by_array": {
+          "coefficients": 0.0,
+          "commutator_residual": 0.0,
+          "density": 0.0,
+          "ecp_normalized": 0.0,
+          "ecp_raw": 0.0,
+          "energy": 0.0,
+          "fock": 0.0,
+          "forces": 0.0,
+          "gradient": 0.0,
+          "hcore": 0.0,
+          "normalization": 0.0,
+          "nuclear_energy": 0.0,
+          "occupations": 0.0,
+          "orbital_energies": 0.0,
+          "orbital_gradient": 0.0,
+          "overlap": 0.0
+        }
+      },
+      "replicas": [
+        {
+          "bytes": 72663,
+          "path": "uhf-cartesian-first.json",
+          "process_id": 2489,
+          "replica": "first",
+          "sha256": "1e0869695eb21526407b9e0c2af7fe74970ec80a789d773f3c7488331e6c1a2e",
+          "timings": {
+            "gradient_seconds": 0.12916804900000045,
+            "scf_seconds": 0.006280395999993971
+          }
+        },
+        {
+          "bytes": 72664,
+          "path": "uhf-cartesian-second.json",
+          "process_id": 2496,
+          "replica": "second",
+          "sha256": "ac1b017090658a5964181171d2da7b9d18b56944c11dc35f6aeba75ae115af6c",
+          "timings": {
+            "gradient_seconds": 0.12950090799999714,
+            "scf_seconds": 0.006479223000006584
+          }
+        }
+      ],
+      "scf": {
+        "actual_class": "pyscf.scf.uhf.HF1e",
+        "converged": true,
+        "cycles": 0,
+        "initial_guess_used": false,
+        "method": "UHF",
+        "resolved": {
+          "conv_check": true,
+          "conv_tol": 1e-12,
+          "conv_tol_cpscf": 1e-08,
+          "conv_tol_grad": null,
+          "damp": 0,
+          "diis": true,
+          "diis_class": "pyscf.scf.diis.CDIIS",
+          "diis_damp": 0,
+          "diis_file": null,
+          "diis_space": 8,
+          "diis_space_rollback": 0,
+          "diis_start_cycle": 1,
+          "direct_scf": true,
+          "direct_scf_tol": 1e-13,
+          "init_guess": "minao",
+          "level_shift": 0,
+          "max_cycle": 50,
+          "max_memory": 4000
+        }
+      }
+    },
+    {
+      "arrays": {
+        "coefficients": {
+          "bytes": 4096,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "06a0df4801a54e43e97628e605f93fb3c018f78c703b7629b65b2a1825f40f37",
+          "shape": [
+            2,
+            16,
+            16
+          ]
+        },
+        "commutator_residual": {
+          "bytes": 4096,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "0fc741b94f73d53c05fee3895ed0ccc8ac3230c83613553dc7ebb374eedf9e72",
+          "shape": [
+            2,
+            16,
+            16
+          ]
+        },
+        "density": {
+          "bytes": 4096,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "f8b99e3a74573b1b694d80e2a57c6fd9eef8fb70748592de0dc5f799ae7a6df8",
+          "shape": [
+            2,
+            16,
+            16
+          ]
+        },
+        "ecp_normalized": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "90b6bb4f9a887c0467c16641ef2da7c9ee14577c6cd9b1c516afdb6cb2967704",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "ecp_raw": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "62d202e3a5c4d07da7f3548b397cd61bef4284ee4f4aed206d9107b3ac77696c",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "694c04df1ebbbffc930c4d9e14fd9dab85eda206381400376ddccf723cea195a",
+          "shape": []
+        },
+        "fock": {
+          "bytes": 4096,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "b5af4766737cf6148b25113f9094cf0e2057000e63c5fa0e383f65471af6235f",
+          "shape": [
+            2,
+            16,
+            16
+          ]
+        },
+        "forces": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "698a1981163b213efa10204e60a3f7923ff168361ef825e1dea62f6f5cb5dbfe",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "gradient": {
+          "bytes": 48,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "84d94513c21771f2ad898ff9273441ab7cee9cd5e4b68de234887d6e4bb75d6e",
+          "shape": [
+            2,
+            3
+          ]
+        },
+        "hcore": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "14d8bbc6216f3611212698ea2744bec1b009d03860fa0bcf11365f93d35efb78",
+          "shape": [
+            16,
+            16
+          ]
+        },
+        "normalization": {
+          "bytes": 128,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "e0a2c207c08e0e1597ce2ee9246579172718732202119b515199a0c0fb95c737",
+          "shape": [
+            16
+          ]
+        },
+        "nuclear_energy": {
+          "bytes": 8,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "ad972c07640361446ced0d128aa7b7c007e2a90e0026a9584d613b68a676db77",
+          "shape": []
+        },
+        "occupations": {
+          "bytes": 256,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "8034367eec76495180b08e634d0bf4236b83a30d9ce7be3fd843fe8860f4de41",
+          "shape": [
+            2,
+            16
+          ]
+        },
+        "orbital_energies": {
+          "bytes": 256,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "6d60d27a936e27f8fd12cac486c934e51430b9aeeacef3f417d043268966ae4a",
+          "shape": [
+            2,
+            16
+          ]
+        },
+        "orbital_gradient": {
+          "bytes": 120,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "61fd45cfef1b1317336a2fee6cb728985790b60e212070f5f8e0d775e72f2583",
+          "shape": [
+            15
+          ]
+        },
+        "overlap": {
+          "bytes": 2048,
+          "dtype": "float64",
+          "encoding": "base64-le-f64",
+          "order": "C",
+          "sha256_le_f64": "c95a9d8c918c83b160c5e0ea0cc606f955b7baa51b0e1fffe17ae5906af073fe",
+          "shape": [
+            16,
+            16
+          ]
+        }
+      },
+      "molecule": {
+        "ao_labels": [
+          "0 Na 3s    ",
+          "0 Na 4s    ",
+          "0 Na 3px   ",
+          "0 Na 3py   ",
+          "0 Na 3pz   ",
+          "0 Na 4px   ",
+          "0 Na 4py   ",
+          "0 Na 4pz   ",
+          "0 Na 4f-3  ",
+          "0 Na 4f-2  ",
+          "0 Na 4f-1  ",
+          "0 Na 4f+0  ",
+          "0 Na 4f+1  ",
+          "0 Na 4f+2  ",
+          "0 Na 4f+3  ",
+          "1 H 1s    "
+        ],
+        "ao_labels_structured": [
+          [
+            0,
+            "Na",
+            "3s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "4s",
+            ""
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "3p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "x"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "y"
+          ],
+          [
+            0,
+            "Na",
+            "4p",
+            "z"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-3"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-2"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "-1"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+0"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+1"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+2"
+          ],
+          [
+            0,
+            "Na",
+            "4f",
+            "+3"
+          ],
+          [
+            1,
+            "H",
+            "1s",
+            ""
+          ]
+        ],
+        "ao_locations": [
+          0,
+          1,
+          2,
+          5,
+          8,
+          15,
+          16
+        ],
+        "atom_ao_slices": [
+          [
+            0,
+            5,
+            0,
+            15
+          ],
+          [
+            5,
+            6,
+            15,
+            16
+          ]
+        ],
+        "atoms_bohr": [
+          [
+            "Na",
+            [
+              0.13,
+              -0.21,
+              0.17
+            ]
+          ],
+          [
+            "H",
+            [
+              0.43,
+              0.19,
+              3.2
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                3.42525091,
+                0.15432897
+              ],
+              [
+                0.62391373,
+                0.53532814
+              ],
+              [
+                0.1688554,
+                0.44463454
+              ]
+            ]
+          ],
+          "Na": [
+            [
+              0,
+              [
+                0.4972,
+                -0.2753574
+              ],
+              [
+                0.056,
+                1.0989969
+              ]
+            ],
+            [
+              0,
+              [
+                0.0221,
+                1.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.6697,
+                -0.0683845
+              ],
+              [
+                0.0636,
+                1.014055
+              ]
+            ],
+            [
+              1,
+              [
+                0.0204,
+                1.0
+              ]
+            ],
+            [
+              3,
+              [
+                0.55,
+                0.81
+              ],
+              [
+                0.17,
+                0.23
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 1,
+        "core_electrons": [
+          10,
+          0
+        ],
+        "ecp": {
+          "Na": [
+            10,
+            [
+              [
+                -1,
+                [
+                  [],
+                  [
+                    [
+                      175.550259,
+                      -10.0
+                    ]
+                  ],
+                  [
+                    [
+                      35.0516791,
+                      -47.4902024
+                    ],
+                    [
+                      7.906027,
+                      -17.2283007
+                    ],
+                    [
+                      2.3365719,
+                      -6.0637782
+                    ],
+                    [
+                      0.7799867,
+                      -0.7299393
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                0,
+                [
+                  [
+                    [
+                      243.3605846,
+                      3.0
+                    ]
+                  ],
+                  [
+                    [
+                      41.5764759,
+                      36.2847626
+                    ]
+                  ],
+                  [
+                    [
+                      13.2649167,
+                      72.930488
+                    ],
+                    [
+                      3.6797165,
+                      23.8401151
+                    ],
+                    [
+                      0.9764209,
+                      6.0123861
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ],
+              [
+                1,
+                [
+                  [
+                    [
+                      1257.2650682,
+                      5.0
+                    ]
+                  ],
+                  [
+                    [
+                      189.624881,
+                      117.4495683
+                    ]
+                  ],
+                  [
+                    [
+                      54.5247759,
+                      423.3986704
+                    ],
+                    [
+                      13.7449955,
+                      109.3247297
+                    ],
+                    [
+                      3.6813579,
+                      31.3701656
+                    ],
+                    [
+                      0.9461106,
+                      7.1241813
+                    ]
+                  ],
+                  [],
+                  [],
+                  [],
+                  []
+                ]
+              ]
+            ]
+          ]
+        },
+        "effective_nuclear_charges": [
+          1,
+          1
+        ],
+        "nao": 16,
+        "nelec": [
+          1,
+          0
+        ],
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "profile": "uhf-spherical",
+      "replay": {
+        "absolute_tolerance": 1e-13,
+        "max_absolute_difference_by_array": {
+          "coefficients": 0.0,
+          "commutator_residual": 0.0,
+          "density": 0.0,
+          "ecp_normalized": 0.0,
+          "ecp_raw": 0.0,
+          "energy": 0.0,
+          "fock": 0.0,
+          "forces": 0.0,
+          "gradient": 0.0,
+          "hcore": 0.0,
+          "normalization": 0.0,
+          "nuclear_energy": 0.0,
+          "occupations": 0.0,
+          "orbital_energies": 0.0,
+          "orbital_gradient": 0.0,
+          "overlap": 0.0
+        }
+      },
+      "replicas": [
+        {
+          "bytes": 58750,
+          "path": "uhf-spherical-first.json",
+          "process_id": 2503,
+          "replica": "first",
+          "sha256": "8a87aeac57d935e37e543dbf7f98ec1d9877ab2dea37d64ef4e3eefde4dc53cb",
+          "timings": {
+            "gradient_seconds": 0.1307617169999986,
+            "scf_seconds": 0.006152743000001237
+          }
+        },
+        {
+          "bytes": 58751,
+          "path": "uhf-spherical-second.json",
+          "process_id": 2511,
+          "replica": "second",
+          "sha256": "aeeaa9921645f3a1ccea3e492eeba0b7eee5e248604fa23a9d30bb4019902f0e",
+          "timings": {
+            "gradient_seconds": 0.1300732089999883,
+            "scf_seconds": 0.006169372999991651
+          }
+        }
+      ],
+      "scf": {
+        "actual_class": "pyscf.scf.uhf.HF1e",
+        "converged": true,
+        "cycles": 0,
+        "initial_guess_used": false,
+        "method": "UHF",
+        "resolved": {
+          "conv_check": true,
+          "conv_tol": 1e-12,
+          "conv_tol_cpscf": 1e-08,
+          "conv_tol_grad": null,
+          "damp": 0,
+          "diis": true,
+          "diis_class": "pyscf.scf.diis.CDIIS",
+          "diis_damp": 0,
+          "diis_file": null,
+          "diis_space": 8,
+          "diis_space_rollback": 0,
+          "diis_start_cycle": 1,
+          "direct_scf": true,
+          "direct_scf_tol": 1e-13,
+          "init_guess": "minao",
+          "level_shift": 0,
+          "max_cycle": 50,
+          "max_memory": 4000
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "configuration": {
+      "policy": "explicit-empty-regular-file",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cuda_visible_devices": "",
+    "device": "CPU",
+    "execution": {
+      "checkout_sha": "2c0458410387d211e3b1e5e19bb3694775390e17",
+      "github_repository": "njzjz-bot/vibeqc",
+      "github_run_attempt": "1",
+      "github_run_id": "38303387532",
+      "github_sha": "2c0458410387d211e3b1e5e19bb3694775390e17"
+    },
+    "generator_sha256": "8b1a289607876c50062fa70a2714bed62881c23355160ab985547bb66d654988",
+    "inputs_sha256": "20f95e88f94c8598e62a20456290b2ceeaf2d2bdb4715341305c58596ab61676",
+    "installed_integral_inputs": {
+      "basis_files": [
+        {
+          "bytes": 109544,
+          "path": "pyscf/gto/basis/lanl2dz.dat",
+          "sha256": "8271af43b895a6b2d2b47f2c958fe86c3c990f76e982a54ac03cc3c6dd196b64"
+        },
+        {
+          "bytes": 49513,
+          "path": "pyscf/gto/basis/sto-3g.dat",
+          "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+        }
+      ],
+      "integral_libraries": [
+        {
+          "bytes": 2402833,
+          "path": "pyscf/lib/deps/lib/libcint.so",
+          "sha256": "950bb0a297507369dce95b9013ef2c5b64b0fa36a0018c303c98e95efce7db7e"
+        },
+        {
+          "bytes": 1409729,
+          "path": "pyscf/lib/libcgto.so",
+          "sha256": "337d956486a156f1aa7ca636ac5a91c6277058ffedb6db2efe714fee65f726e0"
+        }
+      ]
+    },
+    "installed_scf_sources": {
+      "pyscf/grad/uhf.py": {
+        "bytes": 4041,
+        "sha256": "cdcbe1afce1ab5447fcc2976b58b0ab8b8a0a6d039b1d902416ebabe2e6487c1"
+      },
+      "pyscf/scf/__init__.py": {
+        "bytes": 7177,
+        "sha256": "42754aaf7518664076082bab3e4854a954cda79afe10c8cf7f48e7aa23c16e42"
+      },
+      "pyscf/scf/hf.py": {
+        "bytes": 94652,
+        "sha256": "34ea1a9057da3a2d5aa37fe51d4e7305580bcb8e0118a5f17ba95ba5bb36c22f"
+      },
+      "pyscf/scf/uhf.py": {
+        "bytes": 49881,
+        "sha256": "b3ee3e679ab64d51ad610f04d02f4ac332c3f9238aeede7ba6bd80ad962a8fee"
+      }
+    },
+    "machine": "x86_64",
+    "packages": {
+      "h5py": {
+        "installed_source_native_bytes": 17002725,
+        "installed_source_native_files": 89,
+        "installed_source_native_sha256": "ae8661606706915d759b7ca9c98c62b5cb49c5694540a7a2521b1e057c5c3c92",
+        "version": "3.16.0",
+        "wheel_record_sha256": "8174662e95b98828bdba183450be57baefb69b24c06e68639ed049c233e96c21"
+      },
+      "numpy": {
+        "installed_source_native_bytes": 53844146,
+        "installed_source_native_files": 431,
+        "installed_source_native_sha256": "c2282e1c9a05825819078287341058d942ffe98daaceed79a5431c7b6e05171c",
+        "version": "2.3.5",
+        "wheel_record_sha256": "48e12b082951654ee5ab9c495e3bc22a8bee994e05f900a36516bc82f6a27252"
+      },
+      "pyscf": {
+        "installed_source_native_bytes": 135849985,
+        "installed_source_native_files": 717,
+        "installed_source_native_sha256": "801f6d902222f1ba7ae34eca875ac3dd43e91aa485702ba166836a2dfcbe87a8",
+        "version": "2.14.0",
+        "wheel_record_sha256": "4233e4225034532142c1eb9a47b8b806a9f12db9b6d4eef3c644d7c492f25296"
+      },
+      "scipy": {
+        "installed_source_native_bytes": 103245183,
+        "installed_source_native_files": 1087,
+        "installed_source_native_sha256": "9c4925b9a7e18be9fcf3bcfebc2b21ddfc0df7aaff75a443be12d541c0d7c21c",
+        "version": "1.17.0",
+        "wheel_record_sha256": "d67cb70e9ff3bdb86c788d39649247c6bcba22ab6d74f9a1389b816f81c81e59"
+      },
+      "setuptools": {
+        "installed_source_native_bytes": 3071265,
+        "installed_source_native_files": 319,
+        "installed_source_native_sha256": "3914e66cdc85364fd51688fb9364f7cb790ca9edb67cbaaad303df3e61743f1c",
+        "version": "83.0.0",
+        "wheel_record_sha256": "2fe8f339e0ea1a1762bd8b21edcc2609e36aebaf13d993f6ce9e236a0fd2ebd1"
+      },
+      "threadpoolctl": {
+        "installed_source_native_bytes": 50722,
+        "installed_source_native_files": 1,
+        "installed_source_native_sha256": "889df0cc67247507dbe2c94c3177412cd250d1df7d365bd4dc2f9b805d3f2521",
+        "version": "3.6.0",
+        "wheel_record_sha256": "21fd60a7b59ad0785db0d87b7f45a58b9c6961097749168c577efa5b1619e95e"
+      }
+    },
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "source_sha256": {
+      "tests/python/test_ecp.py": "25d8588e549f7866de7d534ae93c33fa72d552fe95f6635fa7d820dc333ec85b",
+      "tests/python/test_ecp_f.py": "f9279f71db35a8a0c13d70966bf2da89dd2cbbb0ef38ec2836f24507b3996c1f",
+      "tools/generate_cpu_hf_high_l_reference.py": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700",
+      "tools/generate_ecp_raw_matrix_reference.py": "374d0b18107c8e66dba3dd7292b1641772483f962e8681e5a9d71a1a44499ac6"
+    },
+    "threadpools": [
+      {
+        "architecture": "Barcelona",
+        "internal_api": "openblas",
+        "library": "libopenblas-r0-f650aae0.3.3.so",
+        "num_threads": 1,
+        "sha256": "79ec02b53f573cd7116a89f04c397473018e7fda05720b354d43505c19d47958",
+        "user_api": "blas",
+        "version": null
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas-6cdc3b4a.so",
+        "num_threads": 1,
+        "sha256": "8fb864c29cac4b25f6e2c139491ea96f2724dde42d51394f84e9c4a622e34790",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas64_-fdde5778.so",
+        "num_threads": 1,
+        "sha256": "ee2039cf13a45e1e89f04d0cea9585657d93ffaa425594e1935161013fdf4e12",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "library": "libgomp-a34b3233.so.1.0.0",
+        "num_threads": 1,
+        "sha256": "3a7eaece7231911be2fbb1b3e7cb4cb5c2e0f84e0c2bb73739472b5a1feec8c1",
+        "user_api": "openmp",
+        "version": null
+      }
+    ]
+  },
+  "schema": "generativeqc.ecp-f-hf.manifest.v1"
+}

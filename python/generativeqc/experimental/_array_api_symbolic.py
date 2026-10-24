@@ -9,6 +9,8 @@ from __future__ import annotations
 import builtins
 import inspect
 import typing
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fractions import Fraction
 
 import numpy as np
@@ -33,6 +35,19 @@ float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 _HOST_CONTAINER_MAX_DEPTH = 64
 _HOST_CONTAINER_MAX_ITEMS = 1_000_000
+_CAPTURE_BACKEND: ContextVar[str | None] = ContextVar(
+    "prod_capture_backend", default=None
+)
+
+
+@contextmanager
+def _capture_backend(backend: str) -> typing.Iterator[None]:
+    """Scope frontend-specific qualification without changing TensorIR identity."""
+    token = _CAPTURE_BACKEND.set(backend)
+    try:
+        yield
+    finally:
+        _CAPTURE_BACKEND.reset(token)
 
 
 def _symbolic(*values: object) -> builtins.bool:
@@ -217,6 +232,31 @@ def equal(x1: object, x2: object) -> typing.Any:
     return _compare("equal", x1, x2)
 
 
+def where(condition: object, x1: object, x2: object) -> typing.Any:
+    """Select finite real branches on the bounded captured/reference path."""
+    if _symbolic(condition, x1, x2) or _active_capture():
+        return _namespace.where(condition, x1, x2)
+    predicate = _eager_data_array(condition)
+    if predicate.dtype != np.dtype("bool"):
+        raise TypeError("where condition must be bool data")
+    return _eager_compute(np.where, predicate, *_eager_operands(x1, x2, scalars=True))
+
+
+def minimum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real minimum, including named compiler inputs."""
+    return _namespace.minimum(x1, x2)
+
+
+def maximum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real maximum, including named compiler inputs."""
+    return _namespace.maximum(x1, x2)
+
+
+def clip(x: object, min: object = None, max: object = None) -> VibeArray:
+    """Capture bounded finite generic real clamping without changing eager clip."""
+    return _namespace.clip(x, min, max)
+
+
 def not_equal(x1: object, x2: object) -> typing.Any:
     """Compare finite real operands elementwise for inequality."""
     return _compare("not_equal", x1, x2)
@@ -240,6 +280,13 @@ def less(x1: object, x2: object) -> typing.Any:
 def less_equal(x1: object, x2: object) -> typing.Any:
     """Compare whether each finite real element is at most its peer."""
     return _compare("less_equal", x1, x2)
+
+
+def positive(x: object) -> typing.Any:
+    """Preserve a real array under eager or symbolic unary plus."""
+    if isinstance(x, VibeArray):
+        return _namespace.positive(x)
+    return _eager_compute(np.positive, _eager_array(x))
 
 
 def negative(x: object) -> typing.Any:
@@ -412,6 +459,32 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     return np.flip(array, axis=axes)
 
 
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> typing.Any:
+    """Roll generic arrays along static axes using bounded gather maps."""
+    if isinstance(x, VibeArray):
+        return _namespace.roll(x, shift, axis=axis)
+    return np.roll(_eager_data_array(x), shift, axis=axis)
+
+
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
+    """Repeat elements using a static integer count during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.repeat(x, repeats, axis=axis)
+    return np.repeat(_eager_data_array(x), repeats, axis=axis)
+
+
+def tile(x: object, repetitions: tuple[int, ...]) -> typing.Any:
+    """Tile whole blocks using static repetition metadata during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.tile(x, repetitions)
+    return np.tile(_eager_data_array(x), repetitions)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
@@ -437,19 +510,14 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     return array[tuple(builtins.slice(start, stop) for start, stop in ranges)]
 
 
-def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
+def take(x: object, indices: tuple[int, ...], *, axis: int | None = None) -> typing.Any:
     """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
     array = _eager_data_array(x)
-    normalized_axis = _namespace._axis(axis, array.ndim, "take")
-    if not isinstance(indices, tuple) or builtins.any(
-        type(index) is not int for index in indices
-    ):
-        raise TypeError("take indices must be a static tuple of integers")
-    if builtins.any(not 0 <= index < array.shape[normalized_axis] for index in indices):
-        raise ValueError("gather position is outside its input axis")
-    return np.take(array, indices, axis=normalized_axis)
+    normalized_axis = _namespace._take_axis(axis, array.ndim)
+    positions = _namespace._take_indices(indices, array.shape[normalized_axis])
+    return np.take(array, positions, axis=normalized_axis)
 
 
 def sum(
@@ -459,12 +527,14 @@ def sum(
     dtype: object = None,
     keepdims: builtins.bool = False,
 ) -> typing.Any:
-    """Reduce over selected axes without retaining reduced dimensions.
-
-    Dtype conversion and keepdims=True are not supported in this preview.
-    """
+    """Capture finite reductions with an optional explicit real input cast."""
     if isinstance(x, VibeArray):
-        return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+        if dtype is not None and _CAPTURE_BACKEND.get() == "cuda":
+            raise ValueError(
+                "sum explicit dtype capture is not qualified for backend='cuda'"
+            )
+        target = None if dtype is None else _dtype_name(dtype)
+        return _namespace.sum(x, axis=axis, dtype=target, keepdims=keepdims)
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
@@ -472,6 +542,53 @@ def sum(
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "sum")
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
+
+
+def prod(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    dtype: object = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite generic products with an optional explicit input cast."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("prod capture is not qualified for backend='cuda'")
+    target = None if dtype is None else _dtype_name(dtype)
+    return _namespace.prod(x, axis=axis, dtype=target, keepdims=keepdims)
+
+
+def var(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    correction: float = 0.0,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite centered variance without broadening backend admission."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("var capture is not qualified for backend='cuda'")
+    return _namespace.var(x, axis=axis, correction=correction, keepdims=keepdims)
+
+
+def max(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic maximum reductions."""
+    return _namespace.max(x, axis=axis, keepdims=keepdims)
+
+
+def min(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic minimum reductions."""
+    return _namespace.min(x, axis=axis, keepdims=keepdims)
 
 
 def mean(
@@ -523,6 +640,20 @@ def matmul(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.matmul(x1, x2)
     return _eager_compute(np.matmul, *_eager_operands(x1, x2))
+
+
+def tensordot(x1: object, x2: object, *, axes: object = 2) -> typing.Any:
+    """Contract generic arrays along static axis pairs."""
+    if _symbolic(x1, x2):
+        return _namespace.tensordot(x1, x2, axes=axes)
+    return _eager_compute(np.tensordot, *_eager_operands(x1, x2), axes=axes)
+
+
+def vecdot(x1: object, x2: object, *, axis: object = -1) -> typing.Any:
+    """Compute real vector dot products with broadcast batch dimensions."""
+    if _symbolic(x1, x2):
+        return _namespace.vecdot(x1, x2, axis=axis)
+    return _eager_compute(np.vecdot, *_eager_operands(x1, x2), axis=axis)
 
 
 def einsum(
@@ -690,6 +821,8 @@ def asarray(
             return value
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
+        if copy is False:
+            raise ValueError("asarray dtype conversion requires a copy")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
     if "unknown-nested" in source_kinds:

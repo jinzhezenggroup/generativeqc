@@ -7,15 +7,16 @@ from pathlib import Path
 
 
 def cache_source(path: typing.Any, source: typing.Any) -> None:
-    """Publish complete bytes; reject a corrupt existing cache entry."""
+    """Publish exact UTF-8 bytes without newline or locale conversion."""
+    data = source.encode("utf-8")
     if path.exists():
-        if path.read_text() != source:
+        if path.read_bytes() != data:
             raise ValueError("native source identity mismatch")
         return
     descriptor, temporary = tempfile.mkstemp(prefix=".source-", dir=path.parent)
     try:
-        with os.fdopen(descriptor, "w") as stream:
-            stream.write(source)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)

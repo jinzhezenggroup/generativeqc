@@ -1,0 +1,6 @@
+{
+  "path": "src/scf/cuda/scf_incremental_policy.cuh",
+  "role": "runtime",
+  "subsystem": "scf_tensor",
+  "reason": "Per-item incremental HF controller states for unanchored builds and sticky full-density energy refinement, shared by matrix and convergence kernels."
+}

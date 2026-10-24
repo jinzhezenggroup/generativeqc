@@ -95,15 +95,19 @@ struct Descriptor { std::size_t jets, points, active, width; };
 Descriptor grid_panel_descriptor(std::size_t j,std::size_t p,std::size_t a,std::size_t w) {
   return {j,p,a,w};
 }
+Descriptor grid_panel_descriptor_fp32(std::size_t jets,std::size_t points,std::size_t active,std::size_t width) {
+  return {jets,points,active,width};
+}
 }
 struct Projection {
+  template<class Arithmetic>
   void execute(generativeqc::dft::generated::Descriptor r, cudaStream_t,
-               const double* left, const double* right, double* output, int*) {
+               const Arithmetic* left, const Arithmetic* right, Arithmetic* output, int*) {
     ++gemm_calls;
     gemm_products += r.jets;
     for (std::size_t row = 0; row < r.jets*r.points; ++row)
       for (std::size_t column = 0; column < r.width; ++column) {
-        double value = 0;
+        Arithmetic value = 0;
         for (std::size_t item = 0; item < r.active; ++item)
           value += left[row*r.active+item]*right[item*r.width+column];
         output[row*r.width+column] = value;
@@ -137,6 +141,8 @@ struct GridPlan {
   bool profile_stages = false;
   Projection projection_value;
   Projection* projection = &projection_value;
+  Projection* projection_fp32 = nullptr;
+  struct FloatPanels { float values[256]{}; float* get() { return values; } } fp32_panels;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
   bool local=true,density_ready=true,use_orbitals=false,orbital_ready=false,last_identity_map=false;
   bool identical_spin_density=false,orbital_enabled=true;
@@ -153,7 +159,7 @@ struct GridPlan {
   const std::size_t* current_ao_ids{};
 };
 void scheduled_ao(int, const double*, std::size_t, std::size_t, std::size_t, const double* points,
-               std::size_t,std::size_t,double*,int* error,const std::size_t*) {
+               std::size_t,std::size_t,double*,int* error,const std::size_t*,bool=false) {
   observed_points = points;
   if (fault == 1) *error = 7;
 }
@@ -167,7 +173,14 @@ void gather_density(const double* density, const std::size_t* ids, I nao, I acti
       for (I column = 0; column < active; ++column)
         output[(spin*active+row)*active+column] = density[(spin*nao+ids[row])*nao+ids[column]];
 }
-template<class... A> void scheduled_grid_features(A&&...) {}
+template<class Arithmetic=double, class... Arguments> void scheduled_grid_features(Arguments&&...) {}
+template<class Output, class Input>
+void convert_grid_panel(const Input* input,Output* output,std::size_t count,int* error) {
+  for (std::size_t index=0;index<count;++index) {
+    output[index]=static_cast<Output>(input[index]);
+    if (!std::isfinite(output[index])) *error=1;
+  }
+}
 """
 
 SPIN_MAIN = r"""
@@ -275,15 +288,17 @@ int check_density_binding(int mode) {
   if (mode == 5) p.density_jets_ready = false;
   if (mode == 7) p.feature_mask = 3;
   if (mode == 8) p.features_ready = false;
+  if (mode == 9 || mode == 10) p.feature_mask = 1;
+  if (mode == 10) p.identical_spin_density = false;
   const auto generation = mode == 6 ? p.generation - 1 : p.generation;
   const double* work = p.work + 1;
   std::uint64_t flags = 99;
-  const int status = grid_cuda_density_jets_v2(&p,generation,4,&work,&flags,nullptr,0);
-  const bool admitted = mode <= 2;
+  const int status = grid_cuda_density_jets_v2(&p,generation,mode >= 9 ? 1 : 4,&work,&flags,nullptr,0);
+  const bool admitted = mode <= 2 || mode >= 9;
   if ((status == 0) != admitted) return 60;
   if (!admitted && (work || flags)) return 61;
   if (admitted && work != p.work) return 62;
-  if (admitted && flags != std::uint64_t(mode == 0)) return 63;
+  if (admitted && flags != std::uint64_t(mode == 0 || mode == 2 || mode == 9)) return 63;
   return 0;
 }
 """
@@ -393,7 +408,7 @@ def publication_probe(
     return executable
 
 
-@pytest.mark.parametrize("mode", range(9))
+@pytest.mark.parametrize("mode", range(11))
 def test_density_binding_requires_current_owned_restricted_features(
     publication_probe: Path, mode: int
 ) -> None:

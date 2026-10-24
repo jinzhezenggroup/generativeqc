@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "api/cuda_response.hpp"
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
@@ -17,6 +18,8 @@
 #include "integrals/ecp_cuda.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
+#include "response/resident_krylov.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
 #include "dft/grid_task_view.cuh"
@@ -33,12 +36,15 @@ struct generativeqc_ks_snapshot {
   std::size_t atoms{};
   generativeqc::dft::CudaKsFinalStateToken token;
   std::vector<double> values;
+  std::vector<double> nonlocal_grid_values;
+  generativeqc::dft::CudaMolecularGridView nonlocal_resident_grid;
   // Snapshot creation already paid the strict final-state export/validation.
   // Retain only D/W needed by the later stationary integral bridge instead of
   // triggering a second complete final-state device export.
   std::vector<generativeqc::scf::reference::Matrix> stationary_density;
   std::vector<generativeqc::scf::reference::Matrix> stationary_weighted_density;
   double energy{};
+  double stationarity_tolerance{1e-8};
   bool all_electron{};
 };
 
@@ -53,7 +59,10 @@ struct generativeqc_ks_xc_response {
   // every buffer is also tied to the still-live stream on exceptional exit.
   generativeqc::runtime::OwnedCudaStream stream;
   generativeqc::runtime::OwnedCudaBuffer<std::byte> arena;
-  generativeqc::runtime::OwnedCudaBuffer<double> density, direction;
+  generativeqc::runtime::OwnedCudaBuffer<double> direction;
+  // The batch/token, not this response consumer, owns the converged D. Every
+  // response action rechecks that token before touching this borrowed pointer.
+  const double* density{};
   std::unique_ptr<generativeqc::dft::CudaXcPlan> plan;
 #endif
 };
@@ -72,9 +81,119 @@ generativeqc_status check_current(const generativeqc_batch& batch,
                                   const generativeqc_ks_snapshot& snapshot) {
   return check_current(batch, snapshot.index, snapshot.token);
 }
+
+#if GENERATIVEQC_HAS_CUDA
+void check_cpks_cuda(cudaError_t status) {
+  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
+  if (status != cudaSuccess)
+    throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                             cudaGetErrorString(status));
+}
+
+/** Adapt the shared orbital/vector engine, not a second CPKS algebra. Its
+ * density callback holds the current KS lease and supplies the native XC map. */
+class CudaKsKrylov final : public generativeqc::response::ResidentKrylovBackend {
+ public:
+  explicit CudaKsKrylov(generativeqc_rhf_response_resident* owner) : owner_(owner) {
+    const auto info = diagnostic();
+    dimension_ = info.dimension;
+    slots_ = info.vector_slots;
+    bytes_ = info.owned_device_bytes;
+  }
+  std::size_t dimension() const noexcept override { return dimension_; }
+  std::size_t vector_slots() const noexcept override { return slots_; }
+  std::size_t owned_resident_bytes() const noexcept override { return bytes_; }
+  void upload(std::size_t slot, std::span<const double> values) override {
+    check(generativeqc_rhf_response_resident_upload(owner_, slot, values.data(), values.size()));
+  }
+  void download(std::size_t slot, std::span<double> values) override {
+    check(generativeqc_rhf_response_resident_download(owner_, slot, values.data(), values.size()));
+  }
+  void zero(std::size_t slot) override {
+    check(generativeqc_rhf_response_resident_zero(owner_, slot));
+  }
+  void copy(std::size_t destination, std::size_t source) override {
+    check(generativeqc_rhf_response_resident_copy(owner_, destination, source));
+  }
+  void scale(std::size_t slot, double alpha) override {
+    check(generativeqc_rhf_response_resident_scale(owner_, slot, alpha));
+  }
+  void axpy(std::size_t destination, double alpha, std::size_t source) override {
+    check(generativeqc_rhf_response_resident_axpy(owner_, destination, alpha, source));
+  }
+  double dot(std::size_t left, std::size_t right) override {
+    double result = 0;
+    check(generativeqc_rhf_response_resident_dot(owner_, left, right, &result));
+    return result;
+  }
+  double norm(std::size_t slot) override {
+    double result = 0;
+    check(generativeqc_rhf_response_resident_norm(owner_, slot, &result));
+    return result;
+  }
+  void apply(std::size_t destination, std::size_t source) override {
+    check(generativeqc_rhf_response_resident_apply(owner_, destination, source));
+  }
+  generativeqc_rhf_response_resident_diagnostic diagnostic() const {
+    generativeqc_rhf_response_resident_diagnostic result{};
+    result.struct_size = sizeof(result);
+    result.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_rhf_response_resident_get_diagnostic(owner_, &result));
+    return result;
+  }
+
+ private:
+  void check(generativeqc_status status) const {
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw generativeqc::methods::MethodError(
+          status, generativeqc_rhf_response_resident_last_error(owner_));
+  }
+  generativeqc_rhf_response_resident* owner_;
+  std::size_t dimension_{}, slots_{}, bytes_{};
+};
+#endif
 }  // namespace
 
 extern "C" {
+
+/** Authenticate the same additional capacity against the prepared item. This
+ * query needs no SCF/final token and publishes only after complete admission. */
+generativeqc_status generativeqc_ks_batch_stationary_cuda_capacity_v1(
+    const generativeqc_batch* batch, std::uint32_t index, std::uint64_t* values,
+    std::size_t count) {
+  if (!batch || !values || count != 9 || index >= batch->plan->size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    generativeqc::dft::CudaStationaryCapacity capacity;
+    std::string detail;
+    const auto status = generativeqc::methods::detail::dft_cuda_stationary_capacity(
+        *batch->plan, index, capacity, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+/** Apply an admitted per-item bound before force consumers are constructed.
+ * The native item retains it across geometry replacement and failed replays. */
+generativeqc_status generativeqc_ks_batch_stationary_cuda_limit_v1(
+    generativeqc_batch* batch, std::uint32_t index, std::uint64_t maximum_device_bytes) {
+  if (!batch || index >= batch->plan->size() ||
+      maximum_device_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    return generativeqc::methods::detail::dft_cuda_stationary_limit(
+        *batch->plan, index, maximum_device_bytes, batch->context->last_detail);
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 /** Expose only stationary *integral sources* to a native single calculation.
  * The verified current-state token and D/W are sourced from the same prepared
  * SCF owner as the energy. No Python orchestrator, approximation switch, or
@@ -170,6 +289,7 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
                            std::all_of(source.system.atoms.begin(), source.system.atoms.end(),
                                        [](const auto& atom) { return atom.ecp_core == 0; });
     result->energy = state.components.total();
+    result->stationarity_tolerance = state.stationarity_tolerance.value_or(1e-8);
     const auto& identity = state.identity;
     const auto n = state.orbitals.at(0).values.size();
     auto& values = result->values;
@@ -196,6 +316,26 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
     append(source.points);
     append(source.weights);
     append(source.grid_owners);
+    if (identity.model.nonlocal_grid) {
+      const auto& nonlocal_grid = *identity.model.nonlocal_grid;
+      auto& quadrature = result->nonlocal_grid_values;
+      quadrature = {static_cast<double>(source.nonlocal_weights.size()),
+                    static_cast<double>(nonlocal_grid.version),
+                    static_cast<double>(nonlocal_grid.radial_points),
+                    static_cast<double>(nonlocal_grid.angular_polar),
+                    static_cast<double>(nonlocal_grid.angular_azimuth),
+                    static_cast<double>(nonlocal_grid.partition_iterations),
+                    nonlocal_grid.coincident_tolerance};
+      const auto append_nonlocal = [&](const auto& array) {
+        quadrature.insert(quadrature.end(), array.begin(), array.end());
+      };
+      append_nonlocal(nonlocal_grid.element_radii);
+      append_nonlocal(source.nonlocal_points);
+      append_nonlocal(source.nonlocal_weights);
+      append_nonlocal(source.nonlocal_grid_owners);
+      append_nonlocal(source.nonlocal_atomic_weights);
+      result->nonlocal_resident_grid = source.nonlocal_resident_grid;
+    }
     const bool cpu = identity.determinant.model.backend == generativeqc::scf::FockBackend::Cpu;
     const auto& exchange = identity.determinant.model.spec.exchange;
     const bool composition = identity.model.semilocal_exchange_scale != 1 ||
@@ -269,6 +409,58 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
   }
 }
 
+/** Authenticate the method-owner physical allowance, never a Python estimate. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value) {
+  if (!batch || !snapshot || !value) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    *value = snapshot->stationarity_tolerance;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+/** Separate transport leaves every existing shared-grid snapshot unchanged.
+ * Both the prescription and materialized arrays come from the token's owner. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t capacity, std::size_t* count) {
+  if (!batch || !snapshot || !count || (!values && capacity != 0))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto status = check_current(*batch, *snapshot);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  *count = snapshot->nonlocal_grid_values.size();
+  if (!values) return GENERATIVEQC_STATUS_SUCCESS;
+  if (capacity != *count) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::copy(snapshot->nonlocal_grid_values.begin(), snapshot->nonlocal_grid_values.end(), values);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Borrow only the immutable independent grid of this live snapshot. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_cuda_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* count) {
+  if (!batch || !snapshot || !device || !points || !weights || !atomic_weights || !count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto status = check_current(*batch, *snapshot);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto& grid = snapshot->nonlocal_resident_grid;
+  if (!grid) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  *device = grid.device;
+  *points = grid.points;
+  *weights = grid.weights;
+  *atomic_weights = grid.atomic_weights;
+  *count = grid.point_count;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count) {
@@ -283,7 +475,7 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     // Both backends retain the full-range short fraction plus the LR
     // correction in this identity. The live owner token, rather than a CPU
     // backend tag, proves the complete model for the stationary consumer.
-    if (!snapshot->all_electron || !model.range_correction || !model.nonlocal_correlation)
+    if (!model.range_correction || !model.nonlocal_correlation)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const double spin_factor = model.spins == 1 ? -0.5 : -1.0;
     const double short_exchange = primary.spec.exchange.coefficient / spin_factor;
@@ -300,6 +492,23 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
         static_cast<double>(model.nonlocal_density_domain),
         primary.screening_tolerance};
     std::copy(proof.begin(), proof.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+generativeqc_status generativeqc_ks_snapshot_range_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* approximation) {
+  if (!batch || !snapshot || !approximation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto& range = snapshot->token.identity.model.range_correction;
+    *approximation = range ? static_cast<std::uint32_t>(range->spec.exchange.approximation)
+                           : std::numeric_limits<std::uint32_t>::max();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
@@ -374,7 +583,7 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
@@ -383,20 +592,35 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     const generativeqc::dft::AoBasis basis(source.system);
     if (basis.packed != source.packed_basis)
       throw std::invalid_argument("CUDA response packed basis differs from native state");
+    const auto borrow_grid = static_cast<bool>(source.resident_grid);
     const auto layout = generativeqc::dft::cuda_xc_layout_shape(
         basis.natom, basis.nprimitive, basis.nao, source.weights.size(), identity.model.functional,
-        identity.model.spins == 2, tile_points, true);
+        identity.model.spins == 2, tile_points, true, generativeqc::dft::CudaXcAoPrecision::Fp64,
+        identity.model.semilocal_exchange_scale, identity.model.semilocal_correlation_scale,
+        borrow_grid);
     using generativeqc::runtime::size_mul;
     const auto count = size_mul(size_mul(layout.spins, layout.nao, "XC response overflow"),
                                 layout.nao, "XC response overflow");
     const auto bytes = generativeqc::runtime::size_add(
-        layout.device_bytes, size_mul(count, 2 * sizeof(double), "XC response overflow"),
+        layout.device_bytes, size_mul(count, sizeof(double), "XC response overflow"),
         "XC response overflow");
     if (bytes > budget_bytes) throw std::bad_alloc();
-    std::vector<double> density;
-    for (const auto& spin : source.state.density)
-      density.insert(density.end(), spin.begin(), spin.end());
-    if (density.size() != count) throw std::invalid_argument("CUDA response spin shape mismatch");
+    int density_device = -1;
+    const double *alpha = nullptr, *beta = nullptr;
+    std::size_t matrix_elements = 0;
+    unsigned spins = 0;
+    void* source_stream = nullptr;
+    status = generativeqc::methods::detail::dft_cuda_resident_density(
+        *batch->plan, snapshot->index, snapshot->token, density_device, alpha, beta,
+        matrix_elements, spins, source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    if (density_device != identity.model.device || spins != layout.spins ||
+        matrix_elements != layout.nao * layout.nao || !alpha || !source_stream ||
+        (spins == 2 && beta != alpha + matrix_elements))
+      throw std::invalid_argument("CUDA response resident spin shape mismatch");
     auto result = std::make_unique<generativeqc_ks_xc_response>();
     result->index = snapshot->index;
     result->token = snapshot->token;
@@ -410,14 +634,16 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     result->stream.create(result->device);
     const auto stream = result->stream.get();
     result->arena.allocate(result->device, layout.device_bytes, stream);
-    result->density.allocate(result->device, count, stream);
+    result->density = alpha;
     result->direction.allocate(result->device, count, stream);
     result->plan = std::make_unique<generativeqc::dft::CudaXcPlan>(
         layout, source.packed_basis, source.points, source.weights, result->arena.get(),
-        layout.device_bytes, stream);
-    generativeqc::runtime::cuda_resource_check(
-        cudaMemcpyAsync(result->density.get(), density.data(), count * sizeof(double),
-                        cudaMemcpyHostToDevice, stream));
+        layout.device_bytes, stream, source.resident_grid);
+    // Grid and D remain with the prepared SCF owner. Establish the dependency
+    // once without an export/re-upload; snapshot freshness guards later actions.
+    generativeqc::runtime::OwnedCudaEvent ready(result->device, cudaEventDisableTiming);
+    ready.record(static_cast<cudaStream_t>(source_stream));
+    generativeqc::runtime::cuda_resource_check(cudaStreamWaitEvent(stream, ready.get(), 0));
     result->stream.synchronize();
     status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -428,6 +654,162 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
   }
 #else
   (void)tile_points;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+generativeqc_status generativeqc_ks_response_solve_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_ks_xc_response* response, generativeqc_fock_plan* fock,
+    const generativeqc_ks_response_controls* controls, const double* rhs, std::size_t count,
+    const double* guess, std::size_t guess_count, std::size_t device_budget_bytes, double* solution,
+    std::size_t solution_count, double* residual, std::size_t residual_count, std::uint64_t* work,
+    std::size_t work_count) {
+  if (!batch || !snapshot || !response || !fock || !controls ||
+      controls->struct_size != sizeof(*controls) || !rhs || !solution || !residual || !work ||
+      solution_count != count || residual_count != 2 || work_count != 10 ||
+      (guess_count && (!guess || guess_count != count)) || !device_budget_bytes)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+#if GENERATIVEQC_HAS_CUDA
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (response->index != snapshot->index || response->token != snapshot->token)
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto& identity = snapshot->token.identity;
+    const auto& model = identity.model;
+    const auto& determinant = identity.determinant;
+    const auto* family = generativeqc::dft::semilocal_family_metadata_from_code(model.functional);
+    if (!snapshot->all_electron || model.spins != 1 || model.range_correction ||
+        model.nonlocal_correlation || !family ||
+        !generativeqc::dft::cuda_xc_capability_qualified(family->cuda_fast_paths.response))
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto nbf = response->plan->layout().nao;
+    const auto occupied = determinant.occupied.at(0);
+    if (!occupied || occupied >= nbf || count != occupied * (nbf - occupied))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    generativeqc::response::GmresOptions options;
+    options.relative_tolerance = controls->rtol;
+    options.absolute_tolerance = controls->atol;
+    options.restart = controls->restart;
+    options.max_iterations = controls->max_iterations;
+    options.max_workspace_bytes = controls->max_workspace_bytes;
+    if (controls->reorthogonalize > std::numeric_limits<unsigned>::max())
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    options.reorthogonalize = controls->reorthogonalize;
+    options.breakdown_tolerance = controls->breakdown_tolerance;
+    options.true_residual_every = controls->true_residual_every;
+    options.stagnation_window = controls->stagnation_window;
+    options.stagnation_tolerance = controls->stagnation_tolerance;
+    const auto plan = generativeqc::response::prepare_gmres(count, options);
+    generativeqc::methods::detail::KsDerivativeSnapshot source;
+    std::string detail;
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
+        *batch->plan, snapshot->index, snapshot->token, source, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw generativeqc::methods::MethodError(status, detail);
+    status = generativeqc::api::validate_cuda_cpks_source(fock, source.system,
+                                                          determinant.model.spec, response->device);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto workspace = generativeqc::response::resident_gmres_workspace(plan);
+    const auto host_bytes = generativeqc::runtime::size_add(
+        workspace.host_scalar_bytes, workspace.host_result_bytes, "CPKS host workspace overflow");
+    if (host_bytes > options.max_workspace_bytes) {
+      const std::array<std::uint64_t, 10> refused{
+          static_cast<std::uint64_t>(generativeqc::response::GmresStatus::workspace_limit),
+          0,
+          0,
+          0,
+          host_bytes,
+          0,
+          0,
+          0,
+          0,
+          0};
+      std::copy(refused.begin(), refused.end(), work);
+      residual[0] = residual[1] = std::numeric_limits<double>::infinity();
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
+    if (device_budget_bytes <= response->device_bytes) throw std::bad_alloc();
+    const auto matrix = generativeqc::runtime::size_mul(nbf, nbf, "CPKS matrix overflow");
+    const auto coefficients_offset = 2 + 4 * snapshot->atoms + 2 * matrix;
+    if (snapshot->values.size() < coefficients_offset + matrix + nbf)
+      throw std::invalid_argument("CPKS snapshot orbital payload is incomplete");
+    generativeqc::runtime::CudaDeviceScope device(response->device, check_cpks_cuda);
+    generativeqc::runtime::OwnedCudaEvent ready(response->device, cudaEventDisableTiming,
+                                                check_cpks_cuda);
+    const auto xc_before = response->plan->transfers();
+    const auto density_response = [&](const double* direction, void* stream) {
+      const auto current = check_current(*batch, response->index, response->token);
+      if (current != GENERATIVEQC_STATUS_SUCCESS)
+        throw generativeqc::methods::MethodError(current, "stale CPKS response generation");
+      try {
+        ready.record(static_cast<cudaStream_t>(stream));
+        check_cpks_cuda(cudaStreamWaitEvent(response->stream.get(), ready.get(), 0));
+        const auto generation = ++response->generation;
+        response->plan->enqueue_response(response->density, direction, response->count, generation);
+        const auto scalars = response->plan->read_scalars(generation);
+        if (scalars.error) throw std::invalid_argument("invalid resident XC response domain");
+        return response->plan->view(generation).potential;
+      } catch (...) {
+        // The XC stream may already borrow the resident orbital arena. Settle
+        // that lease before its owner unwinds, without replacing the failure.
+        try {
+          response->stream.synchronize();
+        } catch (...) {
+        }
+        throw;
+      }
+    };
+    generativeqc_rhf_response_resident* raw_owner = nullptr;
+    status = generativeqc::api::create_cuda_cpks_response(
+        fock, source.system, determinant.model.spec, response->device,
+        snapshot->values.data() + coefficients_offset, matrix,
+        snapshot->values.data() + coefficients_offset + matrix, nbf, occupied,
+        workspace.vector_slots, device_budget_bytes - response->device_bytes, density_response,
+        &raw_owner);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw generativeqc::methods::MethodError(status,
+                                               "resident CPKS provider/capacity admission failed");
+    const std::unique_ptr<generativeqc_rhf_response_resident,
+                          decltype(&generativeqc_rhf_response_resident_destroy)>
+        owner(raw_owner, generativeqc_rhf_response_resident_destroy);
+    CudaKsKrylov backend(owner.get());
+    const auto solved = generativeqc::response::solve_gmres_resident(plan, backend, {rhs, count},
+                                                                     {guess, guess_count});
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto diagnostic = backend.diagnostic();
+    const auto& xc_after = response->plan->transfers();
+    const auto device_bytes = generativeqc::runtime::size_add(
+        response->device_bytes,
+        generativeqc::runtime::size_add(diagnostic.owned_device_bytes,
+                                        generativeqc::api::cuda_cpks_response_provider_bytes(fock),
+                                        "CPKS device workspace overflow"),
+        "CPKS device workspace overflow");
+    const auto& result = solved.result;
+    const std::array<std::uint64_t, 10> summary{
+        static_cast<std::uint64_t>(result.status),
+        result.iterations,
+        result.restarts,
+        result.operator_actions,
+        result.workspace_bytes,
+        device_bytes,
+        diagnostic.h2d_bytes,
+        diagnostic.d2h_bytes + xc_after.output_d2h_bytes - xc_before.output_d2h_bytes,
+        diagnostic.synchronizations + xc_after.synchronizations - xc_before.synchronizations,
+        diagnostic.blas_calls};
+    if (!result.solution.empty())
+      std::copy(result.solution.begin(), result.solution.end(), solution);
+    residual[0] = result.residual_norm;
+    residual[1] = result.relative_residual;
+    std::copy(summary.begin(), summary.end(), work);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+#else
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
@@ -452,7 +834,7 @@ generativeqc_status generativeqc_ks_xc_response_apply_v1(generativeqc_batch* bat
                                                                count * sizeof(double),
                                                                cudaMemcpyHostToDevice, stream));
     response->input_bytes += count * sizeof(double);
-    response->plan->enqueue_response(response->density.get(), response->direction.get(), count,
+    response->plan->enqueue_response(response->density, response->direction.get(), count,
                                      ++response->generation);
     const auto scalars = response->plan->read_scalars(response->generation);
     if (scalars.error) throw std::invalid_argument("invalid CUDA XC response direction/domain");
@@ -484,7 +866,7 @@ generativeqc_status generativeqc_ks_xc_response_diagnostic_v1(
   const auto& t = response->plan->transfers();
   const auto& l = response->plan->layout();
   const std::array<std::uint64_t, 12> result{response->device_bytes,
-                                             t.setup_h2d_bytes + response->count * sizeof(double),
+                                             t.setup_h2d_bytes,
                                              response->input_bytes,
                                              t.output_d2h_bytes,
                                              t.synchronizations + response->extra_synchronizations,
@@ -546,11 +928,11 @@ generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (source.system.ecp_terms.empty()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto n = source.state.orbitals.at(0).values.size();
+    const auto n = generativeqc::molecule::ao_count(source.system);
     const auto atoms = source.system.atoms.size();
     if (!n || atoms > std::numeric_limits<std::size_t>::max() / 6 / n / n ||
         count != 6 * atoms * n * n)
@@ -707,6 +1089,35 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::copy(profile.milliseconds.begin(), profile.milliseconds.end(), milliseconds);
     *present_mask = profile.present_mask;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+generativeqc_status generativeqc_ks_snapshot_cuda_prepare_force_memory_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint64_t additional_device_bytes, std::uint64_t* receipt, std::size_t count) {
+  if (!batch || !snapshot || !receipt || count != 4 ||
+      additional_device_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::fill(receipt, receipt + count, 0);
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::array<std::uint64_t, 4> candidate{};
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_prepare_force_memory(
+        *batch->plan, snapshot->index, snapshot->token,
+        static_cast<std::size_t>(additional_device_bytes), candidate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(candidate.begin(), candidate.end(), receipt);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
@@ -1023,8 +1434,8 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
         output[10] = xc.kinetic[1];
       };
       if (automatic) {
-        // The native SCF and stationary derivative consumers must evaluate the
-        // same AOT program, including its pinned Libxc work-domain continuation.
+        // This legacy ABI is explicitly polarized. Restricted density-work
+        // consumers use v4 so they do not apply a per-spin floor to total rho.
         const auto xc = automatic.program->evaluate(local_rho, local_gradient, local_tau);
         bool finite = std::isfinite(xc.energy);
         for (double value : xc.rho) finite = finite && std::isfinite(value);
@@ -1075,6 +1486,68 @@ generativeqc_status generativeqc_xc_point_batch_v2(std::uint32_t functional, con
                                                    std::size_t value_count) {
   return generativeqc_xc_point_batch_v3(functional, 1.0, 1.0, rho, gradient, tau, point_count,
                                         values, value_count);
+}
+
+/** Layout-aware private stationary bridge. RKS feature transport retains two
+ * equal half-density channels, but the U1 descriptor consumes their original
+ * total. Duplicating total-feature derivatives makes the existing half-channel
+ * pullback contract to the same restricted derivative, including native vtau/2.
+ * Spin is explicit producer metadata, never inferred from equal input values.
+ * Legacy domains retain their SCF's polarized-fold continuation. */
+generativeqc_status generativeqc_xc_point_batch_v4(std::uint32_t functional, std::uint32_t spins,
+                                                   double exchange_scale, double correlation_scale,
+                                                   const double* rho, const double* gradient,
+                                                   const double* tau, std::size_t point_count,
+                                                   double* values, std::size_t value_count) {
+  constexpr std::size_t stride = 11;
+  if ((spins != 1U && spins != 2U) || !rho || !gradient || !tau || !values || !point_count ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
+      value_count != stride * point_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (spins == 2U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  for (std::size_t point = 0; point < point_count; ++point) {
+    if (rho[point] != rho[point_count + point] || tau[point] != tau[point_count + point])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      if (gradient[point * 3 + axis] != gradient[(point_count + point) * 3 + axis])
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto automatic = generativeqc::dft::generated::automatic_libxc_entry(functional);
+  if (!automatic || automatic.program->domain_version <= 4U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  if (exchange_scale != 1.0 || correlation_scale != 1.0)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* restricted = generativeqc::dft::generated::automatic_restricted_libxc_program(
+      automatic.program->identifier);
+  if (!restricted || restricted->domain_version != automatic.program->domain_version ||
+      restricted->ingredient_mask != automatic.program->ingredient_mask)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    generativeqc::dft::validate_semilocal_point_program(*restricted);
+    for (std::size_t point = 0; point < point_count; ++point) {
+      double total_gradient[3]{};
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        total_gradient[axis] =
+            gradient[point * 3 + axis] + gradient[(point_count + point) * 3 + axis];
+      const auto xc = restricted->evaluate(rho[point] + rho[point_count + point], total_gradient,
+                                           tau[point] + tau[point_count + point]);
+      bool finite = std::isfinite(xc.energy) && std::isfinite(xc.rho) && std::isfinite(xc.kinetic);
+      for (double coefficient : xc.gradient) finite = finite && std::isfinite(coefficient);
+      if (!finite) throw std::runtime_error("nonfinite restricted Libxc point result");
+      double* output = values + stride * point;
+      output[0] = xc.energy;
+      output[1] = output[2] = xc.rho;
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        output[3 + axis] = output[6 + axis] = xc.gradient[axis];
+      output[9] = output[10] = xc.kinetic;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
 }
 
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot) { delete snapshot; }

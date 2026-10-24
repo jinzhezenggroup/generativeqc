@@ -17,6 +17,7 @@ from generativeqc_compiler.array_api.scf import (
     weighted_density_program,
 )
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor.history_combination import emit_history_combination
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scf import (
     diis_extrapolation_program,
@@ -157,31 +158,6 @@ def _validate_diis_new_row(program: typing.Any) -> None:
         raise ValueError("SCF DIIS pending-row contraction topology changed")
 
 
-def _validate_diis_extrapolation(program: typing.Any) -> None:
-    if tuple(program.outputs) != ("effective_fock",):
-        raise ValueError("SCF DIIS extrapolation program must have one expected output")
-    contraction = program.outputs["effective_fock"]
-    if contraction.op != "einsum" or contraction.attrs.get("coefficient") != (1, 1):
-        raise ValueError("SCF DIIS extrapolation must be one unit-coefficient einsum")
-    if _kind_signature(contraction) != ("batch", "spin", "ao", "ao"):
-        raise ValueError("SCF DIIS extrapolation output domains changed")
-    if contraction.attrs.get("labels") != (
-        (0, 1, 2, 3, 4),
-        (0, 1),
-    ) or contraction.attrs.get("output") != (0, 2, 3, 4):
-        raise ValueError("SCF DIIS extrapolation contraction topology changed")
-    if tuple(_input_name(node) for node in contraction.inputs) != (
-        "fock_history",
-        "diis_coefficients",
-    ):
-        raise ValueError("SCF DIIS extrapolation operand topology changed")
-    if tuple(_kind_signature(node) for node in contraction.inputs) != (
-        ("batch", "history", "spin", "ao", "ao"),
-        ("batch", "history"),
-    ):
-        raise ValueError("SCF DIIS extrapolation operand layout changed")
-
-
 def native_header() -> str:
     def prepared(program: typing.Any) -> typing.Any:
         return prepare_for_backend(
@@ -212,7 +188,6 @@ def native_header() -> str:
     _validate_hf_force(unrestricted_force, 2)
     _validate_diis_gram(diis_gram)
     _validate_diis_new_row(diis_new_row)
-    _validate_diis_extrapolation(diis_extrapolation)
     density_hash = template_hash(density)
     weighted_hash = template_hash(weighted)
     force_hash = template_hash(restricted_force)
@@ -291,16 +266,7 @@ inline void diis_gram(double* output, std::size_t output_stride, const History& 
   }}
 }}
 
-template <class History>
-inline void diis_extrapolate(double* output, const History& fock_history,
-                             const double* coefficients, std::size_t history_size,
-                             std::size_t vector_size) {{
-  for (std::size_t element = 0; element < vector_size; ++element) output[element] = 0.0;
-  // Keep the historical reduction order over the chronological history.
-  for (std::size_t i = 0; i < history_size; ++i)
-    for (std::size_t element = 0; element < vector_size; ++element)
-      output[element] += coefficients[i] * fock_history[i][element];
-}}
+{emit_history_combination(diis_extrapolation, "cpu")}
 }}  // namespace generativeqc::scf::generated
 """
 
@@ -318,6 +284,12 @@ def diis_cuda_header() -> str:
     )
     _validate_diis_gram(program)
     identity = template_hash(program)
+    combination = prepare_for_backend(
+        diis_extrapolation_program(1, 3, 2, spin_count=2),
+        "cuda",
+        preserve_reduction_order=True,
+    )
+    combination_source = emit_history_combination(combination, "cuda")
     return f"""// Generated from the canonical SCF residual Gram TensorIR.
 #pragma once
 #include <cstddef>
@@ -327,12 +299,16 @@ inline constexpr const char* ordered_history_dot_identity = "{identity}";
 __host__ __device__
 #endif
 inline double ordered_history_dot(const double* left, const double* right,
-                                  std::size_t vector_size) {{
-  double value = 0.0;
+                                  std::size_t vector_size, double value = 0.0) {{
+  // A transport tile may continue the same scalar accumulator. Passing the
+  // prior value preserves element order; summing independent tile dots would
+  // instead change the reduction and is not this schedule's contract.
   for (std::size_t element = 0; element < vector_size; ++element)
     value += left[element] * right[element];
   return value;
 }}
+inline constexpr const char* ordered_history_combination_identity = "{template_hash(combination)}";
+{combination_source}
 }}  // namespace generativeqc::tensor::generated
 """
 

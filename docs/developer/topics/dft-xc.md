@@ -20,7 +20,10 @@ Molecular grids, XC expressions and contractions, functional integration, SCF se
 ../xc_contractions
 ../xc_native_cuda
 ../xc_scf_domain
+../global_hybrid_source_contract
 ../ks_diagnostics
+../ks_df_warm_seed
 ../libxc_bulk_capabilities
 ../libxc_cpu_aot_closure
+../libxc_cuda_aot_closure
 ```

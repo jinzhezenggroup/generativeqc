@@ -9,12 +9,25 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "runtime/strided_range.hpp"
 #include "scf/df_response_weights.hpp"
 namespace generativeqc::scf {
 struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingJkPlan;
 struct CudaDfBorrowedResponseDensity;
+struct CudaDfFinalStateToken;
+/** Synchronous method-owner authorization for narrowed response arithmetic.
+ * Construct only after strict final-state acceptance, binding that exact host
+ * density and token through this call's drain. This is not a lease of cached
+ * SCF factors: corrected final densities may use ordinary dense response.
+ * An allowance alone, an equal-sized density or a retained-factor hint cannot
+ * substitute for this method-authorized binding. */
+struct CudaDfGradientPrecisionRequest {
+  std::array<double, 3> budget{};
+  const CudaDfFinalStateToken* verified_state{};
+  std::span<const double> verified_density;
+};
 /** Bind the prepared owner's immutable source after copying that source into
  * a new single-system plan. The caller owns these host arrays for the plan's
  * lifetime; geometry/basis changes create a new owner. Arbitrary tensor-plan
@@ -39,6 +52,27 @@ struct CudaDfMetricView {
   // The immutable plan generation also binds forward-tensor borrows when no
   // raw-tensor view exists. Pointer equality alone cannot detect allocator reuse.
   std::uint64_t owner_identity{};
+};
+/** Stream-ordered raw auxiliary-charge consumer borrowed from the exact value
+ * source/metric owner. It recomputes A^T D from the density supplied by response;
+ * no earlier SCF density or cached potential is assumed. Submission uses the
+ * borrowed stream, overwrites naux outputs, allocates nothing, and propagates
+ * native status/detail. The enclosing value plan retains and budgets context
+ * through the response bridge's stream drain. No basis data is downloaded. */
+struct CudaDfRawChargeView {
+  using Submit = generativeqc_status (*)(void*, const double*, double*, std::string&);
+  void* context{};
+  Submit submit{};
+  int device_id{-1};
+  void* stream{};
+  std::size_t nbf{}, naux{}, device_bytes{};
+  std::uint64_t owner_identity{};
+  // Optional direct contraction of D_ij v_P d(ij|P)/dR. The bridge retains
+  // metric response and authenticates the atom extent before any submission.
+  using Derivative = generativeqc_status (*)(void*, const double*, const double*, double, double*,
+                                             std::string&);
+  Derivative derivative{};
+  std::size_t natom{};
 };
 /** Borrow of one canonical column-major C, with D=density_scale*C*C^T.
  * The plan owner validates the method token, exact density and device
@@ -92,7 +126,7 @@ struct CudaDfPackedRawTensorView {
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
 };
-/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2.
+/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2, or E=A Q lambda^-1/2.
  * The owning J/K plan retains this allocation across SCF and force, and the
  * same metric factors define its auxiliary axis. Full-rank bounded response
  * may apply the inverse square root again without regenerating raw integrals.
@@ -104,6 +138,9 @@ struct CudaDfWhitenedTensorView {
   bool packed_pairs{};
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
+  // The eigensystem and owner identity bind E's auxiliary coordinates. To
+  // recover A M^-1, multiply E by lambda^-1/2 Q^T, never by M^-1/2.
+  bool spectral_basis{};
 };
 /** Exclusive, stream-ordered borrow from the existing J/K tensor allocation.
  * Dense plans keep two mutable buffers; the third is immutable when resident_raw
@@ -170,6 +207,11 @@ struct DfGradientResources {
   bool device_response{};
   /** True only after the owner validates and executes occupied response. */
   bool occupied_response{};
+  /** Completed shell candidate census, never inferred from the requested mode.
+   * Counts are active task attempts, prepared primitive products and strict
+   * task replays. Only synchronized finite output publishes these fields. */
+  bool precision_work_collected{};
+  std::array<std::uint64_t, 3> precision_work{};
 };
 /** Synchronous bounded bridge for fixed full A[mu,nu,P] and M[P,Q] weights.
  * Orbital/auxiliary bases share the same physical atom coordinates but may
@@ -227,6 +269,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr,
-    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr);
+    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false,
+    const CudaDfRawChargeView* raw_charge = nullptr);
 }  // namespace generativeqc::scf
 #endif

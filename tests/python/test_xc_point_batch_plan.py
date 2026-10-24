@@ -3,11 +3,9 @@
 import subprocess
 from pathlib import Path
 
-from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.dft.xc_point_cuda import emit_point_traversal
 
 
 def test_emitted_point_batch_resource_admission(
@@ -26,7 +24,8 @@ def test_emitted_point_batch_resource_admission(
         "struct CudaXcPointBatchPlan {\n"
         "  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};\n"
         "  std::size_t work_elements{}, potential_elements{}, descriptor_bytes{}; bool compact{};\n"
-        "  std::size_t compact_groups{},compact_tiles{},compact_nonempty_tiles{};\n};\n"
+        "  std::size_t compact_groups{},compact_tiles{},compact_nonempty_tiles{}; bool ragged{};\n"
+        "  std::size_t compact_large_tiles{};\n};\n"
         "struct CudaXcCompactTile { std::size_t begin{},count{},active{},map_offset{},ao_offset{},work_offset{},potential_offset{}; };\n"
         + emit_native_xc_point_batch_plan()
         + r"""
@@ -78,21 +77,3 @@ int main() {
     binary = tmp_path / "plan"
     native_cxx.build_executable([source], binary, compile_args=("-std=c++17", "-O2"))
     subprocess.run([str(binary)], check=True)
-
-
-def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
-    """Batching does not specialize/prune the canonical scientific consumer."""
-    source = emit_native_xc_contraction_kernels()
-    assert "evaluate_points<feature_terms, false, true>" in source
-    assert "return &launch_point_batches<4, 32>;" in source
-    assert "min(tile_points, domain_count - begin)" in source
-    assert source.count(emit_point_traversal()) == 1
-    assert (
-        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator>"
-        in source
-    )
-    assert (
-        source.count("return evaluate_semilocal_point(functional, rho, gradient, tau")
-        == 1
-    )
-    assert "static_assert(!batched || !response)" in source

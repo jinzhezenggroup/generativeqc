@@ -1,0 +1,89 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "No promotion: shared 8x16 full lifecycle122.368ms is slower than default111.687ms; sequential sampling is not a significant interleaved guard",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4502,
+      "path": "summary.json.gz",
+      "role": "summary",
+      "sha256": "38b19dff186fca8a00cdb5a3e1ca769b3e059233ef37f90ea360ac506fe99362"
+    },
+    {
+      "bytes": 17205,
+      "path": "delta-records.json.gz",
+      "role": "samples",
+      "sha256": "f2f0315c093c4023fadc5b6855bc007c487fb3ea5757ed390ae2a590c16d13d5"
+    },
+    {
+      "bytes": 12423,
+      "path": "prior-count-records.json.gz",
+      "role": "samples",
+      "sha256": "c7ecb32e3cd2ca49649d0b3831220b50072a1ac7498f5a6529584a94fe9c881f"
+    },
+    {
+      "bytes": 3619,
+      "path": "private-cache.json.gz",
+      "role": "summary",
+      "sha256": "58e84436148c1bc0308dce0fea1800fd742439d60dbbbd7a7f7bf91da3695e6a"
+    },
+    {
+      "bytes": 18548,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "c9585c5ff8bcd21ece525b37bb5181e3b72815fd59bc65e3c9ea36b1080fb7d6"
+    },
+    {
+      "bytes": 17027,
+      "path": "prior-count-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "7b1de304071559eb1e8bc7ae9f7bcc12eb62800d43a184ae20f76edea00ba54a"
+    },
+    {
+      "bytes": 5870,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "871aff2c430034a51f14b9efbe5246a49c8503f4858f5f60346c44e64eea4871"
+    },
+    {
+      "bytes": 11243,
+      "path": "reach-repair-records.json.gz",
+      "role": "samples",
+      "sha256": "a5b210981d881b5b0a33338e88d2babc767c3577da71fdc5fc1eb79f56e51ccc"
+    },
+    {
+      "bytes": 1588,
+      "path": "reach-repair.patch.gz",
+      "role": "source-patch",
+      "sha256": "1d8e1c0c469125573e3e678f68dfef346f7158c883ece76c70eac5a608c50273"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "tools.qualify_shared_streamed_reductions",
+      "--nvcc",
+      "/usr/local/cuda/bin/nvcc",
+      "--architecture",
+      "sm_90",
+      "--capacity",
+      "32",
+      "--cache",
+      "/absolute/owned/cache",
+      "--output",
+      "/absolute/owned/endpoint.json",
+      "--include-default",
+      "--skip-scalar-counts"
+    ],
+    "instructions": "On exact measured fca37ebf base apply gzip-decoded source.patch.gz once. For prior instrumented scalar counts use a separate checkout and prior-count-source.patch.gz; never label prior counters as latest-source timing. Use supported Linux, verified sccache0.16+ or ccache, real allocated sm90 GPU and bounded Job. Raw records retain QUALIFICATION_INCOMPLETE and default-negative 8x16. Source/compiled identities remain separate for each snapshot."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "fca37ebf7543265f62c4556e6fbf712b33b4edc1"
+  }
+}

@@ -44,6 +44,7 @@ from generativeqc_compiler.tensor import (
 from . import _array_api_eager as _eager
 from . import _array_api_symbolic as _symbolic_backend
 from ._array_api_eager import Array
+from ._array_api_molecular import MolecularModel
 
 API_VERSION = 1
 __array_api_version__ = "2025.12"
@@ -795,7 +796,11 @@ def searchsorted(
 
 
 def where(condition: typing.Any, x1: typing.Any, x2: typing.Any, /) -> typing.Any:
-    """Execute standard where on CPU, or its bounded TensorIR lowering."""
+    """Select eager CPU values, or capture finite generic real reference selection.
+
+    Captured conditions are Boolean; real branches promote and broadcast explicitly.
+    All live operands are checked. Captured selection has no AD or native backend.
+    """
     return _dispatch("where", condition, x1, x2)
 
 
@@ -1002,7 +1007,8 @@ def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> Tensor
 class CompiledFunction:
     """Shape/dtype-specialized quantum-chemistry TensorIR compiler.
 
-    CPU execution is compiled C++ with float64 semantics. CUDA uses the existing
+    CPU execution is compiled C++ with FP64 arithmetic and typed Boolean data.
+    CUDA uses the existing
     TensorIR planner and native executor with explicit host staging. Reference
     interpretation is opt-in; unsupported lowering never selects it implicitly.
     Optional TensorSpecs retain AO/orbital/spin domains instead of inferring
@@ -1033,6 +1039,13 @@ class CompiledFunction:
             if symbolic is not None and function is globals().get(function.__name__)
             else function
         )
+        if builtins.any(
+            function is candidate
+            for candidate in (prod, _symbolic_backend.prod, var, _symbolic_backend.var)
+        ):
+            # Direct compilation uses static defaults. Nondefault reduction
+            # options belong in a closure, not runtime array feeds.
+            signature = signature.replace(parameters=(signature.parameters["x"],))
         unsupported = {
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
@@ -1114,14 +1127,36 @@ class CompiledFunction:
         key = tuple(key_rows)
         program = self._programs.get(key)
         if program is None:
-            program = trace(
-                self._function,
-                specs,
-                provenance={
-                    "public_array_api_version": API_VERSION,
-                    "generic_array_semantics": 1,
-                },
-            )
+            from ._array_api_molecular import _MolecularCapture
+
+            with (
+                _MolecularCapture(
+                    self._backend, self._options["device"], set(specs)
+                ) as capture,
+                _symbolic_backend._capture_backend(self._backend),
+            ):
+                program = trace(
+                    self._function,
+                    specs,
+                    provenance={
+                        "public_array_api_version": API_VERSION,
+                        "generic_array_semantics": 1,
+                    },
+                )
+            if capture.sources:
+                program = Program(
+                    program.outputs,
+                    program.nodes,
+                    provenance={
+                        **dict(program.provenance),
+                        "molecular_sources": tuple(
+                            source.payload() for source in capture.sources
+                        ),
+                        "molecular_ad": "native-analytic-first-order-jet",
+                    },
+                )
+                with self._execution.lock:
+                    self._execution.molecular.register(capture.sources)
             self._programs[key] = program
         return program, feeds
 
@@ -1156,6 +1191,13 @@ class CompiledFunction:
             "specializations": len(self._programs),
             "native_executables": len(self._execution.executables),
             "program_hashes": tuple(self._execution.executables),
+            "molecular_calls": tuple(
+                dict(record)
+                for record in self._execution.molecular.diagnostics.values()
+            ),
+            "molecular_profile_enabled": self._execution.molecular.profile_enabled,
+            "molecular_profile_ns": dict(self._execution.molecular.profile_totals_ns),
+            "molecular_profile_counts": dict(self._execution.molecular.profile_counts),
         }
 
     def close(self) -> None:
@@ -1201,7 +1243,8 @@ def compile(
 ):
     """Compile Array API expressions to native CPU/CUDA code through TensorIR.
 
-    Native CPU currently requires float64; reference and CUDA have their own
+    Native CPU admits FP64 arithmetic, finite FP64 comparisons and typed Boolean
+    inputs/constants/views; reference and CUDA have their own
     explicitly bounded primitive/dtype admission. Shapes specialize on first
     call. Specs optionally declare scientific domains. Cache, byte/work/node
     budgets and finite compiler timeouts apply to native execution. CUDA stages
@@ -1234,6 +1277,8 @@ def grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile a scalar function's reverse derivative for the selected arguments.
@@ -1241,10 +1286,25 @@ def grad(
     An integer argnums returns one Array; a tuple returns a tuple in that order.
     Existing compiled functions retain their backend, budgets and scientific
     specs. Plain functions use native CPU unless a backend is explicitly chosen.
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits first-order fixed-mask selection
+    on generic finite FP64 arrays for reference/CPU only. Select real arguments
+    with argnums; the Boolean mask must remain non-differentiable.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=False)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=False,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def value_and_grad(
@@ -1252,17 +1312,30 @@ def value_and_grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile scalar energy and selected gradients as one shared TensorIR program.
 
     Primal and derivative nodes share the same native endpoint, specialization
     cache and resource gates. This is not numerical differentiation or a call to
-    the reference autodiff evaluator.
+    the reference autodiff evaluator. ``allow_comparison_where=True`` selects
+    real branch derivatives with primal comparison selectors.
+    ``allow_external_mask_where=True`` has
+    the same fixed-mask, generic finite FP64 reference/CPU contract as grad.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=True)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=True,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def jvp(
@@ -1271,33 +1344,73 @@ def jvp(
     tangents: tuple[object, ...],
     *,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> tuple[typing.Any, typing.Any]:
     """Compile a function and forward directional derivative on one backend.
 
     Primals/tangents are matching tuples of positional array arguments. Returned
     primal and tangent outputs preserve the function's array/dictionary structure.
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits first-order generic finite FP64
+    fixed-mask selection on reference/CPU. In that opt-in only, None marks a
+    non-differentiated primal (including a Boolean mask). Every supplied real
+    direction must match its primal; at least one real direction is required.
     """
     from ._array_api_autodiff import _jvp
 
-    return _jvp(function, primals, tangents, backend, options)
+    return _jvp(
+        function,
+        primals,
+        tangents,
+        backend,
+        options,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def vjp(
     function: typing.Callable[..., object],
     *primals: object,
     backend: str | None = None,
+    argnums: int | tuple[int, ...] | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Return native primal outputs and a reusable compiled cotangent pullback.
 
     The pullback snapshots its primal inputs, validates cotangent shapes/dtypes,
-    and returns gradients in positional argument order. Close it to release its
-    execution owner, especially for CUDA.
+    and always returns a tuple of gradients. With argnums=None, differentiate all
+    supplied positional primals; otherwise return the selected gradients in
+    argnums order. Negative positions index the supplied primals, including when
+    the function has omitted defaults. Close the pullback to release its owner.
+
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits fixed external Boolean selectors on
+    generic finite FP64 arrays for reference/CPU execution. Use argnums to select
+    only real primals. Selector values and non-selected real inputs are snapshotted
+    too; no Boolean cotangent or higher-order selection transform is admitted.
     """
     from ._array_api_autodiff import _vjp
 
-    return _vjp(function, primals, backend, options)
+    return _vjp(
+        function,
+        primals,
+        backend,
+        options,
+        argnums=argnums,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def capabilities() -> dict[str, object]:
@@ -1340,9 +1453,45 @@ def capabilities() -> dict[str, object]:
             "scientific_metadata_requires_explicit_indices": True,
             "compiled_call": "shape-dtype-specialized-native-tensorir",
             "compiled_backends": ("cpu", "cuda", "reference"),
-            "native_cpu_dtypes": ("float64",),
+            "native_cpu_dtypes": ("bool", "float64"),
+            "molecular_operators": ("MolecularModel",),
+            "molecular_derivatives": "native-analytic-nuclear-first-order",
+            "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
+            "comparison_where_ad": {
+                "option": "allow_comparison_where",
+                "default": False,
+                "transforms": ("jvp", "vjp", "grad", "value_and_grad"),
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "scope": "first-order-primal-selector; no-Boolean-derivatives; generic-finite-arrays",
+                "switching_points": "selected-branch-convention; no-differentiability-claim",
+            },
+            "external_mask_jvp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "non_differentiated_primal": "explicit-None-tangent-in-matching-tuple",
+                "scope": "first-order-generic-fixed-external-mask; at-least-one-real-direction; eager-all-live-domains",
+            },
+            "external_mask_vjp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "argnums": "explicit-real-primals; supplied-positional-order; tuple-result",
+                "scope": "first-order-generic-fixed-external-mask; snapshot-all-primals; eager-all-live-domains",
+            },
             "compiled_differentiability": "explicit-parameter-names",
+            "external_mask_gradients": {
+                "transforms": ("grad", "value_and_grad"),
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "scope": "first-order-generic-fixed-external-mask; real-argnums-only; eager-all-live-domains",
+            },
             "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
             "runtime_array": "numpy-backed-array-api-cpu",
             "eager_dtypes": _eager.DTYPE_NAMES,
@@ -1370,6 +1519,7 @@ __all__ = [
     "ExactScalar",
     "Index",
     "IndexSpace",
+    "MolecularModel",
     "Program",
     "TensorSpec",
     "VibeArray",

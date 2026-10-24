@@ -1,0 +1,13 @@
+id: cuda-review-discarded-graph-launch
+valid:
+  - |
+    void f(cudaGraphExec_t graph, cudaStream_t stream) { check(cudaGraphLaunch(graph, stream)); }
+  - |
+    void f(cudaGraphExec_t graph, cudaStream_t stream) { auto code = cudaGraphLaunch(graph, stream); }
+invalid:
+  - |
+    void f(cudaGraphExec_t graph, cudaStream_t stream) { (void)cudaGraphLaunch(graph, stream); }
+  - |
+    void f(cudaGraphExec_t graph, cudaStream_t stream) {
+      if (graph) (void)cudaGraphLaunch(graph, cudaStreamGraphTailLaunch);
+    }

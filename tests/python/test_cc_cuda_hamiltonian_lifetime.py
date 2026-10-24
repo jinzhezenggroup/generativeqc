@@ -4,11 +4,14 @@ This tests exception cleanup and device ownership, not generated CC equations or
 CUDA driver behavior. Local result vectors detect destruction before a drain.
 """
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
@@ -176,19 +179,23 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++20 compiler")
+def lifetime_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+) -> Path:
     source = (ROOT / "src/cc/lambda_response_cuda.cu").read_text()
     helpers = source[
         source.index("std::size_t checked_add(") : source.index(
             "struct AmplitudeLayout"
         )
     ]
-    reserve = source[
-        source.index("std::size_t reserve(") : source.index("class CudaLambdaActions")
-    ]
+    # Extract only these host helpers, not the adjacent resident CUDA kernels.
+    reserve = "\n".join(
+        source[start : source.index("\n}", start) + 2]
+        for start in (
+            source.index("std::size_t reserve("),
+            source.index("int checked_device("),
+        )
+    )
     owner = source[
         source.index("struct CudaHamiltonianResponseOwner::Impl {") : source.index(
             "CudaHamiltonianResponseOwner::CudaHamiltonianResponseOwner("
@@ -197,22 +204,18 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp("cc-hamiltonian-lifetime")
     unit, binary = folder / "probe.cpp", folder / "probe"
     unit.write_text(PREFIX + helpers + reserve + owner + DRIVER)
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-O2",
             "-Wall",
             "-Wextra",
             "-Werror",
-            str(unit),
-            "-o",
-            str(binary),
         ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+        compile_timeout=30,
+        link_timeout=30,
     )
     return binary
 

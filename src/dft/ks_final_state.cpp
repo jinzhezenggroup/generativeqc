@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/semilocal_family.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "scf/mean_field.hpp"
@@ -41,34 +42,24 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const bool scalable_semilocal =
       family_metadata && family_metadata->component_coefficients_are_native_scales;
   const bool molecular_nonlocal = family_metadata && family_metadata->molecular_nonlocal_domain;
-  const double qualified_exact_exchange =
-      family_metadata ? family_metadata->cuda_global_hybrid_exact_exchange : -1.0;
-  const bool canonical_global_hybrid = qualified_exact_exchange > 0.0 && !scalable_semilocal;
-  const double expected_semilocal_exchange =
-      scalable_semilocal && qualified_exact_exchange > 0.0 ? 1.0 - qualified_exact_exchange : 1.0;
-  const double exchange_divisor = model.spins == 1 ? 2.0 : 1.0;
-  const bool cuda_scaled_global_hybrid =
-      scalable_semilocal && qualified_exact_exchange > 0.0 &&
-      fock.backend == scf::FockBackend::Cuda && fock.spec.exchange.present &&
-      ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-        fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
-       (fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
-        fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
-      model.semilocal_exchange_scale == expected_semilocal_exchange &&
-      model.semilocal_correlation_scale == 1.0 && !model.range_correction &&
+  const auto hybrid = global_hybrid_composition(model.functional);
+  const bool canonical_global_hybrid = hybrid.present && hybrid.fixed_semilocal;
+  const bool cuda_matched_global_hybrid =
+      fock.backend == scf::FockBackend::Cuda && !model.range_correction &&
       !model.nonlocal_correlation &&
-      fock.spec.exchange.coefficient == -qualified_exact_exchange / exchange_divisor;
-  // Admit matching exact J/K for the three qualified CUDA semilocal
-  // families, plus the independently exercised PBE density-fitted J/K route.
-  // Mixed exact/DF ownership remains fail-closed.
+      cuda_global_hybrid_jk_match(fock.spec, model.functional, model.spins,
+                                  model.semilocal_exchange_scale,
+                                  model.semilocal_correlation_scale);
+  const bool cuda_scaled_global_hybrid = scalable_semilocal && cuda_matched_global_hybrid;
+  // Ordinary semilocal K remains Direct-only; global hybrids, regardless of
+  // whether their XC is GGA or meta-GGA, use the same exact/DF provider rule.
   const bool cuda_primary_exchange =
-      fock.backend == scf::FockBackend::Cuda && semilocal_family_has_cuda_ks(family) &&
-      ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-        fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
-       (scalable_semilocal &&
-        fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
-        fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
-      !model.range_correction && !model.nonlocal_correlation;
+      fock.backend == scf::FockBackend::Cuda && !model.range_correction &&
+      !model.nonlocal_correlation &&
+      (hybrid.present ? cuda_matched_global_hybrid
+                      : (!split_hybrid && semilocal_family_has_cuda_ks(family) &&
+                         fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+                         fock.spec.exchange.approximation == scf::FockApproximation::Exact));
   const bool cuda_range_exchange = [&] {
     if (!family_metadata || !family_metadata->native_range_exchange || molecular_nonlocal ||
         fock.backend != scf::FockBackend::Cuda || !model.range_correction ||
@@ -88,28 +79,12 @@ bool valid_model(const KsFinalStateIdentity& identity) {
            correction.spec.exchange.omega > 0.0 &&
            correction.screening_tolerance == fock.screening_tolerance;
   }();
-#if GENERATIVEQC_HAS_CUDA
-  const auto split_composition = generated::split_hybrid_composition(model.functional);
-  const bool valid_split_exchange =
-      !split_hybrid ||
-      (fock.backend == scf::FockBackend::Cuda && split_composition.matched &&
-       split_composition.exact_exchange_denominator && fock.spec.exchange.present &&
-       fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-       fock.spec.exchange.approximation == scf::FockApproximation::Exact &&
-       !model.range_correction && !model.nonlocal_correlation &&
-       fock.spec.exchange.coefficient ==
-           -static_cast<double>(split_composition.exact_exchange_numerator) /
-               static_cast<double>(split_composition.exact_exchange_denominator) /
-               (model.spins == 1 ? 2.0 : 1.0));
-#else
-  const bool valid_split_exchange = true;
-#endif
   const std::uint32_t expected_domain_version =
       automatic_libxc ? automatic_entry.program->domain_version
                       : (split_hybrid ? 4U : semilocal_family_domain_version(family));
   if (model.version != 1 || model.scf_domain_version != expected_domain_version ||
-      !valid_split_exchange || !model.tile_points || !model.owner ||
-      (model.spins != 1 && model.spins != 2) ||
+      (split_hybrid && fock.backend != scf::FockBackend::Cuda) || !model.tile_points ||
+      !model.owner || (model.spins != 1 && model.spins != 2) ||
       !((fock.backend == scf::FockBackend::Cpu && model.device == -1) ||
         (fock.backend == scf::FockBackend::Cuda && model.device >= 0)) ||
       identity.determinant.occupied.size() != model.spins ||
@@ -142,12 +117,11 @@ bool valid_model(const KsFinalStateIdentity& identity) {
         (fock.spec.exchange.present && !cuda_primary_exchange && !cuda_range_exchange) ||
         (model.range_correction && !cuda_range_exchange))) ||
       (canonical_global_hybrid &&
-       (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
+       (model.semilocal_exchange_scale != hybrid.semilocal_exchange_scale ||
+        model.semilocal_correlation_scale != hybrid.semilocal_correlation_scale ||
         !fock.spec.exchange.present ||
-        fock.spec.exchange.coefficient != -qualified_exact_exchange / exchange_divisor ||
-        (fock.backend == scf::FockBackend::Cuda &&
-         (fock.spec.coulomb.approximation != scf::FockApproximation::Exact ||
-          fock.spec.exchange.approximation != scf::FockApproximation::Exact)))))
+        fock.spec.exchange.coefficient != -hybrid.exact_exchange / (model.spins == 1 ? 2.0 : 1.0) ||
+        (fock.backend == scf::FockBackend::Cuda && !cuda_matched_global_hybrid))))
     return false;
   try {
     if (molecular_nonlocal) {
@@ -158,6 +132,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       scf::require_wb97mv_composition(fock, *model.range_correction, *model.nonlocal_correlation);
     }
     validate_grid_spec(model.grid);
+    if (model.nonlocal_grid) {
+      if (!model.nonlocal_correlation || *model.nonlocal_grid == model.grid) return false;
+      validate_grid_spec(*model.nonlocal_grid);
+    }
     scf::validate_resolved_fock_build(fock);
     if (model.range_correction) scf::validate_resolved_fock_build(*model.range_correction);
   } catch (const std::invalid_argument&) {
@@ -204,6 +182,61 @@ core::ElectronicReferenceView electronic_reference(const VerifiedKsFinalState& s
   return view;
 }
 
+namespace {
+bool valid_evidence_metadata(const KsFinalStateIdentity& current,
+                             const KsFinalStateEvidence& evidence,
+                             const scf::solver::FinalStateLimits& limits, std::string& detail) {
+  if (!valid_model(current)) {
+    detail =
+        "invalid KS final-state model for functional " + std::to_string(current.model.functional);
+    return false;
+  }
+  if (evidence.identity != current || !evidence.physical_origin ||
+      evidence.fock_density_generation != current.determinant.factor.density_generation) {
+    detail = "invalid KS final-state physical identity or generation";
+    return false;
+  }
+  if (!finite_components(evidence.components) || !std::isfinite(evidence.reported_energy) ||
+      !std::isfinite(evidence.physical_residual)) {
+    detail = "nonfinite KS final-state physical evidence";
+    return false;
+  }
+  const double energy_error = std::abs(evidence.components.total() - evidence.reported_energy);
+  const double residual_gate =
+      std::min(limits.stationarity_tolerance.value_or(1e-9), limits.density_tolerance);
+  if (energy_error > limits.energy_tolerance || evidence.physical_residual < 0.0 ||
+      evidence.physical_residual > residual_gate) {
+    detail = "KS final state failed component-energy or physical-residual consistency";
+    return false;
+  }
+  return true;
+}
+}  // namespace
+
+bool validate_ks_final_state_evidence(const KsFinalStateIdentity& current, std::size_t dimension,
+                                      const KsFinalStateEvidence& evidence,
+                                      const scf::solver::FinalStateLimits& limits,
+                                      const scf::solver::FinalStateDiagnostic& products,
+                                      KsFinalStateDiagnostic& output, std::string& detail) {
+  output = {};
+  detail.clear();
+  if (!limits.require_canonicality) {
+    detail = "resident KS final-state evidence requires canonical products";
+    return false;
+  }
+  if (!valid_evidence_metadata(current, evidence, limits, detail) ||
+      !scf::solver::accept_final_state_products(current.determinant, dimension, limits, products,
+                                                detail))
+    return false;
+  auto determinant = products;
+  determinant.energy = evidence.components.total();
+  determinant.energy_change = 0;
+  output = {std::move(determinant), evidence.components.total(),
+            std::abs(evidence.components.total() - evidence.reported_energy),
+            evidence.physical_residual};
+  return true;
+}
+
 bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::reference::Matrix& overlap,
                              const scf::reference::Matrix& hcore, const KsPhysicalState& physical,
@@ -214,25 +247,44 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::solver::FinalStateOperations* operations) {
   output = {};
   detail.clear();
-  if (!valid_model(current) || physical.identity != current || candidate.identity != current ||
-      !physical.physical || !finite_components(physical.components) ||
-      !std::isfinite(physical.reported_energy) || !std::isfinite(physical.physical_residual) ||
-      physical.density.size() != current.model.spins ||
-      physical.fock.size() != current.model.spins ||
-      candidate.spins.size() != current.model.spins ||
-      candidate.fock_density_generation != current.determinant.factor.density_generation) {
-    detail = "invalid KS final-state identity, model, physical state or spin shape";
+  if (physical.identity != current) {
+    detail = "invalid KS final state: physical identity mismatch";
+    return false;
+  }
+  if (candidate.identity != current) {
+    detail = "invalid KS final state: orbital identity mismatch";
+    return false;
+  }
+  if (!physical.physical) {
+    detail = "invalid KS final state: physical state not established";
+    return false;
+  }
+  if (physical.density.size() != current.model.spins) {
+    detail = "invalid KS final state: density spin shape mismatch";
+    return false;
+  }
+  if (physical.fock.size() != current.model.spins) {
+    detail = "invalid KS final state: Fock spin shape mismatch";
+    return false;
+  }
+  if (candidate.spins.size() != current.model.spins) {
+    detail = "invalid KS final state: orbital spin shape mismatch";
+    return false;
+  }
+  if (candidate.fock_density_generation != current.determinant.factor.density_generation) {
+    detail = "invalid KS final state: Fock-density generation mismatch";
     return false;
   }
 
+  const KsFinalStateEvidence evidence{current,
+                                      candidate.fock_density_generation,
+                                      candidate.physical_origin,
+                                      physical.components,
+                                      physical.reported_energy,
+                                      physical.physical_residual};
+  if (!valid_evidence_metadata(current, evidence, limits, detail)) return false;
   const double component_energy = physical.components.total();
   const double energy_error = std::abs(component_energy - physical.reported_energy);
-  const double residual_gate = std::min(1e-9, limits.density_tolerance);
-  if (energy_error > limits.energy_tolerance || physical.physical_residual < 0.0 ||
-      physical.physical_residual > residual_gate) {
-    detail = "KS final state failed component-energy or physical-residual consistency";
-    return false;
-  }
 
   scf::solver::PhysicalFockFrame fock{current.determinant, true, physical.fock};
   scf::solver::FinalFrameCandidate orbitals{candidate.identity.determinant,
@@ -268,6 +320,7 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
       verified.weighted_density.push_back(std::move(weighted));
     }
   }
+  verified.stationarity_tolerance = limits.stationarity_tolerance;
   output = std::move(verified);
   return true;
 }

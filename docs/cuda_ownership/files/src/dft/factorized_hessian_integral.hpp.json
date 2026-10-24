@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/factorized_hessian_integral.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Host-only exact-selector forwarders for the established native integral leaf ABI. Immutable component and angular arrays are copied into bounded kernel arguments; the header defines no integral recurrence, derivative rule, numerical fallback or runtime compiler. Compiler-owned factorized_second emits all scientific arithmetic and the CUDA contraction schedule.",
+  "regions": []
+}

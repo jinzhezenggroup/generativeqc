@@ -117,7 +117,7 @@ def test_prepared_jit_emits_only_admitted_roots(
     monkeypatch.setattr(runtime, "compile_stationary_cuda", compile_source)
     with pytest.raises(CompilationReached):
         owner.ensure(
-            state=None,
+            state=SimpleNamespace(_source=SimpleNamespace()),
             basis=SimpleNamespace(natom=48, nao=384, nprimitive=352),
             contract=None,
             plan=None,

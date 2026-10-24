@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import ctypes
 import typing
+from pathlib import Path
 
 import numpy as np
 import pytest
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc_compiler.method.df_hf_response_cuda import emit_df_hf_response_cuda
 
 
@@ -22,6 +24,16 @@ def retained_contract(
     end = source.index("\n}", start) + 2
     directory = tmp_path_factory.mktemp("retained-coulomb")
     probe = directory / "probe.cpp"
+    provider = (
+        Path(__file__).resolve().parents[2] / "src/tensor/cuda_runtime.cuh"
+    ).read_text()
+    shared = (
+        "namespace generativeqc_tensor {\n"
+        + cpp_record_definition(provider, "ColumnGemmView")
+        + ";\n"
+        + cpp_function_definition(provider, "submit_column_gemm")
+        + "\n}\n"
+    )
     probe.write_text(
         r"""
 #include <cstddef>
@@ -42,6 +54,7 @@ int cublasDgemm(void*, int ta, int tb, int m, int n, int k,
   return 0;
 }
 """
+        + shared
         + source[start:end]
         + r"""
 extern "C" int contract(int pairs, int auxiliary, const double* factor,
