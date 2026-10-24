@@ -2559,6 +2559,9 @@ class KsPreparedBatch final : public PreparedBatch,
           try {
             items_[i].plan->cuda_plan()->enqueue_iteration();
           } catch (...) {
+            target_coulomb_exchange_work[i].complete = false;
+            if (results[i].calculation.ks_diagnostic)
+              results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;
@@ -2576,6 +2579,9 @@ class KsPreparedBatch final : public PreparedBatch,
             finish(i, cuda->result(false));
             results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
+            target_coulomb_exchange_work[i].complete = false;
+            if (results[i].calculation.ks_diagnostic)
+              results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;

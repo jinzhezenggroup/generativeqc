@@ -200,6 +200,17 @@ rebuilds and discarded preliminary-seeded **target** attempts, but exclude
 preliminary-method/integral preparation, derivatives, XC and other linear
 algebra. They are not ERI recurrence counts, FLOPs or performance evidence.
 
+The host-controlled FP64 CUDA KS owner observes successful resident/direct,
+fitted/occupied and range value-provider dispatches, including validation and
+warm-energy rebase applications. Its per-solve record resets before a new
+attempt; method orchestration combines discarded target attempts. Unsupported
+dispatches, failed capture-state queries, lost asynchronous work and overflow revoke
+completeness. The observer checks the actual provider stream; range corrections
+retain their existing borrowed-stream/event handoff. Device
+chunks/graph capture and AUTO/mixed conditional dispatches remain unavailable
+until their separately owned execution is instrumented. Fixed-density profiling
+does not append applications to the completed solve's census.
+
 Only `complete=True` certifies these J/K counts. Unsupported producers, lost
 attempts and overflow stay incomplete; Python exposes unavailable counts as
 `None`, not zero. Older native libraries without the additive v1 query return
