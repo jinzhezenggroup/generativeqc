@@ -174,6 +174,12 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
 }
 std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan*) noexcept { return 0; }
 std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan*) noexcept { return 0; }
+generativeqc_status prepare_cuda_direct_jk_disk_values(
+    CudaDirectJkPlan*, std::size_t, std::size_t, std::size_t, std::size_t,
+    std::uint32_t, const std::string&, std::string&) {
+  throw std::logic_error("graph owner requested unsupported disk staging");
+}
+std::size_t cuda_direct_jk_disk_value_bytes(const CudaDirectJkPlan*) noexcept { return 0; }
 generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
     std::size_t, std::size_t, std::size_t& bytes, std::string&) {
   ++layout_queries;
