@@ -2928,7 +2928,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
           generated_value_plan(generated_value_raw, &destroy_cuda_direct_jk_plan);
       require((std::string(generated_value_diagnostic.schedule).find("coulomb+exchange") !=
                std::string::npos) == (angular <= 2),
-              "automatic generated exchange admission/class fallback mismatch");
+              ("automatic generated exchange admission/class fallback mismatch: l=" +
+               std::to_string(angular) + " representation=" + std::to_string(representation) +
+               " schedule=" + generated_value_diagnostic.schedule)
+                  .c_str());
 
       CudaDirectJkPlan* fallback_raw{};
       CudaDirectJkDiagnostic fallback_diagnostic;
