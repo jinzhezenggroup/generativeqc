@@ -2,53 +2,11 @@
 
 #include "generated_df_md_j.cuh"
 #include "scf/cuda/df_md_j.hpp"
+#include "scf/cuda/df_md_transforms.cuh"
 #include "scf/cuda/hermite_recurrence.cuh"
 #include "scf/cuda/md_hermite_index.cuh"
 
 namespace generativeqc::scf::cuda_execution {
-
-/** Preparation-only reuse of the existing Cartesian Hermite recurrence. Its
- * first dimension admits f and its second dimension admits g; auxiliary g is
- * intentionally placed in the second slot. Shared E avoids recomputing each
- * axis for every public component. No CPU integral oracle participates. */
-__global__ void df_md_prepare_transforms(DfMdView view) {
-  auto& primitive = view.primitives[blockIdx.x];
-  __shared__ HermiteCoefficients<double> coefficients[3];
-  if (threadIdx.x == 0) {
-    primitive.exponent = primitive.alpha + primitive.beta;
-    // Relative shifts avoid cancellation from adding weighted absolute centers.
-    const double fraction = primitive.beta / primitive.exponent;
-    primitive.product = {primitive.first.x + fraction * (primitive.second.x - primitive.first.x),
-                         primitive.first.y + fraction * (primitive.second.y - primitive.first.y),
-                         primitive.first.z + fraction * (primitive.second.z - primitive.first.z)};
-    const double p[3]{primitive.product.x, primitive.product.y, primitive.product.z};
-    const double a[3]{primitive.first.x, primitive.first.y, primitive.first.z};
-    const double b[3]{primitive.second.x, primitive.second.y, primitive.second.z};
-    for (unsigned axis = 0; axis < 3; ++axis)
-      fill_hermite(primitive.first_angular, primitive.second_angular, p[axis], a[axis], b[axis],
-                   primitive.alpha, primitive.beta, coefficients[axis]);
-  }
-  __syncthreads();
-  const unsigned angular = primitive.first_angular + primitive.second_angular;
-  const unsigned hermites = df_md_count(angular);
-  const unsigned components = primitive.first_count * primitive.second_count;
-  for (unsigned item = threadIdx.x; item < components * hermites; item += blockDim.x) {
-    const auto component = item / hermites;
-    const auto& first = view.first_aos[primitive.first_ao + component / primitive.second_count];
-    const auto& second = view.second_aos[primitive.second_ao + component % primitive.second_count];
-    const auto d = md_hermite_angular(angular, item % hermites);
-    double value = 0;
-    for (unsigned i = 0; i < first.count; ++i)
-      for (unsigned j = 0; j < second.count; ++j) {
-        const auto a = first.angular[i], b = second.angular[j];
-        if (d.x > a.x + b.x || d.y > a.y + b.y || d.z > a.z + b.z) continue;
-        value += first.coefficients[i] * second.coefficients[j] *
-                 coefficients[0].at(a.x, b.x, d.x) * coefficients[1].at(a.y, b.y, d.y) *
-                 coefficients[2].at(a.z, b.z, d.z);
-      }
-    view.transforms[primitive.transform_offset + item] = primitive.weight * value;
-  }
-}
 
 /** Precontract the public density (or auxiliary potential) before radial work.
  * Off-diagonal shell pairs sum both orientations, preserving nonsymmetric D.
@@ -110,7 +68,7 @@ __global__ void df_md_project(DfMdView view, double* output) {
 template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Response = false>
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
                                DfMdView auxiliary, std::size_t auxiliary_begin,
-                               std::size_t auxiliary_count) {
+                               std::size_t auxiliary_count, double* charge_partials = nullptr) {
   constexpr unsigned pair_order = PairAngular + (Response && !Charge);
   constexpr unsigned auxiliary_order = AuxiliaryAngular + (Response && Charge);
   constexpr unsigned target_count = df_md_count(Charge ? auxiliary_order : pair_order);
@@ -130,8 +88,16 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
   const auto target = target_view.primitives[(Charge ? auxiliary_begin : pair_begin) + blockIdx.x];
   const auto begin = Charge ? pair_begin : auxiliary_begin;
   const auto count = Charge ? pair_count : auxiliary_count;
+  // A charge class can have few auxiliary targets but many orbital primitives.
+  // Independent CTAs traverse contiguous source groups; the caller reduces
+  // their partials in split order before launching the next angular class.
+  // Padding groups participate normally and overwrite their partial with zero.
+  const std::size_t groups = count ? 1 + (count - 1) / sources : 0;
+  const std::size_t split_groups = groups ? 1 + (groups - 1) / gridDim.y : 0;
+  const std::size_t first = charge_partials ? blockIdx.y * split_groups * sources : 0;
+  const std::size_t last = charge_partials ? min(count, first + split_groups * sources) : count;
   double values[rows]{};
-  for (std::size_t offset = 0; offset < count; offset += sources) {
+  for (std::size_t offset = first; offset < last; offset += sources) {
     bool active = offset + lane < count;
     DfMdPrimitive source{};
     if (active) {
@@ -170,11 +136,35 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
       value += __shfl_down_sync(0xffffffffU, value, stride, sources);
     const auto c = component_lane + row * components;
     if (!lane && c < target_count) {
-      auto* output = Response ? target_view.response_potential : target_view.potential;
-      output[(Response ? target.response_offset : target.hermite_offset) + c] += value;
+      if (charge_partials) {
+        charge_partials[(std::size_t(blockIdx.y) * auxiliary_count + blockIdx.x) * target_count +
+                        c] = value;
+      } else {
+        auto* output = Response ? target_view.response_potential : target_view.potential;
+        output[(Response ? target.response_offset : target.hermite_offset) + c] += value;
+      }
     }
   }
   static_assert(threads == 128);  // Launch contract: four complete warps.
+}
+
+/** One writer per target component, with an explicit deterministic split sum.
+ * The partials alias only the dead orbital primal-potential buffer. Density
+ * and raised response potentials stay live and disjoint throughout this pass. */
+template <unsigned AuxiliaryAngular, bool Response>
+__global__ void df_md_reduce_charge(DfMdView auxiliary, std::size_t begin, std::size_t count,
+                                    const double* partials, unsigned splits) {
+  constexpr unsigned components = df_md_count(AuxiliaryAngular + Response);
+  const auto item = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (item >= count * components) return;
+  const auto target = auxiliary.primitives[begin + item / components];
+  auto* output = Response ? auxiliary.response_potential : auxiliary.potential;
+  const auto offset =
+      (Response ? target.response_offset : target.hermite_offset) + item % components;
+  double value = output[offset];
+  for (unsigned split = 0; split < splits; ++split)
+    value += partials[std::size_t(split) * count * components + item];
+  output[offset] = value;
 }
 
 /** Contract a raised Hermite potential directly into atom derivatives. The

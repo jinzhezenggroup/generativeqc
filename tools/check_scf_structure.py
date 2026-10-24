@@ -124,6 +124,8 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     ),
 }
 CUDA_ALLOWED["cuda_df_source"] = (
+    "scf/cuda/df_md_raw.hpp",
+    "scf/cuda_density_fitting_md.hpp",
     "runtime/cuda_component_trace.hpp",
     # The CUDA-free construction planner shares checked metadata sizes only.
     "scf/df_source_capacity.hpp",
@@ -201,6 +203,8 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda_density_fitting_integrals.hpp",
     "scf/density_fitting.hpp",
     "scf/df_exchange_policy.hpp",
+    # Shared scalar proof limits carry no backend or method-driver ownership.
+    "scf/df_density_seed_policy.hpp",
     "scf/df_streamed_k_policy.hpp",
     "scf/df_projected_exchange_schedule.hpp",
     "molecule/basis.hpp",
@@ -252,7 +256,13 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/matrix_index.",
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
+    # Operand transport uses the same generated ordered dot algebra; it does
+    # not import a method driver or change the shared DIIS solve owner.
+    "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
+    # Allocation-free small solve/acceptance policy shared with host Pulay;
+    # the CUDA kernel still owns normalization, history and Fock transport.
+    "solver/diis_affine.hpp",
     "scf/cuda/matrix_library.hpp",
     "scf/cuda/runtime_support.hpp",
 )
@@ -283,6 +293,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
 CUDA_MODULES["cuda_direct_queues"] = (
     "direct_queue_index",
     "direct_screening",
+    "direct_coarse_screening",
     "direct_task_encoding",
     "direct_page_screening",
     "direct_queue_profile",

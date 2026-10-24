@@ -5,6 +5,7 @@ import typing
 from pathlib import Path
 
 import pytest
+from test_ci_pr_cli_ccache import expression
 from test_ci_prose_workflow import assert_full_coverage_step
 
 
@@ -190,15 +191,18 @@ def test_full_qualification_has_a_separate_finite_budget(
 ) -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows" / filename
     section = path.read_text().split(f"\n  {job}:\n", 1)[1]
-    match = re.search(
-        r"timeout-minutes: \$\{\{ \(github.event_name == 'schedule' \|\| "
-        r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| (\d+) \}\}",
-        section,
-    )
-    assert match, "full qualification must not inherit the routine timeout"
-    full, routine = map(int, match.groups())
-    assert routine == routine_minutes
-    assert 60 <= full <= 120
+    header = section.split("\n    steps:\n", 1)[0]
+    match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
+    assert match, "full qualification must have a finite timeout"
+    budget = match[1]
+    for event in ("schedule", "workflow_dispatch"):
+        full = expression(budget, {"github.event_name": event})
+        assert type(full) is int and 60 <= full <= 120
+    for event in ("pull_request", "push"):
+        assert expression(budget, {"github.event_name": event}) == routine_minutes
+    # CuMetal queue jobs run the full cold native build and scientific suite.
+    queue_minutes = 75 if filename == "cumetal-cuda.yml" else routine_minutes
+    assert expression(budget, {"github.event_name": "merge_group"}) == queue_minutes
     if filename == "ci.yml":
         assert "source .github/scripts/ci_select_python_shard.sh" in section
         selector = (

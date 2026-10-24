@@ -464,8 +464,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "_public_dft_cuda_force",
             owner="PreparedBatch",
         ),
-        "prepared_aot_selection_sha256": (
-            "dbc6ee7cf50d25349b5cf345919a5e6741d4dfc3c4c9d8dacddffc83df4c9504"
+        "prepared_aot_selection_sha256": current_python_owner_identity(
+            "python/generativeqc/_stationary_cuda.py",
+            "ensure",
+            owner="PreparedStationaryCudaExecution",
         ),
     }
 
@@ -2528,6 +2530,47 @@ def test_prepared_aot_route_fails_closed_when_selection_moves(
     assert old in source
     target.write_text(source.replace(old, "if True", 1), encoding="utf-8")
 
+    with pytest.raises(RuntimeError, match="AOT selection contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
+def test_prepared_aot_route_accepts_equivalent_selection(
+    tmp_path: Path,
+) -> None:
+    """Provenance changes without invalidating equivalent backend behavior."""
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    before = qualify_capacity._prepared_aot_route_contract(tmp_path)
+    path = tmp_path / relative
+    source = path.read_text()
+    old = "if aot_directory is None or ecp"
+    assert old in source
+    path.write_text(source.replace(old, "if ecp or aot_directory is None", 1))
+    assert qualify_capacity._prepared_aot_route_contract(tmp_path) != before
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("if native_grid_library is None\n", "if True\n"),
+        ("if device_peak_bound > max_device_bytes:", "if False:"),
+        ("if retained_host > max_host_bytes:", "if False:"),
+    ],
+)
+def test_prepared_aot_route_checks_grid_fallback_and_early_budgets(
+    tmp_path: Path,
+    old: str,
+    new: str,
+) -> None:
+    """Execute invalid routing and capacity policies against inert boundaries."""
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    qualify_capacity._prepared_aot_route_contract(tmp_path)
+    path = tmp_path / relative
+    source = path.read_text()
+    assert old in source
+    offset = source.index(old, source.index("    def ensure("))
+    path.write_text(source[:offset] + source[offset:].replace(old, new, 1))
     with pytest.raises(RuntimeError, match="AOT selection contract changed"):
         qualify_capacity._prepared_aot_route_contract(tmp_path)
 
@@ -4907,6 +4950,118 @@ def test_hybrid_predicate_reordering_changes_only_report_provenance(
                 )
         for method in ("PBE", "CAM-B3LYP", "WB97M-V"):
             assert not route._promoted(precision=precision, method=method)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("fitted_range", (False, True))
+def test_snapshot_range_identity_uses_live_proof_not_environment(
+    monkeypatch: pytest.MonkeyPatch, spin: str, fitted_range: bool
+) -> None:
+    """Execute real decode/proof transport with a detached host wire fixture."""
+    import ctypes as ct
+
+    from generativeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc.ks import ks_range_exchange_parameters
+    from generativeqc_compiler.common.provenance import canonical_hash
+    from test_libxc_snapshot_decode_identity import _decode_fixture
+
+    class Source(SimpleNamespace):
+        range_density_fitted = NativeKsSnapshot.range_density_fitted
+
+    options, original, basis, grid = _decode_fixture(
+        "wb97m-v", spin, selection="default"
+    )
+    source = Source(**vars(original))
+    # Rebind the fixture method to the cloned owner that decode populates.
+    source._decode_nonlocal_grid = NativeKsSnapshot._decode_nonlocal_grid.__get__(
+        source
+    )
+    source._batch._batch = source._batch._context = source._handle = None
+    source._batch._calculator._screening_tolerance = 1e-12
+    source._density_fitting_requested = True
+    source.fock_provider_proof = lambda: ("density-fitted", "density-fitted", 1e-10)
+    proof = SimpleNamespace(approximation=int(fitted_range), reads=0)
+
+    def read_range(batch: object, handle: object, result: object) -> int:
+        proof.reads += 1
+        ct.cast(result, ct.POINTER(ct.c_uint32))[0] = proof.approximation
+        return 0
+
+    def read_model(batch: object, handle: object, result: object, count: int) -> int:
+        nlc = options.execution_plan.nonlocal_correlation
+        assert nlc is not None
+        values = (
+            *ks_range_exchange_parameters(options.method_ir),
+            1.0,
+            float(nlc.spec.b),
+            float(nlc.spec.c),
+            float(nlc.coefficient),
+            1.0,
+            1e-12,
+        )
+        assert count == len(values)
+        for index, value in enumerate(values):
+            result[index] = value
+        return 0
+
+    source._library.generativeqc_ks_snapshot_range_provider_v1 = read_range
+    source._library.generativeqc_ks_snapshot_nonlocal_model_v1 = read_model
+    identities = []
+    for environment in ("df", "direct"):
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", environment)
+        identity = NativeKsSnapshot.decode(source, basis, grid)["identity"]
+        identities.append(identity)
+        assert identity.provider_identity == canonical_hash(
+            {
+                "provider": "native-cpu-density-fitted-jk-fp64",
+                "owner": 1,
+                "device": -1,
+                "metric_relative_threshold": 1e-10,
+                "method_ir": source.method_ir.identity,
+                "coefficients": source.coefficients,
+                "native_model_terms": source.model_terms,
+                "nonlocal_density_policy": source.nonlocal_density_policy,
+                "range_exchange_approximation": "density-fitted"
+                if fitted_range
+                else "exact",
+            }
+        )
+    assert proof.reads > 0
+    assert identities[0] == identities[1]
+    proof.approximation = int(not fitted_range)
+    changed = NativeKsSnapshot.decode(source, basis, grid)["identity"]
+    assert changed.model_identity != identities[0].model_identity
+    assert changed.provider_identity != identities[0].provider_identity
+    proof.approximation = 99
+    with pytest.raises(ValueError, match="unknown native LR approximation"):
+        NativeKsSnapshot.decode(source, basis, grid)
+    del source._library.generativeqc_ks_snapshot_range_provider_v1
+    with pytest.raises(NotImplementedError, match="LR approximation proof"):
+        NativeKsSnapshot.decode(source, basis, grid)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_snapshot_without_range_exchange_needs_no_range_proof(
+    monkeypatch: pytest.MonkeyPatch, spin: str
+) -> None:
+    """Non-RSH identity stays independent of an irrelevant process selector."""
+    from generativeqc._ks_snapshot import NativeKsSnapshot
+    from test_libxc_snapshot_decode_identity import _decode_fixture
+
+    class Source(SimpleNamespace):
+        range_density_fitted = NativeKsSnapshot.range_density_fitted
+
+    _, original, basis, grid = _decode_fixture("pbe", spin, selection="default")
+    source = Source(**vars(original))
+    # Rebind the fixture method to the cloned owner that decode populates.
+    source._decode_nonlocal_grid = NativeKsSnapshot._decode_nonlocal_grid.__get__(
+        source
+    )
+    identities = []
+    for environment in ("df", "direct"):
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", environment)
+        identities.append(NativeKsSnapshot.decode(source, basis, grid)["identity"])
+    assert identities[0] == identities[1]
 
 
 def test_native_capacity_execution_covers_current_owner_and_arena(

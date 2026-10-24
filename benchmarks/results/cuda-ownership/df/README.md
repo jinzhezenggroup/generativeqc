@@ -85,7 +85,7 @@ in the samples. Cases beyond the public AO inventory have no total-budget claim.
 `validation.json.xz` retains exact CPU/GPU test logs and XML as text with their
 original checksums, suite totals, sanitizer conclusions and source identities.
 `raw-source.json.xz` retains all 24 independent libcint/NumPy raw/source comparisons,
-including coordinate derivatives and public transforms. These XZ companions
+including coordinate derivatives and public transforms. These two XZ companions
 decode to the exact original JSON bytes, bound by stored and decoded sizes and
 SHA-256 in `validation-files.json`; use `xz -dc FILE.json.xz` to inspect them.
 Physical input files are retained in `fixtures/`; the exact measured source
@@ -168,3 +168,6 @@ Publication independently recomputes numerical and all performance gates from
 the workers. It never trusts the comparison's accepted flag or overwrites an
 existing bundle. CPU integrity tests reconstruct both archived domains and
 reject corrupted samples and resource bindings.
+
+The OH diagnostic XZ companion restores the exact original JSON bytes; its
+stored and decoded identities are retained in `validation-files.json`.

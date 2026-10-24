@@ -1,0 +1,55 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Scoped water error gates and full paired endpoint checks pass. This compact measured summary retains pilot timing/work observations, not clean whole-master or broad performance promotion. Full vectors remain in the checksum-bound local archive.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2061,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "44a294304759eb2ba4e10f0977567194daa5601b882578b75f4538b99eb7907f"
+    },
+    {
+      "bytes": 6208,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "df75f811c1bf5269224c01dc715e433bd3ff5f9a43e05dd6ada2cc2b07325649"
+    },
+    {
+      "bytes": 2736,
+      "path": "measured-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "23e48fba3b2dca94cc001ffdd6c0fa08fac8e0d03bc46e6a22868a756f33cee2"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.readme_cbs",
+      "native",
+      "--qm7",
+      "QM7_PATH",
+      "--carbon",
+      "6",
+      "--policy",
+      "fast",
+      "--hf-reference",
+      "df",
+      "--budget-mib",
+      "32768",
+      "--samples",
+      "1",
+      "--output",
+      ".artifacts/c6.json"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "afa0a1690be3c0c46774b0f3c2044b8f9a37fd9e"
+  }
+}

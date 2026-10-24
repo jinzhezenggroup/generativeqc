@@ -228,6 +228,22 @@ function(generativeqc_configure_cpu_linalg target)
           GENERATIVEQC_OPENBLAS_HAS_${_capability})
       endif()
     endforeach()
+    # SciPy's LP64 wheel can prefix BLAS/LAPACK while exporting this extension
+    # under its ordinary OpenBLAS name (including the pinned 0.3.34.0.0 wheel).
+    # Probe the actual link symbol; a declaration in cblas.h is not sufficient.
+    # Recheck every configure so a changed provider cannot retain stale linkage.
+    set(_local_threads_unprefixed 0)
+    if(_scipy_prefix AND NOT GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS)
+      unset(GENERATIVEQC_OPENBLAS_HAS_UNPREFIXED_LOCAL_THREADS CACHE)
+      unset(GENERATIVEQC_OPENBLAS_HAS_UNPREFIXED_LOCAL_THREADS)
+      check_cxx_source_compiles(
+        "#include <cblas.h>\nextern \"C\" int openblas_set_num_threads_local(int);\nint main(){return openblas_set_num_threads_local(1);}"
+        GENERATIVEQC_OPENBLAS_HAS_UNPREFIXED_LOCAL_THREADS)
+      if(GENERATIVEQC_OPENBLAS_HAS_UNPREFIXED_LOCAL_THREADS)
+        set(GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS 1 CACHE INTERNAL "Local thread control is linkable" FORCE)
+        set(_local_threads_unprefixed 1)
+      endif()
+    endif()
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
 
@@ -236,6 +252,7 @@ function(generativeqc_configure_cpu_linalg target)
     target_compile_definitions(${target} PRIVATE
       GENERATIVEQC_HAS_OPENBLAS=1
       GENERATIVEQC_OPENBLAS_SCIPY_PREFIX=${_scipy_prefix}
+      GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED=${_local_threads_unprefixed}
       GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS=$<BOOL:${GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS}>
       GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS=$<BOOL:${GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS}>
       GENERATIVEQC_OPENBLAS_HAS_LAPACKE=$<BOOL:${GENERATIVEQC_OPENBLAS_HAS_LAPACKE}>)
@@ -249,6 +266,7 @@ function(generativeqc_configure_cpu_linalg target)
     target_compile_definitions(${target} PRIVATE
       GENERATIVEQC_HAS_OPENBLAS=0
       GENERATIVEQC_OPENBLAS_SCIPY_PREFIX=0
+      GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED=0
       GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS=0
       GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS=0
       GENERATIVEQC_OPENBLAS_HAS_LAPACKE=0)

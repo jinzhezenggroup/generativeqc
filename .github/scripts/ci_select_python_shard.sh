@@ -258,6 +258,10 @@ measured_core_runtime_paths=(
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
   "${measured_core_runtime_paths[@]}"
+  # Run 39351749228 reached minute 28 before the final tight VV10 case.
+  # Preserve the core modulo slot, but transfer the complete endpoint file
+  # to posthf (838 s in the same run) with whole-file fixture ownership.
+  tests/python/test_treutler_endpoints.py
   # Run 39266084600 reached the 30-minute core-b cap in this module's
   # late shared-emitter setup. Retain its modulo slot, but keep the whole
   # module and fixture on the existing loadfile lane (1235 s that run).
@@ -375,15 +379,18 @@ core_hotspots_b=(
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
   # and its original enumeration slot; all cases stay selected.
   tests/python/test_uccsd_response.py
-  tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
   tests/python/test_df_lambda_matrix_audit.py
   tests/python/test_df_lambda_mixed_precision.py
-  tests/python/test_direct_exchange_queue.py
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
+  # Run 39908441593 exhausted core-b at 99% while core-c finished in
+  # 15m48s. Move the complete 296-worker-second Lambda reuse module and
+  # the queue census that only started at minute 29; retain modulo slots.
+  tests/python/test_df_lambda_core_reuse.py
+  tests/python/test_direct_exchange_queue.py
   # Keep the complete order-five probe independent of corrected Lambda.
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
@@ -559,6 +566,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # These measured complete UCCSD owners keep all numerical/failure
     # gates and module-local oracle caches under the existing loadfile.
     for path in \
+      tests/python/test_treutler_endpoints.py \
       tests/python/test_ccsdt_cbs_native.py \
       tests/python/test_uccsd_lambda.py \
       tests/python/test_uccsd_t_owner.py \

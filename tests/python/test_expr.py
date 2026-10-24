@@ -741,3 +741,18 @@ def test_domain_analysis_blocks_boundary_sensitive_rewrites() -> None:
         variable_domains=work,
     )
     assert optimized is not graph
+
+
+def test_deep_parameter_ad_and_lowering_preserve_exact_derivative() -> None:
+    """High-angular integral DAGs may exceed the interpreter recursion limit."""
+    from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+
+    graph = Graph()
+    x, y = graph.variable("x"), graph.variable("y")
+    root = graph.sum(x * y.pow(i % 7 + 1) for i in range(2048))
+    derivative = graph.differentiate(root, x)
+    expected = sum(0.9 ** (i % 7 + 1) for i in range(2048))
+    assert graph.evaluate(derivative, {"x": 2.0, "y": 0.9}) == pytest.approx(expected)
+    emitter = ScalarCEmitter(graph, {"x": "x", "y": "y"})
+    emitter.emit((root, derivative))
+    assert emitter.reference(derivative)

@@ -75,7 +75,14 @@ def auxiliary_snapshot(molecule: Any) -> BasisSet:
     )
 
 
-def check_endpoint(method: str, xc: str | None, fast: bool, case_name: str) -> None:
+def check_endpoint(
+    method: str,
+    xc: str | None,
+    fast: bool,
+    case_name: str,
+    *,
+    density_fitting: str = "cuda",
+) -> None:
     """Exercise public preparation, metric response and retained warm ownership."""
     from pyscf import dft, gto, lib, scf
     from test_dft_complete_cuda import no_cpu_derivatives
@@ -143,7 +150,7 @@ def check_endpoint(method: str, xc: str | None, fast: bool, case_name: str) -> N
         "device": "cuda",
         "basis_representation": "spherical",
         "auxiliary_basis": auxiliary,
-        "density_fitting": "cuda",
+        "density_fitting": density_fitting,
     }
     if method != "r2scan-3c":
         options["basis"] = "def2-svp"

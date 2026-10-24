@@ -81,7 +81,8 @@ function(generativeqc_add_ordered_gram_host_admission_test)
                              "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(generativeqc_ordered_gram_host_admission_tests PRIVATE cxx_std_20)
   target_link_options(generativeqc_ordered_gram_host_admission_tests PRIVATE
-                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel")
+                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel"
+                      "LINKER:--export-dynamic-symbol=cudaPeekAtLastError")
   add_test(NAME generativeqc_ordered_gram_host_admission_tests
            COMMAND "${Python3_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/ordered_gram_host_admission.py"
@@ -107,6 +108,19 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_df_ccsd_precision_policy_tests
                      tests/native/test_df_ccsd_precision_policy.cpp NO_GENERATIVEQC)
   if(GENERATIVEQC_ENABLE_CUDA)
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Both FTZ modes must preserve the incumbent FP64 admission decisions.
+      foreach(_screening_ftz IN ITEMS false true)
+        set(_screening_target generativeqc_direct_coarse_screening_${_screening_ftz}_tests)
+        generativeqc_native_test(${_screening_target}
+                           tests/native/test_direct_coarse_screening_cuda.cu NO_GENERATIVEQC
+                           LIBRARIES CUDA::cudart SKIP_77)
+        target_include_directories(${_screening_target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        target_compile_options(${_screening_target} PRIVATE "--ftz=${_screening_ftz}")
+        set_target_properties(${_screening_target} PROPERTIES CUDA_STANDARD 20)
+        set_tests_properties(${_screening_target} PROPERTIES TIMEOUT 90)
+      endforeach()
+    endif()
     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
     if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND TARGET CUDA::cublasLt)
@@ -602,6 +616,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
                        tests/native/test_cuda_diis_cached_gram.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    add_test(NAME generativeqc_cuda_diis_staged_gram_tests
+             COMMAND generativeqc_cuda_diis_cached_gram_tests --large-only)
+    set_tests_properties(generativeqc_cuda_diis_staged_gram_tests PROPERTIES
+                        SKIP_RETURN_CODE 77 TIMEOUT 180)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
@@ -611,6 +629,9 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_fock_provider_tests tests/native/test_cuda_fock_provider.cpp
                        LIBRARIES CUDA::cudart)
+    add_test(NAME generativeqc_cuda_public_schwarz_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --public-schwarz-only)
+    set_tests_properties(generativeqc_cuda_public_schwarz_tests PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cuda_spd_force_spatial_tests
              COMMAND generativeqc_cuda_fock_provider_tests --spd-force-spatial-only)
     set_tests_properties(generativeqc_cuda_spd_force_spatial_tests PROPERTIES TIMEOUT 600)

@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/parameter_ad_cuda_runtime.cuh",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Device allocation, disjoint ordered task scheduling and deterministic pullback reduction for compiler-generated integral and directional scalar expressions. No integral recurrence or differentiation rule is handwritten.",
+  "regions": []
+}

@@ -1,11 +1,16 @@
 """Source-contract tests for the PBE0-DF final occupied-projection force reuse."""
 
+from __future__ import annotations
+
 import runpy
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -82,10 +87,9 @@ def test_dft_coulomb_response_borrows_final_rks_density() -> None:
     assert "densities = borrowed_density->density" in bridge
 
 
-def test_borrowed_coulomb_density_admission_is_j_only(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def test_borrowed_coulomb_density_admission_is_j_only(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     begin = lower.index("  const bool select_borrowed_density =")
     end = lower.index("  const char* storage_control", begin)
@@ -144,17 +148,14 @@ int main() {
 """
     )
     executable = tmp_path / "density_admission"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             f"-I{ROOT / 'include'}",
             f"-I{ROOT / 'src'}",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)
 
@@ -169,10 +170,8 @@ def test_dft_projection_reuse_keeps_explicit_fallback_controls() -> None:
 
 def test_borrowed_projection_executes_storage_and_provider_admission(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     admission = lower[
         lower.index("  const bool select_borrowed_projection =") : lower.index(
@@ -190,7 +189,7 @@ struct Source {
   int device_id=0;
   void* stream=reinterpret_cast<void*>(1);
   std::size_t nbf=24,naux=24,batch_size=1,completed_occupied_projection_rank=5;
-  bool streamed=false,integral_source=true;
+  bool streamed=false,integral_source=true,resident_raw_coulomb=false;
   std::vector<bool> metric_full_rank{true},metric_response_valid{true};
   double values[1]{};
   const double* auxiliary_tile_values=values;
@@ -209,7 +208,7 @@ generativeqc_status admit(Source* plan, const CudaDfBorrowedFittedProjection* bo
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 int main() {
-  for (int kind=0; kind<16; ++kind) {
+  for (int kind=0; kind<17; ++kind) {
     Source plan;
     CudaDfBorrowedFittedProjection lease{0,plan.values,plan.values,24,24,5,plan.stream};
     std::string_view projection="auto",occupied_source="auto",space="auto",storage="auto";
@@ -230,24 +229,23 @@ int main() {
     if (kind==13) lease.stream=reinterpret_cast<void*>(2);
     if (kind==14) lease.projection=nullptr;
     if (kind==15) plan.metric_response_valid[0]=false;
+    // Raw A is never an authenticated whitened occupied projection.
+    if (kind==16) plan.resident_raw_coulomb=true;
     const auto status=admit(&plan,borrowed,projection,occupied_source,space,storage,host_weights,selected);
-    assert(status==(kind>=9 ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS));
+    assert(status==(kind>=9 && kind<=15 ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS));
     assert(selected==(kind==0));
   }
 }
 """
     )
     executable = tmp_path / "admission"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             f"-I{ROOT / 'include'}",
             f"-I{ROOT / 'src'}",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)

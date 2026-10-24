@@ -188,6 +188,59 @@ def test_fp32_overflow_reports_rejection_instead_of_clipping(
     )
 
 
+@pytest.mark.parametrize("point", [0, 14, 15, 16, 30, 31])
+@pytest.mark.parametrize("mode", [0, 2, 3])
+def test_fp64_cross_cancellation_survives_tile_boundaries(
+    contraction_probe: Any, point: int, mode: int
+) -> None:
+    """A finite bilinear must survive an overflowing intermediate FMA.
+
+    Use two spin channels, noncontiguous AO labels, a partial AO block and a
+    partial final point tile. The independent answer follows from exactly
+    cancelling opposite legs, including a large accumulator from an earlier
+    tile. Reversing both spin/sign orientations exercises either nested leg.
+    """
+    active, count, full, jets, spins = 19, 33, 41, 4, 2
+    ids = np.arange(1, 2 * active + 1, 2, dtype=np.uintp)
+    density = np.zeros((spins, full, full))
+    ao = np.zeros((jets, count, active))
+    work = np.zeros((spins, jets, count, active))
+    products = np.empty_like(work)
+    potential = np.zeros((spins, full, full))
+    expected = np.zeros_like(potential)
+    ao[0, point, 0] = 1.0
+    ao[0, point + 1, :2] = 1.0
+    for spin, sign in enumerate((-1, 1)):
+        large = sign * float.fromhex("0x1.8p1023")
+        leg = sign * float.fromhex("0x1p1022")
+        first = leg if spin else -leg
+        work[spin, 0, point, 1] = large
+        work[spin, 0, point + 1, :2] = (first, -first)
+        expected[spin, ids[0], ids[1]] = large
+        expected[spin, ids[1], ids[0]] = large
+        expected[spin, ids[0], ids[0]] = 2 * first
+        expected[spin, ids[1], ids[1]] = -2 * first
+    assert (
+        contraction_probe(
+            density,
+            ao,
+            work,
+            products,
+            potential,
+            count,
+            active,
+            full,
+            jets,
+            ids,
+            mode,
+            spins=spins,
+        )
+        == 0
+    )
+    np.testing.assert_array_equal(potential, expected)
+    np.testing.assert_array_equal(products, 0.0)
+
+
 @pytest.mark.parametrize("active,count", [(1, 1), (19, 33), (47, 257), (96, 256)])
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("mode", [2, 4, 5])

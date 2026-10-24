@@ -947,6 +947,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
     const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell,
     const CudaDfRawChargeView* raw_charge) {
+  const double range_omega = cuda_density_fitting_integral_source_range_omega(source);
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -1274,7 +1275,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
     // Shell reuse includes auxiliary g using the compiler's raised polynomial
     // domain. Metric response retains its independent complete contraction.
-    const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
+    // That shell consumer implements the full-range operator only. LR owners
+    // retain the omega-aware generic derivative, including auxiliary g.
+    const bool shell_execution =
+        range_omega == 0.0 && execution != "generic" && device_metric && schedule == 0;
     mixed_shell = mixed_shell && shell_execution && !auxiliary_g;
     if (mixed_shell) {
       precision_work =
@@ -1300,7 +1304,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // Only the trusted occupied producer supplies folded packed AO weights.
     // Unsupported states retain dense response, folding its two ordered
     // adjoints when a generated shell consumer is available.
-    const bool packed_pairs = pair_policy == "packed" && shell_execution && full_shell_domain &&
+    const bool packed_pairs = (!device_metric || device_metric->full_rank) &&
+                              pair_policy == "packed" && shell_execution && full_shell_domain &&
                               !auxiliary_g && borrowed && borrowed->occupied_response;
     const auto derivative_pairs = packed_pairs ? DfDerivativePairs::packed
                                   : pair_policy == "symmetric" || pair_policy == "packed" ||
@@ -1471,12 +1476,22 @@ generativeqc_status execute_cuda_df_hf_gradient(
     if (arena.stats.host_bytes >= maximum_bytes) throw std::bad_alloc();
     check(cudaMemsetAsync(output, 0, result.size() * sizeof(double), arena.stream));
     if (device_metric) {
+      const bool whitened_response = !device_metric->full_rank;
       // Choose the auxiliary block from the remaining *device* budget, after
       // basis metadata, coordinates and final output have been charged. Every
       // new response allocation is owned here; launch wrappers allocate
       // nothing. Full borrowed J/K tensors stay charged to the value plan.
-      const long double fixed_elements = fixed_response_elements;
-      const auto available = maximum_bytes - arena.stats.device_bytes;
+      const long double fixed_elements =
+          fixed_response_elements + (whitened_response ? 1.0L * a * n * n : 0.0L);
+      // The prepared allowance is a ceiling, not a reservation of physical
+      // memory. Other retained consumers (notably a nonlocal XC force owner)
+      // may grow after the cold call. Replan the bounded auxiliary tile from
+      // current headroom on every force call instead of failing a warm replay
+      // merely because its previously affordable largest tile no longer fits.
+      std::size_t free_device_bytes{}, total_device_bytes{};
+      check(cudaMemGetInfo(&free_device_bytes, &total_device_bytes));
+      const auto available = std::min(maximum_bytes - arena.stats.device_bytes, free_device_bytes);
+      runtime::cuda_trace::trace_counter("response_available_device_headroom_bytes", available);
       if ((fixed_elements + 2.0L * n * n) * sizeof(double) > available) {
         runtime::cuda_trace::trace_counter("response_fixed_storage_refused", 1);
         throw std::bad_alloc();
@@ -1502,7 +1517,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // Both UHF projections coexist; the reusable projection/weight buffer
       // must hold the largest spin's all-Q projection and at least one AO slice.
       const bool owned_occupied =
-          occupied && (whitened || panel_capacity <= a) && occupied_retained <= factor_capacity &&
+          !whitened_response && occupied && (whitened || panel_capacity <= a) &&
+          occupied_retained <= factor_capacity &&
           std::max(occupied_largest, n * n) <= factor_capacity - occupied_retained &&
           (!requested_algebra || std::string_view(requested_algebra) == "blas") &&
           (!requested_dot || std::string_view(requested_dot) != "1") &&
@@ -1523,16 +1539,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
           owned_occupied
               ? std::min(std::size_t{64}, (factor_capacity - occupied_retained) / (n * n))
               : (single_fitted_tensor ? panel_capacity - a : panel_capacity / 2);
-      const auto tile =
-          std::min({a, capacity, maximum_auxiliary_tile ? maximum_auxiliary_tile : a});
-      // Occupied projection scratch is dead before derivative consumption.
-      // Borrow at most 64 auxiliary AO matrices from it: this bounds W
-      // independently of Naux and avoids fragmenting generated shell work.
-      const auto consume_tile =
-          borrowed ? std::min({a, borrowed->occupied_response ? std::size_t{64} : a,
-                               borrowed->exchange_capacity() / (n * n),
-                               maximum_auxiliary_tile ? maximum_auxiliary_tile : a})
-                   : tile;
+      auto tile = std::min({a, capacity, maximum_auxiliary_tile ? maximum_auxiliary_tile : a});
       const double* densities = nullptr;
       if (borrowed_density) {
         densities = borrowed_density->density;
@@ -1552,13 +1559,48 @@ generativeqc_status execute_cuda_df_hf_gradient(
           ++arena.stats.uploads;
         }
       }
-      const auto workspace_elements =
-          cuda_df_response_workspace_elements(
-              n, a, terms.size(),
-              (borrowed && borrowed->occupied_response) || owned_occupied ? 0 : tile) +
-          (single_fitted_tensor ? (a - tile) * n * n : 0) +
-          (owned_occupied ? occupied_retained + std::max(occupied_largest, tile * n * n) : 0);
-      auto* workspace = static_cast<double*>(arena.allocate(workspace_elements * sizeof(double)));
+      const auto workspace_size = [&](std::size_t block) {
+        return cuda_df_response_workspace_elements(
+                   n, a, terms.size(),
+                   !whitened_response &&
+                           ((borrowed && borrowed->occupied_response) || owned_occupied)
+                       ? 0
+                       : block,
+                   whitened_response) +
+               (single_fitted_tensor ? (a - block) * n * n : 0) +
+               (owned_occupied ? occupied_retained + std::max(occupied_largest, block * n * n) : 0);
+      };
+      double* workspace = nullptr;
+      // Free bytes are advisory: allocation granularity, fragmentation or a
+      // concurrent consumer can still refuse the proposed panel. No response
+      // work has begun, so halve only the auxiliary panel and retry the same
+      // algebra. Fixed occupied/source storage never changes representation;
+      // if shrinking cannot reduce the request, preserve the original error.
+      for (;;) {
+        const auto elements = workspace_size(tile);
+        try {
+          workspace = static_cast<double*>(arena.allocate(elements * sizeof(double)));
+          break;
+        } catch (const CudaFailure& error) {
+          const auto smaller = std::max(std::size_t{1}, tile / 2);
+          if (error.status != cudaErrorMemoryAllocation || tile <= 1 ||
+              workspace_size(smaller) >= elements)
+            throw;
+          const auto pending = cudaGetLastError();
+          if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+          tile = smaller;
+          runtime::cuda_trace::trace_counter("response_allocation_panel_retries", 1);
+        }
+      }
+      // Occupied projection scratch is dead before derivative consumption.
+      // Borrow at most 64 auxiliary AO matrices from it: this bounds W
+      // independently of Naux and avoids fragmenting generated shell work.
+      const auto consume_tile =
+          borrowed && !whitened_response
+              ? std::min({a, borrowed->occupied_response ? std::size_t{64} : a,
+                          borrowed->exchange_capacity() / (n * n),
+                          maximum_auxiliary_tile ? maximum_auxiliary_tile : a})
+              : tile;
       CudaDfResponseBuffers owned_buffers;
       if (owned_occupied) {
         // Raw A occupies the third, otherwise idle, AO temporary while the
@@ -1596,16 +1638,19 @@ generativeqc_status execute_cuda_df_hf_gradient(
             (occupied_retained + owned_buffers.exchange_elements) * sizeof(double));
       }
       arena.stats.device_response = true;
-      arena.stats.occupied_response = (borrowed && borrowed->occupied_response) || owned_occupied;
+      arena.stats.occupied_response =
+          !whitened_response && ((borrowed && borrowed->occupied_response) || owned_occupied);
       arena.stats.auxiliary_weight_tile = consume_tile;
       arena.stats.weight_tile_elements = consume_tile * response_pair_stride;
       if (borrowed) {
         // These allocations remain owned and charged by the value plan. Keep
         // their capacity visible without double-counting it as new response
         // scratch or silently widening the caller's private force allowance.
-        const auto jk_borrowed_bytes = (borrowed->staging_capacity() + borrowed->raw_capacity() +
-                                        borrowed->exchange_capacity()) *
-                                       sizeof(double);
+        const auto jk_borrowed_bytes =
+            (whitened_response ? (borrowed->resident_raw.data ? n * n * a : 0)
+                               : borrowed->staging_capacity() + borrowed->raw_capacity() +
+                                     borrowed->exchange_capacity()) *
+            sizeof(double);
         arena.stats.borrowed_device_bytes += jk_borrowed_bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes", jk_borrowed_bytes);
         runtime::cuda_trace::trace_counter("response_resident_auxiliary_tile", consume_tile);
@@ -1870,6 +1915,30 @@ generativeqc_status execute_cuda_df_hf_gradient(
             runtime::cuda_trace::trace_counter("response_md_derivative_calls", 1);
           };
         }
+      } else if (raw_coulomb && packed_raw && coulomb_policy == "auto") {
+        // A raw resident owner must feed the charge contraction directly.
+        // Regenerating auxiliary panels here repeats all source integrals even
+        // though the immutable packed A was already authenticated above. The
+        // ordinary raw matrix interval is dead during charge preparation and
+        // can hold folded D; the response retains its own metric-vector solve.
+        const auto bytes = packed_raw->pair_count * a * sizeof(double);
+        if (bytes > std::numeric_limits<std::size_t>::max() - arena.stats.borrowed_device_bytes)
+          throw std::bad_alloc();
+        arena.stats.borrowed_device_bytes += bytes;
+        raw_charge_reader = [&](const double* density, double* charge) {
+          auto* packed_density = workspace + 4 * a * a;
+          cuda_df::launch_pack_df_density(arena.stream, n, density, packed_density);
+          check(cudaGetLastError());
+          const double one = 1, zero = 0;
+          const auto status = generativeqc_tensor::submit_column_gemv(
+              {reinterpret_cast<cublasHandle_t>(blas_handle), false, static_cast<int>(a),
+               static_cast<int>(packed_raw->pair_count), &one, packed_raw->data,
+               static_cast<int>(a), packed_density, 1, &zero, charge, 1});
+          if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
+          runtime::cuda_trace::trace_counter("response_resident_raw_charge_calls", 1);
+          runtime::cuda_trace::trace_counter("response_resident_raw_charge_values",
+                                             packed_raw->pair_count * a);
+        };
       } else if (raw_coulomb && coulomb_policy != "slices") {
         // The response owns a tile-sized weight interval that is dead during
         // charge preparation. Emit the source's native pair-major panel there;
@@ -1891,7 +1960,21 @@ generativeqc_status execute_cuda_df_hf_gradient(
         const auto bytes = whitened->pair_count * a * sizeof(double);
         arena.stats.borrowed_device_bytes += bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_whitened_bytes", bytes);
-        read_fitted = [&](std::size_t begin, std::size_t count, double* values) {
+        read_fitted = [&, root_ready = false](std::size_t begin, std::size_t count,
+                                              double* values) mutable {
+          const double* fitted_response_root = device_metric->inverse_square_root;
+          if (whitened->spectral_basis) {
+            // Full-rank panel response never writes the first metric interval.
+            // Prepare R there on the first actual read: pure-J response uses
+            // its vector-only map and need not prepare this unused panel map.
+            if (!root_ready) {
+              cuda_df::launch_spectral_response_root(arena.stream, a, device_metric->eigenvectors,
+                                                     device_metric->eigenvalues, workspace);
+              check(cudaGetLastError());
+              root_ready = true;
+            }
+            fitted_response_root = workspace;
+          }
           runtime::cuda_trace::TraceRegion projection("response_fitted_panel_projection",
                                                       arena.stream);
           const double one = 1, zero = 0;
@@ -1905,7 +1988,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
             // into the bounded auxiliary-major panel used by the response.
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, mi, static_cast<int>(count), ai, &one, whitened->data, ai,
-                 device_metric->inverse_square_root + begin * a, ai, &zero, values, mi}));
+                 fitted_response_root + begin * a, ai, &zero, values, mi}));
             runtime::cuda_trace::trace_counter("response_fitted_panel_gemms", 1);
           } else {
             // Project the whole packed panel with GEMM into the tail of its
@@ -1921,8 +2004,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
             auto* packed_values = workspace + 4 * a * a;
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, static_cast<int>(pairs), static_cast<int>(count), ai, &one,
-                 whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
-                 packed_panel, static_cast<int>(pairs)}));
+                 whitened->data, ai, fitted_response_root + begin * a, ai, &zero, packed_panel,
+                 static_cast<int>(pairs)}));
             for (std::size_t p = 0; p < count; ++p) {
               check(cudaMemcpyAsync(packed_values, packed_panel + p * pairs, pairs * sizeof(double),
                                     cudaMemcpyDeviceToDevice, arena.stream));
@@ -2005,7 +2088,15 @@ generativeqc_status execute_cuda_df_hf_gradient(
           n, a, terms, densities, *device_metric, consume_tile, workspace, arena.stream,
           reinterpret_cast<cublasHandle_t>(blas_handle), serial_dot, algebra == "blas",
           [&](std::size_t p, double* values) {
-            if (packed_raw) {
+            if (whitened_response && borrowed && borrowed->resident_raw.data) {
+              // The validated raw owner preserves discarded metric directions.
+              // Reuse it without borrowing mutable forward J/K work buffers.
+              check(cudaMemcpyAsync(values, borrowed->resident_raw.data + p * n * n,
+                                    n * n * sizeof(double), cudaMemcpyDeviceToDevice,
+                                    arena.stream));
+              runtime::cuda_trace::trace_counter("raw_value_cache_hits", 1);
+              runtime::cuda_trace::trace_counter("raw_value_reuse_bytes", n * n * sizeof(double));
+            } else if (packed_raw) {
               cuda_df::launch_unpack_df_values(arena.stream, n, a, 0, n, p, 1, true,
                                                packed_raw->data, values);
               check(cudaGetLastError());
@@ -2164,7 +2255,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
               check(launch_df_derivative_tile(
                   o, x, r, kind, range, count, weights, schedule, derivative_output, arena.stream,
                   0, result.size(), gradient_copies,
-                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms));
+                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms, false,
+                  range_omega));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },
@@ -2231,7 +2323,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                   count * sizeof(double));
               check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
                                               output, arena.stream, begin, 0, 1, false,
-                                              expansion_terms));
+                                              expansion_terms, false, range_omega));
               ++arena.stats.tiles;
             }
             // The adapter reuses this host span after returning. Drain all its

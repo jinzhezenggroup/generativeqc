@@ -1,0 +1,62 @@
+{
+  "schema": "generativeqc.dft-cold-stage1-provenance.v1",
+  "source_revision": "3f3d67d1ec1bde3f5eab5d703cd57a800123b64d",
+  "base_revision": "bbd41a42764e8d22d15c1348f70a633961d4dcf5",
+  "source_manifest": {
+    "path": "source-inputs.json.xz",
+    "uncompressed_sha256": "fba9cca8b6c6abc18dcc5f0f0daf86e10931c20bd98ebbe683b6c4b34f324fde"
+  },
+  "compiler_cache": {
+    "launcher": "/home/jzzeng/.local/bin/sccache",
+    "version": "sccache 0.16.0",
+    "before": {
+      "Compile requests": 28444,
+      "Compile requests executed": 81606,
+      "Cache hits": 23982,
+      "Cache misses": 44288
+    },
+    "after": {
+      "Compile requests": 29001,
+      "Compile requests executed": 83153,
+      "Cache hits": 25276,
+      "Cache misses": 44296
+    },
+    "scope": "shared persistent server; global counters include concurrent consumers"
+  },
+  "libraries": {
+    "libgenerativeqc.so": "3e63ca3347135feeeca13f3d1196b852e21b036192a4805721a2f0c43ea0bb8f",
+    "libgenerativeqc_stationary_b3lyp_rks_spd.so": "337d62267e898c1de7836ed7659e5708def2fa61757622a3f5c710a5c3f4e016",
+    "libgenerativeqc_stationary_m06_2x_rks_spd.so": "108882ffe057b7311f51d8bd128009d917e436bd0f0d56adde29a77434284fc8",
+    "libgenerativeqc_stationary_pbe0_rks_spd.so": "f23cb6a237b41deba89dff2f8050d7344ab5a5ab65a68af28f570447b9bbb4d7",
+    "libgenerativeqc_stationary_pbe_rks_spd.so": "512290b8c879047023efdf98223c8226799d4edd6602a8025006f77ccdcf3019",
+    "libgenerativeqc_stationary_r2scan_rks_spd.so": "14e58793e98a27aef1c116068f951ca67d2433d0da016ee24b1c341636a9e1b2"
+  },
+  "build": {
+    "configuration": "Release",
+    "cuda_architecture": "120-real",
+    "fast_compile": false,
+    "cxx_pch": false,
+    "parallel": 8
+  },
+  "validation": {
+    "host_tests": 302,
+    "gpu_python_tests": 40,
+    "documentation_tests": 19,
+    "documentation_subtests": 61,
+    "native": [
+      "df-cold-factor: pass",
+      "df-warm-factor: pass",
+      "fock-composition: pass",
+      "full provider with MD disabled: pass",
+      "focused ERI tiles: failure reproduced on base"
+    ],
+    "precommit": "pass",
+    "sphinx_warnings_as_errors": "pass",
+    "materialization": {
+      "base": 9,
+      "candidate": 9,
+      "added": 0,
+      "changed": 0
+    }
+  }
+}

@@ -134,6 +134,10 @@ generativeqc_status create_cuda_density_fitting_integral_source(
 void destroy_cuda_density_fitting_integral_source(
     CudaDensityFittingIntegralSource* source) noexcept;
 
+/** Immutable radial identity shared by raw value and nuclear-response replay. */
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept;
+
 /** Device bytes retained by an opaque bounded DF integral source. */
 std::size_t cuda_density_fitting_integral_source_device_bytes(
     const CudaDensityFittingIntegralSource* source) noexcept;
@@ -235,8 +239,9 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
 
 /** Generate raw zero-order A[mu,nu,P] for unit-weight lower AO pairs.
  * pair=mu*(mu+1)/2+nu, nu<=mu; output remains [pair][auxiliary]. This
- * changes only addressing: it shares the ordinary raw source recurrence,
- * public-basis transforms and arithmetic. The caller folds off-diagonal
+ * shares the physical source, normalization and strict FP64 value contract.
+ * A budgeted prepared Hermite source can reuse E for this packed consumer;
+ * otherwise the ordinary raw source recurrence is used. The caller folds off-diagonal
  * density weights and expands the symmetric result. No metric is applied.
  */
 generativeqc_status generate_cuda_density_fitting_packed_raw_tile(

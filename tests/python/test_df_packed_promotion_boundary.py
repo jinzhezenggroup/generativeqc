@@ -1,12 +1,12 @@
 """Retire benchmark identities without promoting an unqualified default."""
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
-from _cc_owner_test_support import compile_owner
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
 def test_packed_response_auto_has_no_benchmark_identity() -> None:
@@ -19,48 +19,59 @@ def test_packed_response_auto_has_no_benchmark_identity() -> None:
     assert "packed_default" not in source
 
 
-def test_packed_response_requires_explicit_opt_in_and_ownership(tmp_path: Path) -> None:
-    """Execute the production selectors across ownership and fallback states."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def test_packed_response_requires_explicit_opt_in_and_ownership(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute actual selection across rank, ownership and fallback boundaries."""
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/scf/cuda/df_gradient_bridge.cu").read_text()
-    declarations = []
-    for declaration in ("const bool packed_pairs", "const auto derivative_pairs"):
-        match = re.search(re.escape(declaration) + r"\s*=([^;]+);", source)
+    selection = []
+    for name, kind in (("packed_pairs", "bool"), ("derivative_pairs", "auto")):
+        match = re.search(rf"const {kind} {name}\s*=[^;]+;", source)
         assert match is not None
-        declarations.append(match.group(0))
-    probe = tmp_path / "packed_policy.cpp"
-    probe.write_text(
+        selection.append(match.group())
+    unit = (
         r"""
-#include <array>
+#include <iostream>
 #include <string_view>
-enum class DfDerivativePairs { full, symmetric, packed };
+struct Metric { bool full_rank; };
 struct Borrowed { bool occupied_response; };
+enum class DfDerivativePairs { full, symmetric, packed };
 int main() {
-  for (std::string_view pair_policy : {"auto", "full", "symmetric", "packed"})
-    for (unsigned bits = 0; bits < 64; ++bits) {
-      const bool shell_execution = bits & 1, full_shell_domain = bits & 2;
-      const bool auxiliary_g = bits & 4, promoted_default = bits & 8;
-      Borrowed value{bool(bits & 16)};
-      const auto* borrowed = bits & 32 ? &value : nullptr;
+  unsigned cases=0;
+  for (unsigned metric=0;metric<3;++metric)
+    for (const std::string_view pair_policy : {"auto","full","symmetric","packed"})
+      for (bool shell_execution : {false,true})
+        for (bool full_shell_domain : {false,true})
+          for (unsigned owner=0;owner<3;++owner)
+            for (bool promoted_default : {false,true})
+              for (bool auxiliary_g : {false,true}) {
+              Metric metric_value{metric==1};
+              const Metric* device_metric=metric ? &metric_value : nullptr;
+              Borrowed borrowed_value{owner==2};
+              const Borrowed* borrowed=owner ? &borrowed_value : nullptr;
 """
-        + "\n".join(declarations)
+        + "\n".join(selection)
         + r"""
-      const bool eligible = shell_execution && full_shell_domain && !auxiliary_g &&
-                            borrowed && borrowed->occupied_response;
-      if (packed_pairs != (pair_policy == "packed" && eligible)) return 1;
-      auto expected = DfDerivativePairs::full;
-      if (pair_policy == "packed")
-        expected = eligible ? DfDerivativePairs::packed : DfDerivativePairs::symmetric;
-      else if (pair_policy == "symmetric" || (pair_policy == "auto" && promoted_default))
-        expected = DfDerivativePairs::symmetric;
-      if (derivative_pairs != expected) return 2;
-    }
+              const bool expected_packed=pair_policy=="packed" && metric!=2 &&
+                  shell_execution && full_shell_domain && !auxiliary_g && owner==2;
+              const auto expected_pairs=expected_packed ? DfDerivativePairs::packed
+                  : (pair_policy=="symmetric" || pair_policy=="packed" ||
+                     (pair_policy=="auto" && promoted_default))
+                        ? DfDerivativePairs::symmetric : DfDerivativePairs::full;
+              if (packed_pairs!=expected_packed || derivative_pairs!=expected_pairs) {
+                std::cerr << "selection mismatch: " << metric << ' ' << pair_policy
+                    << ' ' << shell_execution << ' ' << full_shell_domain << ' '
+                    << owner << ' ' << promoted_default << '\n';
+                return 1;
+              }
+              ++cases;
+            }
+  std::cout << cases << " packed selection cases passed\n";
 }
 """
     )
-    executable = tmp_path / "packed_policy"
-    compile_owner(compiler, tmp_path, [probe], executable)
-    subprocess.run([str(executable)], check=True, timeout=30)
+    probe, executable = tmp_path / "probe.cpp", tmp_path / "probe"
+    probe.write_text(unit)
+    native_cxx.build_executable([probe], executable, compile_args=("-std=c++17",))
+    subprocess.run([str(executable)], check=True, timeout=10)

@@ -122,6 +122,9 @@ struct DeviceBatch {
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
   bool direct_force_relative_response{true};
+  bool direct_fp32_block_screening{};
+  float* direct_fp32_block_bounds{};
+  float* direct_fp32_density_bounds{};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -170,6 +173,21 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
+  if(argc==2 && std::strcmp(argv[1],"--screening-policy-only")==0) {
+    assert(unsetenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING")==0);
+    DeviceBatch original;
+    configure_direct_coulomb_recurrence(original);
+    assert(!original.direct_fp32_block_screening);
+    for(const auto* selector : {"0", "unknown", "", "1", "01"}) {
+      assert(setenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",selector,1)==0);
+      DeviceBatch prepared;
+      configure_direct_coulomb_recurrence(prepared);
+      assert(prepared.direct_fp32_block_screening==(std::strcmp(selector,"1")==0));
+      assert(!original.direct_fp32_block_screening);
+    }
+    assert(unsetenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING")==0);
+    return 0;
+  }
   if(argc==2 && std::strcmp(argv[1],"--response-policy-only")==0) {
     assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
     DeviceBatch original;
@@ -210,6 +228,9 @@ int main(int argc,char** argv) {
   const unsigned reachable=static_cast<unsigned>(std::atoi(argv[3]));
   cuda_policy::reachable_policy=reachable;
   HostBatch host; DeviceBatch borrowed;
+  float borrowed_block_bound=2.0F, borrowed_density_bound=3.0F;
+  borrowed.direct_fp32_block_bounds=&borrowed_block_bound;
+  borrowed.direct_fp32_density_bounds=&borrowed_density_bound;
   borrowed.direct_coulomb_reachable=reachable ^ 3U;
   borrowed.direct_hermite_convolution=hermite ^ 3U;
   borrowed.direct_pair_materialized_values=!pair_materialized;
@@ -221,6 +242,11 @@ int main(int argc,char** argv) {
     auto plan=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
     if(injected_stage==0) {
       assert(plan && live_allocations>0);
+      assert(plan->batch.direct_fp32_block_bounds==nullptr);
+      assert(plan->batch.direct_fp32_density_bounds==nullptr);
+      assert(borrowed.direct_fp32_block_bounds==&borrowed_block_bound);
+      assert(borrowed.direct_fp32_density_bounds==&borrowed_density_bound);
+      assert(borrowed_block_bound==2.0F && borrowed_density_bound==3.0F);
       assert(plan->batch.direct_coulomb_reachable==reachable);
       assert(plan->batch.direct_hermite_convolution==hermite);
       assert(plan->batch.direct_pair_materialized_values==pair_materialized);
@@ -441,3 +467,10 @@ def test_successful_optional_preparation_is_unchanged(
         check=True,
         timeout=10,
     )
+
+
+def test_block_screening_policy_is_captured_per_prepared_owner(
+    allocation_probe: Path,
+) -> None:
+    """Only exact opt-in affects newly prepared owners; prior selection stays frozen."""
+    subprocess.run([str(allocation_probe), "--screening-policy-only"], check=True)

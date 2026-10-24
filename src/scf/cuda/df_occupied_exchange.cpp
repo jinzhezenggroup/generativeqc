@@ -197,6 +197,10 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
                                             const double* coefficients, std::size_t rank,
                                             bool column_major, double weight, double* exchange,
                                             std::string& detail) {
+  if (plan.resident_raw_coulomb) {
+    detail = "pure-J raw storage cannot supply occupied exchange";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   plan.revoke_projection_leases();
   using namespace runtime::cuda_trace;
   TraceOperation trace(

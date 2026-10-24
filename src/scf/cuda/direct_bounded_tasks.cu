@@ -50,7 +50,8 @@ __global__ void compact_bounded_generated_tasks_kernel(
     const std::size_t second_block = system_block_begin + second_block_local;
     if (!bounded_direct_block_pair_survives_screening<Purpose>(
             first_block, second_block, system, screening_tolerance, shell_pair_block_bounds,
-            system_density_bounds)) {
+            system_density_bounds, batch.direct_fp32_block_bounds,
+            batch.direct_fp32_density_bounds)) {
       continue;
     }
 

@@ -598,8 +598,8 @@
     }
   },
   "base_commit": "21f6314f5a812e9e83a41b3c9921549d6e944778",
-  "bundle_bytes": 756252,
-  "bundle_sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f",
+  "bundle_bytes": 737308,
+  "bundle_sha256": "aee8ec43398dcdaacef7e43e5ccc086e03c4328a9d674e8666e9dd8240c4e154",
   "decoded_bytes": 16326157,
   "schema": "generativeqc.cuda-schedule-evidence-bundle.v1"
 }

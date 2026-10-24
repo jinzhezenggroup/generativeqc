@@ -1673,7 +1673,8 @@ class Calculator:
             operator in {"df_metric", "df_three_center"}
             and derivative_order in (0, 1)
             and self._device_name == "cuda"
-            and self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            and self._density_fitting_mode
+            in (_native.DENSITY_FITTING_CUDA, _native.DENSITY_FITTING_AUTO)
             and (
                 self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
                 or self._ks_options is not None

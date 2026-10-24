@@ -23,7 +23,7 @@ Pass `language="c++"`, `compiler="g++"`, and explicit flags such as
 The default language remains C, including its existing keys and ABI. C++ is
 limited to the canonical native Linux ELF `/usr/bin/g++` driver and the same
 plain optimization/PIC/absolute-include flags, with exactly one `-std=c++20`.
-Clang++, CUDA C++, other standards, alternate ABI options, modules, PCH, LTO,
+CUDA C++, other standards, alternate ABI options, modules, PCH, LTO,
 plugins, response files, cross/sysroot compilation and link closure are outside
 this domain. A neighboring `.gch` file or directory is rejected.
 
@@ -64,6 +64,67 @@ The Clang recipe also returns its resolved `compiler.executable`; use that path
 for object compilation. Invocation-entry/system-driver selection is checked
 around queries and before returning a key, so entry symlink retargeting fails
 closed even when the original canonical driver remains unchanged.
+
+For explicit Clang C++20 objects, pass `compiler="clang++"`,
+`compiler_family="clang"`, `language="c++"`, and
+`flags=("-std=c++20", "-O1", "-fPIC")` with a matching `.cpp` source.
+The canonical native ELF `/usr/bin/clang++` is required. Its physical executable
+may equal Clang C's, so the returned flags explicitly preserve `--driver-mode=g++`
+and the closure uses a separate C++ language/context identity. The actual
+integrated cc1 job must select C++ and exactly C++20. Collection binds and rechecks
+full macro output (including `__cplusplus` and `__GXX_ABI_VERSION`), include-search
+diagnostics and the actual absolute GCC-compatible toolchain installation selected
+by Clang. This domain requires that native GCC selection to be observable;
+alternative standard libraries/toolchain selection remain unsupported. Included
+standard-library configuration headers are hashed as ordinary dependencies.
+Active macro-definition history is also checked and bound: an alternate ABI
+definition is rejected even if a source/header later undefines or restores it.
+Inactive preprocessor branches do not select an ABI and remain supported.
+The caller's immutable snapshot must cover the full C++ header/search, ABI,
+loader and configuration namespaces; observations never infer completeness.
+Clang C and existing GCC/G++ recipes retain their identities and defaults.
+The C++ job decoder follows LLVM's quoted `sys::printArg` protocol: it consumes
+escaped quotes, backslashes and dollars once, preserves genuine preceding
+backslashes, and rejects malformed or unquoted words. Diagnostic text is never
+executed. The existing Clang C decoder is unchanged.
+The C++ module boundary uses Clang's own preprocessed token dump, validating
+every record and exactly one final EOF before interpreting token spellings.
+Comments and ordinary/multiline raw string literals containing `module` or
+`import` do not select modules. Actual token spellings `module`/`import` are
+conservatively rejected with `unsupported-clangxx-module-token`, including legal
+ordinary identifiers with those contextual spellings. Literal tabs in
+non-whitespace token spellings, unknown diagnostics, malformed or incomplete dump framing are
+outside this narrow observation domain (`unsupported-clangxx-token-stream`).
+It does not promise acceptance of all otherwise valid C++20 sources.
+Token observations use the same verified driver/mode/flags/environment and
+snapshot, with a repeated context digest and the existing finite process owner.
+Both output streams share an anonymous file with a hard 64 MiB process file-size
+budget; reaching it yields `clangxx-token-output-limit`, never a reusable key.
+The observer execs Clang in place; it does not execute diagnostic text, parse C++
+independently, compile an object or introduce a second process/cache owner.
+Macro history is itself compiler-raw-lexed before directive interpretation:
+`-dD` also contains ordinary output, so text inside used or unused raw literals
+cannot impersonate an active definition. The derived anonymous projection has
+an observed end marker and the same hard output budget; malformed/truncated
+records yield `unsupported-clangxx-macro-stream`. Active parallel/profile/debug
+mode definitions and non-native C++11 ABI definitions are rejected. Explicit
+ABI undefinition is outside the domain (`unsupported-clangxx-abi`).
+A separate bounded preprocessing observation force-includes an anonymous header
+containing only `#pragma GCC poison push_macro pop_macro`, before user input.
+Clang therefore rejects active direct or generated macro-stack operations,
+including `_Pragma` factories, with `unsupported-clangxx-macro-stack`. Active
+ordinary identifiers and conditional checks using either poisoned spelling are
+also conservatively excluded. Inactive code, comments, literals, unrelated
+pragmas and ordinary user macros remain admissible. The observer defines no
+macros and does not replace `_Pragma`; its forced include never enters the
+object recipe. It uses the same verified driver/base flags/environment, finite
+process owner and 64 MiB bound. Preprocessing history alone cannot establish
+macro-stack absence because Clang consumes those operations.
+Clang C++ inherits the Clang dependency-path restrictions below and the C++ PCH,
+module, alternate ABI, target/sysroot and flag restrictions above. Its returned
+closure salt must reach the verified compiler-cache command. Tests execute a
+retrieved stored object against Decimal references through a separate link step;
+this does not establish reusable link closure or installed/runtime admission.
 Clang driver regularity is checked before reading ELF bytes, so a named FIFO
 that satisfies executable lookup is rejected without blocking on its writer.
 

@@ -126,7 +126,7 @@ struct CudaDfPackedRawTensorView {
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
 };
-/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2.
+/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2, or E=A Q lambda^-1/2.
  * The owning J/K plan retains this allocation across SCF and force, and the
  * same metric factors define its auxiliary axis. Full-rank bounded response
  * may apply the inverse square root again without regenerating raw integrals.
@@ -138,6 +138,9 @@ struct CudaDfWhitenedTensorView {
   bool packed_pairs{};
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
+  // The eigensystem and owner identity bind E's auxiliary coordinates. To
+  // recover A M^-1, multiply E by lambda^-1/2 Q^T, never by M^-1/2.
+  bool spectral_basis{};
 };
 /** Exclusive, stream-ordered borrow from the existing J/K tensor allocation.
  * Dense plans keep two mutable buffers; the third is immutable when resident_raw

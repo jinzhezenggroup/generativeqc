@@ -23,9 +23,12 @@ struct CudaDfResponseBlasFailure {
  * There are four metric matrices, three AO matrices, two auxiliary blocks and
  * two charge vectors per density term. The caller bounds both panels; a tile
  * equal to naux covers the complete tensor and is charged at its literal size.
+ * A rank-truncated metric requires whitened_response=true: one additional
+ * complete whitened tensor is retained for the stable inverse-root adjoint.
+ * This storage is mandatory, not an unaccounted resident-cache optimization.
  */
 std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, std::size_t terms,
-                                                std::size_t tile);
+                                                std::size_t tile, bool whitened_response = false);
 
 /** Produce HF A/M response weights entirely on the caller's CUDA stream.
  * Densities are packed row-major in the same order as the host coefficient
@@ -35,6 +38,8 @@ std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, st
  *
  * The rank-deficient spectral Frechet map includes retained/discarded subspace
  * motion, using the exact eigensystem and cutoff of the forward transform.
+ * Its workspace must include the explicitly charged whitened-response tensor;
+ * bounded raw/weight panels never revert to the unstable raw-Gram response.
  * Owner-verified full rank permits inverse-applied factors before quadratic
  * products when complete buffers or the fitted-panel callback are available.
  * The owner must reject unresolved rank crossings before calling this routine.
