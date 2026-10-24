@@ -6,7 +6,11 @@ from copy import deepcopy
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
+    from typing import Any
+
+    from matplotlib.container import ErrorbarContainer
 
 import pytest
 
@@ -253,6 +257,46 @@ def test_plot_qualification_cannot_be_reused_for_different_timings(
     record["samples"][0]["seconds"] = 1
     with pytest.raises(ValueError, match="bind exactly"):
         render([record], tmp_path, qualifications=qualifications)
+
+
+@pytest.mark.parametrize("include_unqualified", [False, True])
+def test_performance_plot_can_show_failed_accuracy_without_relabelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, include_unqualified: bool
+) -> None:
+    """Accuracy controls visibility only when explicitly requested by the plot."""
+    import numpy as np
+    from matplotlib.axes import Axes
+
+    record, oracles = campaign()
+    for sample in record["samples"]:
+        sample["forces"][0][0] = 1.0
+    qualifications = qualify([record], oracles)
+    assert qualifications[0]["status"] == "failed"
+    visible = []
+    original = Axes.errorbar
+
+    def observe(
+        self: Axes,
+        x: Sequence[float],
+        y: Sequence[float],
+        *args: Any,
+        **kwargs: Any,
+    ) -> ErrorbarContainer:
+        visible.extend(value for value in y if np.isfinite(value))
+        return original(self, x, y, *args, **kwargs)
+
+    monkeypatch.setattr(Axes, "errorbar", observe)
+    rows = render(
+        [record],
+        tmp_path,
+        qualifications=qualifications,
+        include_unqualified=include_unqualified,
+    )
+    assert bool(visible) is include_unqualified
+    assert rows[0]["qualification"]["status"] == "failed"
+    assert rows[0]["cold"]["median"] == 2.0
+    assert rows[0]["warm"]["median"] == 2.0
+    assert (tmp_path / "direct.svg").is_file()
 
 
 def test_historical_four_profile_reduction_does_not_promote_to_v2(

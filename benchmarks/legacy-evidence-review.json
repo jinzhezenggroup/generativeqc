@@ -229,6 +229,11 @@
       "owner": "VV10 same-binary reuse ablation (#2677)",
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
       "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
+    },
+    "readme-final-20261024": {
+      "owner": "README complete HF/DFT endpoint comparison",
+      "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
+      "review_document": "benchmarks/results/readme-final-20261024/README.md"
     }
   },
   "files": [
@@ -631,6 +636,30 @@
       "sha256": "4c35332c306bc2ea410e543da8e49da703c02cb852eb0846a99448b0cd451e77",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/fast.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 240568,
+      "sha256": "1adbb7c58871bc48c0a3e9b4a6595432bcab2c8cc155d46d01cd4fdff49a468e"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/gpu4pyscf.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 188308,
+      "sha256": "eb73f614ddd36160ff5274f939488bf9997892925b2b6972c59c28519ebdc13a"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/standard.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 212060,
+      "sha256": "afa9bbe6670e1dcc335dfdc9ccaf1bda37bb1951dff0bdc66e824f04125d0491"
     },
     {
       "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
