@@ -13,6 +13,12 @@ import numpy as np
 
 from benchmarks.readme_defaults_qualification import qualify
 
+MOVED_GATES = {
+    "energy_per_atom": 2.5e-6,
+    "force_max": 2.5e-5,
+    "force_rms": 7.5e-6,
+}
+
 
 def read_archive(path: Path) -> Any:
     """Decode a lossless JSON or exact-text receipt bundle."""
@@ -53,6 +59,9 @@ def validate(summary: dict, texts: dict[str, str], oracles: list, reuse: dict) -
         )
         record = records[name]
         _require(record["status"] == "complete", f"incomplete moved endpoint: {name}")
+        # Receipt hashes authenticate bytes, not the acceptance policy. Require
+        # the independent moved-reference gates documented for this population.
+        _require(record.get("gates") == MOVED_GATES, f"invalid moved gates: {name}")
         references = records[name.replace("baseline", "candidate")]["references"]
         for sample in record["samples"]:
             oracle = references[sample["geometry"]]
@@ -64,7 +73,7 @@ def validate(summary: dict, texts: dict[str, str], oracles: list, reuse: dict) -
                 "force_rms": float(np.sqrt(np.mean(delta**2))),
             }
             _require(
-                all(errors[key] <= gate for key, gate in record["gates"].items()),
+                all(errors[key] <= gate for key, gate in MOVED_GATES.items()),
                 (name, errors),
             )
             moved_calls += 1

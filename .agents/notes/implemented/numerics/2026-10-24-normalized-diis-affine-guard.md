@@ -128,9 +128,9 @@ The final forward/back-substitution builds qualify 46 complete SCF energy/force
 endpoints against the retained independent references: 16 same-seed diagnostic
 endpoints, 12 cold/warm/moved endpoints, ten PBE/PBE0 Direct/DF endpoints, and
 eight instrumented PBE/3c endpoints. Diagnostics add 32 fixed-state force repeats,
-for 78 total force evaluations on the final builds. Across the original,
-rejected guard-only and final cohorts, 116 endpoints and 212 force evaluations
-remain retained and independently qualified. Qualification uses the existing
+for 78 total force evaluations on the final builds. Including the clean requalification below, the original, rejected guard-only
+and final cohorts retain 170 independently qualified endpoints and 266 native
+RKS gradient evaluations. Qualification uses the existing
 1e-5 Eh/atom, 1e-4 max-force and 3e-5 RMS static gates, and the unchanged
 2.5e-6 / 2.5e-5 / 7.5e-6 displaced-geometry gates. Dense-reference grid stability,
 CPU/GPU small-system agreement, geometry and basis/spin identities are rechecked.
@@ -158,11 +158,53 @@ Final tile-replay library SHA-256:
 `ca0af859fdb34a9257dca06af4bf4969b0747081273bf1fe15bd4f6fe9d5b6d6`.
 Their complete build input manifests are `lu-parent-inputs.json` and
 `lu-inputs.json` at the retained campaign location. The lossless numerical text
-bundle `numerical-evidence.json.xz` has SHA-256
-`32c7b83c387c3e6627445fcec42bb900c5845b711835cf95ce05e822bd7551bb`;
+bundle `numerical-evidence-v2.json.xz` has SHA-256
+`5a7f1fa49355eb280a97e9e1c44ed32592471c24cf6d99f6ce38e0ba07d796bd`;
 large state/seed NPZ files remain alongside the individual receipts. The bundle
 includes the 80-decimal/scalar replay and offline qualification scripts. The
 original 13-iteration receipt remains in the preceding XC campaign archive.
+
+## Complete endpoint requalification
+
+A separate uninstrumented Slurm job (13768) on RTX 5090 uses three rotating
+fresh-process rounds, one warm call per process, eight reserved CPU cores and
+one OMP/OpenBLAS/MKL thread. Every arm uses the final normalized solve. Serial
+and ordered arms use the same pre-XC binary; the XC arm adds tile replay to the
+ordered route. There is no reference-density reuse. Timers include construction,
+preparation, SCF, analytic forces and host export. All 54 calls independently
+qualify; together with the 46 numerical endpoints this gives 100 final-build
+endpoint checks. No samples are trimmed or replaced.
+
+| Direct Standard / 96 atoms | Serial cold (s) | Ordered cold (s) | XC cold (s) | Ordered reduction | Further XC reduction |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| PBE | 21.257688 | 19.979813 | 18.342969 | 6.01% | 8.19% |
+| PBE0 | 24.451506 | 23.682463 | 22.559731 | 3.15% | 4.74% |
+| r2SCAN-3c | 46.336800 | 44.578340 | 43.021881 | 3.79% | 3.49% |
+
+All six paired cold reductions exceed the prespecified
+`max(2%, 2*(baseline MAD/median + candidate MAD/median))` floor, which is 2%
+for each pair. Serial/ordered/XC cold MADs are 0.125197/0.079283/0.078524 s
+(PBE), 0.019428/0.000471/0.167400 s (PBE0), and
+0.027304/0.164645/0.059173 s (3c). Cold iteration/Fock counts are 11/9/10
+in every process; every warm call uses one. Warm medians for serial/ordered/XC
+are 5.481887/5.477637/5.325451 s, 6.998952/7.006971/6.839169 s and
+15.933879/15.927393/15.777962 s. No separate robust warm gain is claimed.
+
+Maximum paired clean force differences are 2.540e-9, 3.766e-13 and
+1.474e-11 Eh/Bohr, below the optional 1e-8 diagnostic. This control excludes
+Fast and does not clear its retained cold reproducibility limitation. It compares
+three native paths with the same repaired solver; GPU4PySCF was not retimed, so
+previous engine-gap measurements are historical rather than a new ranking.
+
+The lossless `clean-evidence.json.xz` bundle at the same campaign location has
+SHA-256 `35d2b64ce8cae87cf252fd808e3be3352a23ca48097c2dee2198e1585457402f`.
+It includes all 27 exact receipts, individual samples, work counts, MAD/ranges,
+independent qualification and `analyze-clean.py`. Its acceptance checks use
+explicit exceptions, and every prescribed process is required before a summary
+is produced. Production/compiler/build input comparison confirms the final
+1,844 tracked files under `src/`, `include/`, `python/`, `cmake/` and
+`CMakeLists.txt` match each tested manifest. Later changes are documentation,
+acceptance-policy audits and their tests, not the measured implementation.
 
 ## Revisit when
 
