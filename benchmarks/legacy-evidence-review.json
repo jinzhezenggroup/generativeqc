@@ -367,6 +367,11 @@
       "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
       "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md"
     },
+    "xc-bounded-cross-20261024": {
+      "owner": "bounded FP64 XC cross-product overflow proof",
+      "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
+      "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
+    },
     "pbe0-ao-batch-capacity-20261024": {
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
@@ -829,6 +834,22 @@
       "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
       "bytes": 472836,
       "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-and-independent-moved-references",
+      "bytes": 534772,
+      "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-build-test-and-execution-provenance",
+      "bytes": 597596,
+      "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
       "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
