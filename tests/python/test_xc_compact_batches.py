@@ -315,7 +315,11 @@ void close(double value,double expected) {
 _NUMERICS = r"""
 using namespace generativeqc::dft::cuda_xc_detail;
 void check_cross_fma_range_fallback() {
-  constexpr I active=16,count=16,panel=active*count;
+  constexpr I active=16,count=48,panel=active*count;
+  // Separate the two contributions as well as putting them in one load tile.
+  // This carries a large incoming accumulator through an ordinary empty tile
+  // before the opposite-sign cross legs require the original grouped retry.
+  for (I second : {I{1},I{33}})
   for (int sign : {-1,1}) for (bool swapped : {false,true}) {
     const double large=sign*0x1.8p1023,leg=sign*0x1p1022;
     std::vector<double> ao(4*panel),coefficients(4*count),weights(count,1.0),
@@ -323,19 +327,19 @@ void check_cross_fma_range_fallback() {
     ao[0]=1.0;
     ao[panel+1]=1.0;
     coefficients[count]=large;
-    ao[active]=ao[active+1]=1.0;
-    ao[panel+active]=swapped ? 1.0 : -1.0;
-    ao[panel+active+1]=swapped ? -1.0 : 1.0;
-    coefficients[count+1]=leg;
+    ao[second*active]=ao[second*active+1]=1.0;
+    ao[panel+second*active]=swapped ? 1.0 : -1.0;
+    ao[panel+second*active+1]=swapped ? -1.0 : 1.0;
+    coefficients[count+second]=leg;
     int error=0;
-    launch({2,1,1},{128,1,1},[&] {
+    launch({6,1,1},{128,1,1},[&] {
       compact_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
           active,count,1,4,1,work.data(),&error);
     });
     assert(error==0);
     assert(work[0]==0.0 && work[1]==large);
-    assert(work[active]==(swapped ? leg : -leg));
-    assert(work[active+1]==(swapped ? -leg : leg));
+    assert(work[second*active]==(swapped ? leg : -leg));
+    assert(work[second*active+1]==(swapped ? -leg : leg));
     launch({1,1,1},{16,16,1},[&] {
       tiled_potential_body<true,double>(ao.data(),work.data(),active,count,1,nullptr,
           potential.data(),nullptr,false,&error,nullptr,active,0);

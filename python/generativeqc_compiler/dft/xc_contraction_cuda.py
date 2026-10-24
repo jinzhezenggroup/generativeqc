@@ -416,6 +416,7 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
       const Arithmetic right = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
       bool reuse_diagonal = false;
+      bool safe_cross = false;
       if (DiagonalJets && !cross) {
         // Keep the qualified FP64 range unchanged. FP32 needs its own bound:
         // a finite right panel can overflow when doubled before multiplication.
@@ -430,10 +431,27 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
         reuse_diagonal = !__syncthreads_or(unsafe);
       } else {
         wn[y][x] = right;
-        __syncthreads();
+        if constexpr (std::is_same_v<Arithmetic, double>) {
+          // Prove a bound for every operand consumed by this CTA. Replacing
+          // the load barrier with a vote amortizes overflow checks over the
+          // point tile; unordered/nonfinite inputs retain the original path.
+          const bool unsafe = !(fabs(am[y][x]) <= 0x1p128) ||
+              !(fabs(an[y][x]) <= 0x1p128) || !(fabs(wm[y][x]) <= 0x1p128) ||
+              !(fabs(right) <= 0x1p128);
+          safe_cross = !__syncthreads_or(unsafe);
+        } else {
+          __syncthreads();
+        }
       }
       if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
-        if (cross)
+        if (cross && std::is_same_v<Arithmetic, double> && safe_cross &&
+            fabs(value) <= 0x1p1020) {
+          // Each product is at most 2^256, with at most 64 ordered additions
+          // for any supported tile. The incoming bound therefore proves all
+          // intermediate FMAs finite. Keep their exact ordering and rounding.
+          for (I k = 0; k < @TILE@; ++k)
+            value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
+        } else if (cross)
           for (I k = 0; k < @TILE@; ++k) {
             if constexpr (std::is_same_v<Arithmetic, double>) {
               const double prior = value;
