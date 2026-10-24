@@ -27,6 +27,11 @@ def main() -> None:
     )
     parser.add_argument("--source-operator", choices=("long", "full"), default="long")
     parser.add_argument(
+        "--disable-incremental",
+        action="store_true",
+        help="qualify source reuse separately from the incumbent incremental Fock path",
+    )
+    parser.add_argument(
         "--gpu-mask", help="explicit common GPU mask for controlled partial-cache arms"
     )
     parser.add_argument("--gpu-bytes", type=int, default=16 << 30)
@@ -68,6 +73,8 @@ def main() -> None:
         ),
         "GENERATIVEQC_CUDA_KS_CHUNK": "1",
     }
+    if args.disable_incremental:
+        controls["GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK"] = "0"
     # Freeze automatic GPU bucket fitting identically in B and C. An inherited
     # explicit mask would silently turn the experiment into a different policy.
     os.environ.pop("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK", None)
