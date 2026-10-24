@@ -25,7 +25,10 @@ void launch_compute_uhf_energy_kernel(dim3 grid, dim3 block, std::size_t shared_
  * to the iterative stop. Null is for compatibility callers/coarse refinement only. Each
  * block must contain exactly one warp; residuals precede DIIS extrapolation.
  * A nonzero per-item approximate census defers this test to target refinement;
- * exact neighbors retain the gate. Refinement must pass a null census. */
+ * exact neighbors retain the gate. Refinement must pass a null census.
+ * Screened incremental HF may supply its controller/census to enter sticky
+ * full-only energy refinement after stationarity, without accepting the item
+ * or retaining a reconstructed energy baseline. Other callers pass nulls. */
 void launch_update_convergence_kernel(
     bool retain_converged_density, dim3 grid, dim3 block, std::size_t shared_bytes,
     cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf, double energy_tolerance,
@@ -33,7 +36,9 @@ void launch_update_convergence_kernel(
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual = nullptr,
-    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false);
+    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
+    std::uint32_t* incremental_delta_updates = nullptr,
+    const unsigned long long* incremental_delta_build_count = nullptr);
 
 /** UHF counterpart; the physical maximum covers both spin channels. */
 void launch_update_uhf_convergence_kernel(
@@ -43,7 +48,9 @@ void launch_update_uhf_convergence_kernel(
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual = nullptr,
-    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false);
+    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
+    std::uint32_t* incremental_delta_updates = nullptr,
+    const unsigned long long* incremental_delta_build_count = nullptr);
 
 /** Validate the rebuilt force determinant, clearing convergence on a failed
  * physical residual. One warp per item; tested_count counts all active items,
