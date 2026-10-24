@@ -784,6 +784,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     ++movement.fitted_final_projection_leases;
   }
 
+  /** Restore only the proved factor of a deliberately unchanged density.
+   * The last eigensolve overwrote tmp1/tmp2 with an unaccepted proposal. Its
+   * predecessor's AO frame remains in warm_orbitals; an orthonormal frame or
+   * a dense K action does not establish the same exact-factor contract. */
+  void restore_held_fitted_factor() {
+    occupied_fitted_factor_ready = false;
+    if (pending_fitted_occupied && spins == 1 && warm_orbitals_ready && warm_orbitals_are_ao) {
+      check(cudaMemcpyAsync(tmp1, warm_orbitals, matrix * sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream));
+      occupied_fitted_factor_ready = true;
+      runtime::cuda_trace::trace_counter("held_density_fitted_factor_restored", 1);
+    } else {
+      invalidate_warm_orbitals();
+    }
+  }
+
   std::uint64_t* mixed_coulomb_work_counter() noexcept {
     static_assert(kCudaKsChunkCapacity >= 2);
     static_assert(sizeof(cuda_ks_detail::Scalars) >= 4 * sizeof(std::uint64_t));
@@ -2709,9 +2725,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Warm replay retires optional values before selecting a new source. Its
     // baseline must therefore use the incumbent without destroying the final
     // solve's value lease or changing the returned physical F[D]/XC frame.
-    check(enqueue_primary_jk(density, spins == 2 ? density + matrix : nullptr, false, status_detail,
-                             false),
-          status_detail);
+    // A range-only cache never changed the fitted primary's value schedule.
+    // When warm replay retains its exact occupied factor, the current J/K are
+    // already the incumbent values. A dense rebuild would revoke the final
+    // U lease and change that primary summation schedule unnecessarily.
+    const bool retain_fitted_primary =
+        range_source_active() && fitted_coulomb &&
+        (!fitted_exchange || (final_fitted_projection_ready && warm_factor_storage));
+    if (!retain_fitted_primary)
+      check(enqueue_primary_jk(density, spins == 2 ? density + matrix : nullptr, false,
+                               status_detail, false),
+            status_detail);
+    runtime::df_progress::Scope::number("retained_fitted_primary", retain_fitted_primary);
     // A warm replay uses the incumbent radial provider too. Rebase both raw
     // exchange terms, with their own coefficients, at this unchanged density.
     if (has_range_correction)
@@ -2727,7 +2752,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (const auto kind :
          {scf::PrecisionOperatorKind::CoulombJ, scf::PrecisionOperatorKind::ExchangeK,
           scf::PrecisionOperatorKind::Diagnostics})
-      if (kind != scf::PrecisionOperatorKind::ExchangeK || has_exchange)
+      if ((kind == scf::PrecisionOperatorKind::Diagnostics || !retain_fitted_primary) &&
+          (kind != scf::PrecisionOperatorKind::ExchangeK || has_exchange))
         record_precision_operator(kind, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
     if (has_range_correction)
@@ -3797,10 +3823,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         occupied_fitted_factor_ready = false;
       } else if (is_active &&
                  (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
-        // tmp2 belongs to the unaccepted proposal, not the held density. Do
-        // not expose that orbital frame as an occupied-factor identity.
-        occupied_fitted_factor_ready = false;
-        invalidate_warm_orbitals();
+        // The unaccepted eigensolver proposal overwrote tmp1/tmp2, while D
+        // remains unchanged for the next physical confirmation. Its retained
+        // AO factor still belongs to exactly that D. Restore it before the
+        // next occupied K rather than publishing the unaccepted proposal or
+        // discarding a valid factor and the final force projection it enables.
+        restore_held_fitted_factor();
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));

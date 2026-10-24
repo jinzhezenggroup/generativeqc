@@ -47,6 +47,7 @@ def warm_factor_probe(
             "  void publish_warm_seed()",
             "  void invalidate_warm_orbitals()",
             "  void clear_warm_state()",
+            "  void restore_held_fitted_factor()",
         )
     )
     harness = r"""
@@ -72,6 +73,9 @@ int cudaMemcpyAsync(void* target, const void* input, std::size_t bytes, int kind
 }
 int cudaGetLastError() { return 0; }
 void check(int status) { if (status) throw std::runtime_error("copy rejected"); }
+namespace runtime::cuda_trace {
+void trace_counter(const char*,std::uint64_t) {}
+}
 void launch_build_density_kernel(unsigned, unsigned, unsigned, void*, unsigned batch,
     std::size_t dimension, const std::int32_t* occupied, const double* coefficients,
     const std::uint8_t* enabled, double* target) {
@@ -153,6 +157,34 @@ int main(int argc, char** argv) {
   launch_build_density_kernel(1,128,0,state.stream,1,state.n,state.occupied,state.proposal,
                               state.final_enabled,state.density);
   const auto original=state.download(state.density);
+  if (mode.rfind("held-",0)==0) {
+    std::copy_n(state.proposal,9,state.warm_orbitals);
+    const auto factor=state.download(state.warm_orbitals);
+    // The next eigensolve proposes a different determinant. The confirmation
+    // deliberately keeps D, so that proposal must never become its K factor.
+    std::fill_n(state.tmp1,9,123.0);
+    std::fill_n(state.proposal,9,456.0);
+    const auto rejected_proposal=state.download(state.proposal);
+    if (mode == "held-dense") state.pending_fitted_occupied=false;
+    if (mode == "held-spins") state.spins=2;
+    if (mode == "held-no-frame") state.warm_orbitals_ready=false;
+    if (mode == "held-orthonormal") state.warm_orbitals_are_ao=false;
+    if (mode == "held-copy-failure") fail_copy=copies+1;
+    bool failed=false;
+    try { state.restore_held_fitted_factor(); }
+    catch (const std::runtime_error&) { failed=true; }
+    assert(failed == (mode == "held-copy-failure"));
+    assert(state.download(state.density) == original);
+    assert(state.download(state.proposal) == rejected_proposal);
+    assert(state.occupied_fitted_factor_ready == (mode == "held-qualified"));
+    if (state.occupied_fitted_factor_ready) {
+      assert(state.download(state.tmp1) == factor);
+      launch_build_density_kernel(1,128,0,state.stream,1,state.n,state.occupied,state.tmp1,
+                                  state.final_enabled,state.effective);
+      assert(state.download(state.effective) == original);
+    }
+    return 0;
+  }
   if (mode == "default") unsetenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR");
   if (mode == "disabled" || mode == "enable-replay")
     setenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR", "0", 1);
@@ -313,6 +345,22 @@ def test_exact_warm_factor_lifecycle(warm_factor_probe: Path, mode: str) -> None
     projection = fitted @ occupied
     occupied_k = 2 * projection.T @ projection
     np.testing.assert_allclose(occupied_k, dense_k, atol=1e-13, rtol=1e-13)
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["qualified", "dense", "spins", "no-frame", "orthonormal", "copy-failure"],
+)
+def test_held_density_keeps_its_own_factor(warm_factor_probe: Path, mode: str) -> None:
+    """An unaccepted proposal cannot replace the held density's exact factor."""
+    result = subprocess.run(
+        [str(warm_factor_probe), "held-" + mode],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.fixture(scope="module")
