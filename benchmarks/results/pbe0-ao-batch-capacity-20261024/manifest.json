@@ -1,0 +1,150 @@
+{
+  "schema": "generativeqc.xc-live-panel-capacity-manifest.v1",
+  "receipts_sha256": "6fe0ffe976f2cdaf2ecb2fdca4070d8fd8693bf625bdb691feaaae22b59b5edc",
+  "receipts_bytes": 731436,
+  "libraries": {
+    "candidate": {
+      "revision": "48918670f59a8e10c254c822565a17796aa42f54",
+      "sha256": "a86358c42adb7c92ad810c1eb196c1075e3440ce05944ab6ae97a5aa28e8f503",
+      "source_identity": "eaf91adac2fe95fbf4ae175562290b5817cd380e06e713f0c85cbb5b7c2c911b"
+    },
+    "master": {
+      "revision": "72e0a7e5a011592428b5625acdfa6f19168645ac",
+      "sha256": "cd831a0c57ce8468bfc1326ce9c44639e8079076bc747e9f96feac3d676ea348",
+      "source_identity": "e704437afb1eac38df12a71e9182c0c06db177ee0772e082c117b13016311ca6"
+    }
+  },
+  "source": {
+    "candidate_base": "48918670f59a8e10c254c822565a17796aa42f54",
+    "qualified_patch_sha256": "44a47998047c9f7fe0cab1e10f412c2787ab2fe928b67d1ac8c36060fa70f8e9",
+    "qualified_inputs_sha256": "f1d8837ac6ae1e7569e38f254772ab19066876d2031d6e557b853b88e53424b2",
+    "production_file_sha256": "c702d5f9e16ec0335daaf3f03293c6e7f3a498d2e88006599ba3b778d7e6796b",
+    "note": "Measured production bytes match this branch. Final test helper/lifecycle fixes and report edits postdate the measured binary."
+  },
+  "reference_dependencies": {
+    "benchmarks/results/readme-final-20261022/oracles.json.xz": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+    "benchmarks/results/readme-final-20261022/reference-reuse.json": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac",
+    "benchmarks/readme_defaults_qualification.py": "c604c05a73e7cadef2c60446b96a1b0c77c97d460fbdf9471e03ee47c3b32d54"
+  },
+  "population": {
+    "headline_records": 18,
+    "held_out_records": 18,
+    "pilot_records": 6,
+    "profile_records": 5,
+    "qualified_static_calls": 94,
+    "qualified_moved_calls": 3,
+    "failed_zero_sample_packaging_records": 1
+  },
+  "build": {
+    "configuration": "Release",
+    "architecture": "sm_120",
+    "nvcc": "/group/software/cuda-12.9.1/bin/nvcc",
+    "nvcc_version": "V12.9.86",
+    "nvcc_sha256": "df9974db233a0b7a6c6d59c0e5d74e011566104098bcb3553495ff1b95bdeaf6",
+    "remote_cache": "sccache 0.16.0",
+    "local_cache": "ccache 4.5.1"
+  },
+  "raw_location": "node1:/data/jzzeng/pbe0-cold-chase-20261024/",
+  "raw_artifacts": {
+    "build-b3lyp.log": {
+      "bytes": 23762,
+      "sha256": "999d2d5431f51aa9e2b15bf11500b108598d46dde68d62af72781c7f41b78216"
+    },
+    "build-candidate.log": {
+      "bytes": 290841,
+      "sha256": "413af7ce11f2074b8324ac59c70b9a789e64c6d5ea38c58ecf6614377014b774"
+    },
+    "build-configure-failure.log": {
+      "bytes": 2189,
+      "sha256": "7bbad94bfc361fad887d82275ecfedac732c1fc62ce8c7e5cf75ce77446a1b04"
+    },
+    "build-final-reconfigure.log": {
+      "bytes": 1082,
+      "sha256": "fab854ef277f76e71d8e035d323f8d485ebe7e1f0c5a4dfd54f78822042a49ec"
+    },
+    "build-final.log": {
+      "bytes": 1879045,
+      "sha256": "a1ccb3d92a54df3535b91a8e52db21eca3c469265a97e97bfb62c953a2ff64cc"
+    },
+    "build-qualified.log": {
+      "bytes": 1777,
+      "sha256": "3521430ec02749abc7f3e443a12f50d0c34949ee4da79514db338efef5d6b5cb"
+    },
+    "candidate-build-commands.txt": {
+      "bytes": 1688765,
+      "sha256": "ae31d10fc6bed02028eb614e04952cc6ea4fd96c2c8a0a0be66ee568beb3f4fa"
+    },
+    "candidate-source.tar": {
+      "bytes": 174100480,
+      "sha256": "689ac403615a703c2929c59d43201dae153e10ccdcc805f7d686716c61772e54"
+    },
+    "final-source.tar": {
+      "bytes": 174100480,
+      "sha256": "9888d32b87fcaa008012cbac534fe11ed1b81849b53ec63773f402e20bf76dcc"
+    },
+    "profiles/batch128-pbe0.json.pstats": {
+      "bytes": 271136,
+      "sha256": "e004ee3a1ad0ff650ceb3241dcdfd2d2172b024a71c071971ac44c1d2ccadb1d"
+    },
+    "profiles/batch128-pbe0.nsys-rep": {
+      "bytes": 11082836,
+      "sha256": "1d19f072830e4285d3170149cad10cea334253e5520095d84d46d26521d00070"
+    },
+    "profiles/batch128-pbe0.sqlite": {
+      "bytes": 25989120,
+      "sha256": "4ee4cc1e05bc1eed6b0dbd4d756f3db79238bcce5be32fbb5956fe0acd3e7e96"
+    },
+    "profiles/candidate-default-pbe0.json.pstats": {
+      "bytes": 269711,
+      "sha256": "9d20940bd3e32d340b2b6c9a2acf4e9107238ebc26ab59348da7cac262e4fca2"
+    },
+    "profiles/candidate-default-pbe0.nsys-rep": {
+      "bytes": 11025063,
+      "sha256": "b9358707ec1126e46b7c97d427bfe25517e9ae53703f81535b30ec656d52bffd"
+    },
+    "profiles/candidate-default-pbe0.sqlite": {
+      "bytes": 25874432,
+      "sha256": "2aae08d6a3ece5ae3a798957079f79aefb1ca5bda287aa831c223f09676a6ac9"
+    },
+    "profiles/candidate-off-pbe0.json.pstats": {
+      "bytes": 271421,
+      "sha256": "73f5dd60861117b5c8998b0e8a01eab8d85127348e1ac39a528fc8fa25b9bc26"
+    },
+    "profiles/candidate-off-pbe0.nsys-rep": {
+      "bytes": 12783467,
+      "sha256": "ec6d44669ecfe134a7c457564730b30aaf49257e1ceb201dbd0686144eda97d0"
+    },
+    "profiles/candidate-off-pbe0.sqlite": {
+      "bytes": 29229056,
+      "sha256": "14c4e621f5a6003a577912852884ca876f882e066d2f117f2274255ec55990c5"
+    },
+    "profiles/gpu4pyscf-pbe0.json.pstats": {
+      "bytes": 254443,
+      "sha256": "d495817095458b916539464e5460f53ab56f6fc6fede10f6c87dd7cffe299d45"
+    },
+    "profiles/gpu4pyscf-pbe0.nsys-rep": {
+      "bytes": 11078259,
+      "sha256": "c740e3cce5e98b07ab06701384ae0b4e3011905e83027585a269e638141bde18"
+    },
+    "profiles/gpu4pyscf-pbe0.sqlite": {
+      "bytes": 26112000,
+      "sha256": "c01297cb7a9b0d75004cacc68568ca877498e8f4eaf081bca4208fef7ce8dbfd"
+    },
+    "profiles/standard-pbe0.json.pstats": {
+      "bytes": 271136,
+      "sha256": "d1466909f5c4149b05ee6ee49bb092cecf1ce7a45f0eff6dd823a429c68f0a6a"
+    },
+    "profiles/standard-pbe0.nsys-rep": {
+      "bytes": 12792696,
+      "sha256": "f3ccfaa0cda028141552e322cbb64d339604aed8b0b26a4543d4c75466924523"
+    },
+    "profiles/standard-pbe0.sqlite": {
+      "bytes": 29274112,
+      "sha256": "ebb8046d1c96716ddad0ecfe4394b30587d7f9880ce96d4984b4785b37555aa2"
+    },
+    "qualified-source.tar": {
+      "bytes": 174100480,
+      "sha256": "3ab2b0a14cab7c55eca23fe73aec58ec764d366307d787b94140f89cf904b4b8"
+    }
+  }
+}
