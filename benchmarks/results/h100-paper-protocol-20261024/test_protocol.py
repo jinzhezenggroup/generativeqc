@@ -255,7 +255,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(len(report["rows"]), 30)
         self.assertAlmostEqual(
             report["rows"][0]["pilot_plus_max_attempt_gpu_hour_ceiling"],
-            (10 + 6 * (52 + 30) + 2) / 3600,
+            (10 + 6 * (52 + 30) + 2 * 2) / 3600,
         )
         self.assertIn("REQUIRES_ROOT_RESOURCE_APPROVAL", report["status"])
 
@@ -267,6 +267,13 @@ class ProtocolTests(unittest.TestCase):
                 p.cost_worksheet(self.manifest, pilot)
         with self.assertRaises(ValueError):
             p.cost_worksheet(self.manifest, {})
+
+    def test_stepwise_pilot_does_not_require_full_matrix_launch(self) -> None:
+        pilot = self.pilot()
+        report = p.cost_worksheet(self.manifest, {"cbs-c2": pilot["cbs-c2"]})
+        self.assertEqual(len(report["rows"]), 2)
+        self.assertIsNone(report["full_matrix_cost_ceiling"])
+        self.assertEqual(len(report["not_estimated"]), 28)
 
     def test_optimized_python_retains_refusal(self) -> None:
         code = "import json,protocol as p;m=json.loads(p.HERE.joinpath('manifest.json').read_text());a=p.attempt_template(m,m['schedule'][0],'test');a['input_sha256']='bad';p.validate_attempt(m,a)"

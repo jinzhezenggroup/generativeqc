@@ -149,12 +149,17 @@ timing processes on it, and do not run new CPU references unnecessarily.
    affected cohort and retains its raw failure. Oversized pilot projections
    require root review rather than silently raising caps.
 
-The worksheet input maps each cell ID to every arm, each containing measured
+The worksheet input maps each measured cell ID to its measured arms, each containing
 `process_wall_seconds`, `setup_seconds`, `price_per_gpu_hour`, `status: PASS`
-and `receipt_sha256`. There is no populated H100 cost or speed estimate.
+and `receipt_sha256`. Partial pilots produce costs only for observed arms;
+unmeasured arms remain UNAVAILABLE and the full-matrix total is null. A worksheet
+never requires launching the whole pilot matrix first. There is no populated
+H100 cost or speed estimate.
 The proposed cap is ceil(2 × observed process wall + setup + 30), limited by
 the hard process cap. Cost includes the pilot and up to six capped formal
-attempts per arm, with termination grace. Add actual CPU/build/retention/queue
+attempts per arm, with termination grace and setup charged once per bounded job.
+It computes the admitted serial batch size and number of jobs under the job cap.
+Add actual CPU/build/retention/queue
 cost separately; a job also must fit setup, serial process caps and grace.
 Actual priority, price and time limits are re-read at submission.
 

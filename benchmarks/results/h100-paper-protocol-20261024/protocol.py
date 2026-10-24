@@ -694,13 +694,19 @@ def timing_statistics(manifest: dict, attempts: list[dict]) -> list[dict]:
 def cost_worksheet(manifest: dict, pilot: dict) -> dict:
     """Use measured pilot wall times only; an empty pilot cannot authorize expansion."""
     require(
-        set(pilot) == {c["id"] for c in manifest["cells"]},
-        "pilot coverage required per cell",
+        bool(pilot) and set(pilot) <= {c["id"] for c in manifest["cells"]},
+        "nonempty known pilot cells required",
     )
     rows = []
+    missing = []
     for cell in manifest["cells"]:
-        observations = pilot[cell["id"]]
-        require(set(observations) == set(cell["arms"]), "pilot arm coverage")
+        observations = pilot.get(cell["id"], {})
+        require(set(observations) <= set(cell["arms"]), "unknown pilot arm")
+        missing.extend(
+            {"cell": cell["id"], "arm": arm, "status": "UNAVAILABLE"}
+            for arm in cell["arms"]
+            if arm not in observations
+        )
         for arm, observation in observations.items():
             wall, setup = (
                 observation["process_wall_seconds"],
@@ -726,17 +732,24 @@ def cost_worksheet(manifest: dict, pilot: dict) -> dict:
                 "pilot gate receipt",
             )
             max_processes = 3 * manifest["execution"]["max_attempts_per_slot"]
-            hours = (
-                wall
-                + max_processes
-                * (cap + manifest["execution"]["termination_grace_seconds"])
-                + setup
-            ) / 3600
+            grace = manifest["execution"]["termination_grace_seconds"]
+            batch = min(
+                manifest["execution"]["job_process_limit"],
+                math.floor(
+                    (manifest["execution"]["job_cap_seconds"] - setup) / (cap + grace)
+                ),
+            )
+            require(batch > 0, "pilot exceeds finite job cap")
+            jobs = math.ceil(max_processes / batch)
+            hours = (wall + max_processes * (cap + grace) + jobs * setup) / 3600
             rows.append(
                 {
                     "cell": cell["id"],
                     "arm": arm,
                     "process_cap_seconds": cap,
+                    "max_processes_per_job": batch,
+                    "max_formal_jobs": jobs,
+                    "job_wall_ceiling_seconds": setup + batch * (cap + grace),
                     "pilot_plus_max_attempt_gpu_hour_ceiling": hours,
                     "cost_ceiling": hours * rate,
                     "pilot_seconds": wall,
@@ -744,10 +757,14 @@ def cost_worksheet(manifest: dict, pilot: dict) -> dict:
                 }
             )
     total = sum(r["cost_ceiling"] for r in rows)
+    require(bool(rows), "no measured pilot arms")
     return {
         "status": "ESTIMATE_REQUIRES_ROOT_RESOURCE_APPROVAL",
         "rows": rows,
         "cost_ceiling": total,
+        "scope": "measured pilot arms only",
+        "full_matrix_cost_ceiling": None if missing else total,
+        "not_estimated": missing,
         "excludes": "retention/queue/CPU/build costs must be added from actual allocation; not a reservation",
     }
 
