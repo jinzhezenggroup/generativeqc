@@ -236,8 +236,92 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
         if requested is not None:
             edits.append((node, str(requested << 20)))
     if trial.grid_tile_points is not None:
-        policy = tuple_assignment(["tile_policy", "policy_tile_points"])
-        edits.append((policy.value, f'("fixed", {trial.grid_tile_points})'))
+        policy_names = {"tile_policy", "policy_tile_points"}
+        stores = [
+            node
+            for node in ast.walk(function)
+            if isinstance(node, ast.Name)
+            and not isinstance(node.ctx, ast.Load)
+            and node.id in policy_names
+        ]
+        legacy = [
+            node
+            for node in branch.orelse
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Tuple)
+            and [x.id for x in node.targets[0].elts if isinstance(x, ast.Name)]
+            == ["tile_policy", "policy_tile_points"]
+        ]
+        if legacy:
+            policy = _only(legacy, "ordinary legacy tile binding")
+            if not (
+                isinstance(policy.value, ast.Tuple)
+                and len(policy.value.elts) == 2
+                and isinstance(policy.value.elts[0], ast.Constant)
+                and policy.value.elts[0].value in ("fixed", "budget-auto")
+                and isinstance(policy.value.elts[1], ast.Constant)
+                and (
+                    policy.value.elts[1].value is None
+                    or (
+                        type(policy.value.elts[1].value) is int
+                        and policy.value.elts[1].value > 0
+                    )
+                )
+            ):
+                raise ValueError("unknown legacy force policy expression")
+            if len(stores) != 4 or any(
+                arg.arg == "tile_points"
+                for arg in function.args.kwonlyargs + function.args.args
+            ):
+                raise ValueError("ambiguous legacy force policy binding")
+            edits.append((policy.value, f'("fixed", {trial.grid_tile_points})'))
+        else:
+            # Current production binds the request after the resource split.
+            # Authenticate the complete shared binding before changing defaults;
+            # caller requests and composite execution retain their own policy.
+            blocks = [
+                block
+                for node in ast.walk(function)
+                for name in ("body", "orelse", "finalbody")
+                if isinstance(block := getattr(node, name, None), list)
+                and branch in block
+            ]
+            block = _only(blocks, "resource split statement block")
+            policy = _assignment(block, "tile_policy")
+            requested = _assignment(block, "policy_tile_points")
+            expected_policy = ast.parse(
+                '"budget-auto" if tile_points is None else "fixed"', mode="eval"
+            ).body
+            arguments = list(
+                zip(function.args.kwonlyargs, function.args.kw_defaults, strict=True)
+            )
+            has_request = any(
+                arg.arg == "tile_points"
+                and isinstance(default, ast.Constant)
+                and default.value is None
+                for arg, default in arguments
+            )
+            if not (
+                has_request
+                and len(stores) == 2
+                and block.index(policy) == block.index(branch) + 1
+                and block.index(requested) == block.index(policy) + 1
+                and ast.dump(policy.value) == ast.dump(expected_policy)
+                and isinstance(requested.value, ast.Name)
+                and requested.value.id == "tile_points"
+            ):
+                raise ValueError("unknown shared force policy binding")
+            begin, end = _span(source, policy.value)
+            original = source.encode("utf-8")[begin:end].decode("utf-8")
+            condition = "not composite_force and tile_points is None"
+            edits.append((policy.value, f'("fixed" if {condition} else ({original}))'))
+            edits.append(
+                (
+                    requested.value,
+                    f"({trial.grid_tile_points} if {condition} else tile_points)",
+                )
+            )
         kwargs = _only(
             [
                 node
@@ -253,10 +337,14 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
             raise ValueError("ordinary force kwargs is not a dictionary")
         if any(key is None for key in kwargs.value.keys):
             raise ValueError("cannot authenticate expanded force kwargs")
-        keys = [
-            key.value if isinstance(key, ast.Constant) else None
+        if any(
+            not isinstance(key, ast.Constant) or not isinstance(key.value, str)
             for key in kwargs.value.keys
-        ]
+        ):
+            raise ValueError("force kwargs require literal string keys")
+        keys = [key.value for key in kwargs.value.keys]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate force kwargs keys")
         if "tile_points" in keys:
             index = keys.index("tile_points")
             edits.append((kwargs.value.values[index], "policy_tile_points"))
@@ -444,11 +532,11 @@ def prepare_trial(
         destination = output / path
         if destination.is_symlink() or output not in destination.resolve().parents:
             raise ValueError(f"source file escapes the detached worktree: {path}")
-        destination.write_text(text, encoding="utf-8")
+        destination.write_bytes(text.encode("utf-8"))
     patch = _git(output, "diff", "--no-ext-diff", "--binary", "--")
     metadata = output / ".artifacts" / "cuda-schedule-trial"
     metadata.mkdir(parents=True, exist_ok=False)
-    (metadata / "source.patch").write_text(patch, encoding="utf-8")
+    (metadata / "source.patch").write_bytes(patch.encode("utf-8"))
 
     def digest(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()

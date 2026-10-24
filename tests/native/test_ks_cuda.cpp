@@ -679,6 +679,8 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
             detail);
   }
 
+  require(plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "successful CUDA KS replay did not publish its observed value work");
   ks_cuda_fail_next_runtime_for_test_v1();
   bool failed_begin = false;
   try {
@@ -689,11 +691,17 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
   require(failed_begin && plan.failed() && plan.has_warm_start() &&
               plan.warm_density() == frozen_density,
           "failed begin damaged the independent last-good warm representation");
+  require(!plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "failed CUDA KS begin retained a previous solve's value census");
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "failed begin kept a final-state token eligible");
   const auto recovered = plan.run();
   require(recovered.converged && std::abs(recovered.energy - reference.energy) < 1e-10,
           "failed begin prevented exact warm-seed recovery");
+  require(recovered.dft_diagnostic.coulomb_exchange_work.complete &&
+              recovered.dft_diagnostic.coulomb_exchange_work.coulomb_applications > 0 &&
+              recovered.dft_diagnostic.coulomb_exchange_work.exchange_applications > 0,
+          "explicit recovery did not own a fresh CUDA value-provider census");
 
   // An explicit non-idempotent density is not identified by the old frame,
   // even on this same owner. Frozen cache updates must leave the old seed live.

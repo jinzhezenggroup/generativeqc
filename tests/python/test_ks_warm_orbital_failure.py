@@ -65,6 +65,7 @@ def orbital_probe(
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include "scf/coulomb_exchange_work.hpp"
 constexpr int cudaMemcpyDeviceToDevice = 3;
 int copies = 0, fail_copy = 0, fences = 0;
 int cudaMemcpyAsync(void* target, const void* source, std::size_t bytes, int kind, void*) {
@@ -136,6 +137,10 @@ struct Owner {
     struct {
       std::uint64_t returned_solve_epoch = 0, returned_state_generation = 0;
     } precision_work;
+    struct {
+      generativeqc::scf::CoulombExchangeWork coulomb_exchange_work =
+          generativeqc::scf::CoulombExchangeWork::empty();
+    } dft_diagnostic;
   } output;
   struct {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
@@ -368,7 +373,7 @@ int main(int argc, char** argv) {
     native_cxx.build_executable(
         [cpp],
         executable,
-        compile_args=("-std=c++17", "-Wall", "-Werror"),
+        compile_args=("-std=c++17", "-Wall", "-Werror", f"-I{ROOT / 'src'}"),
         compile_timeout=30,
     )
     return executable
