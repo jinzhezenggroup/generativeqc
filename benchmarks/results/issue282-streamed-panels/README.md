@@ -1,5 +1,14 @@
 # Generated residency, streamed J/K and preparation capacity (#282)
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue282-streamed-panels`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 The complete 96/192-AO batch-1/batch-4 force matrix now completes with a
 1 GiB declared DF sub-budget. All four value plans retain transformed data.
 Previously the 192-AO cases failed before SCF because one-electron preparation

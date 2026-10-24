@@ -1,5 +1,14 @@
 # Fix the 768-AO response scaling cliff
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue308-768ao-response`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 With this PR's default selectors, the 768-AO complete warm energy+force endpoint
 is **12.084 s, down from 114.804 s (9.50x faster)** with the previous optimized
 shell combination.
@@ -58,7 +67,7 @@ not an allocator high-water mark. No tensor-sized response allocation or full
 nuclear-coordinate derivative tensor is added. Same-stream ordering and bridge
 draining return the scratch safely for later SCF/property/geometry replays.
 
-The completed workspace ablation in [panel-scaling.json](panel-scaling.json)
+The completed workspace ablation in [panel-scaling.json](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/results/issue308-768ao-response/panel-scaling.json)
 is a causal baseline, not the fix: 128/256/512/1024 MiB gave
 113.506/54.394/35.128/26.839 s and 77/32/15/8 panels. The four-point empirical
 fit is `T = 15.884 + 1.26009 * panels` seconds, `R^2 = 0.999014`.
@@ -146,7 +155,7 @@ The trace runner verifies source/library identity, complete force parity and
 actual work counts. Profiling and memory sampling are excluded from clean timings.
 
 For the older implementations, use the base commits and exact patches in
-[provenance.json](provenance.json). Their 768-AO runs explicitly set
+[provenance.json](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/results/issue308-768ao-response/provenance.json). Their 768-AO runs explicitly set
 `shell / compact / blas / pinned-panels`. The preparation-only staircase sets
 `VIBEQC_DF_RESPONSE_BUDGET_BYTES` while keeping the public DF budget zero.
 Large raw traces/libraries remain outside Git; their hashes, numerical samples,

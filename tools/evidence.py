@@ -44,9 +44,10 @@ def main() -> int:
         "--base", required=True, help="Explicit local Git revision; never fetched"
     )
     changes.add_argument("--output", type=Path)
-    campaigns = commands.add_parser("audit-campaigns")
-    campaigns.add_argument("--revision")
-    campaigns.add_argument("--output", type=Path, required=True)
+    for name in ("audit-campaigns", "audit-json"):
+        audit = commands.add_parser(name)
+        audit.add_argument("--revision")
+        audit.add_argument("--output", type=Path, required=True)
     publication = commands.add_parser("publish")
     publication.add_argument("--run-directory", type=Path, required=True)
     publication.add_argument("--specification", type=Path, required=True)
@@ -115,7 +116,11 @@ def main() -> int:
             else "Evidence retention and publication checks passed."
         )
         return int(bool(errors))
-    if args.command == "audit-campaigns":
+    if args.command == "audit-json":
+        from tools.generativeqc_validation.json_storage import audit_json
+
+        result = audit_json(blobs)
+    elif args.command == "audit-campaigns":
         from tools.generativeqc_validation.retention_review import campaign_inventory
 
         result = campaign_inventory(blobs, json.loads(blobs[POLICY_PATH]))
@@ -141,12 +146,13 @@ def main() -> int:
                     "removed_bytes",
                     "total_files",
                     "total_bytes",
+                    "totals",
                 }
             },
             sort_keys=True,
         )
     )
-    return 0
+    return int(args.command == "audit-json" and bool(result["errors"]))
 
 
 if __name__ == "__main__":
