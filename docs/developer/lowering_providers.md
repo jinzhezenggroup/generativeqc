@@ -192,6 +192,75 @@ materialization in this contract revision. Declared scientific symmetries remain
 owned by the source IR; adapters retain their identity rather than infer them
 from equal dimensions.
 
+
+### Physical layout transfers
+
+A provider offer that changes affine strides or demands stronger alignment must
+bind an explicit `common.lowering_contract.LayoutTransfer` to the request and
+execution views. Weaker alignment requirements can use the original allocation.
+Changed read operands require a `before` copy; changed write operands require an
+`after` publication copy. Read/write operands require both. Each record names the
+provider-owned copy implementation, dtype and exact endpoints, preserving logical
+modes, extents, effects and ownership.
+
+The initial transfer domain is same-storage floating affine copies with full,
+disjoint ownership and provably nonoverlapping destinations. Virtual values,
+aliased/triangular ownership and combined storage-cast/packing are rejected until
+their lowering is separately established. Copy destinations and contraction
+output buffers must have independent writers.
+
+Transfer diagnostics expose logical read/write bytes and the full padded affine
+buffer span. `LoweringCost.pack_bytes` must cover all transfer visits;
+`CandidateExecution.temporary_bytes` must cover simultaneously live converted
+buffers. A read/write buffer is charged once while both copy directions count
+toward traffic. These conservative logical counts do not assert physical DRAM
+traffic. Fused copying may have zero standalone pack time only when included in
+the kernel phase; unknown pack time remains unknown. Existing aggregate resource
+limits and complete preparation/replay cost selection still apply.
+
+By default the shared native portfolio emitter reports transfer-bearing recipes
+as unsupported because the ordinary runtime ABI has no generic transfer executor. It
+retains the unchanged-layout strict fallback. Abstract compiler ranking does not
+grant native execution or capture capability. An empty transfer list is omitted
+from serialization so existing no-transfer portfolios retain their identities.
+\n
+The explicit `tensor.layout_contraction.emit_layout_contraction_portfolio`
+adapter can bind `tensor.cuda.affine-copy.v1` for positive, exact-shape,
+unbatched FP64 binary matrix einsums. It emits the canonical portfolio together
+with an immutable `LayoutContractionPlan` factory. Ready offers in this domain
+use the shared generated ordered or pedantic matrix executor. Every physical
+execution view is packed row-major; original affine views retain their modes,
+extents, scalar coefficient and optional output seed. This adapter does not
+admit storage casts, checked updates, method policy, new precision or aliases.
+
+`CudaLayoutContraction` borrows an already prepared `CudaContractionContext`
+and reuses `PreparedContractions` for arithmetic. The enclosing owner reserves
+the complete declared host/device budget and supplies stream-exclusive device
+scratch and explicitly sized input/output buffers. Converted input buffers are
+simultaneously live; a converted output also reserves one buffer, pre-copied
+only when beta reads the seed. Publication copies only logical output elements,
+preserving padding. Replay performs no allocation, plan search or provider retry.
+A provider refusal is handled at preparation by selecting an admitted strict
+generated candidate; insufficient scratch rejects before any submitted work.
+
+The descriptor, target/compiler identities, context generation, device, stream,
+capacity, pointer alignment/device and output/scratch/error disjointness are
+checked before copying. Readonly inputs may share storage. Capture is rejected
+before enqueue until replay accounting and execution are separately qualified.
+Callers serialize use of an owner and keep its borrowed context, buffers and
+scratch alive until the stream drains. Unexpected driver or partial-enqueue
+failures propagate; they never authorize replay through a different provider.
+
+Diagnostics separate submitted contractions and scalar summands from explicit
+copy launches, logical transfer elements/bytes and simultaneous scratch capacity.
+They do not count cuBLAS-internal kernels or establish endpoint profitability.
+The opt-in real-device gate is
+`GENERATIVEQC_LAYOUT_CUDA_TEST=1 GENERATIVEQC_LAYOUT_CUDA_ARCH=sm_XX pytest -s
+tests/python/test_layout_contraction.py::test_layout_contraction_cuda_execution`,
+with the architecture bound to the actual NVIDIA device. Default method routes,
+the generic emitter's refusal boundary and scientific mixed-precision admission
+remain unchanged.
+
 `collect_lowering_candidates` collects ready and unsupported provider offers for
 the **same complete request**. Providers can vary precision, physical layout,
 algorithm and `ScheduleTopology` fusion within that request. They cannot change
@@ -524,6 +593,86 @@ algorithm and rank. The shared table exposes these records per variant/slot via
 `visit_optional_provenance`; released or stale bindings cannot report live plans.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.
+
+## Retained density and history schedules
+
+Ordinary HF/KS and DF-SCF plain density share the `tensor.weighted_gram`
+recognizer and CUDA emitter. DF binds the `occupied-scalar-cuda` candidate to
+its existing occupied-prefix, column-major eigenframe, runtime occupation
+weight and `size_t` dimensions. No occupation panel, packing or workspace is
+introduced. Exact weights 1 and 2 permit mirrored publication only when the
+DF launch covers the complete domain; arbitrary weights and clipped launches
+retain their original product orientations and write domain. Weighted density
+keeps its separately qualified multiplication order.
+
+`tensor.history_combination` lowers the canonical `diis_extrapolation_program`
+for both CPU pointer-row histories and CUDA indexed element views. Both consume
+one provider-neutral semantic request and retain increasing chronological FP64
+coefficient application. The CUDA runtime supplies a `RingHistoryElement` view
+after history retirement. The solver still decides whether the solve succeeded,
+retains the current Fock on singular failure, and owns output publication and
+active masks. All ordinary CUDA DIIS schedules use this coefficient lowerer;
+Gram-cache selection and its optional work counters remain separate.
+
+These retained schedules allocate no resources, add no launches and introduce
+no library selection or default promotion. Host probes execute the emitted
+arithmetic, including poisoned retired slots and incomplete density launches;
+they do not establish CUDA Graph or complete energy/force endpoint acceptance.
+
+## Borrowed structured SCF regions
+
+`tensor.structured_scf` defines seven strict-FP64 regions: occupied Gram,
+signed weighted Gram, inverse-root overlap reconstruction, and the four
+public/direct basis stages. Gram regions reuse the canonical rank-k recognizer;
+the final Fock region includes the fused hcore addition in its request identity.
+Native preparation freezes the generated/GEMM/SYRK offers alongside explicit
+negative SYR2K, cuBLASLt, cuTENSOR and CUTLASS offers for unsupported domains.
+`CudaStructuredProductBinding::candidates()` reports resolved resource charges
+and rejection reasons; its dimension/system/spin accessors report the borrowed
+domain. Missing complete endpoint costs remain unknown.
+
+The conventional RHF/UHF owner consumes shared density, orthogonalizer and
+dense basis-stage bindings. The KS owner consumes shared ordinary and signed
+density bindings. KS shell-span basis transforms retain their existing sparse
+owner. `scf/cuda/structured_matrix.*` owns device scaling, publication and
+failure isolation; vendor submissions remain in the tensor backend. No new
+stream, handle or provider allocation is introduced.
+
+The structured library routes are **not enabled by default**. Production
+bindings retain the generated kernels until complete scientific endpoints
+qualify a crossover. Test-hook bindings permit primitive ablations, not public
+provider pinning. A shell-span invocation always retains the bounded native
+stage rather than packing to dense storage. Basis scratch has zero arena size
+while the production gate is closed. Arena planning consumes workspace-presence
+facts, not tensor/CUDA provider policy.
+
+Active masks are read on device on every invocation/replay. Inactive and
+rejected output bytes are preserved. Orthogonalizer reconstruction rejects
+nonfinite or `<= 1e-10` eigenvalues per system, without a host round trip. Signed
+density sanitizes both panels to exclude poisoned virtual orbitals. Temporary
+charges include scaled columns and masked publication (two square spans), plus
+the sanitized coefficient panel for signed density (three spans). Dense basis
+stages charge one maximum-square span. Preparation charges a 32 KiB host
+envelope in addition to the existing square-product binding; the existing
+96 MiB provider reservation is borrowed, not added a second time to the ledger.
+
+`tools/qualify_structured_scf_routes.sh` builds the independent long-double
+primitive oracle driver with verified ccache. Use `build-only` for compilation
+without a GPU. Real execution requires clean committed source and a finite
+Slurm GPU allocation; for example, on a node exposing a 5090 on `main`:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 bash tools/qualify_structured_scf_routes.sh \
+  "$PWD/.artifacts/structured-qualification" /path/to/cuda 120 /path/to/python
+```
+
+The driver covers asymmetric rectangular stages, spin broadcast, masks,
+changed-data Graph replay, signed weights, poisoned virtual columns, invalid
+eigenvalues, alias rejection and short scratch. Its receipt deliberately reports
+`complete_endpoint_qualified: false`. RHF/UHF/RKS/UKS energy/Fock/density/force
+gates, through-d/f and moved-geometry cases, cold/warm setup and matched complete
+endpoint profitability remain prerequisites for default promotion.
 
 The [decision note](../../.agents/notes/implemented/architecture/2026-10-04-joint-lowering-contract.md)
 records the compatibility and identity rationale.

@@ -195,7 +195,13 @@ def _active_scopes(
     )
     # Automatic batching can fall back on resource rejection. Account both
     # reachable point specializations, never allowing either to replace the other.
-    point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false>"
+    # Current symbols expose the generic static-family sentinel; historical
+    # three-argument symbols omit it. Opt-in PBE entries cannot stand in for
+    # the generic default's pressure or satisfy its missing-resource gate.
+    generic_family = r"(?:,-1[lL]{0,2})?"
+    point_pattern = (
+        rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false{generic_family}>"
+    )
 
     validation = _matching(
         resources,
@@ -223,7 +229,7 @@ def _active_scopes(
         density_parts.extend(
             _matching(
                 resources,
-                lambda name: name.startswith("tiled_density_product<false>"),
+                lambda name: name == "tiled_density_product<false,double>",
                 "strict-FP64 tiled density-product kernel",
             )
         )
@@ -245,13 +251,39 @@ def _active_scopes(
         lambda name: name.startswith(feature_token),
         "active density-feature kernel",
     )
+    occupied_kernels = any(
+        _leaf(resource.function).startswith(
+            (
+                "occupied_density_products",
+                "occupied_density_features",
+                "batch_density_products<double,true>",
+                "batch_density_features<true>",
+            )
+        )
+        for resource in resources
+    )
+    if occupied_kernels:
+        # Compact allocation rejection can reach the standalone projection.
+        # Include both sources even when the requested batch shape is compact.
+        density += _matching(
+            resources,
+            lambda name: name == "occupied_density_products",
+            "standalone occupied density-product kernel",
+        )
+        features += _matching(
+            resources,
+            lambda name: name == "occupied_density_features",
+            "standalone occupied density-feature kernel",
+        )
     points = _matching(
         resources,
         lambda name: re.fullmatch(point_pattern, name) is not None,
         "functional-specific XC point kernel",
     )
     if shape.point_batching and shape.npoint > shape.tile_points:
-        batch_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,true>"
+        batch_pattern = (
+            rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,true{generic_family}>"
+        )
         points += _matching(
             resources,
             lambda name: re.fullmatch(batch_pattern, name) is not None,
@@ -270,7 +302,7 @@ def _active_scopes(
         potential_parts.extend(
             _matching(
                 resources,
-                lambda name: name.startswith("tiled_potential"),
+                lambda name: name == "tiled_potential<double>",
                 "tiled Vxc contraction kernel",
             )
         )
@@ -296,7 +328,12 @@ def _active_scopes(
         # incumbent. Keep both arms, and fail closed on missing batch evidence.
         density += _matching(
             resources,
-            lambda name: name.startswith("batch_density_products"),
+            lambda name: (
+                re.fullmatch(
+                    r"batch_density_products<double(?:,(?:false|true))?>", name
+                )
+                is not None
+            ),
             "batched mapped density-product kernel",
         )
         features += _matching(
@@ -304,14 +341,37 @@ def _active_scopes(
             lambda name: name.startswith("batch_density_features"),
             "batched mapped density-feature kernel",
         )
-        for token in (
-            "batch_potential_panels",
-            "batch_local_potentials",
-            "batch_ordered_scatter",
+        specialized = any(
+            _leaf(resource.function).startswith(
+                ("batch_density_products<double,", "batch_density_features<")
+            )
+            for resource in resources
+        )
+        if specialized:
+            # Both pointer-dependent arms remain reachable in a strict region.
+            # Missing either arm cannot stand in for a bounded pressure envelope.
+            for occupied in ("false", "true"):
+                for pattern in (
+                    f"batch_density_products<double,{occupied}>",
+                    f"batch_density_features<{occupied}>",
+                ):
+                    _matching(
+                        resources,
+                        lambda name, pattern=pattern: name == pattern,
+                        f"specialized {pattern} kernel",
+                    )
+        for token, pattern in (
+            ("batch_potential_panels", "batch_potential_panels"),
+            ("batch_local_potentials", "batch_local_potentials<double>"),
+            (
+                "batch_ordered_scatter unsegmented",
+                "batch_ordered_scatter<false,double>",
+            ),
+            ("batch_ordered_scatter segmented", "batch_ordered_scatter<true,double>"),
         ):
             potential += _matching(
                 resources,
-                lambda name, token=token: name.startswith(token),
+                lambda name, pattern=pattern: re.fullmatch(pattern, name) is not None,
                 f"{token} kernel",
             )
 
@@ -329,6 +389,7 @@ def _kernel_threads(function: str, functional: str) -> int:
     if name.startswith(
         (
             "tiled_density_product",
+            "occupied_density_products",
             "tiled_potential",
             "batch_density_products",
             "batch_local_potentials",

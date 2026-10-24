@@ -13,12 +13,14 @@
 
 #include "cc/df_source.hpp"
 #include "cc/df_source_response.hpp"
+#include "cc/phase_observation.hpp"
 #include "df_mo_source_generated.hpp"
 #include "generated_df_cc_source_cuda.cuh"
 #include "generated_symmetric_matrix_function.cuh"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_source_internal.hpp"
 #include "scf/cuda/topology.hpp"
@@ -96,9 +98,13 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
                                     const hf::PhysicalReference& ref, std::size_t budget,
                                     double relative_threshold, int device, std::size_t caller_bytes,
                                     bool retain_response_state,
-                                    const scf::cuda_execution::CudaDfSourcePolicy* policy) {
+                                    const scf::cuda_execution::CudaDfSourcePolicy* policy,
+                                    bool factors_only) {
+  runtime::df_progress::Scope trace("df_correlation_source");
+  runtime::df_progress::Scope::number("factors_only", factors_only ? 1 : 0);
   const auto started = Clock::now();
   const auto n = ref.nbf, o = ref.nocc, q = molecule::ao_count(auxiliary);
+  phase_observation::Scope observed_source(phase_observation::Site::source_inclusive, n, q);
   if (!n || !o || o >= n || !q || molecule::ao_count(orbital) != n || device < 0 || !budget ||
       !std::isfinite(relative_threshold) || relative_threshold <= 0 || relative_threshold >= 1 ||
       ref.coefficients.size() != checked_mul(n, n) ||
@@ -107,7 +113,7 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
           [](double x) { return std::isfinite(x); }))
     throw std::invalid_argument("invalid native CUDA DF-CC source request");
   const auto v = n - o;
-  const auto layout = generated::df_source::source_layout(o, v, q);
+  const auto layout = generated::df_source::source_layout(o, v, q, factors_only);
   // Every packed BLAS dimension is checked before any source is generated.
   const auto int_limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
   if (std::max({n, q, layout.row_values, layout.matrix_values}) > int_limit)
@@ -238,6 +244,8 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     posthf::generated::transform_df_mo_source(
         n, q, coefficients.get(), plan.inverse_square_roots, bmo.get(), transformed.get(),
         [&](std::size_t mu) {
+          phase_observation::Scope production(phase_observation::Site::source_gpu_submission, mu, q,
+                                              reinterpret_cast<std::uintptr_t>(stream));
           check_status(scf::generate_cuda_density_fitting_raw_expansion(
                            plan.integral_source, 0, mu * n, n, 0, q, stream, row.get(),
                            row_low.get(), detail),
@@ -247,6 +255,9 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
         },
         [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k, const double* a,
             const double* b, double* output) {
+          phase_observation::Scope projection(phase_observation::Site::source_transform_submission,
+                                              result.transform_gemms, k,
+                                              reinterpret_cast<std::uintptr_t>(stream));
           // The two orbital projections can cancel large diffuse AO values.
           // Consume raw residuals in the first and compensate both dots. The
           // final metric projection retains ordinary FP64 cuBLAS execution.
@@ -262,7 +273,11 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
           result.transform_summands =
               checked_add(result.transform_summands, checked_mul(checked_mul(m, columns), k));
         });
-    runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    {
+      phase_observation::Scope wait(phase_observation::Site::explicit_wait, 0, 0,
+                                    reinterpret_cast<std::uintptr_t>(stream));
+      runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    }
     if (retain_response_state) retained_coefficients = std::move(coefficients);
   }
   result.source_values = checked_mul(result.source_rows, layout.row_values);
@@ -275,7 +290,10 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   runtime::OwnedCudaBuffer<double> arena(device, layout.packing_values, stream);
   runtime::OwnedCudaBuffer<int> error(device, 1, stream);
   generated::df_source::CudaState state{o, v, q, bmo.get(), arena.get(), error.get(), stream};
+  phase_observation::Scope packing(phase_observation::Site::source_pack_submission, o, v,
+                                   reinterpret_cast<std::uintptr_t>(stream));
   const auto factors = generated::df_source::pack_cuda(state);
+  packing.close();
   int failed = 0;
   runtime::cuda_resource_check(
       cudaMemcpyAsync(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream));
@@ -284,10 +302,20 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   bmo.reset();
   runtime::OwnedCudaBuffer<double> block(device, layout.largest_block, stream);
   auto download = [&](std::vector<double>& values, const double* device_values, std::size_t count) {
+    phase_observation::Scope host(phase_observation::Site::source_host_preparation, 0, count);
     values.resize(count);
+    host.close();
+    phase_observation::Scope copy(phase_observation::Site::source_copy_submission, 0, bytes(count),
+                                  reinterpret_cast<std::uintptr_t>(stream));
     runtime::cuda_resource_check(cudaMemcpyAsync(values.data(), device_values, bytes(count),
                                                  cudaMemcpyDeviceToHost, stream));
-    runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    copy.close();
+    {
+      phase_observation::Scope wait(phase_observation::Site::explicit_wait, 0, 0,
+                                    reinterpret_cast<std::uintptr_t>(stream));
+      runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    }
+    phase_observation::Scope validation(phase_observation::Site::source_validation, 0, count);
     if (!std::all_of(values.begin(), values.end(), [](double x) { return std::isfinite(x); }))
       throw std::runtime_error("nonfinite native CUDA DF-CC integral block");
     result.factor_block_d2h_bytes = checked_add(result.factor_block_d2h_bytes, bytes(count));
@@ -297,21 +325,26 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   download(result.bvv, factors.bvv, checked_mul(q, checked_mul(v, v)));
   auto block_gemm = [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k,
                         const double* a, const double* b, double* output) {
+    phase_observation::Scope block_submission(phase_observation::Site::source_block_submission,
+                                              result.block_gemms, k,
+                                              reinterpret_cast<std::uintptr_t>(stream));
     gemm(ta, tb, m, columns, k, a, b, output);
     ++result.block_gemms;
     result.block_summands =
         checked_add(result.block_summands, checked_mul(checked_mul(m, columns), k));
   };
-  generated::df_source::build_ovov(o, v, q, factors, block.get(), block_gemm);
-  download(result.ovov, block.get(), generated::df_source::ovov_elements(o, v));
-  generated::df_source::build_ovvo(o, v, q, factors, block.get(), block_gemm);
-  download(result.ovvo, block.get(), generated::df_source::ovvo_elements(o, v));
-  generated::df_source::build_oovv(o, v, q, factors, block.get(), block_gemm);
-  download(result.oovv, block.get(), generated::df_source::oovv_elements(o, v));
-  generated::df_source::build_ovoo(o, v, q, factors, block.get(), block_gemm);
-  download(result.ovoo, block.get(), generated::df_source::ovoo_elements(o, v));
-  generated::df_source::build_oooo(o, v, q, factors, block.get(), block_gemm);
-  download(result.oooo, block.get(), generated::df_source::oooo_elements(o, v));
+  if (!factors_only) {
+    generated::df_source::build_ovov(o, v, q, factors, block.get(), block_gemm);
+    download(result.ovov, block.get(), generated::df_source::ovov_elements(o, v));
+    generated::df_source::build_ovvo(o, v, q, factors, block.get(), block_gemm);
+    download(result.ovvo, block.get(), generated::df_source::ovvo_elements(o, v));
+    generated::df_source::build_oovv(o, v, q, factors, block.get(), block_gemm);
+    download(result.oovv, block.get(), generated::df_source::oovv_elements(o, v));
+    generated::df_source::build_ovoo(o, v, q, factors, block.get(), block_gemm);
+    download(result.ovoo, block.get(), generated::df_source::ovoo_elements(o, v));
+    generated::df_source::build_oooo(o, v, q, factors, block.get(), block_gemm);
+    download(result.oooo, block.get(), generated::df_source::oooo_elements(o, v));
+  }
   if (result.factor_block_d2h_bytes != result.host_output_bytes)
     throw std::logic_error("native DF-CC publication size differs from compiler layout");
   result.block_seconds = elapsed(stage);
@@ -326,6 +359,130 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     result.response_state = std::move(state);
   }
   result.total_seconds = elapsed(started);
+  runtime::df_progress::Scope::number("source_identity", result.source_identity);
+  runtime::df_progress::Scope::number("core_block_gemms", result.block_gemms);
+  runtime::df_progress::Scope::number("host_output_bytes", result.host_output_bytes);
+  return result;
+}
+
+DFMP2Result evaluate_df_mp2_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                 std::span<const double> bov, std::span<const double> eps_o,
+                                 std::span<const double> eps_v, std::uint64_t identity,
+                                 bool response, std::size_t budget, int device,
+                                 std::size_t caller_bytes, double denominator_threshold) {
+  namespace gen = generated::df_source;
+  const auto qov = checked_mul(q, checked_mul(o, v));
+  if (!o || !v || !q || !identity || device < 0 || !budget || bov.size() != qov ||
+      eps_o.size() != o || eps_v.size() != v || !std::isfinite(denominator_threshold) ||
+      denominator_threshold <= 0)
+    throw std::invalid_argument("invalid correlation-only DF-MP2 source/spectrum");
+  for (const auto values : {bov, eps_o, eps_v})
+    if (!std::all_of(values.begin(), values.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::invalid_argument("nonfinite correlation-only DF-MP2 input");
+  const auto minimum_denominator = 2 * (*std::min_element(eps_v.begin(), eps_v.end()) -
+                                        *std::max_element(eps_o.begin(), eps_o.end()));
+  if (minimum_denominator < denominator_threshold)
+    throw std::runtime_error("DF-MP2 occupied/virtual denominator gap is too small");
+  const auto spectrum = checked_add(o, v);
+  const auto input_values = checked_add(qov, checked_add(spectrum, 1));
+  const auto arena_values = response ? gen::mp2_response_arena_elements(o, v, q)
+                                     : gen::mp2_energy_arena_elements(o, v, q);
+  const auto factor_outputs = checked_mul(
+      q, checked_add(checked_mul(o, o), checked_add(checked_mul(o, v), checked_mul(v, v))));
+  const auto fock_outputs = checked_add(checked_mul(o, o), checked_mul(v, v));
+  const auto output_values =
+      response ? checked_add(factor_outputs, checked_add(fock_outputs, checked_mul(2, spectrum)))
+               : 0;
+  const auto peak = checked_add(
+      caller_bytes,
+      checked_add(sizeof(int),
+                  bytes(checked_add(checked_add(input_values, arena_values), output_values))));
+  admit(peak, budget);
+  // Host transfer sources/destinations must outlive every stream-dependent
+  // owner, including on allocation, copy, and synchronization failure.
+  DFMP2Result result;
+  result.minimum_absolute_denominator = minimum_denominator;
+  result.equation_hash = gen::mp2_energy_equation_hash;
+  result.numeric_capacity_bytes = peak;
+  std::vector<double> repeated(response ? spectrum : 0);
+  int failed = 0;
+  const double unit = 1.0;
+  if (response) {
+    result.factors.source_identity = identity;
+    result.factors.boo.assign(checked_mul(q, checked_mul(o, o)), 0.0);
+    result.factors.bov.resize(qov);
+    result.factors.bvv.assign(checked_mul(q, checked_mul(v, v)), 0.0);
+    result.eps_o.resize(o);
+    result.eps_v.resize(v);
+    result.foo.resize(checked_mul(o, o));
+    result.fvv.resize(checked_mul(v, v));
+  }
+  runtime::CudaDeviceScope scope(device);
+  runtime::OwnedCudaStream stream(device);
+  runtime::OwnedCudaBuffer<double> storage(device, input_values, stream.get());
+  runtime::OwnedCudaBuffer<double> arena(device, arena_values, stream.get());
+  runtime::OwnedCudaBuffer<int> error(device, 1, stream.get());
+  runtime::cuda_resource_check(cudaMemsetAsync(error.get(), 0, sizeof(int), stream.get()));
+  for (const auto item : {std::pair{bov, std::size_t{0}}, std::pair{eps_o, qov},
+                          std::pair{eps_v, checked_add(qov, o)}})
+    runtime::cuda_resource_check(cudaMemcpyAsync(storage.get() + item.second, item.first.data(),
+                                                 bytes(item.first.size()), cudaMemcpyHostToDevice,
+                                                 stream.get()));
+  runtime::cuda_resource_check(cudaMemcpyAsync(storage.get() + input_values - 1, &unit,
+                                               sizeof(double), cudaMemcpyHostToDevice,
+                                               stream.get()));
+  gen::Mp2CudaState state{o,
+                          v,
+                          q,
+                          storage.get(),
+                          storage.get() + qov,
+                          storage.get() + qov,
+                          storage.get() + qov + o,
+                          storage.get() + qov + o,
+                          storage.get() + input_values - 1,
+                          arena.get(),
+                          error.get(),
+                          stream.get()};
+  const auto outputs = response ? gen::mp2_response_cuda(state) : gen::mp2_energy_cuda(state);
+  runtime::cuda_resource_check(cudaMemcpyAsync(&result.opposite_spin, outputs.opposite_spin,
+                                               sizeof(double), cudaMemcpyDeviceToHost,
+                                               stream.get()));
+  runtime::cuda_resource_check(cudaMemcpyAsync(&result.same_spin, outputs.same_spin, sizeof(double),
+                                               cudaMemcpyDeviceToHost, stream.get()));
+  if (response) {
+    runtime::cuda_resource_check(cudaMemcpyAsync(result.foo.data(), outputs.bar_foo,
+                                                 bytes(result.foo.size()), cudaMemcpyDeviceToHost,
+                                                 stream.get()));
+    runtime::cuda_resource_check(cudaMemcpyAsync(result.fvv.data(), outputs.bar_fvv,
+                                                 bytes(result.fvv.size()), cudaMemcpyDeviceToHost,
+                                                 stream.get()));
+    runtime::cuda_resource_check(cudaMemcpyAsync(result.factors.bov.data(), outputs.bar_bov,
+                                                 bytes(qov), cudaMemcpyDeviceToHost, stream.get()));
+    for (const auto item : {std::pair{result.eps_o.data(), outputs.bar_ei},
+                            std::pair{result.eps_v.data(), outputs.bar_ea},
+                            std::pair{repeated.data(), outputs.bar_ej},
+                            std::pair{repeated.data() + o, outputs.bar_eb}}) {
+      const auto count = item.second == outputs.bar_ei || item.second == outputs.bar_ej ? o : v;
+      runtime::cuda_resource_check(cudaMemcpyAsync(item.first, item.second, bytes(count),
+                                                   cudaMemcpyDeviceToHost, stream.get()));
+    }
+    runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+    for (std::size_t occupied = 0; occupied < o; ++occupied)
+      result.eps_o[occupied] += repeated[occupied];
+    for (std::size_t virtual_orbital = 0; virtual_orbital < v; ++virtual_orbital)
+      result.eps_v[virtual_orbital] += repeated[o + virtual_orbital];
+    for (const auto* values :
+         {&result.factors.bov, &result.eps_o, &result.eps_v, &result.foo, &result.fvv})
+      if (!std::all_of(values->begin(), values->end(),
+                       [](double value) { return std::isfinite(value); }))
+        throw std::runtime_error("nonfinite combined DF-MP2 cotangent");
+  }
+  runtime::cuda_resource_check(
+      cudaMemcpyAsync(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
+  runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+  if (failed || !std::isfinite(result.opposite_spin) || !std::isfinite(result.same_spin))
+    throw std::runtime_error("nonfinite native DF-MP2 energy/response");
   return result;
 }
 

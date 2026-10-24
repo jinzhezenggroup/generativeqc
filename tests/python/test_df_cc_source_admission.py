@@ -26,7 +26,9 @@ PRELUDE = r"""
 #include <string>
 #include <vector>
 #include "cc/df_source.hpp"
+#include "cc/phase_observation.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/df_source_capacity.hpp"
@@ -167,6 +169,8 @@ std::size_t external(const core::System& o, const core::System& a, const hf::Phy
 }
 int main(int argc, char** argv) {
   if (argc!=2) return 1;
+  // Count scientific source storage with the real diagnostic scope disabled.
+  unsetenv("GENERATIVEQC_DF_PROGRESS_TRACE");
   const int mode=std::atoi(argv[1]);
   scf::cuda_execution::CudaDfSourcePolicy policy;
   std::string detail;
@@ -274,7 +278,8 @@ int main(int argc, char** argv) {
 @pytest.fixture(scope="module")
 def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("df-source-admission")
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
         pytest.skip("C++ compiler and ccache required")
     subprocess.run([cache, "--version"], check=True, capture_output=True)

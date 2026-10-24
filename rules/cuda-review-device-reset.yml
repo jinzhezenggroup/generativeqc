@@ -1,0 +1,8 @@
+id: cuda-review-device-reset
+language: Cpp
+severity: warning
+message: "Review device reset; it invalidates CUDA state and can disrupt other work."
+rule:
+  pattern:
+    context: "void f() { cudaDeviceReset(); }"
+    selector: call_expression

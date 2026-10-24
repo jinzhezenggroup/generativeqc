@@ -106,6 +106,7 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "order5..12, RHF/UHF J/K and exact work PASS" in result.stdout
     assert "whole-shell admission and exact work PASS" in result.stdout
+    assert "FP32 canonical J/K and exchange-only density PASS" in result.stdout
     if stream_object:
         assert (
             "DFT native dddd stream, RHF/UHF J/K and bounded fallbacks PASS"
@@ -133,3 +134,15 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     )
     assert responses.returncode == 0, responses.stdout + responses.stderr
     assert "shared scalar responses and exact primitive work PASS" in responses.stdout
+    density = subprocess.run(
+        [str(executable), "--density-contraction"],
+        capture_output=True,
+        text=True,
+        timeout=360,
+        check=False,
+    )
+    (tmp_path / "density-contraction-gpu.log").write_text(
+        density.stdout + density.stderr
+    )
+    assert density.returncode == 0, density.stdout + density.stderr
+    assert "raw AD orbits PASS" in density.stdout

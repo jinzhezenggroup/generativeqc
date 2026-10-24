@@ -93,7 +93,7 @@ int main() {
       case 8: other.shells[0].primitives.push_back({0.2, 0.1}); break;
       case 9: other.shells.pop_back(); break;
       case 10: other.atoms.pop_back(); break;
-      case 11: other.basis_representation = GENERATIVEQC_BASIS_SPHERICAL; break;
+      case 11: other.basis_representation = core::kSphericalBasis; break;
       case 12: ++other.charge; break;
       case 13: ++other.multiplicity; break;
       case 14: ++other.electron_count; break;

@@ -65,7 +65,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::span<const double>, const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>, unsigned, std::size_t, std::size_t,
     std::vector<double>&, std::string& detail, DfGradientResources*, const CudaDfFinalStateToken*,
-    const CudaDfBorrowedFittedProjection*, const CudaDfBorrowedResponseDensity*) {
+    const CudaDfBorrowedFittedProjection*, const CudaDfBorrowedResponseDensity*,
+    const CudaDfGradientPrecisionRequest*) {
   detail = "CUDA DF generated response is unavailable in this build";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
@@ -107,6 +108,11 @@ std::size_t cuda_density_fitting_integral_source_host_peak_bytes(
 std::size_t cuda_density_fitting_integral_source_coordinate_count(
     const CudaDensityFittingIntegralSource*) noexcept {
   return 0U;
+}
+
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource*) noexcept {
+  return 0.0;
 }
 
 CudaDensityFittingSourceCounters cuda_density_fitting_integral_source_counters(
@@ -306,6 +312,14 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     const std::vector<double>&, const std::vector<std::int32_t>&, const std::vector<double>&,
     unsigned, double, double, std::vector<double>&, std::vector<CudaDensityFittingDeviceScfItem>&,
     std::string& detail, const std::vector<double>&, unsigned) {
+  return unavailable(nullptr, detail);
+}
+
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan*, const std::vector<double>&, const std::vector<double>&,
+    const std::vector<double>&, const std::vector<std::int32_t>&, const std::vector<double>&,
+    unsigned, double, double, std::vector<double>&, std::vector<CudaDensityFittingDeviceScfItem>&,
+    std::string& detail, const std::vector<double>&, unsigned, bool) {
   return unavailable(nullptr, detail);
 }
 

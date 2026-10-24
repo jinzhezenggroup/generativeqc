@@ -861,14 +861,20 @@
       "bytes": 54150
     },
     {
-      "path": "references.json",
-      "sha256": "6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814",
-      "bytes": 229005
+      "path": "references.json.gz",
+      "sha256": "baa05ed1f34a69316aacb51c8b951f0d6ab41028f5fe493681808b4c9d509132",
+      "bytes": 35791,
+      "encoding": "gzip",
+      "decoded_bytes": 229005,
+      "decoded_sha256": "6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814"
     },
     {
-      "path": "work.json",
-      "sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
-      "bytes": 202052
+      "path": "work.json.gz",
+      "sha256": "633f1b6588324fe95135af255e9b976fd6a03662134204e5b9d789cf7571e841",
+      "bytes": 8033,
+      "encoding": "gzip",
+      "decoded_sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
+      "decoded_bytes": 202052
     }
   ],
   "native_endpoint_samples": 184,

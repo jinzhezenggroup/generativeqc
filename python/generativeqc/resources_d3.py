@@ -1,8 +1,8 @@
 """ResourcePlan adapter for the production two-body D3(BJ) owner.
 
-The formulas mirror src/dft/dispersion/d3_runtime.cpp exactly.  Planning is
-metadata-only: no native context, correction batch, coordinates array, or GPU
-allocation is created.
+The discovered native query shares src/dft/dispersion/d3_runtime.cpp with the
+production owner. Old libraries and library-free dry runs retain an explicit
+portable layout. Neither path creates a context, correction batch or GPU state.
 """
 
 from __future__ import annotations
@@ -46,12 +46,105 @@ class _PairData(ctypes.Structure):
     ]
 
 
-_D3_TABLE_BYTES = (
-    _D3_ELEMENT_COUNT * ctypes.sizeof(_ElementData)
-    + _D3_PAIR_COUNT * ctypes.sizeof(_PairData)
-    + byte_product(_D3_REFERENCE_CN_COUNT, 8)
-    + byte_product(_D3_REFERENCE_C6_COUNT, 8)
+_D3_RESOURCE_KEYS = (
+    "plan_host_bytes",
+    "execution_host_bytes",
+    "device_bytes",
+    "table_bytes",
+    "workspace_bytes",
+    "retained_bytes",
 )
+
+
+def _portable_d3_inventory(counts: tuple[int, ...], backend: str) -> dict[str, int]:
+    """Legacy metadata-only layout; never retried after native rejection."""
+    systems, atoms, maximum_atoms = len(counts), sum(counts), max(counts)
+    table_bytes = (
+        _D3_ELEMENT_COUNT * ctypes.sizeof(_ElementData)
+        + _D3_PAIR_COUNT * ctypes.sizeof(_PairData)
+        + byte_product(_D3_REFERENCE_CN_COUNT, 8)
+        + byte_product(_D3_REFERENCE_C6_COUNT, 8)
+    )
+    plan_host_bytes = (
+        byte_product(systems + 1, 4)
+        + byte_product(atoms, 4)
+        + byte_product(3, atoms, 8)
+    )
+    execution_host_bytes = (
+        byte_product(3, atoms, 8)
+        + byte_product(2, systems)
+        + byte_product(systems, 4)
+        + byte_product(systems, 8)
+        + byte_product(3, atoms, 8)
+    )
+    workspace_bytes = byte_product(16, maximum_atoms if backend == "cpu" else atoms, 8)
+    device_bytes = 0
+    if backend == "cpu":
+        execution_host_bytes += workspace_bytes + byte_product(3, maximum_atoms, 8)
+    else:
+        device_bytes = (
+            byte_product(systems + 1, 4)
+            + byte_product(atoms, 4)
+            + byte_product(3, atoms, 8)
+            + byte_product(2, systems)
+            + byte_product(systems, 4)
+            + byte_product(systems, 8)
+            + byte_product(3, atoms, 8)
+            + workspace_bytes
+            + table_bytes
+        )
+    return {
+        key: checked_bytes(value, "D3 " + key)
+        for key, value in zip(
+            _D3_RESOURCE_KEYS,
+            (
+                plan_host_bytes,
+                execution_host_bytes,
+                device_bytes,
+                table_bytes,
+                workspace_bytes,
+                plan_host_bytes + execution_host_bytes + device_bytes,
+            ),
+            strict=True,
+        )
+    }
+
+
+def _d3_inventory(
+    counts: tuple[int, ...], backend: str, library: typing.Any
+) -> dict[str, int]:
+    """Query already-loaded native capacity without discovering a provider."""
+    query = getattr(library, "generativeqc_resource_d3_layout_v1", None)
+    if query is None:
+        return _portable_d3_inventory(counts, backend)
+    query.argtypes = (
+        [ctypes.c_int]
+        + [ctypes.c_uint64] * 3
+        + [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+    )
+    query.restype = ctypes.c_int
+    values = (ctypes.c_uint64 * len(_D3_RESOURCE_KEYS))()
+    if query(
+        int(backend == "cuda"),
+        len(counts),
+        sum(counts),
+        max(counts),
+        values,
+        len(values),
+    ):
+        raise ValueError("native D3 inventory rejected shape or capacity")
+    inventory = {
+        key: checked_bytes(int(value), "D3 " + key)
+        for key, value in zip(_D3_RESOURCE_KEYS, values, strict=True)
+    }
+    if inventory["retained_bytes"] != sum(
+        inventory[key] for key in _D3_RESOURCE_KEYS[:3]
+    ):
+        raise ValueError("native D3 inventory returned inconsistent retained capacity")
+    return inventory
 
 
 def _d3_spec(graph: MethodIR) -> D3Spec:
@@ -88,8 +181,14 @@ def d3_resource_request(
     name: str = "d3",
     first_phase: int = 0,
     last_phase: int = 0,
+    library: typing.Any = None,
 ) -> ResourceRequest:
-    """Describe the retained production D3(BJ) batch owner without allocating it."""
+    """Describe the retained production D3(BJ) owner without allocating it.
+
+    An already-loaded ``library`` supplies native sizing when its additive
+    query exists. No library is loaded here; absent symbols retain portable
+    metadata sizing, while discovered native failures are authoritative.
+    """
     if not isinstance(method, MethodIR):
         raise TypeError("D3 resource planning requires a MethodIR")
     spec = _d3_spec(method)
@@ -112,6 +211,11 @@ def d3_resource_request(
         "correction_identity": spec.identity,
         "device_id": device_id,
         "inventory_version": 1,
+        "inventory_owner": (
+            "native-d3-layout-v1"
+            if getattr(library, "generativeqc_resource_d3_layout_v1", None) is not None
+            else "portable-d3-layout-v1"
+        ),
         "maximum_bytes": maximum_bytes,
         "method_ir_identity": method.identity,
         "schedule": "retained-native-d3-bj",
@@ -156,50 +260,11 @@ def d3_resource_request(
             unsupported_reason=unsupported,
         )
 
-    plan_host_bytes = checked_bytes(
-        byte_product(len(counts) + 1, 4)
-        + byte_product(total_atoms, 4)
-        + byte_product(3, total_atoms, 8),
-        "D3 plan host bytes",
-    )
-    execution_host_bytes = checked_bytes(
-        byte_product(3, total_atoms, 8)
-        + byte_product(2, len(counts))
-        + byte_product(len(counts), 4)
-        + byte_product(len(counts), 8)
-        + byte_product(3, total_atoms, 8),
-        "D3 execution host bytes",
-    )
-
-    device_bytes = 0
-    workspace_bytes = byte_product(
-        16,
-        maximum_atoms if backend == "cpu" else total_atoms,
-        8,
-    )
-    if backend == "cpu":
-        execution_host_bytes = checked_bytes(
-            execution_host_bytes + workspace_bytes + byte_product(3, maximum_atoms, 8),
-            "D3 CPU execution host bytes",
-        )
-    else:
-        device_bytes = checked_bytes(
-            byte_product(len(counts) + 1, 4)
-            + byte_product(total_atoms, 4)
-            + byte_product(3, total_atoms, 8)
-            + byte_product(2, len(counts))
-            + byte_product(len(counts), 4)
-            + byte_product(len(counts), 8)
-            + byte_product(3, total_atoms, 8)
-            + workspace_bytes
-            + _D3_TABLE_BYTES,
-            "D3 device bytes",
-        )
-
-    retained_total = checked_bytes(
-        plan_host_bytes + execution_host_bytes + device_bytes,
-        "D3 retained bytes",
-    )
+    inventory = _d3_inventory(counts, backend, library)
+    plan_host_bytes = inventory["plan_host_bytes"]
+    execution_host_bytes = inventory["execution_host_bytes"]
+    device_bytes = inventory["device_bytes"]
+    retained_total = inventory["retained_bytes"]
     if retained_total > maximum_bytes:
         return ResourceRequest(
             name,
@@ -252,8 +317,8 @@ def d3_resource_request(
             ("plan_host_bytes", str(plan_host_bytes)),
             ("execution_host_bytes", str(execution_host_bytes)),
             ("device_bytes", str(device_bytes)),
-            ("table_bytes", str(_D3_TABLE_BYTES)),
-            ("workspace_bytes", str(workspace_bytes)),
+            ("table_bytes", str(inventory["table_bytes"])),
+            ("workspace_bytes", str(inventory["workspace_bytes"])),
         ),
     )
     return ResourceRequest(name, identity, (candidate,), exclusions)

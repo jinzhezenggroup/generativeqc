@@ -1,0 +1,98 @@
+{
+  "checksum": "bbf130ef3c35e8ed26277b673132a4d6841acc5ea47adbd6b7be92ef5b86cffc",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1543289673E-10",
+              "5353281423E-10",
+              "4446345422E-10"
+            ]
+          ],
+          "exponents": [
+            "27402007312E-10",
+            "49913098384000004E-17",
+            "1350843232E-10"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 8,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 8,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1543289673E-10",
+              "5353281423E-10",
+              "4446345422E-10"
+            ]
+          ],
+          "exponents": [
+            "1307093214E-7",
+            "2380886605E-8",
+            "6443608313E-9"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "-9996722919E-11",
+              "3995128261E-10",
+              "7001154689E-10"
+            ]
+          ],
+          "exponents": [
+            "5033151319E-9",
+            "1169596125E-9",
+            "38038896E-8"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "155916275E-9",
+              "6076837186E-10",
+              "3919573931E-10"
+            ]
+          ],
+          "exponents": [
+            "5033151319E-9",
+            "1169596125E-9",
+            "38038896E-8"
+          ],
+          "source_group": 2
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "water-algebra-high",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "6002092fea25331281cc095dc6dc41a6a3d7a2f0c88f82a1fbceac01225a897c",
+    "license": "BSD-3-Clause",
+    "source": "generativeqc/data/basis_pack.json; Basis Set Exchange",
+    "version": "Basis Set Exchange 0.11"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}

@@ -6,7 +6,17 @@
 #include <string>
 #include <vector>
 
+#include "core/correlation_convergence.hpp"
+
 namespace generativeqc::cc {
+
+/** Conservative native auto policy for the qualified contraction-dominated domain.
+ * Small/low-occupied solves retain FP64: conversion, extra launches and a fresh
+ * strict DIIS epoch cost more than their short auxiliary contractions save.
+ * This requests warmup only; the CUDA owner still admits storage and providers. */
+inline constexpr bool default_df_ccsd_mixed_precision(std::size_t nocc, std::size_t nvir) {
+  return nocc >= 9 && nvir >= 128;
+}
 
 struct SolverOptions {
   unsigned max_iterations{100};
@@ -47,6 +57,14 @@ struct SolverOptions {
   // Independent expanded physical replay only. Optional tiles may reuse the
   // admitted DF scratch, never grow it or displace a primal/pair schedule.
   bool df_replay_auxiliary_batch{false};
+  /** Opt-in FP32 auxiliary preconvergence; final iterations, DIIS history,
+   * independent residual replay and every response consumer remain FP64. */
+  bool df_mixed_precision{false};
+  // Use the same binary64 boundary as admission at the largest legal residual
+  // tolerance; the decimal literal 1e-7 is one representable step smaller.
+  double df_mixed_precision_switch_residual{100.0 * 1e-9};
+  unsigned df_mixed_precision_max_evaluations{24};
+  core::CorrelationConvergence convergence;
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
@@ -143,6 +161,12 @@ struct SolverDiagnostic {
   std::size_t df_pair_evaluations{}, df_pair_refusals{}, df_pair_projection_calls{};
   std::size_t df_pair_projection_bytes{}, df_pair_geometry_elements{};
   std::size_t df_pair_capacity_bytes{}, df_pair_binding_host_bytes{};
+  bool df_mixed_precision{}, df_mixed_precision_refused{};
+  std::size_t df_mixed_evaluations{}, df_fp32_gemm_calls{}, df_fp32_gemm_summands{};
+  std::size_t df_precision_cast_elements{}, df_precision_switches{};
+  std::size_t df_mixed_pair_projection_calls{}, df_mixed_pair_projection_bytes{};
+  std::size_t df_strict_auxiliary_batch_size{1};
+  const char* df_mixed_program_hash{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};
@@ -158,6 +182,7 @@ struct SolverResult {
   std::vector<double> t1, t2;
   SolverDiagnostic diagnostic;
   [[nodiscard]] bool converged() const noexcept { return status == SolveStatus::Converged; }
+  core::CorrelationConvergence convergence;
 };
 
 // Shared admission defaults to the conventional representation. Only an owner

@@ -562,6 +562,10 @@ void verify_preflight_and_approximation_identity() {
   guess_controls.compute_forces = false;
   require_rejected([&] { (void)fock_strategy_for_execution(guess_controls); },
                    "energy-only CUDA DF-HF accepted an explicit initial guess");
+  guess_controls.preliminary_guess->kind = initial_guess::PreliminaryKind::Huckel;
+  require(fock_strategy_for_execution(guess_controls).schedule == FockSchedule::CudaDfResident,
+          "native Huckel changed the CUDA DF target schedule");
+  reject_cuda_df_preliminary_guess(guess_controls);
   guess_controls.preliminary_guess.reset();
   require(fock_strategy_for_execution(guess_controls).schedule == FockSchedule::CudaDfResident,
           "energy-only CUDA DF-HF lost its existing execution schedule");

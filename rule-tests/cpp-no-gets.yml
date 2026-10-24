@@ -1,0 +1,9 @@
+id: cpp-no-gets
+valid:
+  - |
+    void read_line(char* dst, int n) { fgets(dst, n, stdin); }
+  - |
+    void f(char* dst) { get_line(dst); }
+invalid:
+  - |
+    void read_line(char* dst) { gets(dst); }

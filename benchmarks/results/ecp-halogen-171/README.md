@@ -95,3 +95,10 @@ compressed bytes. Its SHA256 is
 `raw-evidence-manifest.json` retains each member's size/hash. Raw logs and
 binaries remain outside Git. The allocated Notebook was stopped after
 retrieval and verification.
+
+Source inventories are stored losslessly in
+`benchmarks/results/ecp-source-inventories.json.xz`. Adjacent `.storage.json`
+files bind the original bytes and the JSON bundle member. Decode with
+`json.loads(lzma.decompress(bundle.read_bytes()))["files"][original_path]`
+and encode that string as UTF-8 to recover the exact original JSON. Historical
+raw manifest checksums continue to describe their original run files.

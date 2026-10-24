@@ -11,18 +11,45 @@
 struct generativeqc_ks_snapshot;
 struct generativeqc_ks_xc_response;
 struct generativeqc_nonlocal_cuda_force;
+struct generativeqc_fock_plan;
+
+/** Private versioned scalar controls for the native resident CPKS endpoint.
+ * Host workspace and complete owned device capacity are independent budgets. */
+struct generativeqc_ks_response_controls {
+  std::uint64_t struct_size;
+  double rtol, atol, breakdown_tolerance, stagnation_tolerance;
+  std::uint64_t restart, max_iterations, max_workspace_bytes, reorthogonalize;
+  std::uint64_t true_residual_every, stagnation_window;
+};
 namespace generativeqc::dft {
 struct GridTaskView;
 }
 
 extern "C" {
+/** Solve one authenticated closed-shell CPKS RHS in native resident GMRES.
+ * No AO matrix or Krylov vector is transferred during iteration. The only
+ * dimension-sized result transfer is final publication. Work has ten entries:
+ * solver status/iterations/restarts/actions, host workspace, owned device bytes,
+ * H2D bytes, D2H bytes, synchronizations and BLAS calls. Residual has two entries.
+ * A host-workspace refusal publishes diagnostics but leaves solution untouched;
+ * other failures publish neither solution nor diagnostics. */
+generativeqc_status generativeqc_ks_response_solve_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_ks_xc_response* response, generativeqc_fock_plan* fock,
+    const generativeqc_ks_response_controls* controls, const double* rhs, std::size_t count,
+    const double* guess, std::size_t guess_count, std::size_t device_budget_bytes, double* solution,
+    std::size_t solution_count, double* residual, std::size_t residual_count, std::uint64_t* work,
+    std::size_t work_count);
+
 /** Private, explicitly partial #2151 native single-system derivative bridge.
  * Only a successfully executed prepared KS calculation with a current verified
  * final state may provide source-major [H', Pulay, J', K'] +dE/dR blocks.
  * Source size is exactly 4*3*Natom doubles; work has exactly nine uint64 slots.
- * CPU DF and qualified CUDA DF/Direct are admitted; CPU Direct and ECP/range/
- * nonlocal/dispersion domains fail closed. Caller output is unchanged on
- * failure. XC/Becke/nuclear terms are absent; this is NOT an analytic force. */
+ * CPU DF, qualified CPU Direct PBE/PBE0 and qualified CUDA DF/Direct are admitted;
+ * ECP/range/nonlocal/dispersion domains fail closed. Caller output is unchanged on
+ * failure. XC/Becke/nuclear terms are absent; this is NOT an analytic force.
+ * CPU Direct work[3] counts owned source/weight numeric capacity, excluding
+ * recurrence scratch, allocator overhead and the retained SCF owner. */
 generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
     generativeqc_calculation* calculation, double* values, std::size_t count,
     std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
@@ -37,12 +64,32 @@ generativeqc_status generativeqc_ks_snapshot_copy_v1(const generativeqc_batch* b
                                                      const generativeqc_ks_snapshot* snapshot,
                                                      double* values, std::size_t count);
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
+/** Read the physical allowance already authenticated at snapshot creation. */
+generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value);
+/** Query/copy the independent VV10 quadrature of the current token.
+ * A null output with zero capacity queries the count; shared grids return zero.
+ * The private wire contains 126 prescription entries followed by 6*N doubles
+ * for coordinates, weights, atom owners and unpartitioned atomic measures. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t capacity, std::size_t* count);
+/** Borrow the exact secondary resident grid only while its token is current. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_cuda_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* count);
 generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
 /** Query the conservative additional lazy derivative-owner device capacity.
  * The live snapshot is checked before publication; no derivative owner is
  * created. DF response resources remain in their separate prepared envelope. */
+// Private force-boundary cache handoff; receipt is requested/free-before/free-after/reclaimed.
+generativeqc_status generativeqc_ks_snapshot_cuda_prepare_force_memory_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint64_t additional_device_bytes, std::uint64_t* receipt, std::size_t count);
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint64_t* bytes);
 
@@ -61,8 +108,9 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
-/** Private mixed bridge. CPU supplies the compact weighted LR correction;
- * CUDA passes an empty correction and executes its resident LR provider. */
+/** Private RSH-DF bridge. Full RI-K owns its LR response on either backend.
+ * Legacy mixed CPU supplies a compact Direct correction; legacy mixed CUDA
+ * passes an empty correction and executes its resident Direct LR provider. */
 generativeqc_status generativeqc_ks_snapshot_mixed_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
     const double* lr_correction, std::size_t correction_count, double* values, std::size_t count,
@@ -96,6 +144,10 @@ generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch*
 generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
+/** Token-checked LR approximation; UINT32_MAX denotes no LR correction. */
+generativeqc_status generativeqc_ks_snapshot_range_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* approximation);
 /** Compatibility alias for the original WB97M-V-specific symbol. */
 generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,

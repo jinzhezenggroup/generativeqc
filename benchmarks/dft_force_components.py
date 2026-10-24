@@ -233,6 +233,11 @@ def _composite_work_counts(
         ("partition_pair_visits_scheduled", "partition_pair_visits"),
         ("ao_collocation_point_visits_scheduled", "ao_collocation_point_visits"),
         ("nonlocal_geometry_point_visits_scheduled", "geometry_point_visits"),
+        # These are measured deltas for this force call, including zero on an
+        # exact reuse hit. Dense grid capacity must not stand in for pair work.
+        ("nonlocal_pair_cache_probes", "nonlocal_pair_cache_probes"),
+        ("nonlocal_pair_cache_hits", "nonlocal_pair_cache_hits"),
+        ("nonlocal_pair_sweeps", "nonlocal_pair_sweeps"),
     ):
         _store_counter(counts["observed"], output_key, work.get(source_key))
     return counts
@@ -744,5 +749,9 @@ def normalize_force_work(
     if isinstance(work.get("component_seconds"), Mapping) or str(
         work.get("execution", "")
     ).startswith("cuda-complete-wb97mv"):
-        return _normalize_composite(work, state_export_seconds=state_export)
-    return _normalize_stationary(work, state_export_seconds=state_export)
+        result = _normalize_composite(work, state_export_seconds=state_export)
+    else:
+        result = _normalize_stationary(work, state_export_seconds=state_export)
+    if "scf_force_memory" in work:
+        result["scf_force_memory"] = dict(_mapping(work["scf_force_memory"]))
+    return result

@@ -4,5 +4,11 @@
   "methods": [
     "M06-2X",
     "MN15"
+  ],
+  "cuda_df_energy_force": [
+    "M06-2X"
+  ],
+  "cuda_fp64_local_ao": [
+    "M06-2X"
   ]
 }

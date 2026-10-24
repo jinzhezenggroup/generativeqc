@@ -6,11 +6,13 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "response/native_gmres.hpp"
 #include "response/resident_krylov.hpp"
+#include "response/sequence.hpp"
 #include "response/solve.hpp"
 
 namespace {
@@ -298,12 +300,374 @@ void linear_response_problem_contract() {
 
   rejected = false;
   try {
-    const auto wrong_plan = generativeqc::response::prepare_gmres(1, options);
+    auto wrong_plan = plan;
+    wrong_plan.dimension = 1;
     (void)generativeqc::response::solve_response(wrong_plan, problem, rhs);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
   require(rejected, "response solve accepted a plan from another problem dimension");
+}
+
+void response_plan_binding_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponsePlan;
+  static_assert(!std::is_convertible_v<generativeqc::response::GmresPlan, ResponsePlan>);
+
+  DenseOperator original_matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  DenseOperator unrelated_matrix{2, {2.0, 0.0, 0.0, 3.0}};
+  const std::array<double, 2> rhs{1.0, 2.0};
+  generativeqc::response::LinearResponseProblem original(
+      2, [&](auto input, auto output) { original_matrix(input, output); });
+  generativeqc::response::LinearResponseProblem unrelated(
+      2, [&](auto input, auto output) { unrelated_matrix(input, output); });
+  const auto plan = generativeqc::response::prepare_response(original, {});
+
+  bool rejected = false;
+  try {
+    (void)generativeqc::response::solve_response(plan, unrelated, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && unrelated_matrix.actions == 0,
+          "response solve accepted a plan from an unrelated same-sized problem");
+
+  auto copied = original;
+  auto moved = std::move(copied);
+  require(plan.is_bound_to(original) && plan.is_bound_to(moved) && !plan.is_bound_to(copied),
+          "response binding did not follow problem copy/move ownership");
+  const auto copied_plan = plan;
+  const auto solved = generativeqc::response::solve_response(copied_plan, moved, rhs);
+  require(solved.converged() && explicit_residual(original_matrix, solved.solution, rhs) < 1e-12,
+          "copied plan/problem changed the physical response solve");
+  const generativeqc::response::GmresPlan numeric_plan = plan;
+  require(numeric_plan.workspace_bytes == plan.workspace_bytes,
+          "bound response plan changed the numeric resource contract");
+  const auto legacy = generativeqc::response::solve_gmres(numeric_plan, moved.apply(), rhs);
+  require(legacy.solution == solved.solution && legacy.status == solved.status &&
+              legacy.residual_norm == solved.residual_norm &&
+              legacy.iterations == solved.iterations &&
+              legacy.operator_actions == solved.operator_actions &&
+              legacy.workspace_bytes == solved.workspace_bytes &&
+              legacy.measured_workspace_peak_bytes == solved.measured_workspace_peak_bytes,
+          "bound response orchestration changed the legacy solve or work/resource diagnostics");
+
+  auto plan_to_move = plan;
+  const auto moved_plan = std::move(plan_to_move);
+  require(moved_plan.is_bound_to(moved) && !plan_to_move.is_bound_to(moved),
+          "response binding did not follow plan move ownership");
+
+  // Rebuilding the same callback is a new binding, not proof of state validity.
+  original = LinearResponseProblem(2, original.apply());
+  rejected = false;
+  const auto actions_before = original_matrix.actions;
+  try {
+    (void)generativeqc::response::solve_response(plan, original, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && original_matrix.actions == actions_before,
+          "reconstructed same-sized response problem reused an old plan binding");
+
+  const auto fresh_plan = generativeqc::response::prepare_response(original, {});
+  require(generativeqc::response::solve_response(fresh_plan, original, rhs).converged(),
+          "response problem could not recover by preparing a fresh plan");
+  rejected = false;
+  try {
+    (void)generativeqc::response::prepare_response(copied, {});
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "moved-from response problem acquired a fresh plan");
+
+  std::weak_ptr<const int> captured_owner;
+  const auto detached_plan = [&] {
+    auto owner = std::make_shared<const int>(1);
+    captured_owner = owner;
+    LinearResponseProblem local(2, [owner](auto input, auto output) {
+      for (std::size_t index = 0; index < input.size(); ++index)
+        output[index] = *owner * input[index];
+    });
+    return generativeqc::response::prepare_response(local, {});
+  }();
+  require(captured_owner.expired(), "response plan retained method callback storage");
+  require(!detached_plan.is_bound_to(original),
+          "destroyed response problem's plan acquired an unrelated live binding");
+
+  rejected = false;
+  try {
+    (void)generativeqc::response::solve_response(ResponsePlan{}, original, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "unprepared response plan reached the solver");
+}
+
+void response_action_shape_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::LinearResponseSymmetry;
+  std::size_t actions = 0;
+  const auto action = [&](std::span<const double> input, std::span<double> output) {
+    ++actions;
+    std::copy(input.begin(), input.end(), output.begin());
+  };
+  LinearResponseProblem general(2, action, LinearResponseSymmetry::General, action);
+  LinearResponseProblem symmetric(2, action, LinearResponseSymmetry::Symmetric);
+  const std::array<double, 2> input{1.0, 2.0};
+  std::array<double, 2> output{};
+  for (const auto* problem : {&general, &symmetric}) {
+    for (const auto* apply : {&problem->apply(), &problem->apply_transpose()}) {
+      for (bool short_input : {false, true}) {
+        bool rejected = false;
+        try {
+          (*apply)(std::span(input).first(short_input ? 1 : 2),
+                   std::span(output).first(short_input ? 2 : 1));
+        } catch (const std::invalid_argument&) {
+          rejected = true;
+        }
+        require(rejected && actions == 0, "malformed response JVP/VJP reached a method action");
+      }
+    }
+  }
+  general.apply()(input, output);
+  require(actions == 1 && output == input, "valid response action changed its physical output");
+  bool rejected = false;
+  try {
+    LinearResponseProblem invalid(2, action, static_cast<LinearResponseSymmetry>(99));
+    (void)invalid;
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "invalid response symmetry metadata was accepted");
+}
+
+void response_callback_preconditioner_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  DenseOperator matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  LinearResponseProblem problem(2, [&](auto input, auto output) { matrix(input, output); });
+  const std::array<double, 2> rhs{1.0, 2.0};
+  const std::array<double, 2> diagonal{4.0, 3.0};
+  const generativeqc::response::LinearOperator inverse = [&](auto input, auto output) {
+    for (std::size_t index = 0; index < input.size(); ++index)
+      output[index] = input[index] / diagonal[index];
+  };
+  const auto plan = generativeqc::response::prepare_response(problem, {});
+  const auto bound = generativeqc::response::solve_response(plan, problem, rhs, {}, {}, inverse);
+  const auto legacy =
+      generativeqc::response::solve_gmres(plan, problem.apply(), rhs, {}, {}, inverse);
+  require(bound.converged() && bound.solution == legacy.solution &&
+              bound.residual_norm == legacy.residual_norm &&
+              bound.iterations == legacy.iterations &&
+              bound.operator_actions == legacy.operator_actions &&
+              bound.preconditioner_actions == legacy.preconditioner_actions &&
+              explicit_residual(matrix, bound.solution, rhs) < 1e-12,
+          "shared callback preconditioning changed the physical solve or diagnostics");
+
+  const std::array<ResponseSolveRequest, 3> requests{
+      ResponseSolveRequest{rhs, {}, {}, inverse},
+      ResponseSolveRequest{rhs,
+                           {},
+                           {},
+                           [](auto, auto output) {
+                             std::fill(output.begin(), output.end(),
+                                       std::numeric_limits<double>::quiet_NaN());
+                           }},
+      ResponseSolveRequest{rhs, {}, diagonal},
+  };
+  const auto batch_plan = generativeqc::response::prepare_response_batch(
+      problem, {}, requests.size(), std::numeric_limits<std::size_t>::max());
+  const auto batch = generativeqc::response::solve_response_batch(batch_plan, problem, requests);
+  require(batch.responses[0].converged() &&
+              batch.responses[1].status == GmresStatus::nonfinite_preconditioner &&
+              batch.responses[2].converged(),
+          "one refused method preconditioner contaminated its batch neighbors");
+  bool rejected = false;
+  const auto actions_before = matrix.actions;
+  try {
+    (void)generativeqc::response::solve_response(plan, problem, rhs, {}, diagonal, inverse);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && matrix.actions == actions_before,
+          "conflicting response preconditioners reached the physical action");
+}
+
+void response_preconditioner_borrow_contract() {
+  using generativeqc::response::LinearOperator;
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  struct StatefulInverse {
+    bool* fail_copy;
+    mutable std::size_t actions{};
+    explicit StatefulInverse(bool& fail) : fail_copy(&fail) {}
+    StatefulInverse(const StatefulInverse& other)
+        : fail_copy(other.fail_copy), actions(other.actions) {
+      if (*fail_copy) throw std::runtime_error("preconditioner was copied during solve");
+    }
+    void operator()(std::span<const double> input, std::span<double> output) const {
+      ++actions;
+      std::copy(input.begin(), input.end(), output.begin());
+    }
+  };
+
+  DenseOperator matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  LinearResponseProblem problem(2, [&](auto input, auto output) { matrix(input, output); });
+  LinearResponseProblem unrelated(2, problem.apply());
+  const std::array<double, 2> rhs{1.0, 2.0};
+  bool fail_copy = false;
+  const LinearOperator inverse = StatefulInverse(fail_copy);
+  const ResponseSolveRequest request{rhs, {}, {}, inverse};
+  const std::array<ResponseSolveRequest, 1> requests{request};
+  // Descriptors own their callbacks, but executing one must borrow that owned
+  // state. Its copy may allocate method payload or throw before admission.
+  fail_copy = true;
+  const auto plan = generativeqc::response::prepare_response(problem, {});
+  const auto direct = generativeqc::response::solve_response(plan, problem, rhs, {}, {}, inverse);
+  const auto owned = generativeqc::response::solve_response(plan, problem, request);
+  require(direct.converged() && owned.converged() && direct.solution == owned.solution &&
+              inverse.target<StatefulInverse>()->actions == direct.preconditioner_actions &&
+              request.right_preconditioner.target<StatefulInverse>()->actions ==
+                  owned.preconditioner_actions,
+          "response solve did not invoke its caller-owned preconditioner state");
+
+  const auto batch_plan = generativeqc::response::prepare_response_batch(
+      problem, {}, requests.size(), std::numeric_limits<std::size_t>::max());
+  const auto batch = generativeqc::response::solve_response_batch(batch_plan, problem, requests);
+  require(batch.complete() && batch.responses[0].converged() &&
+              requests[0].right_preconditioner.target<StatefulInverse>()->actions ==
+                  batch.responses[0].preconditioner_actions,
+          "response batch copied a request's preconditioner state");
+
+  const auto actions_before = matrix.actions;
+  const auto inverse_actions = inverse.target<StatefulInverse>()->actions;
+  const auto request_actions = request.right_preconditioner.target<StatefulInverse>()->actions;
+  const auto batch_actions = requests[0].right_preconditioner.target<StatefulInverse>()->actions;
+  const auto require_wrong_binding = [](auto&& solve) {
+    bool rejected = false;
+    try {
+      solve();
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "unrelated problem reached a preconditioner before binding validation");
+  };
+  require_wrong_binding(
+      [&] { (void)generativeqc::response::solve_response(plan, unrelated, rhs, {}, {}, inverse); });
+  require_wrong_binding(
+      [&] { (void)generativeqc::response::solve_response(plan, unrelated, request); });
+
+  auto limited_options = plan.options;
+  limited_options.max_workspace_bytes = 1;
+  const auto limited_plan = generativeqc::response::prepare_response(problem, limited_options);
+  const auto limited_direct =
+      generativeqc::response::solve_response(limited_plan, problem, rhs, {}, {}, inverse);
+  const auto limited_owned = generativeqc::response::solve_response(limited_plan, problem, request);
+  for (const auto* result : {&limited_direct, &limited_owned})
+    require(result->status == GmresStatus::workspace_limit && result->solution.empty() &&
+                result->measured_workspace_peak_bytes == 0,
+            "response refusal copied a preconditioner before numeric admission");
+
+  const auto limited_batch_plan =
+      generativeqc::response::prepare_response_batch(problem, {}, requests.size(), 0);
+  const auto refused =
+      generativeqc::response::solve_response_batch(limited_batch_plan, problem, requests);
+  require(!refused.complete() && refused.responses.empty(),
+          "over-budget response batch executed a preconditioner");
+  require_wrong_binding([&] {
+    (void)generativeqc::response::solve_response_batch(limited_batch_plan, unrelated, requests);
+  });
+  require(matrix.actions == actions_before &&
+              inverse.target<StatefulInverse>()->actions == inverse_actions &&
+              request.right_preconditioner.target<StatefulInverse>()->actions == request_actions &&
+              requests[0].right_preconditioner.target<StatefulInverse>()->actions == batch_actions,
+          "response binding or budget refusal invoked a method callback");
+}
+
+void response_problem_assignment_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::LinearResponseSymmetry;
+  struct ThrowingCopyOperator {
+    bool* fail;
+    explicit ThrowingCopyOperator(bool& fail_copy) : fail(&fail_copy) {}
+    ThrowingCopyOperator(const ThrowingCopyOperator& other) : fail(other.fail) {
+      if (*fail) throw std::runtime_error("operator copy failed");
+    }
+    void operator()(std::span<const double> input, std::span<double> output) const {
+      output[0] = 3.0 * input[0];
+    }
+  };
+
+  bool fail_copy = false;
+  LinearResponseProblem original(
+      1, [](auto input, auto output) { output[0] = 2.0 * input[0]; },
+      LinearResponseSymmetry::Symmetric);
+  LinearResponseProblem replacement(
+      1, [](auto input, auto output) { output[0] = 3.0 * input[0]; },
+      LinearResponseSymmetry::General, ThrowingCopyOperator(fail_copy));
+  const auto original_plan = generativeqc::response::prepare_response(original, {});
+  const auto replacement_plan = generativeqc::response::prepare_response(replacement, {});
+  const std::array<double, 1> rhs{6.0};
+
+  // A failed late callback copy must not leave a new operator with the old token.
+  fail_copy = true;
+  bool rejected = false;
+  try {
+    original = replacement;
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected && original_plan.is_bound_to(original) &&
+              !replacement_plan.is_bound_to(original) &&
+              original.symmetry() == LinearResponseSymmetry::Symmetric,
+          "failed problem assignment changed the original binding or symmetry");
+  const auto preserved = generativeqc::response::solve_response(original_plan, original, rhs);
+  require(preserved.converged() && std::abs(preserved.solution[0] - 3.0) < 1e-12,
+          "failed problem assignment left a new operator under the old plan binding");
+
+  fail_copy = false;
+  original = replacement;
+  require(replacement_plan.is_bound_to(original) && !original_plan.is_bound_to(original),
+          "successful problem assignment did not replace the binding");
+  const auto assigned = generativeqc::response::solve_response(replacement_plan, original, rhs);
+  require(assigned.converged() && std::abs(assigned.solution[0] - 2.0) < 1e-12,
+          "assigned problem did not use its replacement operator");
+  original = std::move(replacement);
+  require(replacement_plan.is_bound_to(original) && !replacement_plan.is_bound_to(replacement),
+          "problem move assignment did not transfer the binding");
+}
+
+void response_batch_binding_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  DenseOperator matrix{2, {2.0, 0.0, 0.0, 3.0}};
+  LinearResponseProblem original(2, [&](auto input, auto output) { matrix(input, output); });
+  LinearResponseProblem unrelated(2, original.apply());
+  const std::array<double, 2> rhs{2.0, 3.0};
+  const std::array<ResponseSolveRequest, 1> request{{{rhs}}};
+  const auto copied = original;
+
+  for (std::size_t count : {std::size_t{0}, std::size_t{1}}) {
+    for (std::size_t budget : {std::size_t{0}, std::numeric_limits<std::size_t>::max()}) {
+      const auto plan = generativeqc::response::prepare_response_batch(original, {}, count, budget);
+      const auto requests = std::span<const ResponseSolveRequest>(request).first(count);
+      const auto actions_before = matrix.actions;
+      bool rejected = false;
+      try {
+        (void)generativeqc::response::solve_response_batch(plan, unrelated, requests);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected && matrix.actions == actions_before,
+              "empty/refused/admitted batch accepted an unrelated problem binding");
+      const auto result = generativeqc::response::solve_response_batch(plan, copied, requests);
+      require(result.complete() == plan.admitted &&
+                  result.responses.size() == (plan.admitted ? count : 0),
+              "problem-copy binding changed empty/refused/admitted batch semantics");
+      if (plan.admitted && count)
+        require(result.responses[0].converged(), "bound batch failed its valid physical solve");
+    }
+  }
 }
 
 void zero_rhs_is_transactional() {
@@ -523,6 +887,82 @@ void modified_plans_are_rejected_before_execution() {
   require(actions == 0, "mutated plan reached its operator");
 }
 
+void workspace_covers_restarts_and_optional_diagnostics() {
+  // Exercise actual tracked allocation lifetimes rather than duplicating the
+  // planner's formula. A manufactured solution supplies an independent oracle;
+  // small restarts retain best iterates and optional publications across cycles.
+  constexpr std::size_t n = 41;
+  DenseOperator matrix{n, std::vector<double>(n * n)};
+  std::vector<double> solution(n), rhs(n), initial(n), diagonal(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    solution[i] = 1.0 + 0.01 * i;
+    initial[i] = 0.1 * solution[i];
+    diagonal[i] = matrix.values[i * n + i] = 2.0 + 0.07 * i;
+    if (i + 1 < n) matrix.values[i * n + i + 1] = 0.15;
+    if (i) matrix.values[i * n + i - 1] = -0.1;
+  }
+  matrix(solution, rhs);
+  for (unsigned flags = 0; flags != 4; ++flags) {
+    for (const bool exhaust : {false, true}) {
+      for (const bool precondition : {false, true}) {
+        for (const std::size_t restart : {3UL, 30UL}) {
+          GmresOptions options;
+          options.restart = restart;
+          options.max_iterations = exhaust ? 2 : 80;
+          options.relative_tolerance = 1e-13;
+          options.true_residual_every = 3;
+          options.collect_history = flags & 1;
+          options.collect_basis = flags & 2;
+          const auto required = generativeqc::response::prepare_gmres(n, options);
+          options.max_workspace_bytes = required.workspace_bytes;
+          const auto plan = generativeqc::response::prepare_gmres(n, options);
+          auto apply = [&](auto input, auto output) { matrix(input, output); };
+          const auto preconditioner =
+              precondition ? std::span<const double>(diagonal) : std::span<const double>{};
+          const auto result =
+              generativeqc::response::solve_gmres(plan, apply, rhs, initial, preconditioner);
+          require(result.measured_workspace_peak_bytes <= plan.workspace_bytes &&
+                      result.measured_workspace_peak_bytes > 0,
+                  "restarted/diagnostic GMRES exceeded its admitted numeric storage");
+          require(result.history.empty() != options.collect_history &&
+                      result.basis.empty() != options.collect_basis,
+                  "workspace accounting lost requested diagnostics");
+          if (exhaust) {
+            require(result.status == GmresStatus::max_iterations,
+                    "short solve did not exercise finite exhaustion");
+          } else {
+            require(result.converged() && (restart != 3 || result.restarts > 0) &&
+                        explicit_residual(matrix, result.solution, rhs) < 1e-10,
+                    "bounded restarted solve failed the independent residual");
+          }
+          options.max_workspace_bytes = required.workspace_bytes - 1;
+          const auto short_plan = generativeqc::response::prepare_gmres(n, options);
+          const auto before = matrix.actions;
+          const auto refused =
+              generativeqc::response::solve_gmres(short_plan, apply, rhs, initial, preconditioner);
+          require(refused.status == GmresStatus::workspace_limit &&
+                      refused.measured_workspace_peak_bytes == 0 && matrix.actions == before,
+                  "short diagnostic budget allocated storage or invoked the operator");
+
+          // A late operator failure occurs after all iteration arrays and optional
+          // diagnostic capacity exist; no failure return may exceed the same cap.
+          std::size_t actions = 0;
+          const auto failed = generativeqc::response::solve_gmres(
+              plan,
+              [&](auto input, auto output) {
+                matrix(input, output);
+                if (++actions == 3) output[0] = std::numeric_limits<double>::quiet_NaN();
+              },
+              rhs, initial, preconditioner);
+          require(failed.status == GmresStatus::nonfinite_operator &&
+                      failed.measured_workspace_peak_bytes <= plan.workspace_bytes,
+                  "late nonfinite return bypassed bounded GMRES ownership");
+        }
+      }
+    }
+  }
+}
+
 void response_batch_contract() {
   DenseOperator matrix{2, {2.0, 0.0, 0.0, 3.0}};
   generativeqc::response::LinearResponseProblem problem(
@@ -606,6 +1046,180 @@ void response_batch_contract() {
           "mutated response batch plan reached its operator");
 }
 
+void response_batch_diagnostic_storage() {
+  for (unsigned flags = 1; flags <= 3; ++flags) {
+    DenseOperator matrix{2, {3.0, 0.2, -0.1, 2.0}};
+    generativeqc::response::LinearResponseProblem problem(
+        2, [&](auto input, auto output) { matrix(input, output); });
+    GmresOptions options;
+    options.relative_tolerance = 1e-13;
+    options.restart = 2;
+    options.max_iterations = 8;
+    const std::array<double, 2> rhs{3.4, 3.9};
+    const std::array<generativeqc::response::ResponseSolveRequest, 2> requests{
+        generativeqc::response::ResponseSolveRequest{rhs},
+        generativeqc::response::ResponseSolveRequest{rhs},
+    };
+    const auto without_trace = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), std::numeric_limits<std::size_t>::max());
+    options.collect_history = flags & 1;
+    options.collect_basis = flags & 2;
+    const auto probe = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), std::numeric_limits<std::size_t>::max());
+    require(probe.peak_numeric_bytes > without_trace.peak_numeric_bytes &&
+                probe.retained_diagnostic_bytes > 0,
+            "response batch omitted retained diagnostic storage");
+    const auto refused_plan = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), probe.peak_numeric_bytes - 1);
+    const auto refused =
+        generativeqc::response::solve_response_batch(refused_plan, problem, requests);
+    require(!refused.complete() && refused.responses.empty() && matrix.actions == 0,
+            "diagnostic batch refusal invoked a callback or published result arrays");
+    const auto exact = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), probe.peak_numeric_bytes);
+    const auto result = generativeqc::response::solve_response_batch(exact, problem, requests);
+    std::size_t live_bytes = 0, diagnostic_bytes = 0;
+    require(result.complete() && result.responses.size() == requests.size(),
+            "exact-budget diagnostic batch failed");
+    for (const auto& response : result.responses) {
+      require(response.converged() && std::abs(response.solution[0] - 1) < 1e-12 &&
+                  std::abs(response.solution[1] - 2) < 1e-12,
+              "diagnostic collection changed the independently solved system");
+      live_bytes += response.solution.get_allocator().counter()->snapshot().live_bytes;
+      diagnostic_bytes +=
+          (response.history.capacity() + response.basis.capacity()) * sizeof(double);
+      require(response.history.empty() != options.collect_history &&
+                  response.basis.empty() != options.collect_basis,
+              "diagnostic batch lost the requested publication");
+    }
+    require(diagnostic_bytes <= result.retained_diagnostic_bytes &&
+                result.retained_diagnostic_bytes == exact.retained_diagnostic_bytes &&
+                live_bytes <= result.retained_solution_bytes + result.retained_diagnostic_bytes &&
+                live_bytes <= result.planned_peak_numeric_bytes,
+            "live tracked result storage exceeds the batch admission receipt");
+    auto modified = exact;
+    --modified.retained_diagnostic_bytes;
+    bool rejected = false;
+    const auto actions_before = matrix.actions;
+    try {
+      (void)generativeqc::response::solve_response_batch(modified, problem, requests);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected && matrix.actions == actions_before,
+            "mutated diagnostic capacity reached the physical operator");
+    const auto empty = generativeqc::response::prepare_response_batch(problem, options, 0, 0);
+    require(empty.admitted && empty.peak_numeric_bytes == 0 && empty.retained_diagnostic_bytes == 0,
+            "empty diagnostic batch reserved result storage");
+  }
+}
+
+void response_sequence_contract() {
+  for (const bool column_major : {false, true}) {
+    DenseOperator matrix{3, {4, 1, -1, 0, 3, 2, 1, 0, 2}};
+    generativeqc::response::LinearResponseProblem problem(
+        3, [&](auto input, auto output) { matrix(input, output); });
+    GmresOptions options;
+    options.restart = 3;
+    options.max_iterations = 16;
+    options.relative_tolerance = 1e-12;
+    options.collect_history = options.collect_basis = true;
+    const std::array<double, 9> storage =
+        column_major ? std::array<double, 9>{1.5, -5, 2, 3, -10, 4, 0, 0, 0}
+                     : std::array<double, 9>{1.5, 3, 0, -5, -10, 0, 2, 4, 0};
+    const auto make_plan = [&](std::size_t budget) {
+      return generativeqc::response::prepare_response_sequence(
+          3, options, 3, column_major ? 1 : 3, column_major ? 3 : 1, storage.size(), budget);
+    };
+    const auto probe = make_plan(std::numeric_limits<std::size_t>::max());
+    std::vector<GmresStatus> reasons;
+    std::vector<std::vector<double>> solutions;
+    std::size_t published_actions = 0;
+    const auto publish = [&](std::size_t index, const auto& response) {
+      require(index == reasons.size(), "response sequence publication order changed");
+      reasons.push_back(response.status);
+      solutions.emplace_back(response.solution.begin(), response.solution.end());
+      published_actions += response.operator_actions;
+    };
+    const auto exact = make_plan(probe.complete_workspace_bytes);
+    const auto result =
+        generativeqc::response::solve_response_sequence(exact, problem, storage, publish);
+    require(!result.workspace_limited && result.published_count == 3 &&
+                result.converged_count == 3 && matrix.actions == result.operator_actions &&
+                result.peak_workspace_bytes <= exact.complete_workspace_bytes &&
+                result.staging_peak_bytes == (column_major ? 0 : 3 * sizeof(double)),
+            "native sequence lost its numerical/work/strided-staging contract");
+    for (std::size_t column = 0; column < 3; ++column) {
+      const auto factor = column == 0 ? 1.0 : column == 1 ? 2.0 : 0.0;
+      require(std::abs(solutions[column][0] - factor) < 1e-12 &&
+                  std::abs(solutions[column][1] + 2 * factor) < 1e-12 &&
+                  std::abs(solutions[column][2] - 0.5 * factor) < 1e-12,
+              "sequence differs from independently solved nonsymmetric equations");
+    }
+    reasons.clear();
+    solutions.clear();
+    matrix.actions = published_actions = 0;
+    const auto prefix = generativeqc::response::solve_response_sequence(
+        make_plan(probe.first_workspace_bytes), problem, storage, publish);
+    require(prefix.workspace_limited && prefix.converged_count == 1 &&
+                reasons[0] == GmresStatus::converged &&
+                reasons[1] == GmresStatus::workspace_limit &&
+                reasons[2] == GmresStatus::workspace_limit && solutions[1].empty() &&
+                solutions[2].empty() && matrix.actions == published_actions,
+            "resource refusal lost its admitted prefix or executed tail operators");
+    reasons.clear();
+    solutions.clear();
+    matrix.actions = published_actions = 0;
+    const auto refused = generativeqc::response::solve_response_sequence(
+        make_plan(probe.first_workspace_bytes - 1), problem, storage, publish);
+    require(refused.workspace_limited && refused.converged_count == 0 &&
+                refused.staging_peak_bytes == 0 && matrix.actions == 0 &&
+                std::all_of(solutions.begin(), solutions.end(),
+                            [](const auto& data) { return data.empty(); }),
+            "first-request refusal allocated dimension-sized staging or solutions");
+    reasons.clear();
+    solutions.clear();
+    auto forged = exact;
+    --forged.first_workspace_bytes;
+    bool rejected = false;
+    try {
+      (void)generativeqc::response::solve_response_sequence(forged, problem, storage, publish);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected && reasons.empty() && matrix.actions == 0,
+            "forged sequence capacity reached publication or the physical operator");
+    bool lease_valid = true;
+    std::shared_ptr<generativeqc::runtime::AllocationCounter> retained_counter;
+    rejected = false;
+    try {
+      (void)generativeqc::response::solve_response_sequence(
+          exact, problem, storage,
+          [&](std::size_t index, const auto& response) {
+            publish(index, response);
+            retained_counter = response.solution.get_allocator().counter();
+            lease_valid = false;
+          },
+          {},
+          [&] {
+            if (!lease_valid) throw std::runtime_error("stale sequence lease");
+          });
+    } catch (const std::runtime_error&) {
+      rejected = true;
+    }
+    require(rejected && reasons.size() == 1 && matrix.actions == published_actions &&
+                retained_counter && retained_counter->snapshot().live_bytes == 0,
+            "stale publication continued the sequence or retained native result storage");
+    bool validated_empty = false;
+    const auto empty_plan =
+        generativeqc::response::prepare_response_sequence(3, options, 0, 0, 0, 0, 0);
+    const auto empty = generativeqc::response::solve_response_sequence(
+        empty_plan, problem, {}, {}, {}, [&] { validated_empty = true; });
+    require(validated_empty && empty.published_count == 0 && empty.peak_workspace_bytes == 0,
+            "empty sequence skipped its lease or reserved numeric workspace");
+  }
+}
+
 void amortized_true_residuals() {
   constexpr std::size_t n = 24;
   DenseOperator matrix{n, std::vector<double>(n * n)};
@@ -685,14 +1299,23 @@ int main() {
     resident_controller_executes_same_gmres();
     exact_solve_and_true_residual();
     linear_response_problem_contract();
+    response_plan_binding_contract();
+    response_action_shape_contract();
+    response_callback_preconditioner_contract();
+    response_preconditioner_borrow_contract();
+    response_problem_assignment_contract();
+    response_batch_binding_contract();
     zero_rhs_is_transactional();
     restarted_and_exhausted_paths();
     breakdown_and_nonfinite_paths();
     options_and_workspace_boundaries();
     response_batch_contract();
+    response_batch_diagnostic_storage();
+    response_sequence_contract();
     amortized_true_residuals();
     stable_norm_extremes();
     measured_workspace_owns_returned_storage();
+    workspace_covers_restarts_and_optional_diagnostics();
     std::cout << "Native GMRES contracts passed\n";
     return 0;
   } catch (const std::exception& error) {

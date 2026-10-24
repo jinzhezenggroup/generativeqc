@@ -21,8 +21,8 @@ from .libxc_bulk_capabilities import (
     functional_capability,
 )
 
-RESULT_SCHEMA = "generativeqc.libxc-molecular-scf-result/v1"
-QUALIFICATION_SCHEMA = "generativeqc.libxc-molecular-scf-qualification/v1"
+RESULT_SCHEMA = "generativeqc.libxc-molecular-scf-result/v2"
+QUALIFICATION_SCHEMA = "generativeqc.libxc-molecular-scf-qualification/v2"
 PHASES = ("cold", "warm-replay", "changed-geometry")
 STATUSES = ("pass", "fail", "not-run")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -124,6 +124,32 @@ def _resolution_payload(
     }
 
 
+def _normalize_work(value: Any) -> dict[str, Any] | None:
+    """Keep unknown value-provider work distinct from certified empty work.
+
+    Counts are observed logical density applications, not precision inventory,
+    integral setup, derivative work, or counts inferred from SCF iterations.
+    This is the additive native diagnostic's contract, including its uint64
+    range and unavailable counts when any contributing provider is unknown.
+    """
+    if value is None:
+        return None
+    fields = ("coulomb_applications", "exchange_applications")
+    if not isinstance(value, Mapping) or set(value) != {"complete", *fields}:
+        raise ValueError("molecular-SCF Coulomb/exchange work has invalid fields")
+    complete = value["complete"]
+    if type(complete) is not bool:
+        raise ValueError("molecular-SCF Coulomb/exchange completeness must be boolean")
+    for field in fields:
+        count = value[field]
+        if complete:
+            if type(count) is not int or not 0 <= count < 2**64:
+                raise ValueError(f"molecular-SCF {field} must be a uint64 count")
+        elif count is not None:
+            raise ValueError("incomplete molecular-SCF work counts must be unavailable")
+    return {"complete": complete, **{field: value[field] for field in fields}}
+
+
 def _normalize_row(value: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise TypeError("molecular-SCF result row must be a mapping")
@@ -148,6 +174,7 @@ def _normalize_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "reference_identity": _sha(
             value.get("reference_identity"), "reference identity"
         ),
+        "coulomb_exchange_work": _normalize_work(value.get("coulomb_exchange_work")),
     }
     if status != "pass":
         if not isinstance(reason, str) or not reason.strip():
@@ -200,6 +227,17 @@ def _normalize_row(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("passing molecular-SCF row exceeds energy tolerance")
     if residual > residual_tolerance:
         raise ValueError("passing molecular-SCF row exceeds residual tolerance")
+    work = normalized["coulomb_exchange_work"]
+    if work is None or not work["complete"]:
+        raise ValueError(
+            "passing molecular-SCF row requires complete observed J/K work"
+        )
+    if work["coulomb_applications"] == 0:
+        raise ValueError("passing molecular-SCF row requires observed Coulomb work")
+    if work["exchange_applications"] != 0:
+        raise ValueError(
+            "pure semilocal molecular-SCF row executed unused exchange work"
+        )
 
     normalized.update(
         {

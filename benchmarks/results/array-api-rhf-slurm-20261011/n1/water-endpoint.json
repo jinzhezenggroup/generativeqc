@@ -1,0 +1,226 @@
+{
+  "schema": "generativeqc.array-api-rhf-endpoint/v1",
+  "endpoint": "host Bohr coordinates -> converged total energy + nuclear gradient",
+  "molecule": "water",
+  "elements": [
+    "O",
+    "H",
+    "H"
+  ],
+  "coordinates_bohr": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      -1.43,
+      1.11
+    ],
+    [
+      0.0,
+      1.43,
+      1.11
+    ]
+  ],
+  "basis": "sto-3g",
+  "basis_metadata": {
+    "orbital": {
+      "name": "sto-3g",
+      "role": "orbital",
+      "mathematical_identity": "276e9d30b62247aa637ab1d62135186970712b218a62f44874ad345aa8742514",
+      "basis_identity": "57f840292f55bef56089342640740d019174dff148ba5f00f056744b3eb74c6d",
+      "representation": "cartesian",
+      "provenance": {
+        "source": "generativeqc/data/basis_pack.json; Basis Set Exchange",
+        "version": "Basis Set Exchange 0.11",
+        "license": "BSD-3-Clause",
+        "checksum": "6002092fea25331281cc095dc6dc41a6a3d7a2f0c88f82a1fbceac01225a897c"
+      },
+      "electrons": {
+        "atomic_numbers": [
+          8,
+          1,
+          1
+        ],
+        "nuclear_charges": [
+          8,
+          1,
+          1
+        ],
+        "ecp_core_electrons": [
+          0,
+          0,
+          0
+        ],
+        "ionic_charge": 0,
+        "electron_count": 10,
+        "multiplicity": 1,
+        "nalpha": 5,
+        "nbeta": 5
+      },
+      "shell_count": 5,
+      "primitive_count": 15
+    },
+    "model_identity": "79a4274d9d5f48674e9a9a6b902823ee24b33837928ff1231f13e48811b00d3f"
+  },
+  "backend": "cuda",
+  "tensor_cuda_arch": "sm_120",
+  "controls": {
+    "max_iterations": 100,
+    "diis_history": 8,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "screening_tolerance": 1e-14
+  },
+  "precision": {
+    "policy_version": 1,
+    "requested_mode": "fp64",
+    "effective_bits": 64,
+    "mixed_precision_fock_threshold": 0.0,
+    "strict_refinement_applied": false,
+    "mixed_precision_reserved_error": 0.0,
+    "refinement_iterations": 0,
+    "mixed_stage_fock_builds": 0,
+    "strict_stage_fock_builds": 12,
+    "post_scf_fock_builds": 0,
+    "execution_retries": 0,
+    "mixed_admission_census": 0,
+    "final_residual_audits": 0,
+    "skipped_final_fock_builds": 1,
+    "operator_work_counters_valid": true,
+    "detail_version": 1,
+    "complete": false,
+    "operator_inventory_complete": false,
+    "conversion_count": 0,
+    "fallback_count": 0,
+    "returned_state_identity": null,
+    "scf_fock_timeline": [],
+    "operators": [],
+    "native_provenance": {
+      "policy_version": 1,
+      "requested_mode": "fp64",
+      "effective_bits": 64,
+      "mixed_precision_fock_threshold": 0.0,
+      "strict_refinement_applied": false,
+      "mixed_precision_reserved_error": 0.0,
+      "refinement_iterations": 0,
+      "mixed_stage_fock_builds": 0,
+      "strict_stage_fock_builds": 12,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "mixed_admission_census": 0,
+      "final_residual_audits": 0,
+      "skipped_final_fock_builds": 1,
+      "operator_work_counters_valid": true
+    }
+  },
+  "initial_guess": "fresh hcore, no caller-provided density",
+  "cold_seconds": {
+    "native": 1.0664005056023598,
+    "array_api_including_jit": 4.909333985298872
+  },
+  "warm": {
+    "native": {
+      "median_seconds": 0.10130127891898155,
+      "min_seconds": 0.10125168040394783,
+      "max_seconds": 0.10789987072348595,
+      "samples_seconds": [
+        0.10789987072348595,
+        0.10161755606532097,
+        0.10128483176231384,
+        0.10125168040394783,
+        0.10138068348169327,
+        0.10137343406677246,
+        0.10128342732787132,
+        0.10131271183490753,
+        0.10126391053199768,
+        0.10128984600305557
+      ]
+    },
+    "array_api": {
+      "median_seconds": 0.10250863060355186,
+      "min_seconds": 0.1022547036409378,
+      "max_seconds": 0.10256137326359749,
+      "samples_seconds": [
+        0.10256137326359749,
+        0.10230028629302979,
+        0.10252956300973892,
+        0.10239366069436073,
+        0.10254829749464989,
+        0.10251064971089363,
+        0.10251975432038307,
+        0.10232264921069145,
+        0.1025066114962101,
+        0.1022547036409378
+      ]
+    }
+  },
+  "array_api_over_native": 1.011918424895069,
+  "observed_5pct_timing_target_met": true,
+  "energy_error_hartree": 1.4210854715202004e-14,
+  "gradient_error_hartree_per_bohr": 1.790234627208065e-15,
+  "scf_iterations": {
+    "native": [
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12
+    ],
+    "array_api": [
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12
+    ]
+  },
+  "matching_iteration_counts": true,
+  "compiled_execution": {
+    "backend": "cuda",
+    "specializations": 1,
+    "native_executables": 1,
+    "program_hashes": [
+      "d06eff01b3e810acdd2024a4f9b57500cffedc29bce2a30a566f5c853593ab1c"
+    ],
+    "molecular_calls": [
+      {
+        "source": "__gqc_molecular_b60a791cd62100bd121de2ea0d6417f3261456e15e25d218799647269b6959c4_energy",
+        "calls": 11,
+        "force_calls": 11,
+        "total_iterations": 132,
+        "backend": "cuda",
+        "native_source_identity": "869e302bd2e1dcb0c82d9b005652581c297a28dc1225d6d5b0957562e80815bb",
+        "model_identity": "79a4274d9d5f48674e9a9a6b902823ee24b33837928ff1231f13e48811b00d3f",
+        "iterations": 12,
+        "energy_change": 7.105427357601002e-14,
+        "density_rms": 6.321090674452654e-11,
+        "nuclear_gradient": true,
+        "geometry_hash": "82914c57326bb3e341a32198ee7dbc8fc2065f86e0eaa0e0d0fb714960e03737"
+      }
+    ]
+  },
+  "peak_memory_bytes": null,
+  "qualification_gaps": [
+    "peak host/device memory not measured",
+    "native ABI does not expose a complete exact-J/K operator-work inventory here"
+  ],
+  "gpu_performance_qualified": false,
+  "scheduler": {
+    "job_id": "7586",
+    "node": "node1",
+    "visible_devices": "1"
+  }
+}

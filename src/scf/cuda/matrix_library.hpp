@@ -9,6 +9,7 @@
 
 #include "generativeqc/generativeqc.h"
 #include "tensor/cuda_matrix_product.hpp"
+#include "tensor/cuda_structured_product.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -23,6 +24,7 @@ struct MatrixLibraryResources {
   std::size_t masked_output_elements_{};
   /** Immutable semantic binding; no execution-time implementation selector. */
   const tensor::CudaMatrixProductBinding* binding_{};
+  const tensor::CudaStructuredProductBinding* structured_binding_{};
 };
 
 /** Prepared host-safe owner for the shared SCF matrix adapter.
@@ -46,13 +48,19 @@ class MatrixLibraryOwner {
   MatrixLibraryOwner(const MatrixLibraryOwner&) = delete;
   MatrixLibraryOwner& operator=(const MatrixLibraryOwner&) = delete;
 
-  generativeqc_status prepare(cudaStream_t stream, int nbf, int systems = 1, int spins = 2);
+  generativeqc_status prepare(cudaStream_t stream, int nbf, int systems = 1, int spins = 2,
+                              int direct_nbf = 0);
   void reset() noexcept;
 
   bool library_enabled() const noexcept { return blas_ != nullptr; }
   MatrixLibraryResources view(double* masked_output = nullptr,
                               std::size_t masked_output_elements = 0) const noexcept {
-    return {stream_, blas_, masked_output, masked_output_elements, binding_ ? &*binding_ : nullptr};
+    return {stream_,
+            blas_,
+            masked_output,
+            masked_output_elements,
+            binding_ ? &*binding_ : nullptr,
+            structured_binding_ ? &*structured_binding_ : nullptr};
   }
   std::size_t retained_bytes() const noexcept { return retained_bytes_; }
 
@@ -63,6 +71,7 @@ class MatrixLibraryOwner {
   std::size_t retained_bytes_{};
   bool prepared_{};
   std::optional<tensor::CudaMatrixProductBinding> binding_;
+  std::optional<tensor::CudaStructuredProductBinding> structured_binding_;
   generativeqc_status prepare_provider(cudaStream_t stream, int nbf);
 };
 

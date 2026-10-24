@@ -23,6 +23,7 @@
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "response/solve.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "scf/types.hpp"
 #include "tensor/cpu_linalg.hpp"
@@ -384,8 +385,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                     std::size_t source_bytes,
                                                     bool cuda_transform = false) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
-  if (!o || !v || n > (include_triples ? kRccsdtForceMaxAOs : 12) || reference.nbf != n ||
-      reference.nocc != o || molecule::ao_count(system) != n || !max_bytes)
+  if (!o || !v || reference.nbf != n || reference.nocc != o || molecule::ao_count(system) != n ||
+      !max_bytes)
     throw std::invalid_argument("invalid RCCSD(T) force resource dimensions");
   const auto n2 = square(n), n4 = fourth(n), ov = checked_mul(o, v),
              amplitudes = checked_add(ov, square(ov));
@@ -602,17 +603,19 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     const hf::PhysicalReference& reference, const Problem& problem, const SolverResult& cc_result,
     std::span<const double> eps_o, std::span<const double> eps_v, std::size_t max_bytes,
     bool include_triples, bool cuda_derivative, int device_id, std::size_t derivative_stage_budget,
-    double denominator_threshold) {
+    double denominator_threshold, bool resident_lambda_krylov = false) {
   validate_problem(problem);
 #if !GENERATIVEQC_HAS_CUDA
   if (cuda_derivative) throw std::runtime_error("RCCSD(T) CUDA force is unavailable in this build");
 #endif
   if (!cc_result.converged())
     throw std::invalid_argument("RCCSD(T) force requires converged RCCSD amplitudes");
-  if (!max_bytes || reference.nbf > (include_triples ? kRccsdtForceMaxAOs : 12) ||
-      reference.nbf != problem.nocc + problem.nvir || reference.nocc != problem.nocc ||
-      eps_o.size() != problem.nocc || eps_v.size() != problem.nvir ||
-      !std::isfinite(denominator_threshold) || denominator_threshold <= 0.0 ||
+  const auto convergence = cc_result.convergence;
+  convergence.validate();
+  if (!max_bytes || reference.nbf != checked_add(problem.nocc, problem.nvir) ||
+      reference.nocc != problem.nocc || eps_o.size() != problem.nocc ||
+      eps_v.size() != problem.nvir || !std::isfinite(denominator_threshold) ||
+      denominator_threshold <= 0.0 ||
       (cuda_derivative && (device_id < 0 || !derivative_stage_budget)))
     throw std::invalid_argument("RCCSD(T) force is outside the qualified conventional domain");
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;
@@ -674,11 +677,13 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   LambdaOptions lambda_options;
   const auto lambda_started = Clock::now();
   lambda_options.max_bytes = max_bytes;
-  lambda_options.cc_tolerance = 1e-9;
-  lambda_options.lambda_tolerance = 1e-9;
-  lambda_options.gmres.absolute_tolerance = 1e-12;
+  lambda_options.convergence = convergence;
+  lambda_options.cc_tolerance = convergence.cc_residual();
+  lambda_options.lambda_tolerance = convergence.lambda_residual();
+  lambda_options.gmres.absolute_tolerance = convergence.response_solve();
   lambda_options.gmres.relative_tolerance = 0.0;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
+  lambda_options.cuda_resident_krylov = cuda_derivative && resident_lambda_krylov;
   LambdaResult corrected;
   ParameterWeights parameters;
 #if GENERATIVEQC_HAS_CUDA
@@ -799,7 +804,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       for (std::size_t q = bounds.first; q < bounds.second; ++q)
         same_space_stationarity =
             std::max(same_space_stationarity, std::abs(correlation.stationarity[p * n + q]));
-  if (same_space_stationarity > kStationarityTolerance)
+  if (same_space_stationarity > convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("RCCSD(T) same-space canonicalization response failed");
 
   const auto orbital_arena_elements = generated::orbital_jvp_arena_elements(o, v);
@@ -862,12 +867,14 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 
   response::GmresOptions z_options;
   z_options.relative_tolerance = 0.0;
-  z_options.absolute_tolerance = 1e-12;
+  z_options.absolute_tolerance = convergence.response_solve();
   z_options.restart = 30;
   z_options.max_iterations = 200;
   z_options.max_workspace_bytes = max_bytes;
-  const auto z_plan = response::prepare_gmres(dimension, z_options);
-  auto z = response::solve_gmres(z_plan, apply, correlation.orbital_rhs);
+  const response::LinearResponseProblem response_problem(
+      dimension, apply, response::LinearResponseSymmetry::Symmetric);
+  const auto z_plan = response::prepare_response(response_problem, z_options);
+  auto z = response::solve_response(z_plan, response_problem, correlation.orbital_rhs);
   if (!z.converged())
     throw std::runtime_error("RCCSD(T) physical orbital response did not converge");
   std::vector<double> independent(dimension, 0.0);
@@ -877,7 +884,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     independent[row] -= correlation.orbital_rhs[row];
   }
   const double independent_residual = response::stable_norm(independent);
-  if (std::max(z.residual_norm, independent_residual) > kOrbitalResidualTolerance)
+  if (std::max(z.residual_norm, independent_residual) >
+      convergence.limit(kOrbitalResidualTolerance, 1e-7))
     throw std::runtime_error("independent RCCSD(T) physical Z-vector residual failed");
 
   // The control response and dense curvature oracle are dead after the checked
@@ -895,7 +903,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   auto total = hamiltonian_dispatch(parameters, 1.0);
   auto total_eri = eri_dispatch(parameters, 1.0);
   const double stationarity = max_abs(total.stationarity);
-  if (stationarity > kStationarityTolerance)
+  if (stationarity > convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("complete HF+RCCSD(T)+Z orbital stationarity failed");
 
   mp2::LagrangianWeights weights;
@@ -1049,20 +1057,22 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget) {
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov) {
   return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
-                                  max_bytes, false, true, device_id, derivative_stage_budget,
-                                  1e-10);
+                                  max_bytes, false, true, device_id, derivative_stage_budget, 1e-10,
+                                  resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget) {
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov) {
   posthf::RawSource source(system);
   return rccsd_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                          device_id, derivative_stage_budget);
+                          device_id, derivative_stage_budget, resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
@@ -1091,10 +1101,10 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold) {
+                                    double denominator_threshold, bool resident_lambda_krylov) {
   return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
                                   max_bytes, true, true, device_id, derivative_stage_budget,
-                                  denominator_threshold);
+                                  denominator_threshold, resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
@@ -1102,10 +1112,11 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold) {
+                                    double denominator_threshold, bool resident_lambda_krylov) {
   posthf::RawSource source(system);
   return rccsdt_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                           device_id, derivative_stage_budget, denominator_threshold);
+                           device_id, derivative_stage_budget, denominator_threshold,
+                           resident_lambda_krylov);
 }
 
 }  // namespace generativeqc::cc

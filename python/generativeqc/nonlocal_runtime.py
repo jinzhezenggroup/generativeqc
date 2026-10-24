@@ -87,6 +87,9 @@ class NonlocalResidentForceDiagnostic:
     generation: int
     executed: bool
     stream_bound: bool
+    pair_cache_probes: int | None = None
+    pair_cache_hits: int | None = None
+    pair_evaluations: int | None = None
 
 
 def _positive_uint32(value: typing.Any, label: str) -> int:
@@ -686,12 +689,23 @@ class _ResidentNonlocalForceOwner:
             context=self._context,
         )
 
-    def diagnostic(self) -> NonlocalResidentForceDiagnostic:
+    def diagnostic(
+        self, *, include_work: bool = False
+    ) -> NonlocalResidentForceDiagnostic:
+        """Read lifecycle state; optional work counters drain prior force work."""
         self._require_open()
-        values = (ctypes.c_uint64 * 6)()
+        values = (ctypes.c_uint64 * 9)()
+        status = getattr(self._library, self._METRICS)(
+            self._owner, values, 9 if include_work else 6
+        )
+        work_available = include_work and status == _native.STATUS_SUCCESS
+        if include_work and status == _native.STATUS_INVALID_ARGUMENT:
+            # Older source-matched libraries expose only the original six
+            # lifecycle fields. Unavailable work must not become measured zero.
+            status = getattr(self._library, self._METRICS)(self._owner, values, 6)
         _native.check(
             self._library,
-            getattr(self._library, self._METRICS)(self._owner, values, len(values)),
+            status,
             context=self._context,
         )
         return NonlocalResidentForceDiagnostic(
@@ -701,6 +715,9 @@ class _ResidentNonlocalForceOwner:
             generation=int(values[3]),
             executed=bool(values[4]),
             stream_bound=bool(values[5]),
+            pair_cache_probes=int(values[6]) if work_available else None,
+            pair_cache_hits=int(values[7]) if work_available else None,
+            pair_evaluations=int(values[8]) if work_available else None,
         )
 
 

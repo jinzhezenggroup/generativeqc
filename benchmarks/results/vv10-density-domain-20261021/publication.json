@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All recorded boundary/seed and complete observable gates pass for the expanded molecular density domain.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 914,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "d8c6f46a61ff986ccf37c8af3d0f0d76d596b5a9129fa1011f1676ec33640874"
+    },
+    {
+      "bytes": 7719,
+      "path": "endpoint-checks.json",
+      "role": "summary",
+      "sha256": "fdc8a4ad89e3d423f0f0ded00f4a9abb151a4d112081cfd54ce4c1cef09119c6"
+    },
+    {
+      "bytes": 37148,
+      "path": "receipts.json.xz",
+      "role": "samples",
+      "sha256": "747f2b0dbca96e853e740535071d951b3c6a9a4334d4791d5f5665c0d298459e"
+    },
+    {
+      "bytes": 8701,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "b85eeaaa2970e0ca934b2aabf64357f4e29ad50c3e5f77ce42d298a8535a97f0"
+    },
+    {
+      "bytes": 1932,
+      "path": "reference-default-check.json",
+      "role": "summary",
+      "sha256": "f7b5e2c387d5318d2ebbeaccbc94e24b29d50466e3fc176c45d745ee1f8fd559"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--time=00:45:00",
+      "bash",
+      "test-n1.sh",
+      "seeds",
+      "0"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61"
+  }
+}

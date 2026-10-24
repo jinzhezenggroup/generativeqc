@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/correlation_convergence.hpp"
 #include "hf/reference.hpp"
 #include "hf/rhf_frame_identity.hpp"
 #include "hf/rhf_frame_recycle.hpp"
@@ -20,6 +21,7 @@ struct System;
 }
 
 namespace generativeqc::hf {
+class DFReference;
 
 /** Owned, immutable same-frame DF preconditioner inputs. Transfer this owner
  * into response so resource/identity rejection can release it before falling
@@ -79,6 +81,9 @@ RHFFrameDFPreconditionerPreparation prepare_rhf_frame_df_preconditioner(
  * validation; such results are not stationary molecular gradients.
  */
 struct RHFFrameResponseOptions {
+  /** Same immutable SCF source for the full DF model; null selects exact RHF.
+   * The response owner charges its complete retained capacity. */
+  std::shared_ptr<DFReference> df_reference;
   std::size_t maximum_bytes{512ULL << 20};
   std::size_t caller_bytes{};
   bool relax_orbitals{true};
@@ -89,6 +94,9 @@ struct RHFFrameResponseOptions {
   // Optional synchronized J/K timing and canonical integral census. Phase wall
   // times are always reported; J/K times are subsets, not additive phases.
   bool profile_jk{false};
+  /** Reuse prepared shell recurrence for signed J/K actions. The independent
+   * final residual always retains per-component recomputation. */
+  bool materialized_jk{true};
   /** An unset ceiling selects conservative reuse for relaxed, unscreened
    * frames with at least 64 public AOs, capped at 8 GiB. Explicit zero disables
    * reuse; a positive value requests it independently of that crossover.
@@ -103,11 +111,13 @@ struct RHFFrameResponseOptions {
     const auto ceiling = resident_jk_maximum_bytes.value_or(automatic ? 8ULL << 30 : 0);
     return std::min(ceiling, remaining_bytes);
   }
-  // Experimental canonical P:G'(D). Fewer passes can lose shell-level reuse,
-  // so this consumer requires an explicit opt-in and a measured crossover.
-  bool bilinear_derivative{false};
+  // Request one retained-shell P:G'(D) traversal when its exact lease is admitted.
+  // Missing shell storage preserves bounded polarization instead of selecting
+  // the slower canonical experiment solely because it needs fewer passes.
+  bool bilinear_derivative{true};
   // Preserve the admitted shell consumer and contract the cross term as
-  // [E2'(D+P)-E2'(D-P)]/2. Both false retains legacy three-pass polarization.
+  // [E2'(D+P)-E2'(D-P)]/2 when bilinear is disabled or its lease is unavailable.
+  // Both false retains legacy three-pass polarization.
   bool symmetric_polarization{true};
   // Opt-in while complete endpoint qualification is pending. The physical
   // exact J/K operator and all final acceptance gates remain unchanged.
@@ -122,6 +132,7 @@ struct RHFFrameResponseOptions {
     options.true_residual_every = options.restart;
     return options;
   }();
+  core::CorrelationConvergence convergence;
 };
 
 struct RHFFrameResponseResult {
@@ -136,6 +147,7 @@ struct RHFFrameResponseResult {
   bool global_stability_certified{false};
   std::size_t numeric_capacity_bytes{}, direct_device_bytes{}, owned_device_bytes{};
   std::size_t jk_actions{}, derivative_passes{}, orbital_actions{}, gemms{};
+  std::size_t materialized_jk_actions{}, materialized_jk_launches{};
   std::size_t resident_jk_bytes{}, resident_jk_values{}, resident_jk_actions{};
   std::uint64_t resident_jk_value_reads{};
   double resident_jk_setup_seconds{}, resident_jk_seconds{}, resident_jk_device_seconds{};
@@ -174,7 +186,7 @@ struct RHFFrameResponseResult {
   std::size_t recycle_capacity_bytes{};
 };
 
-/** Compose matrix-sized TensorIR pullbacks, exact G(D)=J(D)-K(D)/2,
+/** Compose matrix-sized TensorIR pullbacks, reference-matched G(D)=J(D)-K(D)/2,
  * matrix-free physical Z response, AO Pulay and reference nuclear sources.
  * The reference must belong to this exact normalized all-electron system.
  * Canonical density/Fock consistency is audited before response. bar_fock_mo

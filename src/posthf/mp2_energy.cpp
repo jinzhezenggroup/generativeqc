@@ -1,8 +1,10 @@
 #include "posthf/mp2_energy.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
 #include "posthf/mp2_cpu_generated.hpp"
 #include "posthf/mp2_cuda_plan.hpp"
@@ -51,12 +53,16 @@ unsigned resolved_tile(std::size_t virtuals, unsigned requested) {
 
 Energy conventional_energy(const hf::PhysicalReference& ref,
                            const integrals::ElectronInteractionSource& source, std::size_t budget,
-                           double threshold, unsigned requested_tile, bool cuda, int device) {
+                           double threshold, unsigned requested_tile, bool cuda, int device,
+                           std::span<const double> ovov) {
   validate_reference(ref, threshold, requested_tile);
   const auto& eps = ref.orbital_energies;
   const auto [minimum_denominator, maximum_denominator] = denominator_bounds(ref, threshold);
   (void)maximum_denominator;
   const auto nv = ref.nbf - ref.nocc;
+  if (!ovov.empty() && ovov.size() != posthf::checked_mul(posthf::checked_mul(ref.nocc, ref.nocc),
+                                                          posthf::checked_mul(nv, nv)))
+    throw std::invalid_argument("borrowed MP2 OVOV block has the wrong shape");
   const unsigned tile = resolved_tile(nv, requested_tile);
   const auto cpu = generated::cpu_plan(tile);
   generated::CudaPlan gpu{};
@@ -77,8 +83,17 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   const auto total_jobs = posthf::checked_mul(posthf::checked_mul(ref.nocc, ref.nocc),
                                               posthf::checked_mul(virtual_tiles, virtual_tiles));
   const auto provider_budget = budget - kernel_reserve;
+  const auto* tile_override = std::getenv("GENERATIVEQC_MP2_ENERGY_SOURCE_TILING");
+  const auto tile_domain =
+      cuda && source.supports_device_read(integrals::ElectronInteractionOperator::eri, device) &&
+              (!tile_override || std::string_view(tile_override) != "0")
+          ? posthf::AOTileDomain::Basis
+          : posthf::AOTileDomain::Shell;
+  // Qualified device sources already accept arbitrary public-AO ranges.
+  // Broader tiles avoid repeating every MO-output transform for each tiny
+  // shell-sized AO tile; the existing complete batch planner bounds storage.
   posthf::NativeBlockProvider widest_provider(source, ref, provider_budget,
-                                              std::numeric_limits<unsigned>::max());
+                                              std::numeric_limits<unsigned>::max(), tile_domain);
   const auto maximum_axis_tile = widest_provider.tile_shape()[0];
 
   std::vector<posthf::generated::SourceTileCandidate> tile_candidates;
@@ -86,7 +101,7 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
     try {
       posthf::NativeBlockProvider candidate(source, ref, provider_budget,
-                                            static_cast<unsigned>(axis_tile));
+                                            static_cast<unsigned>(axis_tile), tile_domain);
       const auto request_capacity = candidate.batch_capacity(block_shape, cuda);
       const auto candidate_reuse = generated::conventional_reuse_plan(request_capacity, total_jobs);
       const auto provider_requests = candidate_reuse.provider_requests;
@@ -105,8 +120,8 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   if (tile_candidates.empty())
     throw std::length_error("MP2 energy phase exceeds numeric memory budget");
   const auto source_tile_plan = posthf::generated::select_source_tile(ref.nbf, tile_candidates);
-  posthf::NativeBlockProvider provider(source, ref, provider_budget,
-                                       static_cast<unsigned>(source_tile_plan.axis_tile));
+  posthf::NativeBlockProvider provider(
+      source, ref, provider_budget, static_cast<unsigned>(source_tile_plan.axis_tile), tile_domain);
   const auto request_capacity = provider.batch_capacity(block_shape, cuda);
   const auto reuse = generated::conventional_reuse_plan(request_capacity, total_jobs);
   const bool shared_scan = reuse.shared_scan;
@@ -180,7 +195,22 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
 
   auto flush = [&]() {
     if (jobs.empty()) return;
-    if (shared_scan) {
+    if (!ovov.empty()) {
+      for (const auto& job : jobs) {
+        std::vector<double> direct(static_cast<std::size_t>(tile) * tile), exchange(direct.size());
+        for (unsigned first = 0; first < tile; ++first)
+          for (unsigned second = 0; second < tile; ++second) {
+            if (job.va[first] == posthf::padded_mo || job.vb[second] == posthf::padded_mo) continue;
+            const auto virtual_a = job.va[first] - ref.nocc;
+            const auto virtual_b = job.vb[second] - ref.nocc;
+            direct[first * tile + second] =
+                ovov[((job.i * nv + virtual_a) * ref.nocc + job.j) * nv + virtual_b];
+            exchange[second * tile + first] =
+                ovov[((job.i * nv + virtual_b) * ref.nocc + job.j) * nv + virtual_a];
+          }
+        consume(job, direct, exchange);
+      }
+    } else if (shared_scan) {
       std::vector<posthf::MOSlots> requests;
       requests.reserve(2 * jobs.size());
       for (const auto& job : jobs) {
@@ -233,8 +263,10 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
         }
   flush();
 
-  if (result.provider_work.source_scans != source_tile_plan.source_scans ||
-      result.provider_work.source_reads != source_tile_plan.source_reads)
+  const auto expected_scans = ovov.empty() ? source_tile_plan.source_scans : 0;
+  const auto expected_reads = ovov.empty() ? source_tile_plan.source_reads : 0;
+  if (result.provider_work.source_scans != expected_scans ||
+      result.provider_work.source_reads != expected_reads)
     throw std::logic_error("MP2 source execution disagrees with compiler tile schedule");
   const auto ao2 = posthf::checked_mul(ref.nbf, ref.nbf);
   const auto ao4 = posthf::checked_mul(ao2, ao2);

@@ -1,6 +1,6 @@
 # Post-HF methods
 
-MP2, RCCSD, triples, Lambda and correlated nuclear gradients. Read the shared post-HF architecture before an individual solver or response stage.
+MP2, RCCSD, UCCSD, triples, Lambda and correlated nuclear gradients. Read the shared post-HF architecture before an individual solver or response stage.
 
 **Suggested starting path:** [Post-HF overview](../posthf.md) → [RCCSD](../rccsd.md) → [DF-CCSD(T)](../df_ccsdt.md).
 
@@ -17,6 +17,8 @@ MP2, RCCSD, triples, Lambda and correlated nuclear gradients. Read the shared po
 ../rccsd_bc
 ../rccsd_gpu
 ../rccsd_lambda
+../uccsd_lambda
+../uccsd_physical_response
 ../rccsd_t
 ../rccsd_t_api
 ../ccsd_gradient

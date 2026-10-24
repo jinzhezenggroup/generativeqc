@@ -77,7 +77,8 @@ struct Slots {
 ResidentGmresResult make_result(const ResidentGmresWorkspace& workspace, std::size_t resident_bytes,
                                 WorkspaceVector solution, GmresStatus status, double residual,
                                 double rhs_norm, std::size_t iterations, std::size_t restarts,
-                                std::size_t operator_actions) {
+                                std::size_t operator_actions,
+                                std::size_t preconditioner_actions = 0) {
   GmresResult result;
   result.solution = std::move(solution);
   result.status = status;
@@ -86,7 +87,7 @@ ResidentGmresResult make_result(const ResidentGmresWorkspace& workspace, std::si
   result.iterations = iterations;
   result.restarts = restarts;
   result.operator_actions = operator_actions;
-  result.preconditioner_actions = 0;
+  result.preconditioner_actions = preconditioner_actions;
   result.workspace_bytes = checked_add(workspace.host_scalar_bytes, workspace.host_result_bytes);
   if (const auto counter = result.solution.get_allocator().counter()) {
     const auto measured = counter->snapshot();
@@ -180,12 +181,14 @@ ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBa
   backend.copy(slots.best_x, Slots::x);
   backend.copy(slots.best_residual, Slots::residual);
   std::size_t iterations = 0, restarts = 0, stagnation = 0;
+  std::size_t preconditioner_actions = 0;
 
   auto finish = [&](std::size_t solution_slot, GmresStatus status, double residual) {
     WorkspaceVector solution(n, 0.0, allocator);
     backend.download(solution_slot, solution);
     return make_result(workspace, backend.owned_resident_bytes(), std::move(solution), status,
-                       residual, rhs_norm, iterations, restarts, operator_actions);
+                       residual, rhs_norm, iterations, restarts, operator_actions,
+                       preconditioner_actions);
   };
 
   while (iterations < plan.options.max_iterations) {
@@ -201,7 +204,14 @@ ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBa
          ++column) {
       const auto basis_column = slots.basis + column;
       const auto z_column = slots.preconditioned + column;
-      backend.copy(z_column, basis_column);
+      if (backend.has_right_preconditioner()) {
+        ++preconditioner_actions;
+        backend.precondition(z_column, basis_column);
+        if (!std::isfinite(resident_norm(backend, z_column)))
+          return finish(slots.best_x, GmresStatus::nonfinite_preconditioner, best_norm);
+      } else {
+        backend.copy(z_column, basis_column);
+      }
       backend.apply(slots.work, z_column);
       ++operator_actions;
 

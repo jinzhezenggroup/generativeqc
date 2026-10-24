@@ -1,0 +1,47 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All endpoints completed, but H2/water errors 9.326707032836223e-5/0.0010456709790797603 Eh/Bohr^2 exceed 3e-6; all qualified ratios remain null.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 3784,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "24dd8e42a6583cfdf8ce1de6a91928aeae4b6f153f32a5286355729870b0836b"
+    },
+    {
+      "bytes": 8305,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "26abc45a924b17c19360e17eec2c0ed454d5afe8091bfb37774fed640338dc33"
+    },
+    {
+      "bytes": 2278,
+      "path": "inventory.json.gz",
+      "role": "input",
+      "sha256": "4c014f86824c2e86f5f81338b307ed1a0650b3dea786e2143a762ede0e08062c"
+    },
+    {
+      "bytes": 2129,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "0baea59d5a0c531b65672524eefcc9d1403422d77f366bc450a39eb30688f743"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/wb97mv-hessian-native-parallel-20261016/reproduce.sh"
+    ],
+    "prerequisites": "Run at the measured source on the node2 Slurm controller; CUDA12.9 sm120/RTX PRO6000, CMake/Ninja, a verified compiler cache, build-time compiler Python dependencies and GPU4PySCF1.8.1/PySCF2.14.0/CuPy13.6.0. Preserve Slurm visibility; set CUDA_ROOT and REFERENCE_PYTHON, including required reference library search paths. The complete reproduction script was not independently replayed.",
+    "source_restore": "Keep the bundle outside the checkout before restoring source.revision. The inventory is a selected 267-tile package, not complete orbital-f/auxiliary-g closure. The measured runner used 630s native/600s reference deadlines; the later equal-deadline fix is not in these samples."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "74c90701cfc95a2f7faa0f8e0397692197180a6a"
+  }
+}

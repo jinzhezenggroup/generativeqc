@@ -1,0 +1,58 @@
+{
+  "schema": "generativeqc.ccsd_auto_warmup_evidence.v1",
+  "base_commit": "2a6de26eea1f83e9fd1e8df01c189fea44058b6b",
+  "files": {
+    "README.md": {
+      "sha256": "0c83244dc08816449cb9e4ef87efddac2d0dfb9fc7a4fd5caf7a1d5585e8239a",
+      "bytes": 6535
+    },
+    "ethane144.input.xz": {
+      "sha256": "acda9f34e7e53b0091d3d2c8ffec1682fbbc4a1460345b7f58d26aa5d35d3445",
+      "bytes": 988
+    },
+    "final-source.patch.xz": {
+      "sha256": "06b0a2c0fdcc800678fa6eb5863465ae94bd9ca1f10daff4ed23494a293f3f63",
+      "bytes": 8020
+    },
+    "final-untracked.patch.xz": {
+      "sha256": "c68dd4eaf2196a433b86abdec5971d1e52fdc0164f33c025c8ea0cf9ca35c969",
+      "bytes": 3928
+    },
+    "lifecycle.json.xz": {
+      "sha256": "2d0ace97a8cc3b50fefbb35332b07bb6e01b9d48caedcb88fa1712c0427b2570",
+      "bytes": 5172
+    },
+    "lifecycle_gate.py.gz": {
+      "sha256": "bc38fe8b31510ee0ab39216bbfbbd69654919b68ffe2524ed251bd18c1556c9a",
+      "bytes": 1086
+    },
+    "measured-source.patch.xz": {
+      "sha256": "9e4d646fbc0be34938910e459774f43dc6a13a8b27d9641337185bdee4eaf60b",
+      "bytes": 4032
+    },
+    "oracles.json.xz": {
+      "sha256": "d3bec2f716f6970d753b62798b211343f8bd09fce633e16d1263fa278fd95e03",
+      "bytes": 1624
+    },
+    "retain_evidence.py.gz": {
+      "sha256": "f5bdab0d15ca304fb683638a6ddc48dc033f61decb5b1213653e0141908ee430",
+      "bytes": 1883
+    },
+    "samples.json.xz": {
+      "sha256": "578a3a2cddcde60f23dff3c24bdeb49c277a96b2612a8d1d486a60495bcb1138",
+      "bytes": 20992
+    },
+    "summary.json.xz": {
+      "sha256": "e73c1334525614db419090781b229fddd7cd01045b93740414e31503dc4ee020",
+      "bytes": 1784
+    },
+    "validation-logs.json.xz": {
+      "sha256": "49d6fe091ea80d7c7e3ed7bb1bdd179593b3472f11161bd8e6b225138e4b2836",
+      "bytes": 2820
+    },
+    "water92.input.xz": {
+      "sha256": "5fb6041e58059ccfb9e9e608d84980cee14144f600e3afe6c4e2598d474c09f8",
+      "bytes": 896
+    }
+  }
+}

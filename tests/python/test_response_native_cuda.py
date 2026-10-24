@@ -124,14 +124,15 @@ def test_cuda_action_finite_rotations_and_independent_kernel(
     assert after["d2h_bytes"] - before["d2h_bytes"] == count * (matrix_bytes + 28)
     assert after["synchronizations"] - before["synchronizations"] == count * 2
     assert after["setup_h2d_bytes"] == before["setup_h2d_bytes"]
-    # Preparing the response reads the actual native source a second time;
-    # neither that export nor its fences may disappear from diagnostics.
+    # The verified snapshot already paid final-state export/validation. The
+    # response borrows its current owner's resident D/grid instead of doing
+    # another export, upload, or density allocation.
     for name in (
         "preparation_export_d2h_bytes",
         "preparation_export_reads",
         "preparation_export_synchronizations",
     ):
-        assert before[name] > 0
+        assert before[name] == 0
         assert after[name] == before[name]
     assert response.diagnostics["owned_device_bytes"] <= 128 << 20
     assert response.backend._plan.spec.exchange.present is False
@@ -247,7 +248,9 @@ def test_cuda_meta_gga_is_not_promoted_to_cpks(restricted: bool) -> None:
         # Only the converged state is needed; CUDA tau nuclear gradients have
         # their own capability boundary and do not participate in this gate.
         batch.execute(strict=True, properties=("energy",))
-        with pytest.raises(ValueError, match="LDA/PBE"):
+        with pytest.raises(
+            ValueError, match="all-electron RKS" if restricted else "LDA/PBE"
+        ):
             adapter.from_native(batch, basis)
 
 

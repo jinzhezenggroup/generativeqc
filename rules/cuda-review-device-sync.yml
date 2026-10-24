@@ -1,0 +1,8 @@
+id: cuda-review-device-sync
+language: Cpp
+severity: warning
+message: "Review device-wide synchronization; keep it when required for correctness."
+rule:
+  pattern:
+    context: "void f() { cudaDeviceSynchronize(); }"
+    selector: call_expression

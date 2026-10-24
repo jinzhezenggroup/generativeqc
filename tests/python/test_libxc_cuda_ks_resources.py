@@ -96,12 +96,25 @@ def final_model_admission(
     (folder / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t = void*;\n"
     )
+    # The generated hybrid registry is metadata only in this automatic-point
+    # probe; execute the real shared composition helpers around that boundary.
+    (folder / "generated_split_hybrid_registry.cuh").write_text(
+        "#pragma once\n#include <cstdint>\n"
+        "namespace generativeqc::dft::generated {\n"
+        "struct SplitComposition { bool matched{}; "
+        "unsigned exact_exchange_numerator{}, exact_exchange_denominator{}; };\n"
+        "constexpr SplitComposition split_hybrid_composition(std::uint32_t) { return {}; }\n"
+        "constexpr bool split_hybrid_registered(std::uint32_t) { return false; }\n"
+        "constexpr bool split_hybrid_cuda_df_energy_force(std::uint32_t) { return false; }\n"
+        "}\n"
+    )
     source = folder / "policy.cpp"
     source.write_text(
         r"""
 #include <cmath>
 #include <string_view>
 #include "dft/cuda_xc_point_program.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/ks_final_state.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
@@ -122,12 +135,6 @@ AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t code) {
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) {
   return code == 123 && !missing ? &cuda : nullptr;
 }
-bool split_hybrid_registered(std::uint32_t) { return false; }
-struct SplitComposition {
-  bool matched{};
-  unsigned exact_exchange_numerator{}, exact_exchange_denominator{};
-};
-SplitComposition split_hybrid_composition(std::uint32_t) { return {}; }
 }
 }
 namespace generativeqc::scf {

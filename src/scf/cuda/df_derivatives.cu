@@ -1,3 +1,4 @@
+#include <cmath>
 #include <limits>
 #include <type_traits>
 
@@ -23,27 +24,45 @@ static_assert(threads % 32 == 0 && threads % lanes == 0);
 /** Contract independent primitive partitions before the shared gradient sink. */
 template <std::size_t Terms, unsigned Lanes, unsigned Rank>
 __device__ typename PolicyFor<Terms>::Accumulator cooperative_contract(
-    const products::Factor (&factors)[Rank], const double* positions, unsigned lane) {
+    const products::Factor (&factors)[Rank], const double* positions, unsigned lane, double omega) {
   // Capture before traversal: different contraction lengths diverge within a
   // warp, but every live subgroup must rendezvous with the same original mask.
   const auto mask = __activemask();
+  if (omega > 0.0) {
+    const auto ranged = products::contract<generated_df_policy::LongRangeDerivative, Terms>(
+        factors, positions, lane, Lanes, {omega});
+    typename PolicyFor<Terms>::Accumulator result{};
+    for (unsigned slot = 0; slot < Rank; ++slot)
+      for (unsigned axis = 0; axis < 3; ++axis)
+        result.gradient[slot][axis] = ranged.gradient[slot][axis];
+    runtime::subgroup_sum<Rank, Lanes>(result.gradient, mask);
+    return result;
+  }
   auto result = products::contract<PolicyFor<Terms>, Terms>(factors, positions, lane, Lanes);
   runtime::subgroup_sum<Rank, Lanes>(result.gradient, mask);
   return result;
 }
 
 /** Full dense weights count once; shared atoms are summed by the runtime sink. */
-template <std::size_t Terms, unsigned Lanes = 1, bool SkipSpShells = false>
+template <std::size_t Terms, unsigned Lanes = 1, bool SkipSpShells = false,
+          bool AuxiliaryGOnly = false>
 __device__ void contract(DfDerivativeBasisView o, DfDerivativeBasisView x, const double* positions,
                          unsigned kind, std::size_t element, double weight, double* gradient,
-                         unsigned lane = 0) {
+                         unsigned lane = 0, double omega = 0.0) {
   if (weight == 0) return;
   const auto p = static_cast<std::int64_t>(element % x.nbf);
   if (kind) {
     const products::Factor factors[2]{{x, static_cast<std::int64_t>(element / x.nbf)}, {x, p}};
-    const auto result = cooperative_contract<Terms, Lanes>(factors, positions, lane);
+    const auto result = cooperative_contract<Terms, Lanes>(factors, positions, lane, omega);
     if (lane == 0) products::scatter(factors, result, weight, gradient);
   } else {
+    if constexpr (AuxiliaryGOnly) {
+      const auto* power = x.term_angular + 3 * Terms * p;
+      // Public admission bounds auxiliary angular momentum by g. The shell
+      // consumer owns every lower class, so these domains are disjoint and
+      // complete even when a response panel cuts through a spherical shell.
+      if (power[0] + power[1] + power[2] != 4) return;
+    }
     if constexpr (SkipSpShells) {
       // Every expansion term has the shell's total angular degree, including
       // spherical d/f terms. The shell worker consumed these s/p components.
@@ -58,25 +77,27 @@ __device__ void contract(DfDerivativeBasisView o, DfDerivativeBasisView x, const
     const products::Factor factors[3]{{o, static_cast<std::int64_t>(element / x.nbf / o.nbf)},
                                       {o, static_cast<std::int64_t>(element / x.nbf % o.nbf)},
                                       {x, p}};
-    const auto result = cooperative_contract<Terms, Lanes>(factors, positions, lane);
+    const auto result = cooperative_contract<Terms, Lanes>(factors, positions, lane, omega);
     if (lane == 0) products::scatter(factors, result, weight, gradient);
   }
 }
-template <bool DistributedSink, bool SkipSpShells, std::size_t Terms>
+template <bool DistributedSink, bool SkipSpShells, std::size_t Terms, bool AuxiliaryGOnly = false>
 __global__ void derivative_tile(DfDerivativeBasisView o, DfDerivativeBasisView x,
                                 const double* positions, unsigned kind, runtime::StridedRange range,
                                 std::size_t count, const double* weights, unsigned schedule,
                                 double* gradient, std::size_t begin, std::size_t gradient_stride,
-                                unsigned gradient_copies) {
+                                unsigned gradient_copies, double omega) {
   if constexpr (DistributedSink) gradient += (blockIdx.x % gradient_copies) * gradient_stride;
   const auto thread = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
   if (schedule) {
     if (thread == 0)
       for (std::size_t item = 0; item < count; ++item)
-        contract<Terms>(o, x, positions, kind, range.index(begin + item), weights[item], gradient);
+        contract<Terms>(o, x, positions, kind, range.index(begin + item), weights[item], gradient,
+                        0, omega);
   } else if (thread / lanes < count)
-    contract<Terms, lanes, SkipSpShells>(o, x, positions, kind, range.index(begin + thread / lanes),
-                                         weights[thread / lanes], gradient, thread % lanes);
+    contract<Terms, lanes, SkipSpShells, AuxiliaryGOnly>(
+        o, x, positions, kind, range.index(begin + thread / lanes), weights[thread / lanes],
+        gradient, thread % lanes, omega);
 }
 }  // namespace
 cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasisView x,
@@ -85,12 +106,13 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasis
                                       const double* weights, unsigned schedule, double* gradient,
                                       cudaStream_t stream, std::size_t begin,
                                       std::size_t gradient_stride, unsigned gradient_copies,
-                                      bool skip_sp_shells, unsigned expansion_terms) {
+                                      bool skip_sp_shells, unsigned expansion_terms,
+                                      bool auxiliary_g_only, double omega) {
   if (!expansion_terms) expansion_terms = terms;
   const auto maximum = std::numeric_limits<std::size_t>::max();
   if (!o.nbf || !x.nbf || kind > 1 || schedule > 1 || !positions || !weights || !gradient ||
-      !count || o.nbf > maximum / o.nbf || o.nbf * o.nbf > maximum / x.nbf ||
-      x.nbf > maximum / x.nbf || !gradient_copies ||
+      !std::isfinite(omega) || omega < 0.0 || !count || o.nbf > maximum / o.nbf ||
+      o.nbf * o.nbf > maximum / x.nbf || x.nbf > maximum / x.nbf || !gradient_copies ||
       (gradient_copies > 1 && (!gradient_stride || gradient_stride > maximum / gradient_copies)) ||
       (expansion_terms != terms && expansion_terms != molecule::kMaximumAuxiliaryAoExpansionTerms))
     return cudaErrorInvalidValue;
@@ -113,17 +135,23 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasis
     return cudaErrorInvalidValue;
   const auto blocks = schedule ? 1U : static_cast<unsigned>((count - 1) / elements_per_block + 1);
   if (skip_sp_shells && (kind || schedule || gradient_copies != 1)) return cudaErrorInvalidValue;
+  if (auxiliary_g_only && (kind || schedule || gradient_copies != 1 || skip_sp_shells ||
+                           expansion_terms != molecule::kMaximumAuxiliaryAoExpansionTerms))
+    return cudaErrorInvalidValue;
   const auto launch = [&]<std::size_t Terms>() {
-    if (skip_sp_shells)
+    if (auxiliary_g_only)
+      derivative_tile<false, false, Terms, true><<<blocks, threads, 0, stream>>>(
+          o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1, omega);
+    else if (skip_sp_shells)
       derivative_tile<false, true, Terms><<<blocks, threads, 0, stream>>>(
-          o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1);
+          o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1, omega);
     else if (gradient_copies > 1)
-      derivative_tile<true, false, Terms>
-          <<<blocks, threads, 0, stream>>>(o, x, positions, kind, range, count, weights, schedule,
-                                           gradient, begin, gradient_stride, gradient_copies);
+      derivative_tile<true, false, Terms><<<blocks, threads, 0, stream>>>(
+          o, x, positions, kind, range, count, weights, schedule, gradient, begin, gradient_stride,
+          gradient_copies, omega);
     else
       derivative_tile<false, false, Terms><<<blocks, threads, 0, stream>>>(
-          o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1);
+          o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1, omega);
   };
   if (expansion_terms == molecule::kMaximumAuxiliaryAoExpansionTerms)
     launch.template operator()<molecule::kMaximumAuxiliaryAoExpansionTerms>();

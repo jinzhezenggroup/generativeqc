@@ -286,6 +286,9 @@ def test_cuda_shape_queries_need_no_execution_context_and_cover_large_solver(
         method="pbe-rks",
         basis="def2-svp",
         device="cuda",
+        # The probe intentionally inventories KS alone. Automatic-guess budget
+        # composition is covered by the ledger prepare/replay/rebuild test above.
+        initial_guess=None,
         resource_budget=ResourceBudget(
             host_bytes=probe.peak_bytes["host"], device_bytes=probe.peak_bytes["device"]
         ),
@@ -302,10 +305,13 @@ def test_cuda_shape_queries_need_no_execution_context_and_cover_large_solver(
 
 @CUDA
 @pytest.mark.parametrize("partial", (False, True))
+@pytest.mark.parametrize("admission", ("native_inventory", "legacy"))
 def test_cuda_failed_preparation_retains_ledger_rejection_and_releases_buffers(
     monkeypatch: typing.Any,
     partial: typing.Any,
+    admission: str,
 ) -> None:
+    """Fault the active admission owner, including old-library compatibility."""
     from generativeqc_compiler.common.resources import ResourceAllocationError
 
     calculator = Calculator(
@@ -326,15 +332,56 @@ def test_cuda_failed_preparation_retains_ledger_rejection_and_releases_buffers(
             assert 0 < observed["live_bytes"] <= capacity
     # Fault the assigned capacity only, retaining the real native allocator and
     # exception path so this exercises preparation cleanup rather than a mock.
-    monkeypatch.setattr(
-        calculator._library,
-        "generativeqc_resource_ledger_create_v1",
-        lambda requested, device: create(capacity, device),
-    )
+    if admission == "native_inventory":
+        create_from_inventory = (
+            calculator._library.generativeqc_resource_ledger_create_from_buffers_v1
+        )
+        create_from_inventory.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        create_from_inventory.restype = ctypes.c_int
+
+        def limited_inventory(
+            buffers: typing.Any,
+            count: int,
+            handle: typing.Any,
+            receipt: typing.Any,
+            receipt_count: int,
+        ) -> int:
+            # One observed device record gives the real constructor a smaller
+            # numeric limit while preserving its native receipt and allocator.
+            fault = (ctypes.c_uint64 * 6)(capacity, 4, 0, 0, 0, 0)
+            return create_from_inventory(
+                fault, len(fault), handle, receipt, receipt_count
+            )
+
+        monkeypatch.setattr(
+            calculator._library,
+            "generativeqc_resource_ledger_create_from_buffers_v1",
+            limited_inventory,
+        )
+    else:
+        monkeypatch.setattr(
+            calculator._library,
+            "generativeqc_resource_ledger_create_from_buffers_v1",
+            None,
+        )
+        monkeypatch.setattr(
+            calculator._library,
+            "generativeqc_resource_ledger_create_v1",
+            lambda requested, device: create(capacity, device),
+        )
     with pytest.raises(ResourceAllocationError) as failed:
         calculator.prepare_batch([H2, H2])
     assert failed.value.space == "device:0"
     ledger = failed.value.resource_diagnostics["preparation"]["device_ledger"]
+    # Legacy injection changes the handle, not the Python requested limit.
+    # The native v3 admission receipt reports the actual enforcement capacity.
+    assert ledger["admission"]["limit_bytes"] == capacity
     assert ledger["rejected_allocations"] > 0
     assert ledger["live_bytes"] == 0
     assert bool(ledger["allocations"]) == partial

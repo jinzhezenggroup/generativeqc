@@ -12,6 +12,7 @@ For precise names, units, capabilities, and public Python signatures, use the [R
 
 installation
 quickstart
+spin_roots
 native_cli
 native_cpp
 methods
@@ -23,10 +24,13 @@ methods
 :maxdepth: 1
 :caption: Run and reuse calculations
 
+geometry_optimization
+unrestricted_cc
 batched_hf
 checkpoint
 basis_projection
 progressive_hf
+ccsdt_cbs
 initial_guesses
 ```
 
@@ -61,6 +65,7 @@ ecp
 :caption: Validation and advanced options
 
 accuracy
+application_precision
 local_autotuning
 experimental_array_api
 ```

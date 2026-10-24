@@ -16,10 +16,20 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("case", ["water", "methane", "water-spd"])
+def test_mixed_resident_source_against_independent_jk(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """FP32 storage remains a geometry-only linear operator on signed densities."""
+    test_global_hybrid_phase_source(
+        tmp_path, native_cxx, "water-small-spd", "1", "fp32-source"
+    )
+
+
+@pytest.mark.parametrize("case", ["water", "methane", "water-spd", "water-small-spd"])
 @pytest.mark.parametrize("chunk_width", ["1", "2"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
 def test_global_hybrid_phase_source(
-    tmp_path: Path, native_cxx: NativeCxx, case: str, chunk_width: str
+    tmp_path: Path, native_cxx: NativeCxx, case: str, chunk_width: str, precision: str
 ) -> None:
     """Independent reference data is never supplied to the production KS solve."""
     numpy = pytest.importorskip("numpy")
@@ -28,7 +38,7 @@ def test_global_hybrid_phase_source(
     pyscf.lib.num_threads(2)
     atoms = (
         [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 1.4, 1.1)), ("H", (0.0, -1.4, 1.1))]
-        if case == "water"
+        if case in ("water", "water-small-spd")
         else [
             ("C", (0.0, 0.0, 0.0)),
             ("H", (1.2, 1.2, 1.2)),
@@ -43,7 +53,8 @@ def test_global_hybrid_phase_source(
         atoms = scaling_cases()["water-24"].atoms
     basis = {
         symbol: pyscf.gto.basis.load(
-            "def2-svp" if case == "water-spd" else "aug-cc-pvtz", symbol
+            "def2-svp" if case in ("water-spd", "water-small-spd") else "aug-cc-pvtz",
+            symbol,
         )
         for symbol in {symbol for symbol, _ in atoms}
     }
@@ -109,7 +120,14 @@ def test_global_hybrid_phase_source(
             ),
         )
     execution = subprocess.run(
-        [str(executable), str(input_path)],
+        [str(executable), str(input_path)]
+        + (
+            ["mixed-refinement"]
+            if precision == "auto"
+            else ["mixed-source"]
+            if precision == "fp32-source"
+            else []
+        ),
         capture_output=True,
         text=True,
         timeout=600,
@@ -118,6 +136,15 @@ def test_global_hybrid_phase_source(
     )
     Path(f"{input_path}.probe.log").write_text(execution.stdout + execution.stderr)
     assert execution.returncode == 0, execution.stdout + execution.stderr
+    if precision == "fp32-source":
+        records = [json.loads(line) for line in execution.stdout.splitlines()]
+        assert records and all(record["mixed_source"] for record in records)
+        assert max(record["maximum_jk_error"] for record in records) < 2e-6
+        assert {record["density_scale"] for record in records} == {1.0, -0.5, 0.0}
+        assert all(
+            record["source_bytes"] == 4 * record["source_values"] for record in records
+        )
+        return
     oracle_results = []
     for functional in ("pbe0", "b3lyp"):
         state = json.loads(Path(f"{input_path}.{functional}.json").read_text())
@@ -143,6 +170,7 @@ def test_global_hybrid_phase_source(
     if (
         os.environ.get("GENERATIVEQC_KS_PHASE_VALUES_ENDPOINT_TEST") == "1"
         and chunk_width == "1"
+        and precision == "fp64"
     ):
         with_forces = os.environ.get("GENERATIVEQC_KS_PHASE_VALUES_FORCE_TEST") == "1"
         endpoints = []

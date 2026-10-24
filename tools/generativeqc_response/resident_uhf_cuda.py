@@ -16,6 +16,7 @@ import numpy as np
 from generativeqc import _native
 from generativeqc.profiles import canonical_hash
 
+from .problem import ResponseCompatibilityError
 from .spin_cuda import CudaSpinJKBackend
 from .uhf import UHFResponseProblem, uhf_operator_identity
 
@@ -225,6 +226,14 @@ class CudaResidentUHFResponse:
                 self._handle
             )
             raise RuntimeError((message or b"resident UHF response failure").decode())
+
+    def validate_problem(self, problem: UHFResponseProblem) -> None:
+        """Check the borrowed owner/binding without allocating or transferring."""
+        if self._closed or not self._handle:
+            raise RuntimeError("resident UHF response owner is closed")
+        self._backend._ensure_open()
+        if self.problem.compatibility_identity != problem.compatibility_identity:
+            raise ResponseCompatibilityError("resident response owner/problem mismatch")
 
     @property
     def diagnostics(self) -> dict[str, int]:

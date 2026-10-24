@@ -1,22 +1,22 @@
 #ifndef GENERATIVEQC_METHODS_METHOD_HPP
 #define GENERATIVEQC_METHODS_METHOD_HPP
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "runtime/compiled_execution_region.hpp"
 #include "runtime/execution_context.hpp"
-#include "scf/cuda_density_fitting.hpp"
 #include "scf/precision_work.hpp"
+#include "scf/target_fock_work.hpp"
 #include "scf/types.hpp"
-#include "scf/warm_state.hpp"
 
 namespace generativeqc::methods {
 
@@ -35,6 +35,14 @@ struct Convergence {
   double energy_change{};
   double residual_rms{};  // Historical internal name for the legacy density-update RMS.
   bool converged{};
+};
+
+/** Complete before optional instantiation, including on Clang/libstdc++ where
+ * a nested aggregate's default-construction trait can be queried too early. */
+struct ResultCompanion {
+  double energy{};
+  std::vector<double> forces;
+  std::optional<generativeqc_correlation_diagnostic> correlation;
 };
 
 /** Common calculation result. Method-specific retained state stays in the plan. */
@@ -60,9 +68,16 @@ struct Result {
    * single exported history owner preserves the method resource bound. */
   std::optional<dft::ScfDiagnostic> ks_diagnostic;
   scf::initial_guess::PreliminaryDiagnostic preliminary_guess;
+  /** Optional synchronous CBS companions, evaluated from this exact reference.
+   * They are absent unless requested and never survive a failed transaction. */
+  using Companion = ResultCompanion;
+  std::optional<Companion> hf_component, mp2_component;
 };
 
-/** Method-neutral copy of the cumulative native CUDA KS movement ledger. */
+inline constexpr unsigned kHfComponent = 1;
+inline constexpr unsigned kMp2Component = 2;
+
+/** Copied CC endpoint phase/work diagnostics; the public C prefix stays frozen. */
 struct CcPerformanceDiagnostic {
   double reference_seconds{};
   double problem_seconds{};
@@ -89,6 +104,20 @@ struct CcPerformanceDiagnostic {
   std::uint64_t diis_gram_calls{};
   std::uint64_t diis_coefficient_calls{};
   std::uint64_t diis_combine_calls{};
+  // Private versioned precision telemetry; do not extend the frozen public
+  // performance descriptor or infer execution from a requested Fast policy.
+  std::uint64_t ccsd_fp32_requested{}, ccsd_fp32_executed{}, ccsd_fp32_refused{};
+  std::uint64_t ccsd_fp32_evaluations{}, ccsd_fp32_gemm_calls{}, ccsd_fp32_cast_elements{};
+  // DF response exists only for force endpoints. Older libraries, conventional
+  // methods and energy-only calls must report this extension as unavailable.
+  bool df_response_available{};
+  double lambda_seconds{}, source_response_seconds{}, orbital_seconds{};
+  std::uint64_t lambda_fp32_requested{}, lambda_fp32_executed{}, lambda_fp32_refused{};
+  std::uint64_t lambda_fp32_iterations{}, lambda_fp64_iterations{};
+  std::uint64_t lambda_fp32_actions{}, lambda_fp64_actions{};
+  std::uint64_t lambda_fp32_gemm_calls{}, lambda_fp32_cast_elements{};
+  std::uint64_t lambda_auxiliary_batch_size{}, lambda_numeric_capacity_bytes{},
+      lambda_owned_device_bytes{};
 };
 
 struct KsTransportDiagnostic {
@@ -112,94 +141,9 @@ struct BatchItemResult {
   std::size_t bucket_id{};
   bool warm_start_used{};
   bool warm_start_fallback{};
-};
-
-struct DirectShellClassProfileEntry {
-  std::uint64_t shell_quartets{};
-  std::uint64_t tiles{};
-  std::uint64_t ao_quartets{};
-  std::uint64_t primitive_quartets{};
-};
-
-/** Final-density statistics for the resident scalar PPPS force queue. */
-struct DirectPppsQueueProfile {
-  static constexpr std::size_t kBlockSizeCount = 4;
-  static constexpr std::size_t kOrientationCount = 2;
-  static constexpr std::size_t kPrimitivePairBucketCount = 65;
-
-  std::uint64_t descriptor_slots{};
-  std::uint64_t non_empty_descriptors{};
-  std::uint64_t empty_descriptors{};
-  std::uint64_t tasks{};
-  std::uint64_t primitive_work{};
-  std::uint32_t ket_count_min{};
-  std::uint32_t ket_count_median{};
-  std::uint32_t ket_count_p90{};
-  std::uint32_t ket_count_p99{};
-  std::uint32_t ket_count_max{};
-  std::array<double, kBlockSizeCount> lane_efficiency{};
-  double primitive_warp_efficiency{};
-  std::array<double, kBlockSizeCount> task_tail_imbalance{};
-  std::array<double, kBlockSizeCount> primitive_tail_imbalance{};
-  std::array<std::uint64_t, kOrientationCount> orientation_tasks{};
-  std::array<std::uint64_t, kOrientationCount> orientation_primitive_work{};
-  std::array<std::uint64_t, kPrimitivePairBucketCount> bra_primitive_tasks{};
-  std::array<std::uint64_t, kPrimitivePairBucketCount> bra_primitive_work{};
-  std::array<std::uint64_t, kPrimitivePairBucketCount> ket_primitive_tasks{};
-  std::array<std::uint64_t, kPrimitivePairBucketCount> ket_primitive_work{};
-};
-
-/** Method-neutral record of one CUDA bucket's setup-time eigensolver choice. */
-struct EigensolverDiagnostic {
-  std::uint32_t bucket_id{};
-  std::uint32_t ordinary_family{};
-  std::uint32_t graph_family{};
-  std::uint32_t selection_source{};
-  std::uint64_t matrix_dimension{};
-  std::uint64_t physical_system_count{};
-  std::uint64_t solver_batch_count{};
-  bool api_eligible{};
-  std::uint32_t api_reason{};
-  std::uint64_t matrix_batch_product{};
-  std::uint32_t probe_failure_stage{};
-  std::uint64_t device_workspace_bytes{};
-  std::uint64_t host_workspace_bytes{};
-  std::uint64_t available_device_bytes{};
-  std::int32_t device_id{-1};
-  std::array<std::uint8_t, 16> device_uuid{};
-  std::array<char, 256> device_name{};
-  std::int32_t compute_capability_major{};
-  std::int32_t compute_capability_minor{};
-  std::int32_t cuda_runtime_version{};
-  std::int32_t cuda_driver_version{};
-  std::int32_t cusolver_version{};
-  std::int32_t cuda_error{};
-  std::int32_t cusolver_error{};
-  bool ordinary_execution_passed{};
-  bool graph_capture_passed{};
-  bool host_graph_replay_passed{};
-  bool device_tail_replay_passed{};
-  bool graph_eligible{};
-  double maximum_eigenvalue_error{};
-  double maximum_residual{};
-  double maximum_orthogonality_error{};
-};
-
-/** Method-neutral per-iteration inactive-eigensolver measurement. */
-struct InactiveEigensolverProfileEntry {
-  std::uint32_t bucket_id{};
-  std::uint32_t iteration{};
-  std::uint32_t family{};
-  std::uint32_t physical_system_count{};
-  std::uint32_t solver_batch_count{};
-  std::uint32_t active_physical_count{};
-  std::uint32_t active_solver_count{};
-  std::uint64_t solver_elapsed_nanoseconds{};
-  std::uint32_t inactive_input_nonfinite_count{};
-  std::uint32_t inactive_submission_nonfinite_count{};
-  std::uint32_t inactive_info_nonzero_count{};
-  std::uint32_t inactive_touch_flags{};
-  bool provider_invoked{};
+  /** Present only for an owner that inventories all physical target attempts.
+   * An unavailable total must not fall back to the returned attempt's count. */
+  std::optional<scf::TargetFockWork> target_fock_work;
 };
 
 using Coordinates = std::vector<std::optional<std::vector<double>>>;
@@ -213,6 +157,10 @@ using Coordinates = std::vector<std::optional<std::vector<double>>>;
  */
 class PreparedCalculation {
  public:
+  explicit PreparedCalculation(generativeqc_backend backend = GENERATIVEQC_BACKEND_CPU_REFERENCE,
+                               int device = 0);
+  PreparedCalculation(const PreparedCalculation&) = delete;
+  PreparedCalculation& operator=(const PreparedCalculation&) = delete;
   virtual ~PreparedCalculation() = default;
   [[nodiscard]] virtual std::size_t atom_count() const noexcept = 0;
   [[nodiscard]] virtual const Capabilities& capabilities() const noexcept = 0;
@@ -228,7 +176,18 @@ class PreparedCalculation {
   }
   /** Execute only the requested output work. Energy and convergence
    * diagnostics are always produced; forces are opt-in per execution. */
-  virtual Result execute(bool compute_forces) = 0;
+  Result execute(bool compute_forces, unsigned components = 0);
+  /** The original owner supplies scientific identity/leases and budget admission.
+   * This gate reports the endpoint transaction, not buffer/cache hit counts. */
+  [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
+    return lifecycle_;
+  }
+  /** Revoke exports before recovery. Native owners retain only their existing
+   * last-good warm state; reset never manufactures a scientific generation. */
+  void reset_execution();
+  void close_execution();
+  /** Revoke publication if the ABI copy-out/validation transaction fails. */
+  void reject_execution() noexcept;
   virtual void invalidate_result() {}
   [[nodiscard]] virtual std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const {
     return std::nullopt;
@@ -240,6 +199,17 @@ class PreparedCalculation {
   [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const {
     return std::nullopt;
   }
+
+ protected:
+  virtual Result execute_components_impl(bool compute_forces, unsigned components) {
+    if (components) throw std::invalid_argument("method does not support correlated companions");
+    return execute_impl(compute_forces);
+  }
+  virtual Result execute_impl(bool compute_forces) = 0;
+  virtual void reset_execution_impl() {}
+
+ private:
+  runtime::CompiledExecutionRegion lifecycle_;
 };
 
 /** Prepared ragged execution. Method families choose their own batching policy.
@@ -248,6 +218,10 @@ class PreparedCalculation {
  */
 class PreparedBatch {
  public:
+  explicit PreparedBatch(generativeqc_backend backend = GENERATIVEQC_BACKEND_CPU_REFERENCE,
+                         int device = 0);
+  PreparedBatch(const PreparedBatch&) = delete;
+  PreparedBatch& operator=(const PreparedBatch&) = delete;
   virtual ~PreparedBatch() = default;
   [[nodiscard]] virtual std::size_t size() const noexcept = 0;
   /** Internal per-item immutable prepared capabilities, not the method-global
@@ -259,45 +233,37 @@ class PreparedBatch {
   }
   /** Output selection is per replay; retained scientific controls stay immutable.
    * A false force request skips response evaluation for the complete fleet. */
-  virtual std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                               bool compute_forces = true) = 0;
+  std::vector<BatchItemResult> execute(const Coordinates& coordinates, bool compute_forces = true);
+  /** Select force work per original input slot under the same lifecycle gate.
+   * Each byte is 0 or 1. Owners without this optional execution policy reject
+   * it explicitly; ordinary whole-fleet execution retains its existing contract. */
+  std::vector<BatchItemResult> execute_selected_forces(const Coordinates& coordinates,
+                                                       std::span<const std::uint8_t> forces);
+  [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
+    return lifecycle_;
+  }
+  void reset_execution();
+  void close_execution();
+  void reject_execution() noexcept;
   /** Revoke exported-state eligibility even when API validation rejects a replay. */
   virtual void invalidate_result() {}
-  virtual void clear_warm_starts() = 0;
-  [[nodiscard]] virtual std::size_t warm_density_size(std::size_t index) const = 0;
-  [[nodiscard]] virtual const std::optional<scf::HfWarmState>& warm_state(
-      std::size_t index) const = 0;
-  virtual void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) = 0;
-  virtual void set_warm_start_updates(bool enabled) = 0;
   [[nodiscard]] virtual runtime::ExecutionResourceSnapshot execution_resources(
       std::size_t index) const noexcept {
     (void)index;
     return {};
   }
-  [[nodiscard]] virtual std::optional<KsTransportDiagnostic> ks_transport_diagnostic(
-      std::size_t index) const {
-    (void)index;
-    return std::nullopt;
-  }
-  [[nodiscard]] virtual std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
-      std::size_t index) const {
-    (void)index;
-    return std::nullopt;
-  }
-  [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
-      std::size_t index) const {
-    (void)index;
-    return std::nullopt;
-  }
-  [[nodiscard]] virtual std::optional<std::vector<DirectShellClassProfileEntry>>
-  last_direct_shell_class_profile() const = 0;
-  [[nodiscard]] virtual std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile()
-      const = 0;
-  [[nodiscard]] virtual std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const = 0;
-  [[nodiscard]] virtual std::vector<scf::CudaDensityFittingMetricDiagnostic>
-  last_density_fitting_metric_diagnostics() const = 0;
-  [[nodiscard]] virtual std::vector<InactiveEigensolverProfileEntry>
-  last_inactive_eigensolver_profile() const = 0;
+
+ protected:
+  virtual std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                                    bool compute_forces) = 0;
+  virtual std::vector<BatchItemResult> execute_selected_forces_impl(
+      const Coordinates& coordinates, std::span<const std::uint8_t> forces);
+
+ private:
+  std::vector<BatchItemResult> execute_request(
+      const Coordinates& coordinates, bool compute_forces,
+      std::optional<std::span<const std::uint8_t>> selected_forces);
+  runtime::CompiledExecutionRegion lifecycle_;
 };
 
 /** Exception carrying an exact public status across the C++ method boundary. */
@@ -316,12 +282,14 @@ class MethodError final : public std::runtime_error {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags);
+                                             generativeqc_batch_flags flags,
+                                             const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods
 

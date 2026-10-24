@@ -13,6 +13,8 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include "../runtime/allocation_measurement.hpp"
 #include "../runtime/cuda_resources.cuh"
@@ -78,7 +80,12 @@ struct Context {
             std::to_string(metrics.provider_retained_bytes) + " bytes, allowed " +
             std::to_string(provider_bytes));
     }
-    cuda_check(cudaMalloc(reinterpret_cast<void**>(&arena), bytes));
+    bool host_oom = false;
+    const auto allocation_status = generativeqc::runtime::resource_cuda_malloc(
+        reinterpret_cast<void**>(&arena), bytes, &host_oom);
+    // Host bookkeeping failure must not trigger a smaller-device-arena retry.
+    if (host_oom) throw std::bad_alloc();
+    cuda_check(allocation_status);
     error = reinterpret_cast<int*>(arena + error_offset);
     metrics.owned_device_bytes = bytes;
     if (needs_blas) {
@@ -145,7 +152,7 @@ struct Context {
     if (end) cudaEventDestroy(end);
     if (section_begin) cudaEventDestroy(section_begin);
     if (section_end) cudaEventDestroy(section_end);
-    if (arena) cudaFree(arena);
+    if (arena) generativeqc::runtime::resource_cuda_free(arena);
     if (stream) cudaStreamDestroy(stream);
     cudaSetDevice(previous);
   }
@@ -242,6 +249,118 @@ inline void dot_to_device(Context& context, int count, const double* left, const
 inline void add_vector_in_place(Context& context, int count, const double* source, double* target) {
   constexpr double one = 1.0;
   blas_check(cublasDaxpy(context.handle, count, &one, source, 1, target, 1));
+}
+
+/** Strict-FP64 borrowed column-major tensor primitive views.
+ *
+ * Scientific CUDA callers supply physical dimensions, transposes, pointer
+ * strides and alpha/beta; the provider executes the retained FP64 algorithm
+ * without allocation, a secondary handle, stream mutation or fallback.
+ * The raw submission status intentionally survives the response owner's
+ * draining/exception boundary, which maps cuBLAS failures only after cleanup.
+ * This is an execution adapter for already-qualified prepared resources,
+ * not another provider-selection or precision API.
+ */
+struct ColumnGemmView {
+  cublasHandle_t handle{};
+  bool transpose_left{}, transpose_right{};
+  int rows{}, columns{}, reduction{};
+  const double* alpha{};
+  const double* left{};
+  int left_ld{};
+  const double* right{};
+  int right_ld{};
+  const double* beta{};
+  double* output{};
+  int output_ld{};
+};
+inline cublasStatus_t submit_column_gemm(const ColumnGemmView& view) {
+  return cublasDgemm(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                     view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
+                     view.reduction, view.alpha, view.left, view.left_ld, view.right, view.right_ld,
+                     view.beta, view.output, view.output_ld);
+}
+
+struct ColumnBatchedGemmView {
+  cublasHandle_t handle{};
+  bool transpose_left{}, transpose_right{};
+  int rows{}, columns{}, reduction{};
+  const double* alpha{};
+  const double* left{};
+  int left_ld{};
+  long long left_batch_stride{};
+  const double* right{};
+  int right_ld{};
+  long long right_batch_stride{};
+  const double* beta{};
+  double* output{};
+  int output_ld{};
+  long long output_batch_stride{};
+  int batches{};
+};
+inline cublasStatus_t submit_column_batched_gemm(const ColumnBatchedGemmView& view) {
+  return cublasDgemmStridedBatched(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                                   view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows,
+                                   view.columns, view.reduction, view.alpha, view.left,
+                                   view.left_ld, view.left_batch_stride, view.right, view.right_ld,
+                                   view.right_batch_stride, view.beta, view.output, view.output_ld,
+                                   view.output_batch_stride, view.batches);
+}
+
+struct ColumnGemvView {
+  cublasHandle_t handle{};
+  bool transpose{};
+  int rows{}, columns{};
+  const double* alpha{};
+  const double* matrix{};
+  int ld{};
+  const double* input{};
+  int input_stride{};
+  const double* beta{};
+  double* output{};
+  int output_stride{};
+};
+inline cublasStatus_t submit_column_gemv(const ColumnGemvView& view) {
+  return cublasDgemv(view.handle, view.transpose ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows,
+                     view.columns, view.alpha, view.matrix, view.ld, view.input, view.input_stride,
+                     view.beta, view.output, view.output_stride);
+}
+
+// Some CUDA-compatible runtimes intentionally omit GEAM. Keep the original
+// dependent capability test within the provider, so the scientific owner can
+// retain its generated transpose fallback without spelling a vendor API.
+// The shared tensor header is also parsed by C++17 runtime compilation.
+// Use dependent overload substitution rather than a C++20 requires expression.
+template <class Handle>
+auto column_geam_capability(Handle handle, int m, int n, const double* a, double* output)
+    -> decltype(cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, a, a, n, a, a, n, output, m),
+                std::true_type{});
+auto column_geam_capability(...) -> std::false_type;
+
+template <class Handle>
+inline constexpr bool column_geam_available = decltype(column_geam_capability(
+    std::declval<Handle>(), 0, 0, std::declval<const double*>(), std::declval<double*>()))::value;
+
+template <class Handle>
+struct ColumnGeamView {
+  Handle handle{};
+  bool transpose_left{}, transpose_right{};
+  int rows{}, columns{};
+  const double* alpha{};
+  const double* left{};
+  int left_ld{};
+  const double* beta{};
+  const double* right{};
+  int right_ld{};
+  double* output{};
+  int output_ld{};
+};
+template <class Handle>
+inline cublasStatus_t submit_column_geam(const ColumnGeamView<Handle>& view) {
+  return cublasDgeam(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                     view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
+                     view.alpha, view.left, view.left_ld, view.beta, view.right, view.right_ld,
+                     view.output, view.output_ld);
 }
 
 // Row-major C = op(A) op(B) is column-major C^T = op(B)^T op(A)^T.

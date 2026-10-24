@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import gzip
 import hashlib
 import json
 import os
@@ -17,6 +18,7 @@ import subprocess
 import time
 import typing
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +47,23 @@ CASES = {
 }
 
 
+def read_reference_bytes(path: Path) -> bytes:
+    """Read the original oracle bytes across lossless gzip storage migrations.
+
+    Historical commands may still name the expanded JSON path. Only a missing
+    JSON file may use its gzip sibling; invalid existing inputs must fail.
+    Hash the returned expanded bytes so storage does not change oracle identity.
+    """
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        if path.suffix != ".json" or path.is_symlink():
+            raise
+        path = path.with_suffix(".json.gz")
+        data = path.read_bytes()
+    return gzip.decompress(data) if path.suffix == ".gz" else data
+
+
 @contextmanager
 def _screening_feature_scope(enabled: bool) -> typing.Iterator[None]:
     """Keep diagnostic work out of clean samples and restore on every exit."""
@@ -61,6 +80,26 @@ def _screening_feature_scope(enabled: bool) -> typing.Iterator[None]:
             os.environ.pop(name, None)
         else:
             os.environ[name] = previous
+
+
+def execute_endpoint(
+    batch: typing.Any,
+    *,
+    energy_only: bool = False,
+    cold: bool = False,
+    screening_features: bool = False,
+) -> typing.Any:
+    """Time the complete endpoint, excluding diagnostic control changes."""
+    with _screening_feature_scope(screening_features):
+        start = time.perf_counter()
+        result = batch.execute(
+            strict=True,
+            properties=("energy",)
+            if energy_only and not cold
+            else ("energy", "forces"),
+        )
+        seconds = time.perf_counter() - start
+    return result, seconds
 
 
 def independent_reference(
@@ -440,20 +479,7 @@ def main() -> None:
         """Keep raw numerical evidence even if a subsequent gate fails."""
         args.output.write_text(json.dumps(payload, indent=2) + "\n")
 
-    def execute(
-        batch: typing.Any, *, cold: typing.Any = False, screening_features: bool = False
-    ) -> typing.Any:
-        """Time the complete endpoint, excluding diagnostic control changes."""
-        with _screening_feature_scope(screening_features):
-            start = time.perf_counter()
-            result = batch.execute(
-                strict=True,
-                properties=("energy",)
-                if args.energy_only and not cold
-                else ("energy", "forces"),
-            )
-            seconds = time.perf_counter() - start
-        return result, seconds
+    execute = partial(execute_endpoint, energy_only=args.energy_only)
 
     select_policy(args.policies[0])
     previous_controls = {name: os.environ.get(name) for name in cold_controls}
@@ -549,7 +575,7 @@ def main() -> None:
                     "initialization failed independent energy/force gates"
                 )
         if args.reference:
-            reference_bytes = args.reference.read_bytes()
+            reference_bytes = read_reference_bytes(args.reference)
             expected_energy, expected_forces = independent_reference(
                 json.loads(reference_bytes),
                 args.aos,

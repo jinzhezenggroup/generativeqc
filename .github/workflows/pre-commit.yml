@@ -34,7 +34,10 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           EVIDENCE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 tools/evidence.py check-change --base "$EVIDENCE_BASE"
+          EVIDENCE_HEAD: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+          GIT_TERMINAL_PROMPT: "0"
+        run: bash tools/check_evidence_change.sh
       - name: Prevent legacy codegen test regrowth
         if: github.event_name == 'pull_request'
         env:
@@ -50,6 +53,9 @@ jobs:
           git show "$base:tests/python/test_codegen.py" > "$baseline"
           python3 tools/check_codegen_test_ownership.py --baseline "$baseline"
       - name: Run pre-commit hooks on all files
+        env:
+          # CI reports uncompacted data through the separate --check hook.
+          SKIP: auto-compact-evidence-publications
         run: >-
           uvx --from prek==0.3.1 prek run
           --all-files

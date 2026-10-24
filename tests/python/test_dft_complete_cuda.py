@@ -1216,9 +1216,6 @@ def test_public_cuda_batch_changed_geometry_and_failure_isolation() -> None:
         )
         assert all(item.forces is not None for item in first.items)
         assert not np.array_equal(first.items[0].forces, first.items[1].forces)
-        owner = batch._stationary_cuda_execution
-        assert owner is not None
-        assert owner._lease.executions == 2
 
         malformed = np.asarray([0.0, 1.0])
         isolated = batch.execute(
@@ -1229,11 +1226,20 @@ def test_public_cuda_batch_changed_geometry_and_failure_isolation() -> None:
         assert isolated.items[1].succeeded
         assert isolated.items[1].forces is not None
         assert np.isfinite(isolated.items[1].forces).all()
-        assert batch._stationary_cuda_execution is owner
-        assert owner._lease.executions == 3
+        # Qualified native force owners need no Python stationary executor.
+        # Check the published result against an independent fresh owner, so
+        # either ownership route must isolate the malformed neighbor correctly.
+        with calc.prepare_batch([ATOMS]) as fresh:
+            expected = fresh.execute(
+                coordinates=(moved,), strict=True, properties=("energy", "forces")
+            ).items[0]
+        assert isolated.items[1].energy == pytest.approx(expected.energy, abs=2e-9)
+        np.testing.assert_allclose(
+            isolated.items[1].forces, expected.forces, atol=2e-7, rtol=0
+        )
 
 
-def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
+def test_cuda_ks_resource_plan_accounts_for_public_force_consumers() -> None:
     from test_dft_complete_cpu import ATOMS
 
     calc = _calculator("pbe-rks")
@@ -1245,7 +1251,15 @@ def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
         for candidate in request.candidates
         for estimate in candidate.estimates
     }
-    assert "serialized generated KS force device staging cap" in names
+    native = all(
+        "cuda_stationary_cache" in dict(candidate.decisions)
+        for candidate in request.candidates
+    )
+    if native:
+        assert "all native KS stationary CUDA consumers" in names
+        assert "serialized generated KS force device staging cap" not in names
+    else:
+        assert "serialized generated KS force device staging cap" in names
     assert "serialized generated KS force host staging cap" in names
     assert "serialized KS snapshot grid cache cap" in names
 

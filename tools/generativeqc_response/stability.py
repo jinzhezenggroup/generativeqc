@@ -14,9 +14,8 @@ from hashlib import sha256
 from pathlib import Path
 
 import numpy as np
+from generativeqc._response_spectrum import _qualify_real_spectrum
 from generativeqc.profiles import canonical_hash
-
-from tools.generativeqc_posthf.reference import immutable
 
 from .uhf import UHFResponseOperator
 
@@ -61,7 +60,12 @@ class StabilityOptions:
 
 def _source_identity(operator: UHFResponseOperator) -> str:
     """Bind Python owners; native/provider provenance remains in backend.identity."""
-    owners = (UHFResponseOperator, type(operator.backend), StabilityOptions)
+    owners = (
+        UHFResponseOperator,
+        type(operator.backend),
+        StabilityOptions,
+        _qualify_real_spectrum,
+    )
     files = [inspect.getsourcefile(owner) for owner in owners]
     if any(path is None for path in files):
         raise StabilityUnqualified("unavailable diagnostic/operator/provider source")
@@ -250,51 +254,30 @@ def diagnose_uhf_stability(
             )
         if not math.isfinite(reference_curvature_bound):
             raise StabilityUnqualified("nonfinite reference curvature bound")
-        hessian = np.empty((n, n), dtype=np.float64)
-        column = np.zeros(n, dtype=np.float64)
-        for index in range(n):
-            column[index] = 1.0
-            hessian[:, index] = action(column)
-            column[index] = 0.0
-        symmetry = float(np.linalg.norm(hessian - hessian.T))
-        if not math.isfinite(symmetry) or symmetry > options.symmetry_tolerance:
-            raise StabilityUnqualified("non-self-adjoint physical Hessian")
-        eigenvalues, vectors = np.linalg.eigh(0.5 * (hessian + hessian.T))
-        residual_squared = 0.0
-        for index in range(n):
-            residual = (
-                action(vectors[:, index]) - eigenvalues[index] * vectors[:, index]
+        try:
+            spectrum = _qualify_real_spectrum(
+                action,
+                n,
+                max_dimension=options.max_dimension,
+                max_actions=options.max_evaluations - 1,
+                budget_bytes=options.budget_bytes,
+                curvature_tolerance=options.curvature_tolerance,
+                symmetry_tolerance=options.symmetry_tolerance,
+                residual_tolerance=options.residual_tolerance,
+                reference_curvature_bound=reference_curvature_bound,
             )
-            residual_squared += float(np.dot(residual, residual))
-        residual_bound = math.sqrt(residual_squared)
-        if (
-            not math.isfinite(residual_bound)
-            or residual_bound > options.residual_tolerance
-        ):
-            raise StabilityUnqualified("fresh-action eigen residual failed")
-        if not np.isfinite(eigenvalues).all() or not np.isfinite(vectors).all():
-            raise StabilityUnqualified("nonfinite eigensystem")
-        uncertainty = residual_bound + symmetry / 2.0 + reference_curvature_bound
-        threshold = options.curvature_tolerance + uncertainty
-        status = (
-            "EMPTY"
-            if n == 0
-            else (
-                "UNSTABLE"
-                if eigenvalues[0] < -threshold
-                else "STABLE"
-                if eigenvalues[0] > threshold
-                else "NEAR_SINGULAR"
-            )
+        except ValueError as error:
+            raise StabilityUnqualified(str(error)) from error
+        status, eigenvalues, direction = (
+            spectrum.status,
+            spectrum.eigenvalues,
+            spectrum.direction,
         )
-        direction = None
-        if status == "UNSTABLE":
-            direction = vectors[:, 0].copy()
-            pivot = int(np.argmax(np.abs(direction)))
-            if direction[pivot] < 0:
-                direction *= -1
-            direction = immutable(direction)
-        eigenvalues = immutable(eigenvalues)
+        symmetry, residual_bound, uncertainty = (
+            spectrum.symmetry_defect,
+            spectrum.residual_bound,
+            spectrum.uncertainty,
+        )
         check_current()
         identity = canonical_hash(
             {

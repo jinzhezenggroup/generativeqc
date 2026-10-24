@@ -26,12 +26,16 @@ if TYPE_CHECKING:
 def supports_component_lane_rys(
     spec: ShellClassSpec,
     schedule: ScheduleIR,
+    *,
+    value_only: bool = False,
 ) -> bool:
     """Return whether the runtime-indexed Rys decoder covers ``spec``.
 
     This is a backend capability, not a production promotion decision.  The
     decoder uses one lane per Cartesian component and currently has exact
     tables for s/p/d centers, with no more than a p shell on the fourth center.
+    Value-only plans also admit f centers: their unraised second-center HRR
+    uses the existing cubic bound. Force plans retain the derivative boundary.
     Keeping the predicate beside the lowering prevents manifest validation and
     source emission from silently growing different shell-class boundaries.
     """
@@ -41,7 +45,7 @@ def supports_component_lane_rys(
         and schedule.warp_size == 32
         and schedule.block_threads >= spec.component_count
         and schedule.component_tile >= spec.component_count
-        and max(spec.angular) <= 2
+        and max(spec.angular) <= (3 if value_only else 2)
         and spec.angular[3] <= 1
     )
 
@@ -63,7 +67,9 @@ def _supports_rys_component_lane_fock(
 
     integral = plan.kernel.integral if support_integral is None else support_integral
     return (
-        supports_component_lane_rys(spec, plan.schedule)
+        supports_component_lane_rys(
+            spec, plan.schedule, value_only=integral.derivative is None
+        )
         and integral.recurrence.startswith("rys")
         and (
             (

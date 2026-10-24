@@ -24,6 +24,8 @@ from tools.generate_rccsd_native import (
     _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
     _required_function,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
 )
 
 if typing.TYPE_CHECKING:
@@ -217,14 +219,17 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
-    output = parser.parse_args().output_dir
+    add_cross_size_arena_argument(parser)
+    args = parser.parse_args()
+    output = args.output_dir
     output.mkdir(parents=True, exist_ok=True)
-    for suffix, emit in (
-        ("cpu.hpp", cpu_header),
-        ("cuda.cuh", cuda_header),
-        ("cuda.cu", cuda_source),
-    ):
-        (output / ("generated_rhf_frame_response_" + suffix)).write_text(emit())
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, emit in (
+            ("cpu.hpp", cpu_header),
+            ("cuda.cuh", cuda_header),
+            ("cuda.cu", cuda_source),
+        ):
+            (output / ("generated_rhf_frame_response_" + suffix)).write_text(emit())
 
 
 if __name__ == "__main__":

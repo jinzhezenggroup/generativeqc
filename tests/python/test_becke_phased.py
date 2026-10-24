@@ -50,9 +50,9 @@ bool phases(generativeqc_grid_phased::Workspace work, const double* points,
       if (!point_motion_phase(work, point, atom, owners[point])) return false;
   return true;
 }
-extern "C" int run(const double* points, size_t point_count, const double* centers,
+extern "C" int run_adjusted(const double* points, size_t point_count, const double* centers,
     size_t atom_count, const int64_t* owners, const double* seeds, bool cached,
-    size_t phased, double* output, size_t* counts) {
+    size_t phased, double* output, size_t* counts, const double* radii) {
   using namespace generativeqc_grid_adjoint;
   using generativeqc_grid_phased::Workspace;
   pairs_evaluated = norms_evaluated = logs_evaluated = 0;
@@ -70,10 +70,10 @@ extern "C" int run(const double* points, size_t point_count, const double* cente
                    zeros.data() + 1, maximum.data() + 1};
     const bool valid = cached_pairs
         ? phases(work, points, centers, owners, seeds,
-            PreparedCenterGeometry<decltype(&local_ratio_prepared)>{cached_pairs, local_ratio_prepared})
+            PreparedCenterGeometry<decltype(&local_ratio_prepared)>{cached_pairs, local_ratio_prepared, radii})
         : phases(work, points, centers, owners, seeds,
             DirectCenterGeometry<decltype(&counted_norm), decltype(&local_ratio)>{
-                centers, counted_norm, local_ratio});
+                centers, counted_norm, local_ratio, radii});
     for (const auto* panel : {&pairs, &fields, &maximum})
       if (panel->front() != 987654 || panel->back() != 987654) return -3;
     if (zeros.front() != 987654 || zeros.back() != 987654) return -3;
@@ -90,12 +90,18 @@ extern "C" int run(const double* points, size_t point_count, const double* cente
       if (!contract_point_prepared(points + 3 * point, centers, atom_count, owners[point],
           seeds[point], gradient.data(), logs.data(), products.data(), bars.data(),
           distances_bar.data(), zeros.data(), distances.data(), counted_norm, local_ratio,
-          counted_log, counted_pair, cached_pairs, local_ratio_prepared)) return -2;
+          counted_log, counted_pair, cached_pairs, local_ratio_prepared, radii)) return -2;
   }
   for (double value : gradient) if (!std::isfinite(value)) return -2;
   std::copy(gradient.begin(), gradient.end(), output);
   counts[0] = pairs_evaluated; counts[1] = norms_evaluated; counts[2] = logs_evaluated;
   return 0;
+}
+extern "C" int run(const double* points, size_t point_count, const double* centers,
+    size_t atom_count, const int64_t* owners, const double* seeds, bool cached,
+    size_t phased, double* output, size_t* counts) {
+  return run_adjusted(points, point_count, centers, atom_count, owners, seeds,
+                      cached, phased, output, counts, nullptr);
 }
 """
 
@@ -149,6 +155,8 @@ def helper(
         ct.POINTER(ct.c_size_t),
     ]
     result.run.restype = ct.c_int
+    result.run_adjusted.argtypes = [*result.run.argtypes, pointer]
+    result.run_adjusted.restype = ct.c_int
     result.iterations = request.param
     return result
 

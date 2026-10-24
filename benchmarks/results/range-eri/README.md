@@ -40,3 +40,32 @@ Separate automated tests cover all eight ERI permutations, orbit folding,
 atomic-force scatter with two slots on one atom, malformed records,
 capacity/identity preflight, partial/empty chunks and failed-call replay.
 Native CPU ASan/UBSan and CUDA memcheck probes passed for both range families.
+
+## Lossless CPU resource receipt retention
+
+The CPU `resources.json` is stored as `cpu/resources.json.xz` to keep the
+combined merge-queue snapshot within the unchanged tracked-evidence budget.
+`resource-storage.json` pins the compressed bytes and original Git receipt;
+all resource exclusions and numerical records above remain unchanged. Restore
+the original filename before inspecting the historical publication bundle:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/range-eri/resource-storage.json \
+  --output .artifacts/range-eri-history
+```
+
+The restored file is under
+`.artifacts/range-eri-history/benchmarks/results/range-eri/cpu/resources.json`.
+This is storage-only retention, not a new endpoint or performance qualification.
+
+Additional historical JSON receipts are losslessly stored as `.json.xz`.
+Their original and stored identities are in
+[`merge-storage.json`](../native-grid-binding-20261024/merge-storage.json).
+Restore the exact original filenames for historical publication readers with:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/native-grid-binding-20261024/merge-storage.json \
+  --output .artifacts/native-grid-binding-history
+```

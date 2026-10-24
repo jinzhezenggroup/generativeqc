@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .compiler_lifetime import start_owned_process
 from .compiler_process import CompileResult, kill_compiler_group, run_compiler
 
 if TYPE_CHECKING:
@@ -38,6 +39,35 @@ class CompilerCacheLauncher:
         return [str(self.path), *command]
 
 
+def verify_compiler_cache(
+    executable: Path, timeout: float = 30.0
+) -> CompilerCacheLauncher:
+    """Verify one explicitly selected sccache/ccache executable."""
+    path = executable.absolute()
+    name = path.name.removesuffix(".exe")
+    if name not in {"sccache", "ccache"}:
+        raise ValueError(f"unsupported compiler cache launcher: {path}")
+    result = subprocess.run(
+        [str(path), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode:
+        diagnostic = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            f"{name}: --version exited {result.returncode}"
+            + (f" ({diagnostic})" if diagnostic else "")
+        )
+    version = (result.stdout + result.stderr).strip()
+    if name == "sccache":
+        match = re.search(r"sccache (\d+)\.(\d+)\.(\d+)", version)
+        if match is None or tuple(map(int, match.groups())) < (0, 16, 0):
+            raise RuntimeError("sccache: version 0.16.0 or later is required")
+    return CompilerCacheLauncher(path=path, name=name, version=version)
+
+
 @functools.lru_cache(maxsize=8)
 def _resolve_compiler_cache(
     path_environment: str, timeout: float = 30.0
@@ -46,6 +76,7 @@ def _resolve_compiler_cache(
 
     deadline = time.monotonic() + timeout
     failures: list[str] = []
+    timed_out_probe = False
     for name in ("sccache", "ccache"):
         executable = shutil.which(name, path=path_environment)
         if executable is None:
@@ -55,32 +86,23 @@ def _resolve_compiler_cache(
         if remaining <= 0:
             raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
         try:
-            result = subprocess.run(
-                [str(path), "--version"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=min(30, remaining),
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
+            return verify_compiler_cache(path, min(30, remaining))
+        except subprocess.TimeoutExpired as error:
+            timed_out_probe = True
+            failures.append(f"{name}: {error}")
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(
+                    "compiler-cache discovery", timeout
+                ) from error
+            continue
+        except OSError as error:
             failures.append(f"{name}: {error}")
             continue
-        if result.returncode:
-            diagnostic = (result.stderr or result.stdout).strip()
-            failures.append(
-                f"{name}: --version exited {result.returncode}"
-                + (f" ({diagnostic})" if diagnostic else "")
-            )
+        except (RuntimeError, ValueError) as error:
+            failures.append(str(error))
             continue
-        version = (result.stdout + result.stderr).strip()
-        if name == "sccache":
-            match = re.search(r"sccache (\d+)\.(\d+)\.(\d+)", version)
-            if match is None or tuple(map(int, match.groups())) < (0, 16, 0):
-                failures.append("sccache: version 0.16.0 or later is required")
-                continue
-        return CompilerCacheLauncher(path=path, name=name, version=version)
 
-    if time.monotonic() >= deadline:
+    if timed_out_probe or time.monotonic() >= deadline:
         raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
     detail = f" ({'; '.join(failures)})" if failures else ""
     raise RuntimeError(
@@ -100,13 +122,22 @@ def cached_compiler_command(command: list[str]) -> list[str]:
 
 
 def run_cached_compiler(
-    command: list[str], timeout: float, *, label: str
+    command: list[str],
+    timeout: float,
+    *,
+    label: str,
+    launcher: CompilerCacheLauncher | None = None,
+    preserve_source_paths: bool = False,
 ) -> CompileResult:
     """Cache compilation while owning every local compiler's finite lifetime.
 
     sccache's ordinary shared daemon is outside the client's process group.
     Use a private foreground server and an exclusively leased persistent JIT
     cache slot. Never connect to or shut down the user's shared server.
+
+    ``preserve_source_paths`` prevents ccache from rewriting input filenames via
+    its base directory setting. This preserves path macros when converting an
+    uncached combined driver call to cacheable object compilation.
     """
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("compiler timeout must be finite and positive")
@@ -132,11 +163,19 @@ def run_cached_compiler(
         )
 
     try:
-        launcher = resolve_compiler_cache(timeout)
-        if launcher.name != "sccache":
-            result = run_compiler(launcher.wrap(command), remaining(), label=label)
+        selected = launcher or resolve_compiler_cache(timeout)
+        if selected.name != "sccache":
+            if preserve_source_paths and selected.name == "ccache":
+                result = run_compiler(
+                    selected.wrap(command),
+                    remaining(),
+                    label=label,
+                    environment={**os.environ, "CCACHE_BASEDIR": ""},
+                )
+            else:
+                result = run_compiler(selected.wrap(command), remaining(), label=label)
             return outcome(result)
-        result = _run_sccache(launcher, command, deadline, label=label)
+        result = _run_sccache(selected, command, deadline, label=label)
         return outcome(result)
     except subprocess.TimeoutExpired:
         return outcome(CompileResult(124, True, 0.0, "", ""))
@@ -272,7 +311,7 @@ def _run_sccache(
         environment.pop("SCCACHE_STARTUP_NOTIFY", None)
         environment.pop("SCCACHE_START_SERVER", None)
         with tempfile.TemporaryFile(mode="w+") as server_log:
-            server = subprocess.Popen(
+            server = start_owned_process(
                 [str(launcher.path)],
                 env={**environment, "SCCACHE_START_SERVER": "1"},
                 stdin=subprocess.DEVNULL,

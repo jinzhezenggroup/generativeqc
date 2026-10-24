@@ -42,6 +42,38 @@ because that ID still selects the separately qualified native D4 correction
 owner. System validation, SCF option translation, backend selection and retained
 execution state remain private to the adapter.
 
+Native DFT single calculations (including the C++ SDK and CLI) are one-item
+views of the same C++ prepared batch scheduler used by Python singlepoint and
+batch calls. Preparation, initial-guess/retry policy, backend iteration,
+stationary-force assembly and D4 completion have one native orchestration
+owner. The single-calculation view forwards final-state tokens and derivative
+source reads to that owner's retained item. Repeated native single-calculation
+calls retain warm-start behavior; Python singlepoint creates a fresh cold owner.
+Scalar failures preserve their original exceptions/status and invalidate exports;
+ragged batches continue reporting individual item failures. Energy-only requests
+skip force work. This shared entry does not expand qualified force domains:
+Python compatibility consumers remain for properties the native owner does not
+admit, and native CLI/SDK calls continue rejecting those requests.
+
+Python DFT force routing queries each prepared item's capability. When a batch
+mixes native and compatibility consumers, an additive private bridge submits
+force work only for the qualified slots under the same C++ transaction and
+SCF schedule. Other slots retain native energy/final-state production for their
+existing compatibility consumers. Failures remain input-indexed and native
+execution errors never trigger a compatibility retry. Older libraries lacking
+the selective bridge retain the previous whole-fleet compatibility behavior.
+The public C batch ABI retains its existing mixed-buffer execution semantics.
+
+Batch features beyond execution, lifecycle and resource high waters are opt-in
+interfaces in `src/methods/batch_capabilities.hpp`: warm checkpointing,
+direct-J/K queues, CUDA eigensolver and inactive-lane profiles, DF metric
+records, KS transport, correlation and CC performance. New batch providers
+should not implement empty profile methods merely to satisfy the base class.
+The C ABI retains its existing entry points: unsupported capabilities or
+unavailable measurements return `NOT_IMPLEMENTED`. Reset only clears SCF
+seeds when the batch implements the warm-start capability. Result invalidation
+and the execution lifecycle remain method-neutral.
+
 The ABI registry reports method family, executable properties, and batch support.
 Unimplemented identifiers remain discoverable without inflating executable
 properties. Native DFT carrier metadata remains backend-neutral and conservative.
@@ -55,6 +87,20 @@ CUDA WB97M-V RKS/UKS can advertise analytic forces through the public Python
 calculator while the native carrier manifest remains energy-only. This split is
 intentional and regression-tested; it must not be used to infer forces for an
 unqualified backend/basis/method combination.
+
+The source-level Python/native call-path inventory lives in
+[`manifests/maintenance/python_native_runtime_ownership.json`](../../manifests/maintenance/python_native_runtime_ownership.json).
+It records method selectors, backend, representation, property, spin and
+approximation axes, native source/caller anchors, remaining Python runtime
+work, and the exact baseline source SHA. Wrapper, compiler/AD, compatibility,
+reference-oracle and scientific-runtime sites have separate classifications.
+`python tools/check_native_runtime_ownership.py` checks those source anchors;
+it does not establish native endpoint parity or numerical qualification.
+In particular, native integral/XC/response actions do not make the Python
+stationary force or molecular HVP controller a complete native SDK endpoint.
+Automatic cold-start selection is queried from the native owner; its precise
+domain and older-library behavior are documented in
+[cold-start initial guesses](../user/initial_guesses.md).
 
 Result publication is method-neutral internally; the
 ABI-0 `density_rms` field retains the density-update convergence measure.
@@ -144,6 +190,44 @@ and never triggers a host fallback.
 All public descriptors begin with `struct_size` and `abi_version`. ABI version
 0 is experimental: callers can detect compatibility, but semantic stability is
 not promised until a 1.0 release.
+
+## Native CMake target boundaries
+
+The published library is still the sole `generativeqc` shared SDK/wheel
+artifact (or static core in the monolithic CLI). The explicitly enumerated
+host C++ code is divided into internal OBJECT targets:
+
+- `generativeqc_cpu_scf_solver` (7 units): CPU solver policy and eigensystem
+  utilities, including prepared spectral operations.
+- `generativeqc_cpu_basis_integrals` (3): molecule/basis metadata, MINAO,
+  and DF metric helpers.
+- `generativeqc_host_integrals` (4): CPU integral, ECP, DF and stationary component implementations.
+- `generativeqc_host_scf` (15): shared SCF numerical components and CPU convergence helpers.
+- `generativeqc_host_dft` (12): CPU/grid/XC, dispersion and nonlocal-correlation implementations.
+- `generativeqc_host_posthf_cc` (15): host MP2, CC, and response numerical components.
+
+For example, `cmake --build build --target generativeqc_host_integrals
+generativeqc_host_scf generativeqc_host_dft generativeqc_host_posthf_cc`
+builds these host components independently. All six targets contribute
+their object files directly to `generativeqc`; no additional installed DSO
+or static archives are introduced, and the ABI/CLI/wheel contract is unchanged.
+The OBJECT targets inherit the parent compilation definitions, options,
+include paths, PIC, and optional PCH. With CUDA enabled, host compilation also
+receives CUDA toolkit headers explicitly.
+
+Some host `.cpp` sources contain conditional CUDA dispatch; they remain C++
+compilation units rather than CUDA device-code owners. Native `.cu`, generated
+translation units, CUDA device-link, API/method adapters, and CUDA-heavy
+orchestrators remain on their established owner.
+
+Each extracted component declares only its required codegen target dependencies
+in `cmake/GenerativeQCSources.cmake`, verified at configuration time. This
+avoids generated-header races in parallel builds and supports selective
+component compilation. In particular, `dft/ks_final_state.cpp` and the
+MethodIR adapter are retained by the main target: CUDA split-hybrid header
+generation currently has no separately named codegen target. Extend the
+component boundary only after giving such generated headers an explicit
+owner and checking actual incremental compile timings.
 
 ## Performance engineering
 
@@ -403,6 +487,28 @@ SCF comparison baseline. The original energy and density tolerances still
 apply, but an already converged fixed point may finish after one Graph replay
 instead of an artificial two-replay minimum. The diagnostic
 `GENERATIVEQC_FINAL_FOCK_REBUILD=1` restores the complete rebuild for A/B checks.
+Screened incremental RHF/UHF retires density-delta builds per system once
+the density step and pre-DIIS physical residual meet the original convergence
+criteria. That system uses ordinary full-density builds for the rest of the
+solve, including when the periodic refresh interval is zero. The transition
+discards the reconstructed energy baseline, so convergence still requires two
+consecutive full evaluations and the unchanged energy, density and physical
+residual gates. It does not grant convergence, add iterations beyond the
+configured bound, or depend on a CPU/reference calculation. Full/delta work
+counters charge this refinement, and each new solve resets its admission.
+Unscreened incremental providers and no-delta resident warm solves retain
+their existing paths.
+
+Opt-in incremental Direct-J/K normally retains strict full physical
+finalization. A provenance-matched, unchanged-geometry resident warm bucket
+may reuse the ordinary force-ready path only when every item's actual delta
+build count is zero. The driver restores the last full-anchor density, paired
+with its physical Fock, pre-DIIS residual, energy and tracked determinant
+orbitals; it does not publish the proposed next density with the old Fock.
+Any delta in the bucket, unproven/external seed, changed geometry or explicit
+final-rebuild request preserves canonical finalization. This narrowly bounded
+CUDA HF optimization does not change KS finalization or enable incremental
+J/K by default.
 Component-unrolled/Rys quartet kernels and finer AO-level task compaction
 remain subsequent scheduler work. Direct quartets
 always operate on normalized Cartesian source AOs. For a public real-spherical

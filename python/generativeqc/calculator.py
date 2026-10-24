@@ -22,6 +22,7 @@ from ._api_types import (
     Result,
     Shell,
 )
+from ._method_native import capabilities as _native_method_capabilities
 from ._model_resolution import (
     ModelResolutionInput,
     resolve_model_identity,
@@ -44,11 +45,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .spin_roots import SpinRootPolicy, SpinRootResult
+
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
 _COUPLED_CLUSTER_METHODS = frozenset(
-    (_native.METHOD_RCCSD, _native.METHOD_RCCSD_T, _native.METHOD_DF_RCCSD_T)
+    (
+        _native.METHOD_RCCSD,
+        _native.METHOD_RCCSD_T,
+        _native.METHOD_DF_RCCSD_T,
+        _native.METHOD_UCCSD,
+        _native.METHOD_UCCSD_T,
+    )
 )
 _CORRELATED_METHODS = frozenset(
     (_native.METHOD_MP2, _native.METHOD_UMP2, *_COUPLED_CLUSTER_METHODS)
@@ -119,38 +128,7 @@ def method_capabilities(method: str) -> MethodCapabilities:
             raise ValueError(f"unknown method {method!r}") from error
         method_id = _METHODS[carrier]
     library = _native.load_library()
-    native = _native.MethodCapabilitiesDescriptor(
-        ctypes.sizeof(_native.MethodCapabilitiesDescriptor),
-        _native.ABI_VERSION,
-        0,
-        0,
-        0,
-        0,
-        0,
-    )
-    _native.check(
-        library,
-        library.generativeqc_method_get_capabilities(method_id, ctypes.byref(native)),
-    )
-    family = {
-        _native.METHOD_FAMILY_HARTREE_FOCK: "hartree_fock",
-        _native.METHOD_FAMILY_DENSITY_FUNCTIONAL: "density_functional",
-        _native.METHOD_FAMILY_COUPLED_CLUSTER: "coupled_cluster",
-        _native.METHOD_FAMILY_PERTURBATION: "perturbation",
-        _native.METHOD_FAMILY_SEMIEMPIRICAL: "semiempirical",
-    }[native.family]
-    properties = set()
-    if native.supported_properties & _native.PROPERTY_ENERGY:
-        properties.add("energy")
-    if native.supported_properties & _native.PROPERTY_FORCES:
-        properties.add("forces")
-    return MethodCapabilities(
-        method=canonical,
-        family=family,
-        available=bool(native.available),
-        supports_batch=bool(native.supports_batch),
-        supported_properties=frozenset(properties),
-    )
+    return _native_method_capabilities(library, canonical, method_id)
 
 
 class Calculator:
@@ -190,8 +168,8 @@ class Calculator:
         ccsd_level_shift: float = 0.0,
         ccsd_frozen_core: int = 0,
         max_iterations: int = 100,
-        energy_tolerance: float = 1.0e-10,
-        density_tolerance: float = 1.0e-8,
+        energy_tolerance: float | None = None,
+        density_tolerance: float | None = None,
         diis_history: int = 8,
         screening_tolerance: float | None = None,
         precision: str = "fp64",
@@ -200,6 +178,8 @@ class Calculator:
         ks_options: typing.Any = None,
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
+        _application_precision_budget: typing.Any = None,
+        _correlation_convergence_budget: typing.Any = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -216,8 +196,15 @@ class Calculator:
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
 
-        ``initial_guess="auto"`` selects MINAO for FP64 all-electron H-Ar
-        restricted exact CPU HF/KS and CUDA KS cold starts. Other domains retain
+        Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
+        on qualified CUDA RHF and default-grid restricted local KS owners.
+        Other models/backends and older libraries retain 1e-10/1e-8. Explicit
+        values are preserved. Convergence controls are solver conditions, not
+        observable-error bounds; see the application precision guide.
+
+        ``initial_guess="auto"`` selects native Modified Huckel for FP64
+        all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
+        Older libraries retain their previously supported default. Other domains retain
         Hcore, as does a batch containing an unsupported element. Explicit
         ``None`` disables preparation; existing densities always take precedence.
 
@@ -444,13 +431,13 @@ class Calculator:
 
                 method = native_dft_carrier_for_ir(electronic_ir)
 
-            from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
+            from .ks import SCF_DOMAIN, KsOptions, scf_domain_for_method
 
             if ks_options is None:
                 ks_options = KsOptions(
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else SCF_DOMAIN
                     ),
@@ -468,7 +455,7 @@ class Calculator:
                     ks_options,
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else ks_options.scf_domain
                     ),
@@ -555,16 +542,39 @@ class Calculator:
             "cpu_reference": _native.DENSITY_FITTING_CPU_REFERENCE,
             "cuda": _native.DENSITY_FITTING_CUDA,
             "auto": _native.DENSITY_FITTING_AUTO,
+            "correlation_cuda": _native.DENSITY_FITTING_CORRELATION_CUDA,
+            "full_cuda": _native.DENSITY_FITTING_FULL_CUDA,
         }
         try:
             density_fitting_mode = density_fitting_modes[str(density_fitting).lower()]
         except KeyError as error:
             raise ValueError(
-                "density_fitting must be 'none', 'cpu', 'cuda', or 'auto'"
+                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', 'correlation_cuda', or 'full_cuda'"
             ) from error
+        if density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA:
+            if method_id not in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T):
+                raise ValueError("full_cuda requires MP2 or DF-CCSD(T)")
+            if device != "cuda":
+                raise NotImplementedError("full DF correlated methods require CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "full DF requires an explicit shared JK/correlation auxiliary basis"
+                )
+        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+            if method_id != _native.METHOD_MP2:
+                raise ValueError(
+                    "correlation_cuda density fitting is an MP2 reference contract"
+                )
+            if device != "cuda":
+                raise NotImplementedError("correlation-only DF-MP2 requires CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "correlation-only DF-MP2 requires an explicit auxiliary basis"
+                )
         if intrinsic_df_rccsdt and density_fitting_mode not in (
             _native.DENSITY_FITTING_CUDA,
             _native.DENSITY_FITTING_AUTO,
+            _native.DENSITY_FITTING_FULL_CUDA,
         ):
             raise NotImplementedError(
                 "df-rccsd(t) currently requires CUDA density fitting"
@@ -600,6 +610,35 @@ class Calculator:
             self._precision_mode = precision_modes[str(precision).lower()]
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
+        # CBS convergence allowances share the size-tagged transport, but have
+        # a separate capability and never request lower-precision arithmetic.
+        self._correlation_convergence_budget = _correlation_convergence_budget
+        if _correlation_convergence_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(_correlation_convergence_budget, TargetErrorBudget):
+                raise TypeError("correlation convergence requires a TargetErrorBudget")
+            if _application_precision_budget is not None:
+                raise ValueError("correlation and arithmetic budgets are exclusive")
+            if self._method not in {
+                _native.METHOD_MP2,
+                _native.METHOD_RCCSD,
+                _native.METHOD_RCCSD_T,
+                _native.METHOD_DF_RCCSD_T,
+            }:
+                raise ValueError("correlation convergence requires closed-shell MP2/CC")
+        self._application_precision_budget = _application_precision_budget
+        if _application_precision_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(_application_precision_budget, TargetErrorBudget):
+                raise TypeError(
+                    "application precision requires an immutable TargetErrorBudget"
+                )
+            if device != "cuda" or self._method not in (
+                _HF_METHODS | _method_manifest.NATIVE_DFT_METHOD_IDS
+            ):
+                raise NotImplementedError("application precision requires CUDA HF/KS")
         if (
             self._method == _native.METHOD_PBE_D4_RKS
             and self._precision_mode != _native.PRECISION_FP64
@@ -729,9 +768,17 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
+            from ._correlation_convergence import convergence_limits
+
             for name, value, upper in (
                 ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                ("ccsd_residual_tolerance", ccsd_residual_tolerance, 1e-9),
+                (
+                    "ccsd_residual_tolerance",
+                    ccsd_residual_tolerance,
+                    convergence_limits(_correlation_convergence_budget)[
+                        "ccsd_residual_tolerance"
+                    ],
+                ),
             ):
                 if not np.isfinite(value) or not 0.0 < value <= upper:
                     raise ValueError(
@@ -788,8 +835,14 @@ class Calculator:
         self._representation_name = basis_representation
         self._device_id = int(device_id)
         self._max_iterations = int(max_iterations)
-        self._energy_tolerance = float(energy_tolerance)
-        self._density_tolerance = float(density_tolerance)
+        # Resolve omitted controls after loading the native capability and the
+        # complete method. Explicit values, including tighter ones, are kept.
+        self._energy_tolerance = float(
+            1e-10 if energy_tolerance is None else energy_tolerance
+        )
+        self._density_tolerance = float(
+            1e-8 if density_tolerance is None else density_tolerance
+        )
         self._diis_history = int(diis_history)
         if screening_tolerance is None:
             screening_tolerance = 0.0 if self._method in _CORRELATED_METHODS else 1e-12
@@ -814,7 +867,43 @@ class Calculator:
             if self._method == _native.METHOD_GFN2_XTB
             else None
         )
+        if self._correlation_convergence_budget is not None:
+            query = getattr(
+                self._library, "generativeqc_correlation_convergence_version_v1", None
+            )
+            if query is None:
+                raise NotImplementedError(
+                    "native library lacks correlated convergence transport"
+                )
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 1:
+                raise NotImplementedError(
+                    "unsupported native correlated convergence transport"
+                )
+            if (
+                self._method == _native.METHOD_DF_RCCSD_T
+                and getattr(
+                    self._library, "generativeqc_calculation_get_cc_precision_v1", None
+                )
+                is None
+            ):
+                raise NotImplementedError(
+                    "native library lacks correlated FP32 telemetry"
+                )
         self._ks_options_version = 0
+        if self._application_precision_budget is not None:
+            query = getattr(
+                self._library, "generativeqc_application_precision_version_v2", None
+            )
+            if query is None:
+                raise NotImplementedError(
+                    "native library lacks method precision transport"
+                )
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 2:
+                raise NotImplementedError(
+                    "unsupported native method precision transport"
+                )
         if self._ks_options is not None:
             query = self._library.generativeqc_ks_options_version
             query.argtypes, query.restype = [], ctypes.c_uint32
@@ -825,6 +914,25 @@ class Calculator:
                 raise NotImplementedError(
                     "native library does not support the current semantic KS execution-plan ABI"
                 )
+            if self._ks_options._precision_budget is not None:
+                if self._application_precision_budget is not None:
+                    raise ValueError(
+                        "application precision must have one method/KS transport owner"
+                    )
+                query = getattr(
+                    self._library, "generativeqc_application_precision_version_v1", None
+                )
+                if query is None:
+                    raise NotImplementedError(
+                        "native library lacks application precision transport"
+                    )
+                query.argtypes, query.restype = [], ctypes.c_uint32
+                if query() != 1:
+                    raise NotImplementedError(
+                        "unsupported native application precision transport"
+                    )
+                if self._precision_mode != _native.PRECISION_AUTO:
+                    raise ValueError("application precision transport requires AUTO")
 
         available = ctypes.c_int32()
         _native.check(
@@ -837,7 +945,25 @@ class Calculator:
             raise NotImplementedError(
                 f"method {method!r} is reserved but not implemented"
             )
-        self._capabilities = method_capabilities(self._method_name)
+        self._capabilities = _native_method_capabilities(
+            self._library, self._method_name, self._method
+        )
+        from ._scf_convergence import default_scf_controls
+
+        convergence_defaults = default_scf_controls(self)
+        if energy_tolerance is None:
+            self._energy_tolerance = convergence_defaults["energy_tolerance"]
+        if density_tolerance is None:
+            self._density_tolerance = convergence_defaults["density_tolerance"]
+        if self._automatic_libxc_name is not None:
+            self._capabilities = replace(
+                self._capabilities, supported_properties=frozenset({"energy"})
+            )
+        if density_fitting_mode in (
+            _native.DENSITY_FITTING_CORRELATION_CUDA,
+            _native.DENSITY_FITTING_FULL_CUDA,
+        ):
+            self._capabilities = replace(self._capabilities, supports_batch=False)
         from ._cpu_force_resources import (
             qualified_basis,
             qualified_direct_semilocal_context,
@@ -902,11 +1028,11 @@ class Calculator:
             )
         )
         from .ks import (
-            SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
             cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
             mixed_density_fitted_force_eligible,
+            split_hybrid_df_force_admitted,
         )
 
         cuda_hybrid_force = (
@@ -915,10 +1041,6 @@ class Calculator:
             and self._ks_options is not None
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
-            and (
-                self._precision_mode == _native.PRECISION_FP64
-                or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
-            )
         )
         cuda_nonlocal_force = (
             self._device_name == "cuda"
@@ -928,13 +1050,23 @@ class Calculator:
             and self._ks_options.has_range_exchange
             and cuda_nonlocal_force_basis_eligible(self._basis)
         )
+        from ._df_precision import fitted_scf_budget_admitted
+
+        fitted_budget = fitted_scf_budget_admitted(
+            self, self._application_precision_budget
+        )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
-            and self._precision_mode == _native.PRECISION_FP64
+            and (self._precision_mode == _native.PRECISION_FP64 or fitted_budget)
             and not basis_has_ecp
             and self._automatic_libxc_name is None
-            and self._dispersion_method_ir is None
+            and self._density_fitted_composite_force_eligible()
             and self._ks_options is not None
+            and split_hybrid_df_force_admitted(
+                self._ks_options.method_ir,
+                backend=self._device_name,
+                xc_schedule=self._ks_options.xc_schedule,
+            )
             and (
                 (
                     self._ks_options.execution_plan.nonlocal_correlation is None
@@ -992,36 +1124,48 @@ class Calculator:
                 supported_properties=self._capabilities.supported_properties
                 | {"forces"},
             )
-        second_order_basis = (
-            self._basis is not None
-            and not basis_has_ecp
-            and (
-                isinstance(self._basis, str)
-                or (
-                    isinstance(self._basis, BasisSet)
-                    and all(
-                        shell.angular_momentum <= 3
-                        for element in self._basis.elements
-                        for shell in element.shells
-                    )
-                )
-                or (
-                    not isinstance(self._basis, BasisSet)
-                    and not isinstance(self._basis, str)
-                    and all(shell.angular_momentum <= 3 for shell in self._basis)
+        second_order_basis = self._basis is not None and (
+            isinstance(self._basis, str)
+            or (
+                isinstance(self._basis, BasisSet)
+                and all(
+                    shell.angular_momentum <= 3
+                    for element in self._basis.elements
+                    for shell in element.shells
                 )
             )
+            or (
+                not isinstance(self._basis, BasisSet)
+                and not isinstance(self._basis, str)
+                and all(shell.angular_momentum <= 3 for shell in self._basis)
+            )
+        )
+        from .ks import composite_stationary_second_order_eligible
+
+        self._composite_rks_second_order = (
+            self._ks_options is not None
+            and composite_stationary_second_order_eligible(self._ks_options.method_ir)
         )
         public_rks_second_order = (
-            self._device_name == "cpu"
-            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            (self._device_name == "cpu" or self._composite_rks_second_order)
+            and (not basis_has_ecp or self._composite_rks_second_order)
+            and (
+                density_fitting_mode == _native.DENSITY_FITTING_NONE
+                or self._composite_rks_second_order
+            )
             and self._precision_mode == _native.PRECISION_FP64
-            and self._representation_name == "cartesian"
+            and (
+                self._representation_name == "cartesian"
+                or self._composite_rks_second_order
+            )
             and self._automatic_libxc_name is None
             and self._dispersion_method_ir is None
             and second_order_basis
             and self._ks_options is not None
-            and stationary_second_order_eligible(self._ks_options.method_ir)
+            and (
+                stationary_second_order_eligible(self._ks_options.method_ir)
+                or self._composite_rks_second_order
+            )
         )
         if public_rks_second_order:
             self._capabilities = replace(
@@ -1049,7 +1193,7 @@ class Calculator:
                 # DF changes the Hamiltonian. Keep its backend explicit; the
                 # stationary force consumer is admitted only through the
                 # token-bound auxiliary/metric-response provider above.
-                if self._precision_mode != _native.PRECISION_FP64:
+                if self._precision_mode != _native.PRECISION_FP64 and not fitted_budget:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
                     )
@@ -1072,45 +1216,66 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        if (
-            self._automatic_initial_guess
-            and (
-                self._device_name == "cpu"
-                or self._capabilities.family == "density_functional"
+        native_per_item_guess = False
+        if self._automatic_initial_guess:
+            from .initial_guess import (
+                _uses_native_automatic_cpu,
+                automatic_initial_guess_candidate,
             )
-            and self._precision_mode == _native.PRECISION_FP64
-            and self._density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and restricted
-            and not basis_has_ecp
-            and self._capabilities.family in ("hartree_fock", "density_functional")
-        ):
-            from .initial_guess import supports_automatic_minao
 
-            # Automatic preparation must not make an optional native feature
-            # mandatory for an otherwise supported default calculation.
-            if supports_automatic_minao(self._library):
-                self._initial_guess = InitialGuessSpec("minao")
+            candidate = automatic_initial_guess_candidate(
+                self,
+                restricted=restricted,
+                has_ecp=False,
+            )
+            if candidate is not None:
+                self._initial_guess = candidate
+                # A basis package can contain unused ECP records. Only the qualified
+                # native per-item path may defer those facts to actual target admission.
+                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
+                    self
+                )
+                if not basis_has_ecp or native_per_item_guess:
+                    self._initial_guess = candidate
+                else:
+                    self._initial_guess = None
 
         if self._initial_guess is not None:
-            from .initial_guess import require_initial_guess_library
+            from .initial_guess import (
+                _initial_guess_precision,
+                require_initial_guess_library,
+            )
 
-            minao = self._initial_guess.kind == "minao"
+            minao = self._initial_guess.kind in ("minao", "huckel")
             backend_ok = self._device_name == "cpu" or (
                 minao
                 and self._device_name == "cuda"
-                and self._capabilities.family == "density_functional"
+                and (
+                    self._capabilities.family == "density_functional"
+                    or (
+                        self._initial_guess.kind == "huckel"
+                        and self._method == _native.METHOD_RHF
+                    )
+                )
             )
             if (
                 not backend_ok
-                or self._precision_mode != _native.PRECISION_FP64
-                or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                or (_initial_guess_precision(self) if minao else self._precision_mode)
+                != _native.PRECISION_FP64
+                or (
+                    self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and self._initial_guess.kind != "huckel"
+                )
                 or not restricted
-                or basis_has_ecp
+                or (
+                    basis_has_ecp
+                    and not (self._automatic_initial_guess and native_per_item_guess)
+                )
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):
                 raise NotImplementedError(
-                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS"
+                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS; Huckel also supports CUDA RHF and restricted DF HF/KS"
                     if minao
                     else "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
                 )
@@ -1130,12 +1295,30 @@ class Calculator:
                 ),
             )
 
+    def _density_fitted_composite_force_eligible(self) -> bool:
+        """Keep DF correction admission separate from fitted electronic forces.
+
+        Only the canonical r2SCAN-3c graph has a qualified, additive D4+gCP
+        gradient owner. The constructor already binds its defining basis;
+        compare the full canonical manifest as well as its public name.
+        Other corrected DF methods remain energy-only until qualified.
+        """
+        graph = self._dispersion_method_ir
+        if graph is None:
+            return True
+        if graph.identifier != "R2SCAN-3c":
+            return False
+        from generativeqc_compiler.method import resolve_method
+
+        canonical = resolve_method("R2SCAN-3c", spin=graph.spin)
+        return graph.manifest_identity == canonical.manifest_identity
+
     def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
         """New bounded CPU forces are opt-in; retain established defaults."""
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method == _native.METHOD_RCCSD
+            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
             or (
                 not batch
                 and self._method == _native.METHOD_MP2
@@ -1164,7 +1347,7 @@ class Calculator:
 
     @property
     def initial_guess(self) -> InitialGuessSpec | None:
-        """Resolved cold-start candidate; automatic MINAO also checks batch elements."""
+        """Resolved guarded cold-start candidate; native CPU admission is per item."""
         return self._initial_guess
 
     @property
@@ -1235,8 +1418,16 @@ class Calculator:
                     "density_fitting_memory_budget_bytes", df_budget
                 )
             )
-        descriptor = _native.MethodDescriptor(
-            ctypes.sizeof(_native.MethodDescriptor),
+        budget = getattr(self, "_application_precision_budget", None)
+        if budget is None:
+            budget = getattr(self, "_correlation_convergence_budget", None)
+        descriptor_type = (
+            _native.ApplicationPrecisionMethodDescriptor
+            if budget is not None
+            else _native.MethodDescriptor
+        )
+        descriptor = descriptor_type(
+            ctypes.sizeof(descriptor_type),
             _native.ABI_VERSION,
             self._method,
             self._max_iterations,
@@ -1256,7 +1447,11 @@ class Calculator:
         if active_ks_options is not None and self._ks_options_version >= 1:
             from .ks import native_ks_options
 
-            descriptor.ks_options = ctypes.pointer(native_ks_options(active_ks_options))
+            descriptor.ks_options = ctypes.pointer(
+                native_ks_options(
+                    active_ks_options, library=self._library, backend=self._backend
+                )
+            )
         if self._method in _COUPLED_CLUSTER_METHODS:
             descriptor.ccsd_max_iterations = self._ccsd_max_iterations
             descriptor.ccsd_diis_history = self._ccsd_diis_history
@@ -1266,11 +1461,23 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
-        from .initial_guess import initial_guess_for_systems
+        from .initial_guess import (
+            _uses_native_automatic_cpu,
+            initial_guess_for_systems,
+        )
 
         policy = initial_guess_for_systems(self, systems)
         if policy is not None:
-            descriptor.initial_guess = ctypes.pointer(policy.native())
+            descriptor.initial_guess = ctypes.pointer(
+                policy.native(automatic_cpu=_uses_native_automatic_cpu(self))
+            )
+        if budget is not None:
+            descriptor.application_energy_budget = budget.energy_abs
+            descriptor.application_max_force_budget = budget.force_max_abs
+            descriptor.application_rms_force_budget = budget.force_rms or 0.0
+            prefix = _native.MethodDescriptor.from_buffer(descriptor)
+            prefix._extension_owner = descriptor
+            return prefix
         return descriptor
 
     def _precision_provenance(
@@ -1327,12 +1534,20 @@ class Calculator:
     ) -> dict | None:
         """Expose aggregate provenance plus execution-owned detailed work."""
 
-        from ._precision_work import merge_precision_work, query_precision_work
+        from ._precision_work import (
+            merge_precision_work,
+            query_gradient_precision,
+            query_precision_work,
+        )
 
-        return merge_precision_work(
+        report = merge_precision_work(
             self._precision_provenance(calculation, index),
             query_precision_work(self._library, calculation, index=index),
         )
+        gradient = query_gradient_precision(self._library, calculation, index=index)
+        if gradient is not None:
+            report = {**(report or {}), "gradient": gradient}
+        return report
 
     def _incremental_direct_jk_diagnostic(
         self, calculation: ctypes.c_void_p, index: int | None = None
@@ -1375,6 +1590,36 @@ class Calculator:
             "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
         }
 
+    def _basis_for_atoms(
+        self,
+        atoms: Sequence[Atom],
+        basis: str | Sequence[Shell] | None = None,
+        *,
+        operator: str | None = None,
+        derivative_order: int = 0,
+    ) -> BasisSet | tuple[Shell, ...]:
+        """Admit immutable basis metadata without expanding native contractions."""
+        selected_basis = self._basis if basis is None else basis
+        if not isinstance(selected_basis, BasisSet):
+            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
+        auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
+        require_basis(
+            selected_basis,
+            atoms,
+            backend=self._density_fitting_backend() if auxiliary else self._device_name,
+            operator=selected_operator,
+            derivative_order=derivative_order,
+            role="auxiliary" if auxiliary else "orbital",
+            representation=selected_basis.representation
+            if isinstance(selected_basis, BasisSet)
+            else self._representation_name,
+            consumer=self._auxiliary_basis_consumer(selected_operator, derivative_order)
+            if auxiliary
+            else None,
+        )
+        return selected_basis
+
     def _shells_for_atoms(
         self,
         atoms: Sequence[Atom],
@@ -1383,20 +1628,9 @@ class Calculator:
         operator: str | None = None,
         derivative_order: int = 0,
     ) -> tuple[Shell, ...]:
-        selected_basis = self._basis if basis is None else basis
-        if not isinstance(selected_basis, BasisSet):
-            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
-        auxiliary = basis is not None
-        require_basis(
-            selected_basis,
-            atoms,
-            backend=self._density_fitting_backend() if auxiliary else self._device_name,
-            operator=operator or ("df_metric" if auxiliary else "eri"),
-            derivative_order=derivative_order,
-            role="auxiliary" if auxiliary else "orbital",
-            representation=selected_basis.representation
-            if isinstance(selected_basis, BasisSet)
-            else self._representation_name,
+        """Expand portable metadata for planning, custom bases and old libraries."""
+        selected_basis = self._basis_for_atoms(
+            atoms, basis, operator=operator, derivative_order=derivative_order
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1411,8 +1645,55 @@ class Calculator:
             return "cuda"
         return self._device_name
 
+    def _auxiliary_basis_consumer(
+        self, operator: str, derivative_order: int = 0
+    ) -> str | None:
+        """Select an explicitly linked auxiliary domain, never orbital admission.
+
+        The physical correlation source and its nuclear pullback support
+        auxiliary g shells. Both preflight and native shell expansion must
+        use that same scoped policy. HF/KS uses a separate role for its complete
+        value/first-derivative owner; older libraries retain their f boundary.
+        """
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and self._density_fitting_backend() == "cuda"
+            and (
+                self._method == _native.METHOD_DF_RCCSD_T
+                or self._density_fitting_mode
+                in (
+                    _native.DENSITY_FITTING_CORRELATION_CUDA,
+                    _native.DENSITY_FITTING_FULL_CUDA,
+                )
+            )
+        ):
+            return "correlation_df"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order == 0
+            and self._density_fitting_backend() == "cuda"
+            and self._device_name == "cuda"
+            and getattr(self, "_composite_rks_second_order", False)
+        ):
+            return "wb97mv_df_values"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order in (0, 1)
+            and self._device_name == "cuda"
+            and self._density_fitting_mode
+            in (_native.DENSITY_FITTING_CUDA, _native.DENSITY_FITTING_AUTO)
+            and (
+                self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
+                or self._ks_options is not None
+            )
+            and hasattr(self._library, "generativeqc_scf_auxiliary_system_create_v1")
+        ):
+            return "scf_df"
+        return None
+
     def _model_signature(self) -> typing.Any:
         """Detect replacement of scientific input snapshots before prepared reuse."""
+        budget = getattr(self, "_application_precision_budget", None)
 
         def identity(basis: typing.Any) -> typing.Any:
             if basis is None:
@@ -1483,6 +1764,29 @@ class Calculator:
                 "max_iterations": self._max_iterations,
                 "diis_history": self._diis_history,
                 "precision": self._precision_mode,
+                **(
+                    {
+                        "application_precision_budget": (
+                            budget.energy_abs,
+                            budget.force_max_abs,
+                            budget.force_rms,
+                        )
+                    }
+                    if budget is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "correlation_convergence_budget": (
+                            self._correlation_convergence_budget.energy_abs,
+                            self._correlation_convergence_budget.force_max_abs,
+                            self._correlation_convergence_budget.force_rms,
+                        )
+                    }
+                    if getattr(self, "_correlation_convergence_budget", None)
+                    is not None
+                    else {}
+                ),
                 "target_accuracy": self._target_accuracy.to_dict()
                 if self._target_accuracy
                 else None,
@@ -1652,6 +1956,9 @@ class Calculator:
                         representation=basis.representation
                         if isinstance(basis, BasisSet)
                         else self._representation_name,
+                        consumer=self._auxiliary_basis_consumer(operator, order)
+                        if role == "auxiliary"
+                        else None,
                     )
 
     def _create_native_system(
@@ -1696,25 +2003,97 @@ class Calculator:
                 context=context,
             )
             return system
-        selected_basis = self._basis if basis is None else basis
-        if not isinstance(selected_basis, BasisSet):
-            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
-        shells = self._shells_for_atoms(atoms, basis)
+        selected_basis = self._basis_for_atoms(atoms, basis)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
+        from . import _basis_builtin
+
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        if not correlation_auxiliary and _basis_builtin.eligible(
+            self._library, selected_basis
+        ):
+            return _basis_builtin.create_system(
+                self._library, context, selected_basis, atoms, charge, multiplicity
+            )
+        atom_array = (_native.AtomDescriptor * len(atoms))(
+            *(
+                _native.AtomDescriptor(atom.atomic_number, *atom.position)
+                for atom in atoms
+            )
+        )
+        bundled_create = getattr(
+            self._library, "generativeqc_system_create_bundled", None
+        )
+        bundled_name = (
+            _model_resolution._bundled_basis_name(selected_basis)
+            if bundled_create is not None and not correlation_auxiliary
+            else None
+        )
+        template_create = getattr(
+            self._library, "generativeqc_system_create_basis_template_v1", None
+        )
+        use_template = (
+            template_create is not None
+            and isinstance(selected_basis, BasisSet)
+            and not correlation_auxiliary
+        )
+        if use_template or (
+            bundled_create is not None
+            and bundled_name is not None
+            and not correlation_auxiliary
+        ):
+            descriptor = _native.SystemDescriptor(
+                struct_size=ctypes.sizeof(_native.SystemDescriptor),
+                abi_version=_native.ABI_VERSION,
+                atoms=atom_array,
+                atom_count=len(atom_array),
+                charge=int(charge),
+                multiplicity=int(multiplicity),
+                basis_representation=(
+                    _native.BASIS_SPHERICAL
+                    if selected_basis.representation == "spherical"
+                    else _native.BASIS_CARTESIAN
+                ),
+            )
+            system = ctypes.c_void_p()
+            if bundled_create is not None and bundled_name is not None:
+                status = bundled_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    bundled_name.encode("ascii"),
+                    selected_basis.provenance.checksum.encode("ascii"),
+                    ctypes.byref(system),
+                )
+            else:
+                from ._basis_native import NativeBasisTemplate
+
+                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+                if (
+                    source.has_ecp
+                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and not self._composite_rks_second_order
+                ):
+                    raise NotImplementedError(
+                        "ECP density-fitting execution is not yet validated"
+                    )
+                status = template_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    ctypes.byref(source.descriptor),
+                    ctypes.byref(system),
+                )
+            _native.check(self._library, status, context=context)
+            return system
+        shells = self._shells_for_atoms(atoms, basis)
         checked_integer(len(shells), "shell count", low=1, high=2**32 - 1)
         checked_integer(
             sum(len(s.primitives) for s in shells),
             "primitive count",
             low=1,
             high=2**32 - 1,
-        )
-        atom_array = (_native.AtomDescriptor * len(atoms))(
-            *(
-                _native.AtomDescriptor(atom.atomic_number, *atom.position)
-                for atom in atoms
-            )
         )
         flattened_primitives: list[Primitive] = []
         shell_descriptors: list[_native.ShellDescriptor] = []
@@ -1762,7 +2141,10 @@ class Calculator:
 
         cores, ecp_terms = resolve_ecp(selected_basis, atoms)
         if ecp_terms:
-            if self._density_fitting_mode != _native.DENSITY_FITTING_NONE:
+            if (
+                self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not self._composite_rks_second_order
+            ):
                 raise NotImplementedError(
                     "ECP density-fitting execution is not yet validated"
                 )
@@ -1782,11 +2164,29 @@ class Calculator:
                 ),
             )
             return system
+        create_system = self._library.generativeqc_system_create
+        auxiliary_consumer = (
+            self._auxiliary_basis_consumer("df_metric") if basis is not None else None
+        )
+        if auxiliary_consumer:
+            create_system = getattr(
+                self._library,
+                "generativeqc_correlation_auxiliary_system_create_v1"
+                if auxiliary_consumer == "correlation_df"
+                else (
+                    "generativeqc_scf_auxiliary_system_create_v1"
+                    if auxiliary_consumer == "scf_df"
+                    else "generativeqc_ks_auxiliary_system_create_v1"
+                ),
+                None,
+            )
+            if create_system is None:
+                raise NotImplementedError(
+                    "native library lacks the requested source-only DF auxiliary admission"
+                )
         _native.check(
             self._library,
-            self._library.generativeqc_system_create(
-                context, ctypes.byref(descriptor), ctypes.byref(system)
-            ),
+            create_system(context, ctypes.byref(descriptor), ctypes.byref(system)),
             context=context,
         )
         return system
@@ -1860,6 +2260,9 @@ class Calculator:
                 device_id=self._device_id,
                 library=self._library,
                 include_forces="forces" in planned,
+                _application_precision_budget=getattr(
+                    self, "_application_precision_budget", None
+                ),
             )
         if self._method in {_native.METHOD_MP2, _native.METHOD_UMP2}:
             raise NotImplementedError(
@@ -1943,6 +2346,7 @@ class Calculator:
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
+            library=self._library,
         )
 
     def _effective_ks_selection(
@@ -1985,7 +2389,9 @@ class Calculator:
                 raise NotImplementedError(
                     "native library does not support the current semantic KS execution-plan ABI"
                 )
-            native_ks_options(selection.options)
+            native_ks_options(
+                selection.options, library=self._library, backend=self._backend
+            )
         return selection
 
     def _effective_ks_options(
@@ -2018,10 +2424,9 @@ class Calculator:
         only when explicitly requested in ``properties``. Other contexts retain
         their existing conservative capacity allowance.
         """
-        from generativeqc_compiler.common.resources import (
-            ResourceBudget,
-            plan_resources,
-        )
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        from .resources_planning import plan_resources
 
         systems = tuple(
             tuple(Atom.from_value(atom) for atom in system) for system in systems
@@ -2056,6 +2461,7 @@ class Calculator:
         return plan_resources(
             tuple(requests),
             ResourceBudget() if budget is None else budget,
+            library=self._library,
         )
 
     def prepare_batch(
@@ -2131,16 +2537,24 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
+        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+            )
         if endpoint not in self._capabilities.supported_second_order:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
-                "the qualified DFT second-order domain is CPU direct all-electron "
-                "Cartesian FP64 closed-shell LDA/PBE RKS"
+                "qualified domains are CPU direct all-electron Cartesian FP64 "
+                "closed-shell LDA/PBE, or canonical FP64 WB97M-V RKS/UKS with "
+                "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
-        if multiplicity != 1:
+        if multiplicity != 1 and not (
+            self._composite_rks_second_order
+            and self._ks_options.method_ir.spin == "polarized"
+        ):
             raise NotImplementedError(
-                "public DFT second-order execution is restricted to closed-shell "
-                "RKS multiplicity=1"
+                "RKS requires multiplicity=1; open-shell second order requires "
+                "the polarized WB97M-V graph"
             )
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
@@ -2154,10 +2568,31 @@ class Calculator:
         charge: int,
         multiplicity: int,
         operation: typing.Callable[[typing.Any], typing.Any],
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
+        import time
+        from types import MappingProxyType
+
         from generativeqc_compiler.dft import NativeAO
 
         from .rks_response import NativeRKSResponse
+
+        started = time.perf_counter()
+        factory = NativeRKSResponse.from_native
+        options = {}
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import CompositeRKSResponse
+
+            if type(grid_budget_bytes) is not int or grid_budget_bytes < 1:
+                raise ValueError("grid_budget_bytes must be a positive integer")
+            if type(max_nonlocal_pairs) is not int or max_nonlocal_pairs < 1:
+                raise ValueError("max_nonlocal_pairs must be a positive integer")
+            factory = CompositeRKSResponse.from_native
+            options = {
+                "grid_budget_bytes": grid_budget_bytes,
+                "max_nonlocal_pairs": max_nonlocal_pairs,
+            }
 
         with self.prepare_batch(
             [atoms],
@@ -2174,9 +2609,20 @@ class Calculator:
                     charge=charge,
                     multiplicity=multiplicity,
                 ) as basis,
-                NativeRKSResponse.from_native(batch, basis) as operator,
+                factory(batch, basis, **options) as operator,
             ):
-                return operation(operator)
+                result = operation(operator)
+        if self._composite_rks_second_order:
+            result = replace(
+                result,
+                _diagnostics=MappingProxyType(
+                    {
+                        **result.diagnostics,
+                        "endpoint_seconds": time.perf_counter() - started,
+                    }
+                ),
+            )
+        return result
 
     def hessian_vector_product(
         self,
@@ -2188,11 +2634,19 @@ class Calculator:
         cache: typing.Any = ".artifacts",
         integral_budget_bytes: int = 64 << 20,
         solver_options: typing.Any = None,
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Compute a bounded analytic Cartesian HVP for qualified LDA/PBE RKS.
+        """Compute a bounded analytic Cartesian HVP for LDA/PBE or WB97M-V.
 
-        The public domain is CPU, direct, all-electron, Cartesian, strict-FP64,
-        closed-shell LDA/PBE RKS. Unsupported methods/backends fail before SCF.
+        LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
+        Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
+        and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
+        AD and coupled response, remain in linked native C++/CUDA code. A
+        build-time Hessian AOT package is required; Python, CuPy and runtime
+        compilation are not numerical dependencies. ``cache`` is retained for
+        CPU/development compatibility and is unused by this CUDA AOT path.
+        Unsupported resources never select host AD.
         The integral budget bounds generated second-order integral work;
         response/provider diagnostics remain separately reported.
 
@@ -2201,13 +2655,45 @@ class Calculator:
         the Cartesian Hessian uses Hartree/Bohr squared. Invalid directions,
         failed response solves and exceeded budgets raise before publication.
         See :ref:`python-calculation-values` and :ref:`python-calculation-errors`."""
-        from .rks_hessian import rks_hvp
-        from .rks_hessian_integrals import checked_direction
+        from ._native_hessian import checked_direction
 
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hvp"
         )
         vector = checked_direction(direction, len(native_atoms))
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                direction=vector,
+                integral_budget_bytes=integral_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import composite_rks_hvp
+
+            return self._run_public_rks_second_order(
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                operation=lambda operator: composite_rks_hvp(
+                    operator,
+                    vector,
+                    cache=cache,
+                    integral_budget_bytes=integral_budget_bytes,
+                    solver_options=solver_options,
+                ),
+            )
+        from .rks_hessian import rks_hvp
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2230,23 +2716,34 @@ class Calculator:
         multiplicity: int = 1,
         block_size: int | None = None,
         cache: typing.Any = ".artifacts",
-        strategy: str = "recycled",
+        strategy: str | None = None,
         output_budget_bytes: int = 64 << 20,
         integral_budget_bytes: int = 64 << 20,
         solver_options: typing.Any = None,
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Assemble a raw bounded analytic Cartesian Hessian for LDA/PBE RKS.
+        """Assemble a raw analytic Cartesian Hessian for LDA/PBE or WB97M-V.
 
         The matrix is never post-hoc symmetrized. The output budget must hold
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
 
+        WB97M-V uses compiler automatic differentiation and implicit CPKS, not
+        displaced SCFs. Its RKS/UKS owner assembles scalar columns
+        (``block_size=None`` or ``1``). The default strategy resolves to native
+        ``"scalar"`` on CUDA and ``"recycled"`` on CPU; explicitly requesting
+        recycling/block solves on CUDA is unsupported, never silently ignored.
+        CUDA returns an aggregate native result: intermediate/source-component
+        panels remain on device rather than being exported for Python assembly.
+        ``grid_budget_bytes`` bounds its numeric AO/grid/pair workspace;
+        ``max_nonlocal_pairs`` independently caps ordered VV10 pairs per action.
+        Tight SCF/response tolerances and a converged grid remain necessary.
+
         Return a detached result record with a ``matrix`` of shape
         ``(3*natoms, 3*natoms)`` in Hartree/Bohr squared. The qualified context
         and failure/lifetime rules are those of :ref:`python-calculation-backends`,
         :ref:`python-calculation-errors` and :ref:`python-calculation-ownership`."""
-        from .rks_hessian import rks_hessian
-
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hessian"
         )
@@ -2261,6 +2758,57 @@ class Calculator:
                 "full RKS Hessian output and immutable publication exceed "
                 "output_budget_bytes"
             )
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError("native CUDA Hessian requires block_size=None or 1")
+            if strategy not in (None, "scalar"):
+                raise NotImplementedError(
+                    "native CUDA Hessian supports only strategy='scalar'; no Krylov recycling"
+                )
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                integral_budget_bytes=integral_budget_bytes,
+                output_budget_bytes=output_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import composite_rks_hessian
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError(
+                    "WB97M-V Hessian currently requires block_size=None or 1"
+                )
+            if strategy not in (None, "recycled"):
+                raise ValueError(
+                    "WB97M-V Hessian currently uses the default scalar response strategy"
+                )
+            return self._run_public_rks_second_order(
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                operation=lambda operator: composite_rks_hessian(
+                    operator,
+                    cache=cache,
+                    integral_budget_bytes=integral_budget_bytes,
+                    output_budget_bytes=output_budget_bytes,
+                    solver_options=solver_options,
+                ),
+            )
+        from .rks_hessian import rks_hessian
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2269,13 +2817,56 @@ class Calculator:
                 operator,
                 block_size=block_size,
                 cache=cache,
-                strategy=strategy,
+                strategy="recycled" if strategy is None else strategy,
                 output_budget_bytes=output_budget_bytes,
                 integral_budget_bytes=integral_budget_bytes,
                 solver_options=solver_options,
                 _public_calculator_endpoint=True,
             ),
         )
+
+    def stable_singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+        policy: SpinRootPolicy | None = None,
+        previous: SpinRootResult | None = None,
+    ) -> SpinRootResult:
+        """Require a stable real-internal UHF/UKS root before publishing E/forces.
+
+        This explicit CPU FP64 all-electron workflow certifies unscreened J/K
+        with SCF screening at most 1e-12. It reuses
+        native SCF, J/K, SCF-domain XC and the shared coupled response action.
+        ``SpinRootPolicy`` bounds the full spectrum/restarts and failure gates.
+        ``previous`` is a completed ``SpinRootResult`` for the same model; its
+        occupied spaces are projected as a seed and the new root is independently
+        requalified. Root switches reject unless the policy explicitly allows
+        them. Stable states pass through; unstable states need a lower, stationary,
+        fully stable restart. Failure publishes no energy or force result.
+
+        Coordinates are Bohr, energies Hartree and analytic forces Hartree/Bohr.
+        UHF, native UMP2 UHF references and qualified semilocal polarized LDA/PBE
+        are admitted; CUDA, fitting,
+        ECP, mixed precision, complex/spin-flip stability and unqualified XC fail
+        closed. Install ``generativeqc[stability]`` for the bounded CPU linear
+        algebra. This is not a global-minimum or arbitrary spatial-symmetry proof.
+        """
+        from ._spin_root_workflow import stable_singlepoint
+
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return stable_singlepoint(
+                self,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                policy=policy,
+                previous=previous,
+            )
 
     def singlepoint(
         self,
@@ -2312,6 +2903,46 @@ class Calculator:
                 atoms, charge=charge, multiplicity=multiplicity, properties=properties
             )
 
+    def singlepoint_components(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        companions: Iterable[str] = ("rhf",),
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+    ) -> dict[str, Result]:
+        """Execute a conventional MP2/CCSD(T) group with one RHF reference.
+
+        MP2 can supply ``rhf``; CCSD(T) can supply ``rhf`` and ``mp2``.
+        Coordinates and outputs have the same units as :meth:`singlepoint`.
+        All requested analytic forces must complete before any group is returned.
+        Method-specific response solves remain separate, while the reference,
+        exact integral source and compatible correction-basis OVOV block are shared.
+        """
+        names = tuple(companions)
+        allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
+        if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
+            raise NotImplementedError("companions require MP2 or CCSD(T)")
+        if not names or len(set(names)) != len(names) or not set(names) <= allowed:
+            raise ValueError("unsupported or duplicate companion methods")
+        if not hasattr(self._library, "generativeqc_calculation_execute_components_v1"):
+            raise RuntimeError(
+                "native library lacks same-reference component execution"
+            )
+        outputs: dict[str, Result] = {}
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            result = self._singlepoint(
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                component_methods=names,
+                component_outputs=outputs,
+            )
+        return {self._method_name: result, **outputs}
+
     def clear_cache(self) -> None:
         """Release retained singlepoint workspaces after in-flight calls finish.
 
@@ -2328,6 +2959,8 @@ class Calculator:
         charge: int = 0,
         multiplicity: int = 1,
         properties: Iterable[str] | None = None,
+        component_methods: tuple[str, ...] = (),
+        component_outputs: dict[str, Result] | None = None,
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
         if properties is None:
@@ -2374,11 +3007,13 @@ class Calculator:
                 properties=requested_properties,
             ).require_feasible()
         if self._dispersion_method_ir is not None or (
-            compute_forces and self._capabilities.family == "density_functional"
+            self._capabilities.family == "density_functional"
         ):
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
-            # scientific implementation in the single-system path.
+            # scientific implementation in the single-system path. Energy-only
+            # must use the same SCF owner, final-state gates and optimization
+            # selection; requesting derivatives changes only the consumer.
             with self.prepare_batch(
                 [native_atoms],
                 charges=[charge],
@@ -2490,18 +3125,52 @@ class Calculator:
                 0,
                 _native.BACKEND_CPU_REFERENCE,
             )
-            if resource_plan is None:
-                status = self._library.generativeqc_calculation_execute(
-                    calculation, ctypes.byref(result_descriptor)
+            component_buffers = {
+                method: (ctypes.c_double * (3 * len(native_atoms)))()
+                if compute_forces
+                else None
+                for method in component_methods
+            }
+            component_descriptors = {
+                method: _native.ResultDescriptor(
+                    ctypes.sizeof(_native.ResultDescriptor),
+                    _native.ABI_VERSION,
+                    0.0,
+                    buffer,
+                    len(buffer) if buffer is not None else 0,
+                    0,
+                    0.0,
+                    0.0,
+                    0,
+                    _native.BACKEND_CPU_REFERENCE,
                 )
+                for method, buffer in component_buffers.items()
+            }
+
+            def execute() -> int:
+                if not component_methods:
+                    return self._library.generativeqc_calculation_execute(
+                        calculation, ctypes.byref(result_descriptor)
+                    )
+                return self._library.generativeqc_calculation_execute_components_v1(
+                    calculation,
+                    ctypes.byref(result_descriptor),
+                    ctypes.byref(component_descriptors["rhf"])
+                    if "rhf" in component_descriptors
+                    else None,
+                    ctypes.byref(component_descriptors["mp2"])
+                    if "mp2" in component_descriptors
+                    else None,
+                )
+
+            if resource_plan is None:
+                status = execute()
             else:
                 status, resource_diagnostics = observe_method_call(
                     self._library,
                     resource_plan,
                     ledger,
-                    lambda: self._library.generativeqc_calculation_execute(
-                        calculation, ctypes.byref(result_descriptor)
-                    ),
+                    execute,
                     owner=resource_plan.requests[0].name,
                     previous=resource_diagnostics,
                 )
@@ -2565,7 +3234,7 @@ class Calculator:
                 ks_transport_diagnostic = read_ks_transport_diagnostic(
                     self._library, calculation
                 )
-            return Result(
+            native_result = Result(
                 energy=result_descriptor.energy,
                 forces=forces,
                 converged=bool(result_descriptor.converged),
@@ -2594,6 +3263,33 @@ class Calculator:
                 initial_guess=read_initial_guess_diagnostic(self._library, calculation),
                 ks_transport_diagnostic=ks_transport_diagnostic,
             )
+            if component_outputs is not None:
+                for method, descriptor in component_descriptors.items():
+                    buffer = component_buffers[method]
+                    component_outputs[method] = Result(
+                        energy=descriptor.energy,
+                        forces=np.ctypeslib.as_array(buffer)
+                        .reshape(len(native_atoms), 3)
+                        .copy()
+                        if buffer is not None
+                        else None,
+                        converged=bool(descriptor.converged),
+                        iterations=descriptor.iterations,
+                        energy_change=descriptor.energy_change,
+                        density_rms=descriptor.density_rms,
+                        executed_backend="cuda"
+                        if descriptor.executed_backend == _native.BACKEND_CUDA
+                        else "cpu_reference",
+                        correlation=_read_correlation_result(
+                            self._library,
+                            calculation,
+                            context=context,
+                            mp2_component=True,
+                        )
+                        if method == "mp2"
+                        else None,
+                    )
+            return native_result
         finally:
             if calculation.value:
                 self._library.generativeqc_calculation_destroy(calculation)

@@ -2,16 +2,28 @@
 # See https://pre-commit.com/hooks.html for more hooks
 # Preserve exact upstream bytes and SHA-guarded frozen migration oracles.
 exclude: ^(upstream/|src/xtb/native/|cmake/3rdparty/implib/|tests/native/fixtures/johnson_prechange_3b97c234/|tests/native/fixtures/spectral_prechange_5c02b1ba/)
+# The mutating hook is local only; CI runs the read-only companion below.
+ci:
+  skip: [auto-compact-evidence-publications]
 repos:
+  - repo: local
+    hooks:
+      - id: auto-compact-evidence-publications
+        name: Compact staged shared publication data (review and restage)
+        entry: python3 tools/compact_evidence_publications.py --pre-commit
+        language: system
+        files: ^benchmarks/results/
+        require_serial: true
+        fail_fast: true
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         # Reconstruction patches and checksum-bound receipts retain exact bytes.
-        exclude: ^benchmarks/results/(?:.*\.patch|.*/receipts\.txt)$
+        exclude: ^benchmarks/results/(?:.*\.patch|.*/receipts\.txt|array-api-rhf-slurm-20261011/.*\.log)$
       - id: end-of-file-fixer
-        # Keep archived Basis Set Exchange response bytes unchanged.
-        exclude: ^benchmarks/results/.*\.bse\.json$
+        # Keep archived reference responses and checksum-bound GPU receipts unchanged.
+        exclude: ^benchmarks/results/(?:.*\.bse\.json|array-api-rhf-slurm-20261011/.*\.(?:log|xml))$
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files
@@ -46,9 +58,21 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: native-api-boundaries
+        name: Check C API handle ownership and native core isolation
+        entry: python3 tools/check_native_api_boundaries.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: compiler-structure
         name: Check scientific compiler dependency directions
         entry: python3 tools/check_compiler_structure.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: native-runtime-ownership
+        name: Check Python/native runtime call-path source anchors
+        entry: python3 tools/check_native_runtime_ownership.py
         language: system
         pass_filenames: false
         always_run: true
@@ -96,7 +120,7 @@ repos:
         pass_filenames: false
         always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
+    rev: v0.17.1
     hooks:
       # Generated parameter Python is byte-for-byte qualified against its source.
       - id: ruff
@@ -116,7 +140,29 @@ repos:
         types_or: [python, pyi, jupyter]
         exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v23.1.2
+    rev: v23.1.3
     hooks:
       - id: clang-format
         types_or: [c++, c, cuda]
+  - repo: local
+    hooks:
+      # Pin ast-grep in a managed Python hook environment.  GitHub Actions
+      # uses prek + uv, while external pre-commit.ci runs plain pre-commit
+      # without uvx on PATH; both install additional_dependencies themselves.
+      # No native compilation, CUDA toolkit, or GPU is required to scan.
+      - id: ast-grep-native
+        name: Structural lint for maintained C++/CUDA
+        # Publish non-blocking warnings as inline GitHub Actions annotations.
+        entry: ast-grep scan --config sgconfig.yml --format github
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
+        types: [file]
+        files: ^(?:src|include)/.*\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|cu|cuh)$
+        verbose: true
+      - id: ast-grep-rule-tests
+        name: Test structural lint rules
+        entry: ast-grep test --config sgconfig.yml --skip-snapshot-tests
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
+        pass_filenames: false
+        files: ^(?:sgconfig\.yml|rules/|rule-tests/)

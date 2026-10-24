@@ -54,7 +54,7 @@ class PreparedGrid:
         artifact: typing.Any = None,
         device_id: typing.Any = 0,
     ) -> None:
-        spec = GridSpec() if spec is None else spec
+        spec = GridSpec.treutler() if spec is None else spec
         self._lock = threading.RLock()
         self._basis = None
         self._cuda = None

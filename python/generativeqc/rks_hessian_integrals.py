@@ -45,6 +45,7 @@ from generativeqc_compiler.integral.first_gradient_execute import (
     FirstGradientAccumulator,
     compile_first_gradient,
 )
+from generativeqc_compiler.integral.ir import FOUR_CENTER_ERI_OPERATOR
 from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
@@ -241,6 +242,9 @@ def _contract_directional_first_order(
     direction: np.ndarray,
     *,
     cache: typing.Any,
+    exchange_operators: tuple = (),
+    exchange_density: np.ndarray | None = None,
+    include_coulomb: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     provider = _FirstDerivativeProvider(topology, cache)
     shells, offsets = provider.shells, provider.offsets
@@ -248,6 +252,7 @@ def _contract_directional_first_order(
         [atom.atomic_number for atom in topology.atoms], dtype=np.float64
     )
     frozen = np.zeros((topology.nbf, topology.nbf))
+    exchange_density = density if exchange_density is None else exchange_density
     overlap = np.zeros_like(frozen)
 
     def accumulate(
@@ -290,7 +295,9 @@ def _contract_directional_first_order(
         angular = tuple(shells[i].angular_momentum for i in slots)
         atoms = tuple(shells[i].atom_index for i in slots)
         ir = build_weighted_eri_ir(angular)
-        for component, gradient in provider.raw_tiles(ir, slots, atoms):
+        for component, gradient in (
+            provider.raw_tiles(ir, slots, atoms) if include_coulomb else ()
+        ):
             u, v, w, x = (
                 offsets[shell] + c for shell, c in zip(slots, component, strict=True)
             )
@@ -307,6 +314,22 @@ def _contract_directional_first_order(
                     term.coefficient * density[k, l],
                 )
 
+        for operator, coefficient in exchange_operators:
+            ir = build_weighted_eri_ir(angular, operator=operator)
+            for component, gradient in provider.raw_tiles(ir, slots, atoms):
+                first, second, third, fourth = (
+                    offsets[shell] + index
+                    for shell, index in zip(slots, component, strict=True)
+                )
+                accumulate(
+                    frozen,
+                    atoms,
+                    gradient,
+                    first,
+                    third,
+                    -0.5 * float(coefficient) * exchange_density[second, fourth],
+                )
+
     if not np.isfinite(frozen).all() or not np.isfinite(overlap).all():
         raise FloatingPointError("generated RKS nuclear source is nonfinite")
     return immutable(frozen), immutable(overlap)
@@ -318,12 +341,27 @@ def generated_directional_semilocal_rks_integral_first_order(
     direction: typing.Any,
     *,
     cache: typing.Any = ".artifacts",
+    exchange_operators: tuple = (),
+    exchange_density: np.ndarray | None = None,
+    include_coulomb: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Contract first-order RKS integral derivatives with a nuclear direction."""
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
     ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
-    return _contract_directional_first_order(topology, ao_density, vector, cache=cache)
+    return _contract_directional_first_order(
+        topology,
+        ao_density,
+        vector,
+        cache=cache,
+        exchange_operators=exchange_operators,
+        include_coulomb=include_coulomb,
+        exchange_density=None
+        if exchange_density is None
+        else _checked_ao_weight(
+            exchange_density, topology.nbf, "exchange reference density"
+        ),
+    )
 
 
 def generated_directional_semilocal_rks_integral_first_order_cuda(
@@ -692,6 +730,7 @@ def generated_weighted_first_integral_gradient(
     pair_weights: typing.Any = None,
     eri_shell_weights: typing.Any = None,
     cache: typing.Any = ".artifacts",
+    eri_operator: typing.Any = FOUR_CENTER_ERI_OPERATOR,
 ) -> np.ndarray:
     """Contract named first-integral sources into a Cartesian nuclear gradient."""
     if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
@@ -754,7 +793,7 @@ def generated_weighted_first_integral_gradient(
                 raise ValueError(
                     "ERI shell weights must be finite with the ordered shell shape"
                 )
-            ir = build_weighted_eri_ir(angular)
+            ir = build_weighted_eri_ir(angular, operator=eri_operator)
             for component, gradient in provider.raw_tiles(ir, slots, atoms):
                 accumulate(atoms, gradient, weights[component])
 
@@ -1079,6 +1118,7 @@ def _run_eri_hvp(
     data: dict[str, typing.Any],
     shell_weights: typing.Callable[[tuple[int, int, int, int]], typing.Any],
     direction: np.ndarray,
+    operator: typing.Any = FOUR_CENTER_ERI_OPERATOR,
 ) -> np.ndarray:
     state, shells = data["state"], data["shells"]
     total = np.zeros((state.nat, 3))
@@ -1096,10 +1136,11 @@ def _run_eri_hvp(
         centers = np.asarray([state.coords[atom] for atom in atoms])
         total += _run_kernel_hvp(
             data,
-            ("eri", *angular),
+            ("eri", operator, *angular),
             build_eri_second_ir,
             {
                 "angular": angular,
+                "operator": operator,
                 "output": "weighted_hvp",
                 "_center_atoms": atoms,
             },
@@ -1124,6 +1165,7 @@ def generated_weighted_second_integral_hvp(
     backend: str = "cpu",
     compiler: typing.Any = None,
     device_id: int = 0,
+    eri_operator: typing.Any = FOUR_CENTER_ERI_OPERATOR,
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """Contract a selected second-integral source with a nuclear direction.
 
@@ -1143,7 +1185,7 @@ def generated_weighted_second_integral_hvp(
     if source_name == "coulomb":
         if pair_weights is not None or not callable(eri_shell_weights):
             raise ValueError("coulomb second HVP requires shell-local ERI weights")
-        value = _run_eri_hvp(data, eri_shell_weights, vector)
+        value = _run_eri_hvp(data, eri_shell_weights, vector, eri_operator)
     else:
         if eri_shell_weights is not None:
             raise ValueError("pair second HVP cannot consume ERI shell weights")

@@ -1,29 +1,27 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
 
 namespace generativeqc::dft {
-/** The restricted provider contracts total D=2*Cocc*Cocc^T. Its signed K[D]
- * coefficient is -alpha/2, not the positive physical exact-exchange fraction.
- * Keep this composition check executable independently of the CUDA owner. */
-constexpr bool pbe0_rks_final_validation_composition(bool pbe_family,
-                                                     double fock_exchange_coefficient,
-                                                     double semilocal_exchange_scale,
-                                                     double semilocal_correlation_scale) noexcept {
-  return pbe_family && fock_exchange_coefficient == -0.125 && semilocal_exchange_scale == 0.75 &&
-         semilocal_correlation_scale == 1.0;
+/** RKS uses D=2*Cocc*Cocc^T: the full-range physical exact-exchange
+ * fraction alpha has the signed Fock coefficient -alpha/2. Authentication of
+ * the full source/operator composition remains with the prepared KS owner. */
+constexpr bool restricted_global_hybrid_exchange_coefficient(double coefficient) noexcept {
+  return std::isfinite(coefficient) && coefficient < 0.0 && coefficient >= -0.5;
 }
 
-/** Promote the measured direct PBE0/RKS product owner, not every KS consumer.
- * The 384/768-AO endpoints qualify the lower size boundary. Larger owners use
- * the same nine-product schedule and bounded packets, with no new tile policy.
- * Resource and published-scratch-lease admission remain the caller's contract. */
-constexpr bool device_final_validation_default_eligible(std::size_t aos, unsigned spins,
-                                                        bool direct_pbe0,
-                                                        bool full_precision) noexcept {
-  return aos >= 384 && spins == 1 && direct_pbe0 && full_precision;
+/** The resident final-state matrix algebra is functional-independent.
+ * Exact/fitted global hybrids use the 384-AO envelope. Pure-J exact/fitted
+ * models use the separately qualified 544-AO lower bound. Both retain the
+ * strict RKS/FP64, token, library-handle and scratch-lifetime guards. */
+constexpr bool device_final_validation_default_eligible(
+    std::size_t aos, unsigned spins, bool full_range_global_hybrid, bool full_precision,
+    bool full_range_coulomb_only = false) noexcept {
+  return spins == 1 && full_precision &&
+         ((aos >= 384 && full_range_global_hybrid) || (aos >= 544 && full_range_coulomb_only));
 }
 
 /** An unset selector chooses the evidence-bound default; 0 is a durable opt-out.

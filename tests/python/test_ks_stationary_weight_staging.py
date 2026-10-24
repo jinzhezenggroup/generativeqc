@@ -18,7 +18,15 @@ def _stage_source() -> str:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text(encoding="utf-8")
     begin = source.index("    bool staged_stationary_weights = false;")
     end = source.index("    KsPhysicalState physical;", begin)
-    return source[begin:end]
+    from test_stationary_task_work_budget import _block
+
+    stage = _block(source, "  void stage_stationary_weights(")
+    stage = stage.replace(
+        "void stage_stationary_weights()",
+        "const auto stage_stationary_weights = [&]()",
+        1,
+    )
+    return stage + ";\n" + source[begin:end]
 
 
 @pytest.fixture(scope="module")
@@ -51,22 +59,6 @@ void build(unsigned spins, int n, const std::int32_t* occupied, double* output) 
     for (int i = 0; i < n * n; ++i)
       output[spin * n * n + i] = occupied[spin] * (10.0 + 3.0 * spin + i);
 }
-void launch_build_weighted_density_kernel(
-    unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
-    const std::int32_t* occupied, const double*, const double*,
-    const std::uint8_t* active, double* output) {
-  assert(grid * block >= unsigned(n * n) && shared == 0 && stream == 7);
-  assert(batch == 1 && *active == 1);
-  build(1, n, occupied, output);
-}
-void launch_build_spin_weighted_density_kernel(
-    unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
-    const std::int32_t* occupied, const double*, const double*,
-    const std::uint8_t* active, double* output) {
-  assert(grid * block >= unsigned(2 * n * n) && shared == 0 && stream == 7);
-  assert(batch == 1 && *active == 1);
-  build(2, n, occupied, output);
-}
 void launch_sum_uhf_spin_matrices_kernel(
     unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
     const double* input, const std::uint8_t* active, double* output) {
@@ -85,7 +77,8 @@ int main(int argc, char** argv) {
   const int stream = 7;
   const std::int32_t occupied[2] = {2, beta};
   const std::uint8_t final_enabled[1] = {1};
-  const double *final_coefficients = nullptr, *final_eigenvalues = nullptr;
+  const double coefficients[1] = {1.0}, eigenvalues[1] = {-0.5};
+  const double *final_coefficients = coefficients, *final_eigenvalues = eigenvalues;
   std::vector<double> density_storage(elements), first(elements, -99), second(elements, -88);
   for (std::size_t i = 0; i < matrix; ++i) {
     density_storage[i] = 2.0 + i;
@@ -96,13 +89,20 @@ int main(int argc, char** argv) {
   auto* tmp2 = second.data();
   bool final_stationary_weights_ready = false;
   const bool compute_weighted_density = true;
+  // Staging now calls the common structured-density owner. Keep this fixture
+  // focused on its per-spin weights and lease, with distinct argument sentinels.
+  const auto build_density = [&](const double* frame, const double* energies,
+                                 const std::uint8_t* active, double* output) {
+    assert(frame == final_coefficients && energies == final_eigenvalues);
+    assert(active == final_enabled && *active == 1 && output == tmp1);
+    build(spins, static_cast<int>(n), occupied, output);
+  };
   for (unsigned attempt = 0; attempt < 2; ++attempt) {
 """
         + _stage_source()
         + r"""
     if (device_validation && compute_weighted_density && !final_stationary_weights_ready) {
-      stage_stationary_weights();
-      staged_stationary_weights = true;
+      stage_weights();
     }
     assert(staged_stationary_weights == (attempt == 0));
     final_stationary_weights_ready = true;
@@ -139,13 +139,87 @@ def test_stationary_staging_keeps_both_spin_weights_and_reuses_them(
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_stationary_weight_lease_is_published_only_after_validation() -> None:
+def test_stationary_weight_lease_is_published_only_after_validation(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the production acceptance/publication tail with fault controls."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text(encoding="utf-8")
     begin = source.index("  VerifiedKsFinalState read_final(")
-    end = source.index("  std::vector<double> download(", begin)
-    read = source[begin:end]
-    publish = "if (staged_stationary_weights) final_stationary_weights_ready = true;"
-    assert read.count(publish) == 1
-    assert read.index("validate_ks_final_state(") < read.index(publish)
-    assert read.index(publish) < read.index("return verified;")
-    assert "cudaStreamSynchronize" not in _stage_source()
+    begin = source.index("    VerifiedKsFinalState verified;", begin)
+    end = source.index("    return verified;", begin) + len("    return verified;")
+    program = tmp_path / "publication.cpp"
+    program.write_text(
+        r"""
+#include <cassert>
+#include <stdexcept>
+#include <string>
+
+struct VerifiedKsFinalState { int diagnostic = 0; };
+bool final_state_ready = true, final_stationary_weights_ready = false;
+int final_validation_diagnostic = -1, failure = 0, stages = 0, validations = 0;
+int stream = 7;
+struct { unsigned synchronizations = 0; } movement;
+struct { int identity = 1; } current;
+struct OneElectron { int overlap = 2, hcore = 3; };
+struct Provider { OneElectron one_electron() { return {}; } } provider;
+int physical = 4, candidate = 5, limits = 6, operations = 7;
+int cudaStreamSynchronize(int value) { assert(value == stream); return failure == 4; }
+void check(int status) { if(status) throw std::runtime_error("drain"); }
+bool validate_ks_final_state(int, int, int, int, int, int, bool,
+                            VerifiedKsFinalState& verified, std::string& detail, int*) {
+  ++validations;
+  assert(!final_stationary_weights_ready && final_validation_diagnostic == -1);
+  if(failure == 1) { detail = "rejected"; return false; }
+  if(failure == 2) throw std::invalid_argument("invalid owner");
+  verified.diagnostic = 42;
+  return true;
+}
+VerifiedKsFinalState read(bool device_validation, bool compute_weighted_density) {
+  std::string detail;
+  bool staged_stationary_weights = compute_weighted_density && !device_validation;
+  const auto stage_weights = [&] {
+    assert(validations && !final_stationary_weights_ready);
+    ++stages;
+    if(failure == 3) throw std::runtime_error("stage");
+    staged_stationary_weights = true;
+  };
+"""
+        + source[begin:end]
+        + r"""
+}
+int main() {
+  for(bool device : {false, true}) {
+    for(int injected : {1, 2, 3, 4, 0}) {
+      if(!device && (injected == 3 || injected == 4)) continue;
+      failure = injected;
+      final_state_ready = true;
+      final_stationary_weights_ready = false;
+      final_validation_diagnostic = -1;
+      stages = validations = 0;
+      bool threw = false;
+      try {
+        const auto result = read(device, true);
+        assert(result.diagnostic == 42);
+      } catch(const std::exception&) { threw = true; }
+      assert(threw == (failure != 0));
+      assert(final_stationary_weights_ready == !threw);
+      assert(final_validation_diagnostic == (threw ? -1 : 42));
+      if(threw) assert(!final_state_ready);
+      assert(validations == 1);
+      assert(stages == (device && (failure == 0 || failure >= 3) ? 1 : 0));
+    }
+    final_stationary_weights_ready = false;
+    final_validation_diagnostic = -1;
+    stages = validations = 0;
+    const auto no_weights = read(device, false);
+    assert(no_weights.diagnostic == 42 && !final_stationary_weights_ready);
+    assert(final_validation_diagnostic == -1 && stages == 0);
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    binary = native_cxx.build_executable(
+        [program], tmp_path / "publication", compile_args=["-std=c++17", "-O0"]
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)

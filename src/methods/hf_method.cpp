@@ -1,11 +1,8 @@
 #include "methods/hf_method.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
-#include <cstring>
 #include <iterator>
 #include <memory>
 #include <numeric>
@@ -13,10 +10,12 @@
 #include <stdexcept>
 #include <utility>
 
-#include "api/handles.hpp"
+#include "methods/batch_capabilities.hpp"
+#include "methods/scf_common_options.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/hf_fock_work.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -24,18 +23,6 @@
 
 namespace generativeqc::methods::detail {
 namespace {
-
-generativeqc_density_fitting_mode density_fitting_mode(
-    const generativeqc_method_descriptor& descriptor) {
-  const auto mode = descriptor.density_fitting_mode;
-  if (mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CUDA && mode != GENERATIVEQC_DENSITY_FITTING_AUTO) {
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown density-fitting execution mode");
-  }
-  return mode;
-}
 
 double density_fitting_threshold(const generativeqc_method_descriptor& descriptor) {
   return descriptor.density_fitting_relative_threshold == 0.0
@@ -48,62 +35,20 @@ std::size_t density_fitting_memory_budget(const generativeqc_method_descriptor& 
 }
 
 std::optional<core::System> density_fitting_auxiliary_template(
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* native_auxiliary) {
   if (descriptor.density_fitting_auxiliary_basis == nullptr) return std::nullopt;
-  return descriptor.density_fitting_auxiliary_basis->data;
-}
-
-std::optional<generativeqc_precision_mode> precision_mode(
-    const generativeqc_method_descriptor& descriptor) {
-  const auto mode = descriptor.precision_mode;
-  if (mode != GENERATIVEQC_PRECISION_FP64 && mode != GENERATIVEQC_PRECISION_AUTO) {
+  if (native_auxiliary == nullptr)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown floating-point precision mode");
-  }
-  return mode;
-}
-
-/** Benchmark-only #990 selector. It is intentionally not a public method ABI. */
-bool incremental_direct_jk_benchmark_requested() {
-  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK");
-  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0) {
-    return false;
-  }
-  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
-  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                    "GENERATIVEQC_INCREMENTAL_DIRECT_JK must be 0/off or 1/on");
-}
-
-/** Parse the optional #990 accepted-update interval without weakening fail-closed policy. */
-std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval() {
-  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
-  if (value == nullptr) return std::nullopt;
-  unsigned parsed = 0U;
-  const char* end = value + std::strlen(value);
-  const auto result = std::from_chars(value, end, parsed);
-  if (result.ec != std::errc{} || result.ptr != end) {
-    throw MethodError(
-        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-        "GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL must be an unsigned integer");
-  }
-  return parsed;
+                      "auxiliary basis must be resolved at the API boundary");
+  return *native_auxiliary;
 }
 
 scf::ScfOptions scf_options(const generativeqc_method_descriptor& descriptor) {
-  scf::ScfOptions options;
-  options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
-  options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
-  options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
-  options.energy_tolerance =
-      descriptor.energy_tolerance > 0.0 ? descriptor.energy_tolerance : 1.0e-10;
-  options.density_tolerance =
-      descriptor.density_tolerance > 0.0 ? descriptor.density_tolerance : 1.0e-8;
-  options.screening_tolerance =
-      descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-12;
-  options.density_fitting_mode = density_fitting_mode(descriptor);
+  scf::ScfOptions options = common_scf_options(descriptor);
+  options.density_fitting_mode = checked_density_fitting_mode(descriptor);
   options.density_fitting_relative_threshold = density_fitting_threshold(descriptor);
   options.density_fitting_memory_budget_bytes = density_fitting_memory_budget(descriptor);
-  options.precision_mode = precision_mode(descriptor);
+  options.precision_mode = checked_precision_mode(descriptor);
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       (!(options.density_fitting_relative_threshold > 0.0) ||
        !(options.density_fitting_relative_threshold < 1.0) ||
@@ -129,13 +74,14 @@ void resolve_hf_options(scf::ScfOptions& options, generativeqc_method method,
           fitted ? scf::FockApproximation::DensityFitted : scf::FockApproximation::Exact),
       backend, options.screening_tolerance, options.density_fitting_relative_threshold);
 
-  if (incremental_direct_jk_benchmark_requested()) {
+  if (incremental_direct_jk_benchmark_requested("GENERATIVEQC_INCREMENTAL_DIRECT_JK")) {
     if (backend != scf::FockBackend::Cuda || fitted) {
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "incremental Direct-J/K benchmark mode requires exact CUDA HF");
     }
     options.incremental_direct_jk = true;
-    if (const auto interval = incremental_direct_jk_benchmark_rebuild_interval()) {
+    if (const auto interval = incremental_direct_jk_benchmark_rebuild_interval(
+            "GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL")) {
       options.incremental_direct_jk_rebuild_interval = *interval;
     }
   }
@@ -182,6 +128,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.precision_work = std::move(native.precision_work);
   result.incremental_direct_jk = native.incremental_direct_jk;
   return result;
 }
@@ -303,11 +250,15 @@ class HfPreparedCalculation final : public PreparedCalculation {
   HfPreparedCalculation(Capabilities capabilities, runtime::ExecutionContext execution,
                         core::System system, scf::ScfOptions options,
                         std::optional<core::System> auxiliary_template)
-      : capabilities_(capabilities),
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
         execution_(std::move(execution)),
         system_(std::move(system)),
         options_(options),
-        auxiliary_template_(std::move(auxiliary_template)) {}
+        auxiliary_template_(std::move(auxiliary_template)) {
+    scf::initial_guess::resolve_automatic_preliminary_guess(system_, *options_.resolved_fock_build,
+                                                            options_);
+  }
 
   [[nodiscard]] std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
 
@@ -316,7 +267,7 @@ class HfPreparedCalculation final : public PreparedCalculation {
     return execution_.resources();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     // Keep the prepared scientific controls immutable. Output selection is an
     // execution property and must not leak into a later replay of this plan.
     scf::ScfOptions execution_options = options_;
@@ -332,6 +283,8 @@ class HfPreparedCalculation final : public PreparedCalculation {
                         use_cuda ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE);
   }
 
+  void reset_execution_impl() override { fock_cache_.reset(); }
+
  private:
   Capabilities capabilities_;
   runtime::ExecutionContext execution_;
@@ -344,29 +297,46 @@ class HfPreparedCalculation final : public PreparedCalculation {
   scf::initial_guess::OverlapOrthogonalizer overlap_cache_;
 };
 
-class HfPreparedBatch final : public PreparedBatch {
+class HfPreparedBatch final : public PreparedBatch,
+                              public BatchWarmStarts,
+                              public BatchDirectQueueProfiles,
+                              public BatchEigensolverProfiles,
+                              public BatchDfMetricDiagnostics {
  public:
   HfPreparedBatch(Capabilities capabilities, const runtime::ExecutionContext& execution,
                   std::vector<core::System> systems, scf::ScfOptions options,
                   generativeqc_batch_flags flags, std::optional<core::System> auxiliary_template)
-      : plan_(std::move(systems), capabilities.method, options,
+      : PreparedBatch(execution.backend(), execution.device_id()),
+        plan_(std::move(systems), capabilities.method, options,
               (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
               options.resolved_fock_build->schedule == scf::FockSchedule::CudaFused,
               (flags & GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING) != 0,
               (flags & GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING) != 0,
               execution.device_id(), std::move(auxiliary_template),
-              options.resolved_fock_build->schedule == scf::FockSchedule::CudaDfResident) {}
+              options.resolved_fock_build->schedule == scf::FockSchedule::CudaDfResident),
+        counted_cuda_df_rhf_(capabilities.method == GENERATIVEQC_METHOD_RHF &&
+                             options.resolved_fock_build->schedule ==
+                                 scf::FockSchedule::CudaDfResident) {}
 
   [[nodiscard]] std::size_t size() const noexcept override { return plan_.size(); }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces = true) override {
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces = true) override {
     std::vector<scf::FleetItemResult> native = plan_.execute(coordinates, compute_forces);
     std::vector<BatchItemResult> results;
     results.reserve(native.size());
     for (scf::FleetItemResult& item : native) {
       BatchItemResult result;
       result.status = item.status;
+      if (item.executed_backend == GENERATIVEQC_BACKEND_CUDA) {
+        result.target_fock_work.emplace();
+        result.target_fock_work->begin_attempt();
+        result.target_fock_work->finish_attempt(
+            item.status == GENERATIVEQC_STATUS_SUCCESS
+                ? scf::completed_hf_fock_work(item.scf, item.warm_start_fallback,
+                                              counted_cuda_df_rhf_)
+                : std::nullopt);
+      }
       result.calculation = adapt_result(std::move(item.scf), item.executed_backend);
       result.bucket_id = item.bucket_id;
       result.warm_start_used = item.warm_start_used;
@@ -435,6 +405,7 @@ class HfPreparedBatch final : public PreparedBatch {
 
  private:
   scf::FleetPlan plan_;
+  bool counted_cuda_df_rhf_{};
 };
 
 }  // namespace
@@ -464,10 +435,10 @@ generativeqc_status validate_hf_system(generativeqc_method method, const core::S
 
 std::unique_ptr<PreparedCalculation> prepare_hf_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   runtime::ExecutionContext execution(context);
   scf::ScfOptions options = scf_options(descriptor);
-  const auto auxiliary = density_fitting_auxiliary_template(descriptor);
+  const auto auxiliary = density_fitting_auxiliary_template(descriptor, auxiliary_basis);
   if (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
       !execution.cuda_requested()) {
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -489,7 +460,8 @@ std::unique_ptr<PreparedBatch> prepare_hf_batch(const Capabilities& capabilities
                                                 core::ContextState& context,
                                                 std::vector<core::System> systems,
                                                 const generativeqc_method_descriptor& descriptor,
-                                                generativeqc_batch_flags flags) {
+                                                generativeqc_batch_flags flags,
+                                                const core::System* auxiliary_basis) {
   constexpr generativeqc_batch_flags supported_flags =
       GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
       GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING;
@@ -498,7 +470,7 @@ std::unique_ptr<PreparedBatch> prepare_hf_batch(const Capabilities& capabilities
   }
   runtime::ExecutionContext execution(context);
   scf::ScfOptions options = scf_options(descriptor);
-  const auto auxiliary = density_fitting_auxiliary_template(descriptor);
+  const auto auxiliary = density_fitting_auxiliary_template(descriptor, auxiliary_basis);
   if (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
       !execution.cuda_requested()) {
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,

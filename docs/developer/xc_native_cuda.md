@@ -45,6 +45,41 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+Strict-FP64 integration retains three published totals and three private
+rounding-correction words for XC energy and the two spin populations. One full
+32-thread warp reduces each channel with lane-local compensated sums and a
+fixed tree that merges both words. Corrections survive point-batch boundaries;
+only the final fold publishes the existing three-double result. All three low
+words are cleared with the totals at each enqueue and charged by the exact
+arena request (24 extra bytes), with no new full-grid storage or device
+allocation. Dense, compact, indexed and retained fallback consumers share this
+reduction. Existing FP32 contraction schedules keep their original accumulation.
+The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
+this is an accuracy improvement, not a bitwise-reproducible SCF contract.
+
+### Budget-Fock matrix products
+
+The shared physical density/potential consumer can select FP32 inner products
+independently of point algebra and total summation. Application Fast-Fock
+admission prepares this capability before evaluation; ordinary strict and
+response consumers retain their strict defaults. Selection uses executable
+layout/ingredient capabilities, not functional names. Existing indexed,
+compact and ragged schedules are retained.
+
+Density AO columns use a per-column binary scale before their FP32 dot
+products, restoring that scale into FP64 physical storage afterward. This
+preserves representable tiny tails without a density floor or a hidden strict
+recomputation. Potential panels also retain FP64 storage; their tile-local
+products and sums narrow, while inter-tile scatter and compensated point totals
+remain FP64. The precision census therefore reports separate matrix-product
+reduction signatures rather than inheriting the point evaluator's dtype.
+
+The existing one-sided diagonal schedule is available to both scalar types.
+Its FP32-only operand guard prevents half-panel doubling overflow and otherwise
+retains the original two-legged FP32 contraction; the strict schedule and its
+guard are unchanged. Invalid arithmetic remains an explicit numerical failure,
+not a clipped density or a successful Fast result after strict recovery.
+
 ### Experimental automatic AOT plumbing
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
@@ -55,6 +90,21 @@ ordinary native KS owner. The contract is strict-FP64, device-fused, all-electro
 execution with J only. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
 Analytic automatic CUDA forces and other unqualified products remain rejected.
+
+For bounded packages, set `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` to a
+semicolon-separated list of exact structural registration names, for example
+`"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
+must be enabled; a selected package cannot use the CPU-only compiler fallback.
+An empty list preserves the full-catalog opt-in behavior, while the AOT option
+remains off by default. Selected entries retain their original codes,
+mathematical/source identities and ordinary/batched providers. Omitted entries
+have no executable dispatch case and return a null static descriptor.
+Unknown/unrepresentable names fail before generation writes outputs; duplicate
+or reordered requests do not change structural shard order. Regeneration
+rewrites all shards, removing omitted dispatch cases from shrinking packages.
+Selection controls installed artifact content, not scientific admission,
+public capability promotion, executable alias reuse or a complete persistent
+binary-cache dependency closure.
 
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
@@ -75,6 +125,16 @@ Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
 with four additional history slots accounted by both native and public resource
 owners. Detached snapshots retain the shared physical/canonical validation
 gates rather than treating an SCF convergence flag as sufficient authorization.
+
+The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
+structurally registered automatic provider (`0` restores the old path).
+Its RKS-only sibling shares scalar work after polarized differentiation,
+leaving independent sigma-ab and all work-domain floors/clamps unchanged.
+UKS and the explicitly disabled arm retain the original body; both arms keep the existing 128-thread automatic schedule and
+bounded traversal. The descriptor's exact source identity covers both bodies
+and the selector. This does not add response support, installed variants,
+public backend admission, or resource/performance qualification. See
+[equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
@@ -167,14 +227,113 @@ its buffers to the retained launcher; graph replay retains that entry.
 Unsupported functional/response pairs fail during preparation. See the
 [consumer specialization decision](../../.agents/notes/implemented/performance/2026-09-23-xc-point-consumers.md).
 
+The PBE physical and admitted signed-response point entries also have an
+experimental family-specialized lowering of the same canonical point algebra.
+`GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION=1` selects it when an owner is
+prepared; `0` or an unset value keeps the generic entry. Other families keep
+the generic entry. Invalid switch values fail when preparing a PBE owner. Batched PBE
+points inherit the prepared physical entry's identity, including after a
+changed-geometry owner is prepared. This switch does not change point tiles,
+batch admission, AO maps, precision, or the independent exact-exchange J/K
+provider. It is not a performance default pending source-matched device and
+complete-endpoint qualification.
+
+For RKS physical evaluations, the default-on
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN` policy already binds the admitted functional.
+Both PBE family-switch settings then share that method-bound equal-spin
+consumer. Disabling equal-spin exposes the ordinary generic versus specialized
+PBE comparison; UKS and supported response keep their separate family policy.
+No duplicate equal-spin kernel is introduced by the PBE switch.
+
+The compiled host policy contract applies the independent 97-point SCF gate to
+ordinary consumers. The shared subnormal-ratio repair also applies the wider
+87-point independent gate to ordinary and equal-spin physical consumers and the
+bound PBE0 entry at the original strict tolerance. Every emitted RKS/UKS,
+generic/specialized and serial/batched route must satisfy that oracle; policy
+parity alone does not establish independent accuracy. Original failing receipts
+retain their old source identity. Signed-response tail qualification separately
+uses derivatives of the original energy at 450/550 decimal digits.
+The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
+
+The point-family campaign uses schema v3 and fixes `--equal-spin` identically
+for both RKS arms. Its default `0` is an explicit opt-out diagnostic, while `1`
+records that the physical family difference is superseded. Both retain the same
+tile/map/reduction/workspace/precision contracts and full E+F evidence gates.
+The v1/v2 readers preserve historical evidence. Requested policy fields do not
+substitute for actual GPU consumer identity or production endpoint qualification.
+Current promotion requires explicit v3 producer/policy provenance; relabeling
+or stripping fields cannot turn a shared equal-spin or unknown legacy consumer
+into promotion evidence.
+
+The producer requests a fixed 256-point force tile through the selected Python
+force composition entry before active-AO policy resolution and execution. It
+requires an integer `grid_tile_points_requested=256` and an `explicit` schedule
+in each actual force receipt. A prepared native-force route that bypasses that
+entry is unsupported by this campaign unless it supplies the requested receipt;
+the producer cannot reuse a previous call's work. Normal public force calls
+retain their budget-selected policy. A fixed request does not establish phased
+route support: the independent consumer still requires the original absolute
+phase/work counts and complete endpoint qualification.
+
+The producer retains constructor, owner preparation and initial E+F timestamp
+segments, their own-work sum, observed span and excluded interleaving/provenance
+gaps. Preparation/setup durations retain their earlier meanings. Moved setup
+measures coordinate rebuilding inside execute without charging the initial
+constructor again. These segments do not provide continuous cold wallclock
+qualification; the consumer independently checks their types and totals.
+
+`benchmarks/pbe0_xc_cold_pairs.py` separately measures fresh-process cold E+F.
+Each observation starts a new interpreter, CUDA context, Calculator, owner and
+density. Primary wallclock runs from process launch through successful process
+completion, including provenance collection and cleanup. Synchronized E/F
+delivery is retained as a separate interval and cannot replace full cold time.
+The explicit `--sdk-source`, loaded library, complete native identity, worker,
+consumer, basis and independent reference are frozen for the campaign. The
+collector may be newer than the SDK; its independent consumer is loaded from
+the collector tree, while production modules come from the frozen SDK.
+Output must be a new file; existing files and input aliases are rejected before
+collection. Collector and consumer refuse Python's `-O`/`-OO` modes so required
+validation cannot be optimized away. Journal errors preserve the primary failure.
+CLI admission protects the historical results trees of both collector and SDK
+before allocation checks, provenance or scientific imports.
+Deploy the collector with its sibling `_retention.py`; its hash is frozen with
+the independent tools, without editing the SDK checkout.
+
+The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
+`1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
+full FP64 single-stage PBE0 histories, observed J/K work and equal semantic work
+between arms. Actual precision, operator timeline and cold restart provenance
+are checked. A newly generated native MINAO/Hückel density is a supported cold
+guess; `initial_density_used` alone does not identify warm replay. Retained,
+retried or provisional solves are rejected. Unknown J/K work is incomplete
+evidence. Five complete pairs per
+geometry are required; `--feasibility --repeats 1` only audits readiness and
+cannot establish cold profitability. Both geometries start fresh owners; a
+fresh solve at moved coordinates is distinct from the retained-owner moved
+campaign. Failed children retain negative receipts and are reaped. Profiling
+runs separately from clean timing; this tool does not collect dynamic traffic.
+
+`verify_point_family_pairs` audits independent E/F vectors and fixed work even
+when the measured specialization has no significant endpoint improvement. Its
+successful evidence audit does not qualify a performance default. Promotion
+requires the additional `require_improvement=True` gate for both warm and moved
+replays, along with the remaining source-matched device and cold endpoint gates.
+
 ### Bounded independent point submissions
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:
-it requests up to 32 original tiles within a 32-MiB **additional** per-owner device
-allowance. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+it requests up to 32 original tiles within an **additional** per-owner device
+allowance of 32 MiB times the larger of the AO and density-product jet counts:
+32 MiB when both have one jet, and 128 MiB when either has four jets. GGA keeps
+four AO jets even though its density product needs only one, so its retained
+AO panels receive the same capacity as other four-jet consumers. Selection
+uses these panel dimensions independently of the functional name. The admitted
+count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
 overrides the request; zero or one explicitly retains the one-tile executor.
 `GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
-also retains the incumbent. This scheduling policy does not prune or specialize
+also retains the incumbent; an explicit byte cap is never scaled by the jet count.
+If the automatic larger allowance cannot retain a batch, preparation retries the
+original 32-MiB allowance before falling back to one tile. This scheduling policy does not prune or specialize
 the canonical scientific point source.
 
 Public `resource_budget` and `resource_plan` execution retains one-tile XC under
@@ -189,8 +348,8 @@ silently enlarged.
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
 batch size until complete retained panels fit; tiny domains, response, mixed
-arithmetic, insufficient allowance, and device/global-ledger allocation rejection
-retain the one-tile executor. No device model or molecule-size whitelist is used.
+arithmetic, insufficient allowance, and allocation rejection retain a bounded
+fallback, ultimately the one-tile executor. No device model or molecule-size whitelist is used.
 Prepare maps and arithmetic bindings first. Preparation is forbidden during
 capture or after evaluation; a retained batch also prevents later map discovery
 or a mixed-density rebind. Changed geometry creates and qualifies a new owner.
@@ -232,7 +391,9 @@ one-tile baseline. Compiled-resource evidence includes both the batched point
 kernel and its retained fallback for multi-tile automatic execution. The
 [default decision](../../.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md)
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
-source-specialization/composed ablations belong to the independent #2072 arm.
+the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
+qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
+ablations belong to the independent #2072 arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped
@@ -240,13 +401,13 @@ density products, density features, weighted AO panels and local Vxc
 contractions. The compiler keeps each original active-AO map throughout; it
 does not union maps or expand intermediate AO/density tensors to the full
 basis. Only the final public potential is full-basis. A compact group needs at
-least two tiles, with each nonempty tile having 32–128 active AOs and at least
+least two tiles, with each nonempty tile having 32–1024 active AOs and at least
 32 points. Empty tiles remain legal. Other original groups keep point-only
 batching; one large or tiny AO domain does not disable independent small groups.
 Response, mixed arithmetic and optional library-provider
 execution retain their existing paths. `GENERATIVEQC_CUDA_XC_COMPACT_BATCH=0`
 disables compact contractions while preserving point batching. The small-domain
-bound is a resource/ordered-scatter constraint, not a universal profitability
+bound is a resource/launch constraint, not a universal profitability
 threshold. The automatic compiled-resource envelope includes every compact
 stage and its retained fallback; explicit incumbent-only evidence cannot qualify
 automatic execution.
@@ -254,7 +415,10 @@ automatic execution.
 The candidate reuses the incumbent FP64 bodies but masks density output-tail
 lanes and non-authoritative/padded Vxc pairs while all lanes continue to reach
 shared-memory barriers. Authoritative reduction order, coefficients, weights
-and selected scientific summands are unchanged. One CTA per spin performs
+and selected scientific summands are unchanged. Large groups use unique owners
+of global AO row strips for the upper triangle and its symmetric mirrors;
+each matrix element retains the original tile and addition order without
+floating-point atomics. Small groups use one CTA per spin for
 ordered scatter; consecutive equal AO maps keep the running potential in
 registers and write once per map group, preserving every per-tile addition.
 Different overlapping maps are separated by a block barrier, never atomics.
@@ -265,6 +429,15 @@ and features once per tile, including empty tiles. AO collocation still submits
 once per nonempty original tile. Noncompact groups
 retain the original density/feature/Vxc submission counts; the native work census
 reports actual `compact_groups`, `compact_tiles` and `compact_nonempty_tiles`.
+
+`GENERATIVEQC_CUDA_XC_RAGGED_BATCH=0` restores the original 32–128-AO admission.
+Unset or a nonzero value permits larger groups. Density/panel/potential launches
+use each group's actual maximum extent and include every cross-block term.
+The existing additional byte cap includes retained panels, local potentials,
+features and descriptors; shrinking groups and bounded fallbacks remain active.
+Preparation trace `cuda_xc_batch_plan` reports `compact_large_tiles` separately
+from execution counts. The [default decision](../../.agents/notes/implemented/performance/2026-10-12-ragged-xc-default.md)
+retains complete-endpoint evidence and its cold/moved versus warm limitations.
 
 Retained work panels, compact local matrices and immutable device descriptors
 share the same **additional** XC byte cap as point batching. Descriptors are
@@ -322,6 +495,48 @@ and reads one scalar diagnostic record per iteration. Convergence returns the
 current evaluated density; only converged states replace the resident warm
 cache. An energy-only public call omits final matrix export. Full #203 public
 planning remains separate integration work.
+
+Strict-FP64 restricted resident VV10 solves use bounded native initialization
+before the ordinary physical target tail. The initializer first solves a
+semilocal/range-exchange proposal problem, then refreshes complete VV10 anchors
+between fixed-potential inner solves. Transported densities start with a target
+anchor. Provisional and full-target iterations share the caller's main SCF
+iteration budget; initialization gets no separate allowance. The existing ECP
+physical-final-closure policy retains its separate bound of four correction
+iterations. Only consecutive complete target evaluations passing the unchanged
+energy, density and physical residual gates can publish a successful state or
+forces. An already stationary target density is held for a further
+physical energy confirmation, instead of applying another sub-tolerance update.
+
+Resident warm replays and unsupported spin, precision, incremental-J/K or
+budget cases retain their existing solve. A caller-selected device chunk also
+keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
+select the ordinary full-target fallback explicitly. Provisional history scopes
+and actual VV10 pair-work receipts distinguish initialization from accepted
+physical work; initialization is never a cached convergence result.
+
+Strict-FP64 restricted VV10 initialization automatically admits bounded
+screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
+the existing reuse threshold, a 16 GiB value ceiling and complete host/device
+admission. Cold and transported-density initialization can prepare a lease;
+a retained warm call only reuses its audited immutable-geometry lease. It never
+builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
+selects ordinary Direct evaluation; explicit `1` retains the separately selected
+experimental capacity domain. The existing bucket mask and byte ceiling remain
+explicit controls. The primary full-range J/K may be Direct or fitted; an
+independent strict Direct correction owns the range values. Both providers'
+host storage is charged, and omitted buckets retain ordinary exact execution.
+Capacity refusal, unsupported angular classes,
+lower-precision, incremental and externally budgeted device-ledger paths retain
+their existing providers.
+
+The lease binds geometry, radial operator and omega. It supplies only matching
+raw range K; primary full J/K and derivative owners remain independent.
+Successful solves rebase warm energy metadata with both incumbent exchange
+terms before optional values are retired. An authenticated unchanged fitted
+primary retains its current J/K and final occupied projection during a range-only
+rebase. This preserves the physical replay gates and counts the operators
+actually executed.
 
 ## Prepared ragged execution
 
@@ -403,6 +618,21 @@ Host/device resource admission can still retain dense execution, so read
 selection actually occurred and inspect actual AO work and XC build counts.
 This policy does not select local force AO maps or change Becke response.
 
+`GENERATIVEQC_CUDA_KS_AO_DISCOVERY=host|device` selects the discovery schedule
+at geometry preparation; `host` remains the default. The experimental `device`
+schedule evaluates the same generated AO jets and `abs(jet)>1e-16` predicate,
+then compacts sorted IDs on the device. It downloads CSR offsets and the error
+status once per bounded chunk (at most 128 tiles). It reuses dead XC scratch
+and the already admitted worst-case map storage; it adds no device allocation.
+Both schedules publish only after validation and drain outstanding borrowers
+on exceptions. Resource refusal retains the existing dense route.
+
+The optional `GENERATIVEQC_DF_PROGRESS_TRACE` preparation trace reports
+`cuda_xc_ao_discovery` with observed tiles, chunks, synchronization count,
+transfer bytes, AO jet work and active counts. These are discovery-only counts;
+frozen-geometry XC calls reuse the map. The public v1 AO-work ABI is unchanged.
+Use separate clean complete endpoints for timing, including geometry preparation.
+
 The targeted `generativeqc_dft_cuda_tests --pbe0-local-ao` gate compares
 scaled-PBE E/V with independent CPU integration and checks empty maps and
 bounded admission. It does not establish complete PBE0 SCF/force accuracy or
@@ -437,3 +667,66 @@ separately covered by `tests/python/test_ks_resources.py`; the full workload
 evidence required by #162 remains a separate acceptance gate.
 The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
+
+An admitted radial source survives fixed-geometry warm replay by default.
+`GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY=0` retires it before the next solve.
+Changing range selection, bucket mask or byte ceiling also retires the lease.
+A force-memory eviction restores the incumbent provider; separate energy
+baselines preserve the original convergence checks in both cases. Every call
+still evaluates the physical Fock, convergence gates, derivatives and force
+assembly.
+
+`GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
+experiment. A token-authenticated host snapshot may reuse only the two-electron
+response when every density bit agrees within the same immutable prepared owner.
+It adds no host density export. The one-electron and Pulay responses still run
+with the current resident D/W. Optional key/result storage is capped at 64 MiB
+and one quarter of the caller allowance; budget refusal, allocation failure and
+explicit disable preserve the ordinary derivative path. This control is not
+qualified for default selection.
+
+`GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE=1` separately enables exact-density
+retention of completed semilocal/nonlocal and nuclear geometry components in
+the composite prepared owner. Current native integral and Pulay sources still
+execute. Geometry/operator/grid changes, failures and explicit disable retire
+the key; active-AO experiments and explicit stationary execution controls bypass
+retention. FP32 semilocal geometry requests also bypass retention so Fast
+precision receipts describe fresh work. Capability fallback and numerical retry
+still compute strict geometry; later strict requests may reuse that result.
+Its host allowance includes
+comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
+uses only remaining admitted capacity. Hits report zero executed geometry and
+pair work. This control is also default-off pending endpoint qualification.
+
+The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
+eight rows per lane and retains row inputs for admitted VV10 domains with at
+least 65,536 active points. Smaller domains use the existing four-row schedule.
+Both branches select using the device count without a host synchronization;
+numerical admission, output ownership, ordered fallback and FP64 roots are
+unchanged. This experiment requires separate complete-endpoint qualification.
+
+The automatic VV10 pair schedule uses the rotating-partner packet kernel for
+admitted molecular domains with at least 65,536 grid points on any CUDA target
+supported by the build. There is no sm_120 whitelist: the generated schedule uses
+FP64 atomics and warp shuffles, not architecture-specific instructions. Smaller
+grids and refused numerical/output leases retain the ordered
+fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects the
+packet route, including small qualification fixtures; `parallel` restores the
+previous four-row bilateral schedule and `ordered` forces the ordered fallback.
+Unset and empty selectors both use automatic selection.
+Each warp loads 32 adjacent compact partners and rotates their
+inputs and bilateral FP64 partials through all lanes. After 32 steps each
+partner returns to its original lane for publication. Four rows per lane keep
+the 128-row tile size and scalar pair work unchanged; no extra workspace, host
+count read, allocation or synchronization is introduced. Padded lanes still
+participate in every shuffle. Numerical/output-lease admission, positive-zero
+response, exact-component reuse and ordered fallback retain their contracts.
+The changed reduction order retains independent numerical and complete-endpoint
+qualification requirements. This is a scheduling change, not a scientific
+approximation or a claim that all large molecular populations complete within
+their benchmark limits. See
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-default.md` for the
+promotion decision, measured scope and unresolved 96-atom endpoint boundary, and
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-portable-default.md`
+for architecture-independent selection. Hardware admission is not a claim of
+measured speedup on every supported architecture.

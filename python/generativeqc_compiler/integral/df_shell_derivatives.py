@@ -20,9 +20,14 @@ from generativeqc_compiler.common.homogeneous_schedule import (
 from .cooperative_schedule import CooperativeLaneSchedule
 from .cuda import CudaEmitter
 from .df_derivatives import axis_polynomial
+from .df_derivatives_cuda import emit_df_derivatives_cuda
 
 PROTOTYPE_CLASSES = tuple(a for a in product(range(2), repeat=3) if any(a))
 SHELL_CLASSES = tuple(product(range(4), repeat=3))
+# Auxiliary g uses the same moment DAG with its explicitly raised F_11 domain.
+# Keep the original through-f family stable for existing tuning inventories.
+AUXILIARY_G_SHELL_CLASSES = tuple((a, b, 4) for a, b in product(range(4), repeat=2))
+SUPPORTED_SHELL_CLASSES = SHELL_CLASSES + AUXILIARY_G_SHELL_CLASSES
 DF_SIGNATURE_PACKET_SCHEDULE = HomogeneousTaskSchedule(
     packet_capacity=24,
     execution=HomogeneousExecution.ORDINARY,
@@ -97,8 +102,10 @@ def shell_work_model(angular: typing.Any) -> typing.Any:
     count by the number of executed primitive products; it must not count
     inactive components or infer hardware instructions from these values.
     """
-    if tuple(angular) not in SHELL_CLASSES:
-        raise ValueError("shell work model requires an s/p/d/f angular triple")
+    if tuple(angular) not in SUPPORTED_SHELL_CLASSES:
+        raise ValueError(
+            "shell work model requires orbital s/p/d/f and auxiliary through g"
+        )
     offsets, size = axis_cache_layout(angular)
 
     def powers(degree: typing.Any) -> typing.Any:
@@ -137,16 +144,33 @@ def select_shell_classes(classes: typing.Any = None) -> typing.Any:
     requested = tuple(tuple(angular) for angular in classes)
     if (
         not requested
-        or any(angular not in SHELL_CLASSES for angular in requested)
+        or any(angular not in SUPPORTED_SHELL_CLASSES for angular in requested)
         or len(set(requested)) != len(requested)
     ):
-        raise ValueError("expected unique supported s/p/d/f shell classes")
-    return tuple(angular for angular in SHELL_CLASSES if angular in requested)
+        raise ValueError(
+            "expected unique supported orbital s/p/d/f and auxiliary through-g classes"
+        )
+    return tuple(angular for angular in SUPPORTED_SHELL_CLASSES if angular in requested)
 
 
-def emit_df_shell_derivatives_cuda(*, classes: typing.Any = None) -> typing.Any:
-    """Emit class-specialized cache construction from the shared polynomial IR."""
+def emit_df_shell_derivatives_cuda(
+    *, classes: typing.Any = None, scalar_type: str = "double"
+) -> str:
+    """Emit the same shell schedule with typed moment and contraction arithmetic.
+
+    Float changes the cache, primitive/component sums and scalar DAG together.
+    Geometry/Boys preparation stays in the strict owner; the completed center
+    channels widen before translation recovery and the global force sink.
+    The ordinary double source remains unchanged.
+    """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
     selected = select_shell_classes(classes)
+    auxiliary_g = any(c == 4 for _, _, c in selected)
+    if auxiliary_g and any(c != 4 for _, _, c in selected):
+        raise ValueError(
+            "auxiliary-g shell units require their own scalar geometry domain"
+        )
     lines = [
         r"""// Generated shell-shared weighted DF derivatives.
 #ifndef GENERATIVEQC_GENERATED_DF_SHELL_DERIVATIVES_CUH
@@ -286,7 +310,7 @@ struct Moments {
         ]
         for powers, offset in offsets.items():
             graph, roots = axis_polynomial(*powers)
-            emitter = CudaEmitter(graph, {})
+            emitter = CudaEmitter(graph, {}, scalar_type=scalar_type)
             emitter.emit(roots)
             lines += ["    {", *emitter.lines]
             lines += [
@@ -321,4 +345,55 @@ struct Moments {
             ]
         lines += ["}"]
     lines += ["} // namespace generativeqc::scf::generated_df_shell", "#endif", ""]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if scalar_type == "float":
+        source = (
+            source.replace("double", "float")
+            .replace(
+                "GENERATIVEQC_GENERATED_DF_SHELL_DERIVATIVES",
+                "GENERATIVEQC_GENERATED_DF_FP32_SHELL_DERIVATIVES",
+            )
+            .replace("generated_df_shell", "generated_df_fp32_shell")
+            .replace(
+                "scalar::axis_polynomial",
+                "generated_df_fp32_derivatives::axis_polynomial",
+            )
+            .replace("g.pb[axis]-g.pa[axis]", "float(g.pb[axis])-float(g.pa[axis])")
+            .replace("g.f[i+j+k]", "float(g.f[i+j+k])")
+            .replace("g.prefactor", "float(g.prefactor)")
+            .replace(":0.0)", ":0.0f)")
+            .replace(
+                "struct Contracted { float gradient",
+                "struct Contracted { double gradient",
+            )
+            .replace(
+                "result.gradient[2][axis]=-independent[axis]-independent[3+axis];",
+                "result.gradient[2][axis]=-result.gradient[0][axis]-result.gradient[1][axis];",
+            )
+        )
+        source = emit_df_derivatives_cuda(scalar_type="float") + "\n" + source
+    if auxiliary_g:
+        # Both Geometry's Boys storage and the axis-polynomial switch must use
+        # the raised auxiliary-g domain. Relabeling just the shell class would
+        # leave F_11 and c=4 coefficients outside the through-f scalar contract.
+        if scalar_type == "float":
+            prefix = emit_df_derivatives_cuda(scalar_type="float") + "\n"
+            source = source.removeprefix(prefix)
+            source = (
+                emit_df_derivatives_cuda(auxiliary_g=True, scalar_type="float")
+                + "\n"
+                + source
+            )
+        source = source.replace(
+            '#include "generated_df_derivatives.cuh"',
+            '#include "generated_df_derivative_policy.cuh"',
+        )
+        source = source.replace(
+            "namespace scalar = generated_df_derivatives;",
+            "namespace scalar = generated_df_auxiliary_g_derivatives;",
+        )
+        source = source.replace(
+            "generated_df_fp32_derivatives::axis_polynomial",
+            "generated_df_fp32_auxiliary_g_derivatives::axis_polynomial",
+        )
+    return source

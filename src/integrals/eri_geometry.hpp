@@ -23,7 +23,7 @@ namespace generativeqc::integrals {
  * not replace the established full-Coulomb native/HF geometry path. Derived
  * overflow is reported to the caller; there is no fallback to another kernel.
  */
-template <typename Geometry, unsigned MaximumOrder = 13>
+template <typename Geometry, unsigned MaximumOrder = 13, unsigned UnitGaussianSlots = 0>
 GENERATIVEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double* centers,
                                            unsigned maximum_order, CoulombRange range, double omega,
                                            Geometry& geometry) {
@@ -31,10 +31,19 @@ GENERATIVEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double
   // second-order geometry. A smaller caller array cannot silently overflow.
   static_assert(std::extent<decltype(geometry.boys)>::value > MaximumOrder,
                 "ERI geometry must own every moment in its declared domain");
+  // Internal DF lowering may attach a zero-exponent, zero-angular unit Gaussian
+  // in slots one/three. The ordinary four-center binder still rejects ALL zero
+  // exponents. A masked slot must be exactly zero; real physical slots stay
+  // strictly positive. This is not an extra public primitive-exponent domain.
+  static_assert(UnitGaussianSlots == 0 || UnitGaussianSlots == 8 || UnitGaussianSlots == 10,
+                "only explicit three-center/metric unit-Gaussian layouts are supported");
   if (maximum_order > MaximumOrder) return false;
   if (!exponents || !centers) return false;
   for (unsigned slot = 0; slot < 4; ++slot) {
-    if (!std::isfinite(exponents[slot]) || exponents[slot] <= 0) return false;
+    const bool unit_gaussian = (UnitGaussianSlots & (1u << slot)) != 0;
+    if (!std::isfinite(exponents[slot]) ||
+        (unit_gaussian ? exponents[slot] != 0 : exponents[slot] <= 0))
+      return false;
     for (unsigned axis = 0; axis < 3; ++axis)
       if (!std::isfinite(centers[3 * slot + axis])) return false;
   }

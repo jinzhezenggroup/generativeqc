@@ -3,20 +3,28 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <optional>
+#include <string_view>
 
-#include "api/handles.hpp"
+#include "methods/batch_capabilities.hpp"
+#include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/correlation_convergence.hpp"
+#include "methods/df_rccsdt_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/rhf_source_handoff.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime_api.h>
 #endif
@@ -33,13 +41,14 @@ struct DeviceScope {
   ~DeviceScope() { cudaSetDevice(previous); }
 };
 #endif
-class Mp2Prepared final : public PreparedCalculation {
+class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalculation {
  public:
   Mp2Prepared(Capabilities caps, core::ContextState& context, core::System system,
               std::optional<core::System> auxiliary, scf::ScfOptions options, std::size_t budget,
               std::size_t reference_capacity, double threshold, bool density_fitted,
-              bool fitted_cuda)
-      : caps_(caps),
+              bool fitted_cuda, core::CorrelationConvergence convergence)
+      : PreparedCalculation(context.requested_backend, context.device_id),
+        caps_(caps),
         context_(context),
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
@@ -47,6 +56,7 @@ class Mp2Prepared final : public PreparedCalculation {
         budget_(budget),
         reference_capacity_(reference_capacity),
         threshold_(threshold),
+        convergence_(convergence),
         density_fitted_(density_fitted),
         fitted_cuda_(fitted_cuda) {}
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
@@ -59,18 +69,33 @@ class Mp2Prepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
   }
-  Result execute(bool compute_forces) override {
-    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
+  Result execute_seeded_reference(bool compute_forces, const scf::HfWarmState* seed, bool* fallback,
+                                  std::optional<scf::HfWarmState>* candidate) override {
+    return execute_with_reference_seed(compute_forces, seed, fallback, candidate);
   }
 
-  void transfer_cuda_reference_plan_to(Mp2Prepared& target) noexcept {
-    target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
+  Result execute_impl(bool compute_forces) override {
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
+  }
+  Result execute_components_impl(bool compute_forces, unsigned components) override {
+    if ((components && density_fitted_) || (components & ~kHfComponent))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "MP2 companions require conventional RHF-MP2");
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr, components);
+  }
+
+  void transfer_reference_execution_to(ReferenceSeededCalculation& target) override {
+    auto* compatible = dynamic_cast<Mp2Prepared*>(&target);
+    if (!compatible) throw std::logic_error("incompatible correlated reference owner");
+    compatible->cuda_reference_plan_ = std::move(cuda_reference_plan_);
   }
 
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
-                                     std::optional<scf::HfWarmState>* retained_warm_state) {
+                                     std::optional<scf::HfWarmState>* retained_warm_state,
+                                     unsigned components = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
+    runtime::df_progress::Scope trace("mp2_endpoint");
     last_.reset();
     if (warm_start_fallback) *warm_start_fallback = false;
     try {
@@ -104,8 +129,15 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
+      const auto* source_override = std::getenv("GENERATIVEQC_MP2_REFERENCE_SOURCE");
+      const bool share_reference_source =
+          !source_override || std::string_view(source_override) != "0";
+      std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
+      scf::CudaRhfSourceHandoff source_handoff;
       bool reference_plan_reused = false;
       const auto run_reference = [&](const std::vector<double>* seed) {
+        reference_source.reset();
+        source_handoff = {};
         scf::ScfResult candidate;
         if (!density_fitted_ && !cuda) {
           if (!cpu_exact_plan_) {
@@ -129,9 +161,10 @@ class Mp2Prepared final : public PreparedCalculation {
         } else {
           bool attempt_reused = false;
           try {
-            candidate =
-                scf::run_rhf_cuda_cached(cuda_reference_plan_.slot(), system_, reference_options,
-                                         context_.device_id, seed, &attempt_reused);
+            candidate = scf::run_rhf_cuda_cached(
+                cuda_reference_plan_.slot(), system_, reference_options, context_.device_id, seed,
+                &attempt_reused, share_reference_source ? &reference_source : nullptr,
+                share_reference_source ? &source_handoff : nullptr);
           } catch (...) {
             reference_plan_reused = false;
             throw;
@@ -141,32 +174,19 @@ class Mp2Prepared final : public PreparedCalculation {
         return candidate;
       };
 
-      scf::ScfResult hf;
-      if (initial_density) {
-        bool retried_cold = false;
-        try {
-          hf = run_reference(initial_density);
-        } catch (...) {
-          retried_cold = true;
-          if (warm_start_fallback) *warm_start_fallback = true;
-          hf = run_reference(nullptr);
-        }
-        if (!retried_cold && (!hf.converged || !hf.reference)) {
-          // Retire the unsuccessful proposal before allocating a cold solve.
-          hf = {};
-          if (warm_start_fallback) *warm_start_fallback = true;
-          hf = run_reference(nullptr);
-        }
-      } else {
-        hf = run_reference(nullptr);
-      }
-      if (!hf.converged || !hf.reference)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
-                          "HF did not converge; no MP2 energy evaluated");
+      auto hf = warm_reference::solve_reference(initial_density, scf::FockSpin::Restricted,
+                                                warm_start_fallback, run_reference,
+                                                "HF did not converge; no MP2 energy evaluated");
 
       reference_capacity =
           std::max(reference_capacity,
                    posthf::checked_add(hf.reference->numeric_capacity_bytes, warm_capacity));
+      reference_capacity =
+          std::max(reference_capacity,
+                   posthf::checked_add(source_handoff.numeric_peak_bytes, warm_capacity));
+      // Keep one source owner, as in CC: only a unique resident source can
+      // return its executable to the warm cache after the complete endpoint.
+      source_handoff.source.reset();
       auto* reference_plan = !density_fitted_ && cuda ? cuda_reference_plan_.slot() : nullptr;
 
       if (retained_warm_state) {
@@ -195,60 +215,260 @@ class Mp2Prepared final : public PreparedCalculation {
         conventional_source = &*prepared_source;
       }
       const auto prepare_source = [&] {
-        if ((!prepared_exact || density_fitted_) && !raw_source) {
+        if (reference_source && !density_fitted_) {
+          conventional_source = reference_source.get();
+          return;
+        }
+        if ((!prepared_exact || density_fitted_) && !raw_source)
           raw_source =
               std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
-          conventional_source = raw_source.get();
-        }
+        if (raw_source) conventional_source = raw_source.get();
       };
-      const auto corr = run_with_cuda_reference_budget(
-          reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+      Result result;
+      std::size_t component_capacity = 0;
+      std::size_t component_peak = 0;
+      const auto run_phase = [&](auto&& operation) {
+        return run_with_cuda_reference_budget(
+            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+              if (component_capacity >= correlation_budget)
+                throw std::length_error("MP2 companion outputs exhaust the memory budget");
+              correlation_budget -= component_capacity;
+              try {
+                return operation(correlation_budget);
+              } catch (const std::length_error& error) {
+                if (!reference_source) throw;
+                runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
+                                                   error.what());
+              } catch (const std::bad_alloc&) {
+                if (!reference_source) throw;
+                runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
+                                                   "allocation");
+              }
+              // Optional source residency must not reject a previously
+              // admitted endpoint. Unwind phase-local work, release the source
+              // once, then reconstruct the bounded compatibility provider.
+              conventional_source = nullptr;
+              reference_source.reset();
+              runtime::df_progress::Scope::label("mp2_reference_source_fallback", "memory");
+              return operation(correlation_budget);
+            });
+      };
+      if (components & kHfComponent) {
+        result.hf_component.emplace();
+        result.hf_component->energy = ref.energy;
+        if (compute_forces) {
+          auto force = run_phase([&](std::size_t correlation_budget) {
             prepare_source();
-            return density_fitted_
-                       ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget,
-                                                    threshold_,
-                                                    options_.density_fitting_relative_threshold, 8,
-                                                    fitted_cuda_, context_.device_id)
-                       : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
-                                                  threshold_, 8, cuda, context_.device_id);
+            return mp2::reference_force(ref, *conventional_source, correlation_budget, cuda,
+                                        context_.device_id);
           });
+          component_peak = posthf::checked_add(
+              force.planned_endpoint_peak_bytes,
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes()));
+          result.hf_component->forces = std::move(force.forces);
+          component_capacity =
+              posthf::checked_mul(result.hf_component->forces.capacity(), sizeof(double));
+        }
+      }
+      const auto corr = run_phase([&](std::size_t correlation_budget) {
+        prepare_source();
+        runtime::df_progress::Scope::number(
+            "mp2_energy_device_source",
+            conventional_source &&
+                conventional_source->supports_device_read(
+                    integrals::ElectronInteractionOperator::eri, context_.device_id));
+        return density_fitted_
+                   ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
+                                                options_.density_fitting_relative_threshold, 8,
+                                                fitted_cuda_, context_.device_id)
+                   : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
+                                              threshold_, 8, cuda, context_.device_id);
+      });
       // Preserve this completed phase's simultaneous peak if force admission
       // subsequently retires the optional reference executable.
-      const auto energy_capacity =
-          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
-                              cuda_reference_plan_.retained_numeric_bytes());
-      Result result;
+      auto completed_phase_capacity = std::max(
+          component_peak,
+          posthf::checked_add(
+              posthf::checked_add(corr.numeric_capacity_bytes, component_capacity),
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes())));
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
-      const bool force_started_with_reference_plan = cuda_reference_plan_.get() != nullptr;
+      const bool force_started_with_reference_plan =
+          cuda_reference_plan_.get() != nullptr || reference_source != nullptr;
       if (compute_forces) {
-        // The compatibility force planner does not borrow the prepared ERIs.
-        // Retire its view before its owner and create RawSource only afterward.
-        prepared_source.reset();
-        cpu_exact_plan_.reset();
-        if (!raw_source)
-          raw_source =
-              std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+        // Preserve the legacy CPU force reservation; CUDA keeps the qualified
+        // source across energy, adjoint, response and relaxed-weight replay.
+        if (!cuda) {
+          prepared_source.reset();
+          cpu_exact_plan_.reset();
+          prepared_exact = nullptr;
+          conventional_source = nullptr;
+        }
         response::GmresOptions response_options;
         response_options.relative_tolerance = 1e-10;
-        response_options.absolute_tolerance = 1e-12;
+        response_options.absolute_tolerance = convergence_.response_solve();
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        force_diagnostic = run_with_cuda_reference_budget(
-            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
-              response_options.max_workspace_bytes = correlation_budget;
-              return density_fitted_
-                         ? mp2::density_fitted_force_cpu(
-                               ref, *raw_source, correlation_budget, threshold_,
-                               options_.density_fitting_relative_threshold, 1e-10, response_options)
-                         : (cuda
-                                ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
-                                                               threshold_, 1e-10, response_options,
-                                                               context_.device_id)
-                                : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
-                                                              threshold_, 1e-10, response_options));
-            });
+        struct ForceCache {
+          std::array<std::vector<double>, 6> blocks;
+          std::size_t bytes{}, peak{};
+        };
+        ForceCache cache;
+        const auto clear_force_cache_allocation_error = [] {
+#if GENERATIVEQC_HAS_CUDA
+          // A refused optional CUDA allocation leaves the runtime's last-error
+          // slot set. Consume only that expected status before bounded replay;
+          // an unrelated asynchronous/backend error must still propagate.
+          const auto error = cudaGetLastError();
+          if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
+            throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(error));
+#endif
+        };
+        const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+        const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+        if (cuda && !density_fitted_ &&
+            (!cache_override || std::string_view(cache_override) != "0") &&
+            (!force_tiling_override || std::string_view(force_tiling_override) != "0")) {
+          cache = run_phase([&](std::size_t correlation_budget) {
+            prepare_source();
+            if (!conventional_source->supports_device_read(
+                    integrals::ElectronInteractionOperator::eri, context_.device_id))
+              return ForceCache{};
+            const auto occupied_count = ref.nocc;
+            const auto virtual_count = ref.nbf - occupied_count;
+            const std::array<std::array<std::size_t, 4>, 6> shapes{{
+                {occupied_count, virtual_count, occupied_count, virtual_count},
+                {occupied_count, occupied_count, virtual_count, virtual_count},
+                {occupied_count, virtual_count, occupied_count, occupied_count},
+                {occupied_count, virtual_count, virtual_count, virtual_count},
+                {occupied_count, occupied_count, occupied_count, occupied_count},
+                {virtual_count, virtual_count, virtual_count, virtual_count},
+            }};
+            std::size_t cache_bytes = 0;
+            for (const auto& shape : shapes) {
+              std::size_t elements = 1;
+              for (const auto extent : shape) elements = posthf::checked_mul(elements, extent);
+              cache_bytes =
+                  posthf::checked_add(cache_bytes, posthf::checked_mul(elements, sizeof(double)));
+            }
+            // Reserve at most a quarter for optional primal storage. Complete
+            // force admission still checks its real remaining phase budget.
+            if (cache_bytes > correlation_budget / 4) return ForceCache{};
+            try {
+              std::size_t selected_axis = 0, peak = 0;
+              for (std::size_t axis = ref.nbf; axis > 0; --axis) {
+                try {
+                  posthf::NativeBlockProvider candidate(
+                      *conventional_source, ref, correlation_budget, static_cast<unsigned>(axis),
+                      posthf::AOTileDomain::Basis);
+                  std::size_t candidate_peak = 0;
+                  for (const auto& shape : shapes) {
+                    const auto plan = candidate.plan(shape, true);
+                    candidate_peak = std::max(
+                        candidate_peak,
+                        posthf::checked_add(
+                            cache_bytes, posthf::checked_add(plan.host_bytes, plan.device_bytes)));
+                  }
+                  if (candidate_peak > correlation_budget) continue;
+                  selected_axis = axis;
+                  peak = candidate_peak;
+                  break;
+                } catch (const std::length_error&) {
+                  continue;
+                }
+              }
+              if (!selected_axis) return ForceCache{};
+              std::vector<std::size_t> occupied(occupied_count), virtuals(virtual_count);
+              std::iota(occupied.begin(), occupied.end(), 0);
+              std::iota(virtuals.begin(), virtuals.end(), occupied_count);
+              const std::array<posthf::MOSlots, 6> requests{{
+                  {occupied, virtuals, occupied, virtuals},
+                  {occupied, occupied, virtuals, virtuals},
+                  {occupied, virtuals, occupied, occupied},
+                  {occupied, virtuals, virtuals, virtuals},
+                  {occupied, occupied, occupied, occupied},
+                  {virtuals, virtuals, virtuals, virtuals},
+              }};
+              ForceCache candidate;
+              candidate.peak = peak;
+              for (std::size_t index = 0; index < requests.size(); ++index) {
+                posthf::NativeBlockProvider producer(
+                    *conventional_source, ref, correlation_budget - candidate.bytes,
+                    static_cast<unsigned>(selected_axis), posthf::AOTileDomain::Basis);
+                candidate.blocks[index] = producer.get(requests[index], true, context_.device_id);
+                candidate.bytes = posthf::checked_add(
+                    candidate.bytes,
+                    posthf::checked_mul(candidate.blocks[index].capacity(), sizeof(double)));
+                if (candidate.bytes > cache_bytes)
+                  throw std::length_error("MP2 force cache exceeds its admitted capacity");
+              }
+              return candidate;
+            } catch (const std::length_error&) {
+              clear_force_cache_allocation_error();
+              return ForceCache{};
+            } catch (const std::bad_alloc&) {
+              clear_force_cache_allocation_error();
+              return ForceCache{};
+            }
+          });
+          completed_phase_capacity =
+              std::max(completed_phase_capacity,
+                       posthf::checked_add(
+                           cache.peak,
+                           posthf::checked_add(
+                               component_capacity,
+                               posthf::checked_add(
+                                   warm_capacity, cuda_reference_plan_.retained_numeric_bytes()))));
+        }
+        force_diagnostic = run_phase([&](std::size_t correlation_budget) {
+          prepare_source();
+          runtime::df_progress::Scope::number(
+              "mp2_force_device_source",
+              conventional_source &&
+                  conventional_source->supports_device_read(
+                      integrals::ElectronInteractionOperator::eri, context_.device_id));
+          if (cache.bytes) {
+            try {
+              if (cache.bytes >= correlation_budget)
+                throw std::length_error("MP2 force cache exhausts its phase budget");
+              response_options.max_workspace_bytes = correlation_budget - cache.bytes;
+              const std::array<posthf::BorrowedMOBlock, 6> blocks{{
+                  {{false, true, false, true}, cache.blocks[0]},
+                  {{false, false, true, true}, cache.blocks[1]},
+                  {{false, true, false, false}, cache.blocks[2]},
+                  {{false, true, true, true}, cache.blocks[3]},
+                  {{false, false, false, false}, cache.blocks[4]},
+                  {{true, true, true, true}, cache.blocks[5]},
+              }};
+              auto force = mp2::conventional_force_cuda(
+                  ref, *conventional_source, correlation_budget - cache.bytes, threshold_, 1e-10,
+                  response_options, context_.device_id, cache.blocks[0], blocks);
+              force.planned_endpoint_peak_bytes =
+                  posthf::checked_add(force.planned_endpoint_peak_bytes, cache.bytes);
+              force.measured_endpoint_peak_bytes = 0;
+              runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", cache.bytes);
+              return force;
+            } catch (const std::length_error&) {
+              cache = {};
+              clear_force_cache_allocation_error();
+            } catch (const std::bad_alloc&) {
+              cache = {};
+              clear_force_cache_allocation_error();
+            }
+          }
+          runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", 0);
+          response_options.max_workspace_bytes = correlation_budget;
+          return density_fitted_
+                     ? mp2::density_fitted_force_cpu(
+                           ref, *raw_source, correlation_budget, threshold_,
+                           options_.density_fitting_relative_threshold, 1e-10, response_options)
+                     : (cuda ? mp2::conventional_force_cuda(ref, *conventional_source,
+                                                            correlation_budget, threshold_, 1e-10,
+                                                            response_options, context_.device_id)
+                             : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
+                                                           threshold_, 1e-10, response_options));
+        });
         result.forces = force_diagnostic->forces;
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
@@ -263,7 +483,7 @@ class Mp2Prepared final : public PreparedCalculation {
       diagnostic.same_spin_energy = corr.same_spin;
       diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
       diagnostic.reference_residual = ref.commutator_residual;
-      diagnostic.numeric_capacity_bytes = std::max(reference_capacity, energy_capacity);
+      diagnostic.numeric_capacity_bytes = std::max(reference_capacity, completed_phase_capacity);
       diagnostic.energy_tile_count = corr.tiles;
       diagnostic.mo_host_staging = executed_cuda && !density_fitted_ ? 1 : 0;
       diagnostic.reference_execution_plan_reused = reference_plan_reused ? 1 : 0;
@@ -292,7 +512,8 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->planned_endpoint_peak_bytes = std::max<std::uint64_t>(
             last_->numeric_capacity_bytes,
             posthf::checked_add(
-                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),
+                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes,
+                                    posthf::checked_add(warm_capacity, component_capacity)),
                 cuda_reference_plan_.retained_numeric_bytes()));
         // External warm/plan reservations are not part of the force allocator
         // telemetry. Keep the whole-endpoint measurement unknown when either
@@ -313,6 +534,15 @@ class Mp2Prepared final : public PreparedCalculation {
           std::copy_n(conventional_response_hash, sizeof(conventional_response_hash),
                       last_->response_operator_hash);
       }
+      // Do this after peak accounting: the provider already charges a
+      // source-owned executable, so charging it again after reclaim would
+      // double-count the completed force phase. All source reads are drained.
+      if (cuda && reference_source) {
+        conventional_source = nullptr;
+        (void)scf::reclaim_rhf_cuda_reference_plan(cuda_reference_plan_.slot(), reference_source);
+        last_->reference_execution_plan_owned_device_bytes =
+            cuda_reference_plan_.owned_device_bytes();
+      }
       return result;
     } catch (const std::length_error& e) {
       throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY, e.what());
@@ -328,6 +558,7 @@ class Mp2Prepared final : public PreparedCalculation {
   std::size_t budget_;
   std::size_t reference_capacity_;
   double threshold_;
+  core::CorrelationConvergence convergence_;
   bool density_fitted_{};
   bool fitted_cuda_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
@@ -336,163 +567,6 @@ class Mp2Prepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-generativeqc_status item_exception_status() {
-  try {
-    throw;
-  } catch (const MethodError& error) {
-    return error.status();
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-}
-
-class Mp2PreparedBatch final : public PreparedBatch {
- public:
-  Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
-                   std::vector<core::System> systems,
-                   const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : capabilities_(capabilities),
-        context_(&context),
-        systems_(std::move(systems)),
-        warm_starts_enabled_(warm_starts_enabled),
-        warm_states_(systems_.size()) {
-    descriptor_ = descriptor;
-    descriptor_.density_fitting_auxiliary_basis = nullptr;
-    descriptor_.ks_options = nullptr;
-    owners_.reserve(systems_.size());
-    owner_coordinates_.reserve(systems_.size());
-    for (const auto& system : systems_) {
-      owners_.push_back(prepare_mp2_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(warm_reference::coordinates(system));
-    }
-  }
-
-  [[nodiscard]] std::size_t size() const noexcept override { return systems_.size(); }
-
-  void invalidate_result() override {
-    for (auto& owner : owners_) owner->invalidate_result();
-  }
-
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
-    if (!coordinates.empty() && coordinates.size() != size())
-      throw std::invalid_argument("MP2 batch coordinates do not match system count");
-    std::vector<BatchItemResult> results(size());
-    for (std::size_t index = 0; index < size(); ++index) {
-      auto& result = results[index];
-      result.bucket_id = index;
-      result.calculation.energy = std::numeric_limits<double>::quiet_NaN();
-      result.calculation.executed_backend = context_->requested_backend;
-      try {
-        auto target = systems_[index];
-        auto target_coordinates = warm_reference::coordinates(target);
-        if (!coordinates.empty() && coordinates[index]) {
-          if (!warm_reference::valid_coordinates(*coordinates[index], target))
-            throw std::invalid_argument("invalid MP2 batch item coordinates");
-          target_coordinates = *coordinates[index];
-          warm_reference::set_coordinates(target, target_coordinates);
-        }
-        if (target_coordinates != owner_coordinates_[index]) {
-          auto candidate = prepare_mp2_calculation(capabilities_, *context_, target, descriptor_);
-          auto& current_owner = static_cast<Mp2Prepared&>(*owners_[index]);
-          auto& candidate_owner = static_cast<Mp2Prepared&>(*candidate);
-          current_owner.transfer_cuda_reference_plan_to(candidate_owner);
-          owners_[index] = std::move(candidate);
-          owner_coordinates_[index] = std::move(target_coordinates);
-        }
-
-        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
-        result.warm_start_used = has_warm_state;
-        bool warm_start_fallback = false;
-        std::optional<scf::HfWarmState> next_warm_state;
-        auto& owner = static_cast<Mp2Prepared&>(*owners_[index]);
-        result.calculation = owner.execute_with_reference_seed(
-            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
-            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
-        result.warm_start_fallback = warm_start_fallback;
-        if (next_warm_state) warm_states_[index].swap(next_warm_state);
-        result.status = GENERATIVEQC_STATUS_SUCCESS;
-      } catch (...) {
-        result.status = item_exception_status();
-      }
-    }
-    return results;
-  }
-
-  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
-      std::size_t index) const override {
-    if (index >= owners_.size())
-      throw std::invalid_argument("correlation diagnostic batch index is out of range");
-    return owners_[index]->correlation_diagnostic();
-  }
-
-  void clear_warm_starts() override {
-    for (auto& state : warm_states_) state.reset();
-  }
-
-  [[nodiscard]] std::size_t warm_density_size(std::size_t index) const override {
-    const auto n = molecule::ao_count(systems_.at(index));
-    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / sizeof(double))
-      throw std::invalid_argument("MP2 warm density dimensions overflow");
-    return posthf::checked_mul(n, n);
-  }
-
-  [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(
-      std::size_t index) const override {
-    return warm_states_.at(index);
-  }
-
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
-    if (!warm_starts_enabled_ || states.size() != size())
-      throw std::invalid_argument("checkpoint restore requires a matching warm-enabled MP2 batch");
-
-    for (std::size_t index = 0; index < size(); ++index)
-      if (states[index])
-        warm_reference::validate_checkpoint(systems_[index], *states[index], "MP2");
-
-    for (std::size_t index = 0; index < size(); ++index)
-      if (states[index]) warm_states_[index].swap(states[index]);
-  }
-
-  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
-  [[nodiscard]] std::optional<std::vector<DirectShellClassProfileEntry>>
-  last_direct_shell_class_profile() const override {
-    return std::nullopt;
-  }
-  [[nodiscard]] std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile()
-      const override {
-    return std::nullopt;
-  }
-  [[nodiscard]] std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override {
-    return {};
-  }
-  [[nodiscard]] std::vector<scf::CudaDensityFittingMetricDiagnostic>
-  last_density_fitting_metric_diagnostics() const override {
-    return {};
-  }
-  [[nodiscard]] std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile()
-      const override {
-    return {};
-  }
-
- private:
-  Capabilities capabilities_;
-  core::ContextState* context_{};
-  std::vector<core::System> systems_;
-  bool warm_starts_enabled_{};
-  bool warm_start_updates_enabled_{true};
-  std::vector<std::optional<scf::HfWarmState>> warm_states_;
-  generativeqc_method_descriptor descriptor_{};
-  std::vector<std::unique_ptr<PreparedCalculation>> owners_;
-  std::vector<std::vector<double>> owner_coordinates_;
-};
 }  // namespace
 
 generativeqc_status validate_mp2_system(generativeqc_method, const core::System& system,
@@ -525,8 +599,11 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
 
 std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& d) {
+    const generativeqc_method_descriptor& d, const core::System* auxiliary_basis) {
   const auto density_fitting_mode = d.density_fitting_mode;
+  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||
+      density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
+    return prepare_df_rccsdt_calculation(caps, context, system, d, auxiliary_basis);
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
@@ -550,8 +627,10 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "canonical MP2 requires FP64 precision");
   std::optional<core::System> auxiliary;
   if (density_fitted) {
-    auxiliary =
-        d.density_fitting_auxiliary_basis ? d.density_fitting_auxiliary_basis->data : system;
+    if (d.density_fitting_auxiliary_basis != nullptr && auxiliary_basis == nullptr)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "auxiliary basis must be resolved at the API boundary");
+    auxiliary = d.density_fitting_auxiliary_basis ? *auxiliary_basis : system;
     if (auxiliary->atoms.size() != system.atoms.size())
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "RI-MP2 auxiliary basis must contain the same atoms");
@@ -585,11 +664,13 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
       !std::isfinite(d.density_tolerance) || d.density_tolerance < 0)
     throw std::invalid_argument("invalid MP2 reference convergence threshold");
   scf::ScfOptions options;
+  const auto convergence = correlation_convergence(d);
   options.max_iterations = d.max_iterations ? d.max_iterations : 100;
   options.diis_history = d.diis_history ? d.diis_history : 8;
-  options.energy_tolerance = d.energy_tolerance > 0 ? std::min(d.energy_tolerance, 1e-11) : 1e-11;
+  options.energy_tolerance =
+      d.energy_tolerance > 0 ? std::min(d.energy_tolerance, convergence.scf_energy()) : 1e-11;
   options.density_tolerance =
-      d.density_tolerance > 0 ? std::min(d.density_tolerance, 1e-11) : 1e-11;
+      d.density_tolerance > 0 ? std::min(d.density_tolerance, convergence.scf_density()) : 1e-11;
   options.screening_tolerance = 0;
   options.compute_forces = false;
   options.export_physical_reference = true;
@@ -643,14 +724,16 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RI-MP2 DF reference state exceeds numeric memory budget");
   return std::make_unique<Mp2Prepared>(caps, context, system, std::move(auxiliary), options, budget,
-                                       reference_capacity, threshold, density_fitted, fitted_cuda);
+                                       reference_capacity, threshold, density_fitted, fitted_cuda,
+                                       convergence);
 }
 
 std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags) {
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System*) {
   const bool warm_starts_enabled = (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0;
   constexpr generativeqc_batch_flags profiling_flags =
       GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
@@ -666,7 +749,8 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
   if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "conventional MP2 batch does not accept an auxiliary basis");
-  return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor,
-                                            warm_starts_enabled);
+  return prepare_correlated_batch(capabilities, context, std::move(systems), descriptor,
+                                  warm_starts_enabled, prepare_mp2_calculation, "MP2",
+                                  GENERATIVEQC_METHOD_RHF, true, false);
 }
 }  // namespace generativeqc::methods::detail

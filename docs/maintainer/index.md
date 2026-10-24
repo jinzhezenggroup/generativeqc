@@ -11,9 +11,12 @@ Keep the distinction clear: the current rules and qualification procedures live 
 :caption: Core workflows
 
 validation
+array_api_conformance
 oh_uhf_comparison
 performance_engineering
+production_default_comparison
 gfn2_density_work_diagnostics
+gfn2_mixer_endpoint_qualification
 evidence_retention
 resource_planning
 roadmap
@@ -32,6 +35,7 @@ f_shell_validation
 hybrid_cuda_acceptance
 ccsdt_cpu_bundle_qualification
 pbe0_xc_tile_qualification
+xc_equal_spin_qualification
 stationary_large_domain_qualification
 ```
 
@@ -42,6 +46,7 @@ stationary_large_domain_qualification
 :caption: Runtime and work evidence
 
 cuda_ownership
+generated_cuda_host_api
 vendor_boundaries
 cpu_autotuning
 source_work_audit

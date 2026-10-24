@@ -3167,5 +3167,5 @@
     "In-core energy-only HF; no DFT/force/GPU/scaling performance claim.",
     "Native fock counts are source-derived; PySCF J/K calls are measured. Screening work equality is not claimed."
   ],
-  "retained_full_summary": "normalized-campaign.json.gz: matched-endpoints-bytecode-normalized/summary.json (including every cross-repeat error and row)"
+  "retained_full_summary": "normalized-campaign.json.xz: matched-endpoints-bytecode-normalized/summary.json (including every cross-repeat error and row)"
 }

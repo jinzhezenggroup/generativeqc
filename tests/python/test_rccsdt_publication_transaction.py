@@ -24,7 +24,18 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text(encoding="utf-8")
     start = source.index("      auto diagnostic = state.diagnostic;")
     stop = source.index("      return std::move(state.result);", start)
-    body = source[start:stop] + "      return std::move(state.result);\n"
+    # This stand-in exercises the legacy endpoint's post-triples publication.
+    # The real native CBS tests separately cover companion publication and
+    # nonconvergence; their numerical owners are outside this host-only shim.
+    companion_start = source.index("      if (components) {", start)
+    companion_stop = source.index(
+        "      if (retained_warm_state && state.reference)", companion_start
+    )
+    body = (
+        source[start:companion_start]
+        + source[companion_stop:stop]
+        + "      return std::move(state.result);\n"
+    )
     reservation_start = source.index("      const auto phase_budget =")
     reservation_stop = source.index(
         "      run_with_rccsd_reference_source(", reservation_start

@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "scf/cuda_derivative_sources.hpp"
+#include "scf/direct_force_precision.hpp"
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::scf {
@@ -34,8 +36,9 @@ struct PreparedCudaFockBinding {
 /** Return the ordinary-stream device binding when the prepared plan can
  * execute its complete requested value-side Fock model through one resident
  * provider. The value seam covers exact full-range Coulomb plus exact full-/
- * short-/long-range exchange, and full-range density-fitted J/K when every
- * requested term shares the fitted owner. Qualified exact SR/LR value
+ * short-/long-range exchange, full-range density-fitted J/K and a dedicated
+ * long-range fitted exchange owner. Requested terms must share one radial
+ * metric when fitted. Qualified exact SR/LR value
  * execution may reuse the owner's conservative full-range Schwarz screening.
  * Derivatives use the separate capability binding below so value identity does
  * not become derivative identity. Mixed-provider compositions fail closed
@@ -162,7 +165,15 @@ generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
-    bool separate_sources = true, bool allow_spatial_default = false);
+    bool separate_sources = true, bool allow_spatial_default = false,
+    DirectForcePrecisionRequest* precision = nullptr);
+
+/** Consume the prepared immutable full-range J/K composition on device. The
+ * enclosing method owns final-state authentication and source publication. */
+generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.
@@ -171,14 +182,24 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
  * coefficients, screening, or provider selection. When supplied for a mixed
  * Direct execution, mixed_coulomb_work_count is a caller-owned device counter
  * for actually evaluated mixed Coulomb AO-ERI recurrences. Supplying it for a
- * strict execution fails closed.
+ * strict execution fails closed. mixed_exchange additionally selects shared
+ * restricted full-range FP32 J/K; other provider/spin/range domains fail closed.
  */
 generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
                                                const double* beta, std::size_t matrix_elements,
                                                double* coulomb, double* alpha_exchange,
                                                double* beta_exchange, int* numerical_error,
                                                bool mixed_coulomb, std::string& detail,
-                                               std::uint64_t* mixed_coulomb_work_count = nullptr);
+                                               std::uint64_t* mixed_coulomb_work_count = nullptr,
+                                               bool mixed_exchange = false);
+
+/** Propose a strict-FP64 full-range RKS step using a coarser J/K screening
+ * cutoff. No prepared provider identity is mutated. NOT_IMPLEMENTED permits
+ * ordinary execution; final physical validation must use the ordinary facade.
+ */
+generativeqc_status enqueue_prepared_cuda_fock_proposal(
+    const PreparedFockPlan& plan, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, int* numerical_error, double screening, std::string& detail);
 
 /** Enqueue the prepared primary full-range J/K plus one compatible exact
  * SR/LR exchange correction through a single Direct density-preparation pass.
@@ -190,16 +211,21 @@ generativeqc_status enqueue_prepared_cuda_rsh_values(
     double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
     int* primary_error, int* range_error, std::string& detail);
 
-/** Enqueue a separately resolved long-range exact-exchange correction through
- * the same resident direct-J/K source as the primary prepared owner. The
- * correction must preserve spin and screening identity and contain no Coulomb
- * term. This keeps RSH composition on one stream/source without creating a
- * second CUDA provider owner.
+/** Enqueue a separately resolved exchange correction with no Coulomb term.
+ * Exact short-/long-range corrections borrow the primary resident Direct source
+ * and preserve its spin and screening identity. Fitted LR corrections instead
+ * require their own identical resolved FP64 plan, including its omega-specific
+ * metric and source, and use the shared DF executor on that owner's stream.
+ * Mixed execution applies only to Direct and narrows the shared Cartesian
+ * recurrence, retaining FP64 radial moments and output accumulation. Whole-shell
+ * contraction stays FP64; bounded AO contraction follows the mixed value scalar.
+ * Its optional device counter records executed recurrence work.
  */
 generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail);
+    int* numerical_error, std::string& detail, bool mixed_exchange = false,
+    std::uint64_t* mixed_work_count = nullptr);
 
 }  // namespace generativeqc::scf
 

@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_one_electron_response.cu",
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives",
+  "reason": "Integer-only linked AOT closure admission and bounded native S/T/effective-point-charge V traversal. Device record gathering uses actual normalized AoBasis storage; fixed Cartesian/spherical public projection and deterministic physical-atom scatter contract compiler-generated value/gradient/gradient-JVP leaves with a compiler-AD weighted envelope. Caller arena, semantic work bounds, finite/symmetry gates, live-owner authentication, queue drainage and joint six-output publication introduce no derivative authority, Python or CPU numerical fallback. This component excludes residual ECP projectors and does not advertise a stationary Hessian endpoint.",
+  "regions": []
+}

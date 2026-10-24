@@ -14,6 +14,7 @@ from generativeqc_compiler.integral.expr import AlgebraForm, ScalarDomain
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .domain import feature_domains
+from .equal_spin import EQUAL_SPIN_BINDINGS, equal_spin_roots
 from .expression_dispatch import (
     build_energy_expression,
     build_pointwise_energy_expression,
@@ -117,41 +118,54 @@ def emit_polarized_semilocal(
     declarations: tuple[str, ...] = (),
     function_qualifier: str = "inline",
     pointwise_bulk: bool = False,
+    equal_spin_function_name: str | None = None,
+    scalar_type: str = "double",
 ) -> str:
     """Emit polarized LDA/GGA/MGGA E/vxc from the canonical scalar Graph.
 
     function_qualifier is a backend ABI choice such as inline on the host or
     __device__ inline for CUDA. It does not participate in the mathematical
-    expression identity.
+    expression identity. Every CUDA lowering gets an equal-spin sibling,
+    independently of functional identity. It shares already-built polarized
+    partials only after paired work inputs have been proven identical.
+
+    ``scalar_type`` selects the parameter/result ABI, intermediate arithmetic,
+    constants and elementary functions, not just final result storage. The
+    expression identity is mathematical and unchanged; emitted source identity
+    distinguishes precisions. Float emission alone is not molecular admission:
+    a consumer must qualify its budget and retain the strict boundary fallback.
     """
 
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    zero = "0.0f" if scalar_type == "float" else "0.0"
     feature_count = polarized_feature_count(spec)
     if feature_count == 2:
         signature = (
             f"{function_qualifier} {value_type} {function_name}(",
-            "    double rho_a, double rho_b) {",
+            f"    {scalar_type} rho_a, {scalar_type} rho_b) {{",
         )
         prelude = (
-            "  const double sigma_aa = 0.0;",
-            "  const double sigma_ab = 0.0;",
-            "  const double sigma_bb = 0.0;",
-            "  const double tau_a = 0.0;",
-            "  const double tau_b = 0.0;",
+            f"  const {scalar_type} sigma_aa = {zero};",
+            f"  const {scalar_type} sigma_ab = {zero};",
+            f"  const {scalar_type} sigma_bb = {zero};",
+            f"  const {scalar_type} tau_a = {zero};",
+            f"  const {scalar_type} tau_b = {zero};",
         )
     elif feature_count == 5:
         signature = (
             f"{function_qualifier} {value_type} {function_name}(",
-            "    double rho_a, double rho_b, double sigma_aa, double sigma_ab, double sigma_bb) {",
+            f"    {scalar_type} rho_a, {scalar_type} rho_b, {scalar_type} sigma_aa, {scalar_type} sigma_ab, {scalar_type} sigma_bb) {{",
         )
         prelude = (
-            "  const double tau_a = 0.0;",
-            "  const double tau_b = 0.0;",
+            f"  const {scalar_type} tau_a = {zero};",
+            f"  const {scalar_type} tau_b = {zero};",
         )
     else:
         signature = (
             f"{function_qualifier} {value_type} {function_name}(",
-            "    double rho_a, double rho_b, double sigma_aa, double sigma_ab,",
-            "    double sigma_bb, double tau_a, double tau_b) {",
+            f"    {scalar_type} rho_a, {scalar_type} rho_b, {scalar_type} sigma_aa, {scalar_type} sigma_ab,",
+            f"    {scalar_type} sigma_bb, {scalar_type} tau_a, {scalar_type} tau_b) {{",
         )
         prelude = ()
 
@@ -162,14 +176,16 @@ def emit_polarized_semilocal(
         production=production,
         pointwise_bulk=pointwise_bulk,
     )
-    emitter = ScalarCEmitter(graph, {name: name for name in spec.features})
+    emitter = ScalarCEmitter(
+        graph, {name: name for name in spec.features}, scalar_type=scalar_type
+    )
     emitter.emit(roots)
     references = [emitter.reference(root) for root in roots]
-    return "\n".join(
+    source = "\n".join(
         [
             f"struct {value_type} {{",
-            "  double energy_density;",
-            f"  double feature_derivative[{feature_count}];",
+            f"  {scalar_type} energy_density;",
+            f"  {scalar_type} feature_derivative[{feature_count}];",
             "};",
             f'inline constexpr const char* {identity_constant} = "{expression_hash}";',
             *declarations,
@@ -177,6 +193,36 @@ def emit_polarized_semilocal(
             *prelude,
             *emitter.lines,
             "  return {" + references[0] + ", {" + ", ".join(references[1:]) + "}};",
+            "}",
+            "",
+        ]
+    )
+    if equal_spin_function_name is None and "__device__" in function_qualifier.split():
+        equal_spin_function_name = f"{function_name}_equal_spin"
+    if equal_spin_function_name is None:
+        return source
+    restricted_roots = equal_spin_roots(graph, roots)
+    restricted_emitter = ScalarCEmitter(
+        graph, {name: name for name in spec.features}, scalar_type=scalar_type
+    )
+    restricted_emitter.emit(restricted_roots)
+    restricted_refs = [restricted_emitter.reference(root) for root in restricted_roots]
+    restricted_identity = canonical_hash(
+        {"expression": expression_hash, "equal_spin_bindings": EQUAL_SPIN_BINDINGS}
+    )
+    return source + "\n".join(
+        [
+            f'inline constexpr const char* {identity_constant}EqualSpin = "{restricted_identity}";',
+            "// Requires identical paired work inputs; polarized partials are preserved.",
+            f"{function_qualifier} {value_type} {equal_spin_function_name}(",
+            *signature[1:],
+            *prelude,
+            *restricted_emitter.lines,
+            "  return {"
+            + restricted_refs[0]
+            + ", {"
+            + ", ".join(restricted_refs[1:])
+            + "}};",
             "}",
             "",
         ]
@@ -216,10 +262,25 @@ def emit_r2scan_program(
     function_name: str,
     identity_constant: str,
     qualifier: str,
+    include_equal_spin: bool | None = None,
+    scalar_type: str = "double",
 ) -> str:
-    """Emit component-wise r2SCAN with compiler-owned Libxc boundary semantics."""
+    """Emit r2SCAN with unchanged component-wise Libxc boundary semantics.
 
+    The optional equal-spin sibling applies the same thresholds, work-input
+    floors and original-density energy rescaling before sharing scalar work.
+    ``scalar_type`` selects component graph arithmetic and result storage;
+    work-input conditioning and original-density rescaling remain FP64. A
+    float consumer must independently admit its interior domain and retain
+    strict evaluation for unqualified tails or nonfinite component results.
+    """
+
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    if include_equal_spin is None:
+        include_equal_spin = "__device__" in qualifier.split()
     component_rows = []
+    roots_for_component = {}
     for tag, component in (
         ("X", "MGGA_X_R2SCAN"),
         ("C", "MGGA_C_R2SCAN"),
@@ -227,8 +288,11 @@ def emit_r2scan_program(
         graph, roots, expression_hash, policy, work_domains = _r2scan_component_program(
             component
         )
-        emitter = ScalarCEmitter(graph, {name: name for name in work_domains})
+        emitter = ScalarCEmitter(
+            graph, {name: name for name in work_domains}, scalar_type=scalar_type
+        )
         emitter.emit(roots)
+        roots_for_component[tag] = roots
         references = [emitter.reference(root) for root in roots]
         component_rows.append(
             (tag, component, expression_hash, policy, emitter, references)
@@ -249,8 +313,8 @@ def emit_r2scan_program(
     )
     lines = [
         f"struct {value_type} {{",
-        "  double energy_density{};",
-        "  double feature_derivative[7]{};",
+        f"  {scalar_type} energy_density{{}};",
+        f"  {scalar_type} feature_derivative[7]{{}};",
         "};",
         f'inline constexpr const char* {identity_constant} = "{identity}";',
         'inline constexpr const char* kR2scanProductionPolicy = "libxc-7.0/work-mgga-v1";',
@@ -265,8 +329,8 @@ def emit_r2scan_program(
                 f"inline constexpr double {prefix}SigmaThreshold = {policy.sigma_threshold.hex()};",
                 f"inline constexpr double {prefix}TauThreshold = {policy.tau_threshold.hex()};",
                 f"{qualifier} {value_type} {raw_name}(",
-                "    double rho_a, double rho_b, double sigma_aa, double sigma_ab,",
-                "    double sigma_bb, double tau_a, double tau_b) {",
+                f"    {scalar_type} rho_a, {scalar_type} rho_b, {scalar_type} sigma_aa, {scalar_type} sigma_ab,",
+                f"    {scalar_type} sigma_bb, {scalar_type} tau_a, {scalar_type} tau_b) {{",
                 *emitter.lines,
                 "  return {"
                 + references[0]
@@ -277,7 +341,32 @@ def emit_r2scan_program(
                 "",
             ]
         )
+        if include_equal_spin:
+            restricted_roots = equal_spin_roots(emitter.graph, roots_for_component[tag])
+            restricted_emitter = ScalarCEmitter(
+                emitter.graph, emitter.variables, scalar_type=scalar_type
+            )
+            restricted_emitter.emit(restricted_roots)
+            restricted_refs = [
+                restricted_emitter.reference(root) for root in restricted_roots
+            ]
+            lines.extend(
+                [
+                    f"{qualifier} {value_type} {raw_name}_equal_spin(",
+                    f"    {scalar_type} rho_a, {scalar_type} rho_b, {scalar_type} sigma_aa, {scalar_type} sigma_ab,",
+                    f"    {scalar_type} sigma_bb, {scalar_type} tau_a, {scalar_type} tau_b) {{",
+                    *restricted_emitter.lines,
+                    "  return {"
+                    + restricted_refs[0]
+                    + ", {"
+                    + ", ".join(restricted_refs[1:])
+                    + "}};",
+                    "}",
+                    "",
+                ]
+            )
 
+    wrapper_start = len(lines)
     lines.extend(
         [
             f"{qualifier} {value_type} {function_name}(",
@@ -306,11 +395,28 @@ def emit_r2scan_program(
                 "        work_rho_a, work_rho_b, work_sigma_aa, work_sigma_ab,",
                 "        work_sigma_bb, work_tau_a, work_tau_b);",
                 "    const double work_density = work_rho_a + work_rho_b;",
-                "    out.energy_density += raw.energy_density * total_density / work_density;",
+                "    out.energy_density += raw.energy_density * total_density / work_density;"
+                if scalar_type == "double"
+                else "    out.energy_density = static_cast<float>(static_cast<double>(out.energy_density) + static_cast<double>(raw.energy_density) * total_density / work_density);",
                 "    for (unsigned i = 0; i < 7; ++i)",
                 "      out.feature_derivative[i] += raw.feature_derivative[i];",
                 "  }",
             ]
         )
     lines.extend(["  return out;", "}", ""])
+    if include_equal_spin:
+        wrapper = "\n".join(lines[wrapper_start:])
+        restricted_identity = canonical_hash(
+            {"expression": identity, "equal_spin_bindings": EQUAL_SPIN_BINDINGS}
+        )
+        lines.append(
+            f'inline constexpr const char* {identity_constant}EqualSpin = "{restricted_identity}";'
+        )
+        for symbol in (
+            function_name,
+            f"{function_name}_x_raw",
+            f"{function_name}_c_raw",
+        ):
+            wrapper = wrapper.replace(f"{symbol}(", f"{symbol}_equal_spin(")
+        lines.append(wrapper)
     return "\n".join(lines)

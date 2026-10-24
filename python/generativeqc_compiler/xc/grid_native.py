@@ -29,6 +29,7 @@ _GRID_ADJOINT_SOURCE = r"""#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <type_traits>
 
 #if defined(__CUDACC__)
 #define GENERATIVEQC_GRID_HD __host__ __device__
@@ -38,6 +39,8 @@ _GRID_ADJOINT_SOURCE = r"""#include <algorithm>
 
 namespace generativeqc_grid_adjoint {
 GENERATIVEQC_GRID_HD inline double portable_abs(double value) { return value < 0.0 ? -value : value; }
+GENERATIVEQC_GRID_HD inline float portable_abs(float value) { return value < 0.0f ? -value : value; }
+GENERATIVEQC_GRID_HD inline float portable_exp(float value) { return ::expf(value); }
 
 GENERATIVEQC_GRID_HD inline double portable_exp(double value) {
 #if defined(__CUDA_ARCH__)
@@ -50,12 +53,13 @@ GENERATIVEQC_GRID_HD inline double portable_exp(double value) {
 // Shared two-pass Becke reverse composition. Runtime owners supply O(natom)
 // scratch per worker and transactional reduction storage. Local mathematical
 // partials come exclusively from the compiler's grid_response Graphs.
-template <class Norm>
-GENERATIVEQC_GRID_HD std::array<double, 4> distance(const double* a, const double* b, Norm norm,
+template <class Arithmetic = double, class Norm>
+GENERATIVEQC_GRID_HD std::array<Arithmetic, 4> distance(const double* a, const double* b, Norm norm,
                                               bool& valid) {
-  double delta[3], scale = 0;
+  Arithmetic delta[3], scale = 0;
   for (size_t k = 0; k < 3; ++k) {
-    delta[k] = a[k] - b[k];
+    // Preserve translations before narrowing the point-relative geometry.
+    delta[k] = static_cast<Arithmetic>(a[k] - b[k]);
     scale = std::max(scale, portable_abs(delta[k]));
   }
   if (!(scale > 0) || !std::isfinite(scale)) {
@@ -98,71 +102,81 @@ GENERATIVEQC_GRID_HD bool prepare_center_geometry(const double* centers, size_t 
   }
   return valid;
 }
-template <class Norm, class Ratio>
+// The adjustment is frozen elemental metadata; its geometry derivatives are
+// zero. The common scalar graph supplies its mu derivative for every schedule.
+@TREUTLER_ADJUSTMENT@
+template <class Norm, class Ratio, class Arithmetic = double>
 struct DirectCenterGeometry {
   const double* centers;
   Norm norm;
   Ratio ratio;
-  GENERATIVEQC_GRID_HD std::array<double, 4> separation(size_t a, size_t b, bool& valid) const {
-    return distance(centers + 3 * a, centers + 3 * b, norm, valid);
+  const double* radii{};
+  GENERATIVEQC_GRID_HD std::array<Arithmetic, 4> separation(size_t a, size_t b, bool& valid) const {
+    return distance<Arithmetic>(centers + 3 * a, centers + 3 * b, norm, valid);
   }
-  GENERATIVEQC_GRID_HD std::array<double, 3> coordinate(double difference, size_t, size_t,
-                                                      double separation) const {
-    return ratio(difference, separation);
+  GENERATIVEQC_GRID_HD std::array<Arithmetic, 3> coordinate(Arithmetic difference, size_t a, size_t b,
+                                                      Arithmetic separation) const {
+    return adjust_coordinate(ratio(difference, separation), a, b, radii);
   }
 };
-template <class PreparedRatio>
+template <class PreparedRatio, class Arithmetic = double>
 struct PreparedCenterGeometry {
   const CenterPair* pairs;
   PreparedRatio ratio;
-  GENERATIVEQC_GRID_HD std::array<double, 4> separation(size_t a, size_t b, bool&) const {
-    return pairs[center_pair_index(a, b)].distance;
+  const double* radii{};
+  GENERATIVEQC_GRID_HD std::array<Arithmetic, 4> separation(size_t a, size_t b, bool&) const {
+    const auto& stored = pairs[center_pair_index(a, b)].distance;
+    return {Arithmetic(stored[0]), Arithmetic(stored[1]), Arithmetic(stored[2]), Arithmetic(stored[3])};
   }
-  GENERATIVEQC_GRID_HD std::array<double, 3> coordinate(double difference, size_t a, size_t b,
-                                                      double) const {
-    return ratio(difference, pairs[center_pair_index(a, b)].ratio.data());
+  GENERATIVEQC_GRID_HD std::array<Arithmetic, 3> coordinate(Arithmetic difference, size_t a, size_t b,
+                                                      Arithmetic) const {
+    const auto& stored = pairs[center_pair_index(a, b)].ratio;
+    const Arithmetic narrowed[2]{Arithmetic(stored[0]), Arithmetic(stored[1])};
+    return adjust_coordinate(ratio(difference, narrowed), a, b, radii);
   }
 };
 
 
 // Point-dependent state belongs to one point worker only. The cooperative
 // schedule retains it until every reverse pair has consumed the forward pass.
-struct PointPair {
-  std::array<double, 2> ratio;
-  std::array<double, 2> factor;
-  std::array<double, 2> logarithm[2];
+template <class Arithmetic>
+struct BasicPointPair {
+  std::array<Arithmetic, 2> ratio;
+  std::array<Arithmetic, 2> factor;
+  std::array<Arithmetic, 2> logarithm[2];
 };
+using PointPair = BasicPointPair<double>;
 static_assert(sizeof(PointPair) == 8 * sizeof(double));
-template <bool RetainLogs = true, class Geometry, class Log, class Pair>
-GENERATIVEQC_GRID_HD PointPair point_pair(double difference, size_t a, size_t b,
-                                         double separation, Geometry geometry,
+template <bool RetainLogs = true, class Arithmetic, class Geometry, class Log, class Pair>
+GENERATIVEQC_GRID_HD BasicPointPair<Arithmetic> point_pair(Arithmetic difference, size_t a, size_t b,
+                                         Arithmetic separation, Geometry geometry,
                                          Log logarithm, Pair pair) {
   const auto r = geometry.coordinate(difference, a, b, separation);
   const bool clipped = portable_abs(r[0]) >= 1;
-  auto f = pair(std::clamp(r[0], -1.0, 1.0));
+  auto f = pair(std::clamp(r[0], Arithmetic(-1), Arithmetic(1)));
   if (clipped || f[0] < 0 || f[0] > 1) f[1] = 0;
-  f[0] = std::clamp(f[0], 0.0, 1.0);
-  PointPair result{{r[1], r[2]}, f, {}};
+  f[0] = std::clamp(f[0], Arithmetic(0), Arithmetic(1));
+  BasicPointPair<Arithmetic> result{{r[1], r[2]}, f, {}};
   for (size_t side = 0; side < 2; ++side) {
-    const double v = side ? 1 - f[0] : f[0];
+    const Arithmetic v = side ? 1 - f[0] : f[0];
     if constexpr (RetainLogs)
       if (v > 0) result.logarithm[side] = logarithm(v);
   }
   return result;
 }
-template <bool RetainedLogs, class Logs, class Products, class Bars, class Zeros, class Log>
-GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a, size_t b,
+template <bool RetainedLogs, class Arithmetic, class Logs, class Products, class Bars, class Zeros, class Log>
+GENERATIVEQC_GRID_HD inline Arithmetic pair_adjoint(const BasicPointPair<Arithmetic>& state, size_t a, size_t b,
                                                 Logs logs, Products products,
                                                 Bars bar_product, Zeros zeros,
-                                                double maximum, Log logarithm) {
+                                                Arithmetic maximum, Log logarithm) {
   // Saturated branches have exactly zero pullback. Skip before exponentiation
   // to avoid inf*0. One exact zero leaves the other factors; two kill the JVP.
   if (state.factor[1] == 0) return 0;
-  double bar_mu = 0;
+  Arithmetic bar_mu = 0;
   for (size_t side = 0; side < 2; ++side) {
     const size_t atom = side ? b : a;
-    const double v = side ? 1 - state.factor[0] : state.factor[0];
-    double derivative = 0;
+    const Arithmetic v = side ? 1 - state.factor[0] : state.factor[0];
+    Arithmetic derivative = 0;
     if (!zeros[atom]) {
       if constexpr (RetainedLogs) derivative = products[atom] * state.logarithm[side][1];
       else derivative = products[atom] * logarithm(v)[1];
@@ -175,14 +189,16 @@ GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a
 }
 
 template <class Logs, class Zeros>
-GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zeros zeros) {
-  double maximum = -std::numeric_limits<double>::infinity();
+GENERATIVEQC_GRID_HD inline auto maximum_log_product(size_t na, Logs logs, Zeros zeros) {
+  using Arithmetic = std::decay_t<decltype(logs[0])>;
+  Arithmetic maximum = -std::numeric_limits<Arithmetic>::infinity();
   for (size_t a = 0; a < na; ++a)
     if (!zeros[a]) maximum = std::max(maximum, logs[a]);
   return maximum;
 }
-GENERATIVEQC_GRID_HD inline double normalized_product_value(double logarithm,
-    size_t zeros, double maximum) {
+template <class Arithmetic>
+GENERATIVEQC_GRID_HD inline Arithmetic normalized_product_value(Arithmetic logarithm,
+    size_t zeros, Arithmetic maximum) {
   return zeros ? 0 : portable_exp(logarithm - maximum);
 }
 template <class Products, class Ratio>
@@ -193,16 +209,16 @@ GENERATIVEQC_GRID_HD auto normalized_product_objective(size_t na, size_t owner,
   for (size_t atom = 0; atom < na; ++atom) total += products[atom];
   return ratio(products[owner], total);
 }
-template <class Objective>
-GENERATIVEQC_GRID_HD inline double normalized_product_bar(size_t atom, size_t owner,
-    double seed, Objective objective) {
+template <class Objective, class Arithmetic>
+GENERATIVEQC_GRID_HD inline Arithmetic normalized_product_bar(size_t atom, size_t owner,
+    Arithmetic seed, Objective objective) {
   return seed * (objective[2] + (atom == owner ? objective[1] : 0));
 }
-template <class Logs, class Products, class Bars, class Zeros, class Ratio>
-GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, double seed,
+template <class Arithmetic, class Logs, class Products, class Bars, class Zeros, class Ratio>
+GENERATIVEQC_GRID_HD Arithmetic normalized_product_adjoint(size_t na, size_t owner, Arithmetic seed,
     Logs logs, Products products, Bars bar_product, Zeros zeros,
-    double maximum, Ratio ratio) {
-  double total = 0;
+    Arithmetic maximum, Ratio ratio) {
+  Arithmetic total = 0;
   for (size_t a = 0; a < na; ++a) {
     products[a] = normalized_product_value(logs[a], zeros[a], maximum);
     total += products[a];
@@ -215,26 +231,27 @@ GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, 
   // Indexed consumers broadcast this same denominator adjoint instead of
   // materializing it for products whose first derivatives are annihilated.
   // Preserve the dense branch's addition and multiplication order.
-  return seed * (objective[2] + 0.0);
+  return seed * (objective[2] + Arithmetic(0));
 }
+template <class Arithmetic, class Accumulation>
 GENERATIVEQC_GRID_HD inline void point_motion_adjoint(size_t na, size_t owner,
-    const double* bar_distance, const std::array<double, 4>* distances, double* gradient) {
+    const Arithmetic* bar_distance, const std::array<Arithmetic, 4>* distances, Accumulation* gradient) {
   for (size_t a = 0; a < na; ++a)
     for (size_t k = 0; k < 3; ++k) {
-      const double value = bar_distance[a] * distances[a][k + 1];
+      const Arithmetic value = bar_distance[a] * distances[a][k + 1];
       gradient[3 * a + k] -= value;
       gradient[3 * owner + k] += value;
     }
 }
 
-template <class Norm, class Ratio, class Log, class Pair, class Geometry>
+template <class Arithmetic, class Accumulation, class Norm, class Ratio, class Log, class Pair, class Geometry>
 GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double* centers, size_t na,
-                                   size_t owner, double seed, double* gradient, double* logs,
-                                   double* products, double* bar_product, double* bar_distance,
-                                   size_t* zeros, std::array<double, 4>* distances, Norm norm,
+                                   size_t owner, Arithmetic seed, Accumulation* gradient, Arithmetic* logs,
+                                   Arithmetic* products, Arithmetic* bar_product, Arithmetic* bar_distance,
+                                   size_t* zeros, std::array<Arithmetic, 4>* distances, Norm norm,
                                    Ratio ratio, Log logarithm, Pair pair, Geometry geometry) {
   bool valid = true;
-  for (size_t a = 0; a < na; ++a) distances[a] = distance(point, centers + 3 * a, norm, valid);
+  for (size_t a = 0; a < na; ++a) distances[a] = distance<Arithmetic>(point, centers + 3 * a, norm, valid);
   if (!valid) return false;
   if (na == 1) return true;
   for (size_t a = 0; a < na; ++a) logs[a] = 0;
@@ -242,20 +259,20 @@ GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double*
   for (size_t a = 0; a < na; ++a) bar_distance[a] = 0;
   for (size_t a = 0; a < na; ++a)
     for (size_t b = 0; b < a; ++b) {
-      const double separation = geometry.separation(a, b, valid)[0];
+      const Arithmetic separation = geometry.separation(a, b, valid)[0];
       const auto state = point_pair(distances[a][0] - distances[b][0], a, b, separation,
                                     geometry, logarithm, pair);
       const auto& f = state.factor;
       for (size_t side = 0; side < 2; ++side) {
         const size_t atom = side ? b : a;
-        const double v = side ? 1 - f[0] : f[0];
+        const Arithmetic v = side ? 1 - f[0] : f[0];
         if (v > 0)
           logs[atom] += state.logarithm[side][0];
         else
           ++zeros[atom];
       }
     }
-  const double maximum = maximum_log_product(na, logs, zeros);
+  const Arithmetic maximum = maximum_log_product(na, logs, zeros);
   if (!std::isfinite(maximum)) return false;
   normalized_product_adjoint(na, owner, seed, logs, products, bar_product, zeros, maximum, ratio);
   for (size_t a = 0; a < na; ++a)
@@ -264,11 +281,11 @@ GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double*
       const auto state = point_pair<false>(distances[a][0] - distances[b][0], a, b, separation[0],
                                     geometry, logarithm, pair);
       if (state.factor[1] == 0) continue;
-      const double bar_mu = pair_adjoint<false>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
+      const Arithmetic bar_mu = pair_adjoint<false>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
       bar_distance[a] += bar_mu * state.ratio[0];
       bar_distance[b] -= bar_mu * state.ratio[0];
       for (size_t k = 0; k < 3; ++k) {
-        const double value = bar_mu * state.ratio[1] * separation[k + 1];
+        const Arithmetic value = bar_mu * state.ratio[1] * separation[k + 1];
         gradient[3 * a + k] += value;
         gradient[3 * b + k] -= value;
       }
@@ -277,44 +294,44 @@ GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double*
   return valid;
 }
 // Keep the bounded direct route for owners without retained geometry capacity.
-template <class Norm, class Ratio, class Log, class Pair>
+template <class Arithmetic, class Accumulation, class Norm, class Ratio, class Log, class Pair>
 GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* centers, size_t na,
-                                   size_t owner, double seed, double* gradient, double* logs,
-                                   double* products, double* bar_product, double* bar_distance,
-                                   size_t* zeros, std::array<double, 4>* distances, Norm norm,
-                                   Ratio ratio, Log logarithm, Pair pair) {
+                                   size_t owner, Arithmetic seed, Accumulation* gradient, Arithmetic* logs,
+                                   Arithmetic* products, Arithmetic* bar_product, Arithmetic* bar_distance,
+                                   size_t* zeros, std::array<Arithmetic, 4>* distances, Norm norm,
+                                   Ratio ratio, Log logarithm, Pair pair, const double* radii = nullptr) {
   return contract_point_impl(point, centers, na, owner, seed, gradient, logs, products,
                              bar_product, bar_distance, zeros, distances, norm, ratio,
-                             logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
+                             logarithm, pair, DirectCenterGeometry<Norm, Ratio, Arithmetic>{centers, norm, ratio, radii});
 }
-template <class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+template <class Arithmetic, class Accumulation, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
 GENERATIVEQC_GRID_HD bool contract_point_prepared(const double* point, const double* centers, size_t na,
-                                   size_t owner, double seed, double* gradient, double* logs,
-                                   double* products, double* bar_product, double* bar_distance,
-                                   size_t* zeros, std::array<double, 4>* distances, Norm norm,
+                                   size_t owner, Arithmetic seed, Accumulation* gradient, Arithmetic* logs,
+                                   Arithmetic* products, Arithmetic* bar_product, Arithmetic* bar_distance,
+                                   size_t* zeros, std::array<Arithmetic, 4>* distances, Norm norm,
                                    Ratio ratio, Log logarithm, Pair pair,
-                                   const CenterPair* pairs, PreparedRatio prepared_ratio) {
+                                   const CenterPair* pairs, PreparedRatio prepared_ratio, const double* radii = nullptr) {
   if (!pairs) return contract_point(point, centers, na, owner, seed, gradient, logs, products,
                                    bar_product, bar_distance, zeros, distances, norm, ratio,
-                                   logarithm, pair);
+                                   logarithm, pair, radii);
   return contract_point_impl(point, centers, na, owner, seed, gradient, logs, products,
                              bar_product, bar_distance, zeros, distances, norm, ratio,
-                             logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+                             logarithm, pair, PreparedCenterGeometry<PreparedRatio, Arithmetic>{pairs, prepared_ratio, radii});
 }
 
 // A full block owns one point worker. No floating-point atomic operations and
 // no cross-point state: barriers delimit distance, forward, reverse and gather
 // lifetimes. Team::sync is a block barrier (also host-thread emulatable).
-template <class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
+template <class Arithmetic, class Accumulation, class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
 GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
-    const double* point, const double* centers, size_t na, size_t owner, double seed,
-    double* gradient, double* logs, double* products, double* bar_product,
-    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
-    PointPair* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    const double* point, const double* centers, size_t na, size_t owner, Arithmetic seed,
+    Accumulation* gradient, Arithmetic* logs, Arithmetic* products, Arithmetic* bar_product,
+    Arithmetic* bar_distance, size_t* zeros, std::array<Arithmetic, 4>* distances,
+    BasicPointPair<Arithmetic>* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
     Geometry geometry) {
   for (size_t a = team.rank(); a < na; a += team.size()) {
     bool valid = true;
-    distances[a] = distance(point, centers + 3 * a, norm, valid);
+    distances[a] = distance<Arithmetic>(point, centers + 3 * a, norm, valid);
     if (!valid) distances[a][0] = 0;
   }
   team.sync();
@@ -331,7 +348,7 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
     const auto separation = geometry.separation(a, b, valid);
     states[index] = point_pair(distances[a][0] - distances[b][0], a, b, separation[0],
                                geometry, logarithm, pair);
-    if (!valid) states[index].factor[0] = std::numeric_limits<double>::quiet_NaN();
+    if (!valid) states[index].factor[0] = std::numeric_limits<Arithmetic>::quiet_NaN();
   }
   team.sync();
   for (size_t index = 0; index < count; ++index)
@@ -345,13 +362,13 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
       const size_t a = std::max(atom, other), b = std::min(atom, other);
       const size_t side = atom == b;
       const auto& state = states[center_pair_index(a, b)];
-      const double v = side ? 1 - state.factor[0] : state.factor[0];
+      const Arithmetic v = side ? 1 - state.factor[0] : state.factor[0];
       if (v > 0) logs[atom] += state.logarithm[side][0];
       else ++zeros[atom];
     }
   }
   team.sync();
-  const double maximum = maximum_log_product(na, logs, zeros);
+  const Arithmetic maximum = maximum_log_product(na, logs, zeros);
   if (!std::isfinite(maximum)) return false;
   if (team.rank() == 0)
     normalized_product_adjoint(na, owner, seed, logs, products, bar_product, zeros, maximum, ratio);
@@ -361,12 +378,12 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
     while (a * (a + 1) / 2 <= index) ++a;
     const size_t b = index - center_pair_index(a, 0);
     auto& state = states[index];
-    std::array<double, 4> pullback{};
+    std::array<Arithmetic, 4> pullback{};
     bool valid = true;
     const auto separation = geometry.separation(a, b, valid);
     // Do not multiply zero slope by a potentially infinite ratio derivative.
     if (state.factor[1] != 0) {
-      const double bar_mu = pair_adjoint<true>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
+      const Arithmetic bar_mu = pair_adjoint<true>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
       pullback[0] = bar_mu * state.ratio[0];
       for (size_t k = 0; k < 3; ++k)
         pullback[k + 1] = bar_mu * state.ratio[1] * separation[k + 1];
@@ -383,7 +400,7 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
       if (other == atom) continue;
       const size_t a = std::max(atom, other), b = std::min(atom, other);
       const auto& state = states[center_pair_index(a, b)];
-      const double sign = atom == a ? 1 : -1;
+      const Arithmetic sign = atom == a ? 1 : -1;
       bar_distance[atom] += sign * state.ratio[0];
       gradient[3 * atom] += sign * state.ratio[1];
       gradient[3 * atom + 1] += sign * state.factor[0];
@@ -397,20 +414,20 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
   team.sync();
   return true;
 }
-template <class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+template <class Arithmetic, class Accumulation, class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
 GENERATIVEQC_GRID_HD bool contract_point_cooperative(
-    const double* point, const double* centers, size_t na, size_t owner, double seed,
-    double* gradient, double* logs, double* products, double* bar_product,
-    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
-    PointPair* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
-    const CenterPair* pairs, PreparedRatio prepared_ratio) {
+    const double* point, const double* centers, size_t na, size_t owner, Arithmetic seed,
+    Accumulation* gradient, Arithmetic* logs, Arithmetic* products, Arithmetic* bar_product,
+    Arithmetic* bar_distance, size_t* zeros, std::array<Arithmetic, 4>* distances,
+    BasicPointPair<Arithmetic>* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    const CenterPair* pairs, PreparedRatio prepared_ratio, const double* radii = nullptr) {
   if (pairs)
     return contract_point_cooperative_impl(point, centers, na, owner, seed, gradient, logs,
         products, bar_product, bar_distance, zeros, distances, states, team, norm, ratio,
-        logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+        logarithm, pair, PreparedCenterGeometry<PreparedRatio, Arithmetic>{pairs, prepared_ratio, radii});
   return contract_point_cooperative_impl(point, centers, na, owner, seed, gradient, logs,
       products, bar_product, bar_distance, zeros, distances, states, team, norm, ratio,
-      logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
+      logarithm, pair, DirectCenterGeometry<Norm, Ratio, Arithmetic>{centers, norm, ratio, radii});
 }
 
 // Large domains stream a bounded strip of triangular rows through one block.
@@ -419,18 +436,18 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative(
 // passes; rematerialization keeps storage O(rows*natom), not O(natom^2).
 // Team::all publishes votes collectively and completes every participant's read
 // before a later vote can overwrite the same shared flag.
-template <class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
+template <class Arithmetic, class Accumulation, class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
 GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
-    const double* point, const double* centers, size_t na, size_t owner, double seed,
-    double* gradient, double* logs, double* products, double* bar_product,
-    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
-    PointPair* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm,
+    const double* point, const double* centers, size_t na, size_t owner, Arithmetic seed,
+    Accumulation* gradient, Arithmetic* logs, Arithmetic* products, Arithmetic* bar_product,
+    Arithmetic* bar_distance, size_t* zeros, std::array<Arithmetic, 4>* distances,
+    BasicPointPair<Arithmetic>* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm,
     Pair pair, Geometry geometry) {
   if (!rows) return false;
   bool point_valid = true;
   for (size_t atom = team.rank(); atom < na; atom += team.size()) {
     bool valid = true;
-    distances[atom] = distance(point, centers + 3 * atom, norm, valid);
+    distances[atom] = distance<Arithmetic>(point, centers + 3 * atom, norm, valid);
     point_valid = point_valid && valid;
     logs[atom] = 0;
     zeros[atom] = 0;
@@ -438,7 +455,7 @@ GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
   }
   if (!team.all(point_valid)) return false;
   if (na == 1) { team.sync(); return true; }
-  double maximum = 0;
+  Arithmetic maximum = 0;
   for (size_t pass = 0; pass < 2; ++pass) {
     for (size_t begin = 1; begin < na; begin += rows) {
       const size_t end = std::min(na, begin + rows);
@@ -458,9 +475,9 @@ GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
                                 geometry, logarithm, pair);
         tile_valid = tile_valid && valid && std::isfinite(state.factor[0]);
         if (pass == 1) {
-          std::array<double, 4> pullback{};
+          std::array<Arithmetic, 4> pullback{};
           if (state.factor[1] != 0) {
-            const double bar_mu = pair_adjoint<false>(state, a, b, logs, products,
+            const Arithmetic bar_mu = pair_adjoint<false>(state, a, b, logs, products,
                 bar_product, zeros, maximum, logarithm);
             pullback[0] = bar_mu * state.ratio[0];
             for (size_t k = 0; k < 3; ++k)
@@ -486,11 +503,11 @@ GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
           const size_t b = side ? atom : incident;
           const auto& state = states[center_pair_index(a, b) - offset];
           if (pass == 0) {
-            const double v = side ? 1 - state.factor[0] : state.factor[0];
+            const Arithmetic v = side ? 1 - state.factor[0] : state.factor[0];
             if (v > 0) logs[atom] += state.logarithm[side][0];
             else ++zeros[atom];
           } else {
-            const double sign = side ? -1 : 1;
+            const Arithmetic sign = side ? -1 : 1;
             bar_distance[atom] += sign * state.ratio[0];
             gradient[3 * atom] += sign * state.ratio[1];
             gradient[3 * atom + 1] += sign * state.factor[0];
@@ -513,20 +530,20 @@ GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
   team.sync();
   return true;
 }
-template <class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+template <class Arithmetic, class Accumulation, class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
 GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative(
-    const double* point, const double* centers, size_t na, size_t owner, double seed,
-    double* gradient, double* logs, double* products, double* bar_product,
-    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
-    PointPair* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
-    const CenterPair* pairs, PreparedRatio prepared_ratio) {
+    const double* point, const double* centers, size_t na, size_t owner, Arithmetic seed,
+    Accumulation* gradient, Arithmetic* logs, Arithmetic* products, Arithmetic* bar_product,
+    Arithmetic* bar_distance, size_t* zeros, std::array<Arithmetic, 4>* distances,
+    BasicPointPair<Arithmetic>* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    const CenterPair* pairs, PreparedRatio prepared_ratio, const double* radii = nullptr) {
   if (pairs)
     return contract_point_tiled_cooperative_impl(point, centers, na, owner, seed, gradient,
         logs, products, bar_product, bar_distance, zeros, distances, states, rows, team,
-        norm, ratio, logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+        norm, ratio, logarithm, pair, PreparedCenterGeometry<PreparedRatio, Arithmetic>{pairs, prepared_ratio, radii});
   return contract_point_tiled_cooperative_impl(point, centers, na, owner, seed, gradient,
       logs, products, bar_product, bar_distance, zeros, distances, states, rows, team,
-      norm, ratio, logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
+      norm, ratio, logarithm, pair, DirectCenterGeometry<Norm, Ratio, Arithmetic>{centers, norm, ratio, radii});
 }
 }  // namespace generativeqc_grid_adjoint
 #undef GENERATIVEQC_GRID_HD
@@ -535,10 +552,44 @@ GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative(
 
 def emit_grid_adjoint() -> str:
     """Emit the shared bounded Becke normalized-product reverse traversal."""
-    return _GRID_ADJOINT_SOURCE
+    program = grid_response_program("treutler_adjust")
+    graph, primal = program.graph, program.roots[0]
+    slope = graph.differentiate(primal, graph.variable("mu"))
+    functions = []
+    # Emit each supported arithmetic type through the existing typed lowerer;
+    # no second algebra or token rewriting supplies the correction derivative.
+    for scalar_type in ("double", "float"):
+        emitter = ScalarCEmitter(
+            graph, {"mu": "mu", "adjustment": "adjustment"}, scalar_type=scalar_type
+        )
+        emitter.emit((primal, slope))
+        functions.append(
+            "\n".join(
+                [
+                    f"GENERATIVEQC_GRID_HD std::array<{scalar_type},3> adjust_coordinate(std::array<{scalar_type},3> value, size_t a, size_t b, const double* radii) {{",
+                    f"using Arithmetic = {scalar_type};",
+                    "if (!radii) return value;",
+                    "const double ratio = std::sqrt(radii[b] / radii[a]);",
+                    "const Arithmetic adjustment = Arithmetic(std::clamp(.25 * (ratio - 1.0 / ratio), -.5, .5));",
+                    "const bool clipped = value[0] <= -1 || value[0] >= 1;",
+                    "const Arithmetic mu = std::clamp(value[0], Arithmetic(-1), Arithmetic(1));",
+                    *emitter.lines,
+                    "return {"
+                    + emitter.reference(primal)
+                    + ", clipped ? Arithmetic(0) : value[1] * "
+                    + emitter.reference(slope)
+                    + ", clipped ? Arithmetic(0) : value[2] * "
+                    + emitter.reference(slope)
+                    + "};}",
+                ]
+            )
+        )
+    return _GRID_ADJOINT_SOURCE.replace("@TREUTLER_ADJUSTMENT@", "\n".join(functions))
 
 
-def _emit_prepared_ratio(*, device: bool) -> str:
+def _emit_prepared_ratio(
+    *, device: bool, scalar_type: str = "double", suffix: str = ""
+) -> str:
     """Cut geometry-only nodes from the existing ratio AD graph, without rewriting it."""
     program = grid_response_program("ratio")
     graph, primal = program.graph, program.roots[0]
@@ -571,9 +622,9 @@ def _emit_prepared_ratio(*, device: bool) -> str:
 
     expressions = tuple(Expr(graph, identifier) for identifier in retained)
     prefix = "__device__" if device else "static"
-    prepare = ScalarCEmitter(graph, {"b": "b"})
+    prepare = ScalarCEmitter(graph, {"b": "b"}, scalar_type=scalar_type)
     prepare.emit(expressions)
-    consume = ScalarCEmitter(graph, {"a": "a", "b": "b"})
+    consume = ScalarCEmitter(graph, {"a": "a", "b": "b"}, scalar_type=scalar_type)
     # Bind every invariant node, not just the cut, so emission cannot leave dead
     # reciprocal/pow work in the pointwise body.
     for identifier in order:
@@ -587,13 +638,13 @@ def _emit_prepared_ratio(*, device: bool) -> str:
     return (
         "\n".join(
             [
-                f"{prefix} std::array<double, 2> local_ratio_geometry(double b) {{",
+                f"{prefix} std::array<{scalar_type}, 2> local_ratio_geometry{suffix}({scalar_type} b) {{",
                 *prepare.lines,
                 "return {"
                 + ", ".join(prepare.reference(root) for root in expressions)
                 + "};",
                 "}",
-                f"{prefix} std::array<double, 3> local_ratio_prepared(double a, const double* geometry) {{",
+                f"{prefix} std::array<{scalar_type}, 3> local_ratio_prepared{suffix}({scalar_type} a, const {scalar_type}* geometry) {{",
                 *consume.lines,
                 "return {"
                 + ", ".join(consume.reference(root) for root in roots)
@@ -606,12 +657,18 @@ def _emit_prepared_ratio(*, device: bool) -> str:
 
 
 def emit_grid_partials(
-    iterations: typing.Any = 3, *, device: typing.Any = False
+    iterations: typing.Any = 3,
+    *,
+    device: typing.Any = False,
+    scalar_type: str = "double",
+    suffix: str = "",
 ) -> typing.Any:
     """Shared local AD construction for CPU and CUDA traversal owners."""
     lines = []
     identities = {}
-    lines.append(_emit_prepared_ratio(device=device))
+    lines.append(
+        _emit_prepared_ratio(device=device, scalar_type=scalar_type, suffix=suffix)
+    )
     for kind, names in (
         ("norm", ("x", "y", "z")),
         ("ratio", ("a", "b")),
@@ -624,10 +681,12 @@ def emit_grid_partials(
             primal,
             *(graph.differentiate(primal, graph.variable(name)) for name in names),
         )
-        emitter = ScalarCEmitter(graph, {name: name for name in names})
+        emitter = ScalarCEmitter(
+            graph, {name: name for name in names}, scalar_type=scalar_type
+        )
         emitter.emit(roots)
         lines += [
-            f"{'__device__' if device else 'static'} std::array<double, {len(roots)}> local_{kind}({', '.join('double ' + name for name in names)}) {{",
+            f"{'__device__' if device else 'static'} std::array<{scalar_type}, {len(roots)}> local_{kind}{suffix}({', '.join(scalar_type + ' ' + name for name in names)}) {{",
             *emitter.lines,
             "return {" + ", ".join(emitter.reference(root) for root in roots) + "};",
             "}",
@@ -648,6 +707,11 @@ def emit_grid_contraction(iterations: typing.Any = 3) -> typing.Any:
     lines += [
         'extern "C" int grid_contract(const double* points, size_t np, const double* centers, size_t na, const int64_t* owners, const double* seeds, double* output, size_t no, size_t budget, size_t max_pairs, double tolerance) noexcept {',
         "return generativeqc_grid_cpu::contract(points, np, centers, na, owners, seeds, output, no, budget, max_pairs, tolerance, local_norm, local_ratio, local_log, local_becke, local_ratio_geometry, local_ratio_prepared);",
+        "}",
+    ]
+    lines += [
+        'extern "C" int grid_contract_radii(const double* points, size_t np, const double* centers, size_t na, const int64_t* owners, const double* seeds, double* output, size_t no, size_t budget, size_t max_pairs, double tolerance, const double* radii) noexcept {',
+        "return generativeqc_grid_cpu::contract(points, np, centers, na, owners, seeds, output, no, budget, max_pairs, tolerance, local_norm, local_ratio, local_log, local_becke, local_ratio_geometry, local_ratio_prepared, radii);",
         "}",
     ]
     return "\n".join(lines) + "\n"
@@ -707,6 +771,9 @@ class NativeGridContraction:
             ct.c_double,
         ]
         self.call.restype = ct.c_int
+        self.call_radii = self.library.grid_contract_radii
+        self.call_radii.argtypes = [*self.call.argtypes, ct.POINTER(ct.c_double)]
+        self.call_radii.restype = ct.c_int
 
     def contract(
         self,
@@ -716,6 +783,7 @@ class NativeGridContraction:
         seeds: typing.Any,
         *,
         coincident_tolerance: typing.Any = 1e-12,
+        atomic_radii: typing.Any = None,
     ) -> typing.Any:
         """Return a detached gradient, publishing nothing on a late native error."""
         points, centers, owners, seeds = map(
@@ -730,9 +798,22 @@ class NativeGridContraction:
         ):
             raise ValueError("grid points/centers require (n,3) and nonempty centers")
         npnt, natom = len(points), len(centers)
+        if atomic_radii is not None:
+            atomic_radii = np.ascontiguousarray(atomic_radii, dtype=np.float64)
+            if (
+                atomic_radii.shape != (natom,)
+                or not np.isfinite(atomic_radii).all()
+                or np.any(atomic_radii <= 0)
+            ):
+                raise ValueError(
+                    "partition radii must be finite positive values per atom"
+                )
         if (1 + 2 * npnt) * natom * (natom - 1) // 2 > self.max_pair_visits:
             raise ValueError("grid work budget exceeded")
-        if 8 * (10 * npnt + 30 * natom) > self.max_bytes:
+        if (
+            8 * (10 * npnt + (30 + int(atomic_radii is not None)) * natom)
+            > self.max_bytes
+        ):
             raise ValueError("grid byte budget exceeded")
         if (
             owners.shape != (npnt,)
@@ -750,7 +831,8 @@ class NativeGridContraction:
         )
         output = np.empty((natom, 3))
         ptr = lambda a: a.ctypes.data_as(ct.POINTER(ct.c_double))
-        code = self.call(
+        call = self.call if atomic_radii is None else self.call_radii
+        code = call(
             ptr(points),
             npnt,
             ptr(centers),
@@ -762,6 +844,7 @@ class NativeGridContraction:
             self.max_bytes,
             self.max_pair_visits,
             coincident_tolerance,
+            *([] if atomic_radii is None else [ptr(atomic_radii)]),
         )
         if code:
             raise ValueError(

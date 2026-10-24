@@ -1,0 +1,25 @@
+{
+  "scope": "CPU reader replay of archived values and synthetic perturbations only; zero new oracle/native/device executions",
+  "reader": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/oracle-reader-v1/h100-paper-environment-20261024/oracle_replay.py",
+  "reader_sha256": "f5a28b40d783f169bdfda3d9b49426ae4a2fd4a73cbb94a9029b4ef7749ac9c9",
+  "reference_sha256": {
+    "cbs-fast-memory-20261021/summary.json.xz": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414",
+    "readme-repaired-20261021/oracles.json.xz": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+  },
+  "results": [
+    {
+      "options": [],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.053s\n\nOK\n"
+    },
+    {
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.045s\n\nOK\n"
+    }
+  ]
+}

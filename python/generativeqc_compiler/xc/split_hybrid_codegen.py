@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.xc.equal_spin import EQUAL_SPIN_BINDINGS, equal_spin_roots
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.split_hybrid_program import (
     _bound_component,
@@ -117,7 +118,11 @@ def _selected_features(program: BulkProgram) -> tuple[str, ...]:
 
 
 def _emit_work_wrapper(
-    type_name: str, function_name: str, policy: SplitHybridWorkPolicy
+    type_name: str,
+    function_name: str,
+    policy: SplitHybridWorkPolicy,
+    *,
+    scalar_type: str = "double",
 ) -> str:
     signature = ", ".join(f"double {name}" for name in _MGGA_FEATURES)
     density_threshold = float(policy.density_threshold).hex()
@@ -149,7 +154,9 @@ def _emit_work_wrapper(
             "      work_rho_a, work_rho_b, work_sigma_aa, work_sigma_ab, work_sigma_bb,",
             "      work_tau_a, work_tau_b);",
             "  // Libxc returns epsilon at work inputs. Integrate with the original density.",
-            "  out.energy_density *= total / (work_rho_a + work_rho_b);",
+            "  out.energy_density *= total / (work_rho_a + work_rho_b);"
+            if scalar_type == "double"
+            else "  out.energy_density = static_cast<float>(static_cast<double>(out.energy_density) * total / (work_rho_a + work_rho_b));",
             "  // vxc follows work_mgga: derivatives at work inputs, not AD through clipping.",
             "  return out;",
             "}",
@@ -164,7 +171,19 @@ def _emit_component(
     type_name: str,
     function_name: str,
     policy: SplitHybridWorkPolicy,
+    *,
+    scalar_type: str = "double",
+    lower_integer_powers: bool = False,
 ) -> str:
+    """Lower integer powers after AD without changing polarized work policies.
+
+    Split Libxc programs retain power nodes in their imported graph. Reuse the
+    existing bounded scalar lowering used by curated semilocal programs, rather
+    than invoking general pow for squares, cubes and reciprocal squares.
+    Differentiating first preserves independent spin partials and lazy screens.
+    Keep float emission unchanged until its separate precision gates qualify
+    the new operation ordering; the README endpoint comparison is FP64.
+    """
     selected = _selected_features(program)
     by_name = dict(zip(program.features, program.variables, strict=True))
     roots = (
@@ -174,10 +193,14 @@ def _emit_component(
             for name in selected
         ),
     )
-    variables = {name: name if name in selected else "0.0" for name in program.features}
-    emitter = CudaEmitter(program.graph, variables)
+    graph = program.graph
+    if lower_integer_powers:
+        graph, roots = graph.lower_small_integer_powers(roots)
+    zero = "0.0f" if scalar_type == "float" else "0.0"
+    variables = {name: name if name in selected else zero for name in program.features}
+    emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
     emitter.emit(roots)
-    signature = ", ".join(f"double {name}" for name in selected)
+    signature = ", ".join(f"{scalar_type} {name}" for name in selected)
     interior = "\n".join(
         [
             f"__device__ inline {type_name} {function_name}_interior({signature}) {{",
@@ -191,11 +214,64 @@ def _emit_component(
             "",
         ]
     )
-    return interior + _emit_work_wrapper(type_name, function_name, policy)
+    restricted_roots = equal_spin_roots(graph, roots)
+    # Share lazy regions only in FP64 split-hybrid equal-spin emission.
+    # Preserve the #2505 force-only integer-power policy and FP32 ordering.
+    restricted_emitter = CudaEmitter(
+        graph,
+        variables,
+        scalar_type=scalar_type,
+        coalesce_branches=(scalar_type == "double"),
+    )
+    restricted_emitter.emit(restricted_roots)
+    restricted_interior = "\n".join(
+        [
+            f"__device__ inline {type_name} {function_name}_equal_spin_interior({signature}) {{",
+            *restricted_emitter.lines,
+            "  return {"
+            + restricted_emitter.reference(restricted_roots[0])
+            + ", {"
+            + ", ".join(
+                restricted_emitter.reference(root) for root in restricted_roots[1:]
+            )
+            + "}};",
+            "}",
+            "",
+        ]
+    )
+    return (
+        interior
+        + _emit_work_wrapper(type_name, function_name, policy, scalar_type=scalar_type)
+        + restricted_interior
+        + _emit_work_wrapper(
+            type_name, f"{function_name}_equal_spin", policy, scalar_type=scalar_type
+        )
+    )
 
 
-def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str, ...]]:
-    """Return namespace body, type name and selected feature ABI for one method."""
+def emit_split_hybrid_device_body(
+    identifier: str,
+    *,
+    scalar_type: str = "double",
+    lower_integer_powers: bool = False,
+) -> tuple[str, str, tuple[str, ...]]:
+    """Return one typed component graph with the unchanged Libxc work contract.
+
+    Float selects raw-component parameters, graph arithmetic and result storage.
+    Domain conditioning and physical-density energy rescaling stay FP64; the
+    caller still owns interior qualification and a strict numerical fallback.
+    No rounding policy changes the mathematical expression identity.
+    FP64 force consumers may opt into bounded integer-power lowering after AD.
+    The default preserves SCF operation ordering: changing a converged replay's
+    point arithmetic can increase work even when numerical gates still pass.
+    Endpoint qualification belongs to the consumer, not this generic emitter.
+    """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    if type(lower_integer_powers) is not bool:
+        raise TypeError("integer-power lowering must be a boolean")
+    if lower_integer_powers and scalar_type != "double":
+        raise ValueError("integer-power lowering requires FP64 qualification")
     method = build_split_global_hybrid(identifier)
     if method.exchange.family != method.correlation.family:
         raise MapleImportError("split hybrid CUDA components use different families")
@@ -225,16 +301,26 @@ def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str,
     signature = ", ".join(f"double {name}" for name in selected)
     arguments = ", ".join(selected)
     exchange = _emit_component(
-        method.exchange, type_name, f"{function_name}_exchange", x_policy
+        method.exchange,
+        type_name,
+        f"{function_name}_exchange",
+        x_policy,
+        scalar_type=scalar_type,
+        lower_integer_powers=lower_integer_powers,
     )
     correlation = _emit_component(
-        method.correlation, type_name, f"{function_name}_correlation", c_policy
+        method.correlation,
+        type_name,
+        f"{function_name}_correlation",
+        c_policy,
+        scalar_type=scalar_type,
+        lower_integer_powers=lower_integer_powers,
     )
     body = "\n".join(
         [
             f"struct {type_name} {{",
-            "  double energy_density{};",
-            f"  double feature_derivative[{len(selected)}]{{}};",
+            f"  {scalar_type} energy_density{{}};",
+            f"  {scalar_type} feature_derivative[{len(selected)}]{{}};",
             "};",
             f'inline constexpr const char* k{type_stem}DeviceExpressionIdentity = "{expression_identity}";',
             f"inline constexpr double k{type_stem}ExactExchange = {float(method.exact_exchange).hex()};",
@@ -253,7 +339,31 @@ def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str,
             "",
         ]
     )
-    return body, type_name, selected
+    restricted_body = "\n".join(
+        [
+            f'inline constexpr const char* k{type_stem}EqualSpinExpressionIdentity = "'
+            + canonical_hash(
+                {
+                    "expression": expression_identity,
+                    "equal_spin_bindings": EQUAL_SPIN_BINDINGS,
+                }
+            )
+            + '";',
+            "// Paired sanitized inputs must match; sigma_ab remains independent.",
+            f"__device__ inline {type_name} {function_name}_equal_spin({signature}) {{",
+            f"  const auto exchange = {function_name}_exchange_equal_spin({arguments});",
+            f"  const auto correlation = {function_name}_correlation_equal_spin({arguments});",
+            f"  {type_name} out{{}};",
+            "  out.energy_density = exchange.energy_density + correlation.energy_density;",
+            f"  for (unsigned index = 0; index < {len(selected)}; ++index)",
+            "    out.feature_derivative[index] =",
+            "        exchange.feature_derivative[index] + correlation.feature_derivative[index];",
+            "  return out;",
+            "}",
+            "",
+        ]
+    )
+    return body + restricted_body, type_name, selected
 
 
 def emit_split_hybrid_device(identifier: str) -> str:

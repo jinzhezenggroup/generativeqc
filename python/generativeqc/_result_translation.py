@@ -23,6 +23,7 @@ def read_correlation_result(
     *,
     index: int | None = None,
     context: ctypes.c_void_p | None = None,
+    mp2_component: bool = False,
 ) -> CorrelationResult | None:
     """Decode the optional post-HF diagnostic ABI into a stable record."""
 
@@ -31,6 +32,10 @@ def read_correlation_result(
         if index is None
         else "generativeqc_batch_get_correlation_diagnostic"
     )
+    if mp2_component:
+        if index is not None:
+            raise ValueError("MP2 companions are single-system results")
+        name = "generativeqc_calculation_get_mp2_component_diagnostic_v1"
     getter = getattr(library, name)
     diag = _native.CorrelationDiagnostic()
     diag.struct_size = ctypes.sizeof(diag)
@@ -95,6 +100,72 @@ def read_cc_performance_result(
         for field_name, _ in diag._fields_
         if field_name not in ("struct_size", "abi_version")
     }
+    precision = getattr(library, "generativeqc_calculation_get_cc_precision_v1", None)
+    if index is None and precision is not None:
+        precision.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_uint32,
+        ]
+        precision.restype = ctypes.c_int
+        counters = (ctypes.c_uint64 * 6)()
+        status = precision(owner, counters, len(counters))
+        if status != _native.STATUS_NOT_IMPLEMENTED:
+            _native.check(library, status, context=context)
+            for position, field in enumerate(
+                (
+                    "ccsd_fp32_requested",
+                    "ccsd_fp32_executed",
+                    "ccsd_fp32_refused",
+                    "ccsd_fp32_evaluations",
+                    "ccsd_fp32_gemm_calls",
+                    "ccsd_fp32_cast_elements",
+                )
+            ):
+                values[field] = (
+                    bool(counters[position]) if position < 3 else counters[position]
+                )
+    response = getattr(library, "generativeqc_calculation_get_df_response_v1", None)
+    if index is None and response is not None:
+        response.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_uint32,
+        ]
+        response.restype = ctypes.c_int
+        counters = (ctypes.c_uint64 * 12)()
+        seconds = (ctypes.c_double * 3)()
+        status = response(owner, counters, len(counters), seconds, len(seconds))
+        if status != _native.STATUS_NOT_IMPLEMENTED:
+            _native.check(library, status, context=context)
+            for position, field in enumerate(
+                (
+                    "lambda_fp32_requested",
+                    "lambda_fp32_executed",
+                    "lambda_fp32_refused",
+                    "lambda_fp32_iterations",
+                    "lambda_fp64_iterations",
+                    "lambda_fp32_actions",
+                    "lambda_fp64_actions",
+                    "lambda_fp32_gemm_calls",
+                    "lambda_fp32_cast_elements",
+                    "lambda_auxiliary_batch_size",
+                    "lambda_numeric_capacity_bytes",
+                    "lambda_owned_device_bytes",
+                )
+            ):
+                values[field] = (
+                    bool(counters[position]) if position < 3 else counters[position]
+                )
+            values.update(
+                zip(
+                    ("lambda_seconds", "source_response_seconds", "orbital_seconds"),
+                    seconds,
+                    strict=True,
+                )
+            )
     return CcPerformanceResult(**values)
 
 

@@ -16,13 +16,17 @@ PREFIX = r"""
 #include <cassert>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include "cc/solver.hpp"
+#include "molecule/basis.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 namespace probe {
 namespace core = generativeqc::core;
+namespace cc = generativeqc::cc;
+namespace molecule = generativeqc::molecule;
 int rhf_calls = 0, source_calls = 0, allocations = 0;
 unsigned expected_math = 0;
 namespace runtime {
@@ -86,14 +90,22 @@ struct RccsdNativeState {
 void validate_descriptor(const generativeqc_method_descriptor&, const runtime::ExecutionContext&) {}
 std::size_t correlation_budget(const generativeqc_method_descriptor&) { return 100; }
 using SolverOptions = generativeqc::cc::SolverOptions;
-SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
-Reference reference_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
+SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t, core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
+  return {};
+}
+Reference reference_options(const generativeqc_method_descriptor&, std::size_t, core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
+  return {};
+}
 RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
     std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary, bool retain_df_response,
-    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan) {
+    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan,
+    bool df_mp2_mode, bool df_reference) {
   assert(plan == nullptr);
+  assert(!df_mp2_mode && !df_reference);
   ++rhf_calls;
   assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
   // A mid-RHF diagnostic change must not alter the already admitted source.
@@ -219,11 +231,12 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     objects = []
     env = dict(os.environ, CCACHE_BASEDIR=str(ROOT))
-    # Compile the complete real policy/domain translation units, not test reimplementations.
+    # Compile real AO counting and policy/domain units, not test reimplementations.
     for source in (
         probe,
         ROOT / "src/scf/cuda/df_source_domain.cpp",
         ROOT / "src/scf/cuda/rhf_policy.cpp",
+        ROOT / "src/molecule/basis.cpp",
     ):
         obj = tmp / (source.stem + ".o")
         subprocess.run(

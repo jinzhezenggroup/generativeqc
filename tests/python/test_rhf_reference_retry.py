@@ -31,11 +31,13 @@ _PREFIX = r"""
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -46,6 +48,9 @@ _PREFIX = r"""
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaMemcpyDeviceToHost=2;
 static int mode=0, validations=0, copies=0, builds=0, solves=0, products=0, energies=0;
+static bool screened=false;
+static std::map<std::string,std::uint64_t> journal_counts;
+static std::string journal_cutoff;
 static int plan_capacity_samples=0, candidate_capacity_samples=0;
 struct MockPlan {
   std::size_t reference_admitted_plan_host_bytes=101;
@@ -134,8 +139,11 @@ void launch_compute_energy_kernel(unsigned,unsigned,int,int,int,int,const double
 namespace generativeqc::runtime::df_progress {
 struct Scope {
   Scope(const char*,const char*){}
-  static void label(const char*,const char*){}
-  template<class T> static void number(const char*,T){}
+  bool enabled() const {return true;}
+  static void label(const char* key,const char* value){
+    if(std::string(key)=="iteration_screening_tolerance")journal_cutoff=value;
+  }
+  template<class T> static void number(const char* key,T value){journal_counts[key]=value;}
 };
 }
 namespace runtime=generativeqc::runtime;
@@ -161,6 +169,8 @@ std::vector<Item> run() {
   int solver_info[1]{},ordinary_eigensolver_family=0,lwork=0,cuda_error=0;
   generativeqc_status status=GENERATIVEQC_STATUS_SUCCESS;
   const bool reuse_converged_fock=mode!=4,mixed_precision_fock=false;
+  const bool screened_reference_iterations=screened;
+  const std::vector<std::uint32_t> host_pre_refinement_iterations{screened ? 7U : 0U};
   std::uint32_t host_final_fock_rebuild_count=mode==3 ? 1U : 0U;
   std::uint32_t post_scf_physical_fock_builds=0,post_scf_final_eigen_solves=1;
   const bool persistent_eri=false,geometry_changed=false,quartet_direct=false,bounded_direct_streaming=false;
@@ -180,7 +190,7 @@ _MAIN = r"""
   return outputs;
 }
 int main(int argc,char**argv) {
-  if(argc!=2)return 99;mode=std::stoi(argv[1]);
+  if(argc!=3)return 99;mode=std::stoi(argv[1]);screened=std::stoi(argv[2])!=0;
   try {
     std::vector<Item> result;
     std::string caught;
@@ -194,16 +204,26 @@ int main(int argc,char**argv) {
       const auto& r=result[0];
       require(r.status==GENERATIVEQC_STATUS_SUCCESS && r.scf.converged && r.scf.reference,
               "successful final reference was not published");
-      require(r.scf.iterations==5 && r.scf.reference->numeric_capacity_bytes==1000,
+      const unsigned total_iterations=screened ? 12U : 5U;
+      require(r.scf.iterations==total_iterations && r.scf.reference->numeric_capacity_bytes==1000,
               "lost reference metadata");
+      require(r.scf.precision.strict_refinement_applied==screened &&
+                  r.scf.precision.refinement_iterations==(screened ? 5U : 0U) &&
+                  r.scf.precision.mixed_stage_fock_builds==0,
+              "screened FP64 stage lost refinement provenance or became mixed work");
       require(r.scf.reference->energy==(mode==1 ? -99 : -77),"stale reference energy");
       require(r.scf.precision.operator_work_counters_valid==1 &&
-                  r.scf.precision.strict_stage_fock_builds==5 &&
+                  r.scf.precision.strict_stage_fock_builds==total_iterations &&
                   r.scf.precision.post_scf_fock_builds==static_cast<unsigned>(mode) &&
                   r.scf.precision.skipped_final_fock_builds==static_cast<unsigned>(1-mode),
               "incorrect published work counts");
       require(validations==mode+1 && builds==mode && solves==mode && products==3*mode &&
                   energies==mode,"retry work is not bounded");
+      require(journal_counts.at("screened_fock_builds")==static_cast<unsigned>(screened ? 7 : 0) &&
+                  journal_counts.at("unscreened_refinement_fock_builds")==static_cast<unsigned>(screened ? 5 : 0) &&
+                  journal_counts.at("physical_fock_builds")==total_iterations+mode &&
+                  std::stod(journal_cutoff)==(screened ? 1e-12 : 0),
+              "screened/refinement work or decimal cutoff journal is incorrect");
       require(plan.reference_admitted_plan_host_bytes==3000+100*mode &&
                   plan.reference_admitted_candidate_host_bytes==4000+100*mode &&
                   plan_capacity_samples==1 && candidate_capacity_samples==1,
@@ -313,11 +333,12 @@ def reference_retry_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "retry-kernel-error",
     ],
 )
+@pytest.mark.parametrize("screened", (False, True), ids=("unscreened", "screened"))
 def test_reference_retry_publishes_only_validated_state(
-    reference_retry_probe: Path, scenario: int
+    reference_retry_probe: Path, scenario: int, screened: bool
 ) -> None:
     result = subprocess.run(
-        [str(reference_retry_probe), str(scenario)],
+        [str(reference_retry_probe), str(scenario), str(int(screened))],
         capture_output=True,
         text=True,
         timeout=5,

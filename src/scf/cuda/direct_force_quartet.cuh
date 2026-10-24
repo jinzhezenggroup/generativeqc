@@ -107,11 +107,12 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     // components separate instead of repeating the invariant ERI recurrence.
     const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
         n, physical_offset, spin_offset, density, i, j, k, l, coulomb_coefficient,
-        SeparateSources ? 0.0 : exchange_coefficient);
+        SeparateSources ? 0.0 : exchange_coefficient, batch.direct_force_seed);
     double exchange_weight = 0.0;
     if constexpr (SeparateSources) {
       exchange_weight = direct_force_density_coefficient_scaled<Unrestricted>(
-          n, physical_offset, spin_offset, density, i, j, k, l, 0.0, exchange_coefficient);
+          n, physical_offset, spin_offset, density, i, j, k, l, 0.0, exchange_coefficient,
+          batch.direct_force_seed);
     }
     if (coefficient == 0.0 && exchange_weight == 0.0) return;
     const double source_coefficients[2] = {coefficient, exchange_weight};
@@ -154,6 +155,12 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       } else {
+        // This site executes one complete primitive product per surviving AO
+        // component. Count after AO/source admission, not from shell capacity.
+        if (auto* diagnostic = direct_force_class_work(batch, shell_class)) {
+          atomicAdd(&diagnostic->executed_components, 1ULL);
+          profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+        }
         explicit_gradient = contracted_eri_cartesian_source_order6_gradient<false, SpatialReuse>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
@@ -305,7 +312,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
     return;
 
   const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
-      n, physical_offset, spin_offset, density, i, j, k, l, 0.0, exchange_coefficient);
+      n, physical_offset, spin_offset, density, i, j, k, l, 0.0, exchange_coefficient,
+      batch.direct_force_seed);
   if (coefficient == 0.0) return;
 
   const std::int32_t first_shell = batch.shell_pair_first[first_pair];
@@ -508,11 +516,11 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rsh_
   double coulomb_density = 0.0;
   if (coulomb_coefficient != 0.0)
     coulomb_density = direct_force_density_coefficient_scaled<Unrestricted>(
-        n, physical_offset, spin_offset, density, i, j, k, l, 1.0, 0.0);
+        n, physical_offset, spin_offset, density, i, j, k, l, 1.0, 0.0, batch.direct_force_seed);
   double exchange_density = 0.0;
   if (short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0)
     exchange_density = direct_force_density_coefficient_scaled<Unrestricted>(
-        n, physical_offset, spin_offset, density, i, j, k, l, 0.0, 1.0);
+        n, physical_offset, spin_offset, density, i, j, k, l, 0.0, 1.0, batch.direct_force_seed);
   const double source_coefficient[3] = {
       coulomb_coefficient * coulomb_density,
       short_exchange_coefficient * exchange_density,

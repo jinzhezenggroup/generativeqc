@@ -1,0 +1,17 @@
+[
+  {
+    "phase": "networkx_download",
+    "returncode": 0,
+    "output": "Collecting networkx\n  Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)\nDownloading networkx-3.6.1-py3-none-any.whl (2.1 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 7.1 MB/s  0:00:00\nSaved ./h100-paper-environment-20261024/assets/networkx-3.6.1-py3-none-any.whl\nSuccessfully downloaded networkx\n"
+  },
+  {
+    "phase": "gpy_offline_install",
+    "returncode": 0,
+    "output": "Looking in links: /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets\nProcessing ./h100-paper-environment-20261024/assets/gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl\nProcessing ./h100-paper-environment-20261024/assets/cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl\nProcessing ./h100-paper-environment-20261024/assets/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl\nProcessing ./h100-paper-environment-20261024/assets/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\nProcessing ./h100-paper-environment-20261024/assets/geometric-1.1.1-py3-none-any.whl\nProcessing ./h100-paper-environment-20261024/assets/fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl\nRequirement already satisfied: pyscf>=2.8.0 in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from gpu4pyscf-cuda12x==1.8.1) (2.14.0)\nRequirement already satisfied: packaging in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from gpu4pyscf-cuda12x==1.8.1) (26.3)\nRequirement already satisfied: numpy<2.6,>=1.22 in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from cupy-cuda12x==13.6.0) (2.2.6)\nProcessing ./h100-paper-environment-20261024/assets/networkx-3.6.1-py3-none-any.whl (from geometric==1.1.1)\nRequirement already satisfied: six in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from geometric==1.1.1) (1.17.0)\nRequirement already satisfied: scipy in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from geometric==1.1.1) (1.15.3)\nRequirement already satisfied: h5py>=2.7 in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from pyscf>=2.8.0->gpu4pyscf-cuda12x==1.8.1) (3.16.0)\nRequirement already satisfied: setuptools in ./h100-paper-environment-20261024/env/lib/python3.11/site-packages (from pyscf>=2.8.0->gpu4pyscf-cuda12x==1.8.1) (84.0.0)\nInstalling collected packages: gpu4pyscf-libxc-cuda12x, fastrlock, networkx, cupy-cuda12x, geometric, pyscf-dispersion, gpu4pyscf-cuda12x\n\nSuccessfully installed cupy-cuda12x-13.6.0 fastrlock-0.8.4 geometric-1.1.1 gpu4pyscf-cuda12x-1.8.1 gpu4pyscf-libxc-cuda12x-0.8.1 networkx-3.6.1 pyscf-dispersion-1.5.0\n"
+  },
+  {
+    "phase": "pip_check",
+    "returncode": 0,
+    "output": "No broken requirements found.\n"
+  }
+]

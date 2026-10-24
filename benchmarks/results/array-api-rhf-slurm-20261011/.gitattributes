@@ -1,0 +1,2 @@
+# Preserve scheduler/compiler/pytest receipts byte-for-byte, including whitespace.
+*.log -whitespace

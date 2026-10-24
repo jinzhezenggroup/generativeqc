@@ -9,12 +9,17 @@ FRONTEND_VERSION = 1
 ## The 2025.12 standard is a comparison target, not an implementation claim.
 # Group definitions own the bounded preview inventory and its matrix together.
 _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "real-selection": ("where",),
     "real-elementwise": (
+        "clip",
+        "minimum",
+        "maximum",
         "add",
         "subtract",
         "multiply",
         "divide",
         "negative",
+        "positive",
         "pow",
         "exp",
         "log",
@@ -42,6 +47,10 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
     ),
     "shape-transform": (
         "reshape_explicit_indices",
@@ -54,6 +63,9 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
+        "repeat",
+        "tile",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
     ),
@@ -65,6 +77,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "tensor-algebra": (
         "matmul",
+        "tensordot",
+        "vecdot",
         "einsum_extension",
     ),
 }
@@ -73,6 +87,10 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 # test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
+        "clip",
+        "minimum",
+        "maximum",
+        "where",
         "add",
         "equal",
         "not_equal",
@@ -91,6 +109,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "multiply",
         "divide",
         "negative",
+        "positive",
         "pow",
         "exp",
         "log",
@@ -99,6 +118,10 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
         "reshape_explicit_indices",
         "permute_dims",
         "reshape",
@@ -109,18 +132,24 @@ SUPPORTED_FUNCTIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
+        "repeat",
+        "tile",
         "slice",
         "take",
         "broadcast_to_explicit_indices",
         "slice_static",
         "take_static",
         "matmul",
+        "tensordot",
+        "vecdot",
         "matrix_transpose",
         "einsum_extension",
     }
 )
 
 _OPERATION_DTYPES: dict[str, str] = {
+    "real-selection": "bool condition; float32|float64 branches",
     "real-elementwise": "float32|float64",
     "real-comparison": "float32|float64 -> bool",
     "array-creation": "bool|float32|float64 (operation-specific admission)",
@@ -132,6 +161,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
+    "real-selection": "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -144,10 +174,42 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "var": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-zero",
+        "keepdims": "bool; generic-arrays-only",
+        "correction": "finite-static-int|float; nonempty-reduction; positive-divisor; finite-nonzero-coefficient",
+        "capture": "finite-generic-real-only; centered-two-pass; all-intermediates-finite; static-graph-budget",
+    },
+    "prod": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+        "keepdims": "bool; generic-arrays-only",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
+        "capture": "finite-generic-real-only; empty-product-one; static-graph-budget",
+    },
+    **{
+        name: {
+            "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+            "keepdims": "bool; generic-arrays-only",
+            "capture": "finite-generic-real-only; empty-reduction-error; earliest-C-order-tie; static-graph-budget",
+        }
+        for name in ("max", "min")
+    },
+    **{
+        name: {
+            "capture": "finite-generic-real-only; at-least-one-array; first-operand-selected-on-ties",
+            "operands": "broadcast-arrays; float32/float64-promotion; weak-exact-static-scalars",
+        }
+        for name in ("minimum", "maximum")
+    },
+    "clip": {
+        "min": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "max": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "capture": "finite-only; lower-then-upper; current-value-selected-on-ties",
+    },
     "sum": {
         "axis": "static-int|tuple|None",
         "keepdims": "generic-arrays-only",
-        "dtype": "conversion-unsupported",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
     },
     "mean": {
         "axis": "static-int|tuple|None",
@@ -162,6 +224,20 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "flip": {
         "axis": "static-int|tuple|None",
         "capture": "gather extent <= 65536",
+    },
+    "roll": {
+        "shift": "static-int|tuple; broadcast with axis; repeated axes accumulate",
+        "axis": "static-int|tuple|None; None flattens in row-major order",
+        "capture": "generic-only; total nonidentity gather positions <= 65536",
+    },
+    "repeat": {
+        "repeats": "static nonnegative Python integer; per-element counts unsupported",
+        "axis": "static signed integer or None; None flattens in row-major order",
+        "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
+    },
+    "tile": {
+        "repetitions": "static nonnegative Python-integer tuple; leading ones pad shape/counts",
+        "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
     },
     "astype": {
         "dtype": "real float32/float64 only; bool identity unsupported",
@@ -179,6 +255,14 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "slice": {
         "ranges": "static in-bounds half-open",
     },
+    "tensordot": {
+        "axes": "static-int|pair-of-axis-sequences; equal contracted extents",
+        "capture": "generic-real-only; at most 52 distinct labels",
+    },
+    "vecdot": {
+        "axis": "static-int; equal contracted extents; broadcast remaining axes",
+        "capture": "generic-real-only; rank <= 52",
+    },
     "einsum_extension": {
         "equation": "explicit-output; no ellipsis",
     },
@@ -194,6 +278,28 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "var": {
+        "ad": "centered-polynomial-first-order; rounding-not-classical-derivative",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+    },
+    "sum": {
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; explicit-dtype-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    "prod": {
+        "ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    **{
+        name: {
+            "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+        }
+        for name in ("minimum", "maximum", "min", "max")
+    },
+    "clip": {
+        "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+    },
     "reshape_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_to_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_shapes": {
@@ -205,9 +311,95 @@ _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
     },
 }
 
+# Reviewed frontend lowerings, not an intersection of frontend/primitive names:
+# e.g. subtract/negative lower to add, mean to reduce/add, and matmul to einsum.
+# Keep this allowlist explicit so new reference operations fail closed. Source
+# emission tests check every entry against tensor.cpu without importing that
+# backend here (which would introduce a compiler-package import cycle).
+_NATIVE_CPU_OPERATIONS = frozenset(
+    {
+        "where",
+        "add",
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
+        "subtract",
+        "multiply",
+        "divide",
+        "negative",
+        "positive",
+        "pow",
+        "exp",
+        "log",
+        "sqrt",
+        "square",
+        "reciprocal",
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+        "sum",
+        "mean",
+        "reshape_explicit_indices",
+        "permute_dims",
+        "reshape",
+        "broadcast_to",
+        "broadcast_arrays",
+        "expand_dims",
+        "squeeze",
+        "moveaxis",
+        "flip",
+        "roll",
+        "repeat",
+        "tile",
+        "broadcast_to_explicit_indices",
+        "matrix_transpose",
+        "slice",
+        "take",
+        "slice_static",
+        "take_static",
+        "matmul",
+        "tensordot",
+        "vecdot",
+        "einsum_extension",
+    }
+)
+
+_NATIVE_CPU_BOOLEAN_OPERATIONS = (
+    frozenset(
+        _OPERATION_GROUPS["array-creation"]
+        + _OPERATION_GROUPS["shape-transform"]
+        + _OPERATION_GROUPS["static-indexing"]
+    )
+    & _NATIVE_CPU_OPERATIONS
+)
+
+_NATIVE_CPU_NOTES: dict[str, str] = {
+    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; generated-fixed-mask-AD-opt-in",
+    **{
+        name: "finite-float64-operands; one-byte-bool-result; non-differentiable"
+        for name in _OPERATION_GROUPS["real-comparison"]
+    },
+    "astype": (
+        "dtype-conversion-unsupported; float64-identity-only-after-cast-elision"
+    ),
+    "broadcast_shapes": "python-static-shape; no-native-operation",
+    "broadcast_arrays": "unpack-tuple-into-array-or-mapping-trace-outputs",
+    "pow": "static-exact-scalar-exponent; strictly-positive-base",
+    "log": "strictly-positive-input",
+    "sqrt": "nonnegative-input",
+    "divide": "nonzero-denominator",
+    "reciprocal": "nonzero-input; generic-arrays-only",
+}
+
 
 def _operation_matrix() -> dict[str, dict[str, object]]:
-    """Describe admitted reference operations without implying backend conformance."""
+    """Separate reference admission from bounded native lowering qualification."""
     return {
         name: {
             "function": _OPERATION_FUNCTIONS.get(name, name),
@@ -215,9 +407,22 @@ def _operation_matrix() -> dict[str, dict[str, object]]:
             "dtypes": _OPERATION_DTYPES[category],
             "device": "device-none-cpu-reference",
             "eager": "numpy-reference",
-            "capture": "tensorir-reference",
+            "capture": "tensorir",
             "ad": _AD_STATUS[category],
-            "native_cpu": False,
+            "native_cpu": name in _NATIVE_CPU_OPERATIONS,
+            "native_cpu_dtypes": (
+                ("bool", "float64")
+                if name in _NATIVE_CPU_BOOLEAN_OPERATIONS
+                else ("float64",)
+                if name in _NATIVE_CPU_OPERATIONS
+                else ()
+            ),
+            "native_cpu_notes": _NATIVE_CPU_NOTES.get(
+                name,
+                "subject-to-native_cpu_requires"
+                if name in _NATIVE_CPU_OPERATIONS
+                else "not-qualified",
+            ),
             "native_cuda": False,
             "audited_keywords": dict(_AUDITED_KEYWORDS.get(name, {})),
             **_OPERATION_OVERRIDES.get(name, {}),
@@ -237,6 +442,14 @@ def capabilities() -> dict[str, object]:
         "operation_matrix_schema": "generativeqc.array-api-operation-coverage.v1",
         "operation_matrix_scope": "compiler-preview-inventory-excludes-public-helpers",
         "operation_matrix": _operation_matrix(),
+        "native_cpu_scope": "bounded-tensorir-subset-not-array-api-conformance",
+        "native_cpu_requires": (
+            "all-live-nodes-float64-or-typed-bool",
+            "all-live-primitives-supported-by-CPU_PRIMITIVES",
+            "frontend-operation-and-keyword-constraints",
+            "finite-runtime-values-and-operation-domains",
+            "static-shapes-within-byte-work-node-budgets",
+        ),
         "array_namespace_protocol": False,
         "implicit_broadcast": "generic-arrays",
         "reshape_requires_explicit_indices": "scientific-arrays-only",
@@ -252,9 +465,12 @@ def capabilities() -> dict[str, object]:
         "dtype_promotion": "generic-float32-float64-explicit-cast",
         "scientific_dtype_promotion": False,
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
-        "boolean_data": "typed-input-constant-comparison-reference-only",
+        "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "boolean_native_lowering": False,
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD; generated-fixed-mask-fp64-opt-in",
+        "where_native_scope": "materializing-cpu-forward-and-opt-in-generated-fixed-mask-AD; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
+        "boolean_native_lowering": True,
+        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-where; Boolean-data-nondifferentiable",
         "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "typed-bool-or-exact-real-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",

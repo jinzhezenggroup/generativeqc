@@ -4,12 +4,18 @@ This checks write-domain ownership and scalar arithmetic, not GPU execution or
 synchronization. Clipped launches must preserve the original flat-prefix work.
 """
 
+from __future__ import annotations
+
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.tensor.scf_cuda import emit_density_cuda
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
@@ -71,46 +77,40 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def density_domain_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++20 compiler")
+def density_domain_probe(
+    tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/scf/cuda/df_scf_kernels.cu").read_text()
-    begin = source.index("__global__ void build_device_density_kernel")
-    end = source.index("__global__ void compute_device_energy_kernel", begin)
-    kernel = source[begin:end].replace(
-        "density[element] = value;", "++hits[element]; density[element] = value;"
+    kernel = emit_density_cuda().replace(
+        "  density[element] = value;", "  ++hits[element]; density[element] = value;"
     )
     kernel = kernel.replace(
-        "density[offset + column + row * nbf] = value;",
-        "{ ++hits[offset + column + row * nbf]; "
-        "density[offset + column + row * nbf] = value; }",
+        "density[offset + column + row * n] = value;",
+        "{ ++hits[offset + column + row * n]; "
+        "density[offset + column + row * n] = value; }",
     )
     begin = source.index("void launch_build_device_density_kernel")
     end = source.index("void launch_compute_device_energy_kernel", begin)
     wrapper, count = re.subn(
-        r"(\w+)<<<([\s\S]*?)>>>\(([\s\S]*?)\);",
+        r"([\w:]+(?:<\d+>)?)<<<([\s\S]*?)>>>\(([\s\S]*?)\);",
         r"simulate(\1, \2, \3);",
         source[begin:end],
     )
     assert count == 1
     directory = tmp_path_factory.mktemp("df-density-domain")
     unit, executable = directory / "probe.cpp", directory / "probe"
-    unit.write_text(PREFIX + kernel + wrapper + DRIVER)
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-fsanitize=undefined",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    unit.write_text(
+        PREFIX
+        + kernel
+        + "\nnamespace generated = generativeqc::scf::generated;\n"
+        + wrapper
+        + DRIVER
+    )
+    required_native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=("-std=c++20", "-O2", "-fsanitize=undefined"),
+        link_args=("-fsanitize=undefined",),
     )
     return executable
 

@@ -1,0 +1,1132 @@
+{
+  "schema_version": 1,
+  "baseline_revision": "a2ba59894217215d68a7885235699249333c77b0",
+  "endpoints": [
+    {
+      "device": "cpu",
+      "method": "pbe-rks",
+      "forces": false,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "c15230def3e72731b10f2707af494900b2ea950fa32ed9d7bcc196d60dbb3941",
+      "candidate_library_sha256": "c99bb1cfd0f5a176855709bd773532b3af8819e8d011e9ebacf58ab317d820e3",
+      "candidate_slurm_job_id": null,
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.3225966840982437,
+          "candidate_median_seconds": 0.32399408239871264,
+          "candidate_over_baseline": 1.0043317193553154
+        },
+        "warm": {
+          "baseline_median_seconds": 0.2626196872442961,
+          "candidate_median_seconds": 0.26468721870332956,
+          "candidate_over_baseline": 1.0078727207420295
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.2729315785691142,
+          "candidate_median_seconds": 0.2758181719109416,
+          "candidate_over_baseline": 1.0105762526892668
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.26235269382596016,
+          "candidate_median_seconds": 0.26385592482984066,
+          "candidate_over_baseline": 1.0057298096770362
+        },
+        "reset": {
+          "baseline_median_seconds": 0.31500163301825523,
+          "candidate_median_seconds": 0.31723439134657383,
+          "candidate_over_baseline": 1.0070880849312587
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.0839299876242876,
+          "candidate_median_seconds": 0.08490205556154251,
+          "candidate_over_baseline": 1.0115818906301568
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.2622351283207536,
+          "candidate_median_seconds": 0.2638661367818713,
+          "candidate_over_baseline": 1.0062196414018292
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cpu",
+      "method": "pbe-rks",
+      "forces": true,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "c15230def3e72731b10f2707af494900b2ea950fa32ed9d7bcc196d60dbb3941",
+      "candidate_library_sha256": "c99bb1cfd0f5a176855709bd773532b3af8819e8d011e9ebacf58ab317d820e3",
+      "candidate_slurm_job_id": null,
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 1.453221645206213,
+          "candidate_median_seconds": 1.450124280527234,
+          "candidate_over_baseline": 0.9978686219757349
+        },
+        "warm": {
+          "baseline_median_seconds": 1.394759178161621,
+          "candidate_median_seconds": 1.3947841580957174,
+          "candidate_over_baseline": 1.0000179098546096
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 1.3999450486153364,
+          "candidate_median_seconds": 1.4004591880366206,
+          "candidate_over_baseline": 1.0003672568589694
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 1.3929822845384479,
+          "candidate_median_seconds": 1.3915157318115234,
+          "candidate_over_baseline": 0.9989471849403955
+        },
+        "reset": {
+          "baseline_median_seconds": 1.4411599915474653,
+          "candidate_median_seconds": 1.4463382055982947,
+          "candidate_over_baseline": 1.0035930875691805
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.4912809804081917,
+          "candidate_median_seconds": 0.48537952452898026,
+          "candidate_over_baseline": 0.9879876158154788
+        },
+        "recovery": {
+          "baseline_median_seconds": 1.3919151443988085,
+          "candidate_median_seconds": 1.394531854428351,
+          "candidate_over_baseline": 1.0018799350233902
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cpu",
+      "method": "rhf",
+      "forces": false,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "c15230def3e72731b10f2707af494900b2ea950fa32ed9d7bcc196d60dbb3941",
+      "candidate_library_sha256": "c99bb1cfd0f5a176855709bd773532b3af8819e8d011e9ebacf58ab317d820e3",
+      "candidate_slurm_job_id": null,
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.0009768540039658546,
+          "candidate_median_seconds": 0.0009850263595581055,
+          "candidate_over_baseline": 1.0083659948764836
+        },
+        "warm": {
+          "baseline_median_seconds": 0.00040998589247465134,
+          "candidate_median_seconds": 0.00041895266622304916,
+          "candidate_over_baseline": 1.0218709324222717
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.0004719449207186699,
+          "candidate_median_seconds": 0.00046982988715171814,
+          "candidate_over_baseline": 0.9955184737156806
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.00046549364924430847,
+          "candidate_median_seconds": 0.0004652617499232292,
+          "candidate_over_baseline": 0.9995018206554359
+        },
+        "reset": {
+          "baseline_median_seconds": 0.00044514425098896027,
+          "candidate_median_seconds": 0.00044143572449684143,
+          "candidate_over_baseline": 0.9916689331966442
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.00032479315996170044,
+          "candidate_median_seconds": 0.00032871030271053314,
+          "candidate_over_baseline": 1.012060422544904
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.000409616157412529,
+          "candidate_median_seconds": 0.0004094243049621582,
+          "candidate_over_baseline": 0.9995316287043395
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cpu",
+      "method": "rhf",
+      "forces": true,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "c15230def3e72731b10f2707af494900b2ea950fa32ed9d7bcc196d60dbb3941",
+      "candidate_library_sha256": "c99bb1cfd0f5a176855709bd773532b3af8819e8d011e9ebacf58ab317d820e3",
+      "candidate_slurm_job_id": null,
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 140,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 270,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.0033594444394111633,
+          "candidate_median_seconds": 0.003417331725358963,
+          "candidate_over_baseline": 1.0172312080142472
+        },
+        "warm": {
+          "baseline_median_seconds": 0.0027865953743457794,
+          "candidate_median_seconds": 0.0028095850721001625,
+          "candidate_over_baseline": 1.0082501026040713
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.0028461292386054993,
+          "candidate_median_seconds": 0.002864792011678219,
+          "candidate_over_baseline": 1.0065572472323372
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.002841831184923649,
+          "candidate_median_seconds": 0.002853158861398697,
+          "candidate_over_baseline": 1.003986048339234
+        },
+        "reset": {
+          "baseline_median_seconds": 0.0028145890682935715,
+          "candidate_median_seconds": 0.0028399722650647163,
+          "candidate_over_baseline": 1.0090184379158889
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.0006710672751069069,
+          "candidate_median_seconds": 0.0006762165576219559,
+          "candidate_over_baseline": 1.0076732731665818
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.0027871159836649895,
+          "candidate_median_seconds": 0.002807040698826313,
+          "candidate_over_baseline": 1.0071488647326126
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cuda",
+      "method": "pbe-rks",
+      "forces": false,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "2a81df633965bc80dbe33265c4caccdc3289c0f2637602f90d8d1d05f0c4bc90",
+      "candidate_library_sha256": "81425696aea52ebb6b994f8128dc111a132146635382be7db9489d8c880d5af4",
+      "candidate_slurm_job_id": "7650",
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        {
+          "setup_h2d_bytes": 10549,
+          "density_h2d_bytes": 96,
+          "scalar_d2h_bytes": 1692,
+          "matrix_d2h_bytes": 288,
+          "synchronizations": 683,
+          "iterations": 11,
+          "occupation_stabilized_proposals": 0
+        },
+        {
+          "setup_h2d_bytes": 7023,
+          "density_h2d_bytes": 16,
+          "scalar_d2h_bytes": 1332,
+          "matrix_d2h_bytes": 64,
+          "synchronizations": 132,
+          "iterations": 9,
+          "occupation_stabilized_proposals": 0
+        }
+      ],
+      "candidate_native_ks_transport": [
+        {
+          "setup_h2d_bytes": 10549,
+          "density_h2d_bytes": 96,
+          "scalar_d2h_bytes": 1692,
+          "matrix_d2h_bytes": 288,
+          "synchronizations": 683,
+          "iterations": 11,
+          "occupation_stabilized_proposals": 0
+        },
+        {
+          "setup_h2d_bytes": 7023,
+          "density_h2d_bytes": 16,
+          "scalar_d2h_bytes": 1332,
+          "matrix_d2h_bytes": 64,
+          "synchronizations": 132,
+          "iterations": 9,
+          "occupation_stabilized_proposals": 0
+        }
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 100,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 100,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 100,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 100,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.12916475534439087,
+          "candidate_median_seconds": 0.1330171786248684,
+          "candidate_over_baseline": 1.0298256538341737
+        },
+        "warm": {
+          "baseline_median_seconds": 0.03406791388988495,
+          "candidate_median_seconds": 0.034067705273628235,
+          "candidate_over_baseline": 0.9999938764593163
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.08236126229166985,
+          "candidate_median_seconds": 0.08274410665035248,
+          "candidate_over_baseline": 1.004648354675853
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.03424685075879097,
+          "candidate_median_seconds": 0.034254394471645355,
+          "candidate_over_baseline": 1.0002202746438649
+        },
+        "reset": {
+          "baseline_median_seconds": 0.11503539606928825,
+          "candidate_median_seconds": 0.11479632183909416,
+          "candidate_over_baseline": 0.9979217333241492
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.01650334894657135,
+          "candidate_median_seconds": 0.01650715246796608,
+          "candidate_over_baseline": 1.0002304696705526
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.033812761306762695,
+          "candidate_median_seconds": 0.033800557255744934,
+          "candidate_over_baseline": 0.9996390696723334
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cuda",
+      "method": "pbe-rks",
+      "forces": true,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "2a81df633965bc80dbe33265c4caccdc3289c0f2637602f90d8d1d05f0c4bc90",
+      "candidate_library_sha256": "81425696aea52ebb6b994f8128dc111a132146635382be7db9489d8c880d5af4",
+      "candidate_slurm_job_id": "7650",
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        {
+          "setup_h2d_bytes": 10549,
+          "density_h2d_bytes": 96,
+          "scalar_d2h_bytes": 1692,
+          "matrix_d2h_bytes": 864,
+          "synchronizations": 689,
+          "iterations": 11,
+          "occupation_stabilized_proposals": 0
+        },
+        {
+          "setup_h2d_bytes": 7023,
+          "density_h2d_bytes": 16,
+          "scalar_d2h_bytes": 1332,
+          "matrix_d2h_bytes": 232,
+          "synchronizations": 139,
+          "iterations": 9,
+          "occupation_stabilized_proposals": 0
+        }
+      ],
+      "candidate_native_ks_transport": [
+        {
+          "setup_h2d_bytes": 10549,
+          "density_h2d_bytes": 96,
+          "scalar_d2h_bytes": 1692,
+          "matrix_d2h_bytes": 864,
+          "synchronizations": 689,
+          "iterations": 11,
+          "occupation_stabilized_proposals": 0
+        },
+        {
+          "setup_h2d_bytes": 7023,
+          "density_h2d_bytes": 16,
+          "scalar_d2h_bytes": 1332,
+          "matrix_d2h_bytes": 232,
+          "synchronizations": 139,
+          "iterations": 9,
+          "occupation_stabilized_proposals": 0
+        }
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 100,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 100,
+            "unmeasured_items": 5
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 100,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 100,
+            "unmeasured_items": 5
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 2.16624977812171,
+          "candidate_median_seconds": 2.0115111842751503,
+          "candidate_over_baseline": 0.928568443302633
+        },
+        "warm": {
+          "baseline_median_seconds": 2.0701949037611485,
+          "candidate_median_seconds": 1.9239107184112072,
+          "candidate_over_baseline": 0.9293379647084578
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 2.120869092643261,
+          "candidate_median_seconds": 1.969856385141611,
+          "candidate_over_baseline": 0.9287967805153683
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 2.0736032277345657,
+          "candidate_median_seconds": 1.9136813767254353,
+          "candidate_over_baseline": 0.9228773138129001
+        },
+        "reset": {
+          "baseline_median_seconds": 2.1510382778942585,
+          "candidate_median_seconds": 1.992983229458332,
+          "candidate_over_baseline": 0.92652150821293
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.05047649145126343,
+          "candidate_median_seconds": 0.050373248755931854,
+          "candidate_over_baseline": 0.9979546380431125
+        },
+        "recovery": {
+          "baseline_median_seconds": 2.0696019753813744,
+          "candidate_median_seconds": 1.9128669314086437,
+          "candidate_over_baseline": 0.9242680255251262
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cuda",
+      "method": "rhf",
+      "forces": false,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "2a81df633965bc80dbe33265c4caccdc3289c0f2637602f90d8d1d05f0c4bc90",
+      "candidate_library_sha256": "81425696aea52ebb6b994f8128dc111a132146635382be7db9489d8c880d5af4",
+      "candidate_slurm_job_id": "7650",
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 90,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 0,
+            "unmeasured_items": 70
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 90,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 0,
+            "unmeasured_items": 70
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.0030969232320785522,
+          "candidate_median_seconds": 0.0030710697174072266,
+          "candidate_over_baseline": 0.9916518709913343
+        },
+        "warm": {
+          "baseline_median_seconds": 0.0005389824509620667,
+          "candidate_median_seconds": 0.0005377866327762604,
+          "candidate_over_baseline": 0.9977813411481732
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.0014893487095832825,
+          "candidate_median_seconds": 0.001484416425228119,
+          "candidate_over_baseline": 0.9966882944716529
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.0005786754190921783,
+          "candidate_median_seconds": 0.0005747340619564056,
+          "candidate_over_baseline": 0.9931890019763482
+        },
+        "reset": {
+          "baseline_median_seconds": 0.0014875158667564392,
+          "candidate_median_seconds": 0.0014834441244602203,
+          "candidate_over_baseline": 0.9972627234524245
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.00039631128311157227,
+          "candidate_median_seconds": 0.0003944709897041321,
+          "candidate_over_baseline": 0.9953564445781321
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.0005048774182796478,
+          "candidate_median_seconds": 0.0005062706768512726,
+          "candidate_over_baseline": 1.0027595977185357
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    },
+    {
+      "device": "cuda",
+      "method": "rhf",
+      "forces": true,
+      "repeats": 5,
+      "baseline_native_source_identity": "d264ce773dd98ccb67b58b4715a196062c95f87ff7f4b507ae594090459900e2",
+      "candidate_native_source_identity": "83928f84fa383b99ac20dc8d5cf3580f7f87c51f7a1cccd778db6acd7a95d02a",
+      "baseline_library_sha256": "2a81df633965bc80dbe33265c4caccdc3289c0f2637602f90d8d1d05f0c4bc90",
+      "candidate_library_sha256": "81425696aea52ebb6b994f8128dc111a132146635382be7db9489d8c880d5af4",
+      "candidate_slurm_job_id": "7650",
+      "max_absolute_energy_difference": 0.0,
+      "max_absolute_force_difference": 0.0,
+      "iteration_fock_and_warm_seed_counts_equal": true,
+      "cumulative_native_ks_transport_equal": true,
+      "baseline_native_ks_transport": [
+        null,
+        null
+      ],
+      "candidate_native_ks_transport": [
+        null,
+        null
+      ],
+      "semantic_work_totals": {
+        "baseline": {
+          "iterations": {
+            "measured_sum": 90,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 0,
+            "unmeasured_items": 70
+          }
+        },
+        "candidate": {
+          "iterations": {
+            "measured_sum": 90,
+            "unmeasured_items": 0
+          },
+          "fock_builds": {
+            "measured_sum": 0,
+            "unmeasured_items": 70
+          }
+        }
+      },
+      "timings": {
+        "cold": {
+          "baseline_median_seconds": 0.006958171725273132,
+          "candidate_median_seconds": 0.0068613700568675995,
+          "candidate_over_baseline": 0.9860880598772901
+        },
+        "warm": {
+          "baseline_median_seconds": 0.0030723251402378082,
+          "candidate_median_seconds": 0.003077954053878784,
+          "candidate_over_baseline": 1.0018321347461747
+        },
+        "changed_geometry": {
+          "baseline_median_seconds": 0.0052229128777980804,
+          "candidate_median_seconds": 0.005210701376199722,
+          "candidate_over_baseline": 0.9976619365698655
+        },
+        "changed_replay": {
+          "baseline_median_seconds": 0.0030927658081054688,
+          "candidate_median_seconds": 0.0030836090445518494,
+          "candidate_over_baseline": 0.9970392961763799
+        },
+        "reset": {
+          "baseline_median_seconds": 0.0051726289093494415,
+          "candidate_median_seconds": 0.005159154534339905,
+          "candidate_over_baseline": 0.9973950625019355
+        },
+        "ragged_failure": {
+          "baseline_median_seconds": 0.0012179762125015259,
+          "candidate_median_seconds": 0.0012242607772350311,
+          "candidate_over_baseline": 1.0051598419320504
+        },
+        "recovery": {
+          "baseline_median_seconds": 0.0030467547476291656,
+          "candidate_median_seconds": 0.0030532926321029663,
+          "candidate_over_baseline": 1.0021458519032056
+        }
+      },
+      "unmeasured": [
+        "full host heap",
+        "vendor-internal allocations",
+        "non-KS native transfer/work counts"
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "source": "profile-baseline-pbe-rks.sqlite",
+      "CUPTI_ACTIVITY_KIND_KERNEL": 51572,
+      "CUPTI_ACTIVITY_KIND_MEMCPY": 5294,
+      "CUPTI_ACTIVITY_KIND_MEMSET": 7690,
+      "transfers_by_kind": [
+        [
+          1,
+          872,
+          204112
+        ],
+        [
+          2,
+          3970,
+          12440416
+        ],
+        [
+          8,
+          452,
+          15486256
+        ]
+      ],
+      "runtime_calls": {
+        "cuGetProcAddress_v2": 838,
+        "cuInit": 4,
+        "cuKernelGetFunction": 4104,
+        "cuLaunchKernel": 4104,
+        "cuLibraryGetKernel": 16,
+        "cuLibraryLoadData": 15,
+        "cuModuleGetLoadingMode": 3,
+        "cudaDeviceSynchronize_v3020": 96,
+        "cudaEventCreateWithFlags_v3020": 432,
+        "cudaEventCreate_v3020": 192,
+        "cudaEventDestroy_v3020": 624,
+        "cudaEventRecord_v3020": 100,
+        "cudaEventSynchronize_v3020": 50,
+        "cudaFree_v3020": 810,
+        "cudaGetDeviceProperties_v2_v12000": 96,
+        "cudaGetDriverEntryPoint_v11030": 2,
+        "cudaLaunchKernel_v7000": 47468,
+        "cudaMalloc_v3020": 784,
+        "cudaMemGetInfo_v3020": 220,
+        "cudaMemcpyAsync_v3020": 4866,
+        "cudaMemcpy_v3020": 428,
+        "cudaMemsetAsync_v3020": 7690,
+        "cudaStreamCreateWithFlags_v5000": 72,
+        "cudaStreamDestroy_v5050": 72,
+        "cudaStreamIsCapturing_v10000": 4388,
+        "cudaStreamSynchronize_v3020": 2258
+      },
+      "memory_event_tables": [
+        "CUDA_GPU_MEMORY_USAGE_EVENTS",
+        "ENUM_ETW_MEMORY_TRANSFER_TYPE"
+      ],
+      "observed_address_liveness_peak_bytes_by_kind": {
+        "Device": 19458892,
+        "Device Static": 119222
+      },
+      "observed_end_live_bytes_by_kind": {
+        "Device": 0,
+        "Device Static": 119222
+      },
+      "unpaired_deallocation_events": 0,
+      "duplicate_allocation_events": 0,
+      "reported_pool_peak_sizes_bytes": [],
+      "memory_scope": "simultaneously live traced CUDA allocation addresses; pool backing retention reported separately, not added to aliases/requests; static allocations live until process/context destruction; host, untraced vendor/driver internals are unknown",
+      "sqlite_sha256": "a86b187c973b4b1dcc592e2ce0988fc57144f0dd9c5c0da0c5db5bbac35d40eb"
+    },
+    {
+      "source": "profile-baseline-rhf.sqlite",
+      "CUPTI_ACTIVITY_KIND_KERNEL": 610,
+      "CUPTI_ACTIVITY_KIND_MEMCPY": 412,
+      "CUPTI_ACTIVITY_KIND_MEMSET": 68,
+      "transfers_by_kind": [
+        [
+          1,
+          194,
+          2742
+        ],
+        [
+          2,
+          218,
+          2210
+        ]
+      ],
+      "runtime_calls": {
+        "cuModuleGetLoadingMode": 1,
+        "cudaFreeAsync_v11020": 8,
+        "cudaFree_v3020": 2,
+        "cudaGraphDestroy_v10000": 4,
+        "cudaGraphExecDestroy_v10000": 4,
+        "cudaGraphInstantiate_v12000": 4,
+        "cudaGraphLaunch_v10000": 26,
+        "cudaGraphUpload_v10000": 4,
+        "cudaLaunchKernel_v7000": 694,
+        "cudaMallocAsync_v11020": 8,
+        "cudaMemcpyAsync_v3020": 642,
+        "cudaMemsetAsync_v3020": 68,
+        "cudaStreamBeginCapture_v10000": 4,
+        "cudaStreamCreateWithFlags_v5000": 4,
+        "cudaStreamDestroy_v5050": 4,
+        "cudaStreamEndCapture_v10000": 4,
+        "cudaStreamSynchronize_v3020": 42
+      },
+      "memory_event_tables": [
+        "CUDA_GPU_MEMORY_POOL_EVENTS",
+        "CUDA_GPU_MEMORY_USAGE_EVENTS",
+        "ENUM_ETW_MEMORY_TRANSFER_TYPE"
+      ],
+      "observed_address_liveness_peak_bytes_by_kind": {
+        "Device": 6792,
+        "Device Static": 135166
+      },
+      "observed_end_live_bytes_by_kind": {
+        "Device": 0,
+        "Device Static": 135166
+      },
+      "unpaired_deallocation_events": 0,
+      "duplicate_allocation_events": 0,
+      "reported_pool_peak_sizes_bytes": [
+        33554432
+      ],
+      "memory_scope": "simultaneously live traced CUDA allocation addresses; pool backing retention reported separately, not added to aliases/requests; static allocations live until process/context destruction; host, untraced vendor/driver internals are unknown",
+      "sqlite_sha256": "b0d7d346802e0f50d1efc22c8ba88358ec4569fbf1c338785b3fc1671dbe584b"
+    },
+    {
+      "source": "profile-candidate-pbe-rks.sqlite",
+      "CUPTI_ACTIVITY_KIND_KERNEL": 51572,
+      "CUPTI_ACTIVITY_KIND_MEMCPY": 5294,
+      "CUPTI_ACTIVITY_KIND_MEMSET": 7690,
+      "transfers_by_kind": [
+        [
+          1,
+          872,
+          204112
+        ],
+        [
+          2,
+          3970,
+          12440416
+        ],
+        [
+          8,
+          452,
+          15486256
+        ]
+      ],
+      "runtime_calls": {
+        "cuGetProcAddress_v2": 838,
+        "cuInit": 4,
+        "cuKernelGetFunction": 4104,
+        "cuLaunchKernel": 4104,
+        "cuLibraryGetKernel": 16,
+        "cuLibraryLoadData": 15,
+        "cuModuleGetLoadingMode": 3,
+        "cudaDeviceSynchronize_v3020": 96,
+        "cudaEventCreateWithFlags_v3020": 432,
+        "cudaEventCreate_v3020": 192,
+        "cudaEventDestroy_v3020": 624,
+        "cudaEventRecord_v3020": 100,
+        "cudaEventSynchronize_v3020": 50,
+        "cudaFree_v3020": 810,
+        "cudaGetDeviceProperties_v2_v12000": 96,
+        "cudaGetDriverEntryPoint_v11030": 2,
+        "cudaLaunchKernel_v7000": 47468,
+        "cudaMalloc_v3020": 784,
+        "cudaMemGetInfo_v3020": 220,
+        "cudaMemcpyAsync_v3020": 4866,
+        "cudaMemcpy_v3020": 428,
+        "cudaMemsetAsync_v3020": 7690,
+        "cudaStreamCreateWithFlags_v5000": 72,
+        "cudaStreamDestroy_v5050": 72,
+        "cudaStreamIsCapturing_v10000": 4388,
+        "cudaStreamSynchronize_v3020": 2258
+      },
+      "memory_event_tables": [
+        "CUDA_GPU_MEMORY_USAGE_EVENTS",
+        "ENUM_ETW_MEMORY_TRANSFER_TYPE"
+      ],
+      "observed_address_liveness_peak_bytes_by_kind": {
+        "Device": 19458892,
+        "Device Static": 119222
+      },
+      "observed_end_live_bytes_by_kind": {
+        "Device": 0,
+        "Device Static": 119222
+      },
+      "unpaired_deallocation_events": 0,
+      "duplicate_allocation_events": 0,
+      "reported_pool_peak_sizes_bytes": [],
+      "memory_scope": "simultaneously live traced CUDA allocation addresses; pool backing retention reported separately, not added to aliases/requests; static allocations live until process/context destruction; host, untraced vendor/driver internals are unknown",
+      "sqlite_sha256": "26c41de096118fbfee7448ccbd6daaf6da070479160aa7fc5c67ec95c3eab919"
+    },
+    {
+      "source": "profile-candidate-rhf.sqlite",
+      "CUPTI_ACTIVITY_KIND_KERNEL": 610,
+      "CUPTI_ACTIVITY_KIND_MEMCPY": 412,
+      "CUPTI_ACTIVITY_KIND_MEMSET": 68,
+      "transfers_by_kind": [
+        [
+          1,
+          194,
+          2742
+        ],
+        [
+          2,
+          218,
+          2210
+        ]
+      ],
+      "runtime_calls": {
+        "cuModuleGetLoadingMode": 1,
+        "cudaFreeAsync_v11020": 8,
+        "cudaFree_v3020": 2,
+        "cudaGraphDestroy_v10000": 4,
+        "cudaGraphExecDestroy_v10000": 4,
+        "cudaGraphInstantiate_v12000": 4,
+        "cudaGraphLaunch_v10000": 26,
+        "cudaGraphUpload_v10000": 4,
+        "cudaLaunchKernel_v7000": 694,
+        "cudaMallocAsync_v11020": 8,
+        "cudaMemcpyAsync_v3020": 642,
+        "cudaMemsetAsync_v3020": 68,
+        "cudaStreamBeginCapture_v10000": 4,
+        "cudaStreamCreateWithFlags_v5000": 4,
+        "cudaStreamDestroy_v5050": 4,
+        "cudaStreamEndCapture_v10000": 4,
+        "cudaStreamSynchronize_v3020": 42
+      },
+      "memory_event_tables": [
+        "CUDA_GPU_MEMORY_POOL_EVENTS",
+        "CUDA_GPU_MEMORY_USAGE_EVENTS",
+        "ENUM_ETW_MEMORY_TRANSFER_TYPE"
+      ],
+      "observed_address_liveness_peak_bytes_by_kind": {
+        "Device": 6792,
+        "Device Static": 135166
+      },
+      "observed_end_live_bytes_by_kind": {
+        "Device": 0,
+        "Device Static": 135166
+      },
+      "unpaired_deallocation_events": 0,
+      "duplicate_allocation_events": 0,
+      "reported_pool_peak_sizes_bytes": [
+        33554432
+      ],
+      "memory_scope": "simultaneously live traced CUDA allocation addresses; pool backing retention reported separately, not added to aliases/requests; static allocations live until process/context destruction; host, untraced vendor/driver internals are unknown",
+      "sqlite_sha256": "e16240ff4daa5f60d473ba722da85d881e8cc69da5507562bf233c645e16f7cc"
+    }
+  ],
+  "timing_scope": "prepare/cold plus complete requested replay; Calculator construction and process/library startup are outside timed intervals",
+  "qualification_scope": "native endpoint gate plus original stationary CUDA/D3 artifact lease states; not full issue 933 closure",
+  "raw_artifact_sha256s": {
+    "baseline-cpu-pbe-rks-energy.json": "1171bfb88a6c084a96bd3e4ef0c86a58969e8b8d8b4dcb6732f9df361a589cb7",
+    "baseline-cpu-pbe-rks-force.json": "69071b6cd552d844d9c1ec31d8ea3260ab3933b54d2f4fb72167e5616ae45d38",
+    "baseline-cpu-rhf-energy.json": "15ca71511e29911e7ff57ecb899c141aeae5b57c45c736a4941e5c8711369892",
+    "baseline-cpu-rhf-force.json": "70a13fa248950ddc6eab20a4cd33939c0c305feb1f0c9a389ec707fea374eed0",
+    "baseline-cuda-pbe-rks-energy.json": "e59d229f2126d402a7ccf5e32e0c1a16d49c5c737858ef22c0e40edd18f53a6e",
+    "baseline-cuda-pbe-rks-force.json": "0024bdfe6bd62c15b6488dbbf9203907f424956802a8ec05c80d309c85f6f38a",
+    "baseline-cuda-rhf-energy.json": "25838c800821375de407f2bb20d85b379a777a4267e917fcdfc7f6f1a0459795",
+    "baseline-cuda-rhf-force.json": "2d20cfb3df7c6be1a6398ec0158c50a0c10a975904743dd1e4dd7bd7c5bdf97d",
+    "candidate-cpu-pbe-force-probe.json": "acc1b931fa6aa9b38339fcb7b888bc01ba7946361b87be37b98b428e4348e752",
+    "candidate-cpu-pbe-rks-energy.json": "0aba77a251098cd3b2f660591b325e221ed93c723d105583fe34ba63d6d49fa9",
+    "candidate-cpu-pbe-rks-force.json": "dc9a3ce122db5a3c7b28c9106c659083f5d8d1e452bdafc285d2f86a56a8d80c",
+    "candidate-cpu-rhf-energy.json": "6cf94e7d44910bbee20fb5ade0ea1aaa2aa4ee1221d7f89655ced6180cd14e1f",
+    "candidate-cpu-rhf-force-probe.json": "8fa65b2f17ab6430a14f0ff7d72c8035e10e0ef3fcfe21babe0e0232bc7a10cb",
+    "candidate-cpu-rhf-force.json": "d2fb3e6dfeb556d92737a2c74239e356c6659c85e16a607ff2fa644afd8610b6",
+    "candidate-cuda-pbe-rks-energy.json": "16cecf40c03fe9d987026aab423569e45e1639ca3c06c6dde69d1f2ea4826729",
+    "candidate-cuda-pbe-rks-force.json": "e7e57089c9d272cb945c1f43cf003caf6dde9e151a6c840c18ba568f55be2ed4",
+    "candidate-cuda-rhf-energy.json": "7f6090866e66d191906c8f92c26c2954a6900473a6991ff6553e3f844bfe9b95",
+    "candidate-cuda-rhf-force.json": "2c9d88bf4afa3cdc638ab8dd0411bbc01111fa6234ae339ddbb6e82538287b7e",
+    "cpu-source-matched-regression.log": "258637362b9281632406d25323615fde528073df1aa53dfda553f08159c7689f",
+    "cuda-existing-regression-final.log": "b213d0ae890afea07b051a65e9e309388686242b66e624f5364ae28daea7dfb9",
+    "cpu-last-focused.log": "3037ab8d1b0f8d8b6539f7012c25aa4f1fa9c3c02b0c013ac2cc021f317ee2af",
+    "baseline-existing-failures.log": "7a94bbfdc04e25d2017924060cbcc5ff805081553ce32ac2797f78c569788017",
+    "cuda-lifecycle-final.log": "57aa4496d804bdb4d6c8ddd8e6f4c663a0615211051e732fb8aa882363704c39",
+    "cpu-source-matched-ctest.log": "e251ab47980eaea53e7fa3d3d8ddd32465d3e07993a660235da4b0df7ef51de2",
+    "sanitizer-pbe-rks.log": "be43266a7d902f3876c503fc344bb7ca8b0dc750da7ca06ce64389b6b8a019db",
+    "sanitizer-rhf.log": "be43266a7d902f3876c503fc344bb7ca8b0dc750da7ca06ce64389b6b8a019db",
+    "docs-build.log": "f92af54eb59ee49903df56291de2e081ddb79fce481b18faeded28973b6a827b",
+    "prek-qualified.log": "2444f4fac96cffa7e6f107358d9ba45b950ab1c34eb6f54dae114bb48fb965e4",
+    "cuda-oracle-regression.log": "48c61e05bd0237e3882bd38b3659fbad26cc3ed5031c7c00a8fca3e6cd0c2b44"
+  },
+  "validation": {
+    "cpu_native_ctests": {
+      "passed": 2
+    },
+    "cpu_source_matched_regression": {
+      "passed": 172,
+      "skipped": 53
+    },
+    "cpu_final_focused": {
+      "passed": 8,
+      "skipped": 5
+    },
+    "real_cuda_lifecycle_and_artifact_contract": {
+      "passed": 21,
+      "slurm_job_id": "7650"
+    },
+    "candidate_existing_cuda_regression": {
+      "passed": 193,
+      "failed": 2,
+      "skipped": 3
+    },
+    "baseline_selected_existing_failures": {
+      "passed": 4,
+      "failed": 2,
+      "deselected": 29
+    },
+    "baseline_failures": [
+      "test_open_shell_large_solver_ragged_replay_and_failure[cuda-pbe-uks]",
+      "test_cuda_df_common_ledger_preserves_factor_differential[recomputed-805316952]"
+    ],
+    "sanitizer": {
+      "rhf": {
+        "errors": 0,
+        "leaked_bytes": 0
+      },
+      "pbe-rks": {
+        "errors": 0,
+        "leaked_bytes": 0
+      }
+    },
+    "documentation": {
+      "sphinx_warnings_as_errors": "passed",
+      "tests_passed": 19,
+      "subtests_passed": 60
+    },
+    "pre_commit_all_files": "passed"
+  },
+  "limits": [
+    "H2/He endpoints only; no broad performance/default-promotion claim",
+    "CPU Direct-KS forces retain existing JIT consumers outside the native gate; CPU force AOT was off in both builds",
+    "unmeasured memory/work scopes remain unknown, not zero",
+    "two baseline-reproduced regression failures prevent a fully green suite",
+    "original failed Slurm 7647 setup/test receipt retained locally; no device qualification inferred from compilation"
+  ],
+  "slurm": {
+    "initial_job_id": "7647",
+    "qualified_job_id": "7650",
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:30:00",
+    "cuda_visible_devices": "2",
+    "visibility_preserved": true,
+    "driver_version": "580.95.05"
+  },
+  "builds": {
+    "type": "Release",
+    "cuda_toolkit": "12.9",
+    "cuda_architecture": "sm_120",
+    "cmake_compiler_launcher": "ccache 4.5.1",
+    "runtime_compiler_cache_verified_on_node1": "sccache 0.16.0",
+    "tests_enabled": true,
+    "cpu_stationary_force_aot_enabled": false,
+    "stationary_cuda_profiles": [
+      "lda_rks",
+      "lda_uks",
+      "pbe_rks",
+      "pbe_uks"
+    ],
+    "integral_aot_shells_enabled": false
+  }
+}

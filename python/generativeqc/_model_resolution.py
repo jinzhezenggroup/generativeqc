@@ -21,6 +21,8 @@ from .basis import BasisProvenance, BasisSet, BasisShell, ElementBasis, load_bas
 from .elements import checked_integer
 from .profiles import canonical_hash
 
+_BUNDLED_BASIS_SOURCE = "generativeqc/data/basis_pack.json; Basis Set Exchange"
+
 
 @lru_cache(maxsize=1)
 def _basis_pack() -> dict[str, object]:
@@ -102,7 +104,7 @@ def _named_basis_record(name: typing.Any, representation: typing.Any) -> typing.
         canonical,
         tuple(elements),
         BasisProvenance(
-            "generativeqc/data/basis_pack.json; Basis Set Exchange",
+            _BUNDLED_BASIS_SOURCE,
             str(pack["source"]),
             "BSD-3-Clause",
             canonical_hash(pack),
@@ -140,6 +142,25 @@ def snapshot_basis(basis: typing.Any, representation: typing.Any = None) -> typi
     )
 
 
+def _bundled_basis_name(basis: typing.Any) -> str | None:
+    """Recognize an exact bundled snapshot, never a same-name custom basis.
+
+    Full record identity includes decimals, contractions, representation and
+    provenance. Native execution additionally checks the source-pack checksum;
+    recognition alone must not authorize a mismatched installed catalog.
+    """
+    if (
+        not isinstance(basis, BasisSet)
+        or basis.provenance.source != _BUNDLED_BASIS_SOURCE
+    ):
+        return None
+    try:
+        bundled = _named_basis_record(basis.name, basis.representation)
+    except NotImplementedError:
+        return None
+    return bundled.name if basis.identity == bundled.identity else None
+
+
 @dataclass(frozen=True)
 class ModelResolutionInput:
     """Native-free inputs needed to construct a :class:`ResolvedModel`."""
@@ -164,6 +185,8 @@ def resolve_model_identity(request: ModelResolutionInput) -> typing.Any:
         _method_manifest.METHOD_RCCSD,
         _method_manifest.METHOD_RCCSD_T,
         _method_manifest.METHOD_DF_RCCSD_T,
+        _method_manifest.METHOD_UCCSD,
+        _method_manifest.METHOD_UCCSD_T,
     ):
         raise NotImplementedError("accuracy model is unavailable for this method")
     orbital = request.basis_metadata["orbital"]

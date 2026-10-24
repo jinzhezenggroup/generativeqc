@@ -1,0 +1,605 @@
+{
+  "schema": "generativeqc.paper-evidence-map.v1",
+  "scope": "Incremental CPU/offline historical index; not the final H100 report",
+  "parent_issues": {
+    "2724": "OPEN",
+    "2739": "OPEN"
+  },
+  "snapshot_upstream": "72e0a7e5a011592428b5625acdfa6f19168645ac",
+  "protocol_adapter": {
+    "owner_issue": 2725,
+    "path": "benchmarks/results/h100-paper-protocol-20261024/",
+    "schema_status": "FIXED_PREPARED_UNMERGED_CONTRACT",
+    "contract": "Read-only reference to the protocol owner prepared contract; not upstream-delivered or execution/scientific acceptance. HF old-manifest comparability gaps remain unchanged.",
+    "schema": "generativeqc.h100-paper-protocol.v1",
+    "attempt_schema": "generativeqc.h100-paper-attempt.v1",
+    "field_adapter": {
+      "row_identity": "cells[].id",
+      "input": "cells[].input",
+      "input_sha256": "cells[].input_sha256",
+      "arms": "cells[].arms",
+      "source": "sources",
+      "reference": "references",
+      "process_key": "(cell, arm, repeat); each retry has its own attempt id",
+      "unavailable": "null"
+    },
+    "execution_authority": false,
+    "commit": "df5c44a81c5d73210a8d2f7f09ba4930d7f67210",
+    "manifest_path": "benchmarks/results/h100-paper-protocol-20261024/manifest.json",
+    "manifest_bytes": 69646,
+    "manifest_sha256": "dd96c17e702101d21352deb4f867ab0fbb7bce66700222d49fc67bbdef23185e",
+    "delivered": false,
+    "h100_qualified": false
+  },
+  "paper": {
+    "repository": "jinzhezenggroup/generativeqc-paper",
+    "commit": "294a0817a75f7bd2d66db49f24a35db42e015c40",
+    "archive": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+    "edited": false,
+    "results_anchors": [
+      "sections/results.tex:77-81",
+      "sections/results.tex:177-186",
+      "sections/results.tex:468-474",
+      "figures/scripts/results_cbs_cost.py"
+    ],
+    "freeze_status": "UNCHANGED",
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "git_blob": "659dbc905633cfdb2a4dbdb998bdea0d56ac7c8d"
+      },
+      {
+        "path": "notes/section_workflow.md",
+        "git_blob": "5320d745f58f69bb02610fa179684d4b3106983f"
+      },
+      {
+        "path": "notes/claims_evidence.md",
+        "git_blob": "029eab34dbd7549d36ee2a9107888caebdbf5be0"
+      },
+      {
+        "path": "sections/results.tex",
+        "git_blob": "8ca2346629b75327b83783cd22f16bfa2038b43c"
+      },
+      {
+        "path": "figures/scripts/results_cbs_cost.py",
+        "git_blob": "94205afcddf1b22f4a5a80d5baf66999a6dd81f0"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "claim": "A6",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 85,
+      "frozen_text": "| A6 | 〔獨立〕C2 乙烷的組分與複合能量，以及沿一個歸一化方向的力投影，都與重新收斂的 PySCF 一致 | A | `cbs-fast-memory-20261021/timings.md@7522994` L81（Standard：max ΔE 3.965e-12 Eh，max directional error 5.454e-9 Eh/Bohr）、L121（Fast：6.290e-10 Eh，5.416e-9 Eh/Bohr）；README L83–85。Standard 門檻為 5e-8 Eh 與 5e-6 Eh/Bohr。Fast 的複合門檻為 1e-5 Eh、約 1.46969e-4 Eh/Bohr，各組分為約 2.38273e-6 Eh、3.50188e-5 Eh/Bohr；其實測誤差也低於 Standard 門檻（`benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994`，`points` 與 `fast.points` 中 carbon=2 的 `checks[].component_limits`）。兩個步長 1e-4、3e-5 Bohr（`benchmarks/results/readme-cbs-20261013/README.md@7522994` L123–126）；2026-10-22 審稿勘誤 | 有證據 | 只覆蓋 C2；是方向投影，不是全力向量（timings L58） |",
+      "evidence": [
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "Retain the frozen C2 directional result with its original scope. Exact original displaced-energy/driver recovery remains unavailable (#2705); this slice does not requalify C2."
+    },
+    {
+      "claim": "A7",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 86,
+      "frozen_text": "| A7 | 〔獨立〕水分子在兩種 DF 模型、原始和位移幾何下，全力向量都與 PySCF 重新收斂的中心差分一致 | A | `cbs-fast-memory-20261021/README.md@7522994` L87–94：20 個完整端點；最大複合誤差：能量 6.293e-9 Eh，最大力 3.886e-8 Eh/Bohr，RMS 2.422e-8 Eh/Bohr；步長 3e-5 Bohr | 有證據 | 基組對是 STO-3G/def2-SVP，屬代數測試，不是物理 CBS 基組序列；只證明組合與導數的實現正確 |",
+      "evidence": [
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "cpu",
+          "locator": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz@1c7a3e969e357042b91f6452fb8b6b227bb70e8d"
+        },
+        {
+          "family": "cpu",
+          "locator": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz@1c7a3e969e357042b91f6452fb8b6b227bb70e8d"
+        }
+      ],
+      "proposed_wording": "Retain the frozen synthetic water DF algebra validation. It does not validate a physical CBS limit and is separate from the conventional CPU H2/water slice."
+    },
+    {
+      "claim": "A9",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 88,
+      "frozen_text": "| A9 | （不利）C1、C3–C7 沒有獨立精度驗證 | A | `cbs-fast-memory-20261021/timings.md@7522994` L62–68 標 \"unchecked ‡\"；README L85：\"Independent full-vector alkane coverage is not claimed for the other sizes\" | 需補數據 | 至少要補：C3–C7 的能量與 PySCF（同一 RI-JK/JKFIT 模型）比較；再選一個較大的烷烃做方向或全向量力檢查。補實驗 issue：jinzhezenggroup/generativeqc#2679 |",
+      "evidence": [
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/inputs.json@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C1.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C3.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C4.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C5.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C6.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "energy",
+          "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C7.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+        },
+        {
+          "family": "forces",
+          "locator": "benchmarks/results/cbs-independent-forces-20261024/inputs.json.xz@594343670cfdea574e5b1c6821b51165ce004f97"
+        },
+        {
+          "family": "forces",
+          "locator": "benchmarks/results/cbs-independent-forces-20261024/receipts.json.xz@594343670cfdea574e5b1c6821b51165ce004f97"
+        }
+      ],
+      "proposed_wording": "For the frozen RTX 5090 native cohort, independent PySCF energies now cover C1 and C3-C7 in both policies; C4 and C7 additionally pass one directional projection at two steps and translation controls. Full-vector alkane qualification remains unavailable."
+    },
+    {
+      "claim": "C5",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 131,
+      "frozen_text": "| C5 | Direct ωB97M-V、96 原子：warm 加速 3.74×（Standard）、3.96×（Fast）；cold 加速 1.16×、1.30× | C | `readme-repaired-20261021/README.md@7522994` L22–23；`timings.md@7522994` L196–198：warm 32.703／30.848 vs 122.178 s；cold 326.516／291.151 vs 378.663 s | 有證據 | warm 是同一幾何、從各自的 cold 密度重新開始；不代表幾何優化或 MD 中每一步的性能 |",
+      "evidence": [
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "Retain the frozen RTX 5090 Direct WB97M-V cold/warm observations and their original definitions. No accepted H100 comparison has been imported."
+    },
+    {
+      "claim": "C7",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 133,
+      "frozen_text": "| C7 | （不利）DF ωB97M-V 的 cold 在 48 和 96 原子時慢於 GPU4PySCF | C | `timings.md@7522994` L100–102：96 原子 cold 729.892／716.594 vs 385.670 s（0.53×、0.54×）；本表計算：48 原子 0.49×、0.50× | 有證據 | — |",
+      "evidence": [
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "Retain the adverse frozen RTX 5090 DF WB97M-V observations. The planned H100 Direct WB97M-V cells cannot update this DF claim."
+    },
+    {
+      "claim": "C16",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 142,
+      "frozen_text": "| C16 | 硬件代表性 | C | HF/DFT 與 CBS 的數據都在 RTX 5090 上測得（`conditions.md@7522994` L31；`cbs-fast-memory-20261021/README.md@7522994` L124–127） | 需補數據 | 是否要在 H100/H200 等數據中心卡上補測（兩類卡的 FP64 性能差異需查官方規格） |",
+      "evidence": [
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_hfdft",
+          "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "All manuscript endpoint performance observations remain historical RTX 5090 observations. H100 core receipts are pending; this map establishes no second-device ranking."
+    },
+    {
+      "claim": "D2",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 151,
+      "frozen_text": "| D2 | 〔F≈S〕CBS Fast 相對 Standard 的耗時比：C1–C7 依次為 1.13／1.10／1.19／1.28／1.29／1.34／1.32×；C7 從 1447.813 s 降到 1093.350 s | D | `cbs-fast-memory-20261021/timings.md@7522994` L10–16（本表計算）；README L28–30（1.324×） | 有證據 | 每點一次觀測，沒有交錯重複；曲線本身不構成統計結論（`cbs-fast-lambda-20261021/README.md@7522994` L15–18）。CCSD 迭代：Standard 15–21 次，Fast 12–13 次；C7 的 Λ 時間 798.776 s 降到 513.805 s（timings L41–47、L80–86、L120–126） |",
+      "evidence": [
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        },
+        {
+          "family": "archive_cbs",
+          "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "Retain the archived Standard/Fast cold observations as single observations per point, without repeat variance or a hardware-only interpretation. Independent accuracy additions do not create new timings."
+    },
+    {
+      "claim": "D3",
+      "paper_path": "notes/claims_evidence.md",
+      "paper_line": 152,
+      "frozen_text": "| D3 | Λ 的 FP32 預收斂（對照消融）：C4 中位耗時 87.304 s 降到 80.513 s（−7.78%）；C6 一對 611.895 s 降到 539.205 s（−11.88%） | D | `benchmarks/results/cbs-fast-lambda-20261021/README.md@7522994` L19–36 | 有證據 | C4：同一張 n1 RTX 5090，每個變體三個新進程交替運行；範圍 87.204–87.351 s 與 80.453–80.718 s。〔F≈S〕六個結果都通過 Standard 對照。C6 只有一對。與 D2 的比較基準不同 |",
+      "evidence": [
+        {
+          "family": "archive_lambda",
+          "locator": "benchmarks/results/cbs-fast-lambda-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+        }
+      ],
+      "proposed_wording": "Retain the separately controlled historical Lambda ablation. H100 Standard/Fast total costs cannot establish Lambda causality; an accepted conditional #2736 study would be required."
+    }
+  ],
+  "historical_coverage": [
+    {
+      "id": "six-QM7-energy",
+      "family": "energy",
+      "independent_energy": "PASS",
+      "independent_directional": "UNAVAILABLE except separate C4/C7 slice",
+      "independent_full_vector": "UNAVAILABLE",
+      "internal_parity": "historical separate evidence",
+      "scope": "C1/C3/C4/C5/C6/C7; Standard/Fast; five constituents plus composite; source-frozen full RI-JK/JKFIT model, not true CBS limit accuracy"
+    },
+    {
+      "id": "C4-C7-directions",
+      "family": "forces",
+      "independent_energy": "reuses energy slice",
+      "independent_directional": "PASS",
+      "independent_full_vector": "UNAVAILABLE",
+      "scope": "one seed-709 normalized direction per molecule, two steps; no native displaced-energy check"
+    },
+    {
+      "id": "conventional-CPU",
+      "family": "cpu",
+      "independent_energy": "PASS",
+      "independent_full_vector": "PASS within fixture scope",
+      "scope": "physical H2 DZ/TZ and synthetic water algebra; conventional exact only; DF correlation/full RI-JK/CUDA/current-master UNAVAILABLE"
+    },
+    {
+      "id": "C2-original",
+      "family": "archive_cbs",
+      "independent_directional": "HISTORICALLY_REPORTED",
+      "exact_original_displaced_energy_and_driver_recovery": "UNAVAILABLE",
+      "follow_up_issue": 2705,
+      "scope": "Do not promote paper A6 to newly replayed acceptance"
+    },
+    {
+      "id": "water-DF-algebra",
+      "family": "archive_cbs",
+      "independent_full_vector": "HISTORICALLY_REPORTED",
+      "scope": "Paper A7 synthetic STO-3G/def2-SVP algebra; separate from physical CBS and the conventional CPU fixture"
+    },
+    {
+      "id": "VV10-paired-full-force",
+      "family": "archive_hfdft",
+      "exact_original_paired_full_force_recovery": "UNAVAILABLE",
+      "follow_up_issue": 2706
+    }
+  ],
+  "review_delivery": [
+    {
+      "pr": 2685,
+      "merge": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "head": "c856f9986a117cf41ea8d4bb3b0ff902bd201970",
+      "formal_latest_head_approval": "APPROVED",
+      "review": "PRR_kwDOUFEw6s8AAAABT9Z4dw",
+      "scope": "historical energy only"
+    },
+    {
+      "pr": 2721,
+      "merge": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "head": "9c04cf6effc55aa2a474a334fa00c8bb12c2cb05",
+      "formal_latest_head_approval": "ABSENT",
+      "latest_bot_review": "COMMENTED",
+      "process_exception": "Externally merged without formal APPROVED; numerical replay does not erase this exception"
+    },
+    {
+      "pr": 2719,
+      "merge": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "head": "dc11714a6793a78c98e3b8bcdc3c81e9b7719587",
+      "formal_latest_head_approval": "ABSENT",
+      "latest_bot_review": "COMMENTED",
+      "process_exception": "Externally merged without formal APPROVED; numerical replay does not erase this exception"
+    }
+  ],
+  "h100_core": [
+    {
+      "id": "C2-QM7-1",
+      "kind": "CBS",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "cbs-c2",
+      "protocol_input_sha256": "46866a8df4733f92e31f0dcf9ef78fd7239311069c698a4ef0555db5363a4a91",
+      "protocol_arms": [
+        "standard",
+        "fast"
+      ]
+    },
+    {
+      "id": "C4-QM7-48",
+      "kind": "CBS",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "cbs-c4",
+      "protocol_input_sha256": "d50f232d935c767033515d4a33aa0e16ce34e2d442a6acd5160a2b7fdd58a7f8",
+      "protocol_arms": [
+        "standard",
+        "fast"
+      ]
+    },
+    {
+      "id": "C7-QM7-5604",
+      "kind": "CBS",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "cbs-c7",
+      "protocol_input_sha256": "9a86fbaddb33c43f9e24f72ef0ddb459d065fddb15b0164bbbb96dac51acec5e",
+      "protocol_arms": [
+        "standard",
+        "fast"
+      ]
+    },
+    {
+      "id": "PBE0-Direct-water48",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water48-pbe0-direct",
+      "protocol_input_sha256": "0c7def283849733029bbf9cd9a91519f076e84d607cc6f7a18560a3fd6a7d4cd",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "PBE0-DF-water48",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water48-pbe0-df",
+      "protocol_input_sha256": "d33c923063a1c43fd2400afcaf094ec07f0fd460dd432864f15b06530d1031ff",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "WB97M-V-Direct-water48",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water48-wb97m-v-direct",
+      "protocol_input_sha256": "17d44df7afa9996b0abf7df72301bf4758eadbde9f4523ce321001d14d2596ea",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "r2SCAN-3c-DF-water48",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water48-r2scan-3c-df",
+      "protocol_input_sha256": "d0992c9786f0c9feb1415ec5225015ff5365a22efa72bbf51112c984b74bb80a",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "PBE0-Direct-water96",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water96-pbe0-direct",
+      "protocol_input_sha256": "4d3894fdcf030e42e4d2d0300dc5e3e085e7a20deed00b88bd6c426408a2db31",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "PBE0-DF-water96",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water96-pbe0-df",
+      "protocol_input_sha256": "bf8f1b2febfd7d9b2d04d5e632d17210c54bb58d4be9b57a95d4c89385c98fdb",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "WB97M-V-Direct-water96",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water96-wb97m-v-direct",
+      "protocol_input_sha256": "03c18d243ced417acc7ae0dc324f54145f1665febded4f50c62f8d73b1d4d0e3",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    },
+    {
+      "id": "r2SCAN-3c-DF-water96",
+      "kind": "HF/DFT",
+      "receipt_status": "UNAVAILABLE",
+      "qualification": "PENDING",
+      "counts": {
+        "attempted": null,
+        "complete": null,
+        "qualified": null,
+        "rejected": null,
+        "unavailable": null,
+        "imported": 0
+      },
+      "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+      "protocol_cell_id": "water96-r2scan-3c-df",
+      "protocol_input_sha256": "0b2105c17f77e4976cda41a8a15fd3887d586dc9df8db5322e1e72bcf5a25718",
+      "protocol_arms": [
+        "standard",
+        "fast",
+        "gpu4pyscf"
+      ]
+    }
+  ],
+  "optional": {
+    "2734": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+    "2735": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+    "2736": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+    "2737": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+    "2738": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE"
+  },
+  "limits": [
+    "No new native/oracle/H100/GPU calls",
+    "No hardware-only attribution or universal H100/H200 ranking",
+    "Historical single/cold and within-process warm are not independent repeat populations",
+    "Only qualified arm pairs may enter performance ratios; no reference-runtime denominator",
+    "CBS 32 GiB numeric budget is not a measured peak-memory claim",
+    "Core Direct WB97M-V does not update paper C7 DF WB97M-V",
+    "Standard/Fast timing alone does not establish H100 Lambda causality; conditional #2736 required",
+    "Failed initial C1 oracle and capacity/timeout histories remain in pinned raw capsules and PR records"
+  ]
+}

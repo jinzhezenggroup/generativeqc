@@ -54,6 +54,12 @@ symmetry violations, zero division and nonfinite intermediates fail explicitly.
 Unused feeds are allowed. Each named result owns independent host storage,
 including when two output names refer to the same logical tensor.
 
+Finite-domain `exp`, `log`, `sqrt` and rational `power` use the declared CUDA
+scalar type, including `expf`/`logf`/`sqrtf`/`powf` for float32. Ordinary and
+resident primal/JVP/VJP plans retain the same domain, overflow and error-recovery
+guards for both types. Float32 compilation keeps gradual underflow and rejects
+fast-math overrides; molecular RHF sources still require float64.
+
 A prepared plan owns its stream, cuBLAS handle, events and buffers. It does not
 assume that the existing `ContextState` owns an SCF stream. Execution requires
 the thread's current CUDA device to match the prepared device. Architecture
@@ -151,6 +157,20 @@ plan/artifact identity machinery. The ordinary schedule and earlier streaming
 schedule remain available. The candidate can recompute expensive virtual
 producers, so it is absent from the default search space. Complete endpoint
 qualification is required for each workload before use as a performance choice.
+
+`TensorSchedule(shared_streamed_reductions=True)` additionally requires
+`stream_reductions=True` and opts into reuse across proved independent sibling
+cooperative reductions. The compiler selects disjoint subgroups of at most four
+siblings from its shared-producer facts. Materialized inputs must already be
+ready, and early output writes must preserve every allocated storage lifetime.
+Unproved coordinates, overlapping storage, resource limits and prepared
+alternative reduction recipes retain the ordinary unfused execution.
+The generated lane accumulation and warp reduction order remain unchanged;
+cached producer scalars retain their original precision and checked arithmetic.
+Ordinary and resident entry points use the same launch partition. This option
+is disabled by default and absent from automatic schedule search. Static launch,
+work and shared-storage diagnostics describe the selected execution but do not
+constitute measured device counters or endpoint performance qualification.
 
 Generated kernels cover ordered addition, products, division/denominators,
 transpose, logical reshape, slice, gather (including repeated coordinates),

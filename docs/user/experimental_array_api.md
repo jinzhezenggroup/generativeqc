@@ -1,13 +1,30 @@
-# Experimental symbolic Array API
+# Experimental Array API
 
-GenerativeQC exposes a bounded Array-API-shaped frontend at
+GenerativeQC exposes an Array API **2025.12 CPU eager namespace** at
 `generativeqc.experimental.array_api`. The ordinary user path is deliberately
 shape/dtype based: users write array expressions and do not need to construct
 TensorIR `IndexSpace`, `Index`, or `TensorSpec` objects.
 
-This is an **experimental public preview**, not a Python Array API conformance
-claim. The surface may change between releases and symbolic arrays deliberately
-do not implement `__array_namespace__`.
+The public surface remains experimental. Concrete `Array` objects implement
+`__array_namespace__` and the core standard, including all thirteen standard
+dtypes, IEEE non-finite values, data-dependent shapes, and the `linalg` and `fft`
+extensions. Storage and eager execution are explicitly NumPy-backed CPU work,
+using `array-api-compat`; no GPU/native-compiler conformance is implied.
+
+`VibeArray` and `compile` remain a bounded scientific TensorIR frontend. Symbolic
+arrays deliberately do not advertise `__array_namespace__`: eager capabilities
+must not be mistaken for qualified compiler/native operations. See
+[the developer boundary](../developer/array_api_frontend.md) and
+[the reproducible conformance gate](../maintainer/array_api_conformance.md).
+
+```python
+from generativeqc.experimental import array_api as xp
+
+x = xp.asarray([1, 2, 3], dtype=xp.int32)
+assert x.__array_namespace__(api_version="2025.12") is xp
+assert x.device == "cpu"
+y = xp.where(x > 1, x, 0)
+```
 
 ## Ordinary use
 
@@ -31,14 +48,170 @@ O = np.eye(3, dtype=np.float64)
 value = observable(C, occupation, O)
 ```
 
-The namespace also works eagerly on its NumPy-backed reference arrays. The same
+The namespace also works eagerly on its NumPy-backed CPU arrays. The same
 function body can therefore be evaluated directly and then compiled without
 rewriting its array expressions. The first compiled call captures a
 specialization from the concrete argument shapes and dtypes, lowers the
-expression to canonical TensorIR, caches that program, and executes it through
-the independent reference interpreter. Use
+expression to canonical TensorIR, and compiles/caches a native CPU executable. Use
 `observable.lower(C, occupation, O)` when the TensorIR `Program` itself is
-needed for inspection, optimization, or a separate native compilation step.
+needed for inspection or optimization. Native CPU currently requires float64.
+`backend="reference"` explicitly selects the independent interpreter; unsupported
+native lowering never falls back to it implicitly.
+
+## Compile energies and derivatives
+
+Users do not need to construct derivative IR or call compiler-internal AD:
+
+```python
+@xp.compile(backend="cpu")
+def energy(density, hcore):
+    return xp.sum(density * hcore)
+
+density = xp.eye(2)
+hcore = xp.asarray([[-1.0, -0.2], [-0.2, -0.8]])
+energy_and_gradient = xp.value_and_grad(energy, argnums=0)
+value, density_gradient = energy_and_gradient(density, hcore)
+```
+
+`grad` returns only gradients. Integer `argnums` selects one positional parameter;
+a tuple returns gradients in that order, including with keyword-bound arguments.
+Negative positions are accepted. Both transforms require one scalar array
+output; use `vjp` for vector/dictionary outputs. Differentiability is inferred
+from `argnums`. `value_and_grad` compiles primal and reverse nodes as **one shared
+native endpoint**, not interpreter calls or finite differences.
+
+`xp.jvp(function, (x,), (direction,))` returns primal and directional derivative.
+`value, pullback = xp.vjp(function, x)` returns a reusable compiled pullback;
+`pullback(cotangent)` returns a tuple of input cotangents. Pullbacks snapshot
+their primal inputs, so later mutation cannot change the derivative. Call
+`pullback.close()` to release native owners. Compiled and gradient functions
+also provide `close()` and `compilation_info()`.
+
+For first-order fixed external masks on generic finite FP64 arrays, public JVP
+accepts an explicit opt-in and a matching tangent tuple with `None` at each
+non-differentiated primal:
+
+```python
+def selected_values(x, y, mask):
+    return xp.where(mask, x * x, y * y)
+
+value, direction = xp.jvp(
+    selected_values, (x, y, mask), (dx, dy, None),
+    allow_external_mask_where=True,
+)
+```
+
+This path is qualified for reference/materializing native CPU. `None` supplies
+no numerical tangent, including for the Boolean mask; omitted real directions
+are fixed parameters. At least one explicit real direction is required. Every
+supplied direction, including a disconnected one, must match its primal shape
+and dtype and remain finite. Requested disconnected FP32 or scientific-domain
+inputs reject before compilation. All live primal and forward derivative
+domains remain checked, including unselected branches and empty outputs. Results
+are detached, inherited native byte/work/node budgets apply, and temporary
+executors close on success or failure. Default JVP admission, computed predicates,
+Boolean AD, scientific annotations, FP32/mixed/packed selection, higher-order
+selection and CUDA admission remain unchanged.
+
+`xp.vjp` additionally accepts `argnums` (an integer or nonempty tuple). It returns
+only those input cotangents, always as a tuple in the requested order. Negative
+positions count from the supplied positional primals, rather than any omitted
+function defaults. Omitting `argnums` retains differentiation of all supplied
+primals.
+
+For fixed external masks, select only real arguments and explicitly enable
+`allow_external_mask_where=True`:
+
+```python
+def selected_values(x, y, mask):
+    return xp.where(mask, x * x, y * y)
+
+value, pullback = xp.vjp(
+    selected_values, x, y, mask,
+    argnums=(0, 1), allow_external_mask_where=True,
+)
+dx, dy = pullback(xp.ones_like(value))
+pullback.close()
+```
+
+This first-order opt-in is limited to generic finite FP64 arrays on reference or
+materializing native CPU. All primal arrays, including the Boolean mask and
+non-selected real inputs, belong to the forward snapshot. Mutating them after
+`vjp` does not change a pullback. Every output needs a matching finite cotangent,
+including empty/disconnected outputs. All live primal/forward domains and
+reference retained-byte and native byte/work/node gates remain enforced.
+Computed predicates, Boolean AD, scientific
+annotations, FP32/mixed/packed policies, higher-order selection and CUDA are
+unsupported; default `where` rejection is unchanged.
+
+For a condition computed from real comparisons, explicitly select
+`allow_comparison_where=True` on `jvp`, `vjp`, `grad` or `value_and_grad`:
+
+```python
+def piecewise_values(x, threshold):
+    return xp.where(x > threshold, x * x, 3 * x)
+
+value, direction = xp.jvp(
+    piecewise_values, (x, threshold), (dx, None),
+    allow_comparison_where=True,
+)
+```
+
+This is first-order differentiation of the real branches with the condition
+fixed at that call's primal value. It supports all six finite real comparisons,
+external selectors and their typed views on generic FP64 arrays, using reference
+or materializing native CPU execution. Only real branch edges carry derivatives;
+Boolean values and comparisons have no tangents/cotangents. Real computations
+used only by the predicate are evaluated and domain-checked as primals, without
+evaluating their derivatives. If a value is also used by a real branch, its
+branch derivative remains subject to the usual domain checks. All unselected
+real branches retain the existing primal and forward-derivative checks.
+
+At a switching point, the selected branch defines the reported directional and
+adjoint values; this is **not a claim of mathematical differentiability** at a
+jump or kink. Finite differences qualify points whose selectors do not switch
+under the chosen perturbation. VJP snapshots include predicate inputs, so later
+mutation does not change its selector. `None` JVP directions, `argnums`, retained
+byte/work/node budgets, detached outputs and executor lifetime follow the fixed
+external-mask contract above. The default policy and
+`allow_external_mask_where=True` retain their narrower admission. Boolean
+outputs/AD, scientific annotations, FP32/mixed/packed generated selection,
+higher-order selection and CUDA remain unsupported. Low-level reference
+`tensor.autodiff.jvp/vjp/dot_test` accepts the same explicit option on generic
+finite FP32/FP64 graphs; generated `linearize/transpose_program` accepts it on
+FP64 graphs.
+
+For quantum-chemistry equations, pass `specs={parameter: TensorSpec(...)}` to
+`compile` to retain AO, occupied, virtual, auxiliary and spin domains. Equal
+extents never authorize mixing scientific spaces. `einsum` accepts exact
+`Fraction` coefficients. The native RHF density derivative is checked against
+independent Fock contractions and finite differences in
+`tests/python/test_array_api_native_autodiff.py`.
+
+`backend="cuda"` uses the existing native TensorIR compiler/planner. `cuda_arch`
+and the Slurm-visible `device` are explicit. This interface stages host inputs
+to the GPU and returns detached CPU arrays; it does not create a GPU eager
+namespace or accept implicit foreign GPU conversions. CUDA failures never
+switch to CPU/reference. Real-device qualification requires scheduled execution;
+planner/source tests alone do not qualify a GPU endpoint.
+
+Native compilation requires a C++/CUDA toolchain and a verified compiler-cache
+launcher. `cache`, `max_bytes`, `max_work`, `max_nodes` and `compile_timeout`
+control artifacts, resources and finite compiler lifetime. Forward and
+derivative programs pass the same backend admission. Native CPU supports float64
+contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
+`sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
+The materializing CPU backend also accepts one-byte Boolean inputs, constants,
+shape/static-index views and six comparisons of finite float64 operands.
+It also executes forward `where` on genuine Boolean selectors and finite generic
+float64 branches, with explicit broadcasting and detached outputs.
+Programs containing Boolean data use a separate checked byte ABI; pure float64
+programs retain their existing ABI. FP32 comparison operands, Boolean AD,
+float32/mixed selection branches, nonfinite comparison semantics and native CUDA
+Boolean data remain
+unsupported. This subset does not establish complete Array API conformance.
+Other operations fail closed; full eager conformance does
+not imply full compiler coverage. Higher-order public transforms are unsupported.
 
 Inputs are non-differentiable by default. When the lowered program will be used
 with TensorIR AD, declare that contract explicitly:
@@ -54,7 +227,7 @@ program = norm2.lower(x)
 This avoids silently treating every runtime array as a differentiable scientific
 parameter while still giving the inferred public path a supported JVP/VJP route.
 
-The preview also supports finite, uniform array creation through `zeros`, `ones`,
+The compiled frontend supports finite, uniform array creation through `zeros`, `ones`,
 `full`, and `zeros_like`, `ones_like`, `full_like`. Inside `@xp.compile`,
 these constructors lower **statically known** shapes to a single exact TensorIR
 scalar constant and broadcast (no size-proportional literal payload):
@@ -65,37 +238,558 @@ def shifted(x):
     return x + xp.ones_like(x) * xp.full(x.shape, 0.25, dtype=x.dtype)
 ```
 
-Outside capture, creation executes eagerly on NumPy/CPU. `bool`, `float32` and
-`float64` dtypes with `device=None` are admitted: an explicit device request never
-triggers a hidden host transfer. Boolean `full`/`full_like` require a Boolean fill
+Inside capture, `bool`, `float32` and `float64` dtypes with `device=None` are
+admitted: an explicit device request never triggers a hidden host transfer.
+Boolean `full`/`full_like` require a Boolean fill
 value; `zeros` and `ones` produce false and true when `dtype=xp.bool` is explicit.
 `full(shape, integer)` without an explicit floating dtype is rejected rather than
-silently claiming the standard's unsupported default integer dtype. Scientific
+silently claiming an unsupported compiled integer dtype. Scientific
 AO/occupied/etc. arrays cannot be passed to `*_like` without their explicit
 TensorIR metadata.
 
-The current preview supports ordinary shape broadcasting for generic arrays,
+Outside capture, creation follows the full CPU eager standard, including integer
+and complex dtypes and explicit `device="cpu"`; these compiled restrictions do
+not apply. See [execution boundaries](#execution-boundaries).
+
+In both eager and captured programs, `.T` requires a two-dimensional matrix.
+Use `.mT` / `matrix_transpose` for the final two axes of a matrix stack, or
+`permute_dims` with an explicit permutation for arbitrary-rank arrays.
+
+The current compiled frontend supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
-dimension, and static indexing with integers, slices (including negative
+dimension, `tensordot` with static contraction counts or pairs of axis sequences,
+and `vecdot` with a static signed axis. These two contractions accept generic
+real float32/float64 arrays (with ordinary promotion), require equal contracted
+extents, and reuse TensorIR einsum. `vecdot` broadcasts only the remaining axes;
+`tensordot` retains left free axes followed by right free axes. Capture permits
+at most 52 distinct contraction labels; scientific index domains require explicit
+`einsum`. The frontend also supports static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
+Captured `positive(x)` and unary `+x` preserve float32/float64 values, signed
+zeros and scientific index metadata. Both reject Boolean arrays and integer
+control tensors; unary plus does not turn them into numeric data.
 `sum` and `mean` accept static axes, and generic arrays may use
 `keepdims=True` to retain reduced singleton axes. Shape utilities also include
 `broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
-`moveaxis` and `flip`. `expand_dims` accepts the 2025.12 multi-axis tuple
+`moveaxis`, `flip`, `roll` and `repeat`. `expand_dims` accepts the 2025.12 multi-axis tuple
 form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
-reshape, transpose, broadcast and gather semantics. Six elementwise comparisons
+reshape, transpose, broadcast and gather semantics.
+
+Captured `repeat` accepts a static nonnegative Python integer count and a signed
+axis, or `axis=None` to flatten in row-major order. Scalar inputs use `axis=None`.
+It composes reshape/broadcast without an elementwise static gather map; per-element
+count arrays are not admitted. Existing backend byte/work/node budgets still apply.
+
+Six elementwise comparisons
 (`equal`, `not_equal`, `greater`, `greater_equal`, `less`, `less_equal`, plus
 their Python operators) accept finite real operands and return genuine Boolean
 arrays. Generic comparison operands broadcast and promote within float32/float64;
 scientifically annotated operands must have identical domains. Boolean arrays
-support the shape/view operations listed above in both eager and captured paths,
-but remain excluded from floating arithmetic and reductions. Generic arrays accept
+support the shape/view operations listed above in captured programs,
+but remain excluded from compiled floating arithmetic and reductions. Generic arrays accept
 finite Python float literals as ordinary scalar values, so expressions such as
 `x + 0.5` have eager/compiled parity. The compiler records the exact binary value
-of that Python float. Negative-zero float literals are rejected because exact
+of that Python float. During capture, negative-zero float literals are rejected because exact
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
+
+### Captured products
+
+`xp.prod(x, axis=None, dtype=None, keepdims=False)` captures generic finite
+float32/float64 arrays using the existing TensorIR multiplication and static
+gather/reshape operations. Axes may be signed integers, unique tuples, `None`
+(all axes), or `()` (identity). Reduced zero extents produce the empty product
+1; zero extents on retained axes produce an empty output. `keepdims=True`
+retains reduced axes of length one. `dtype=None` preserves the input dtype;
+explicit `float32`/`float64` requests cast generic inputs before reduction.
+Scientific index annotations, spin, symmetry and compressed representations
+are outside this capture contract.
+
+Pairwise multiplication with separate odd tails gives a bounded static graph;
+no input is duplicated to pad an odd extent. Capture preflights gather positions,
+nodes, rounds and retained intermediate bytes before creating index maps.
+Backend byte/work/node budgets still apply to the complete program. Multiplication
+is polynomial, so existing first-order JVP/VJP rules remain valid at one or
+multiple zero factors without a comparison-selector opt-in or division by an
+input. Native execution is limited here to the existing materializing CPU FP64
+contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
+explicitly rejected. Higher derivatives, scientific endpoints and performance
+are outside this slice. Standard eager `prod` behavior is unchanged.
+
+The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
+
+### Captured variance
+
+`xp.var(x, axis=None, correction=0.0, keepdims=False)` captures generic finite
+float32/float64 arrays with their input dtype unchanged. It computes a centered
+two-pass variance: subtract the mean, square, sum and scale by `1/(M-correction)`.
+This avoids subtracting two large raw moments. Signed integer axes, unique
+tuples, `None`, scalar arrays and `()` are supported; `()` gives zero at every
+element. Empty retained dimensions give empty outputs. Scientific index, spin,
+symmetry and representation annotations are rejected before identity cases.
+
+Correction must be a finite static Python int or float, with a nonempty
+reduction, positive divisor and finite nonzero scaling coefficient in the input
+dtype. All executed intermediate values must remain finite. Nonpositive
+divisors and empty reductions are rejected during capture; standard eager
+NaN behavior remains available. No `dtype` keyword or `std` capture is added.
+Capture preflights all new buffers and nodes against a conservative 256 MiB
+retained-storage bound; complete-program backend byte/work/node gates remain.
+
+Existing first-order AD composes the centered derivative, including zero at
+constant inputs. This is the existing real-arithmetic AD convention, without a
+claim about classical derivatives of floating-point rounding. Opt-in native
+execution uses only the existing CPU FP64 contract. Public CUDA compile/lower,
+execution and AD entries reject this unqualified operation. Native FP32, higher
+derivatives, molecular endpoints and performance are outside this slice.
+
+The comparison target is [Array API 2025.12 var](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.var.html);
+this finite captured subset does not implement its full IEEE special cases.
+
+### Explicit reduction dtype
+
+Captured generic finite `sum` and `prod` accept `dtype=xp.float32` or
+`dtype=xp.float64`. The existing TensorIR cast converts each input element
+before arithmetic; casting only the result would have different precision and
+overflow behavior. `dtype=None` and explicit same-dtype requests preserve the
+existing graph without an extra cast. Empty sums/products retain identities
+0/1 in the requested dtype. Standard eager behavior is unchanged.
+
+Explicit dtype requests reject scientific index spaces, spin, symmetries and
+non-general representations, including same-dtype requests. `sum(dtype=None)`
+retains its existing scientific contract. Integer, Boolean and complex targets
+remain unsupported by capture. Nonfinite conversion or arithmetic results fail
+the existing finite contract. Conversion preflight includes the entire target
+buffer and reduction intermediates within 256 MiB before building gather
+positions; backend byte/node limits still apply.
+
+Reference execution supports both real dtypes. First-order AD uses the existing
+cast convention: convert tangents to the forward target dtype and cotangents
+back to the input dtype. This convention does not treat IEEE rounding as an
+everywhere differentiable function. Products retain zero-safe polynomial AD.
+Opt-in native CPU execution admits only the already supported float64 input,
+output and arithmetic; float32 inputs are not admitted by requesting float64
+output. Public explicit-dtype CUDA capture is rejected before native compilation
+or device work. Raw TensorIR primitive admission remains separate. These limits
+do not qualify native float32, CUDA, full IEEE semantics or full Array API
+conformance. The compiler capability report retains `array_api_version=None`.
+
+The precision contract follows [Array API 2025.12 sum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.sum.html)
+and the product specification linked above.
+The compiler continues to report `array_api_version=None`; the public eager
+namespace's existing standard discovery does not qualify capture conformance.
+
+## Generic native molecular method sources
+
+Use `xp.MolecularModel` to connect any **existing, supported** native
+`Calculator` method selector (such as `rhf`, `uhf`, or a qualified
+`pbe-rks`/`pbe0-rks` route) without writing a separate frontend or
+first-order TensorIR rule for each functional:
+
+```python
+pbe = xp.MolecularModel(("O", "H", "H"), method="pbe-rks",
+                        basis="sto-3g", backend="cpu")
+energy_grad = xp.value_and_grad(lambda coordinates: pbe(coordinates))
+value, gradient = energy_grad(coordinates)
+energy_grad.close()
+```
+
+`method` passes through the established native method/MethodIR resolution,
+using the native method's own analytic energy and force operators.
+`multiplicity`, `density_fitting` and `auxiliary_basis` are part of the
+immutable source identity; unknown or unsupported scientific combinations fail
+through the native capability/resource gate, without CPU or finite-difference
+fallback. This is an *interface generalization*, **not** evidence that all DFT
+functionals, ECPs, unrestricted or CC methods already provide qualified analytic
+nuclear gradients. Energy-only calls are allowed for energy-capable methods;
+`grad`/`value_and_grad` require the method's genuine analytic forces.
+The initial public method-neutral source remains host-staged FP64 and first
+order; higher-order implicit/response gradients are not inferred.
+
+### User-composed XC methods inside Array API
+
+A user may combine **already audited** XC components through the public
+`generativeqc.extensions` builders, then pass their canonical `MethodIR`
+directly to `xp.MolecularModel`. This uses the existing native SCF and,
+**only when qualified**, its analytic force. Explicit `KsOptions` may select
+the grid and tile schedule, but cannot replace the method's XC composition.
+
+```python
+from generativeqc import GridSpec, KsOptions
+from generativeqc.extensions import method, xc
+from generativeqc.experimental import array_api as xp
+
+functional = xc.compose(
+    "my-pbe50",
+    {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+    exact_exchange="1/2",
+)
+method_ir = method.compose("my-pbe50", xc=functional)
+model = xp.MolecularModel(
+    ("H", "H"), method=method_ir, basis="sto-3g", backend="cpu",
+    ks_options=KsOptions(grid=GridSpec()),
+)
+coordinates = xp.asarray(
+    [[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=xp.float64,
+)
+compiled = xp.compile(lambda positions: model(positions), backend="cpu")
+try:
+    energy = compiled(coordinates)
+finally:
+    compiled.close()
+```
+
+The MethodIR identity, not the custom label, determines source deduplication;
+grid/scheduling options are also included in the immutable source identity.
+The source passes the original MethodIR to `Calculator`; it does not
+reconstruct the science from the label. Unsupported methods, device routes
+and missing analytic-force support fail through the native capability gate,
+not through a silent fallback. For methods with qualified analytic forces,
+`xp.value_and_grad` reuses the existing first-order native-source AD path.
+
+This does **not** allow an arbitrary new formula in \(\rho,\sigma,\tau\)
+to run self-consistently. That separate compiler/SCF work is tracked in
+[XC expression-to-SCF #2330](https://github.com/jinzhezenggroup/generativeqc/issues/2330).
+
+### Diagnose small-endpoint overhead
+
+The opt-in environment switch
+`GENERATIVEQC_ARRAY_API_PROFILE=1` must be set **before constructing the
+compiled function**. `compiled.compilation_info()` then exposes
+`molecular_profile_ns` and `molecular_profile_counts`. The stages are
+`source_input_scan`, `source_geometry`, `source_calculator_lookup`,
+`source_native_singlepoint`, `source_result_publication`,
+`source_diagnostics`, `tensor_snapshot_binding`,
+`tensor_build_cold`, `molecular_dispatch`, and `tensor_execute`.
+`molecular_dispatch` includes its nested source stages, so do **not** sum all
+stage totals as if they were disjoint. Timings use CPU wall clocks around
+synchronous calls and are **not** CUDA-event/kernel measurements.
+
+For alternating complete energy-and-gradient endpoints with a separately
+subtracted cold profile:
+
+```bash
+python benchmarks/array_api_rhf_endpoint.py --backend cuda --molecule h2 \
+  --profile-molecular --repeats 10 --output /tmp/rhf-profile.json
+```
+
+This command still requires the documented bounded Slurm GPU allocation.
+`warm_phase_profile` reports the mean time per profiled warm call; profile
+sampling changes the measured timing and disables the ordinary 5% parity verdict.
+Run again without `--profile-molecular` for fair endpoint comparisons. Neither
+mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
+
+(differentiate-through-gaussian-integrals)=
+## Differentiate through Gaussian integrals
+
+Select `differentiation="integral-ad"` to differentiate the complete chain from
+Gaussian parameters to RHF/UHF total energy. This explicit FP64 path generates
+S, T, nuclear-attraction and ordered two-electron integrals, including primitive
+and contraction normalization. The shared native SCF solver consumes those
+actual values. Its stationary Lagrangian supplies cotangents to the generated
+integral pullback, including the overlap/Pulay and nuclear-repulsion terms.
+Coordinates, primitive exponents and raw contraction coefficients all carry
+first and second derivatives. Runtime execution requires neither PySCF nor finite
+differences and does not call `Calculator.singlepoint` or its force endpoint.
+
+```python
+import numpy as np
+from generativeqc.experimental import array_api as xp
+from generativeqc.experimental.integral_autodiff import IntegralRHF
+
+# The standalone owner exposes the named basis parameters and explicit budgets.
+owner = IntegralRHF(("H", "H"), basis="sto-3g")
+r = np.array([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=np.float64)
+alpha = owner.exponents.copy()
+c = owner.coefficients.copy()
+energy, gradient = owner.value_and_grad(r, exponents=alpha, coefficients=c)
+# gradient.coordinates, gradient.exponents, gradient.coefficients
+owner.close()
+
+model = xp.MolecularModel(
+    ("H", "H"), method="rhf", differentiation="integral-ad",
+)
+
+def loss(r, log_alpha, c):
+    energy = model(r, exponents=xp.exp(log_alpha), coefficients=c)
+    return xp.square(energy) + 0.01 * xp.sum(r * r)
+
+loss_and_grad = xp.value_and_grad(loss, argnums=(0, 1, 2))
+value, (dr, dlog_alpha, dc) = loss_and_grad(r, np.log(alpha), c)
+loss_and_grad.close()
+```
+
+`grad`, `value_and_grad`, JVP and snapshot VJP compose with the surrounding
+Array API expressions. Each new geometry or basis input causes a fresh SCF
+solve; reusable VJP pullbacks retain the forward inputs. Capture and `lower()`
+do not execute SCF or compile integrals. `jvp(grad(loss), primals, directions)`
+uses a quadratic source jet and the analytic coupled orbital response, including
+outer nonlinear geometry and basis transformations. The SCF iteration history
+is not differentiated. `jvp(value_and_grad(loss), ...)` also returns the energy
+and its directional derivative. Arbitrary nesting of `grad` and orders above
+two are unsupported. DF/KS/post-HF methods, ECPs and spherical bases are outside
+this integral-AD contract. The default `differentiation="native"`
+continues to use the existing method-specific analytic derivative endpoint and
+does not accept continuous basis parameters.
+
+Use `derivative_order=2` on a standalone owner to enable `integral_jvp`, `hvp`
+and `hessian`. Directions use an `IntegralGradient` record with one array for
+each continuous input. `hessian` orders its axes as flattened xyz, exponents,
+then raw coefficients; its `parameters` tuple can select a subset. Mixed
+blocks include normalization and orbital relaxation. Returned Hessians are not
+symmetrized to hide response errors.
+
+```python
+from generativeqc.experimental.integral_autodiff import IntegralGradient, IntegralUHF
+
+owner = IntegralUHF(("He", "H"), spin_multiplicity=2, derivative_order=2)
+direction = IntegralGradient(np.ones_like(r), np.zeros_like(owner.exponents),
+                             np.zeros_like(owner.coefficients))
+hv = owner.hvp(r, direction)
+hessian = owner.hessian(r, parameters=("coordinates",))
+owner.close()
+```
+
+Select `backend="cuda"` on the standalone owner or `MolecularModel` to use
+CUDA FP64 integral values/pullbacks, explicit-integral J/K and the shared CUDA
+eigensolver. SCF/DIIS and Krylov iteration control, compact stationary weights
+and response matrix algebra remain on the host. CUDA does not recompute a
+different set of integrals or retry with a CPU integral/Fock/eigen provider.
+Device is a visible ordinal (`device=0` by default); the standalone compiler
+accepts `cuda_arch="sm_120"` by default. CUDA execution requires a CUDA native
+library and NVCC for an artifact-cache miss. Use the scheduler for GPU tests.
+
+(integral-ad-values-and-ownership)=
+### Integral AD values and ownership
+
+Coordinates are finite float64 arrays of shape `(natoms, 3)` in Bohr. Exponents
+are strictly positive float64 arrays in inverse square Bohr; raw coefficients
+are finite signed float64 arrays. Both basis inputs have shape `(nprimitive,)`
+in shell order, then primitive order, as exposed by `owner.shells`. Zero raw
+coefficients remain differentiable, but an identically zero or numerically
+singular contraction is invalid. Normalization is part of the differentiated
+expression, so a common coefficient scale per shell is a null direction.
+Omitted basis inputs retain the named/custom basis values. Topology, atomic
+numbers, charge and angular momenta are fixed structural data.
+
+`IntegralHF`, `IntegralRHF` and `IntegralUHF` also accept an all-electron Cartesian `BasisSet` snapshot or a
+sequence of `generativeqc.Shell` records for a custom Cartesian basis. ECP and
+spherical metadata are rejected before expansion into primitive inputs.
+`integrals(...)` returns an `IntegralValues` record containing
+`overlap`, `hcore = T + V`, chemists' ordered `eri`, and scalar `nuclear`.
+Matrix shapes are `(nao, nao)` and ERI shape is `(nao, nao, nao, nao)`, with
+Cartesian CCA component order. `integral_vjp(coordinates, cotangents, ...)`
+accepts a record with the same layout and arbitrary finite float64 weights;
+there is no symmetry requirement on cotangents. It returns an `IntegralGradient`
+without an SCF solve. `energy(...)` evaluates only the primal HF endpoint.
+Energy is in Hartree; coordinate energy gradients are in Hartree/Bohr, and
+basis gradients are per corresponding raw input unit.
+
+Owner configuration is immutable. Calls copy input arrays before native
+execution. Returned value/gradient arrays are immutable owned snapshots that
+outlive `close()`. Later execution on a closed owner raises `RuntimeError`.
+Serialize execution and `close()` on a shared owner; independent owners may be
+used for independent calls.
+`diagnostics()` returns a detached record for the last successful energy call,
+including SCF convergence metrics, final physical residual, Fock-build count,
+primitive evaluation counts, and generated source/template identity. Array API
+`compilation_info()["molecular_calls"]` includes this record under `integral_ad`
+and reports zero native force-endpoint calls for this mode.
+
+(integral-ad-admission-and-resource-limits)=
+### Integral AD admission and resource limits
+
+This endpoint admits all-electron RHF and UHF with a positive electron count and
+compatible integer spin multiplicity, up to 256 atoms and 256 Cartesian AOs,
+subject to the tighter budgets below. `IntegralHF(method="uhf",
+spin_multiplicity=2, ...)` and `IntegralUHF(..., spin_multiplicity=2)` select a
+doublet; `MolecularModel` uses its existing `multiplicity=2` argument. The source algebra admits s/p/d/f/g components; this does not guarantee
+that a complete high-angular basis fits the symbolic or native compile budget.
+Molecular acceptance currently covers s/p bases; emitted primitive acceptance
+includes d/f/g one-electron components and mixed ERIs. Compact second-order
+tapes also pass an independent mixed `(gg|gg)` primitive gate and Boys F0..F18
+checks; this is not a qualification of a complete g-shell molecular endpoint.
+
+The standalone owners default to `max_bytes=64 << 20`, `max_work=100_000_000`,
+`compiler_work=5_000_000`, and a finite `compile_timeout=300` seconds. Primal ERIs
+are dense. The numeric-array bound is
+reported by `owner.numeric_peak_bytes`, including retained source/state copies,
+response workspace and, on CUDA, lane-private integral scratch and bounded
+solver workspace. It excludes
+Python/compiler memory and opaque library scratch, and is not a process-RSS
+claim. The work limit bounds both the forward and streamed pullback primitive
+evaluations, including attraction centers and nuclear pairs. No molecular
+coordinate-by-ERI Jacobian is stored. Symbolic interning work is separately
+bounded. Compilation uses the shared verified compiler-cache adapter and
+artifact cache; failures do not select a different scientific implementation.
+Full Hessian diagnostics aggregate the work of all columns. A failed column
+does not replace the last successful call's diagnostics with a partial receipt.
+
+`MolecularModel` uses these default integral budgets; its compiled tensor
+budgets independently constrain surrounding algebra. Use the standalone owner
+for custom integral budgets. Integral AD always uses unscreened integrals;
+`screening_tolerance=0` or the shared constructor default is accepted, while
+other screening values are rejected. `max_iterations` (at most 10000),
+`diis_history` (at most 32), and finite positive energy/density tolerances are
+honored. No KS/resource-budget override or density-fitting mode is accepted.
+
+Invalid shape/dtype/domain/resource inputs raise `ValueError`; invalid
+normalization, coincident nuclei or nonfinite integral arithmetic raise
+`ArithmeticError`. Native SCF nonconvergence, singular metric or failed final
+physical-stationarity checks raise `RuntimeError`. Compiler failures propagate.
+No new result or gradient is published on failure. Gradients describe a smooth
+converged HF stationary branch; this is not a guarantee of a unique/global
+minimum at electronic state crossings.
+
+Independent CPU acceptance uses pinned PySCF/libcint values and reconverged
+energy differences, including multiple step sizes, normalization null
+directions, arbitrary integral cotangents and nonlinear outer losses:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  python -m pytest -q tests/python/test_integral_autodiff.py \
+  tests/python/test_integral_parameter_ad.py tests/python/test_integral_autodiff_second.py \
+  tests/python/test_array_api_integral_ad.py
+```
+
+Real-device tests additionally exercise RHF/UHF integral JVP/VJP and joint HVPs,
+p-shell independent references, and the Array API CUDA composition. Point
+`GENERATIVEQC_LIBRARY` to a CUDA build and run them in a finite GPU allocation:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:15:00 env GENERATIVEQC_INTEGRAL_AD_CUDA_TEST=1 \
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
+  python -m pytest -q tests/python/test_integral_autodiff_cuda.py
+```
+
+## Compose native RHF energies with the unified molecular operator
+
+`MolecularModel` is a GenerativeQC extension, not a standard Array API function.
+Selecting `method="rhf"` binds the native all-electron closed-shell RHF solver
+and its complete analytic force endpoint. It composes inside ordinary captured
+Array API expressions:
+
+```python
+rhf = xp.MolecularModel(("O", "H", "H"), method="rhf", basis="sto-3g", backend="cpu")
+
+@xp.compile(backend="cpu")
+def energy(coordinates, strength):
+    separation = coordinates[1] - coordinates[2]
+    return rhf(coordinates) + strength * xp.sum(separation * separation)
+
+coordinates = xp.asarray(
+    [[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]],
+    dtype=xp.float64,
+)
+energy_and_gradient = xp.value_and_grad(energy, argnums=0)
+value, nuclear_gradient = energy_and_gradient(coordinates, xp.asarray(0.0))
+forces = -nuclear_gradient
+energy_and_gradient.close()
+energy.close()
+```
+
+Coordinates have shape `(number_of_nuclei, 3)` in **Bohr**, energy is total
+**Hartree**, and nuclear gradients/forces are **Hartree/Bohr**. These are full
+geometric derivatives, including orbital stationarity, basis/Pulay and nuclear
+repulsion contributions. They are **not** the density derivative/Fock test
+described earlier. Nonlinear surrounding energy expressions and compiled
+geometry transformations use the same first-order chain rule. `grad`, combined
+`value_and_grad`, JVP and snapshot VJP are supported. Changed geometries always
+run a new native endpoint; identical operator/geometry expressions within one
+capture share one source invocation. VJP replay uses the saved forward source
+and does not rerun SCF after the caller changes an input.
+
+The molecular method is an **explicit native source cut**. Capture records its
+settings and geometry subprogram without loading a native library or executing
+SCF. The derivative tape contains its local first-order jet; after AD lowering,
+runtime binds that jet exactly at the snapshot geometry, preserving the native
+energy without duplicate displacement arithmetic. TensorIR compiles the
+surrounding algebra and its chain rule; the native RHF driver still owns the
+solver and its analytic molecular derivative. This does not differentiate the
+SCF iteration history, implement arbitrary electronic methods, or add higher
+derivatives/response solvers. A molecular `lower()` result requires its public
+compiled owner's source bindings; it is not a standalone TensorIR executable
+with only the user's original inputs.
+
+Configuration requires a nonempty tuple of at most 256 nuclei, a valid
+method-specific electron/spin occupation, an admitted Gaussian basis, float64
+coordinates, finite positive tolerances and bounded iteration counts. Restricted
+RHF specifically requires a positive even electron count and singlet multiplicity.
+Scientifically annotated coordinates must use complete, spin-independent `atom`
+and `cartesian` index spaces; matching AO/orbital extents do not authorize a
+nuclear-coordinate binding. These domains survive native snapshots and AD.
+Density fitting, unrestricted methods and ECPs are admitted *only* when the
+selected native Calculator supports the exact requested basis, backend and
+analytic derivative; the generic interface does not create missing scientific
+capabilities. Nested molecular dependencies in geometry remain unsupported.
+Capture admits at most 16 distinct molecular sources. Native
+nonconvergence, basis/derivative/resource errors propagate without publication
+or fallback. `resource_budget` is the existing `ResourceBudget` for native method
+preflight; the compiler's `max_bytes`/`max_work`/`max_nodes` bound **tensor algebra**,
+not the independent SCF/J/K endpoint's work or resident memory.
+
+`backend="cuda"` must be selected on both `MolecularModel` and `compile`/AD, with the same
+logical `device`. The interface stages host coordinates/results, not resident
+GPU arrays. CUDA failures do not rerun on CPU. The native CPU ABI calls its
+scientific backend `cpu_reference`; this label means the **native C++ CPU method**,
+not `backend="reference"`'s Array API interpreter. Molecular source execution
+does not support the latter. `compilation_info()["molecular_calls"]` reports
+native backend, source/force call counts, SCF iteration totals and last geometry
+identity. `close()` releases retained native method and compiled tensor owners.
+
+Run CPU endpoint acceptance with an actual built/installed native library:
+
+```bash
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  pytest -q tests/python/test_array_api_molecular.py
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  python benchmarks/array_api_rhf_endpoint.py --backend cpu --molecule water \
+    --repeats 10 --output /tmp/array-api-rhf-cpu.json
+```
+
+The benchmark compares identical FP64 exact-J/K complete energy/nuclear-gradient
+calls with fresh Hcore starts, alternates order, separates cold JIT, and reports
+numerical errors and actual SCF iterations. It reports a measured 5% timing
+target separately from qualification: peak memory and a complete native
+operator-work inventory are not measured by this script. **No GPU parity is
+qualified by a CPU result.** CUDA tests/benchmarks require an explicit finite-time
+Slurm `srun` on an allowed node (`n1`, `n2`, `n4`, `n5`), a compatible partition/GPU
+request and the unchanged scheduler-assigned `CUDA_VISIBLE_DEVICES`. Select
+`GENERATIVEQC_ARRAY_API_CUDA_TEST=1` for the real-device molecular test, or
+`--backend cuda` for the benchmark; source/planner checks are not device evidence.
+Pass `--cuda-arch` matching the selected GPU when it differs from the default
+`sm_120`; this selects the tensor compiler target without changing Slurm visibility.
+SSH host aliases and Slurm node names are distinct: these machines report
+`node1`, `node2`, `node4`, and `node5` to the scheduler. Both verified naming
+forms are admitted; `n3`/`node3` remains excluded during maintenance.
+
+On an allowed remote machine with a source-matched CUDA library and the verified
+compiler-cache launcher/toolkit on `PATH`, run the real-device acceptance and
+complete endpoint benchmark in the same allocation. For example, after connecting
+to `n4` and changing to that machine's checkout:
+
+```bash
+srun --partition=main --nodelist=node4 --gres=gpu:5090:1 \
+  --nodes=1 --ntasks=1 --cpus-per-task=8 --mem=24G --time=00:20:00 \
+  bash -lc '
+    set -e
+    export PYTHONPATH=python:.
+    export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+    export GENERATIVEQC_ARRAY_API_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_120
+    python -m pytest -q tests/python/test_array_api_native_cuda.py \
+      tests/python/test_array_api_molecular.py
+    python benchmarks/array_api_rhf_endpoint.py --backend cuda --cuda-arch sm_120 \
+      --molecule water --repeats 10 --output /tmp/array-api-rhf-gpu.json
+  '
+```
+
+The scheduled molecular gate checks H2/STO-3G, HeH+/def2-SVP and water/STO-3G
+gradients against independent central energy differences, plus compiled nonlinear
+geometry composition and a mutation-safe reusable VJP. A CUDA library build or
+planner test alone does not satisfy this gate.
 
 ## Scientific metadata remains explicit
 
@@ -119,85 +813,177 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
                   TensorIR
 ```
 
-## Current limits
+## Execution boundaries
 
-The eager namespace and reference compiled-call path currently accept CPU/NumPy
-`bool`, `float32` and `float64` arrays. Shape functions require static integer
-dimensions and axes. Captured `flip` builds explicit gather index maps and
-rejects reversed axes larger than 65,536 elements to avoid unbounded source
-materialization. Static creation is capture-aware but does not
-supply the standard's full dtype defaults, devices or constructor set. Generic
-float32/float64 array arithmetic, matmul and explicit-output einsum now promote
-mixed floating operands to float64 through a canonical TensorIR `cast`.
-Scientific annotated arrays retain strict dtype identity and need explicit
-`xp.astype` to change precision. Dynamic Python control flow and implicit
-external-device transfer remain unsupported. `xp.asarray` refuses to silently
-copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
-same-device handoff. Every eager namespace operation checks this host boundary
-before NumPy dispatch, including nested host containers and foreign DLPack/CUDA
-array protocols. Before dtype inference, bounded host-container inspection rejects
-mixed Boolean/real leaves (up to 64 nesting levels and 1,000,000 inspected
-items), so NumPy cannot silently promote predicates into floating data. Exact
-scalar literals (`int`, `Fraction`, or rational strings) and finite Python floats
-are converted to the array operand dtype; mixed supported real array dtypes
-promote according to the float32/float64 subset.
+The standard eager namespace supports Boolean, int8/int16/int32/int64,
+uint8/uint16/uint32/uint64, float32/float64 and complex64/complex128 data on CPU.
+Constructors infer standard dtype defaults; explicit `device="cpu"` is supported.
+Non-finite values, negative power bases where mathematically defined, reduction
+`dtype`, empty reductions, array-valued gathers and data-dependent results follow
+the standard. `linalg` and `fft` results retain the same discovery protocol.
 
-The dtype-introspection subset includes `astype` (explicit float32/float64
-casts), `can_cast` (promotion-safe), `finfo`, `isdtype`, and `result_type`
-(with weak Python numeric scalars). Boolean identity queries are supported, but
-Boolean/real casts and promotion are not. `astype(x, dtype, copy=False)` returns
-the same eager array if the dtype is unchanged; default `copy=True` produces a
-new host array. Symbolic `astype` lowers through the existing TensorIR cast,
-rather than asserting a physical aliasing policy for generated native programs.
-Its `device` argument currently only accepts `None`.
-Integer/complex dtypes, Boolean arithmetic, `where`, IEEE non-finite comparison
-semantics, and standardized discovery remain unsupported, so this is **not**
-standard conformance.
+`copy=False` refuses an allocation when conversion requires one; wrapping an
+existing NumPy allocation does not copy its data. `astype` with unchanged dtype
+and `copy=False` preserves the input. `T` requires a matrix, `mT` transposes the
+last two axes, indexing always returns an array, and Python scalar conversion
+requires rank zero. Complex-to-real casts require an explicit component selection.
+NumPy-style host interoperability is available, but foreign device protocols are
+rejected before implicit conversion, including through operators or nested host
+containers. CPU `from_dlpack` is explicit; `import_dlpack` retains the existing
+same-device consumer handoff extension.
 
-Eager functions retain the bounded compiled contract: `sum` does not yet
-accept a `dtype` conversion; `mean` rejects reductions over zero elements
-rather than producing a nonfinite value; `take` requires a static tuple of
-nonnegative in-bounds indices; `slice` requires one nonnegative in-bounds
-half-open range per axis. Normal `x[...]` indexing remains a separate path
-supporting negative indices and strides. For scientifically annotated arrays,
-reduction `keepdims=True` remains unsupported without explicit TensorIR index
-metadata, rather than silently recreating a discarded AO/occupied/etc. domain.
-Real-valued operations require finite inputs and results, strictly positive
-inputs for `log`/`pow`, and nonnegative inputs for `sqrt`. `square` does
-not inherit the positive-base restriction of `pow`.
+Capture accepts CPU bool/float32/float64 inputs and the compiler's bounded
+operation set; backend execution has narrower dtype/primitive admission.
+Captured `asarray(..., copy=False)` rejects dtype changes; `copy=True` or
+`copy=None` permits an explicit supported real cast. Same-dtype conversion does
+not imply aliasing of compiled outputs, which remain detached from inputs.
+Shape/axis values must be static. Captured `flip` retains
+its 65,536-index budget per reversed axis. Captured `roll` accepts static integer
+shifts and signed axes (including tuples and repeated axes); `axis=None` rolls
+the flattened row-major array and restores its shape. Its total gather-map budget
+is 65,536 positions across axes with nonzero effective shifts, checked before
+constructing any maps. Empty axes and shifts by whole axis lengths need no maps.
+Scientific domains retain explicit
+metadata requirements. Compiled reductions do not introduce implicit dtype
+conversions, compiled empty means remain unsupported, and reference execution
+requires finite inputs/results with positive `log`/`pow` and nonnegative `sqrt`
+domains. Exact rational constants cannot represent negative zero. Integer/complex
+compilation, dynamic indexing/shapes and arbitrary Python control flow are not
+implied by eager support. Unsupported capture functions, including linalg/fft,
+raise instead of evaluating a NumPy fallback during tracing.
 
-General `einsum` remains a GenerativeQC extension for high-rank scientific
-contractions, using explicit-output equations without ellipses or implicit
-singleton-label broadcasting. The eager path validates this subset through the
-canonical frontend. The goal is that common expressions use normal array syntax, while
-specialized quantum-chemistry algebra can still use `einsum` when it is the
-clearest representation.
+Captured `minimum(x1, x2)` and `maximum(x1, x2)` accept generic finite
+float32/float64 arrays, with at least one array operand. Array operands broadcast
+and use existing float32/float64 promotion; static real scalars follow the weak,
+exact scalar contract of the array dtype. Scalar overflow is rejected even for
+empty arrays. Scientific indices, representation/symmetry/spin annotations,
+other dtypes, implicit device transfers and nonfinite live inputs remain
+unsupported. The existing eager standard operations retain their IEEE behavior,
+including NaN propagation. Capture is a bounded subset, not full conformance.
 
-Use `xp.capabilities()` for the exact current subset. It continues to report
-`array_api_version=None` and `array_namespace_protocol=False` until a declared
-standard version has a dedicated conformance matrix.
+Both captured operations retain the first operand on equality, including its
+array signed zero. The [minimum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.minimum.html)
+and [maximum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.maximum.html)
+specifications leave signed-zero order implementation-defined, so equal numerical
+results need not have the same zero sign as an eager backend. Static negative-zero
+literals remain unsupported. Direct `xp.compile(xp.minimum)` / `xp.compile(xp.maximum)`
+accept two concrete array arguments; put static scalar operands inside a function.
+First-order JVP/VJP require `allow_comparison_where=True` and use the selected
+branch, with broadcast adjoint reduction. Interior derivatives are qualified
+separately from the tie selection convention; no mathematical differentiability
+at ties or Hessian qualification is claimed. The operations reuse comparisons and
+`where`, with shared broadcast values and unchanged resource budgets. Their
+capability entries retain native CPU/CUDA qualification unset.
 
-The machine-readable `operation_matrix` reports the compiler preview's existing
-capability IDs, dtype families, reviewed keyword limitations, CPU/NumPy eager
-versus TensorIR reference-capture behavior, and differentiability status.
-Each row's `function` names its namespace callable; for example,
-`einsum_extension` maps to `einsum`. Explicit-index reshape/broadcast entries
-require symbolic arrays and are not available eagerly. `broadcast_shapes`
-operates on static Python shape tuples in both modes and has no array dtype,
-device, or adjoint. `astype` accepts only real float32/float64 conversions,
-including same-dtype copies; Boolean identity conversion is unsupported.
-Its native CPU/CUDA fields are **false for the public `@xp.compile` path**,
-because that path currently executes through the reference interpreter. TensorIR
-having a separate compiler is not equivalent to native `@xp.compile` admission.
-`target_standard_for_gap_analysis="2025.12"` identifies only the comparison
-target, not a conformance version. Empty `audited_keywords` means no keyword
-audit is recorded, **not** that every standard keyword is supported. The bounded
-matrix excludes public helpers such as `asarray`, `compile`, and dtype queries;
-absence alone does not imply an unsupported callable. `where` remains
-unsupported. The matrix is not an exhaustive catalog of standard requirements.
+Captured `max(x, axis=None, keepdims=False)` and `min` accept finite generic
+float32/float64 static arrays. Axis accepts a signed integer, a unique tuple of
+axes, or `None`; an empty tuple is a detached identity. `keepdims` must be a
+Python bool. An actual zero-length reduced axis raises; a zero-length retained
+axis gives an empty output. Scientific annotations and nonfinite capture remain
+unsupported. The existing eager IEEE behavior is unchanged. The
+[max](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.max.html)
+and [min](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.min.html)
+specifications permit errors for empty reductions and implementation-defined
+signed-zero order.
+
+Capture pairs adjacent values in a balanced tree, preserving the earliest
+C-order value on ties, including its zero sign. Before constructing the graph,
+it limits total gather positions to 65,536, pairwise rounds to 64, and estimated
+new retained tensor storage to 256 MiB. Ordinary backend node, work and byte
+budgets still apply and may reject smaller programs. Put static options inside
+a function, for example `xp.compile(lambda x: xp.max(x, axis=(0, -1)),
+backend="reference")`, following the existing array-only runtime argument
+contract. First-order comparison-selector AD requires
+`allow_comparison_where=True` wherever comparisons remain in the graph; empty
+axis and singleton identities use the existing identity AD. Tie gradients are
+only a deterministic branch convention. CPU FP64 execution/AD uses the existing
+opt-in native path; capability qualification flags remain unset, and native
+float32 and CUDA reductions are not qualified.
+
+Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
+arrays. Each bound can be absent, a finite static scalar under the existing exact
+scalar contract, or a same-dtype generic array. All three shapes must broadcast;
+mixed array dtypes, scientific annotations and nonfinite live operands are
+rejected. Both absent bounds give a detached numerical identity at execution.
+Static negative-zero literals remain unsupported; array signed zeros are retained
+by selection. Clamping applies the lower bound and then the upper bound, keeping
+the current value on equality. Reversed bounds therefore select the upper bound;
+the [2025.12 standard](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.clip.html)
+leaves reversed bounds and mixed array dtypes unspecified. These capture limits
+do not restrict the existing eager standard `clip`, including its NaN behavior.
+For direct `xp.compile(xp.clip, backend="reference")`, supply concrete array
+arguments for all three parameters, as required by the compiled runtime input
+contract. Capture absent or static scalar bounds inside a named function instead.
+Reference first-order JVP/VJP use the existing explicit
+`allow_comparison_where=True` option. Interior derivatives follow the selected
+input or bound, including broadcast adjoint reduction. At a tie, the selected
+current branch is only a convention, not a differentiability claim. No new AD
+engine or TensorIR primitive is introduced. The clip capability entry keeps
+native CPU/CUDA qualification unset; successful capture alone does not qualify
+either backend, performance, or full standard compliance.
+
+Captured `where(condition, x1, x2)` supports a genuine Boolean condition and
+finite generic float32/float64 branches. The branches use explicit casts for
+float promotion; condition and values each broadcast explicitly, including
+scalars and empty axes. Python real branch scalars follow the existing exact
+scalar contract (negative-zero literals are rejected; array signed zeros are
+preserved). Reference outputs are detached and never mutate inputs. The reference
+precision transform preserves the Boolean condition and casts only the real
+branches; generated precision variants remain unqualified reference candidates.
+The reference interpreter counts all live operands, selection results and published copies
+against its retained-byte budget; selection costs one unit of logical work per
+result element. All live operands are evaluated and finite-checked, so an invalid
+or nonfinite unselected branch still raises, even under a constant condition.
+Scientific index domains, representations and symmetry annotations are not
+admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
+tests support external fixed Boolean masks in finite generic real graphs, and
+comparison selectors with the explicit `allow_comparison_where=True` option;
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+`xp.grad` and `xp.value_and_grad` accept `allow_external_mask_where=True`
+for first-order fixed external-mask gradients on generic finite FP64 arrays
+with `backend="reference"` or the default native CPU backend. Select only real
+arguments with `argnums`; pass the mask as a separate non-differentiated argument.
+For example:
 
 ```python
-report = xp.capabilities()
-assert report["array_api_version"] is None
-print(report["operation_matrix"]["sum"]["audited_keywords"])
+def selected_energy(x, y, mask):
+    return xp.sum(xp.where(mask, x * x, y * y))
+
+derivative = xp.value_and_grad(
+    selected_energy, argnums=(0, 1), allow_external_mask_where=True
+)
+value, (dx, dy) = derivative(x, y, mask)
+derivative.close()
 ```
+
+All live branches and forward derivative domains remain checked, including
+unselected branches and disconnected or empty requested gradients. Prepared
+calls read the current mask; the function does not freeze its contents. The
+combined value/gradient call uses one native endpoint and retains inherited
+byte/work/node budgets and independent executor lifetime. With this external-mask-only
+option, computed predicates,
+Boolean differentiation, scientific annotations, FP32/mixed/packed policies,
+higher-order transforms and CUDA remain unsupported. Default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
+functions accept `allow_external_mask_where=True` to generate first-order
+JVP/VJP programs for fixed external masks on generic finite FP64 arrays,
+replayable by the reference interpreter and materializing native CPU owner.
+Only real branch tangents/cotangents are generated. Comparison selectors require
+the separate `allow_comparison_where=True` option described above; comparisons
+and masks never receive derivatives. See the derivative contract linked above for its eager
+validation and higher-order boundaries.
+The materializing native CPU forward path admits only
+float64 branches with the same generic-domain restrictions and explicit broadcasts.
+Its byte ABI stores each Boolean in one byte and aligns FP64 fields. Every live
+input and branch is materialized and validated before selection; unselected
+invalid branches fail without publishing outputs. Byte, work and node budgets
+include the selector and both branches. Native CUDA/portable/scalar/bundle paths
+and float32/mixed CPU branches reject before compiler discovery or device execution.
+This captured contract does not change
+the broader standard eager namespace or promise full IEEE conformance.
+
+`einsum` and `slice` remain bounded GenerativeQC extensions, not standard API
+functions. They preserve explicit-output/no-ellipsis contraction notation and
+exact finite scientific validation. Use `xp.capabilities()` to distinguish
+`eager_functions`, `eager_dtypes` and `eager_device` from `compiled_functions` and
+the compiler-owned operation matrix. Symbolic arrays never advertise standardized
+discovery, even though concrete arrays do.

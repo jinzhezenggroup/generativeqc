@@ -49,6 +49,7 @@ def test_integral_bridge_converts_the_complete_signature(layout: str) -> None:
     )
     snapshot = SimpleNamespace(
         backend="cuda",
+        range_density_fitted=False,
         check_current=lambda: None,
         _library=SimpleNamespace(**{bridge: evaluate}),
         _batch=SimpleNamespace(_batch=ct.c_void_p(11), _context=None),
@@ -79,3 +80,53 @@ def test_combined_bridge_is_optional_for_an_older_native_library() -> None:
         )
         is None
     )
+
+
+def test_force_memory_bridge_preserves_token_and_64bit_receipt() -> None:
+    """Exercise actual ctypes widths and current-token checks on both sides."""
+    checks = []
+    signature = ct.CFUNCTYPE(
+        ct.c_int,
+        ct.c_void_p,
+        ct.c_void_p,
+        ct.c_uint64,
+        ct.POINTER(ct.c_uint64),
+        ct.c_size_t,
+    )
+
+    @signature
+    def prepare(
+        batch: int, snapshot: int, additional: int, receipt: Any, count: int
+    ) -> int:
+        assert (batch, snapshot, count) == (11, 22, 4)
+        assert additional == 6 << 30
+        for index, value in enumerate((additional, 3 << 30, 12 << 30, 9 << 30)):
+            receipt[index] = value
+        return 0
+
+    snapshot = SimpleNamespace(
+        check_current=lambda: checks.append(True),
+        _library=SimpleNamespace(
+            generativeqc_ks_snapshot_cuda_prepare_force_memory_v1=prepare
+        ),
+        _batch=SimpleNamespace(_batch=ct.c_void_p(11), _context=None),
+        _handle=ct.c_void_p(22),
+    )
+    assert NativeKsSnapshot.cuda_prepare_force_memory(snapshot, 6 << 30) == {
+        "additional_device_bytes": 6 << 30,
+        "free_before_bytes": 3 << 30,
+        "free_after_bytes": 12 << 30,
+        "reclaimed_device_bytes": 9 << 30,
+    }
+    assert checks == [True, True]
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5, (1 << 40) + 1])
+def test_force_memory_rejects_invalid_capacity(value: Any) -> None:
+    with pytest.raises(ValueError, match="additional force device bytes"):
+        NativeKsSnapshot.cuda_prepare_force_memory(SimpleNamespace(), value)
+
+
+def test_force_memory_remains_optional_for_older_native_libraries() -> None:
+    snapshot = SimpleNamespace(check_current=lambda: None, _library=SimpleNamespace())
+    assert NativeKsSnapshot.cuda_prepare_force_memory(snapshot, 0) == {}

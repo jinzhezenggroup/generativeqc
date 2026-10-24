@@ -96,7 +96,7 @@ def run(
     budget: int = 1 << 30,
     iterations: int = 200,
     screening: float = 0.0,
-    bilinear: bool = True,
+    bilinear: bool | None = True,
     symmetric: bool = False,
 ) -> tuple:
     n = len(arrays[0])
@@ -109,7 +109,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     feeds = (dp * 8)(*(a.ctypes.data_as(dp) for a in [*arrays, *sources]))
     destinations = (dp * 6)(*(a.ctypes.data_as(dp) for a in output))
-    counts, values = np.zeros(20, dtype=np.uintp), np.zeros(5)
+    counts, values = np.zeros(22, dtype=np.uintp), np.zeros(5)
     error = ct.create_string_buffer(1024)
     with NativeSource(**source_arguments(metadata)) as source:
         status = probe(
@@ -121,7 +121,7 @@ def run(
             budget,
             iterations,
             screening,
-            2 if symmetric else int(bilinear),
+            2 if symmetric else 3 if bilinear is None else int(bilinear),
             destinations,
             counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
             values.ctypes.data_as(dp),
@@ -133,7 +133,10 @@ def run(
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih", "h2_f"])
 @pytest.mark.parametrize("blas", [False, True])
-def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
+@pytest.mark.parametrize("schedule", ["explicit", "default"])
+def test_complete_hf_limit(
+    probe: typing.Any, name: str, blas: bool, schedule: str
+) -> None:
     metadata, _ = load_fixture("h2" if name == "h2_f" else name)
     if name == "h2_f":
         metadata["inputs"]["shells"].append(
@@ -143,7 +146,12 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     n, o = len(arrays[0]), mf.mol.nelectron // 2
     sources, _ = seeds(arrays, o, 0.0)
     status, error, output, counts, values = run(
-        probe, metadata, arrays, sources, blas=blas
+        probe,
+        metadata,
+        arrays,
+        sources,
+        blas=blas,
+        bilinear=None if schedule == "default" else True,
     )
     assert status == 0, error
     independent = mf.nuc_grad_method()
@@ -153,12 +161,13 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     np.testing.assert_allclose(output[1], arrays[4], atol=3e-10, rtol=3e-10)
     expected_pulay = -2 * (arrays[0][:, :o] * arrays[5][:o]) @ arrays[0][:, :o].T
     np.testing.assert_allclose(output[2], expected_pulay, atol=3e-9, rtol=3e-10)
-    # Specialized SPD leases are build/admission dependent. Without one, the
-    # same canonical bilinear consumer is valid for these small bases too.
-    assert counts[2] in (1, 3)
+    # Default refusal preserves symmetric polarization; explicit schedule one
+    # retains its requested legacy fallback when a shell lease is unavailable.
+    assert counts[2] in ((1, 2) if schedule == "default" else (1, 3))
+    if schedule == "default" and counts[2] == 1:
+        assert counts[20] == 1 and counts[21] == 0
     assert counts[9] == 0 and counts[11] == 0
     if name == "h2_f":
-        assert counts[2] == 1
         fallback = run(probe, metadata, arrays, sources, blas=blas, bilinear=False)
         assert fallback[0] == 0, fallback[1]
         assert fallback[3][2] == 3
@@ -177,12 +186,16 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-10, rtol=3e-10)
 
 
-@pytest.mark.parametrize("name", ["water", "lih"])
+@pytest.mark.parametrize("name", ["water", "lih", "h2_f"])
 @pytest.mark.parametrize("blas", [False, True])
 def test_nonzero_z_response_matches_complete_energy_directions(
     probe: typing.Any, name: str, blas: bool
 ) -> None:
-    metadata, _ = load_fixture(name)
+    metadata, _ = load_fixture("h2" if name == "h2_f" else name)
+    if name == "h2_f":
+        metadata["inputs"]["shells"].append(
+            {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+        )
     arrays, mf = reference(metadata)
     o = mf.mol.nelectron // 2
     sources, w = seeds(arrays, o, 0.03)
@@ -314,17 +327,55 @@ def test_fixed_mask_response_is_qualified_against_exact_operator(
     assert actual[3][14] <= actual[3][13]
 
 
-@pytest.mark.parametrize("threshold", [0.0, 0.03])
-def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
+@pytest.mark.parametrize("threshold", [0.0, 0.03, 0.2])
+@pytest.mark.parametrize("name", ["water", "h2_spdf"])
+@pytest.mark.parametrize("materialized", [False, True])
+@pytest.mark.parametrize("prepared_threshold", [0.0, 0.1])
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+def test_fixed_mask_signed_jk_matches_dense_oracle(
+    threshold: float,
+    name: str,
+    materialized: bool,
+    prepared_threshold: float,
+    representation: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The same symmetric ERI mask must act linearly on arbitrary signed D."""
     from tools.generate_validation_references import pyscf_molecule
 
-    metadata, _ = load_fixture("water")
+    monkeypatch.setenv("GENERATIVEQC_TEST_RHF_MATERIALIZED_JK", str(int(materialized)))
+    monkeypatch.setenv(
+        "GENERATIVEQC_TEST_RHF_PREPARED_SCREENING", str(prepared_threshold)
+    )
+    metadata, _ = load_fixture("h2" if name == "h2_spdf" else name)
+    metadata["inputs"]["basis_representation"] = representation
+    if name == "h2_spdf":
+        for angular in (1, 2, 3):
+            metadata["inputs"]["shells"].append(
+                {
+                    "atom_index": 1,
+                    "angular_momentum": angular,
+                    "primitives": [[0.8, 1.0]],
+                }
+            )
     mol, scale, _ = pyscf_molecule(metadata["inputs"])
-    eri = mol.intor("int2e") * np.einsum("i,j,k,l->ijkl", scale, scale, scale, scale)
+    cartesian_inputs = {**metadata["inputs"], "basis_representation": "cartesian"}
+    cartesian, cartesian_scale, _ = pyscf_molecule(cartesian_inputs)
+    eri = cartesian.intor("int2e") * np.einsum(
+        "i,j,k,l->ijkl", *([cartesian_scale] * 4)
+    )
     bounds = np.sqrt(np.maximum(np.einsum("ijij->ij", eri), 0))
     mask = bounds[:, :, None, None] * bounds[None, None, :, :] >= threshold
-    screened = eri * mask
+    # The production mask is defined in normalized Cartesian AOs, even for a
+    # spherical public frame. Mask before the independent libcint projection.
+    projection = (
+        np.eye(len(scale))
+        if mol.cart
+        else mol.cart2sph_coeff() * scale[None, :] / cartesian_scale[:, None]
+    )
+    screened = np.einsum(
+        "ap,bq,cr,ds,abcd->pqrs", *([projection] * 4), eri * mask, optimize=True
+    )
     n = len(scale)
     dp = ct.POINTER(ct.c_double)
     call = ct.CDLL(
@@ -345,8 +396,8 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
     a, b = a + a.T, b + b.T
     potentials = []
     with NativeSource(**source_arguments(metadata)) as source:
-        for d in (a, b, 2.3 * a - 0.7 * b):
-            output = np.empty((2, n, n))
+        for density_index, d in enumerate((a, b, 2.3 * a - 0.7 * b)):
+            output = np.full((2, n, n), 12345.0)
             counts = np.zeros(2, dtype=np.uint64)
             error = ct.create_string_buffer(2048)
             code = call(
@@ -354,10 +405,16 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
                 d.ctypes.data_as(dp),
                 threshold,
                 output.ctypes.data_as(dp),
-                counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+                counts.ctypes.data_as(ct.POINTER(ct.c_uint64))
+                if density_index != 1
+                else None,
                 error,
                 len(error),
             )
+            if threshold < prepared_threshold:
+                assert code != 0 and b"screening domain" in error.value
+                np.testing.assert_array_equal(output, 12345.0)
+                return
             assert code == 0, error.value.decode()
             reference = np.stack(
                 [
@@ -366,7 +423,10 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
                 ]
             )
             np.testing.assert_allclose(output, reference, atol=2e-11, rtol=2e-12)
-            assert counts[0] >= counts[1] > 0
+            if density_index != 1:
+                assert counts[0] >= counts[1] > 0
+            else:
+                np.testing.assert_array_equal(counts, 0)
             potentials.append(output[0] - 0.5 * output[1])
     np.testing.assert_allclose(
         potentials[2], 2.3 * potentials[0] - 0.7 * potentials[1], atol=2e-11, rtol=2e-12
@@ -425,11 +485,14 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
     unrestricted: bool,
     cache_budget: int,
     allocation_refused: bool = False,
+    bucket_mask: int | None = None,
+    displacement: float = 0.0,
 ) -> None:
     """Cached sources retain the exact signed Hamiltonian and a real capacity fallback."""
     assert os.environ.get("SLURM_JOB_ID")
     metadata, _ = load_fixture("water")
     metadata["inputs"]["basis_representation"] = representation
+    metadata["inputs"]["coordinates"][0][0] += displacement
     if through_f:
         metadata["inputs"]["shells"].append(
             {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
@@ -486,14 +549,18 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
         )
     assert status == 0, error.value.decode()
     assert counts[0] > 0
-    if cache_budget >= counts[0] and not allocation_refused:
-        assert counts[1] == counts[0] == 8 * counts[2]
+    if counts[1] and not allocation_refused:
+        assert counts[1] == 8 * counts[2] <= counts[0]
+        if bucket_mask is None or bucket_mask == (1 << 28) - 1:
+            assert counts[1] == counts[0]
+        else:
+            assert counts[1] < counts[0]
         assert counts[6] == 0 and counts[7] == 1
-        assert counts[4] == len(densities) * counts[2]
-        assert counts[5] == 0
+        assert counts[4] == len(densities) * (counts[0] // 8)
+        assert counts[5] == len(densities) * (counts[0] // 8 - counts[2])
     else:
         assert counts[1] == counts[2] == 0
-        assert counts[6] == 7
+        assert counts[6] == (0 if bucket_mask == 0 else 7)
     expected = []
     for density in densities:
         channels = [np.einsum("ijkl,kl->ij", eri, density.sum(axis=0))]
@@ -521,13 +588,46 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
 
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("bucket_mask", [0, 1, 1 << 27, 1 | (1 << 9) | (1 << 27)])
+@pytest.mark.parametrize("displacement", [0.0, 0.05])
+def test_partial_resident_signed_oracle_and_work_partition(
+    monkeypatch: pytest.MonkeyPatch,
+    representation: str,
+    unrestricted: bool,
+    bucket_mask: int,
+    displacement: float,
+) -> None:
+    """Every canonical source is cached or evaluated once, including moved f shells."""
+    monkeypatch.setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK", str(bucket_mask))
+    test_resident_exact_jk_signed_oracle_and_bounded_fallback(
+        True,
+        representation,
+        unrestricted,
+        1 << 20,
+        bucket_mask=bucket_mask,
+        displacement=displacement,
+    )
+
+
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("bucket_mask", [(1 << 28) - 1, 1 | (1 << 27)])
 def test_resident_allocation_refusal_keeps_exact_signed_actions(
-    monkeypatch: pytest.MonkeyPatch, representation: str, unrestricted: bool
+    monkeypatch: pytest.MonkeyPatch,
+    representation: str,
+    unrestricted: bool,
+    bucket_mask: int,
 ) -> None:
     """A rejected device lease must not poison later ordinary Direct actions."""
     monkeypatch.setenv("GENERATIVEQC_TEST_RHF_RESIDENT_ALLOCATION_REFUSAL", "1")
+    monkeypatch.setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK", str(bucket_mask))
     test_resident_exact_jk_signed_oracle_and_bounded_fallback(
-        True, representation, unrestricted, 1 << 20, allocation_refused=True
+        True,
+        representation,
+        unrestricted,
+        1 << 20,
+        allocation_refused=True,
+        bucket_mask=bucket_mask,
     )
 
 
@@ -589,8 +689,9 @@ def test_resident_quartic_inventory_cliff_refuses_without_allocating_values(
 @pytest.mark.parametrize("through_f", [False, True])
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("centers", [2, 4])
+@pytest.mark.parametrize("route", ["canonical", "shell"])
 def test_bilinear_derivative_signed_density_oracle(
-    through_f: bool, representation: str, centers: int
+    through_f: bool, representation: str, centers: int, route: str
 ) -> None:
     """Independent libcint nuclear derivatives and FD of signed P:G(D)."""
     metadata, _ = load_fixture("h2")
@@ -633,9 +734,13 @@ def test_bilinear_derivative_signed_density_oracle(
                 "xijkl,ijkl->x", tensor, weight * normalization * mask.reshape(shape)
             )
     dp = ct.POINTER(ct.c_double)
-    call = ct.CDLL(
-        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
-    ).rhf_bilinear_derivative_probe
+    library = ct.CDLL(str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve()))
+    call = getattr(
+        library,
+        "rhf_shell_bilinear_derivative_probe"
+        if route == "shell"
+        else "rhf_bilinear_derivative_probe",
+    )
     call.argtypes = [
         ct.c_void_p,
         dp,
@@ -669,7 +774,10 @@ def test_bilinear_derivative_signed_density_oracle(
             assert code == 0, error.value.decode()
             np.testing.assert_allclose(output, oracle, atol=2e-11, rtol=2e-10)
             np.testing.assert_allclose(output.sum(axis=0), 0, atol=2e-12)
-            assert 0 < counts[1] <= (centers - 1) * counts[0]
+            if route == "canonical":
+                assert 0 < counts[1] <= (centers - 1) * counts[0]
+            else:
+                np.testing.assert_array_equal(counts, 0)
     for step in (1e-4, 3e-5):
         energies = []
         for sign in (-1, 1):

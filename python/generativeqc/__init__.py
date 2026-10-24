@@ -9,7 +9,6 @@ from generativeqc_compiler.common.resources import (
     ResourcePlan,
     ResourceRequest,
     ResourceSession,
-    plan_resources,
 )
 from generativeqc_compiler.dft.grid import GridPolicy, GridProfile, GridSpec
 
@@ -46,6 +45,7 @@ from .calculator import (
     Shell,
     method_capabilities,
 )
+from .cbs import CBSBasis, CBSComponent, CBSResult, CCSDTCBSCalculator
 from .dispersion import (
     D3CorrectionBatch,
     D3CorrectionResult,
@@ -106,6 +106,14 @@ from .mean_field import (
     exchange_operator_key,
 )
 from .overlap import cross_overlap
+from .precision_policy import (
+    PrecisionBudgetError,
+    PrecisionCalculator,
+    PrecisionError,
+    PrecisionPolicy,
+    PrecisionSolve,
+    PrecisionValidation,
+)
 from .progressive import ProgressiveResult, projected_singlepoint
 from .progressive_controller import (
     ArithmeticPolicy,
@@ -135,6 +143,13 @@ from .projection import (
 from .r2scan3c import load_r2scan3c_basis
 from .resources_hf import estimate_hf_resources
 from .resources_ks import estimate_ks_resources
+from .resources_planning import plan_resources
+from .spin_roots import (
+    SpinRootPolicy,
+    SpinRootReference,
+    SpinRootResult,
+    SpinRootUnqualified,
+)
 
 _install_native_loader()
 del _install_native_loader
@@ -150,6 +165,10 @@ __all__ = [
     "BasisShell",
     "BatchItemResult",
     "BatchResult",
+    "CBSBasis",
+    "CBSComponent",
+    "CBSResult",
+    "CCSDTCBSCalculator",
     "Calculator",
     "ContributionLedger",
     "CorrelationResult",
@@ -204,6 +223,12 @@ __all__ = [
     "PairedCalibrationSample",
     "PairedDifferenceEstimator",
     "PppsQueueProfile",
+    "PrecisionBudgetError",
+    "PrecisionCalculator",
+    "PrecisionError",
+    "PrecisionPolicy",
+    "PrecisionSolve",
+    "PrecisionValidation",
     "PreparedBatch",
     "Primitive",
     "ProgressiveBudget",
@@ -234,6 +259,10 @@ __all__ = [
     "ScfForceErrorEstimator",
     "Shell",
     "ShellClassProfileEntry",
+    "SpinRootPolicy",
+    "SpinRootReference",
+    "SpinRootResult",
+    "SpinRootUnqualified",
     "StageExecution",
     "StagePlan",
     "StageRole",

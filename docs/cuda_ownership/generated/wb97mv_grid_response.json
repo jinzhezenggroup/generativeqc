@@ -1,0 +1,8 @@
+{
+  "name": "wb97mv_grid_response",
+  "outputs": [
+    "generated/response/wb97mv_grid_response.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/method/wb97mv_grid_response.py",
+  "scope": "WB97M-V RKS/UKS fixed-grid semilocal coefficient/JVP with the incumbent work policy, bilateral total-density VV10 pair gradient/JVP and feature-to-density VJP. Reuses shared scalar XC/coefficient/pair graphs and TensorIR AD; native owners retain resource budgets, masks, pair traversal and publication."
+}

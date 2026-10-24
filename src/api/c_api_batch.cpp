@@ -8,8 +8,11 @@
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
+#include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
+#include "methods/batch_capabilities.hpp"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
 
@@ -63,6 +66,12 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     atom_counts.reserve(system_count);
     for (std::uint32_t i = 0; i < system_count; ++i) {
       if (systems[i] == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      if (!generativeqc::api::valid_system_roles(*systems[i], *descriptor,
+                                                 context->state.executed_backend)) {
+        context->last_detail =
+            "auxiliary handle role requires its matching method and density-fitting backend";
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      }
       native_systems.push_back(systems[i]->data);
       atom_counts.push_back(static_cast<std::uint32_t>(systems[i]->data.atoms.size()));
     }
@@ -78,7 +87,8 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     candidate->ks_diagnostics.resize(system_count);
     candidate->initial_guesses.resize(system_count);
     candidate->plan = generativeqc::methods::prepare_batch(
-        context->state, std::move(native_systems), *descriptor, flags);
+        context->state, std::move(native_systems), *descriptor, flags,
+        generativeqc::api::native_auxiliary_basis(*descriptor));
     *batch = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
@@ -114,7 +124,10 @@ generativeqc_status generativeqc_batch_get_correlation_diagnostic(
   if (!generativeqc::api::valid_descriptor(diagnostic)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
-    const auto value = batch->plan->correlation_diagnostic(index);
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchCorrelationDiagnostics*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto value = capability->correlation_diagnostic(index);
     if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     *diagnostic = *value;
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -129,7 +142,11 @@ generativeqc_status generativeqc_batch_get_cc_performance_diagnostic(
   if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
-    const auto value = batch->plan->cc_performance_diagnostic(index);
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchCcPerformanceDiagnostics*>(
+            batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto value = capability->cc_performance_diagnostic(index);
     if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (out)
       *out = {sizeof(*out),
@@ -176,6 +193,41 @@ generativeqc_status generativeqc_batch_get_ks_diagnostic(const generativeqc_batc
                                                history_capacity);
 }
 
+generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_ks_coulomb_exchange_work_v1* out) {
+  if (!batch || index >= batch->ks_diagnostics.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  return generativeqc::api::copy_ks_coulomb_exchange_work(batch->ks_diagnostics[index], out);
+}
+
+/** Copy the optional VV10 work receipt without another device read or fence. */
+extern "C" GENERATIVEQC_API generativeqc_status generativeqc_internal_batch_get_nonlocal_work_v1(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* values, size_t count) {
+  if (!batch || !values || count != 6 || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  std::copy(diagnostic->nonlocal_work.begin(), diagnostic->nonlocal_work.end(), values);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Preserve interleaved provisional/physical history without changing public ABI. */
+extern "C" GENERATIVEQC_API generativeqc_status
+generativeqc_internal_batch_get_nonlocal_history_scopes_v1(const generativeqc_batch* batch,
+                                                           uint32_t index, uint64_t* values,
+                                                           size_t count) {
+  if (!batch || !values || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (count != diagnostic->history.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  for (size_t i = 0; i < count; ++i) values[i] = diagnostic->history[i].nonlocal_operator_scope;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_ks_ao_selection_diagnostic_v1* out) {
@@ -216,7 +268,10 @@ generativeqc_status generativeqc_batch_get_ks_transport_diagnostic(
   if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
-    const auto source = batch->plan->ks_transport_diagnostic(index);
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchKsTransportDiagnostics*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto source = capability->ks_transport_diagnostic(index);
     if (!source) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (out)
       *out = {sizeof(*out),
@@ -242,7 +297,10 @@ generativeqc_status generativeqc_batch_get_last_shell_class_profile(
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    const auto profile = batch->plan->last_direct_shell_class_profile();
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchDirectQueueProfiles*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto profile = capability->last_direct_shell_class_profile();
     if (!profile.has_value()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (entry_count < profile->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     for (std::size_t index = 0; index < profile->size(); ++index) {
@@ -263,7 +321,10 @@ generativeqc_status generativeqc_batch_get_last_ppps_queue_profile(
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    const auto source = batch->plan->last_direct_ppps_queue_profile();
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchDirectQueueProfiles*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto source = capability->last_direct_ppps_queue_profile();
     if (!source.has_value()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     *profile = {};
     profile->descriptor_slots = source->descriptor_slots;
@@ -310,7 +371,10 @@ generativeqc_status generativeqc_batch_get_last_eigensolver_diagnostics(
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    const auto source = batch->plan->last_eigensolver_diagnostics();
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchEigensolverProfiles*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto source = capability->last_eigensolver_diagnostics();
     if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<std::uint32_t>::max()) {
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
@@ -370,7 +434,10 @@ generativeqc_status generativeqc_batch_get_last_density_fitting_metric_diagnosti
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    const auto& source = batch->plan->last_density_fitting_metric_diagnostics();
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchDfMetricDiagnostics*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto& source = capability->last_density_fitting_metric_diagnostics();
     if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<uint32_t>::max()) {
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
@@ -411,7 +478,10 @@ generativeqc_status generativeqc_batch_get_last_inactive_eigensolver_profile(
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    const auto source = batch->plan->last_inactive_eigensolver_profile();
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchEigensolverProfiles*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto source = capability->last_inactive_eigensolver_profile();
     if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<std::uint32_t>::max()) {
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
@@ -447,7 +517,7 @@ generativeqc_status generativeqc_batch_clear_warm_starts(generativeqc_batch* bat
   if (batch == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    batch->plan->clear_warm_starts();
+    batch->plan->reset_execution();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
@@ -461,7 +531,9 @@ generativeqc_status generativeqc_batch_set_warm_start_updates(generativeqc_batch
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    batch->plan->set_warm_start_updates(enabled != 0);
+    auto* capability = dynamic_cast<generativeqc::methods::BatchWarmStarts*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    capability->set_warm_start_updates(enabled != 0);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
@@ -475,7 +547,10 @@ generativeqc_status generativeqc_batch_get_hf_warm_state(const generativeqc_batc
   if (!generativeqc::api::valid_descriptor(state)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
-    const auto& source = batch->plan->warm_state(index);
+    const auto* capability =
+        dynamic_cast<const generativeqc::methods::BatchWarmStarts*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto& source = capability->warm_state(index);
     if (!source) {
       state->present = 0;
       state->density_count = state->coordinate_count = 0;
@@ -509,6 +584,8 @@ generativeqc_status generativeqc_batch_restore_hf_warm_states(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
+    auto* capability = dynamic_cast<generativeqc::methods::BatchWarmStarts*>(batch->plan.get());
+    if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     // Validate dimensions against the trusted prepared topology before any
     // caller-controlled allocation or pointer arithmetic.
     for (uint32_t i = 0; i < count; ++i) {
@@ -517,7 +594,7 @@ generativeqc_status generativeqc_batch_restore_hf_warm_states(
       if (state.present != 0 && state.present != 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       if (!state.present) continue;
       if (!state.density || !state.coordinates ||
-          state.density_count != batch->plan->warm_density_size(i) ||
+          state.density_count != capability->warm_density_size(i) ||
           state.coordinate_count != std::size_t(batch->atom_counts[i]) * 3)
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
@@ -533,18 +610,18 @@ generativeqc_status generativeqc_batch_restore_hf_warm_states(
           state.density_rms,
           state.iterations};
     }
-    batch->plan->restore_warm_states(std::move(candidates));
+    capability->restore_warm_states(std::move(candidates));
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
-                                               const generativeqc_batch_input_descriptor* inputs,
-                                               uint32_t input_count,
-                                               generativeqc_batch_item_result_descriptor* results,
-                                               uint32_t result_count) {
+static generativeqc_status execute_batch(generativeqc_batch* batch,
+                                         const generativeqc_batch_input_descriptor* inputs,
+                                         uint32_t input_count,
+                                         generativeqc_batch_item_result_descriptor* results,
+                                         uint32_t result_count, bool selective_forces) {
   generativeqc::runtime::host_trace::Region trace("batch_execute");
   if (batch == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -552,6 +629,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  generativeqc::api::PreparedPublication publication(*batch->plan);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
   std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
@@ -606,14 +684,23 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
       }
     }
 
-    // All omitted force buffers request a true energy-only replay. Mixed
-    // outputs keep the existing whole-fleet force schedule and per-item buffer
-    // validation below; no requested force can be silently dropped.
+    // All omitted force buffers request a true energy-only replay. The legacy
+    // entry retains its whole-fleet schedule for mixed outputs; the selective
+    // bridge requests only the indicated slots. Both validate buffers below.
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
-    std::vector<generativeqc::methods::BatchItemResult> native =
-        batch->plan->execute(coordinates, compute_forces);
+    std::vector<generativeqc::methods::BatchItemResult> native;
+    if (selective_forces) {
+      // The additive bridge uses the existing output descriptors as per-item
+      // work requests. Keep the legacy whole-fleet ABI schedule unchanged.
+      std::vector<std::uint8_t> requests(system_count);
+      for (std::uint32_t i = 0; i < system_count; ++i)
+        requests[i] = results[i].forces != nullptr || results[i].force_count != 0;
+      native = batch->plan->execute_selected_forces(coordinates, requests);
+    } else {
+      native = batch->plan->execute(coordinates, compute_forces);
+    }
     if (native.size() != system_count) {
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
@@ -632,17 +719,18 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
               sizeof(generativeqc_scf_diagnostic), GENERATIVEQC_ABI_VERSION,
               item.calculation.convergence.residual_rms, *item.calculation.physical_residual_rms};
       }
-      // The CUDA KS legacy executor counts actual physical builds. Publish
-      // them only with its complete operator census: chunk/replay and other
-      // uninstrumented owners may omit speculative work. A warm-to-cold retry
-      // can also discard builds, so its successful attempt is not a total.
+      // A retry-aware owner publishes only its complete execution-local total.
+      // Missing work must not fall through to a successful attempt's count.
+      // Legacy owners still require the final census and no discarded attempt.
       const auto& work = item.calculation.precision_work;
       const bool counted_cuda_ks = item.calculation.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
                                    batch->ks_diagnostics[i].has_value() && work.complete &&
                                    work.operator_inventory_complete;
-      if (!item.warm_start_fallback &&
-          (item.calculation.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-           counted_cuda_ks)) {
+      if (item.target_fock_work) {
+        batch->last_fock_builds[i] = item.target_fock_work->total().value_or(0);
+      } else if (!item.warm_start_fallback &&
+                 (item.calculation.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+                  counted_cuda_ks)) {
         batch->last_fock_builds[i] = item.calculation.fock_builds;
       }
       const std::uint32_t required_forces = batch->atom_counts[i] * 3;
@@ -674,10 +762,30 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
         std::copy(item.calculation.forces.begin(), item.calculation.forces.end(), output.forces);
       }
     }
+    publication.commit();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
+                                               const generativeqc_batch_input_descriptor* inputs,
+                                               uint32_t input_count,
+                                               generativeqc_batch_item_result_descriptor* results,
+                                               uint32_t result_count) {
+  return execute_batch(batch, inputs, input_count, results, result_count, false);
+}
+
+/** Private additive bridge for Python/native KS mixed force consumers. NULL/0
+ * force storage requests only energy for that slot; requested forces remain
+ * subject to the prepared native capability. Uses the same invalidation,
+ * diagnostics and publication transaction as the legacy batch entry point. */
+generativeqc_status generativeqc_ks_batch_execute_selected_forces_v1(
+    generativeqc_batch* batch, const generativeqc_batch_input_descriptor* inputs,
+    uint32_t input_count, generativeqc_batch_item_result_descriptor* results,
+    uint32_t result_count) {
+  return execute_batch(batch, inputs, input_count, results, result_count, true);
 }
 
 generativeqc_status generativeqc_batch_get_precision_provenance(

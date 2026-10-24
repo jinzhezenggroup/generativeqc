@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_one_electron_response.hpp",
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives",
+  "reason": "Nonmovable live KS one-electron source adapter contract: actual native owner identity/generation/device/stream authentication, independent arena/charge lifetime, generic method-supplied weights and explicit T+effective-charge versus residual ECP boundary. No complete Hessian capability is advertised.",
+  "regions": []
+}

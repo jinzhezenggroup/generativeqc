@@ -310,14 +310,18 @@ def _admit_work(
         type(primitive) is RangeSeparatedExchangePrimitive
         for primitive in getattr(method_ir, "primitives", ())
     )
-    # Direct sources each traverse the ordered primitive quartet domain. DF
-    # elides those primary loops, but mixed DF still executes one exact LR pass.
+    fitted_range = bool(range_exchange) and bool(
+        getattr(state._source, "range_density_fitted", False)
+    )
+    # Full RI-K elides every quartet traversal; legacy mixed DF retains one LR pass.
     # These counts exclude the native fitted response's independently owned work.
     quartet_passes = (
         int(bool(range_exchange))
         if native_fitted_integrals
         else 1 + int(exact_exchange) + range_exchange
     )
+    if fitted_range:
+        quartet_passes = 0
     component_costs = [int(row[2]) * int(row[3]) for row in aos]
     # Two symmetric pair sums count the canonical primitive domain exactly,
     # without materializing AO pairs while rejecting oversized diagnostics.
@@ -330,6 +334,8 @@ def _admit_work(
     range_passes = (
         int(bool(range_exchange)) if native_fitted_integrals else range_exchange
     )
+    if fitted_range:
+        range_passes = 0
     records = pairs + range_passes * canonical_records
     if not native_fitted_integrals:
         records += (1 + int(exact_exchange)) * primitive_sum**4
@@ -341,14 +347,24 @@ def _admit_work(
     # validates on every coordinate traversal. Include both in admission.
     if execution == "reference":
         validations *= 3 * natom
-    nonlocal_pair_visits = points * points if nonlocal_correlation else 0
-    nonlocal_partition_visits = visits + validations if nonlocal_correlation else 0
+    nonlocal_points = len(getattr(state._source, "nonlocal_grid", state.grid).points)
+    nonlocal_pair_visits = (
+        nonlocal_points * nonlocal_points if nonlocal_correlation else 0
+    )
+    nonlocal_partition_visits = (
+        (2 if execution == "native" else 3 * natom) * pairs * nonlocal_points
+        + ((nonlocal_points + tile_points - 1) // tile_points)
+        * pairs
+        * (3 * natom if execution == "reference" else 1)
+        if nonlocal_correlation
+        else 0
+    )
     grid_pair_work = (
         visits + validations + nonlocal_pair_visits + nonlocal_partition_visits
     )
     for actual, budget, label in (
         (records, max_primitive_records, "primitive"),
-        (points, max_grid_points, "grid point"),
+        (max(points, nonlocal_points), max_grid_points, "grid point"),
         (grid_pair_work, max_grid_pair_visits, "grid pair"),
     ):
         if actual > budget:
@@ -431,7 +447,7 @@ def complete_rks_gradient_diagnostic(
     Mixed DF uses the shared native fitted primary and only one compiler-generated
     exact LR correction traversal, never exact SR/full-range replacements;
     public RSH snapshot/capability admission remains a separate boundary. Uses a
-    native unpruned version-one grid, distinct nuclei and no
+    native fixed-topology grid, distinct nuclei and no
     point/center collisions. CPU is explicit; CUDA snapshots are rejected.
     Caller chooses an ignored/temporary compilation cache and may supply a
     CppCompilerAdapter; otherwise CXX (or c++) selects the executable. Scientific work is
@@ -509,7 +525,12 @@ def complete_rks_gradient_diagnostic(
             raise ValueError("max_host_bytes must be an integer in [1,1099511627776]")
         inventory = cpu_force_inventory(
             basis,
-            grid_points=len(state.grid.points),
+            grid_points=len(state.grid.points)
+            + (
+                len(state._source.nonlocal_grid.points)
+                if state._source.nonlocal_grid is not state.grid
+                else 0
+            ),
             ecp_terms=len(state._source.ecp_terms),
             nonlocal_correlation=any(
                 isinstance(primitive, NonlocalCorrelationPrimitive)
@@ -722,7 +743,10 @@ def complete_rks_gradient_diagnostic(
         )
 
     range_native = None
-    if plan.range_exchange_primitives:
+    fitted_range = bool(plan.range_exchange_primitives) and bool(
+        getattr(state._source, "range_density_fitted", False)
+    )
+    if plan.range_exchange_primitives and not fitted_range:
         range_native = RangeExchangeExecutor(
             basis,
             cache,
@@ -785,12 +809,12 @@ def complete_rks_gradient_diagnostic(
             )
             range_native.close()
     if native_mixed_integrals:
-        # LR currently holds the weighted correction, not the physical LR row.
-        # The same native composer as CUDA recovers SR/LR from fitted full K.
+        # The native owner fits LR itself, or consumes the explicit legacy
+        # Direct correction. Both recover physical SR/LR from the same primary.
         native_integral = integral_provider(
             natom,
             publication_budget,
-            lr_correction=components["exchange_long_range"],
+            lr_correction=None if fitted_range else components["exchange_long_range"],
         )
         if native_integral is None:
             raise NotImplementedError(
@@ -817,12 +841,20 @@ def complete_rks_gradient_diagnostic(
         ):
             components[source] = np.ascontiguousarray(values)
         work.update(
-            stationary_integral_derivative_route="prepared-mixed-density-fitted",
+            stationary_integral_derivative_route=(
+                "prepared-full-ri-jk"
+                if fitted_range
+                else "prepared-mixed-density-fitted"
+            ),
             stationary_native_integral_sources=source_names,
             native_integral_resources=dict(native_integral_resources),
             density_fitted_response_resources_included=False,
             native_integral_resource_scope="compact-publication-and-host-one-electron-only",
         )
+        if fitted_range:
+            work["range_density_fitted_provider"] = 1
+            work["range_exchange_primitive_records"] = 0
+            work["range_exchange_recurrence_evaluations"] = 0
     for a in range(natom):
         for b in range(a):
             np.add.at(components["nuclear"], [a, b], native.nuclear(a, b, charges))
@@ -912,6 +944,7 @@ def complete_rks_gradient_diagnostic(
                 atoms.astype(np.int64),
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
             continue
         # One coordinate at a time bounds storage; this interpreter boundary
@@ -927,6 +960,7 @@ def complete_rks_gradient_diagnostic(
                     center_motion=fallback_motion,
                     iterations=spec.partition_iterations,
                     coincident_tolerance=spec.coincident_tolerance,
+                    atomic_radii=spec.partition_radii(basis.atoms),
                 )
                 selected = (np.arange(end - begin), atoms)
                 derivative = response.directional[selected]
@@ -946,6 +980,17 @@ def complete_rks_gradient_diagnostic(
         None,
     )
     if nonlocal_primitive is not None:
+        grid = state._source.nonlocal_grid
+        spec = state._source.nonlocal_grid_spec
+        nonlocal_atomic_weights = state._source.nonlocal_atomic_weights
+        if (
+            execution == "native"
+            and spec.partition_iterations
+            != state._source.grid_spec.partition_iterations
+        ):
+            grid_consumer = NativeGridContraction(
+                compiler=compiler, cache=cache, iterations=spec.partition_iterations
+            )
         calculator = state._source._batch._calculator
         provider = NativeNonlocalPairProvider(
             device="cpu",
@@ -965,7 +1010,7 @@ def complete_rks_gradient_diagnostic(
         if grid_consumer is not None:
             with np.errstate(over="raise", invalid="raise"):
                 seeds = np.asarray(geometry.weights) * np.asarray(
-                    state._source.atomic_weights
+                    nonlocal_atomic_weights
                 )
             components["nonlocal_weight"] += grid_consumer.contract(
                 grid.points,
@@ -973,6 +1018,7 @@ def complete_rks_gradient_diagnostic(
                 owners,
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
         else:
             assert fallback_motion is not None
@@ -989,11 +1035,12 @@ def complete_rks_gradient_diagnostic(
                             center_motion=fallback_motion,
                             iterations=spec.partition_iterations,
                             coincident_tolerance=spec.coincident_tolerance,
+                            atomic_radii=spec.partition_radii(basis.atoms),
                         )
                         selected = (np.arange(end - begin), atoms)
                         components["nonlocal_weight"][a, axis] += np.dot(
                             geometry.weights[begin:end],
-                            state._source.atomic_weights[begin:end]
+                            nonlocal_atomic_weights[begin:end]
                             * response.directional[selected],
                         )
                     fallback_motion[a, axis] = 0.0

@@ -1,0 +1,54 @@
+{
+  "observed_utc": "2026-10-24T06:22:47.656760+00:00",
+  "assets": [
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl",
+      "bytes": 113039337,
+      "sha256": "77ba6745a130d880c962e687e4e146ebbb9014f290b0a80dbc4e4634eb5c3b48"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "bytes": 64386,
+      "sha256": "91afda5f106bbb8a3bfaae1c919061c4158064bb0305866011d5a091d61f034b"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/geometric-1.1.1-py3-none-any.whl",
+      "bytes": 408349,
+      "sha256": "f7696c93759201471db47dbec099a0395e5e70c6d7c02408c8531a77608b8e2b"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/geometric-1.1.1.tar.gz",
+      "bytes": 392235,
+      "sha256": "c712c4102bb9db4afab4c7a482289a13d04989735cc1430c89ebb73d587d1d8b"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "bytes": 151734684,
+      "sha256": "42dd9c619ff587dd393232d39c8894950956bace29d83765ce630bf7ad5d686c"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "bytes": 159668567,
+      "sha256": "c788f2ca50ef036076754e6167169c957834885430bfc2e23e3b8111942c686a"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/networkx-3.6.1-py3-none-any.whl",
+      "bytes": 2068504,
+      "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"
+    },
+    {
+      "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "bytes": 12729963,
+      "sha256": "c65aa46f24005794bf8198205a0d83f3431a23333868fbafff43bd82efc2294d"
+    }
+  ],
+  "installed_lock": {
+    "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/requirements.installed.txt",
+    "sha256": "1f680aa8d5047ecdf715846b6843b18d651e733afe466664016d9ffccdde7e9b",
+    "content": "array-api-compat==1.15.0\narray_api_strict==2.6.1\ncfgv==3.5.0\nclang-format==22.1.8\ncmake==3.31.10\ncontourpy==1.3.3\ncoverage==7.16.0\ncupy-cuda12x==13.6.0\ncycler==0.12.1\ndefusedxml==0.7.1\ndistlib==0.4.3\nexceptiongroup==1.3.1\nexecnet==2.1.2\nfastrlock==0.8.4\nfilelock==3.32.5\nfonttools==4.67.0\ngeometric==1.1.1\ngpu4pyscf-cuda12x==1.8.1\ngpu4pyscf-libxc-cuda12x==0.8.1\nh5py==3.16.0\nhypothesis==6.169.3\nidentify==2.6.19\nimportlib_resources==7.1.0\niniconfig==2.3.0\nkiwisolver==1.5.1\nmatplotlib==3.11.2\nmpmath==1.3.0\nndindex==1.10.1\nnetworkx==3.6.1\nninja==1.13.2\nnlohmann-json==3.11.3\nnodeenv==1.10.0\nnumpy==2.2.6\nnvidia-cublas-cu12==12.9.1.4\nnvidia-cuda-runtime-cu12==12.9.79\nnvidia-cusolver-cu12==11.7.5.82\nnvidia-cusparse-cu12==12.5.10.65\nnvidia-nvjitlink-cu12==12.9.86\npackaging==26.3\npathspec==1.1.1\npillow==12.3.0\npip==26.2.1\nplatformdirs==4.11.7\npluggy==1.6.0\npre_commit==4.6.2\nPygments==2.21.0\npyparsing==3.3.3\npyscf==2.14.0\npyscf-dispersion==1.5.0\npytest==9.1.1\npytest-cov==7.1.0\npytest-json-report==1.5.0\npytest-metadata==3.1.1\npytest-xdist==3.8.0\npython-dateutil==2.9.0.post0\npython-discovery==1.6.0\nPyYAML==6.0.3\nruff==0.16.2\nsccache==0.16.0\nscikit_build_core==1.1.1\nscipy==1.15.3\nscipy-openblas32==0.3.34.0.0\nsetuptools==84.0.0\nsix==1.17.0\nsortedcontainers==2.4.0\nsympy==1.14.0\nthreadpoolctl==3.6.0\ntomli==2.4.1\ntyping_extensions==4.16.0\nvirtualenv==21.7.8\nwheel==0.48.0\n"
+  },
+  "sdk_build": "NOT_RUN",
+  "GPU_endpoint": "NOT_RUN",
+  "historical_source_substitution": false,
+  "pip_cache_deviation": "Earlier geometric wheel creation used default /root/.cache/pip; subsequent operations set task PIP_CACHE_DIR/TMPDIR. No global cleanup performed."
+}

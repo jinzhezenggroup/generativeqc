@@ -6,11 +6,15 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
 from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,15 +28,13 @@ def _guard() -> str:
 
 def test_local_ao_guard_depends_on_layout_capability_not_method_or_schedule(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
     guard = _guard()
     assert "cuda_xc_execution_capabilities(xc_layout).local_ao_selection" in guard
     assert "precision_schedule" not in guard
     assert "SemilocalFamily" not in guard
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     unit = tmp_path / "guard.cpp"
     executable = tmp_path / "guard"
     unit.write_text(
@@ -68,23 +70,9 @@ int main(int argc, char** argv) {
 }
 """
     )
-    built = subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+    native_cxx.build_executable(
+        [unit], executable, compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror")
     )
-    assert built.returncode == 0, built.stderr
 
     cases = {
         ("unset", "blocked", "host"): "dense",
@@ -163,8 +151,39 @@ struct PanelProductDiagnostic {
 std::size_t sum(std::size_t left, std::size_t right) {
   return runtime::size_add(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; };
+std::size_t product(std::size_t left, std::size_t right) {
+  return runtime::size_mul(left, right, "test resource overflow");
+}
+struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
+namespace cuda_xc_detail {
+bool mixed_matrix_contractions_supported(const Layout&) {
+  throw std::logic_error("AUTO/FP64 must not query Fast-only matrix admission");
+}
+}
+// Ordinary AUTO/FP64 must leave nonlocal arithmetic and its counters strict.
+std::uint64_t* mixed_coulomb_work_counter() {
+  throw std::logic_error("ordinary precision must not borrow mixed nonlocal counters");
+}
+int cudaMemsetAsync(void*, int, std::size_t, int) {
+  throw std::logic_error("ordinary precision must not initialize mixed nonlocal counters");
+}
+void check(int status) { assert(status == 0); }
+// Provider facts are stubbed; the extracted production block owns the choice
+// between strict generated J and admitted mixed arithmetic.
+struct Provider {
+  bool generated;
+  bool cuda_direct_source() const { return generated; }
+  struct Strategy { int spec{}; };
+  Strategy strategy() const { return {}; }
+};
+struct PhaseSource {
+  bool enabled;
+  bool active() const { return enabled; }
+};
+namespace generativeqc::scf {
+bool cuda_direct_jk_generated_coulomb_available(bool generated, int) { return generated; }
+}
 struct Xc {
   struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
   Binding admitted{}, strict{{runtime::strict_fp64_precision()}};
@@ -172,15 +191,20 @@ struct Xc {
   bool qualified{};
   std::size_t reserved{};
   tensor::PanelProductDiagnostic diagnostic{};
-  struct BatchPlan { std::size_t device_bytes{}; } batch;
-  std::size_t batch_calls{}, batch_tiles{}, batch_budget{};
-  bool batch_compact{};
-  void prepare_point_batches(std::size_t tiles, std::size_t budget, bool compact) {
-    ++batch_calls; batch_tiles = tiles; batch_budget = budget;
+  struct BatchPlan { std::size_t device_bytes{}, tiles = 1; } batch;
+  std::size_t batch_tiles{}, batch_budget{};
+  bool batch_compact{}, batch_ragged{};
+  void prepare_point_batches(std::size_t tiles, std::size_t budget, bool compact, bool ragged) {
+    batch_tiles = tiles; batch_budget = budget;
     batch_compact = compact;
+    batch_ragged = ragged;
     batch.device_bytes = admitted.precision.arithmetic.is_strict_fp64() && budget >= 64 ? 64 : 0;
+    batch.tiles = batch.device_bytes ? tiles : 1;
   }
   const BatchPlan& point_batch_plan() const { return batch; }
+  void prepare_mixed_matrix_contractions() {
+    throw std::logic_error("AUTO/FP64 must not prepare Fast-only matrix arithmetic");
+  }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
                        std::size_t budget) {
     assert(replays == 50);
@@ -200,6 +224,10 @@ struct Xc {
   }
 };
 int main() {
+  for (unsigned ragged = 0; ragged < 3; ++ragged) {
+    unsetenv("GENERATIVEQC_CUDA_XC_RAGGED_BATCH");
+    if (ragged)
+      setenv("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", ragged == 1 ? "0" : "1", 1);
   for (unsigned compact = 0; compact < 3; ++compact) {
     unsetenv("GENERATIVEQC_CUDA_XC_COMPACT_BATCH");
     if (compact)
@@ -231,7 +259,7 @@ int main() {
     formal.mixed_density_precision = qualification;
     const auto precision_schedule = resolve_cuda_ks_precision_schedule(
         automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64,
-        formal, false, nonlocal);
+        formal, false, nonlocal, false, false, {}, true, true);
     const bool mixed_density = automatic && capable && !nonlocal &&
                                qualification == CudaXcCapability::Qualified;
     Layout xc_layout{capable};
@@ -253,26 +281,49 @@ int main() {
     const bool selected = admitted && device >= 160 && qualified;
     const bool requested = batching != 1 && batching != 4;
     const bool batched = !budgeted && (batching == 0 || batching == 3) && !mixed_density;
-    assert(owner.batch_calls == (requested ? 1 : 0));
     assert(owner.batch_compact == (requested && compact != 1));
+    assert(owner.batch_ragged == (requested && ragged != 1));
     assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
-    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? 32 * 1024 * 1024 : batching == 3 ? 4096 : 0));
+    // Ineligible mixed panels decline both requests, ending on the bounded
+    // 32-MiB retry; strict four-AO-jet panels accept the larger first request.
+    const auto automatic_budget = (mixed_density ? 32 : 128) * 1024 * 1024;
+    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? automatic_budget : batching == 3 ? 4096 : 0));
     assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
     assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
-    for (bool strict_refinement : {false, true}) {
-      bool pending_mixed_coulomb{}, pending_mixed_density{};
+    for (bool strict_refinement : {false, true})
+      for (bool has_range_correction : {false, true})
+      for (bool generated : {false, true})
+      for (int phase = 0; phase < 3; ++phase) {
+      const bool has_exchange = false;
+      Provider provider{generated};
+      PhaseSource phase_owner{phase == 2};
+      auto* phase_source = phase ? &phase_owner : nullptr;
+      const bool device_nonlocal = nonlocal;
+      const int stream = 7;
+      bool pending_mixed_range_exchange = true, pending_mixed_nonlocal = true;
+      bool pending_mixed_coulomb{}, pending_mixed_exchange{};
+      bool pending_mixed_density{}, pending_mixed_point{};
+      bool pending_mixed_contractions{};
+      struct { std::size_t point_ao_visits = 1; } prepared_ao_work;
 """
         + block
         + r"""
-      assert(pending_mixed_coulomb == (automatic && !strict_refinement));
+      const bool strict_generated_j = !has_range_correction && generated && phase != 2;
+      assert(pending_mixed_coulomb ==
+             (automatic && !strict_refinement && !strict_generated_j));
+      assert(!pending_mixed_exchange);
+      assert(!pending_mixed_range_exchange && !pending_mixed_nonlocal);
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
+      assert(!pending_mixed_point);
+      assert(!pending_mixed_contractions);
     }
   }
   }
   }
   runtime::active_device_resource_ledger.reset();
+  }
   }
 }
 """
@@ -299,10 +350,9 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
     emitted = _emit_tiled(XcMatrixSchedule(16))
+    admission_start = emitted.index("inline bool tiled_xc_admitted(")
     shape_admission = emitted[
-        emitted.index("inline bool tiled_xc_admitted(") : emitted.index(
-            "template <bool Mixed, bool Tiled>"
-        )
+        admission_start : emitted.index("\ntemplate <", admission_start)
     ]
     unit.write_text(
         r"""
@@ -461,10 +511,54 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_selected_physical_layout_propagates_back_to_the_ks_owner() -> None:
+def test_selected_physical_layout_propagates_back_to_the_ks_owner(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute publication/refusal using the owner's real admission block."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("        if (admit_ao) {")
-    end = source.index("        prepared_ao_work = xc->ao_selection_work();", start)
-    block = source[start:end]
-    assert "xc->select_local_ao(1e-16, ao_map_host_budget)" in block
-    assert "xc_layout = xc->layout();" in block
+    end = source.index("        const auto admitted_precision", start)
+    probe = tmp_path / "publication.cpp"
+    probe.write_text(
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <stdexcept>
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
+struct Layout { bool local; };
+struct Owner {
+  bool success, called{};
+  CudaXcAoDiscovery schedule{};
+  bool select_local_ao(double cutoff, std::size_t budget, CudaXcAoDiscovery selected) {
+    assert(cutoff == 1e-16 && budget == 1024);
+    called = true; schedule = selected; return success;
+  }
+  Layout layout() { return {true}; }
+};
+int main() {
+  for (bool admit_ao : {false, true})
+    for (bool device_discovery : {false, true})
+      for (bool success : {false, true}) {
+        Owner owner{success}; auto* xc = &owner;
+        Layout xc_layout{false};
+        const std::size_t ao_map_host_budget = 1024;
+        bool refused = false;
+        try {
+"""
+        + source[start:end]
+        + r"""
+        } catch (const std::logic_error&) { refused = true; }
+        assert(refused == (admit_ao && !success));
+        assert(xc_layout.local == (admit_ao && success));
+        assert(owner.called == admit_ao);
+        if (owner.called)
+          assert(owner.schedule == (device_discovery ? CudaXcAoDiscovery::DeviceChunks
+                                                     : CudaXcAoDiscovery::HostTiles));
+      }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [probe], tmp_path / "publication", compile_args=["-std=c++20", "-O0"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

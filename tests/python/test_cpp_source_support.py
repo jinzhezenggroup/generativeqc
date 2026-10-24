@@ -6,6 +6,7 @@ import pytest
 from _cpp_source_support import (
     cpp_function_declaration,
     cpp_function_definition,
+    cpp_function_definition_signature,
     cpp_if_block,
     cpp_record_definition,
 )
@@ -42,6 +43,23 @@ std::vector<RhfBucketItem> execute(
     assert not signature.endswith(";")
 
 
+def test_definition_signature_leaves_defaults_in_the_header() -> None:
+    source = """
+int execute(int value, const char* detail = nullptr) noexcept;
+int execute(int value, const char* detail /* { ignored } */) noexcept {
+  return value;
+}
+"""
+    signature = cpp_function_definition_signature(source, "execute")
+    assert signature == (
+        "int execute(int value, const char* detail /* { ignored } */) noexcept"
+    )
+    with pytest.raises(ValueError, match="found 0"):
+        cpp_function_definition_signature("int execute(int value = 1);", "execute")
+    with pytest.raises(ValueError, match="found 2"):
+        cpp_function_definition_signature("void f() {}\nvoid f(int x) {}", "f")
+
+
 def test_record_uses_definition_not_forward_declaration() -> None:
     source = 'struct Lease;\nstruct Lease { char x; const char* text = "}"; };'
     assert cpp_record_definition(source, "Lease").startswith("struct Lease {")
@@ -75,6 +93,18 @@ if (retain_resident /* guarded lease */) {
     assert block.endswith("\n}")
     with pytest.raises(ValueError, match="found 2"):
         cpp_if_block("if (ready) {} if (ready) {}", "ready")
+
+
+def test_if_block_can_keep_owned_and_borrowed_routes() -> None:
+    source = 'if (borrowed) { use(); } /* } */ else { own("}"); }\nnext();'
+    assert cpp_if_block(source, "borrowed", include_else=True) == source.split("\n")[0]
+    assert cpp_if_block(source, "borrowed") == "if (borrowed) { use(); }"
+    assert (
+        cpp_if_block("if (ready) {} next();", "ready", include_else=True)
+        == "if (ready) {}"
+    )
+    with pytest.raises(ValueError, match="braced"):
+        cpp_if_block("if (ready) {} else if (other) {}", "ready", include_else=True)
 
 
 @pytest.mark.parametrize(

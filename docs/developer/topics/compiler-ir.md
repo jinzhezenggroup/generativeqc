@@ -23,4 +23,5 @@ Start here for scientific ownership, intermediate representations, generated pro
 ../local_spaces
 ../compiler_gfn1_geometry
 ../compiler_xtb_method_ir
+../semiempirical-product-contracts
 ```

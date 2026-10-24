@@ -9,6 +9,33 @@ import pytest
 from generativeqc.autotune import _source_identity_paths
 
 
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "cmake/GenerativeQCHessianAot.cmake",
+        "manifests/hessian_aot_development.json",
+        "tools/complete_hessian_aot_inventory.py",
+        "tools/hessian_aot_inventory.py",
+        "tools/generate_hessian_aot.py",
+        "tools/generate_cuda_gmres.py",
+        "tools/generate_ks_cpks.py",
+        "tools/generate_wb97mv_grid_response.py",
+        "tools/generate_wb97mv_fock_response.py",
+        "tools/generate_grid_geometry_response.py",
+        "tools/generate_wb97mv_nuclear_grid.py",
+        "tools/generate_nuclear_integral_response.py",
+        "tools/generate_wb97mv_nuclear_jk.py",
+        "tools/generate_wb97mv_df_response.py",
+        "tools/generate_wb97mv_stationary_assembly.py",
+        "tools/generate_ecp_response.py",
+    ],
+)
+def test_hessian_build_inputs_participate_in_source_identity(relative: str) -> None:
+    """Codegen/build-input edits must invalidate deployed source provenance."""
+    root = Path(__file__).resolve().parents[2]
+    assert root / relative in _source_identity_paths(root)
+
+
 def _write_manifest(root: Path, payload: dict[str, object]) -> None:
     manifest = root / "cmake/GenerativeQCSourceIdentity.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)

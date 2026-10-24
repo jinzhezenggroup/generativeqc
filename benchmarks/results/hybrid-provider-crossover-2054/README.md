@@ -124,13 +124,22 @@ fail-closed pair summaries are required afterward.
 fresh bounded CPU process, writes `NOT_RUN` for failed Direct 48 attempts,
 retains timeouts/crashes and all per-pair `INCOMPLETE` or accepted summaries,
 and never converts a platform `SUCCEEDED` state into scientific acceptance.
-The small retained evidence under `evidence/` preserves the raw JSON byte count
-and SHA-256. Native/oracle/profile records use deterministic gzip; summaries
-remain readable JSON. Grid NPZ exports and full trace streams stay in the
-ignored task-owned qz experiment directory.
-GitHub may collapse these generated JSON diffs; expand an individual record or
-run `verify_evidence.py` to inspect/check every full-precision value.
-`evidence/platform/job-metrics.json` retains the platform's one-minute Pod
+The small retained evidence under `evidence/` preserves every original raw byte
+in `receipts.txt.xz`. The manifest authenticates the compressed container and
+each named member's decoded bytes, offset and SHA-256. The historical member
+names retain their `.gz` suffixes; the reader returns the original decoded
+receipt directly, without filesystem extraction. Grid NPZ exports and full
+trace streams stay in the ignored task-owned qz experiment directory.
+Run `verify_evidence.py` to check all full-precision values. To inspect one raw
+member from the repository root:
+
+```bash
+python benchmarks/hybrid_crossover_receipts.py \
+  benchmarks/results/hybrid-provider-crossover-2054/evidence \
+  platform/job-metrics.json.gz
+```
+
+The logical `platform/job-metrics.json.gz` member retains the one-minute Pod
 samples, including GPU memory usage rate. Its sampled maximum is not a
 per-process measured peak and cannot replace the provider allocation ledger.
 
@@ -163,8 +172,8 @@ endpoint, 96-atom coverage, measured memory/work decomposition and reviewed
 source-matched crossover evidence before any policy discussion.
 
 Grid NPZ exports and full trace streams remain in task-owned shared storage.
-Small raw attempt and independent-oracle JSONs are retained as deterministic
-gzip members in `evidence/`.
+Small raw attempt and independent-oracle JSONs are retained as lossless named
+members in `evidence/receipts.txt.xz`.
 Provider metric records describe allocations and planned peaks; they are not
 measured device peak memory. Missing work counters stay absent. Diagnostic
 traces and profiles must be collected in a separate pass and never mixed with

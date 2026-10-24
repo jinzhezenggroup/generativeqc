@@ -1,4 +1,4 @@
-"""Generated directional response of the existing unpruned Becke grid.
+"""Generated directional response of fixed-topology Becke quadratures.
 
 This is a tiled CPU diagnostic/consumer building block for #163 B and #180,
 not a complete KS gradient/HVP or a native derivative capability. Scalar first
@@ -11,8 +11,8 @@ import typing
 from dataclasses import dataclass
 from hashlib import sha256
 
-import numpy as np
-
+from generativeqc_compiler.common.array_execution import arrays as np
+from generativeqc_compiler.common.array_execution import branch_bytes
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.grid import GridTile, MolecularGrid, checked_int
@@ -75,6 +75,7 @@ def partition_response(
     center_motion: typing.Any,
     iterations: typing.Any = 3,
     coincident_tolerance: typing.Any = 1e-12,
+    atomic_radii: typing.Any = None,
 ) -> typing.Any:
     """Differentiate point AND every partition-center dependence exactly once.
 
@@ -99,12 +100,22 @@ def partition_response(
     dp = immutable(point_motion, shape=points.shape)
     dc = immutable(center_motion, shape=centers.shape)
     npnt, natom = len(points), len(centers)
+    if atomic_radii is not None:
+        atomic_radii = immutable(atomic_radii, shape=(natom,))
+        if np.any(atomic_radii <= 0):
+            raise ValueError("partition radii must be positive")
+        from generativeqc_compiler.dft.treutler import radii_adjustment
     branch = sha256(
         canonical_hash(
             {
                 "schema": "generativeqc.becke-response-branch/v1",
                 "shape": (npnt, natom),
                 "iterations": iterations,
+                **(
+                    {"atomic_radii": atomic_radii.tolist()}
+                    if atomic_radii is not None
+                    else {}
+                ),
                 "coincident_tolerance": coincident_tolerance,
                 "pair_program": grid_response_program("becke", iterations).identity,
             }
@@ -144,16 +155,25 @@ def partition_response(
                 db=ds,
             )
             clipped = np.abs(mu) >= 1
-            branch.update(np.asarray(np.sign(mu) * clipped, dtype=np.int8).tobytes())
+            branch.update(
+                branch_bytes(np.asarray(np.sign(mu) * clipped, dtype=np.int8))
+            )
+            if atomic_radii is not None:
+                mu, dmu = grid_response_program("treutler_adjust").evaluate(
+                    mu=np.clip(mu, -1, 1),
+                    dmu=np.where(clipped, 0, dmu),
+                    adjustment=radii_adjustment(atomic_radii[a], atomic_radii[b]),
+                    dadjustment=0.0,
+                )
             pair, derivative = pair_program.evaluate(
                 mu=np.clip(mu, -1, 1), dmu=np.where(clipped, 0, dmu)
             )
             outside = (pair < 0) | (pair > 1)
-            branch.update(outside.tobytes())
+            branch.update(branch_bytes(outside))
             derivative = np.where(outside, 0, derivative)
             pair = np.clip(pair, 0, 1)
             branch.update(
-                np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8).tobytes()
+                branch_bytes(np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8))
             )
             for atom, value, tangent in (
                 (a, pair, derivative),
@@ -212,6 +232,7 @@ def partition_mixed_response(
     right_center_motion: typing.Any,
     iterations: typing.Any = 3,
     coincident_tolerance: typing.Any = 1e-12,
+    atomic_radii: typing.Any = None,
 ) -> typing.Any:
     """Apply the smooth-branch Becke partition Hessian to two directions.
 
@@ -237,12 +258,22 @@ def partition_mixed_response(
     rp = immutable(right_point_motion, shape=points.shape)
     rc = immutable(right_center_motion, shape=centers.shape)
     npnt, natom = len(points), len(centers)
+    if atomic_radii is not None:
+        atomic_radii = immutable(atomic_radii, shape=(natom,))
+        if np.any(atomic_radii <= 0):
+            raise ValueError("partition radii must be positive")
+        from generativeqc_compiler.dft.treutler import radii_adjustment
     branch = sha256(
         canonical_hash(
             {
                 "schema": "generativeqc.becke-response-branch/v1",
                 "shape": (npnt, natom),
                 "iterations": iterations,
+                **(
+                    {"atomic_radii": atomic_radii.tolist()}
+                    if atomic_radii is not None
+                    else {}
+                ),
                 "coincident_tolerance": coincident_tolerance,
                 "pair_program": grid_response_program("becke", iterations).identity,
             }
@@ -313,7 +344,22 @@ def partition_mixed_response(
                 lrb=lrs,
             )
             clipped = np.abs(mu) >= 1
-            branch.update(np.asarray(np.sign(mu) * clipped, dtype=np.int8).tobytes())
+            branch.update(
+                branch_bytes(np.asarray(np.sign(mu) * clipped, dtype=np.int8))
+            )
+            if atomic_radii is not None:
+                mu, lmu, rmu, lrmu = grid_mixed_response_program(
+                    "treutler_adjust"
+                ).evaluate(
+                    mu=np.clip(mu, -1, 1),
+                    lmu=np.where(clipped, 0, lmu),
+                    rmu=np.where(clipped, 0, rmu),
+                    lrmu=np.where(clipped, 0, lrmu),
+                    adjustment=radii_adjustment(atomic_radii[a], atomic_radii[b]),
+                    ladjustment=0.0,
+                    radjustment=0.0,
+                    lradjustment=0.0,
+                )
             pair, lpair, rpair, lrpair = pair_program.evaluate(
                 mu=np.clip(mu, -1, 1),
                 lmu=np.where(clipped, 0, lmu),
@@ -321,13 +367,13 @@ def partition_mixed_response(
                 lrmu=np.where(clipped, 0, lrmu),
             )
             outside = (pair < 0) | (pair > 1)
-            branch.update(outside.tobytes())
+            branch.update(branch_bytes(outside))
             lpair = np.where(outside, 0, lpair)
             rpair = np.where(outside, 0, rpair)
             lrpair = np.where(outside, 0, lrpair)
             pair = np.clip(pair, 0, 1)
             branch.update(
-                np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8).tobytes()
+                branch_bytes(np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8))
             )
             for atom, value, left, right, mixed in (
                 (a, pair, lpair, rpair, lrpair),
@@ -440,6 +486,7 @@ def grid_response_tiles(
             center_motion=motion,
             iterations=grid.spec.partition_iterations,
             coincident_tolerance=grid.spec.coincident_tolerance,
+            atomic_radii=grid.resolved_radii if grid.spec.version == 4 else None,
         )
         selected = (np.arange(len(owner)), owner)
         yield GridResponseTile(
@@ -510,6 +557,7 @@ def grid_mixed_response_tiles(
             right_center_motion=right,
             iterations=grid.spec.partition_iterations,
             coincident_tolerance=grid.spec.coincident_tolerance,
+            atomic_radii=grid.resolved_radii if grid.spec.version == 4 else None,
         )
         selected = (np.arange(len(owner)), owner)
         yield GridMixedResponseTile(

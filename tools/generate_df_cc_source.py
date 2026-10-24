@@ -19,7 +19,12 @@ from generativeqc_compiler.cc.df_source import (
     factor_program,
     retained_factor_vjp,
 )
+from generativeqc_compiler.mp2.equations import (
+    df_energy_program,
+    df_energy_response_program,
+)
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 from tools.generate_df_ccsd_hoisted import contraction_query
 from tools.generate_rccsd_native import (
@@ -28,6 +33,8 @@ from tools.generate_rccsd_native import (
     _cuda_program,
     _label_dims,
     _required_function,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
 )
 
 RESPONSE_INPUTS = (
@@ -105,7 +112,7 @@ def cpu_header() -> str:
     lines += [
         "// Phase peaks include caller-owned host outputs only in the publication phase.",
         "struct SourceLayout { std::size_t source_values,row_values,matrix_values,packing_values,output_values,largest_block,transform_bytes,packing_bytes,blocks_bytes; };",
-        "inline SourceLayout source_layout(std::size_t o,std::size_t v,std::size_t q) {",
+        "inline SourceLayout source_layout(std::size_t o,std::size_t v,std::size_t q,bool factors_only=false) {",
         '  if(!o||!v||!q)throw std::invalid_argument("empty DF-CC source shape");',
         "  const auto n=checked_add(o,v);",
         "  SourceLayout p{}; p.matrix_values=checked_mul(n,n);",
@@ -115,8 +122,8 @@ def cpu_header() -> str:
     ]
     for name in BLOCK_FACTORS:
         lines += [
-            f"  p.output_values=checked_add(p.output_values,{name}_elements(o,v));",
-            f"  p.largest_block=std::max(p.largest_block,{name}_elements(o,v));",
+            f"  if(!factors_only) p.output_values=checked_add(p.output_values,{name}_elements(o,v));",
+            f"  if(!factors_only) p.largest_block=std::max(p.largest_block,{name}_elements(o,v));",
         ]
     lines += [
         "  // Two streamed raw-row components; large MO intermediates remain single FP64 arrays.",
@@ -125,6 +132,20 @@ def cpu_header() -> str:
         "  p.blocks_bytes=checked_add(sizeof(int),checked_mul(sizeof(double),checked_add(p.packing_values,checked_add(p.largest_block,p.output_values))));",
         "  return p;",
         "}",
+    ]
+    lines += [
+        "struct Mp2Outputs { const double *opposite_spin{}, *same_spin{}, *bar_bov{}, *bar_ei{}, *bar_ej{}, *bar_ea{}, *bar_eb{}, *bar_foo{}, *bar_fvv{}; };",
+        f'inline constexpr const char* mp2_energy_equation_hash="{df_energy_program(*REPRESENTATIVE, 1).logical_hash}";',
+        _required_function(
+            df_energy_program(*REPRESENTATIVE, 1),
+            "mp2_energy_arena_elements",
+            batch_dim=True,
+        ),
+        _required_function(
+            df_energy_response_program(*REPRESENTATIVE, 1),
+            "mp2_response_arena_elements",
+            batch_dim=True,
+        ),
     ]
     lines += [
         "struct ResponseInputs {",
@@ -184,6 +205,15 @@ struct ResponseCudaState : ResponseInputs {
   cudaStream_t stream{};
 };
 ResponseOutputs response_cuda(ResponseCudaState& state);
+struct Mp2CudaState {
+  std::size_t o{},v{},q{};
+  const double *bov{}, *ei{}, *ej{}, *ea{}, *eb{}, *unit{};
+  double* response_arena{};
+  int* error{};
+  cudaStream_t stream{};
+};
+Mp2Outputs mp2_energy_cuda(Mp2CudaState& state);
+Mp2Outputs mp2_response_cuda(Mp2CudaState& state);
 struct EmbeddingCudaState : EmbeddingInputs {
   std::size_t o{},v{},q{};
   double* response_arena{};
@@ -201,7 +231,10 @@ def cuda_source() -> str:
         [
             '#include "generated_df_cc_source_cuda.cuh"',
             '#include "tensor/cuda_runtime.cuh"',
+            '#include "tensor/cuda_reduction.cuh"',
             "namespace generativeqc::cc::generated::df_source {",
+            "using generativeqc_tensor::finite;",
+            emit_scaled_bilinear("triples_"),
             _cuda_program(
                 program,
                 "source_pack",
@@ -211,6 +244,44 @@ def cuda_source() -> str:
                 output_fields=FACTOR_NAMES,
             ),
             "FactorOutputs pack_cuda(CudaState& state) { return run_source_pack(state); }",
+            _cuda_program(
+                df_energy_program(*REPRESENTATIVE, 1),
+                "mp2_energy",
+                "Mp2Outputs",
+                state_type="Mp2CudaState",
+                input_overrides={
+                    name: "s." + name for name in ("bov", "ei", "ej", "ea", "eb")
+                },
+                batch_dim=True,
+                output_fields=("opposite_spin", "same_spin"),
+                parallel_scalar_reductions=True,
+            ),
+            "Mp2Outputs mp2_energy_cuda(Mp2CudaState& state) { return run_mp2_energy(state); }",
+            _cuda_program(
+                df_energy_response_program(*REPRESENTATIVE, 1),
+                "mp2_response",
+                "Mp2Outputs",
+                state_type="Mp2CudaState",
+                input_overrides={
+                    **{name: "s." + name for name in ("bov", "ei", "ej", "ea", "eb")},
+                    "bar_opposite_spin": "s.unit",
+                    "bar_same_spin": "s.unit",
+                },
+                batch_dim=True,
+                output_fields=(
+                    "opposite_spin",
+                    "same_spin",
+                    "bar_bov",
+                    "bar_ei",
+                    "bar_ej",
+                    "bar_ea",
+                    "bar_eb",
+                    "bar_foo",
+                    "bar_fvv",
+                ),
+                parallel_scalar_reductions=True,
+            ),
+            "Mp2Outputs mp2_response_cuda(Mp2CudaState& state) { return run_mp2_response(state); }",
             _cuda_program(
                 retained_factor_vjp(*REPRESENTATIVE, 1),
                 "factor_response",
@@ -240,16 +311,18 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for suffix, emit in (
-        ("_cpu.hpp", cpu_header),
-        ("_cuda.cuh", cuda_header),
-        ("_cuda.cu", cuda_source),
-    ):
-        (args.output_dir / ("generated_df_cc_source" + suffix)).write_text(
-            emit(), encoding="utf-8"
-        )
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, emit in (
+            ("_cpu.hpp", cpu_header),
+            ("_cuda.cuh", cuda_header),
+            ("_cuda.cu", cuda_source),
+        ):
+            (args.output_dir / ("generated_df_cc_source" + suffix)).write_text(
+                emit(), encoding="utf-8"
+            )
 
 
 if __name__ == "__main__":

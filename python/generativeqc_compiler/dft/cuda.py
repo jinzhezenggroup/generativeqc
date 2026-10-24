@@ -6,16 +6,21 @@ import ctypes as ct
 import threading
 import typing
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
 import numpy as np
 
 from generativeqc_compiler.common.arrays import immutable
-from generativeqc_compiler.common.cuda_runtime import _PREPARATION_LOCK, _Metrics
+from generativeqc_compiler.common.cuda_runtime import (
+    _PREPARATION_LOCK,
+    CudaArtifact,
+    _Metrics,
+)
 from generativeqc_compiler.common.native_call import checked_native_call
 from generativeqc_compiler.common.native_runtime import compile_runtime
-from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.common.resources import (
     MAX_BYTES,
     ResourceBudget,
@@ -31,6 +36,40 @@ from .grid import checked_int
 from .indexed_layout import AoGridBlockLayout
 from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
+
+
+@dataclass(frozen=True)
+class NativeGridLibrary:
+    """Unbound native-build input; the consuming grid establishes its identity.
+
+    This is not a verified artifact or a digest cache. Each new grid owner reads
+    the current complete binary after resource admission, then creates its own
+    immutable artifact record. Externally supplied CudaArtifact digests retain
+    their independent verification path.
+    """
+
+    library: Path
+    architecture: str
+
+    def bind(self) -> CudaArtifact:
+        """Read current binary bytes and establish the existing native-grid key."""
+        path = Path(self.library).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"native CUDA library not found: {path}")
+        digest = file_hash(path)
+        identity = {
+            "schema": "generativeqc.native-grid-aot.v1",
+            "target": {"architecture": self.architecture},
+        }
+        return CudaArtifact(
+            path,
+            {
+                "identity": identity,
+                "binary_sha256": digest,
+                "key": canonical_hash({"identity": identity, "binary_sha256": digest}),
+                "artifact_kind": "native-build-aot",
+            },
+        )
 
 
 class CudaAoMapAllocationError(MemoryError):
@@ -159,6 +198,8 @@ class DeviceGridTask:
         ``reset=True`` (or start a new density execution) to discard it; error
         status is fresh for every scatter attempt.
         """
+        if self._owner.plan.features_only:
+            raise RuntimeError("features-only CUDA grids cannot assemble potentials")
         view = self.view
         if type(reset) is not bool or type(download) is not bool:
             raise ValueError("scatter flags must be boolean")
@@ -235,6 +276,8 @@ class DeviceGridTask:
         three scalar integrals and, when requested, the accumulated global
         potential cross back to the host.
         """
+        if self._owner.plan.features_only:
+            raise RuntimeError("features-only CUDA grids cannot assemble potentials")
         view = self.view
         if (
             type(restricted) is not bool
@@ -296,6 +339,10 @@ class CudaGrid:
     explicitly, features download explicitly, and AO jets download only when
     requested by validation or a CPU consumer. No molecular AO grid is retained. Calls on
     one plan are serialized; different plans own independent arenas/streams.
+    ``features_only=True`` removes host potential-scatter staging from admission
+    and rejects potential assembly before packing inputs; native device buffers
+    keep their ordinary bound. Density preparation and feature/jet reads remain
+    available, including indexed and resident-point leases.
     """
 
     _fixed = frozenset(
@@ -355,6 +402,7 @@ class CudaGrid:
         active_ao_capacity: typing.Any = None,
         orbital_capacity: typing.Any = None,
         orbital_tile: typing.Any = 32,
+        features_only: bool = False,
         ingredients: typing.Any = None,
         resource_budget: typing.Any = None,
         basis_generation: typing.Any = 0,
@@ -388,12 +436,18 @@ class CudaGrid:
             active_ao_capacity=active_ao_capacity,
             orbital_capacity=orbital_capacity,
             orbital_tile=orbital_tile,
+            features_only=features_only,
         )
         self.resource_plan = plan_resources(
             (self.plan.resource_request(self.ingredients, device_id),),
             resource_budget or ResourceBudget(),
         ).require_feasible()
-        if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
+        if isinstance(artifact, NativeGridLibrary):
+            # Native-build requests carry no earlier digest to validate. Bind
+            # once here, immediately before loading, instead of hashing once in
+            # the caller to create an artifact and again here to consume it.
+            artifact = artifact.bind()
+        elif file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
             raise ValueError("CUDA grid binary hash mismatch")
         self.basis_identity = basis.identity
         self.artifact = artifact
@@ -1030,8 +1084,6 @@ class CudaGrid:
         """
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
             with self._task(
@@ -1128,13 +1180,13 @@ class CudaGrid:
 
         This device-only path is deliberately deferred: the downstream same-stream
         consumer propagates the grid error before reading AO/features. The point
-        allocation remains caller-owned and must outlive the lease.
+        allocation remains caller-owned and must outlive the lease. Dense
+        owners expose read-only AO/features with no potential/scatter buffers;
+        explicit AO maps still require a capacity-qualified indexed owner.
         """
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             active, selected = self._selected_ao_map(ao_ids)
@@ -1394,8 +1446,6 @@ class CudaGrid:
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             with self._task(
@@ -1427,8 +1477,6 @@ class CudaGrid:
         published, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients) or not published.issubset(
                 self.ingredients
             ):

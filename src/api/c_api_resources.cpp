@@ -1,13 +1,19 @@
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <iterator>
 #include <limits>
 #include <stdexcept>
 
+#include "api/error.hpp"
+#include "dft/cuda_stationary_capacity.hpp"
+#include "dft/dispersion/d3_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
+#include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
 #include "runtime/residency_observer.hpp"
@@ -15,16 +21,84 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/hf_cuda_resources.hpp"
+#include "scf/hf_df_resources.hpp"
+#include "scf/hf_host_resources.hpp"
+#include "scf/ks_device_resources.hpp"
+#include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #endif
 
 extern "C" {
+
+/** Private allocation-free compact topology query. Each row is an already
+ * expanded contraction, not an element template. The scalar AO rules are the
+ * same ones used by normalized systems; no coefficients, coordinates, provider
+ * or scientific arrays are accessed. Output is transactional on invalid input
+ * or count overflow. Results are public AOs, Cartesian AOs, shells, primitives
+ * and maximum angular momentum, bounded by size_t and signed-int64 metadata.
+ * Counts do not establish complete allocation authority. */
+int generativeqc_resource_basis_shape_v1(const std::uint32_t* angular_momenta,
+                                         const std::uint64_t* primitive_counts,
+                                         std::size_t shell_count, int representation,
+                                         std::uint64_t* output, std::size_t count) {
+  if (!angular_momenta || !primitive_counts || !shell_count || !output || count != 5 ||
+      (representation != GENERATIVEQC_BASIS_CARTESIAN &&
+       representation != GENERATIVEQC_BASIS_SPHERICAL))
+    return 1;
+  std::array<std::uint64_t, 5> result{0, 0, shell_count, 0, 0};
+  const auto maximum = std::min<std::uint64_t>(std::numeric_limits<std::size_t>::max(),
+                                               std::numeric_limits<std::int64_t>::max());
+  if (shell_count > maximum) return 1;
+  for (std::size_t index = 0; index < shell_count; ++index) {
+    const auto angular = angular_momenta[index];
+    const auto aos = generativeqc::molecule::shell_ao_count(angular, representation);
+    const auto cartesian = generativeqc::molecule::cartesian_count(angular);
+    const auto primitives = primitive_counts[index];
+    if (!aos || !cartesian || !primitives || aos > maximum - result[0] ||
+        cartesian > maximum - result[1] || primitives > maximum - result[3])
+      return 1;
+    result[0] += aos;
+    result[1] += cartesian;
+    result[3] += primitives;
+    result[4] = std::max(result[4], static_cast<std::uint64_t>(angular));
+  }
+  std::copy(result.begin(), result.end(), output);
+  return 0;
+}
+
+/** Private allocation-free D3 layout query, shared with D3Plan::prepare().
+ * Six outputs: plan host, execution host, device, tables, workspace and total
+ * retained bytes. CUDA is a selector only, including in CPU-only libraries.
+ * Invalid selectors, shapes and schemas leave the output untouched.
+ */
+int generativeqc_resource_d3_layout_v1(int backend, std::uint64_t systems, std::uint64_t atoms,
+                                       std::uint64_t maximum_atoms, std::uint64_t* values,
+                                       std::size_t value_count) {
+  if (!values || value_count != 6 || (backend != 0 && backend != 1)) return -1;
+  try {
+    const auto usage = generativeqc::dft::dispersion::d3_resource_usage(
+        static_cast<generativeqc_backend>(backend), systems, atoms, maximum_atoms);
+    const std::array<std::uint64_t, 6> inventory{
+        usage.plan_host_bytes,
+        usage.execution_host_bytes,
+        usage.device_bytes,
+        usage.table_bytes,
+        usage.workspace_bytes,
+        usage.plan_host_bytes + usage.execution_host_bytes + usage.device_bytes};
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (const std::exception&) {
+    return -1;
+  }
+}
 
 /** Read immutable source tags from this actual library, with no CUDA or heap
  * work. Null is an unknown tag, not an inferred role/payload classification. */
@@ -79,6 +153,8 @@ int generativeqc_resource_ledger_bind_v1(void* handle) {
   ledger->rejected = 0;
   ledger->requested_bytes = 0;
   ledger->requested_bytes_overflow = false;
+  ledger->provider_reservation_peak = ledger->provider_reserved;
+  ledger->admission_peak = ledger->live + ledger->provider_reserved;
   active_device_resource_ledger = std::move(ledger);
   return 0;
 }
@@ -110,6 +186,75 @@ int generativeqc_resource_ledger_read_v2(void* handle, std::uint64_t* values, st
   values[3] = ledger->rejected;
   values[4] = ledger->requested_bytes;
   return 0;
+}
+
+/** Keep numeric v1/v2 observations unchanged. The separate v3 admission receipt
+ * reports limit, numeric live/peak, retained-provider reserved/peak and their
+ * simultaneously live admission peak. Reservations are not measured allocations. */
+int generativeqc_resource_ledger_read_v3(void* handle, std::uint64_t* values, std::size_t count) {
+  if (!handle || !values || count != 6) return 1;
+  const auto& ledger =
+      *static_cast<std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>*>(handle);
+  std::lock_guard<std::mutex> lock(generativeqc::runtime::device_resource_mutex);
+  const std::array<std::uint64_t, 6> snapshot{ledger->limit,
+                                              ledger->live,
+                                              ledger->peak,
+                                              ledger->provider_reserved,
+                                              ledger->provider_reservation_peak,
+                                              ledger->admission_peak};
+  std::copy(snapshot.begin(), snapshot.end(), values);
+  return 0;
+}
+
+/** Additional per-controller capacity, never a method/property admission bit.
+ * Shape-only and CUDA-context-free, including unbuilt-profile rejection. Output
+ * is grid numeric/provider allowance, stationary minimum/cached arenas, combined
+ * minimum/cached admission, tile points, geometry lanes and geometry threads.
+ * Callers retain the legacy plan for unsupported contexts until public cutover. */
+int generativeqc_resource_stationary_cuda_v1(const char* profile, std::size_t atoms,
+                                             std::size_t aos, std::size_t primitives,
+                                             std::size_t points, std::size_t tile_points,
+                                             std::uint64_t* values, std::size_t count) {
+  if (!profile || !values || count != 9) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* binding = generativeqc::dft::cuda_stationary_binding(profile);
+  if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    const auto capacity = generativeqc::dft::cuda_stationary_capacity(
+        *binding, atoms, aos, primitives, points, tile_points);
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::exception&) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+}
+
+/** Private shape-only planner authority. Unlike the raw-profile query this
+ * parses the production descriptor and shares prepared scientific admission.
+ * Unsupported/invalid/unbuilt contexts never mutate the nine-field output. */
+generativeqc_status generativeqc_resource_ks_stationary_cuda_v1(
+    const generativeqc_method_descriptor* descriptor, const std::uint64_t* shape,
+    std::size_t shape_count, std::uint64_t* values, std::size_t count) {
+  if (!descriptor || !shape || shape_count != 7 || !values || count != 9)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(descriptor) ||
+      (descriptor->initial_guess &&
+       !generativeqc::api::valid_descriptor(descriptor->initial_guess)))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    generativeqc::dft::CudaStationaryCapacity capacity;
+    std::string detail;
+    const auto status = generativeqc::methods::detail::dft_cuda_stationary_capacity(
+        *descriptor, std::span<const std::uint64_t>(shape, shape_count), capacity, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
 }
 
 /** Snapshot retained owners and reserve journal slots before a replay begins.
@@ -237,43 +382,11 @@ int generativeqc_ks_resource_inventory_version_v1() {
   return sizeof(void*) == 8 && sizeof(generativeqc::dft::ScfIteration) <= 128 ? 1 : 0;
 }
 
-/** Pure shape bridge to allocator-owned KS/XC and common #202 direct-J
- * layouts. The XC slot combines the borrowed-grid arena and its retained
- * MolecularGrid owner. It never constructs a grid, density or CUDA context. */
-int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
-                                     std::size_t primitives, std::size_t points,
-                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
-                                     std::size_t tile_points, std::uint64_t* output,
-                                     std::size_t count) {
-  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) || pbe > 1) return 1;
-#if GENERATIVEQC_HAS_CUDA
-  try {
-    const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
-    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
-        atoms, primitives, nao, points, pbe != 0, spins == 2, tile_points, false,
-        generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
-    // The shared grid retains xyz, partition weights and atomic measures.
-    // A nonborrowed XC arena owns only the first four arrays and cannot stand
-    // in for this five-array lifetime, even when XC reads only points/weights.
-    const auto xc_and_grid = generativeqc::runtime::size_add(
-        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
-    const auto direct =
-        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives);
-    output[0] = state;
-    output[1] = xc_and_grid;
-    output[2] = direct;
-    return 0;
-  } catch (...) {
-    return 1;
-  }
-#else
-  return 2;
-#endif
-}
-
-/** Code-scoped additive inventory for generic KS. Unlike v1's LDA/PBE jet
- * flag, the exact program determines ingredient/feature widths, including tau.
- * Missing static CUDA providers fail before allocation or context creation. */
+/** Point-program-aware inventory, including tau-dependent work/feature panels.
+ * This shape-only query shares the allocator's actual layout and creates no
+ * CUDA context. XC includes the borrowed-grid arena and retained MolecularGrid;
+ * J/K uses the existing allocator-owned first-order provider storage.
+ * The legacy v1 boolean selector remains a compatible adapter. */
 int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
                                      std::size_t diis_history, std::size_t spins,
@@ -288,10 +401,20 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
     const auto xc = generativeqc::dft::cuda_xc_layout_shape(
         atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
         tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+    // The shared grid retains xyz, partition weights and atomic measures.
+    // A nonborrowed XC arena owns only the first four arrays and cannot stand
+    // in for this five-array lifetime, even when XC reads only points/weights.
     const auto xc_and_grid = generativeqc::runtime::size_add(
-        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
-    const auto direct =
-        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives);
+        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
+    // Curated exact owners retain first-order J/K leases. Automatic energy-only
+    // owners deliberately omit derivative staging; match their preparation.
+    // A missing automatic provider has already failed the XC layout query.
+    const auto direct = generativeqc::scf::cuda_direct_coulomb_device_bytes(
+        1, nao, atoms, shells, primitives,
+        generativeqc::dft::generated::automatic_cuda_point_entry(
+            static_cast<std::uint32_t>(functional))
+            ? 0U
+            : 1U);
     output[0] = state;
     output[1] = xc_and_grid;
     output[2] = direct;
@@ -302,6 +425,16 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
 #else
   return 2;
 #endif
+}
+
+int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
+                                     std::size_t primitives, std::size_t points,
+                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
+                                     std::size_t tile_points, std::uint64_t* output,
+                                     std::size_t count) {
+  if (pbe > 1) return 1;
+  return generativeqc_resource_ks_cuda_v2(nao, atoms, shells, primitives, points, diis_history,
+                                          spins, pbe, tile_points, output, count);
 }
 
 /** Shape-only opaque matrix-provider reservation, separate from explicit arenas.
@@ -337,6 +470,46 @@ int generativeqc_resource_quadrature_cuda_v1(std::size_t atoms, std::size_t poin
 #else
   return 2;
 #endif
+}
+
+/** Private shape-only CUDA fleet composition, available in CPU-only builds.
+ * Each input record has 13 slots in CudaKsDeviceResourceItem field order;
+ * slot 10 is a canonical boolean. Existing leaf queries own the supplied
+ * capacities. Nine aggregate outputs precede six diagnostic values per item.
+ * Both passes use scalar/stack storage; aliasing, malformed later records and
+ * overflow leave the complete output untouched. No device/provider is probed.
+ */
+int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 13 || !values) return -1;
+  const auto item_count = shape_count / 13;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 9) / 6 ||
+      value_count != 9 + 6 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 13 * index;
+      if (shape[10] > 1) throw std::invalid_argument("CUDA KS fleet requires a canonical boolean");
+      return scf::CudaKsDeviceResourceItem{shape[0],       shape[1],  shape[2], shape[3], shape[4],
+                                           shape[5],       shape[6],  shape[7], shape[8], shape[9],
+                                           shape[10] != 0, shape[11], shape[12]};
+    };
+    scf::CudaKsDeviceFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cuda_ks_device_item_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 9 + 6 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
 }
 
 /** Private execution-scope bridge. The selected CPU plan can explicitly cap
@@ -519,6 +692,82 @@ int generativeqc_resource_df_packed_tiles_v1(std::size_t batch, std::size_t nbf,
                                                   error_size);
 }
 
+/** Private CUDA DF numeric fleet query; available without a CUDA runtime.
+ * Thirteen slots per expanded/repeated item follow CudaDfResourceItem. A
+ * three-slot output queries bucket count, candidate count and full wire length;
+ * a full output appends each eight-slot candidate and its 66-slot buckets.
+ * Both passes validate the entire fleet. Publication is transactional, including
+ * late overflow/refusal. Input, output and error ranges must be disjoint. Only
+ * linear topology/plan metadata is allocated, never scientific/GPU storage.
+ * Status 2 preserves an unsupported-domain refusal; status 1 is invalid input,
+ * overflow or insufficient budget. Neither status permits Python fallback. */
+int generativeqc_resource_hf_df_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                              unsigned diis_history, std::uint64_t requested_budget,
+                                              unsigned storage, unsigned occupied_exchange,
+                                              std::uint64_t* values, std::size_t value_count,
+                                              char* error, std::size_t error_size) {
+  using namespace generativeqc;
+  if (!shapes || !shape_count || shape_count % scf::cuda_df_resource_item_width || !values ||
+      value_count < 3 || !error || !error_size)
+    return 1;
+  try {
+    const auto shape_bytes = runtime::size_mul(shape_count, sizeof(*shapes));
+    const auto value_bytes = runtime::size_mul(value_count, sizeof(*values));
+    if (runtime::ranges_overlap(shapes, shape_bytes, values, value_bytes) ||
+        runtime::ranges_overlap(shapes, shape_bytes, error, error_size) ||
+        runtime::ranges_overlap(values, value_bytes, error, error_size))
+      return 1;
+  } catch (const std::exception&) {
+    return 1;
+  }
+  try {
+    if (storage > 3 || occupied_exchange > 1)
+      throw std::invalid_argument("invalid CUDA DF fleet selector");
+    std::vector<scf::CudaDfResourceItem> items;
+    items.reserve(shape_count / scf::cuda_df_resource_item_width);
+    for (std::size_t offset = 0; offset < shape_count; offset += scf::cuda_df_resource_item_width) {
+      const auto* item = shapes + offset;
+      items.push_back({item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7],
+                       item[8], item[9], item[10], item[11], item[12]});
+    }
+    const auto candidates = scf::cuda_df_fleet_resources(
+        items, diis_history, requested_budget, static_cast<scf::DfPairStorageRequest>(storage),
+        occupied_exchange != 0);
+    const auto bucket_count = candidates.front().buckets.size();
+    const auto candidate_size =
+        runtime::size_add(scf::cuda_df_resource_candidate_width,
+                          runtime::size_mul(bucket_count, scf::cuda_df_resource_bucket_width));
+    const auto full_count =
+        runtime::size_add(3, runtime::size_mul(candidates.size(), candidate_size));
+    if (value_count != 3 && value_count != full_count)
+      throw std::invalid_argument("invalid CUDA DF fleet output length");
+    const std::array<std::uint64_t, 3> header{bucket_count, candidates.size(), full_count};
+    std::copy(header.begin(), header.end(), values);
+    if (value_count != 3) {
+      auto* destination = values + 3;
+      for (const auto& candidate : candidates) {
+        const auto inventory = candidate.inventory();
+        destination = std::copy(inventory.begin(), inventory.end(), destination);
+        for (const auto& bucket : candidate.buckets) {
+          destination = std::copy(bucket.values.begin(), bucket.values.end(), destination);
+          destination =
+              std::copy(bucket.energy_tiles.begin(), bucket.energy_tiles.end(), destination);
+          destination =
+              std::copy(bucket.force_tiles.begin(), bucket.force_tiles.end(), destination);
+        }
+      }
+    }
+    error[0] = '\0';
+    return 0;
+  } catch (const scf::CudaDfResourceUnsupported& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 2;
+  } catch (const std::exception& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 1;
+  }
+}
+
 int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atoms,
                                              std::size_t shells, std::size_t cartesian_aos,
                                              std::size_t primitives, std::size_t transforms,
@@ -547,6 +796,223 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
     return 0;
   } catch (const std::exception&) {
     return 1;
+  }
+}
+
+/** Shape-only private CPU HF inventory, without provider discovery or execution.
+ * Ten shape slots follow CpuHfHostResourceShape; four outputs follow
+ * cpu_hf_host_resource_keys. Invalid requests preserve the complete output.
+ */
+int generativeqc_resource_hf_cpu_host_v1(const std::uint64_t* shape, std::size_t shape_count,
+                                         std::uint64_t* values, std::size_t value_count) {
+  if (!shape || shape_count != 10 || !values || value_count != 4) return -1;
+  try {
+    const generativeqc::scf::CpuHfHostResourceShape request{shape[0], shape[1], shape[2], shape[3],
+                                                            shape[4], shape[5], shape[6], shape[7],
+                                                            shape[8], shape[9]};
+    const auto inventory = generativeqc::scf::cpu_hf_host_resources(request);
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Shape-only CPU HF fleet inventory with transactional publication.
+ * Each 14-slot item is the ten phase-shape fields followed by orbital and
+ * auxiliary shell/primitive counts. Output is retained/workspace/peak followed
+ * by four phase capacities per item. Input must remain immutable and disjoint
+ * from output. Two bounded scalar passes avoid O(items) native scratch: first
+ * validate the entire fleet, then publish its already validated phase bounds.
+ * No allocation/provider/scientific work occurs on successful requests.
+ */
+int generativeqc_resource_hf_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 14 || !values) return -1;
+  const auto item_count = shape_count / 14;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 3) / 4 ||
+      value_count != 3 + 4 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 14 * index;
+      return scf::CpuHfHostResourceItem{{shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+                                         shape[6], shape[7], shape[8], shape[9]},
+                                        shape[10],
+                                        shape[11],
+                                        shape[12],
+                                        shape[13]};
+    };
+    scf::CpuHfHostFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto phases = scf::cpu_hf_host_resources(item_at(index).shape);
+      std::copy(phases.begin(), phases.end(), values + 3 + 4 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Direct CUDA HF fleet composition without CUDA/provider construction.
+ * Each nine-slot item follows CudaHfResourceShape. Outputs are the four fleet
+ * slots followed by arena/host/ECP for each item. Allocator/ECP leaf capacities
+ * are inputs, not recomputed here. Disjoint buffers and two scalar passes make
+ * publication transactional for malformed later items and aggregate overflow.
+ */
+int generativeqc_resource_hf_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 9 || !values) return -1;
+  const auto item_count = shape_count / 9;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 4) / 3 ||
+      value_count != 4 + 3 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 9 * index;
+      return scf::CudaHfResourceShape{shape[0], shape[1], shape[2], shape[3], shape[4],
+                                      shape[5], shape[6], shape[7], shape[8]};
+    };
+    scf::CudaHfFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cuda_hf_item_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 4 + 3 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Shape-only private CPU host inventory, not an execution capability.
+ * Successful queries use only scalar/stack storage, without heap/provider work.
+ * Shape slots follow CpuKsHostResourceShape's field order (17 unsigned values);
+ * boolean slots 14/15 must be 0/1. Output slots follow cpu_ks_host_resource_keys.
+ * Wrong lengths, topology or overflow preserve the entire caller output.
+ */
+int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t shape_count,
+                                         std::uint64_t* values, std::size_t value_count) {
+  if (!shape || shape_count != 17 || !values || value_count != 16 || shape[14] > 1 || shape[15] > 1)
+    return -1;
+  try {
+    const generativeqc::scf::CpuKsHostResourceShape request{
+        shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+        shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+        shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    const auto inventory = generativeqc::scf::cpu_ks_host_resources(request);
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Transactional CPU KS fleet capacity query, without allocation or providers.
+ * Each input item has the existing 17-slot host shape. Output is twelve
+ * persistent component totals, retained/workspace/peak, then sixteen diagnostic
+ * capacities per item. The workspace floor is a caller-supplied consumer bound,
+ * not a capability/admission bit. Immutable input must be disjoint from output.
+ * Two scalar passes validate the full request before publishing with O(1)
+ * native scratch; malformed later items or aggregate overflow preserve output.
+ */
+int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t workspace_floor, std::uint64_t* values,
+                                          std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 17 || !values) return -1;
+  const auto item_count = shape_count / 17;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
+      value_count != 15 + 16 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 17 * index;
+      if (shape[14] > 1 || shape[15] > 1)
+        throw std::invalid_argument("CPU KS fleet requires canonical boolean slots");
+      return scf::CpuKsHostResourceShape{
+          shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+          shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+          shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    };
+    scf::CpuKsHostFleetResources fleet(workspace_floor);
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cpu_ks_host_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 15 + 16 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Shape-only CUDA host lifetimes, including explicitly retained consumers.
+ * Each item contains the CPU ABI's 17 shape slots plus host-unfused XC at 17.
+ * Boolean slots 14/15/17 must be canonical. The 15 aggregate and 16/item output
+ * slots match the host fleet vocabulary; aggregate retained additionally owns
+ * retained_allowance. Neither allowance admits a force/provider capability.
+ * Two scalar passes and disjoint buffers preserve all-or-nothing publication,
+ * including malformed later items and aggregate signed-int64 overflow.
+ */
+int generativeqc_resource_ks_cuda_host_fleet_v1(const std::uint64_t* shapes,
+                                                std::size_t shape_count,
+                                                std::uint64_t retained_allowance,
+                                                std::uint64_t workspace_floor,
+                                                std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 18 || !values) return -1;
+  const auto item_count = shape_count / 18;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
+      value_count != 15 + 16 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 18 * index;
+      if (shape[14] > 1 || shape[15] > 1 || shape[17] > 1)
+        throw std::invalid_argument("CUDA KS host fleet requires canonical boolean slots");
+      return scf::KsHostResourceShape{
+          shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+          shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+          shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    };
+    const auto execution_at = [&](std::size_t index) {
+      return shapes[18 * index + 17] ? scf::KsHostExecution::cuda_host_unfused
+                                     : scf::KsHostExecution::cuda_fused;
+    };
+    scf::KsHostFleetResources fleet(workspace_floor, retained_allowance);
+    for (std::size_t index = 0; index < item_count; ++index)
+      fleet.append(item_at(index), 1, execution_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::ks_host_resources(item_at(index), execution_at(index));
+      std::copy(item.begin(), item.end(), values + 15 + 16 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
   }
 }
 

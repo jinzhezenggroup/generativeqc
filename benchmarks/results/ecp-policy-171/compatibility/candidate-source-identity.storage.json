@@ -1,0 +1,15 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/ecp-policy-171/compatibility/candidate-source-identity.json",
+  "original_revision": "39e2ebc05944ffad4e7bd3080d6aa284cdc7694b",
+  "original_bytes": 164181,
+  "original_sha256": "76342f9fc7c4486428d813fee960699c637a7842e9a17f688d8ff89b2991ce16",
+  "original_git_blob": "3e48b876a72bab48a32e467dd6bbca53a44d8e96",
+  "historical_manifest_entry": "candidate-source-identity.json",
+  "stored_path": "benchmarks/results/ecp-source-inventories.json.xz",
+  "stored_bytes": 68904,
+  "stored_sha256": "d3ac19abf2ca059cffc284360057a3c13e03ff470364c58e71edb55e863e784c",
+  "compression": "xz / LZMA2 preset 9; JSON text members",
+  "scope": "Storage only. Decompression reproduces every original byte, including whitespace. Historical raw-evidence manifests retain their original identities.",
+  "member": "benchmarks/results/ecp-policy-171/compatibility/candidate-source-identity.json"
+}

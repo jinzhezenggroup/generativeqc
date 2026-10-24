@@ -19,7 +19,7 @@ def test_native_split_hybrid_descriptor_gate(
         [ROOT / "tests/native/split_hybrid_admission_probe.cpp"],
         executable,
         compile_args=(
-            "-std=c++17",
+            "-std=c++20",
             "-DGENERATIVEQC_HAS_CUDA=1",
             "-I" + str(ROOT / "include"),
             "-I" + str(ROOT / "src"),

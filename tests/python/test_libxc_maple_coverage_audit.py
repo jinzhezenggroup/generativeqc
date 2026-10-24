@@ -21,10 +21,8 @@ def test_static_direct_import_blockers_are_explicit() -> None:
         for item in report["sources"]
         if item["kind"] == "functional" and not item["direct_importable"]
     }
-    assert report["direct_importable_functionals"] == 22
-    assert blocked == {
-        "lda_x.mpl": ["lda_x_spin"],
-    }
+    assert report["direct_importable_functionals"] == 23
+    assert blocked == {}
 
 
 def test_checked_in_coverage_snapshot_is_current() -> None:

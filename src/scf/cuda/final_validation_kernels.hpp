@@ -59,4 +59,8 @@ void launch_validation_finish(cudaStream_t stream, ValidationPartial* partial,
 void launch_validation_columns(cudaStream_t stream, std::size_t n, std::size_t occupied,
                                const double* c, const double* values, double weight,
                                double* columns);
+/** Inspect staged total D/W before publication. The caller clears and owns
+ * the status word, and drains the stream before reading or reusing it. */
+void launch_validation_weights_status(cudaStream_t stream, std::size_t elements,
+                                      const double* density, const double* weighted, int* status);
 }  // namespace generativeqc::scf::cuda_df

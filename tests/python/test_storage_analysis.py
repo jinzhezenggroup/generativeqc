@@ -8,12 +8,66 @@ from generativeqc_compiler.common.storage import (
     BufferOp,
     BufferValue,
     MemoryEffect,
+    analyze_lifetimes,
     analyze_storage,
 )
 
 
 def explicit(key: typing.Any, reads: typing.Any, writes: typing.Any) -> BufferOp:
     return BufferOp(key, reads, writes, MemoryEffect.EXPLICIT)
+
+
+@pytest.mark.parametrize("opaque", [False, True])
+@pytest.mark.parametrize("unknown", [False, True])
+def test_lifetime_only_analysis_reuses_alias_and_effect_legality(
+    monkeypatch: pytest.MonkeyPatch, opaque: bool, unknown: bool
+) -> None:
+    """Symbolic clients use the same ranges without constructing interference."""
+    from generativeqc_compiler.common import storage
+
+    values = (
+        BufferValue(
+            "external",
+            64,
+            "device",
+            compiler_owned=False,
+            alias=AliasKind.UNKNOWN if unknown else AliasKind.OWNER,
+        ),
+        BufferValue("owner", 64, "device"),
+        BufferValue(
+            "view",
+            32,
+            "device",
+            alias=AliasKind.VIEW,
+            alias_of="owner",
+            compiler_owned=False,
+        ),
+        BufferValue("result", 8, "device"),
+    )
+    operations = (
+        explicit("produce", ("external",), ("owner",)),
+        explicit("view", ("owner",), ("view",)),
+        BufferOp(
+            "consume",
+            ("view",),
+            ("result",),
+            MemoryEffect.OPAQUE if opaque else MemoryEffect.EXPLICIT,
+        ),
+    )
+    reference = analyze_storage(
+        values, operations, inputs=("external",), outputs=("result",)
+    )
+
+    def no_edges(*args: object) -> typing.NoReturn:
+        raise AssertionError("lifetime-only analysis built interference")
+
+    monkeypatch.setattr(storage, "_overlap", no_edges)
+    lifetimes = analyze_lifetimes(
+        values, operations, inputs=("external",), outputs=("result",)
+    )
+    assert lifetimes.ranges == reference.ranges
+    assert lifetimes.blocked_spaces == reference.blocked_spaces
+    assert lifetimes.donations == reference.donations
 
 
 def test_alias_lifetime_interference_and_deterministic_reuse() -> None:

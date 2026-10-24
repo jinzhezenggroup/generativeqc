@@ -102,3 +102,68 @@ independent NumPy and external references; it is never an automatic error
 fallback. The ledger requires removing the kernel and selector after complete
 #206 numerical, resource and endpoint acceptance, once independent gates and
 retained samples cover its regression role. Those closure gates remain open.
+
+The 2026-10-11 storage-only compaction retains the exact original 192-AO and
+384-AO batch-four force comparisons in `measurements/192ao-b4-forces-blas.json.gz`
+and `measurements/384ao-b4-forces-blas.json.gz`. Each adjacent `.storage.json`
+records original/stored sizes and hashes plus the original Git blob. Decompression restores the original JSON bytes, including
+all timings, forces, settings and ordering; historical summary hashes continue
+to identify those restored bytes. The live response-timeline reader accepts the
+compressed reference. No benchmark was rerun or acceptance gate changed.
+
+The 192-AO batch-four serial-dot comparison is likewise retained losslessly in
+`measurements/192ao-b4-forces-serial.json.gz`, authenticated by the adjacent
+`.storage.json`. The stored payload restores all 166,398 original JSON bytes;
+historical command paths and decoded-file hashes remain unchanged. Read the
+record with the shared `load_record` reader or `gzip -dc`.
+
+The 2026-10-17 storage-only compaction applies the same representation to the
+96-AO batch-four serial-dot and BLAS force comparisons in
+`measurements/96ao-b4-forces-{serial,blas}.json.gz`. Adjacent `.storage.json`
+receipts pin the original Git blobs and both byte identities. Every historical
+sample and decoded-file hash is preserved; this makes room for new Hessian
+evidence without increasing the repository's 64 MiB evidence budget.
+
+The 384-AO batch-four BLAS energy comparison is likewise retained losslessly in
+`measurements/384ao-b4-energy-blas.json.gz`, with its original Git blob and both
+byte identities in the adjacent `.storage.json`. All 99,289 original JSON bytes
+are restored by `gzip -dc` or read by the shared `load_record` reader. Historical
+summary paths and decoded-file hashes remain unchanged. This storage-only change
+makes room for the pending Direct-force evidence without changing its measured
+source, samples, qualification gates or the aggregate evidence budget.
+
+The historical 192-AO batch-four direct-gate record is retained losslessly in
+`direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json.gz`. The adjacent
+`.storage.json` pins all 142,797 original bytes, their Git blob and both SHA-256
+identities. Use `gzip -dc` or the shared `load_record` reader. All five unmatched
+iteration-pair labels, complete timings and E/F vectors remain intact; the
+separate strict-gate failures and historical summary paths are unchanged.
+The stored member is below the unchanged 128 KiB large-record review threshold.
+
+The remaining tetramer direct-gate records and 192/384-AO batch-one energy records
+are retained in adjacent `.json.gz` files, with `.storage.json` original/stored
+hashes and Git blobs. Exact original bytes, including historical failed gates,
+are unchanged. Use `gzip -dc` or the shared `load_record` reader. This storage
+change makes room for native-grid-binding evidence under unchanged limits.
+
+The 2026-10-23 storage-only update compresses five additional historical records
+(two 96-AO direct/control batch-four records and the 192/96-AO batch-four energy
+and 19-AO batch-four force records) with deterministic gzip. Adjacent
+`*.storage.json` files pin every original byte count, SHA-256 and Git blob, plus
+the compressed identity. Use `gzip -dc <original-path>.gz` to restore the exact
+original JSON, or the existing `load_record` reader with the `.gz` path. The
+original logical paths and hashes in historical summaries remain provenance;
+no timings, failures, numerical gates or storage caps change.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.
+
+The 192/384-AO batch-one BLAS and 192-AO batch-one serial force records use
+the same exact-byte gzip representation and adjacent `.storage.json` receipts.
+This retains every historical observation while making room for the bounded
+Hessian capacity qualification; decoded Git blobs and scientific gates are
+unchanged.

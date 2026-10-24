@@ -57,7 +57,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     output = np.full((len(metadata["inputs"]["atomic_numbers"]), 3), 12345.0)
     values = np.full(16, 12345.0)
-    counts = np.zeros(12, dtype=np.uintp)
+    counts = np.zeros(20, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     with NativeSource(**source_arguments(metadata)) as source:
         code = probe(
@@ -137,9 +137,9 @@ def test_complete_native_force_against_independent_energy_directions(
     expected = independent(metadata, triples)
     np.testing.assert_allclose(values[:4], expected, atol=3e-9, rtol=0)
     assert max(values[4:8]) < 1e-8
-    # Symmetric polarization retains the admitted integral consumer in two
-    # traversals; the complete endpoint uses this default with exact sources.
-    assert counts[6] == 0 and counts[7] == 2
+    # The default uses one retained-shell pass when admitted, otherwise bounded
+    # symmetric polarization; neither path constructs an explicit Hessian.
+    assert counts[6] == 0 and counts[7] in (1, 2)
     assert counts[1] > 0 and counts[2] > 0 and counts[0] <= 1 << 30
     np.testing.assert_allclose(forces.sum(axis=0), 0, atol=3e-8, rtol=0)
     direction = np.random.default_rng(1764).normal(size=forces.shape)
@@ -227,6 +227,34 @@ def test_native_energy_force_finite_difference_and_failure_publication(
     rejected = run(probe, metadata, budget=1)
     assert rejected[0] != 0
     assert np.all(rejected[2] == 12345.0) and np.all(rejected[3] == 12345.0)
+
+
+@pytest.mark.parametrize("name", ["h2", "water", "lih"])
+@pytest.mark.parametrize("triples", [False, True])
+def test_complete_response_defaults_preserve_legacy_force(
+    probe: typing.Any,
+    name: str,
+    triples: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gap-free production defaults retain independent physical acceptance."""
+    metadata, _ = load_fixture(name)
+    monkeypatch.setenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    monkeypatch.setenv("GENERATIVEQC_TEST_LAMBDA_SERIAL_SCRATCH", "0")
+    baseline = run(probe, metadata, triples=triples)
+    assert baseline[0] == 0, baseline[1]
+    monkeypatch.delenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS")
+    monkeypatch.delenv("GENERATIVEQC_TEST_LAMBDA_SERIAL_SCRATCH")
+    candidate = run(probe, metadata, triples=triples)
+    assert candidate[0] == 0, candidate[1]
+    np.testing.assert_allclose(candidate[2], baseline[2], atol=3e-10, rtol=3e-10)
+    np.testing.assert_allclose(
+        candidate[3][:4], independent(metadata, triples), atol=3e-9, rtol=0
+    )
+    assert max(candidate[3][4:8]) < 1e-8
+    np.testing.assert_array_equal(candidate[4][1:8], baseline[4][1:8])
 
 
 def test_complete_water_all_nuclear_coordinates(

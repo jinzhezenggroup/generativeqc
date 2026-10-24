@@ -35,6 +35,8 @@ struct KsModelIdentity {
   std::optional<scf::ResolvedFockBuild> range_correction{};
   std::optional<nlc::Vv10Parameters> nonlocal_correlation{};
   nlc::Vv10DensityDomain nonlocal_density_domain{nlc::Vv10DensityDomain::StrictPositive};
+  /** Distinct full quadrature prescription, never just a total point count. */
+  std::optional<GridSpec> nonlocal_grid{};
   bool operator==(const KsModelIdentity&) const = default;
 };
 
@@ -70,6 +72,27 @@ struct KsFinalStateDiagnostic {
   double physical_residual{};
 };
 
+/** Scalar evidence bound by a native owner to its exact physical final frame.
+ * The owner must authenticate the token, generations, device and solver result
+ * before supplying products; copied identity labels alone prove no lifetime. */
+struct KsFinalStateEvidence {
+  KsFinalStateIdentity identity;
+  std::uint64_t fock_density_generation{};
+  bool physical_origin{};
+  EnergyComponents components;
+  double reported_energy{}, physical_residual{};
+};
+
+/** Shared KS component-energy and determinant gates for resident consumers.
+ * Requires canonical products and the current physical F[D] generation; never
+ * substitutes the quadratic HF energy for the KS component energy. Failed
+ * evidence clears output and does not authorize stationary weights. */
+bool validate_ks_final_state_evidence(const KsFinalStateIdentity& current, std::size_t dimension,
+                                      const KsFinalStateEvidence& evidence,
+                                      const scf::solver::FinalStateLimits& limits,
+                                      const scf::solver::FinalStateDiagnostic& products,
+                                      KsFinalStateDiagnostic& output, std::string& detail);
+
 /** Detached output authorized for a later stationary-gradient consumer. W is
  * absent unless explicitly requested after every identity and numerical gate
  * has passed. */
@@ -79,6 +102,8 @@ struct VerifiedKsFinalState {
   std::vector<scf::reference::EigenResult> orbitals;
   EnergyComponents components;
   KsFinalStateDiagnostic diagnostic;
+  /** Published only after the native owner verifies its explicit budget gate. */
+  std::optional<double> stationarity_tolerance;
 };
 
 /** Borrow a validated RKS/UKS snapshot through the common core reference

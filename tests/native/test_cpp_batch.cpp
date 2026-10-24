@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -66,6 +67,82 @@ int main() {
                                                  0,
                                                  1};
     generativeqc::System helium(context, he_descriptor);
+
+    const std::array<generativeqc_atom, 1> ca_atoms{{{20, 0.0, 0.0, 0.0}}};
+    auto ca_descriptor = he_descriptor;
+    ca_descriptor.atoms = ca_atoms.data();
+    ca_descriptor.charge = 18;
+    generativeqc::System calcium_ion(context, ca_descriptor);
+    generativeqc_initial_guess_options automatic{};
+    automatic.struct_size = sizeof(automatic);
+    automatic.abi_version = GENERATIVEQC_ABI_VERSION;
+    automatic.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+    require(generativeqc_initial_guess_capabilities_v1() &
+                GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU,
+            "native automatic CPU execution capability is unavailable");
+    for (const auto method_name : {"rhf", "pbe-rks"}) {
+      auto automatic_method = generativeqc::default_method_descriptor(method_name);
+      automatic_method.initial_guess = &automatic;
+      const std::array<const generativeqc_system*, 2> mixed{{helium.get(), calcium_ion.get()}};
+      generativeqc_batch* handle = nullptr;
+      generativeqc::check(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, &handle));
+      const std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> owner(
+          handle, generativeqc_batch_destroy);
+      std::array<generativeqc_batch_item_result_descriptor, 2> results{};
+      for (auto& result : results) {
+        result.struct_size = sizeof(result);
+        result.abi_version = GENERATIVEQC_ABI_VERSION;
+      }
+      for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        generativeqc::check(
+            generativeqc_batch_execute(handle, nullptr, 0, results.data(), results.size()));
+        for (std::size_t index = 0; index < results.size(); ++index) {
+          require(results[index].status == GENERATIVEQC_STATUS_SUCCESS,
+                  "native automatic mixed batch did not converge");
+          generativeqc_initial_guess_diagnostic diagnostic{};
+          diagnostic.struct_size = sizeof(diagnostic);
+          diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+          const auto status =
+              generativeqc_batch_get_initial_guess_diagnostic(handle, index, &diagnostic);
+          if (index) {
+            require(status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                    "native Hcore fallback published a preliminary diagnostic");
+            continue;
+          }
+          generativeqc::check(status);
+          require(diagnostic.requested_kind == GENERATIVEQC_INITIAL_GUESS_MINAO,
+                  "an unsupported neighbor changed native automatic selection");
+          require(diagnostic.outcome == (attempt ? 1U : 2U),
+                  "native per-item cold/warm initial-guess lifecycle drifted");
+        }
+      }
+      automatic_method.initial_guess = nullptr;
+      generativeqc::Calculation core(context, calcium_ion, automatic_method);
+      const auto reference = core.execute();
+      require(std::abs(results[1].energy - reference.energy) < 1e-10,
+              "native automatic fallback changed target equations");
+      automatic_method.initial_guess = &automatic;
+      generativeqc::Calculation automatic_single(context, calcium_ion, automatic_method);
+      require(std::abs(automatic_single.execute().energy - reference.energy) < 1e-10,
+              "single-system native automatic fallback changed target equations");
+      automatic.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+      automatic_method.initial_guess = &automatic;
+      handle = nullptr;
+      require(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     0, &handle) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "explicit MINAO silently fell back for a heavy element");
+      automatic.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+      automatic.max_iterations = 65;
+      handle = nullptr;
+      require(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     0, &handle) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "automatic domain fallback hid invalid preparation controls");
+      automatic.max_iterations = 0;
+    }
 
     generativeqc_method_descriptor method{sizeof(generativeqc_method_descriptor),
                                           GENERATIVEQC_ABI_VERSION,
@@ -164,14 +241,25 @@ int main() {
             "Python-free C++ PBE0 energy differs from qualified native reference");
     require(pbe0_energy.physical_residual_rms.has_value(),
             "C++ PBE0 SCF lost physical commutator diagnostic");
-    try {
-      (void)prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
-      throw std::runtime_error("C++ SDK incorrectly advertised DFT forces");
-    } catch (const generativeqc::Error& error) {
-      require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "C++ DFT force request did not fail closed");
+    if (prepared.supported_properties() & GENERATIVEQC_PROPERTY_FORCES) {
+      const auto direct =
+          prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+      require(direct.forces && direct.forces->size() == 6 &&
+                  std::abs(direct.energy - pbe0_energy.energy) < 1e-8,
+              "C++ Direct PBE0 failed complete native E+F publication");
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        require(std::abs((*direct.forces)[axis] + (*direct.forces)[3 + axis]) < 2e-5,
+                "C++ Direct PBE0 force violates translation invariance");
+    } else {
+      try {
+        (void)prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+        throw std::runtime_error("C++ SDK admitted disabled Direct derivative inventory");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                "C++ DFT force request did not fail closed");
+      }
     }
-    // Only a prepared CPU DF-RKS PBE0 context can advertise these forces.
+    // A prepared CPU DF-RKS PBE0 context does not require the Direct AOT inventory.
     // This tests SDK parity with the compiler MethodIR CLI selector, which
     // exercises complete reconverged-displacement force differences in CTest.
     pbe0_descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
@@ -190,6 +278,55 @@ int main() {
     for (std::size_t axis = 0; axis < 3; ++axis)
       require(std::abs((*pbe0_forces.forces)[axis] + (*pbe0_forces.forces)[3 + axis]) < 2e-5,
               "C++ CPU DF-PBE0 force violates translation invariance");
+
+    // Empty beta occupation must still publish the complete native two-spin
+    // determinant. Each displaced energy uses a fresh SDK preparation/solve.
+    auto uks_system_descriptor = h2_descriptor;
+    uks_system_descriptor.charge = 1;
+    uks_system_descriptor.multiplicity = 2;
+    generativeqc::System h2_cation(context, uks_system_descriptor);
+    auto uks_descriptor = pbe0_descriptor;
+    uks_descriptor.method = GENERATIVEQC_METHOD_PBE_UKS;
+    const auto prepare_uks = [&](const generativeqc::System& system, bool hybrid) {
+      generativeqc::KsComposition composition(GENERATIVEQC_METHOD_PBE_UKS,
+                                              "semilocal-scaled-v1/pbe-spin-c2-1e-18", 2);
+      composition.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
+          .add_semilocal("GGA_C_PBE", 1.0)
+          .add_semilocal("GGA_X_PBE", hybrid ? 0.75 : 1.0);
+      if (hybrid) composition.add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
+      return composition.prepare(context, system, uks_descriptor);
+    };
+    for (const auto fitting :
+         {GENERATIVEQC_DENSITY_FITTING_NONE, GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE}) {
+      uks_descriptor.density_fitting_mode = fitting;
+      for (const bool hybrid : {false, true}) {
+        auto owner = prepare_uks(h2_cation, hybrid);
+        const bool eligible = owner.supported_properties() & GENERATIVEQC_PROPERTY_FORCES;
+        require(eligible || fitting == GENERATIVEQC_DENSITY_FITTING_NONE,
+                "C++ fitted UKS context did not advertise native forces");
+        if (!eligible) continue;
+        const auto result =
+            owner.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+        require(result.forces && result.forces->size() == 6 && std::isfinite(result.energy),
+                "C++ UKS failed native E+F publication");
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          require(std::isfinite((*result.forces)[axis]) &&
+                      std::abs((*result.forces)[axis] + (*result.forces)[3 + axis]) < 2e-5,
+                  "C++ UKS native force violates translation invariance");
+        constexpr double step = 2e-4;
+        std::array<double, 2> energies{};
+        for (std::size_t displacement = 0; displacement < energies.size(); ++displacement) {
+          auto atoms = h_atoms;
+          atoms[1].z += displacement == 0 ? step : -step;
+          auto descriptor = uks_system_descriptor;
+          descriptor.atoms = atoms.data();
+          generativeqc::System moved(context, descriptor);
+          energies[displacement] = prepare_uks(moved, hybrid).execute().energy;
+        }
+        require(std::abs((*result.forces)[5] + (energies[0] - energies[1]) / (2 * step)) < 2e-6,
+                "C++ UKS native force disagrees with reconverged energy differences");
+      }
+    }
     std::cout << "C++ ragged batch and explicit KS API: PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

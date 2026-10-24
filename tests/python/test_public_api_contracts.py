@@ -450,6 +450,22 @@ class PublicContractTests(unittest.TestCase):
             any("missing contract classification" in item for item in self.contracts())
         )
 
+    def test_standard_numpy_scalar_dtypes_and_constants(self) -> None:
+        self.exported(
+            "import numpy as np\nint8 = np.int8\ncomplex128 = np.complex128\n"
+            "pi = np.pi\ninf = np.inf\n",
+            ("int8", "complex128", "pi", "inf"),
+        )
+        _, declarations, failures = checker.public_declarations(self.package)
+        self.assertFalse(failures)
+        self.assertEqual(
+            {entry.kind for entry in declarations.values()}, {"dtype", "constant"}
+        )
+
+    def test_arbitrary_numpy_attributes_are_not_public_constant_contracts(self) -> None:
+        self.exported("import numpy as np\nrun = np.random")
+        self.assertIn("unsupported assignment", self.errors()[0])
+
     def test_new_documented_export_still_requires_contract_classification(self) -> None:
         self.exported('def run():\n    """Execute a checked program."""\n')
         policy = self.policy()

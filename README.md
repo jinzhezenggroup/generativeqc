@@ -1,9 +1,6 @@
 <!--
-IMPORTANT: Keep this README concise and user-facing. It should contain only
-the project identity, current supported methods, essential capabilities,
-installation, and minimal examples. Put implementation history, kernel
-details, benchmark analysis, and extended roadmaps in docs/ or
-benchmarks/results/ instead of expanding this file.
+Keep this README concise and user-facing. Implementation details, capability
+boundaries, and benchmark analysis belong in docs/ and benchmarks/results/.
 -->
 
 <p align="center">
@@ -21,89 +18,50 @@ benchmarks/results/ instead of expanding this file.
 
 <p align="center">
   <strong>Quantum chemistry generated across the stack.</strong><br>
-  GPU-native, batched quantum chemistry with analytic forces.
+  GPU-native energies and analytic forces, with reusable batched execution.
 </p>
 
-## Why *Generative*QC?
+GenerativeQC brings **generation from scientific intent to executable kernels**:
+coding agents help develop human-reviewed source; declarative method definitions
+and compiler IRs produce execution programs and specialized CPU/CUDA kernels.
+The underlying quantum chemistry remains explicit and is checked against
+independent scientific references—not replaced by a learned surrogate.
 
-GenerativeQC treats **generation as a design principle across the software stack**:
+## Highlights
 
-- **LLM-generated source** — coding agents and large language models help generate
-  and evolve human-readable source code, tests, benchmarks, and documentation
-  under human scientific review.
-- **Generated scientific methods** — declarative descriptions such as `MethodIR`
-  let method families, compositions, and metadata be generated instead of
-  hand-wiring every variant.
-- **Generated computational programs** — compiler IRs lower high-level
-  electronic-structure definitions into executable program and computation-graph
-  representations.
-- **Generated kernels** — code generation and AOT specialization emit CPU and
-  CUDA kernels specialized for methods, basis and shell structure, and target
-  hardware.
+- **HF, DFT, and correlated methods.** RHF/UHF; RKS/UKS from LDA and GGA through
+  meta-GGA, hybrid, range-separated, and nonlocal functionals (including PBE,
+  PBE0, B3LYP, r2SCAN, WB97M-V, and r2SCAN-3c); qualified MP2, RCCSD, and
+  RCCSD(T) paths.
+- **Analytic derivatives.** Nuclear forces for qualified CPU/CUDA methods,
+  with analytic Hessians and Hessian-vector products in selected domains.
+- **GPU-native prepared execution.** Direct and density-fitted paths, reusable
+  calculation plans, density warm starts, ragged batches, and per-system isolation.
+- **Generated methods and kernels.** MethodIR and Libxc-backed discovery,
+  compiler-generated execution/derivative graphs, and AOT-specialized CPU/CUDA
+  kernels, with bounded runtime generation where supported.
+- **More chemistry.** GFN2-xTB energies and forces; Cartesian and spherical
+  Gaussian bases, custom basis input, and scalar Gaussian ECPs.
+- **One native core, several interfaces.** Python, C, C++, and a Python-free
+  native CLI, plus PyTorch and JAX integration.
 
-In short: **scientific intent → LLM-generated source → generated methods →
-generated programs → generated kernels**.
+## Install
 
-The LLM layer is a development workflow, not a surrogate for the underlying
-quantum chemistry. Numerical results come from explicit electronic-structure
-methods, are checked against independent references, and performance claims
-require reproducible gates.
-
-## Features
-
-- **Compiler-generated quantum chemistry.** MethodIR, ProgramIR, and IntegralIR
-  turn declarative scientific definitions into validated execution graphs,
-  derivative/response programs, schedules, and specialized CPU/CUDA kernels.
-  Built-in paths are AOT-first; JIT and autotuning are explicit opt-in workflows.
-- **Hartree–Fock and correlated methods.** RHF/UHF provide energies and analytic
-  nuclear forces with direct and density-fitted execution paths. Qualified public
-  post-HF domains include MP2, RCCSD, and RCCSD(T), behind the same method registry
-  and prepared-execution contracts.
-- **Broad Kohn–Sham DFT.** RKS/UKS execution covers semilocal LDA/GGA/meta-GGA,
-  global-hybrid, range-separated, and nonlocal-correlation compositions. MethodIR
-  drives named and automatically imported Libxc selectors; qualified examples
-  include PBE, PBE0, B3LYP, r2SCAN, WB97M-V, generic D4 compositions, and
-  r2SCAN-3c.
-- **Analytic derivatives with fail-closed capability gates.** Supported
-  method/backend/property combinations expose native analytic forces, including
-  CUDA HF, global-hybrid DFT, WB97M-V, composite r2SCAN-3c, and qualified
-  correlated-method paths. Unsupported derivative domains fail explicitly rather
-  than silently changing methods or backends.
-- **GPU-native prepared execution.** Reusable CPU/CUDA plans retain topology and
-  numerical state across calls, with density warm starts, ragged batches,
-  per-system failure isolation, CUDA-resident execution, and resource/precision
-  diagnostics.
-- **GFN2-xTB.** Molecular energies and analytic forces are available on CPU and
-  native CUDA SDK builds, including charged and standard restricted open-shell
-  states for H-Rn with the method's intrinsic minimal basis.
-- **Gaussian basis and ECP support.** Contracted Cartesian and real-spherical
-  bases reach `s` through `g` on CPU and `s` through `f` on CUDA. Bundled
-  basis data, [offline local/custom basis input](docs/user/external_basis.md) with
-  H–Og identities, and [scalar Gaussian ECPs](docs/user/ecp.md) share explicit
-  provenance and capability checks.
-- **Multiple interfaces, one scientific core.** Python, C, C++, and a Python-free
-  native CLI share the native runtime; PyTorch and JAX bindings reuse native
-  analytic derivatives for custom backward paths.
-
-
-## Build and install
-
-Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+. CUDA
-builds additionally require a supported CUDA toolchain.
-
-Install the Python package from source:
+Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+.
+CUDA builds also require a supported CUDA toolkit.
 
 ```bash
 python -m pip install .
 ```
 
-For a CPU-only build:
+For CPU-only installations:
 
 ```bash
 GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
 ```
 
-For CUDA, select NVCC and the target architecture, for example:
+For CUDA, select NVCC and an architecture matching your GPU (`120` is an
+RTX 5090 example):
 
 ```bash
 CUDACXX=/path/to/cuda/bin/nvcc \
@@ -111,71 +69,46 @@ GENERATIVEQC_CUDA_ARCHITECTURES=120 \
 python -m pip install .
 ```
 
-Native development can use the provided CMake presets:
-
-```bash
-cmake --preset cuda-dev-fast
-cmake --build --preset cuda-dev-fast
-```
-
-An installed native SDK/runtime does not require Python:
-
-```bash
-cmake --install build/cuda-dev-fast --prefix /opt/generativeqc
-/opt/generativeqc/bin/generativeqc methods
-```
-
-See the [installation guide](docs/user/installation.md) for user setup and the
-[build and CUDA configuration guide](docs/developer/build.md) for CMake profiles,
-portable GPU targets, generated-AOT tuning, compiler caches, device linking,
-split compilation, and SDK details.
+See the [installation guide](docs/user/installation.md) and
+[CUDA/native build guide](docs/developer/build.md) for other architectures,
+CMake presets, and SDK installation. The installed native CLI runs without
+Python.
 
 ## Methods
 
-Stable native ABI IDs, providers and compatibility selectors are generated from
-`manifests/public_methods.json`; see the
-[public method catalog](docs/public_methods.md). DFT scientific names and
-compositions are discovered from the compiler MethodIR catalog, including
-generated metadata from the pinned Libxc sources. `Calculator(method=...)`
-accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
-one ABI-manifest row per functional.
-
-Run the Python-free C++ CLI (`generativeqc methods`) for the current MethodIR-aware
-native discovery set. The standalone compiler tuner is `generativeqc-tune`. MethodIR representation is
-not by itself an execution promise: missing primitive lowerers, unsupported
-backends/models, or method-specific requirements such as an explicit hybrid
-grid fail closed. The Python API also accepts the composite selectors
-`r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`.
+Explore the compiled method registry and MethodIR compositions:
 
 ```bash
 generativeqc methods
 generativeqc methods --compositions --json
 ```
 
-## Python API
+DFT selectors include `pbe0-rks` and `pbe0-uks`; the Python API also supports
+`r2scan-3c`. Available properties depend on the method and execution context:
+check `Calculator.capabilities` or see
+[method discovery and support](docs/user/methods.md).
+
+## Python quick start
 
 Coordinates are in Bohr, energies in Hartree, and forces in Hartree/Bohr.
+Use `device="cpu"` for CPU-only installations.
 
 ```python
 from generativeqc import Calculator
 
 calc = Calculator(method="rhf", basis="sto-3g", device="cuda")
-result = calc.singlepoint(
-    [
-        ("H", (0.0, 0.0, -0.7)),
-        ("H", (0.0, 0.0, 0.7)),
-    ]
-)
+result = calc.singlepoint([
+    ("H", (0.0, 0.0, -0.7)),
+    ("H", (0.0, 0.0, 0.7)),
+])
 
 print(result.energy)
 print(result.forces)
 ```
 
-Prepared batches retain reusable topology and density state:
+Prepared batches reuse system topology and converged density state:
 
 ```python
-from generativeqc import Calculator
-
 systems = [
     [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
     [("He", (0.0, 0.0, 0.0))],
@@ -191,60 +124,52 @@ print(first.energies)
 
 ## Benchmarks
 
-| Method | Performance |
-| --- | --- |
-| HF (direct / DF) | <a href="benchmarks/results/df-source-screening-20261004/hf.svg"><img src="benchmarks/results/df-source-screening-20261004/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
-| ωB97M-V / def2-SVP | <a href="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg"><img src="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg" width="900" alt="GenerativeQC versus GPU4PySCF: warm WB97M-V energy-plus-analytic-force latency at 3, 6, 12, 24, 48 and 96 atoms; medians and min–max ranges"></a> |
-| ωB97M-V / full def2-TZVPD | <a href="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg"><img src="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg" width="900" alt="Full OMol25 functional and basis: validated 3-, 6- and 12-atom warm energy-plus-force observations; 24–96 atoms pending"></a> |
+**HF/DFT energy + analytic forces — RTX 5090**
 
-<!-- DFT benchmark rows are temporarily withheld from the rendered README.
-Restore these rows to the table above only after approval to publish the results.
-| PBE0 / def2-SVP | <a href="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg"><img src="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg" width="900" alt="GenerativeQC versus GPU4PySCF: complete warm PBE0 energy-plus-analytic-force latency at all six sizes"></a> |
--->
+Standard and Fast outperform GPU4PySCF in **44/58** and **45/58** accuracy-qualified warm cases.
+For 96-atom Direct ωB97M-V, warm speedups are **3.89× (Standard)** and **4.14× (Fast)**.
 
-RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
-[Protocol and results](benchmarks/results/df-source-screening-20261004/README.md).
+![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
-ωB97M-V / def2-SVP uses an explicitly enabled integration candidate with SCF/force AO
-selection and matched unpruned grids on an RTX 5090. The six-point figure uses
-the same AO sizes and visual style as HF and shows warm medians and min–max
-ranges over three fixed-density replays per engine. At 24–96 atoms, warm takes
-3.9–5.8% less time. Complete cold startup is documented separately and remains
-slower.
-[Source, controls, cold timings and all-sample accuracy
-gates](benchmarks/results/wb97mv-active-ao-20261003/README.md) identify the measured
-path separately from the master default.
+![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
 
-The full def2-TZVPD pilot uses OMol25's functional and basis on the same water
-clusters, with five warm repeats and original/displaced energy-and-force gates.
-The explicitly enabled candidate is faster at 3 and 6 atoms (58 and 116 AOs),
-but at 12 atoms (232 AOs) takes 62.96 s warm versus 18.20 s for GPU4PySCF.
-The 24/48/96-atom endpoints are in progress; the goal remains the full HF-size
-series. [Cold graph, initialization costs and exact
-protocol](benchmarks/results/wb97mv-tzvpd-cold-20261004/README.md) accompany the
-warm figure. These are matched-grid RTX 5090 observations, not OMol25 dataset
-or ORCA throughput.
+Default XC/VV10 grids, native SCF policies and full grid-response forces;
+plotted points pass common independent energy/force accuracy gates.
+Cold includes setup; warm is the median of three frozen-density calls.
+Gaps mark accuracy failures.
+See [measurements and conditions](benchmarks/results/readme-final-20261022/README.md).
 
-<!-- DFT benchmark discussion is temporarily withheld with the rows above.
-PBE0 uses the same 3–96-atom water clusters, full spherical def2-SVP,
-five fixed engine-local warm replays, and independent energy/force gates at
-both original and changed geometries. Both engines use the same moving
-quadrature; timings include analytic grid response and host-returned forces,
-not energy-only SCF. Native uses the default direct FP64 path.
-[PBE0 protocol and results](benchmarks/results/pbe0-grid-reuse-20261003/README.md).
+**DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 
--->
+![Standard and Fast GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
+
+MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
+DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
+gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
+correlation within each basis group. Timings cover the
+complete two-group E+F endpoint, not just SCF or summed component timings.
+[Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
+convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
+by FP64 final solves, independent residual checks and response. The curves use one fresh
+complete call per mode and molecule, with the same binary and GPU within each
+pair; they do not imply a speedup for every case. All Fast points pass
+constituent and composite energy/full-force checks against Standard.
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-memory-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-memory-20261021/README.md).
+The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
+is retained separately: its fitting model differs, so the two series are not
+identical-Hamiltonian speedup measurements.
+
+Other results are in the [benchmark archive](benchmarks/results/README.md).
 
 ## Documentation
 
-Choose the path that matches what you are trying to do:
-
-- [Learn quantum chemistry](docs/learn/index.md) — the minimum background needed to use GenerativeQC correctly.
-- [User Guide](docs/user/index.md) — install GenerativeQC and run calculations.
-- [Reference](docs/reference/index.md) — methods, capabilities, units, and lookup material.
-- [Developer Guide](docs/developer/index.md) — architecture, implementation, and extension points.
-- [Maintainer Guide](docs/maintainer/index.md) — validation, performance qualification, generated artifacts, and project operations.
-- [Agent Guide](docs/agent/index.md) — workflow for coding agents; normative repository rules remain in [AGENTS.md](AGENTS.md).
+Start with the [User Guide](docs/user/index.md) or
+[Learn quantum chemistry](docs/learn/index.md).
+Explore the [Reference](docs/reference/index.md),
+[Developer Guide](docs/developer/index.md),
+[Maintainer Guide](docs/maintainer/index.md), and
+[Agent Guide](docs/agent/index.md).
 
 ## License
 

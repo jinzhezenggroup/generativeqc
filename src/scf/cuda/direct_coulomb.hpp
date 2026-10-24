@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -13,6 +14,11 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/direct_block_schedule.hpp"
 
+namespace generativeqc::scf {
+struct CudaDerivativeSourceView;
+struct DirectForcePrecisionRequest;
+}  // namespace generativeqc::scf
+
 namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
@@ -21,6 +27,15 @@ struct ShellPairDensityBounds;
  * The canonical provider stays independent of the HF runtime policy header.
  */
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
+
+/** Capture only exact weighted-force arithmetic, without changing Fock policy. */
+void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept;
+
+/** Capture the experimental coarse gate without changing integral precision. */
+void configure_direct_block_screening(DeviceBatch& batch) noexcept;
+
+/** Read before arena sizing; retained owners freeze this storage choice. */
+bool direct_fp32_block_screening_requested() noexcept;
 
 /** Query the opt-in at preparation only; optional retained storage freezes it.
  * This adapter keeps canonical providers independent of HF policy headers.
@@ -44,6 +59,9 @@ struct GeneratedCoulombPlan {
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
+  /** Coulomb owns two contiguous Cartesian planes: sum followed by rounding
+   * correction. Every J writer shares them; projection folds once per build.
+   * Compensation improves accuracy, not a bitwise-reproducibility guarantee. */
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{},
       *shell_bounds{};
   ShellPairDensityBounds* shell_pair_density_bounds{};
@@ -70,7 +88,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     std::size_t budget, bool allow_bounded_shell_fallback = false,
     detail::BoundedDirectHostSchedule* bounded_schedule = nullptr);
 
-/** Enqueue raw J from total spin density. Inputs and result use public AO order.
+/** Enqueue compensated raw J from total spin density in public AO order.
  * The same stream owns every transform, scatter and projection; no host copies.
  */
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* density,
@@ -131,12 +149,15 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestri
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
+ * A nonnegative proposal_screening explicitly selects a coarser full-range
+ * value action, without mutating the prepared source or its derivative cutoff.
+ * The default -1 preserves the prepared physical screening contract.
  */
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
                                        DirectCoulombRange range = DirectCoulombRange::Full,
-                                       double omega = 0.0);
+                                       double omega = 0.0, double proposal_screening = -1.0);
 
 /** Enqueue primary full-range J/K plus one SR/LR correction after a
  * single public-to-Cartesian spin-density transform and shell-density-bound
@@ -152,11 +173,23 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
  * containing 3*atom_count energy-gradient values. The public AO density stays
  * resident; this routine transforms it to the owner's Cartesian basis once.
  * separate_sources=false publishes one J+K block after precontracting the
- * cotangents, using the same scientific weights and screened shell domain. */
+ * cotangents, using the same scientific weights and screened shell domain.
+ * bilinear=true treats alpha/beta as D/P for one unscreened restricted item,
+ * and differentiates the shared quadratic weights in the same shell consumer. */
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources = true, bool allow_spatial_default = false);
+    bool separate_sources = true, bool allow_spatial_default = false, bool bilinear = false,
+    DirectForcePrecisionRequest* precision = nullptr);
+
+/** Consume the same generated J/K channels directly on their owning stream.
+ * No host gradient is allocated or copied. The callback must enqueue its copy
+ * before provider scratch is reused; an exceptional submission is drained. */
+cudaError_t consume_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient,
+    const std::function<void(const CudaDerivativeSourceView&)>& consumer,
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

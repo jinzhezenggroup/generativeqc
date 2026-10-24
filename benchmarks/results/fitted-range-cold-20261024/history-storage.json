@@ -1,0 +1,121 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "045e4253631c4168fe9d1557565cb0fe02437049",
+  "file_count": 14,
+  "total_bytes": 750599,
+  "retention": "Complete historical RTX 5090 observations retained as deterministic gzip with byte-identical decoded payloads; no numerical observations, failures or work counts removed.",
+  "files": [
+    {
+      "path": "benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json",
+      "bytes": 78117,
+      "sha256": "2a69c6f4f317f366646f090d773c5368e6fe7682f93cee3f3811e1954b14bcbc",
+      "stored_path": "benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json.gz",
+      "stored_bytes": 13081,
+      "stored_sha256": "0045cab1279a7aff18fd3d06ec28110de1f3ee5d51d1ef5eda25e86b48f95a6a"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json",
+      "bytes": 78097,
+      "sha256": "e89f6c5f9d1e7fe4b401be07ec7f37fdfdaaf7ecabc2c37f92ec2ef42b50a6e2",
+      "stored_path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json.gz",
+      "stored_bytes": 13116,
+      "stored_sha256": "fc832c4d81eae22ed89bd676635a429b14d937217b427962d95dede1483a6c47"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json",
+      "bytes": 69134,
+      "sha256": "55b6edc814d4c803f20f1464d1fdea415b881b733d8febe153491dfad0b5bd15",
+      "stored_path": "benchmarks/results/rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 14392,
+      "stored_sha256": "388df18c853aee1f7d244b3826a6c2bfad8728d727a0c80b6f2e925b7276c1ec"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json",
+      "bytes": 61755,
+      "sha256": "65491e58acdf868817a174d435cc4d0546b402eda14f306e4e71b769b211b8f9",
+      "stored_path": "benchmarks/results/rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json.gz",
+      "stored_bytes": 9489,
+      "stored_sha256": "6131fbc1d7a940c1223b3be876404b59cb3b778d064f23a076f23da2324b583f"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-2335e71-issue-41-completion-evidence.json",
+      "bytes": 58281,
+      "sha256": "73e64a4ea9cc628321d16ff8ab1e96481f12fdcc71c2f9836fef134005c76a3a",
+      "stored_path": "benchmarks/results/rtx5090-2335e71-issue-41-completion-evidence.json.gz",
+      "stored_bytes": 14066,
+      "stored_sha256": "60bb74f8bc8efdfabf357d79811dd811854cbdca02902e7b3c2714ca8ca398bf"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-profile.json",
+      "bytes": 47673,
+      "sha256": "3e729e7cd888e0c055fab5441bb3f7017cd54bcd993c3182b299a09e7e47672b",
+      "stored_path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-profile.json.gz",
+      "stored_bytes": 8124,
+      "stored_sha256": "c7a3d61637ff54a0fffaaba68a9d8b05d4d6f075de025b119a1a06e4ab41c0e6"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-38a988e-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44728,
+      "sha256": "6ce6e16e5a05dc35603ce6a3d02242b95df137c06c77f8dd03d980913c1abe40",
+      "stored_path": "benchmarks/results/rtx5090-38a988e-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7650,
+      "stored_sha256": "13ee54f6bca24049265b5d03a2957399a3d2512754fd7af2a2d716faad223934"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-0e33f48-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44700,
+      "sha256": "16e49d124ff62bee361c428af1343f178b766fb2a820337c6cde0a93356fecdc",
+      "stored_path": "benchmarks/results/rtx5090-0e33f48-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7626,
+      "stored_sha256": "335ec4f7cdfb95773b069118b24b37eb68be302b686e4ab7c2567c759122a8ba"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-299cf69-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44696,
+      "sha256": "fe0e1d6722f1bfe5591bb112485fb06133cc19ca85b536af2cf9e55386fbe389",
+      "stored_path": "benchmarks/results/rtx5090-299cf69-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7634,
+      "stored_sha256": "e40ad57c6e07ed986e8780cafa3b3ae1073f8ef83369d344b4e563e1cab657bc"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-10d2b6f-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44674,
+      "sha256": "1261beaebd19526825ddca380823c349b8b0c433a9fd7444bc396e1938ffd394",
+      "stored_path": "benchmarks/results/rtx5090-10d2b6f-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7613,
+      "stored_sha256": "73ced39ad853d636c63f9a8139e4d110c0ee72ff71f0fee792668f5a6dae42f2"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-ae6406f-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44695,
+      "sha256": "91d0d2b70b8a214bbb9259025bfa9404da376f9c9e5419ec63fcd12411093501",
+      "stored_path": "benchmarks/results/rtx5090-ae6406f-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7641,
+      "stored_sha256": "b5910970649383fc3992db60648aa5c161a08768156ac945757938124c2e8b83"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-906f064-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44692,
+      "sha256": "f589c555b1694d2f4df770e92ce28bcd3849a049f9369418595012b0d6b39919",
+      "stored_path": "benchmarks/results/rtx5090-906f064-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7639,
+      "stored_sha256": "49b7ce888d083299f3fddec2ad654e7066eaabed9d749d5dab6bbdaa0371f449"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-5c398b4-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44674,
+      "sha256": "ee2e88851c9a946636d02c2e6e2955329763d9563d4c996431d854ca23024470",
+      "stored_path": "benchmarks/results/rtx5090-5c398b4-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7624,
+      "stored_sha256": "08d11970e58721949b4a96a4030ce20ad6ba1120cc20bbee7fe4a4b933a12042"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a4db5f3-water-octamer-s4-def2-svp-spherical-b4.json",
+      "bytes": 44683,
+      "sha256": "198282b095f6e09dede68dc6eaedde53e30a9e22d27d130eff6e26e8105392ce",
+      "stored_path": "benchmarks/results/rtx5090-a4db5f3-water-octamer-s4-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 7659,
+      "stored_sha256": "bbbf58b94c0b445dbe2ce0a375d447f8f50600f7b0af44f186b358b2510d1e6c"
+    }
+  ]
+}

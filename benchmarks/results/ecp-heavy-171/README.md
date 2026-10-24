@@ -69,7 +69,7 @@ Across the four CPU and four CUDA complete endpoints, maximum local/nonlocal
 matrix errors are **2.62e-14 / 9.46e-13 Eh**, energy error **3.45e-13 Eh**,
 and force error **2.32e-10 Eh/bohr**. CPU/CUDA raw blocks agree within
 **1.89e-15 Eh** for matrices and **6.94e-17 Eh/bohr** for derivatives.
-The exact values are retained in `cpu-endpoints.json` and `cuda-endpoints.json`.
+The exact values are retained in `cpu-endpoints.json.gz` and `cuda-endpoints.json`.
 
 | CUDA case | Planned host bytes | Planned device bytes | Observed ledger peak bytes |
 |---|---:|---:|---:|
@@ -122,3 +122,14 @@ remains. Resource observations establish feasibility for these 13-AO cases,
 not a larger inventory. Single-call endpoint timings include synchronous
 Calculator setup, SCF and forces after raw/reference setup; they are not cold
 process-startup measurements or comparative speed evidence.
+
+## Retained storage
+
+The CPU record is losslessly gzip-compressed. `cpu-endpoints.storage.json` pins
+the stored and original byte counts and SHA-256 digests, plus the original Git
+blob. Restore the exact historical JSON with
+`gzip -dc cpu-endpoints.json.gz > cpu-endpoints.json`, or read the compressed
+path directly with `tools.generativeqc_validation.record.load_record`.
+`raw-evidence-manifest.json` remains unchanged: its CPU-record entry describes
+the decoded original bytes in the historical archive. All scientific values,
+timings and provenance are unchanged; this is no new qualification run.

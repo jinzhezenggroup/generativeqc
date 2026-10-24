@@ -201,8 +201,8 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
     )
     assert options.scf_domain == WB97MV_SCF_DOMAIN
     assert options.to_payload()["nonlocal_density_policy"] == {
-        "version": "vv10-molecular-rho-ge-1e-8-v1",
-        "threshold": "1/100000000",
+        "version": "vv10-molecular-rho-ge-1e-10-v2",
+        "threshold": "1/10000000000",
         "active_comparison": ">=",
     }
     from generativeqc import _native

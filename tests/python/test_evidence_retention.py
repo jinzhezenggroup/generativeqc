@@ -1,6 +1,8 @@
 """Storage policy cannot discard references or manufacture scientific passes."""
 
+import gzip
 import json
+import runpy
 import subprocess
 import typing
 from pathlib import Path
@@ -305,9 +307,20 @@ def test_publication_rejects_false_numerical_pass_or_lost_measurements(
 
 
 def test_migration_keeps_exported_profiler_evidence_and_xc_manifest() -> None:
-    audit = json.loads(
-        (ROOT / "benchmarks/results/retention-238/migration.json").read_text()
+    audit_directory = ROOT / "benchmarks/results/retention-238"
+    storage = json.loads((audit_directory / "migration.storage.json").read_text())
+    assert storage["schema"] == "generativeqc.lossless-evidence-storage.v1"
+    assert storage["original_path"] == "benchmarks/results/retention-238/migration.json"
+    assert (
+        storage["stored_path"] == "benchmarks/results/retention-238/migration.json.gz"
     )
+    stored = (ROOT / storage["stored_path"]).read_bytes()
+    assert len(stored) == storage["stored_bytes"]
+    assert digest(stored) == storage["stored_sha256"]
+    decoded = gzip.decompress(stored)
+    assert len(decoded) == storage["original_bytes"]
+    assert digest(decoded) == storage["original_sha256"]
+    audit = json.loads(decoded)
     assert audit["removed_files"] == len(audit["files"])
     assert audit["removed_bytes"] == sum(row["bytes"] for row in audit["files"])
     for family in audit["summaries"].values():
@@ -315,5 +328,54 @@ def test_migration_keeps_exported_profiler_evidence_and_xc_manifest() -> None:
             for path in record.get("retained_exports", []):
                 assert (ROOT / path).is_file()
     directory = ROOT / "benchmarks/results/xc-expressions-161"
+    records = runpy.run_path(str(directory / "restore.py"))["read_records"]()
     for path, expected in json.loads((directory / "manifest.json").read_text()).items():
-        assert digest((directory / path).read_bytes()) == expected
+        assert digest(records[path]) == expected
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "integrated-cbs-smoke.log.gz",
+        "integrated-host-portability.log.gz",
+        "integrated-host-smoke.log.gz",
+        "reuse-live-capacity-native.log.gz",
+        "reuse-qualified-contracts.log.gz",
+        "reuse-qualified-cpu.log.gz",
+        "reuse-qualified-gpu-focused.log.gz",
+        "reuse-qualified-gpu-legacy-timeout.log.gz",
+        "reuse-tight-budget-gpu.log.gz",
+    ),
+)
+def test_cbs_receipt_exceptions_admit_only_the_reviewed_bytes(filename: str) -> None:
+    """Frozen receipts cannot silently admit changed or future run logs."""
+    committed = json.loads((ROOT / "benchmarks/evidence-policy.json").read_text())
+    prefix = "benchmarks/results/ccsdt-cbs-native-reuse-20261012/"
+    path = prefix + filename
+    data = (ROOT / path).read_bytes()
+    assert gzip.decompress(data)
+    exception = committed["exceptions"][path]
+    scoped = {
+        "schema": committed["schema"],
+        "review_size_bytes": committed["review_size_bytes"],
+        "benchmark_results_max_bytes": committed["benchmark_results_max_bytes"],
+        "change_review_max_bytes": committed["change_review_max_bytes"],
+        "exceptions": {path: exception},
+    }
+    assert check({path: data}, scoped) == []
+    assert any(
+        "stale exception" in error for error in check({path: data + b"changed"}, scoped)
+    )
+    assert any("stale exception" in error for error in check({}, scoped))
+    future = prefix + "unreviewed-run.log.gz"
+    assert any(
+        future in error and "transient" in error
+        for error in check({path: data, future: data}, scoped)
+    )
+    assert any(
+        "aggregate budget" in error
+        for error in check(
+            {path: data},
+            {**scoped, "benchmark_results_max_bytes": len(data) - 1},
+        )
+    )

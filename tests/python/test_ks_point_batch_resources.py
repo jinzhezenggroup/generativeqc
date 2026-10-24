@@ -22,7 +22,7 @@ from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.xc.quadrature_cuda import _LAYOUT
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -52,10 +52,13 @@ using cudaError_t = int;
 using cudaStream_t = void*;
 constexpr cudaError_t cudaSuccess=0, cudaErrorInvalidValue=1;
 constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
+inline std::size_t allocation_limit=~std::size_t{0};
 inline cudaError_t cudaGetDevice(int* d) { *d=0; return 0; }
 inline cudaError_t cudaSetDevice(int) { return 0; }
+inline cudaError_t cudaGetLastError() { return cudaSuccess; }
 inline const char* cudaGetErrorString(cudaError_t) { return "CUDA allocation double"; }
-inline cudaError_t cudaMalloc(void** p,std::size_t) {
+inline cudaError_t cudaMalloc(void** p,std::size_t bytes) {
+  if(bytes>allocation_limit) return cudaErrorMemoryAllocation;
   static std::uintptr_t next=4096;
   *p=reinterpret_cast<void*>(next+=4096); return 0;
 }
@@ -74,6 +77,7 @@ def native_probe(
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
+    (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -94,11 +98,13 @@ def native_probe(
 #include <utility>
 #include <vector>
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"
 #define __host__
 #define __device__
@@ -136,7 +142,7 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         + _definition(diis, "bool incremental_diis_gram_requested(")
         + "\n}\n"
     )
-    source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
+    source += '\n#include "generated_quadrature.cuh"\n'
     source += r"""
 namespace generativeqc::dft {
 using scf::cuda_execution::MatrixLibraryOwner;
@@ -182,8 +188,8 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
         "void generativeqc_resource_ledger_destroy_v1(",
         "int generativeqc_resource_ledger_bind_v1(",
         "int generativeqc_resource_ledger_read_v1(",
-        "int generativeqc_resource_ks_cuda_v1(",
         "int generativeqc_resource_ks_cuda_v2(",
+        "int generativeqc_resource_ks_cuda_v1(",
         "int generativeqc_resource_quadrature_cuda_v1(",
     ):
         source += _definition(api, signature) + "\n"
@@ -195,8 +201,8 @@ struct Xc {
   dft::CudaXcPointBatchPlan batch;
   std::vector<void*>& allocations;
   explicit Xc(std::vector<void*>& owned) : allocations(owned) {}
-  void prepare_point_batches(std::size_t tiles,std::size_t budget,bool compact=false) {
-    const auto plan = dft::cuda_xc_detail::prepare_point_batch_plan(layout,{},tiles,budget,compact);
+  void prepare_point_batches(std::size_t tiles,std::size_t budget,bool compact=false,bool ragged=false) {
+    const auto plan = dft::cuda_xc_detail::prepare_point_batch_plan(layout,{},tiles,budget,compact,ragged);
     if (plan.tiles==1) return;
     void* arena=nullptr;
     const auto status=runtime::resource_cuda_malloc(&arena,plan.device_bytes);
@@ -207,15 +213,35 @@ struct Xc {
   }
   const dft::CudaXcPointBatchPlan& point_batch_plan() const { return batch; }
 };
-std::size_t prepare_optional(std::vector<void*>& allocations) {
+std::size_t prepare_optional(std::vector<void*>& allocations,
+                            const dft::CudaXcLayout* layout=nullptr,
+                            std::size_t* selected_tiles=nullptr) {
   Xc owner(allocations);
+  if(layout) owner.layout=*layout;
   auto* xc=&owner;
+  const auto& xc_layout=owner.layout;
   dft::CudaKsResources resource;
   using dft::sum;
+  using dft::product;
 """
         + ks[start:end]
         + r"""
+  if(selected_tiles) *selected_tiles=owner.batch.tiles;
   return resource.xc_device_bytes;
+}
+extern "C" void capacity(std::size_t jets,std::size_t work_jets,std::size_t spins,std::size_t limit,
+                          std::uint64_t* result) {
+  auto layout=dft::cuda_xc_layout_shape(2,6,512,49152,1,spins==2,256);
+  layout.jets=jets;
+  layout.work_jets=work_jets;
+  layout.feature_terms=work_jets==4?5:(jets==4?4:1);
+  std::vector<void*> allocations;
+  std::size_t selected=1;
+  allocation_limit=limit;
+  result[0]=prepare_optional(allocations,&layout,&selected);
+  result[1]=selected;
+  for(auto* arena:allocations) assert(runtime::resource_cuda_free(arena)==cudaSuccess);
+  allocation_limit=~std::size_t{0};
 }
 extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
                       std::size_t later_workspace,std::uint64_t* result) {
@@ -249,8 +275,6 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
     # Compile the allocation owner and quadrature retention block unchanged.
     owned = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
     source += "namespace generativeqc::runtime {\n"
-    for signature in ("inline void cuda_resource_check(", "class CudaDeviceScope"):
-        source += _definition(owned, signature) + ";\n"
     for signature in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
         source += "template<class T>\n" + _definition(owned, signature) + ";\n"
     source += "}\n"
@@ -266,7 +290,9 @@ extern "C" void grid_lifetime(void* handle,std::size_t points,std::uint64_t* out
   auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
   active_device_resource_ledger=ledger;
   namespace q=generated::quadrature;
-  struct {std::size_t points;} l{points};
+  struct {std::size_t points, atoms;} l{points, 0};
+  using dft::cuda_resident_grid_bytes;
+  const bool treutler=false;
   const bool retain_device=true;
   const int device=0;
 """
@@ -407,6 +433,8 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.fleet.restype = None
+    probe.capacity.argtypes = [ctypes.c_size_t] * 4 + [ctypes.POINTER(ctypes.c_uint64)]
+    probe.capacity.restype = None
     probe.grid_lifetime.argtypes = [
         ctypes.c_void_p,
         ctypes.c_size_t,
@@ -466,6 +494,34 @@ def _request(
         **options,
     )
     return request, library
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_point_program_inventory_preserves_v1_and_charges_tau(
+    native_probe: Any, spins: int
+) -> None:
+    """Execute both ABI versions with the allocator's actual point-program traits."""
+    inventories = []
+    for functional in (0, 1, 2, 3):
+        output = (ctypes.c_uint64 * 3)()
+        shape = (2, 2, 2, 6, 49152, 8, spins, functional, 256)
+        assert native_probe.generativeqc_resource_ks_cuda_v2(*shape, output, 3) == 0
+        inventories.append(tuple(output))
+        if functional <= 1:
+            legacy = (ctypes.c_uint64 * 3)()
+            assert native_probe.generativeqc_resource_ks_cuda_v1(*shape, legacy, 3) == 0
+            assert tuple(legacy) == tuple(output)
+    assert inventories[2][1] > inventories[1][1]
+    assert inventories[3][1] == inventories[1][1]
+    assert len({(item[0], item[2]) for item in inventories}) == 1
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v2(
+            2, 2, 2, 6, 49152, 8, spins, 0xFFFFFFFF, 256, output, 3
+        )
+        != 0
+    )
+    assert tuple(output) == (17, 19, 23)
 
 
 @pytest.mark.parametrize("count,workspace", [(1, 512 << 20), (1024, 128 << 20)])
@@ -573,6 +629,60 @@ def test_incremental_gram_charges_only_optional_physical_cache(
     )
 
 
+@pytest.mark.parametrize("aos", [16, 511, 512, 768])
+@pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_large_ks_automatic_gram_capacity_and_rollback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    aos: int,
+    history: int,
+    spins: int,
+) -> None:
+    """Public reservations include the admitted cache exactly once for either spin."""
+    selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
+    reducer = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+    monkeypatch.delenv(reducer, raising=False)
+    inventories = []
+    for mode in (None, "0", "1"):
+        if mode is None:
+            monkeypatch.delenv(selection, raising=False)
+        else:
+            monkeypatch.setenv(selection, mode)
+        output = (ctypes.c_uint64 * 3)()
+        assert (
+            native_probe.generativeqc_resource_ks_cuda_v1(
+                aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+            )
+            == 0
+        )
+        inventories.append(tuple(output))
+    automatic, serial, incremental = inventories
+    assert automatic == (incremental if aos >= 512 else serial)
+    expected = 8 * history * history if history >= 2 else 0
+    assert incremental[0] - serial[0] == expected
+    assert incremental[1:] == serial[1:]
+
+    # Automatic admission activates reducer validation at the public boundary;
+    # explicit serial rollback and one-vector histories still ignore it.
+    monkeypatch.delenv(selection, raising=False)
+    monkeypatch.setenv(reducer, "invalid")
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    status = native_probe.generativeqc_resource_ks_cuda_v1(
+        aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+    )
+    assert (status != 0) == (aos >= 512 and history >= 2)
+    if status:
+        assert tuple(output) == (17, 19, 23)
+    monkeypatch.setenv(selection, "0")
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+        )
+        == 0
+    )
+
+
 @pytest.mark.parametrize(
     "tiles,bytes_,expected",
     [(None, None, 1245184), ("0", None, 0), ("1", None, 0), (None, "0", 0)],
@@ -592,3 +702,42 @@ def test_unbudgeted_default_and_explicit_opt_out(
     result = (ctypes.c_uint64 * 5)()
     native_probe.fleet(None, 2, 1024, 0, result)
     assert list(result) == [2, 2 * expected, 0, 0, 0]
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("jets,work_jets", ((1, 1), (4, 1), (4, 4)))
+def test_point_capacity_scales_with_live_panels_and_preserves_bounded_fallback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    spins: int,
+    jets: int,
+    work_jets: int,
+) -> None:
+    """AO and density panels retain batching within explicit and OOM bounds."""
+    for name in CONTROLS:
+        monkeypatch.delenv(name, raising=False)
+    unlimited = ctypes.c_size_t(-1).value
+
+    def capacity(limit: int = unlimited) -> tuple[int, int]:
+        result = (ctypes.c_uint64 * 2)()
+        native_probe.capacity(jets, work_jets, spins, limit, result)
+        return result[0], result[1]
+
+    automatic = capacity()
+    allowance = (32 if jets == 1 else 128) << 20
+    assert 0 < automatic[0] <= allowance
+    if jets == 4:
+        assert automatic[0] > 32 << 20
+    monkeypatch.setenv(CONTROLS[1], str(allowance))
+    assert capacity() == automatic
+    monkeypatch.setenv(CONTROLS[1], str(32 << 20))
+    incumbent = capacity()
+    assert 0 < incumbent[0] <= 32 << 20
+    assert 1 < incumbent[1] <= automatic[1]
+    monkeypatch.delenv(CONTROLS[1])
+    if jets == 1:
+        assert automatic == incumbent
+    assert capacity(32 << 20) == incumbent
+    assert capacity(1) == (0, 1)
+    monkeypatch.setenv(CONTROLS[1], "0")
+    assert capacity() == (0, 1)

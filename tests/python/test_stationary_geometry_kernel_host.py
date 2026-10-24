@@ -25,6 +25,7 @@ PREFIX = r"""
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 using std::isfinite;
 #define __device__
@@ -52,7 +53,11 @@ struct StationaryPointValue {
 StationaryPointValue stationary_evaluate_point(const double*, const double (*)[3], const double*) {
   return {};
 }
+StationaryPointValue stationary_evaluate_point_fp32(const double*, const double (*)[3], const double*) {
+  return {};
+}
 constexpr bool stationary_pbe0_restricted_point_capable=false;
+constexpr bool stationary_restricted_point_capable=false;
 StationaryPointValue stationary_evaluate_restricted_point(
     const double* rho, const double gradient[2][3], const double* tau) {
   return stationary_evaluate_point(rho,gradient,tau);
@@ -61,11 +66,12 @@ void ao_pullback(const double* c,const double* w,double* out) {
   for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];
 }
 int local_norm=0,local_ratio=0,local_log=0,local_becke=0,local_ratio_prepared=0;
+int local_norm_fp32=0,local_ratio_fp32=0,local_log_fp32=0,local_becke_fp32=0,local_ratio_prepared_fp32=0;
 namespace generativeqc_grid_adjoint {
 struct CenterPair {};
 bool contract_point_prepared(const double*,const double*,size_t,int64_t owner,double scale,
                     double* grad,double*,double*,double*,double*,size_t*,
-                    std::array<double,4>*,int,int,int,int,const CenterPair*,int) {
+                    std::array<double,4>*,int,int,int,int,const CenterPair*,int,const double*) {
   for(size_t k=0;k<3;++k) grad[3*owner+k]+=scale*(k+1);
   return true;
 }
@@ -76,13 +82,13 @@ MAIN = r"""
 int main(int argc,char**) {
   // Ambiguity here rejects a stale forward declaration, even though C++ would
   // otherwise accept a mismatching definition as a new overload.
-  auto* kernel=&geometry_kernel;
+  auto* kernel=&geometry_kernel<double>;
   // Empty launches must not read stale partials or dereference task inputs.
   generativeqc::dft::GridTaskView empty{};
   double sentinel=123, zero_output[9]{};
   int zero_error=0;
   kernel(empty,nullptr,nullptr,nullptr,0,0,nullptr,1,nullptr,nullptr,nullptr,0,0,
-         0,&sentinel,&sentinel,nullptr,&zero_error);
+         0,&sentinel,&sentinel,nullptr,&zero_error,false,nullptr);
   for(size_t j=0;j<9;++j) {
     blockIdx.x=0; blockDim.x=128; threadIdx.x=j;
     geometry_reduce(&sentinel,1,0,zero_output,&zero_error);
@@ -129,7 +135,7 @@ int main(int argc,char**) {
           kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
                  implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
                  external?seeds.data():nullptr,total+7,begin+3,
-                 lanes,partial.data()+1,scratch.data()+1,nullptr,&error);
+                 lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false,nullptr);
         }
         if(error) return 1;
         if(partial.front()!=987654 || partial.back()!=987654 ||
@@ -144,7 +150,7 @@ int main(int argc,char**) {
         blockIdx.x=threadIdx.x=0;
         const auto prior=result;
         kernel(view,work.data(),ao_atoms,owners.data(),0,0,centers,na,weights.data(),raw.data(),
-               nullptr,0,0,lanes,partial.data()+1,scratch.data()+1,nullptr,&error);
+               nullptr,0,0,lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false,nullptr);
         for(size_t j=0;j<9*na;++j) {
           blockIdx.x=j/threads; threadIdx.x=j%threads;
           geometry_reduce(partial.data()+1,na,lanes,result.data(),&error);
@@ -177,10 +183,12 @@ def _kernel_source() -> str:
         )
     )
     source = ast.literal_eval(assignment.value)
-    begin = source.index("__global__ void geometry_kernel(")
+    begin = source.rfind(
+        "template <", 0, source.index("__global__ void geometry_kernel(")
+    )
     end = source.index("}  // namespace generativeqc_stationary_cuda", begin)
-    ao_begin = source.index(
-        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
+    ao_begin = source.rfind(
+        "template <", 0, source.index("__device__ bool geometry_point_setup(")
     )
     ao_end = source.index("struct GeometryBlockControl", ao_begin)
     return source[ao_begin:ao_end] + source[begin:end]
@@ -191,7 +199,10 @@ def geometry_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> Path:
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
-    declaration = re.search(r"__global__ void geometry_kernel\([^;]+;", header)
+    declaration = re.search(
+        r"template\s*<class Arithmetic>\s*__global__ void geometry_kernel\([^;]+;",
+        header,
+    )
     assert declaration is not None
     directory = tmp_path_factory.mktemp("stationary-geometry")
     source, executable = directory / "probe.cpp", directory / "probe"
@@ -235,6 +246,7 @@ def test_actual_becke_helper_inside_emitted_geometry_kernel(
         prefix
         + emit_grid_adjoint()
         + emit_grid_partials(3)
+        + emit_grid_partials(3, scalar_type="float", suffix="_fp32")
         + _kernel_source()
         + r"""
 int main() {
@@ -268,10 +280,10 @@ int main() {
               blockDim.x=32;
               for(size_t lane=0;lane<((active+31)/32)*32;++lane) {
                 blockIdx.x=lane/32; threadIdx.x=lane%32;
-                geometry_kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
+                geometry_kernel<double>(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
                                 implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
                                 nullptr,0,0,active,partial.data(),scratch.data(),
-                                cached?pairs.data():nullptr,&error);
+                                cached?pairs.data():nullptr,&error,false,nullptr);
               }
               for(size_t j=0;j<9*na;++j) {
                 blockIdx.x=j/32; threadIdx.x=j%32;

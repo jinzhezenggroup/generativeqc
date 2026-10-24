@@ -25,8 +25,10 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include "dft/semilocal_family.hpp"
+#include "dft/global_hybrid_fock.hpp"
 using generativeqc::dft::SemilocalFamily;
+using generativeqc::dft::global_hybrid_composition;
+using generativeqc::dft::cuda_global_hybrid_jk_match;
 using generativeqc::dft::semilocal_family_metadata_from_code;
 using generativeqc::dft::semilocal_family_domain_version;
 using generativeqc::dft::semilocal_family_has_cuda_ks;
@@ -40,14 +42,12 @@ AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t) noexcept { return {}; }
 }
 namespace nlc { enum class Vv10DensityDomain { MolecularV1 }; }
 namespace scf {
-enum class FockBackend {Cpu,Cuda};
-enum class FockSpin {Restricted,Unrestricted};
-enum class FockPrecision {Float64,Float32};
-enum class FockApproximation {Exact,DensityFitted};
-enum class FockOperator {FullRange,LongRange};
-struct Term {bool present=true; double coefficient=1,omega=0; FockOperator op=FockOperator::FullRange;
- FockApproximation approximation=FockApproximation::Exact;};
-struct Spec {FockSpin spin=FockSpin::Restricted; unsigned derivative_order=0;Term coulomb,exchange;};
+using generativeqc::scf::FockBackend;
+using generativeqc::scf::FockSpin;
+using generativeqc::scf::FockPrecision;
+using generativeqc::scf::FockApproximation;
+using generativeqc::scf::FockOperator;
+using Spec = generativeqc::scf::FockBuildSpec;
 struct Fock {FockBackend backend=FockBackend::Cuda;FockPrecision precision=FockPrecision::Float64;
  Spec spec;double screening_tolerance=1e-12;};
 // Preserve the basic finite-coefficient contract of the independent validator.
@@ -60,6 +60,7 @@ struct Model {unsigned version=1,functional=1,scf_domain_version=1,tile_points=2
  int device=0,grid=1;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;
  std::optional<scf::Fock> range_correction;
  std::optional<int> nonlocal_correlation;
+ std::optional<int> nonlocal_grid;
  nlc::Vv10DensityDomain nonlocal_density_domain=nlc::Vv10DensityDomain::MolecularV1;};
 struct KsFinalStateIdentity {
  Model model;
@@ -77,11 +78,25 @@ int main(int argc,char** argv) {
  state.model.functional=functional;state.model.spins=spins;
  state.determinant.occupied.assign(spins,1);
  auto& f=state.determinant.model;
+ f.spec.derivative_order=0;
  f.spec.spin=spins==1?scf::FockSpin::Restricted:scf::FockSpin::Unrestricted;
  f.spec.exchange.coefficient=spins==1?-0.125:-0.25;
- if(mode=="no-exchange")f.spec.exchange.present=false;
+ // Every PBE hybrid negative starts from the actual PBE0 composition.
+ // Unit-scaled semilocal PBE plus 25% K is a different Hamiltonian.
+ if(functional==1)state.model.semilocal_exchange_scale=0.75;
+ if(mode=="no-exchange") {
+   f.spec.exchange.present=false;state.model.semilocal_exchange_scale=1;
+ }
+ else if(mode=="unscaled-pbe-k" || mode=="unscaled-pbe-df") {
+   state.model.semilocal_exchange_scale=1;
+   if(mode=="unscaled-pbe-df") {
+     f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
+     f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
+   }
+ }
  else if(mode=="cpu" || mode=="cpu-scaled") {
    f.backend=scf::FockBackend::Cpu;state.model.device=-1;
+   state.model.semilocal_exchange_scale=1;
    if(mode=="cpu-scaled")state.model.semilocal_exchange_scale=0.75;
  }
  else if(mode=="df-jk") {
@@ -119,13 +134,14 @@ int main(int argc,char** argv) {
  }
  else if(mode=="positive-k")f.spec.exchange.coefficient=0.25;
  else if(mode=="nan-k")f.spec.exchange.coefficient=std::nan("");
- else if(mode=="float32")f.precision=scf::FockPrecision::Float32;
+ else if(mode=="float32")f.precision=static_cast<scf::FockPrecision>(1);
  else if(mode=="wrong-device")state.model.device=-1;
  else if(mode=="derivative")f.spec.derivative_order=1;
  else if(mode=="bad-grid")state.model.grid=0;
  else if(mode=="bad-spins")state.determinant.occupied.clear();
  else if(mode=="wrong-domain")state.model.scf_domain_version=2;
  if(mode.rfind("rsh",0)==0) {
+   state.model.semilocal_exchange_scale=1;
    scf::Fock correction=f;
    correction.spec.coulomb.present=false;
    correction.spec.exchange.op=scf::FockOperator::LongRange;
@@ -163,7 +179,13 @@ def model_probe(
     native_cxx.build_executable(
         [unit],
         executable,
-        compile_args=("-std=c++20", "-O2", "-fsanitize=undefined", f"-I{ROOT / 'src'}"),
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-fsanitize=undefined",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ),
         link_args=("-fsanitize=undefined",),
         compile_timeout=30,
     )
@@ -180,6 +202,8 @@ def model_probe(
             for family in (0, 1, 2)
         ),
         ("df-jk", 1, True),
+        ("unscaled-pbe-k", 1, False),
+        ("unscaled-pbe-df", 1, False),
         ("df-jk", 0, False),
         ("df-jk", 2, False),
         *(

@@ -7,9 +7,11 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_batch.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/fleet_item.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
@@ -18,15 +20,6 @@ namespace generativeqc::scf {
 
 struct CudaRhfBucketPlan;
 class PreparedFockPlan;
-
-struct FleetItemResult {
-  generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
-  ScfResult scf;
-  std::size_t bucket_id{};
-  bool warm_start_used{};
-  bool warm_start_fallback{};
-  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
-};
 
 /**
  * Persistent ragged-system execution plan.

@@ -1,0 +1,4 @@
+Checked 535 compiler modules; 0 dependency errors
+Native API contracts covered: 89 c-function, 11 cpp-type, 44 cpp-operation
+All checks passed!
+All checks passed!

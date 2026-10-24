@@ -15,7 +15,7 @@ import os
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
@@ -25,7 +25,6 @@ from types import MappingProxyType
 import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from generativeqc_compiler.common.cuda_runtime import CudaArtifact
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.common.execution import CompiledExecutionIdentity
 from generativeqc_compiler.common.native_call import checked_native_call
@@ -44,6 +43,7 @@ from generativeqc_compiler.dft.ao_map_plan import ExactAoMapResources
 from generativeqc_compiler.dft.cuda import (
     CudaGrid,
     GridTaskView,
+    NativeGridLibrary,
 )
 from generativeqc_compiler.dft.cuda import (
     compile_cuda as compile_grid,
@@ -100,8 +100,13 @@ _REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
 
 
 def _stationary_density_jet_count(functional: int) -> int:
+    """Admit first AO derivatives by ingredients, with conservative legacy fallback."""
     record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
-    return 4 if record is None or record["requires_gradient"] else 1
+    return (
+        4
+        if record is None or record["requires_gradient"] or record["requires_tau"]
+        else 1
+    )
 
 
 _DOUBLE = ct.POINTER(ct.c_double)
@@ -172,19 +177,24 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int
 
 
 def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
-    """Request the qualified PBE0 point schedule unless explicitly disabled.
+    """Request restricted point scheduling without asserting producer equality.
 
     This requests a schedule, not an equal-spin proof. Native mathematical,
     generation and scratch admission gates still select the actual kernel.
+    All registered candidates now default to equal-spin XC sharing when the
+    producer and resource gates pass. The PBE0-named environment variable
+    remains a compatibility spelling for this request.
     Older stationary/grid artifacts retain the general point route.
     """
     if selection is not None:
         if type(selection) is not bool:
             raise TypeError("restricted point selection must be boolean or None")
         return selection
-    mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_RESTRICTED_POINT")
+    if mode is None:
+        mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
     if mode not in {"off", "on"}:
-        raise ValueError("PBE0 restricted point mode must be 'off' or 'on'")
+        raise ValueError("restricted point mode must be 'off' or 'on'")
     return mode == "on"
 
 
@@ -559,6 +569,10 @@ def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.A
     return primitives, aos, expansions, requests
 
 
+class _Fp32GeometryUnavailable(NotImplementedError):
+    """Optional mixed transport/proof absent; not a numerical or driver failure."""
+
+
 class _CudaSources:
     """Serialized finite owner; bounded AO tasks expand primitives only on CUDA.
 
@@ -588,9 +602,17 @@ class _CudaSources:
         becke_primitive: bool | int | None = None,
         becke_normalize: bool | None = None,
         restricted_point: bool | None = None,
+        fp32_geometry: bool = False,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
+        if type(fp32_geometry) is not bool:
+            raise TypeError("FP32 geometry selection must be boolean")
+        if fp32_geometry and profile_device:
+            raise ValueError(
+                "FP32 geometry requires the unprofiled resident-weight consumer"
+            )
+        self.fp32_geometry_requested = fp32_geometry
         if becke_normalize is not None and type(becke_normalize) is not bool:
             raise TypeError("Becke normalization selection must be boolean or None")
         zero_seed = _resolve_becke_zero_seed_policy()
@@ -659,7 +681,8 @@ class _CudaSources:
             )
         else:
             self.component_ids = None
-        self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
+        self.kind_tables: dict[tuple[str, int, bool], np.ndarray] = {}
+        self.component_page_arrays: tuple[np.ndarray, ...] | None = None
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
@@ -780,6 +803,23 @@ class _CudaSources:
         )
         if restricted_enqueue is not None:
             restricted_enqueue.argtypes = [
+                *molecular_resident_weight_args[:-2],
+                ct.c_uint64,
+                ct.c_uint64,
+                *tail,
+            ]
+        mixed_enqueue = getattr(
+            lib, "stationary_geometry_molecular_resident_weights_fp32_enqueue_v1", None
+        )
+        if fp32_geometry and (
+            mixed_enqueue is None
+            or not hasattr(lib, "stationary_geometry_precision_metrics_v1")
+        ):
+            raise _Fp32GeometryUnavailable(
+                "stationary artifact lacks FP32 geometry transport or work counters"
+            )
+        if mixed_enqueue is not None:
+            mixed_enqueue.argtypes = [
                 *molecular_resident_weight_args[:-2],
                 ct.c_uint64,
                 ct.c_uint64,
@@ -930,7 +970,53 @@ class _CudaSources:
         )
 
     def _call(self, name: typing.Any, *args: typing.Any) -> None:
-        checked_native_call(getattr(self.library, name), *args)
+        checked_native_call(
+            getattr(self.library, name),
+            *args,
+            status_error_types={
+                2: MemoryError,
+                3: MemoryError,
+                4: OSError,
+                5: ArithmeticError,
+            },
+        )
+
+    def configure_grid(self, spec: typing.Any, atoms: typing.Any) -> None:
+        """Bind immutable atom-major extents and adjusted-partition parameters.
+
+        Topology is copied once per scientific grid identity; moving centers
+        continue to use reset/rebind_geometry without rebuilding quadrature.
+        """
+        identity = (spec, tuple(a.atomic_number for a in atoms))
+        if getattr(self, "_grid_topology_identity", None) == identity:
+            return
+        offsets = np.asarray(spec.atom_offsets(atoms), dtype=np.uint64)
+        radii = spec.partition_radii(atoms)
+        function = self.library.stationary_grid_topology_v1
+        function.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        radius_array = None if radii is None else np.asarray(radii, dtype=np.float64)
+        self._call(
+            "stationary_grid_topology_v1",
+            self.handle,
+            offsets.ctypes.data_as(ct.c_void_p),
+            None if radius_array is None else _ptr(radius_array),
+            self.natom,
+        )
+        self._grid_offsets = offsets
+        self._grid_topology_identity = identity
+
+    def _molecular_owners(self, begin: int, count: int, per_atom: int) -> np.ndarray:
+        indices = np.arange(begin, begin + count, dtype=np.int64)
+        if per_atom:
+            return indices // per_atom
+        return np.searchsorted(self._grid_offsets, indices, side="right") - 1
 
     def enable_profile(self) -> None:
         if self.profile_device:
@@ -1074,21 +1160,117 @@ class _CudaSources:
             kind, source, rank, indices, primitive_work, nucleus, float(charge)
         )
 
-    def _kind_table(self, operator: str, rank: int) -> np.ndarray:
-        key = (operator, rank)
+    def _kind_table(
+        self, operator: str, rank: int, has_nucleus: bool = False
+    ) -> np.ndarray:
+        """Cache artifact-bound kinds, including public center/axis permutations."""
+        key = (operator, rank, has_nucleus)
         cached = self.kind_tables.get(key)
         if cached is not None:
             return cached
         shape = (len(COMPONENT_LABELS),) * rank
         table = np.full(shape, -1, dtype=np.int64)
         component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
-        for request, kind in self.kinds.items():
-            request_operator, components = request
-            if request_operator != operator or len(components) != rank:
-                continue
-            table[tuple(component_index[label] for label in components)] = kind
+        if self.component_mode:
+            for components in product(_component_domain(self.expansions), repeat=rank):
+                binding = derivative_binding(operator, components)
+                kind = self.kinds.get(binding.request)
+                if kind is not None:
+                    table[tuple(component_index[label] for label in components)] = (
+                        encode_stationary_derivative_kind(
+                            kind, binding, rank=rank, has_nucleus=has_nucleus
+                        )
+                    )
+        else:
+            for request, kind in self.kinds.items():
+                request_operator, components = request
+                if request_operator != operator or len(components) != rank:
+                    continue
+                table[tuple(component_index[label] for label in components)] = kind
         self.kind_tables[key] = table
         return table
+
+    def _component_arrays(self) -> tuple[np.ndarray, ...]:
+        """Retain only linear AO topology, never a Cartesian descriptor inventory."""
+        if self.component_page_arrays is None:
+            component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+            counts = np.asarray([len(row) for row in self.expansions], dtype=np.int64)
+            labels = np.full((self.nao, 3), -1, dtype=np.int64)
+            coefficients = np.zeros((self.nao, 3), dtype=np.float64)
+            for ao_index, expansion in enumerate(self.expansions):
+                for term, (component, coefficient) in enumerate(expansion):
+                    labels[ao_index, term] = component_index[component]
+                    coefficients[ao_index, term] = coefficient
+            self.component_page_arrays = counts, labels, coefficients
+        return self.component_page_arrays
+
+    def _component_integral_page(
+        self,
+        source: int,
+        operator: str,
+        coordinates: tuple[tuple[int, ...], ...],
+        nucleus: int | None,
+        charge: float,
+    ) -> None:
+        """Expand ragged spherical components in descriptor-capacity-sized windows.
+
+        Mixed-radix decoding visits exactly the scalar Cartesian products, with
+        the last AO varying fastest. Both logical and expanded scratch are
+        bounded by task capacity, including when one quartet spans many windows.
+        """
+        rank = len(coordinates[0])
+        counts, labels, coefficients = self._component_arrays()
+        table = self._kind_table(operator, rank, nucleus is not None)
+        capacity = len(self.tasks)
+        for logical_begin in range(0, len(coordinates), capacity):
+            indices = np.asarray(
+                coordinates[logical_begin : logical_begin + capacity], dtype=np.int64
+            )
+            if np.any(indices < 0) or np.any(indices >= self.nao):
+                raise ValueError("stationary CUDA page contains invalid AO indices")
+            primitive_work = np.prod(
+                self.aos[indices, 2].astype(np.int64), axis=1, dtype=np.int64
+            )
+            if np.any(primitive_work > self.page_work_budget):
+                raise ValueError(
+                    "stationary CUDA descriptor exceeds primitive page work budget"
+                )
+            radices = counts[indices]
+            fanout = np.prod(radices, axis=1, dtype=np.int64)
+            ends = np.cumsum(fanout, dtype=np.int64)
+            starts = ends - fanout
+            for begin in range(0, int(ends[-1]), capacity):
+                ordinals = np.arange(begin, min(begin + capacity, ends[-1]))
+                rows = np.searchsorted(ends, ordinals, side="right")
+                remainder = ordinals - starts[rows]
+                expanded_indices = indices[rows]
+                term_ids = np.empty_like(expanded_indices)
+                for axis in reversed(range(rank)):
+                    radix = radices[rows, axis]
+                    term_ids[:, axis] = remainder % radix
+                    remainder = remainder // radix
+                selectors = tuple(
+                    labels[expanded_indices[:, axis], term_ids[:, axis]]
+                    for axis in range(rank)
+                )
+                kinds = table[selectors]
+                if np.any(kinds < 0):
+                    raise ValueError(
+                        "stationary CUDA page requests an unavailable derivative kind"
+                    )
+                # Match np.prod in the scalar producer before multiplying charge;
+                # padding or pre-multiplying charge changes signed FP64 products.
+                charges = float(charge) * np.prod(
+                    coefficients[expanded_indices, term_ids], axis=1
+                )
+                self._pack_integral_descriptors(
+                    source,
+                    expanded_indices,
+                    kinds,
+                    primitive_work[rows],
+                    nucleus,
+                    charges,
+                )
 
     def integral_page(
         self,
@@ -1110,6 +1292,18 @@ class _CudaSources:
         if rank not in (2, 4) or any(len(row) != rank for row in coordinates):
             raise ValueError("stationary CUDA page requires uniform rank two or four")
         if self.component_mode:
+            packing = os.environ.get(
+                "GENERATIVEQC_STATIONARY_COMPONENT_PACKING", "bulk"
+            )
+            if packing not in ("scalar", "bulk"):
+                raise ValueError(
+                    "stationary CUDA component packing must be scalar or bulk"
+                )
+            if packing == "bulk":
+                self._component_integral_page(
+                    source, operator, coordinates, nucleus, charge
+                )
+                return
             for indices in coordinates:
                 self.integral(
                     source,
@@ -1139,8 +1333,24 @@ class _CudaSources:
                 "stationary CUDA descriptor exceeds primitive page work budget"
             )
 
+        self._pack_integral_descriptors(
+            source, indices, kinds, primitive_work, nucleus, float(charge)
+        )
+
+    def _pack_integral_descriptors(
+        self,
+        source: int,
+        indices: np.ndarray,
+        kinds: np.ndarray,
+        primitive_work: np.ndarray,
+        nucleus: int | None,
+        charges: float | np.ndarray,
+    ) -> None:
+        """Share scalar-compatible capacity/work flush boundaries across producers."""
+        rank = indices.shape[1]
+        scalar_charge = np.ndim(charges) == 0
         offset = 0
-        while offset < len(coordinates):
+        while offset < len(indices):
             if self.used == len(self.tasks):
                 self.flush()
             descriptor_room = len(self.tasks) - self.used
@@ -1166,7 +1376,9 @@ class _CudaSources:
             tasks[:, 4 : 4 + rank] = indices[source_begin:source_end]
             selected_work = primitive_work[source_begin:source_end]
             tasks[:, 8] = selected_work
-            self.charges[begin:end] = float(charge)
+            self.charges[begin:end] = (
+                charges if scalar_charge else charges[source_begin:source_end]
+            )
             self.used = end
             self.pending_primitive_records += int(np.sum(selected_work, dtype=np.int64))
             self.bulk_pack_chunks += 1
@@ -1323,7 +1535,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1343,10 +1556,7 @@ class _CudaSources:
         ):
             raise ValueError("unsupported stationary semilocal functional")
         if self.profile_device:
-            owners = (
-                np.arange(owner_offset, owner_offset + view.npoint, dtype=np.int64)
-                // points_per_atom
-            )
+            owners = self._molecular_owners(owner_offset, view.npoint, points_per_atom)
             self.geometry(task, owners, weights, raw, functional=functional)
             return
         work = task.density_jets(_stationary_density_jet_count(functional))
@@ -1389,7 +1599,12 @@ class _CudaSources:
         functional: typing.Any = None,
         pbe: typing.Any = None,
     ) -> None:
-        """Consume resident partition weights and implicit molecular-grid owners."""
+        """Consume resident weights; experimental FP32 requires a live density proof.
+
+        The explicit candidate does not silently widen if the transport or
+        producer is missing. Its caller owns complete-endpoint qualification
+        and any bounded strict retry; external nonlocal seeds stay strict.
+        """
         view = task.view
         if task._owner.device_id != self.device:
             raise ValueError("stationary/grid current owner device mismatch")
@@ -1397,7 +1612,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1432,6 +1648,25 @@ class _CudaSources:
             return
         jets = _stationary_density_jet_count(functional)
         binding = getattr(task, "density_jets_binding", None)
+        if getattr(self, "fp32_geometry_requested", False):
+            if binding is None:
+                raise _Fp32GeometryUnavailable(
+                    "FP32 geometry requires a current density binding"
+                )
+            work, flags = binding(jets)
+            self._call(
+                "stationary_geometry_molecular_resident_weights_fp32_enqueue_v1",
+                self.handle,
+                ct.byref(view),
+                work,
+                owner_offset,
+                points_per_atom,
+                device_weights,
+                ct.cast(device_raw, _DOUBLE),
+                view.generation,
+                flags,
+            )
+            return
         restricted_enqueue = getattr(
             self.library,
             "stationary_geometry_molecular_resident_weights_enqueue_v2",
@@ -1489,7 +1724,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1557,7 +1793,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1584,10 +1821,7 @@ class _CudaSources:
         if not external_device.value:
             raise ValueError("resident nonlocal seed device pointer is null")
         if self.profile_device:
-            owners = (
-                np.arange(owner_offset, owner_offset + view.npoint, dtype=np.int64)
-                // points_per_atom
-            )
+            owners = self._molecular_owners(owner_offset, view.npoint, points_per_atom)
             self.geometry_external_device(
                 task,
                 owners,
@@ -1784,7 +2018,31 @@ class _CudaSources:
         metrics["restricted_point_requested"] = int(
             getattr(self, "restricted_point_requested", False)
         )
+        precision_metrics = getattr(
+            self.library, "stationary_geometry_precision_metrics_v1", None
+        )
+        if precision_metrics is not None:
+            precision_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            precision_values = (ct.c_uint64 * 3)()
+            if precision_metrics(self.handle, precision_values, 3):
+                raise RuntimeError("stationary geometry precision metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "fp32_geometry_capable",
+                        "fp32_geometry_batches",
+                        "fp32_geometry_points",
+                    ),
+                    precision_values,
+                    strict=True,
+                )
+            )
         if point_metrics is not None:
+            metrics["restricted_point_capable"] = int(point_values[0])
             metrics.update(
                 zip(
                     (
@@ -1838,6 +2096,32 @@ class _CudaSources:
                         "becke_primitive_reverse_pair_visits",
                     ),
                     primitive_values,
+                    strict=True,
+                )
+            )
+        scaled_metrics = getattr(
+            self.library, "stationary_becke_binary_scaled_metrics_v1", None
+        )
+        if scaled_metrics is not None:
+            scaled_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            scaled_values = (ct.c_uint64 * 6)()
+            if scaled_metrics(self.handle, scaled_values, 6):
+                raise RuntimeError("stationary binary-scaled Becke metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "becke_binary_scaled_requested",
+                        "becke_binary_scaled_selected",
+                        "becke_binary_scaled_batches",
+                        "becke_binary_scaled_points",
+                        "becke_binary_scaled_phased_bytes",
+                        "becke_binary_scaled_cooperative_normalize",
+                    ),
+                    scaled_values,
                     strict=True,
                 )
             )
@@ -1955,25 +2239,15 @@ def _stationary_source_cache_enabled() -> bool:
     return value == "1"
 
 
-def _native_grid_artifact(library: typing.Any, architecture: str) -> CudaArtifact:
-    """Bind the already built native CUDA grid code without recompilation."""
-    path = Path(library).resolve()
-    if not path.is_file():
-        raise FileNotFoundError(f"native CUDA library not found: {path}")
-    digest = file_hash(path)
-    identity = {
-        "schema": "generativeqc.native-grid-aot.v1",
-        "target": {"architecture": architecture},
-    }
-    return CudaArtifact(
-        path,
-        {
-            "identity": identity,
-            "binary_sha256": digest,
-            "key": canonical_hash({"identity": identity, "binary_sha256": digest}),
-            "artifact_kind": "native-build-aot",
-        },
-    )
+def _native_grid_artifact(library: typing.Any, architecture: str) -> NativeGridLibrary:
+    """Defer native-build identity to the admitted grid owner that consumes it.
+
+    No expected digest is supplied by this route. The owner hashes the complete
+    current binary before loading; ordinary compiled artifacts remain verified
+    against their externally supplied digest. Prepared owners retain the bound
+    artifact and rehash it on geometry refresh exactly as before.
+    """
+    return NativeGridLibrary(Path(library).resolve(), architecture)
 
 
 def _unique_prepared_artifacts(
@@ -1998,6 +2272,14 @@ class PreparedStationaryCudaTopologyMismatch(ValueError):
     """Retained execution is incompatible with the requested scientific topology."""
 
 
+def _prepare_force_memory(
+    source: typing.Any, additional_device_bytes: int
+) -> dict[str, int]:
+    """Ask the authenticated SCF owner for room before force allocations begin."""
+    prepare = getattr(source, "cuda_prepare_force_memory", None)
+    return prepare(additional_device_bytes) if callable(prepare) else {}
+
+
 class PreparedStationaryCudaExecution:
     """Retain method-owned CUDA resources behind the shared prepared-region lease."""
 
@@ -2008,6 +2290,7 @@ class PreparedStationaryCudaExecution:
         self.preparation_seconds = 0.0
         self._resident_ao_maps = None
         self._resident_ao_map_key = None
+        self._attempt_source_metrics = None
 
     @property
     def identity(self) -> str | None:
@@ -2048,6 +2331,7 @@ class PreparedStationaryCudaExecution:
         resident_ao_producer: str = "sampled-jets",
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
+        fp32_semilocal_geometry: bool = False,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
         scientific_identity = canonical_hash(
@@ -2077,8 +2361,10 @@ class PreparedStationaryCudaExecution:
                 "integral_terms": integral_terms,
                 "primitive_page_work_budget": page_work_budget,
                 "primitive_integral_derivatives": integral_derivatives,
+                "fp32_semilocal_geometry": fp32_semilocal_geometry,
                 "pbe0_restricted_point": _resolve_restricted_point_policy(),
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
+                "grid_features_only": getattr(grid_plan, "features_only", False),
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
                 "resident_ao_producer": resident_ao_producer,
@@ -2151,7 +2437,12 @@ class PreparedStationaryCudaExecution:
         resident_ao_producer: str = "sampled-jets",
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
+        fp32_semilocal_geometry: bool = False,
     ) -> None:
+        if self._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if self._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         if not integral_derivatives and (
             aot_directory is not None
             or ecp
@@ -2187,6 +2478,7 @@ class PreparedStationaryCudaExecution:
             resident_ao_producer=resident_ao_producer,
             resident_ao_max_active_fraction=resident_ao_max_active_fraction,
             integral_derivatives=integral_derivatives,
+            fp32_semilocal_geometry=fp32_semilocal_geometry,
         )
         if self._lease.contract is not None:
             try:
@@ -2203,6 +2495,11 @@ class PreparedStationaryCudaExecution:
                 raise PreparedStationaryCudaTopologyMismatch(
                     "stationary CUDA prepared profiling mode changed"
                 )
+            # Replays retain their force arenas. Only remaining transient work
+            # competes with optional SCF values in this phase.
+            self.force_memory = _prepare_force_memory(
+                state._source, max(0, max_device_bytes - self.device_peak_bound)
+            )
             if (
                 basis.identity != self._bound_basis_identity
                 or self._lease.needs_refresh
@@ -2239,6 +2536,7 @@ class PreparedStationaryCudaExecution:
         if retained_host > max_host_bytes:
             raise ValueError("prepared stationary CUDA host budget exceeded")
 
+        self.force_memory = _prepare_force_memory(state._source, max_device_bytes)
         started = perf_counter()
         cache = Path(cache)
         _, _, expansions, _ = _layout(basis)
@@ -2287,7 +2585,7 @@ class PreparedStationaryCudaExecution:
         stack = ExitStack()
         try:
             source_names = stationary_runtime_sources(plan)
-            needs_first = functional != 0
+            needs_first = _stationary_density_jet_count(functional) > 1
             # Register the borrowed grid owner first so ExitStack closes the
             # stationary consumer before destroying the CUDA stream it borrows.
             grid = stack.enter_context(
@@ -2298,12 +2596,15 @@ class PreparedStationaryCudaExecution:
                     tile_points=tile_points,
                     budget_bytes=grid_plan.peak_bytes,
                     device_id=device,
-                    active_ao_capacity=basis.nao,
+                    active_ao_capacity=grid_plan.active_ao_capacity,
+                    features_only=getattr(grid_plan, "features_only", False),
                     ingredients=(
                         ("rho", "gradient", "tau") if needs_first else ("rho",)
                     ),
                 )
             )
+            if isinstance(grid_artifact, NativeGridLibrary):
+                grid_artifact = grid.artifact
             sources = stack.enter_context(
                 _CudaSources(
                     basis,
@@ -2319,6 +2620,7 @@ class PreparedStationaryCudaExecution:
                     page_work_budget=page_work_budget,
                     profile_device=profile_device,
                     integral_derivatives=integral_derivatives,
+                    fp32_geometry=fp32_semilocal_geometry,
                 )
             )
             tensors = {
@@ -2400,14 +2702,28 @@ class PreparedStationaryCudaExecution:
             },
         )
 
+    def _discard_resources(self) -> None:
+        """Drain borrowed streams before invalidating a rejected execution.
+
+        Unlike close(), this keeps the public owner reusable for a bounded
+        strict retry. Its next ensure() must re-admit and rebuild all resources.
+        The caller holds the execution lock and no source may escape this drain.
+        """
+        self._resident_ao_maps = None
+        self._resident_ao_map_key = None
+        if self._stack is not None:
+            self._stack.close()
+            self._stack = None
+        self._lease.invalidate()
+        self._attempt_source_metrics = None
+
     def close(self) -> None:
         with self._lock:
-            self._resident_ao_maps = None
-            self._resident_ao_map_key = None
-            if self._stack is not None:
-                self._stack.close()
-                self._stack = None
-            self._lease.invalidate()
+            if not self._lease.closed:
+                try:
+                    self._discard_resources()
+                finally:
+                    self._lease.close()
 
     def __enter__(self) -> typing.Any:
         return self
@@ -2473,12 +2789,16 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "becke_elided_reverse_pair_panel_write_bytes",
         "becke_elided_gather_pair_panel_read_bytes",
         "phased_becke_batches",
+        "becke_binary_scaled_batches",
+        "becke_binary_scaled_points",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",
         "restricted_point_batches",
         "restricted_point_count",
         "general_point_batches",
         "general_point_count",
+        "fp32_geometry_batches",
+        "fp32_geometry_points",
         *_BECKE_PHASE_COUNTER_NAMES,
     ):
         if name in after and name in before:
@@ -2544,6 +2864,8 @@ def _plan_stationary_cuda_tile(
     max_device_bytes: int,
     max_host_bytes: int,
     max_ecp_pair_samples: int,
+    reserve_active_ao: bool = True,
+    features_only: bool = False,
 ) -> _StationaryCudaTileLayout:
     """Retain the ordinary force owner inventory for each candidate tile.
 
@@ -2557,7 +2879,11 @@ def _plan_stationary_cuda_tile(
         backend="cuda",
         order=2 if needs_first else 1,
         tile_points=tile_points,
-        active_ao_capacity=n,
+        # Indexed density preparation owns additional dense packing/validation
+        # buffers. A consumer without AO maps must use the dense contract, so
+        # unused optional storage cannot exclude an otherwise bounded force.
+        active_ao_capacity=n if reserve_active_ao else None,
+        features_only=features_only,
         budget_bytes=max_device_bytes,
     )
     # Admit the bounded fallback first. Optional lane expansion uses only the
@@ -2583,13 +2909,17 @@ def _plan_stationary_cuda_tile(
     # Conservative numeric-array bound: compact task pages/sort staging, resident
     # topology mirrors, D/W admission copies, adapter staging, cached Cartesian
     # derivative-kind lookup tables, candidate/publication copies, and tile owners.
+    # The component producer reserves 48 additional task-capacity words of
+    # transient mixed-radix scratch and seven retained words per public AO even
+    # when the scalar fallback is selected. An environment change cannot evade
+    # prepared-owner admission. No page-times-Cartesian-fanout storage is retained.
     # Compiler objects, Python headers and the caller's existing SCF snapshot
     # are explicit exclusions, as in the reused grid/TensorIR resource contracts.
     host_bound = (
         grid_plan.host_bytes
         + 8
         * (
-            34 * primitive_tile
+            82 * primitive_tile
             + 4 * plan.spin_blocks * n * n
             + 120 * na
             + 12 * (len(source_names) - len(_SOURCE_NAMES)) * na
@@ -2598,7 +2928,7 @@ def _plan_stationary_cuda_tile(
             + 3 * len(COMPONENT_LABELS) ** 2
             + 3 * tile_points
             + 2 * basis.nprimitive
-            + 4 * n
+            + 11 * n
             + 80
         )
         + max((tp.host_bytes for tp in tensor_plans.values()), default=0)
@@ -2736,6 +3066,40 @@ def _plan_stationary_cuda_tile(
         native_geometry_reserve,
         source_resources,
     )
+
+
+def _plan_stationary_optional_ao_schedule(
+    *,
+    grid_points: int,
+    tile_points: int | None,
+    preferred_tile_points: int,
+    requested_maps: bool,
+    admit: typing.Callable[[int, bool], tuple[_StationaryCudaTileLayout, typing.Any]],
+) -> tuple[_StationaryCudaTileLayout, typing.Any, str | None]:
+    """Admit optional indexed storage, retaining the complete dense fallback.
+
+    Both searches are dry and include every concurrent owner's original caps.
+    Retrying cannot bypass a grid/work/explicit-tile rejection: dense admission
+    rechecks those same constraints. No native allocation or execution is retried.
+    """
+
+    def choose(indexed: bool) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+        return plan_stationary_cuda_grid_schedule(
+            grid_points=grid_points,
+            tile_points=tile_points,
+            admit=lambda points: admit(points, indexed),
+            preferred_tile_points=preferred_tile_points,
+        )
+
+    try:
+        layout, work = choose(requested_maps)
+        return layout, work, None
+    except ValueError as error:
+        if not requested_maps:
+            raise
+        indexed_rejection = str(error)
+    layout, work = choose(False)
+    return layout, work, indexed_rejection
 
 
 def _stationary_ao_map_reserve(
@@ -2879,10 +3243,11 @@ def _complete_rks_cuda_gradient_diagnostic(
     resident_ao_cache_bytes: int = 16 << 20,
     resident_ao_producer: str = "sampled-jets",
     resident_ao_max_active_fraction: float = 1.0,
+    fp32_semilocal_geometry: bool = False,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
-    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
+    Domain: qualified real FP64 RKS/UKS compositions, native fixed-topology grid and
     distinct noncolliding centers. Enlarged domains require the shared native
     stationary integral owner. No CPKS is required. None for either whole-grid
     work guard admits the finite complete grid, retaining bounded submission
@@ -2898,9 +3263,19 @@ def _complete_rks_cuda_gradient_diagnostic(
     charges (nine sources). Its small dense export is separately budgeted and
     preserves the checked native two-grid gate. The public wrapper restricts ECP
     force capability to Cartesian/real-spherical s/p records.
+
+    The private FP32 geometry candidate changes only its typed semilocal
+    consumer, never the fitted metric/three-center response or final SCF state.
+    It requires a current producer proof and reports actual candidate launches.
+    It does not itself grant Fast admission. The public policy validates the
+    complete fitted model separately; the wrapper owns bounded retry.
     """
+    if type(fp32_semilocal_geometry) is not bool:
+        raise TypeError("FP32 semilocal geometry selection must be boolean")
+    if prepared is not None:
+        prepared._attempt_source_metrics = None
     timeline = _ExclusiveWallTimeline()
-    contract = StationaryDerivativeContract(state.identity)
+    contract = StationaryDerivativeContract.for_native_force(state)
     contract.validate(state)
     if state._source.backend != "cuda":
         raise NotImplementedError("CUDA diagnostic requires a native CUDA KS state")
@@ -3025,7 +3400,16 @@ def _complete_rks_cuda_gradient_diagnostic(
     needs_first = "sigma" in ingredients
     device = int(state._source.metadata[12])
 
-    def admit_tile(points: int) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+    # Validate the requested optional policy even if indexed capacity is later
+    # declined, so fallback cannot conceal a malformed cutoff or cache budget.
+    _stationary_ao_map_reserve(
+        resident_ao_cutoff, resident_ao_cache_bytes, 0, max_host_bytes
+    )
+    requested_resident_ao_cutoff = resident_ao_cutoff
+
+    def admit_tile(
+        points: int, reserve_active_ao: bool
+    ) -> tuple[_StationaryCudaTileLayout, typing.Any]:
         work = plan_stationary_cuda_grid_work(
             atoms=na,
             grid_points=len(state.grid.points),
@@ -3049,6 +3433,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             max_ecp_pair_samples=max_ecp_pair_samples,
+            reserve_active_ao=reserve_active_ao,
+            features_only=True,
         )
         # Prepared ECP retains all tensor owners simultaneously. Its later lease
         # admission charges their host storage in addition to the ordinary bound;
@@ -3074,12 +3460,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         and callable(getattr(state._source, "stationary_integral_device_reserve", None))
         else 512
     )
-    layout, grid_work = plan_stationary_cuda_grid_schedule(
+    layout, grid_work, ao_capacity_fallback = _plan_stationary_optional_ao_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,
         admit=admit_tile,
         preferred_tile_points=preferred_tile_points,
+        requested_maps=resident_ao_cutoff is not None,
     )
+    if ao_capacity_fallback is not None:
+        resident_ao_cutoff = None
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans
     host_bound = layout.host_bound
@@ -3122,6 +3511,11 @@ def _complete_rks_cuda_gradient_diagnostic(
             n, len(state.grid.points), tile_points
         ).admitted_bytes(ao_map_reserve)
     host_bound += ao_map_reserve
+    force_memory = (
+        _prepare_force_memory(state._source, max_device_bytes)
+        if prepared is None
+        else {}
+    )
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -3199,10 +3593,16 @@ def _complete_rks_cuda_gradient_diagnostic(
                 resident_ao_producer=resident_ao_producer,
                 resident_ao_max_active_fraction=resident_ao_max_active_fraction,
                 integral_derivatives=primitive_demand.integral_derivatives,
+                fp32_semilocal_geometry=fp32_semilocal_geometry,
             )
         artifact = prepared.stationary_artifact
         grid_artifact = prepared.grid_artifact
         artifacts = list(prepared.artifacts)
+        prepared._lease.begin(
+            prepared._lease.contract.request,
+            max_host_bytes=max_host_bytes,
+            max_device_bytes=max_device_bytes,
+        )
     tensor_work = {
         "executions": 0,
         "h2d_numeric_bytes": 0,
@@ -3250,7 +3650,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                         tile_points=tile_points,
                         budget_bytes=grid_plan.peak_bytes,
                         device_id=device,
-                        active_ao_capacity=n,
+                        active_ao_capacity=grid_plan.active_ao_capacity,
+                        features_only=getattr(grid_plan, "features_only", False),
                         # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
                         # additionally consumes tau from the same current density.
                         ingredients=("rho", "gradient", "tau")
@@ -3258,6 +3659,9 @@ def _complete_rks_cuda_gradient_diagnostic(
                         else ("rho",),
                     )
                 )
+                if isinstance(grid_artifact, NativeGridLibrary):
+                    grid_artifact = ao.artifact
+                    artifacts[1] = grid_artifact
                 sources = stack.enter_context(
                     _CudaSources(
                         basis,
@@ -3274,6 +3678,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         timeline=timeline,
                         profile_device=profile_device,
                         integral_derivatives=primitive_demand.integral_derivatives,
+                        fp32_geometry=fp32_semilocal_geometry,
                     )
                 )
             source_before = grid_before = None
@@ -3282,6 +3687,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.timeline = timeline
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
+            prepared._attempt_source_metrics = source_before
+        sources.configure_grid(spec, basis.atoms)
         if profile_device:
             ao.profile_stages()
         native_integral_components = None
@@ -3497,10 +3904,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                 raise ValueError(
                     "resident molecular-grid lease differs from stationary state"
                 )
-            points_per_atom = (
-                spec.radial_points * spec.angular_polar * spec.angular_azimuth
-            )
-            if points_per_atom <= 0 or grid_points != na * points_per_atom:
+            points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+            if grid_points != spec.point_count(a.atomic_number for a in basis.atoms):
                 raise ValueError(
                     "resident molecular grid is not the expected atom-major GridSpec"
                 )
@@ -3769,6 +4174,8 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     timeline.switch("publication_metadata")
     work.update(
+        fp32_semilocal_geometry_requested=fp32_semilocal_geometry,
+        fp64_geometry_retries=0,
         ecp_provider="generated-cuda/two-grid/dense-host-export" if ecp else None,
         ecp_provider_workspace_bound=ecp_workspace,
         ecp_state_export=(
@@ -3786,7 +4193,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         },
         resident_ao_selection={
             "schema": "generativeqc.stationary-resident-ao-selection.v1",
-            "mode": "disabled"
+            "requested_cutoff": requested_resident_ao_cutoff,
+            "capacity_fallback": ao_capacity_fallback,
+            "mode": "dense-capacity-fallback"
+            if ao_capacity_fallback is not None
+            else "disabled"
             if resident_ao_cutoff is None
             else (
                 "dense-no-resident-grid" if ao_maps is None else resident_ao_producer
@@ -3869,6 +4280,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             else 0
         )
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
+        scf_force_memory=force_memory if prepared is None else prepared.force_memory,
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
         tensor_executions=tensor_work["executions"],
@@ -4045,8 +4457,18 @@ def complete_rks_cuda_gradient_diagnostic(
     resident_ao_cache_bytes: int = 16 << 20,
     resident_ao_producer: str = "sampled-jets",
     resident_ao_max_active_fraction: float = 1.0,
+    fp32_semilocal_geometry: bool = False,
 ) -> typing.Any:
-    """Execute once, optionally retaining validated CUDA owners for later replay."""
+    """Execute complete sources, optionally retaining owners for later replay.
+
+    Only an explicit candidate with positive mixed work and a typed numerical
+    failure can retry. Drain and discard all sources first, then execute once
+    in strict arithmetic at the same authenticated state. Allocation, driver,
+    identity failures never authorize a retry. Missing optional mixed transport
+    has a separate strict replay, recorded as capability fallback, not numerical
+    recovery. Neither replay recursively retries a failed strict execution.
+    """
+    started = perf_counter()
     kwargs = {
         "compiler": compiler,
         "cache": cache,
@@ -4070,16 +4492,76 @@ def complete_rks_cuda_gradient_diagnostic(
         "resident_ao_cache_bytes": resident_ao_cache_bytes,
         "resident_ao_producer": resident_ao_producer,
         "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
+        "fp32_semilocal_geometry": fp32_semilocal_geometry,
     }
     if prepared is None:
-        return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+        if not fp32_semilocal_geometry:
+            return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+        with PreparedStationaryCudaExecution() as temporary:
+            kwargs["prepared"] = temporary
+            return complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
     if not isinstance(prepared, PreparedStationaryCudaExecution):
         raise TypeError("prepared CUDA execution has the wrong owner type")
     with prepared._lock:
+        if prepared._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if prepared._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         try:
-            result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
-        except Exception:
+            try:
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+            except _Fp32GeometryUnavailable as error:
+                if not fp32_semilocal_geometry:
+                    raise
+                baseline = prepared._attempt_source_metrics
+                attempts = (
+                    {}
+                    if baseline is None
+                    else _metric_delta(prepared.sources.metrics(), baseline)
+                )
+                prepared._lease.mark_failure()
+                prepared._discard_resources()
+                kwargs["fp32_semilocal_geometry"] = False
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+                result = replace(
+                    result,
+                    work=MappingProxyType(
+                        {
+                            **result.work,
+                            "fp32_semilocal_geometry_requested": True,
+                            "fp32_geometry_unavailable": str(error),
+                            "rejected_semilocal_work": attempts,
+                            "endpoint_seconds": perf_counter() - started,
+                        }
+                    ),
+                )
+            except ArithmeticError:
+                baseline = prepared._attempt_source_metrics
+                if not fp32_semilocal_geometry or baseline is None:
+                    raise
+                attempts = _metric_delta(prepared.sources.metrics(), baseline)
+                if not attempts.get("fp32_geometry_points", 0):
+                    raise
+                prepared._lease.mark_failure()
+                prepared._discard_resources()
+                kwargs["fp32_semilocal_geometry"] = False
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+                result = replace(
+                    result,
+                    work=MappingProxyType(
+                        {
+                            **result.work,
+                            "fp32_semilocal_geometry_requested": True,
+                            "fp64_geometry_retries": 1,
+                            "rejected_semilocal_work": attempts,
+                            "endpoint_seconds": perf_counter() - started,
+                        }
+                    ),
+                )
+        except BaseException:
             prepared._lease.mark_failure()
+            if fp32_semilocal_geometry:
+                prepared._discard_resources()
             raise
         prepared._lease.mark_success()
         return result

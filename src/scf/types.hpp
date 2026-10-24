@@ -1,11 +1,13 @@
 #ifndef GENERATIVEQC_SCF_TYPES_HPP
 #define GENERATIVEQC_SCF_TYPES_HPP
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
 
 #include "dft/density_source.hpp"
+#include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
@@ -39,7 +41,7 @@ struct IncrementalDirectJkDiagnostic {
   std::uint64_t bypass_full_builds{};
   /** Strict full physical builds performed by ordinary finalization. */
   std::uint64_t post_scf_full_builds{};
-  /** Number of times a successful delta build became the next anchor. */
+  /** Successful delta-to-anchor promotions; zero for fixed screened anchors. */
   std::uint64_t anchor_updates{};
   /** Largest absolute alpha/beta delta-density element observed. */
   double max_abs_delta_density{};
@@ -76,7 +78,7 @@ struct PrecisionProvenance {
   bool strict_refinement_applied{false};
   /** Accumulated FP32 Fock rounding the admission budget certified; 0 if none. */
   double mixed_precision_reserved_error{0.0};
-  /** FP64 target-precision iterations run after the mixed iterative stage. */
+  /** Strict target iterations after a mixed or screened preliminary stage. */
   uint32_t refinement_iterations{0};
   /** Complete mixed-stage Fock/operator applications for this item. */
   uint64_t mixed_stage_fock_builds{0};
@@ -100,15 +102,29 @@ struct PrecisionProvenance {
 
 /** Numerical controls shared by the implemented mean-field solvers. */
 struct ScfOptions {
+  /** Copied prescription plus a preparation-owned immutable source. A null
+   * source retains the incumbent shared-grid path, including explicit equality. */
+  std::optional<dft::GridSpec> nonlocal_grid_spec;
+  const dft::MolecularGrid* nonlocal_grid{};
   unsigned max_iterations{100};
   unsigned diis_history{8};
   double energy_tolerance{1.0e-10};
   double density_tolerance{1.0e-8};
   double screening_tolerance{1.0e-12};
+  /** Optional screened FP64 iteration stage for a nonresident CUDA physical
+   * reference. Schwarz and density-weighted J/K gates share this cutoff;
+   * final reference publication requires a fresh unscreened SCF refinement.
+   * Zero disables the preliminary stage without changing the target operator. */
+  double reference_iteration_screening_tolerance{1.0e-12};
   /** Experimental #990 exact incremental Direct-J/K controller. Off by
    * default. It is admitted only when every requested J/K term is Exact.
    * The final physical state still uses ordinary full provider builds. */
   bool incremental_direct_jk{};
+  /** Method-owned request for a guarded automatic cold-only CUDA KS Direct-J/K
+   * path. The actual owner checks numeric/provider/resource admission; public
+   * resource ledgers must retain the ordinary fully inventoried execution.
+   * Explicit incremental_direct_jk requests retain their existing domain. */
+  bool incremental_direct_jk_auto{};
   /** Accepted delta updates before refreshing the full anchor. Zero disables
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};
@@ -166,6 +182,9 @@ struct ScfOptions {
   enum class XcExecutionSchedule : std::uint32_t { DeviceFused = 0, HostUnfused = 1 };
   /** Placement-only semilocal XC schedule; scientific identity is unchanged. */
   XcExecutionSchedule xc_execution_schedule{XcExecutionSchedule::DeviceFused};
+  /** Requested energy, maximum force-component and RMS force-component
+   * allowances. The method owns admission; zeros preserve incumbent behavior. */
+  std::array<double, 3> application_precision_budget{};
   /** Resolved semilocal component scales; exact exchange lives only in the
    * common FockBuildSpec. Unit defaults preserve legacy LDA/PBE callers. */
   double semilocal_exchange_scale{1.0};
@@ -181,8 +200,8 @@ struct ScfOptions {
  *
  * These capabilities describe execution semantics, not backend identity. CPU
  * and CUDA therefore resolve the same accepted-iterate policy before lowering,
- * while a lower that performs density-weighted screening can request the
- * stricter refresh cadence needed to bound omitted delta contributions.
+ * while a lower that performs density-weighted screening retains a full-density
+ * anchor to bound the number of omitted delta contributions.
  */
 struct IncrementalDirectJkCapabilities {
   bool provider_eligible{};
@@ -194,6 +213,8 @@ struct IncrementalDirectJkCapabilities {
 struct IncrementalDirectJkPolicy {
   bool requested{};
   bool active{};
+  /** Screened deltas reference the last full build, never another screened delta. */
+  bool fixed_full_density_anchor{};
   unsigned requested_rebuild_interval{};
   unsigned effective_rebuild_interval{};
   double density_rms_threshold{};
@@ -209,10 +230,12 @@ inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strate
 
 /** Resolve one policy before CPU/CUDA lowering.
  *
- * A density-weighted screened lower is allowed at most one accepted delta build
- * before a full-density refresh. This keeps screening omissions from accumulating
- * through an arbitrarily long anchor chain. Exact-linear lowers retain the
- * caller's requested cadence, including zero for no periodic refresh.
+ * Density-weighted screened lowers retain the last full-density anchor across
+ * delta builds. Each reconstruction contains only the full-anchor and current
+ * delta screening omissions, rather than a growing chain of omissions. Both
+ * screened and exact-linear lowers honor the requested refresh cadence, including
+ * zero for no periodic refresh. Exact-linear lowers may roll the anchor forward
+ * after each delta because they do not omit density-dependent work.
  */
 inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
     const ScfOptions& options, IncrementalDirectJkCapabilities capabilities) noexcept {
@@ -221,10 +244,10 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
   policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
   const bool screened_lower =
       capabilities.density_weighted_screening && options.screening_tolerance != 0.0;
+  policy.fixed_full_density_anchor = screened_lower;
   policy.density_rms_threshold =
       screened_lower ? options.incremental_direct_jk_density_rms_threshold : 0.0;
-  policy.effective_rebuild_interval =
-      screened_lower ? 1U : options.incremental_direct_jk_rebuild_interval;
+  policy.effective_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
   policy.active = policy.requested && capabilities.provider_eligible &&
                   !capabilities.conflicting_precision_policy;
   return policy;
@@ -260,6 +283,9 @@ struct ScfResult {
   bool initial_density_used{};
   /** CPU physical operator evaluations, counting a joint UHF J/K as one build. */
   std::size_t fock_builds{};
+  /** Independently counted completed CUDA Direct Fock applications. Missing
+   * means this execution did not publish a complete physical census. */
+  std::optional<std::uint64_t> executed_fock_builds;
   /** Exact incremental Direct-J/K execution provenance, when requested. */
   IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /**

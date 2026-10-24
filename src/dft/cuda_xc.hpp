@@ -19,6 +19,9 @@
 
 namespace generativeqc::dft {
 
+/** Three published XC/electron totals plus three private reduction low words. */
+inline constexpr std::size_t kCudaXcTotalStorageElements = 6;
+
 /** Exact explicit storage request for ordinary-stream semilocal XC. The
  * method's ResourcePlan supplies one arena of device_bytes. Optional lowering
  * resources have a separate reservation within that same resource plan.
@@ -52,6 +55,10 @@ struct CudaXcPointBatchPlan {
   bool compact{};
   /** Actual eligible groups/tiles; heterogeneous groups retain the incumbent. */
   std::size_t compact_groups{}, compact_tiles{}, compact_nonempty_tiles{};
+  /** Explicit research admission for tiled domains through 1024 AOs. */
+  bool ragged{};
+  /** Prepared nonempty domains above the incumbent 128-AO admission. */
+  std::size_t compact_large_tiles{};
 };
 
 /** Immutable offsets into one reusable batch arena. AO labels borrow the
@@ -78,6 +85,14 @@ struct CudaXcLayout {
   double exchange_scale{1.0}, correlation_scale{1.0};
   bool response{};
   CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
+  /** Admitted compact products: FP32 shared panels and inner sums;
+   * global storage and potential scatter across point tiles stay FP64.
+   * Unsupported compact groups retain the typed single-tile schedule. */
+  bool fp32_contractions{};
+  /** Point-total precision is independent of matrix products. Only the
+   * existing mixed-point warmup lowers these sums; ordinary point programs
+   * retain their compensated FP64 reduction with mixed matrix products. */
+  bool fp32_point_totals{};
   /** Full-grid points/weights are borrowed from an immutable MolecularGrid
    * device owner instead of occupying this arena. */
   bool borrowed_grid{};
@@ -93,6 +108,31 @@ struct CudaXcLayout {
   int map_derivative_order{-1};
   /** Immutable admission facts resolved from the point program, never its display name. */
   CudaXcFastPathCapabilities fast_paths{};
+};
+
+/** Same-stream canonical frame that produced this exact density generation.
+ * Only the SCF owner supplies this witness, after accepting its structured
+ * density proposal. Imported, held, mixed and response densities remain dense.
+ * Coefficients are column-major nao-by-nao frames, one per spin. */
+struct CudaXcOccupiedDensity {
+  const double* density{};
+  const double* coefficients{};
+  std::size_t nao{}, spins{}, occupations[2]{};
+  std::uint64_t generation{};
+
+#if defined(__CUDACC__)
+  __host__ __device__
+#endif
+      std::size_t rank() const noexcept {
+    return occupations[0] > occupations[1] ? occupations[0] : occupations[1];
+  }
+  bool matches(const double* current_density, std::size_t current_nao, std::size_t current_spins,
+               std::uint64_t current_generation) const noexcept {
+    return density && density == current_density && coefficients && nao == current_nao &&
+           spins == current_spins && (spins == 1 || spins == 2) && generation &&
+           generation == current_generation && rank() && rank() <= nao &&
+           (spins == 2 || occupations[1] == 0);
+  }
 };
 
 /** Layout-owned execution facts consumed by higher-level schedulers. These
@@ -116,9 +156,15 @@ struct CudaXcAoTiles {
   int derivative_order{-1};
 };
 
+/** Discovery schedule only: both routes sample the same generated AO jets.
+ * DeviceChunks compacts sorted IDs on the plan stream and downloads offsets
+ * at bounded chunk boundaries. HostTiles is the retained qualification control.
+ */
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
+
 /** Worst-case admission for sampled-jet discovery. The device bound includes
  * the dense arena and one global-capacity map per tile; host peak includes
- * those maps, offsets, and the current tile's flags. No mean AO count enters
+ * offsets/launchers and only the current tile's indices/flags. No mean AO count enters
  * admission. Discovery borrows the already charged AO/work scratch. */
 struct CudaXcAoSelectionResources {
   std::size_t device_bytes{}, host_peak_bytes{}, max_entries{}, tiles{};
@@ -129,6 +175,13 @@ CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& de
  * Only physical FP64 execution is admitted; response retains its dense route.
  * No discovery, screening threshold, CUDA allocation or GPU work occurs here. */
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps);
+
+/** Charge a map produced and validated incrementally on the plan stream.
+ * The producer must establish sorted, unique, in-range indices and tile
+ * offsets; this helper validates only shape, derivative capability and capacity.
+ */
+CudaXcLayout cuda_xc_local_ao_layout_shape(CudaXcLayout dense, std::size_t entries,
+                                           int derivative_order);
 
 CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept;
 
@@ -209,11 +262,21 @@ class CudaXcPlan {
    * This is diagnostic/execution provenance, not public capability admission. */
   const CudaXcPointProgram* point_program() const noexcept { return point_program_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Prepare bounded PBE correlation, optional AO and tiled-product lowering.
+   * Application admission or experimental ablations select the components;
+   * strict refinement/audit always restores FP64 for all of them. */
+  void prepare_mixed_pbe_points(bool mixed_ao = false, bool mixed_contractions = false);
+  /** Select shared FP32 density/potential products independently of point XC.
+   * Storage and inter-tile accumulation remain FP64. Shape admission covers
+   * nonempty indexed/tail tiles within CUDA launch bounds; strict audit
+   * restores all FP64 products. Unsupported shapes retain the strict binding.
+   * Call only during preparation, before evaluation or stream capture. */
+  void prepare_mixed_matrix_contractions();
   /** Prepare after maps and before evaluation/capture. Rejection/OOM preserves
    * the incumbent. Compact contraction batching is an explicit qualification
    * candidate; response, mixed arithmetic and optional providers do not use it. */
   void prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget,
-                             bool compact = false);
+                             bool compact = false, bool ragged = false);
   const CudaXcPointBatchPlan& point_batch_plan() const noexcept { return point_batch_plan_; }
   /** Setup-only provider preparation within an explicit additional allowance.
    * Zero retains the generated incumbent. The allowance is separate from the
@@ -248,13 +311,36 @@ class CudaXcPlan {
    * Returns false without discovery if either numeric budget is insufficient.
    * A successful selection is immutable for the lifetime of this geometry
    * owner. A positive sampled-jet cutoff requires endpoint qualification. */
-  bool select_local_ao(double cutoff, std::size_t max_host_bytes);
+  bool select_local_ao(double cutoff, std::size_t max_host_bytes,
+                       CudaXcAoDiscovery schedule = CudaXcAoDiscovery::HostTiles);
   const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
+  /** Setup-only exact point permutation, before maps/providers/capture. Only
+   * a matching borrowed MolecularGrid can supply the canonical source. The
+   * caller reserves separate temporary host and retained device allowances;
+   * insufficient capacity/device OOM retains the original order. This opt-in
+   * path is qualified for semilocal SCF; nonlocal consumers stay canonical. */
+  bool prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
+                            std::size_t device_budget);
+  /** Explicit alternative to center grouping: recursive spatial cuts align to
+   * this owner's execution tile. Shares the same resource/lifetime contract;
+   * the original overload and its default schedule remain unchanged. */
+  bool prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
+                            std::size_t device_budget, bool recursive_bisection);
+  std::size_t spatial_grid_device_bytes() const noexcept { return spatial_grid_bytes_; }
+  /** Canonical atom/radial/angular order for moving-grid force consumers.
+   * Spatial SCF execution keeps a separate exact permutation of these values;
+   * atomic measures and owner indexing always refer to this canonical view. */
+  CudaXcGridView canonical_grid_view() const;
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
+  /** Borrow the immutable validated AoBasis records on the plan's current
+   * device. Extents are in layout(); lifetime is that of this XC owner. A
+   * stationary consumer must additionally authenticate its live KS token. */
+  const double* packed_basis() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                generativeqc::runtime::PrecisionPhase phase =
-                   generativeqc::runtime::PrecisionPhase::StrictAudit);
+                   generativeqc::runtime::PrecisionPhase::StrictAudit,
+               CudaXcOccupiedDensity occupied = {});
   /** Enqueue only the stable device body for a shared replay region. The caller
    * must publish exactly one logical generation per physically submitted body
    * after the runtime chooses warmup/capture/replay/fallback. */
@@ -264,14 +350,20 @@ class CudaXcPlan {
   /** Replay-runtime counterpart that also exports total rho/grad-rho for a
    * resident nonlocal consumer. Logical generation publication remains owned
    * by publish_submitted_generation() after the runtime selects physical work. */
-  CudaXcView enqueue_replay_density_features(const double* density, std::size_t elements,
-                                             double* total_density, double* total_gradient);
+  CudaXcView enqueue_replay_density_features(
+      const double* density, std::size_t elements, double* total_density, double* total_gradient,
+      generativeqc::runtime::PrecisionPhase phase =
+          generativeqc::runtime::PrecisionPhase::StrictAudit);
   /** Execute the ordinary physical XC evaluation while also publishing total
    * rho and grad-rho to caller-owned full-grid device buffers. This adds no
-   * plan-owned storage and is admitted only for GGA/meta-GGA ingredient sets. */
+   * plan-owned storage and is admitted only for GGA/meta-GGA ingredient sets.
+   * The caller propagates its physical precision phase; independent consumers
+   * retain the strict default rather than implicitly opting into FP32 work. */
   void enqueue_density_features(const double* density, std::size_t elements,
                                 std::uint64_t generation, double* total_density,
-                                double* total_gradient);
+                                double* total_gradient,
+                                generativeqc::runtime::PrecisionPhase phase =
+                                    generativeqc::runtime::PrecisionPhase::StrictAudit);
   /** Accumulate a total-density nonlocal contribution into the already
    * submitted physical XC potential/totals for the same generation. All
    * inputs are caller-owned full-grid device arrays/scalars. */
@@ -302,7 +394,7 @@ class CudaXcPlan {
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
                     std::uint64_t generation, generativeqc::runtime::PrecisionPhase phase,
                     double* total_density = nullptr, double* total_gradient = nullptr,
-                    bool publish_generation = true);
+                    bool publish_generation = true, CudaXcOccupiedDensity occupied = {});
   void enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
                                        const double* effective_weights,
                                        const double* total_gradient, const double* vrho,
@@ -310,6 +402,9 @@ class CudaXcPlan {
   CudaXcLayout layout_;
   const CudaXcPointProgram* point_program_{};
   CudaXcPointLauncher point_launcher_{};
+  bool mixed_pbe_points_{};
+  bool mixed_pbe_ao_{};
+  bool mixed_matrix_contractions_{};
   CudaXcPointBatchLauncher point_batch_launcher_{};
   CudaXcPointBatchPlan point_batch_plan_;
   double* point_batch_arena_{};
@@ -331,6 +426,9 @@ class CudaXcPlan {
   std::size_t arena_bytes_{};
   cudaStream_t stream_{};
   std::shared_ptr<const void> grid_lifetime_;
+  const double *canonical_points_{}, *canonical_weights_{};
+  double* spatial_grid_{};
+  std::size_t spatial_grid_bytes_{};
   generativeqc::runtime::AsyncGeneration generations_;
   double *basis_{}, *points_{}, *weights_{}, *ao_{}, *work_{}, *features_{}, *coefficients_{},
       *point_totals_{}, *potential_{}, *totals_{}, *delta_features_{};
@@ -345,7 +443,7 @@ namespace cuda_xc_detail {
 /** Compiler-owned small-contraction legality for one original point batch. */
 bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   const std::vector<std::size_t>& ao_offsets,
-                                  std::size_t first_tile, std::size_t end_tile);
+                                  std::size_t first_tile, std::size_t end_tile, bool ragged);
 std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
                                                                     cudaStream_t stream,
                                                                     std::size_t provider_budget);
@@ -363,14 +461,29 @@ std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const Cud
 void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
                const double* points, std::size_t count, double cutoff, double* ao, double* work,
                int* error, unsigned* host_flags);
+/** Discover a bounded chunk using the existing AO predicate. Scratch consists
+ * of the dense AO/work panels and at most 3*tile_points offsets in point_totals.
+ * The only host publication is tile_count absolute CSR offsets after one fence;
+ * errors drain the stream before releasing borrowed host output storage.
+ */
+void select_ao_chunk(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
+                     const double* points, std::size_t first_tile, std::size_t tile_count,
+                     double cutoff, double* ao, double* work, double* point_totals, int* error,
+                     std::size_t* indices, std::size_t capacity, std::size_t initial_offset,
+                     std::size_t* host_offsets);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
+CudaXcPointLauncher mixed_pbe_point_launcher();
+CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher();
+/** Pure launch-shape admission for shared FP32 products, independent of XC. */
+bool mixed_matrix_contractions_supported(const CudaXcLayout& layout);
 /** Pure compiler-emitted resource qualification, with no device-model policy. */
 CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& ao_offsets,
                                               std::size_t requested_tiles,
-                                              std::size_t device_budget, bool compact);
-CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional);
+                                              std::size_t device_budget, bool compact, bool ragged);
+CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional,
+                                                      CudaXcPointLauncher point_launcher);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO
@@ -388,7 +501,7 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              const tensor::PreparedSymmetricProduct* potential_binding = nullptr,
              const CudaXcPointBatchPlan& point_batch_plan = {},
              CudaXcPointBatchLauncher point_batch_launcher = nullptr,
-             double* point_batch_arena = nullptr);
+             double* point_batch_arena = nullptr, CudaXcOccupiedDensity occupied = {});
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

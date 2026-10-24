@@ -47,6 +47,46 @@ def _forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
     raise AssertionError("resident block solve crossed a host long-vector seam")
 
 
+@pytest.mark.parametrize("strategy", ("sequential", "blocked", "recycled"))
+def test_empty_resident_batch_has_no_vectors_transfers_or_actions(
+    strategy: str,
+    monkeypatch: typing.Any,
+) -> None:
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    meta, arrays = load_fixture("lih")
+    with (
+        NativeSource(**source_arguments(meta)) as source,
+        CudaDirectJKBackend(source) as backend,
+    ):
+        problem = RHFResponseOperator.build_problem(
+            fixture_snapshot(meta, arrays), backend
+        )
+        operator = RHFResponseOperator(problem, backend)
+        with backend.resident_response(
+            problem, vector_slots=32, device_budget_bytes=16 << 20
+        ) as resident:
+            operator._krylov_engine = resident
+            before = resident.diagnostics
+            monkeypatch.setattr(operator, "apply", _forbidden)
+            monkeypatch.setattr(resident, "_call", _forbidden)
+            result = solve_many(
+                operator,
+                np.empty((problem.dimension, 0)),
+                strategy=strategy,
+                options=GMRESOptions(max_workspace_bytes=1),
+                raise_on_failure=True,
+            )
+            assert result.solution.shape == (problem.dimension, 0)
+            assert result.operator_actions == result.peak_workspace_bytes == 0
+            assert not resident._live
+            assert not resident._retained
+            monkeypatch.undo()
+            after = resident.diagnostics
+            assert after == before
+        with pytest.raises(RuntimeError, match="closed"):
+            solve_many(operator, np.empty((problem.dimension, 0)), strategy=strategy)
+
+
 @pytest.mark.parametrize("name", ("h2", "lih", "water"))
 @pytest.mark.parametrize("scale", (1.0, 1e-100))
 @pytest.mark.parametrize("strategy", ("blocked", "sequential", "recycled"))

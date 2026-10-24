@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -16,6 +15,8 @@ from generativeqc_compiler.integral.shell_spec import DPPP_SPEC
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from conftest import NativeCxx
 
 
 def _function(source: str, name: str) -> str:
@@ -32,14 +33,13 @@ def _function(source: str, name: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def coefficient_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-
-    generic = _function(
-        emit_direct_force_density_coefficient(),
-        "direct_force_density_coefficient_scaled",
+def coefficient_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    generic = (
+        emit_direct_force_density_coefficient()
+        .replace("__device__ ", "")
+        .replace("__forceinline__ ", "")
     )
     exact = _function(
         emit_shell_class_fused_cuda(DPPP_SPEC, target=cuda_target_info("sm_120")),
@@ -134,14 +134,13 @@ int main() {
     source_path = directory / "probe.cpp"
     executable = directory / "probe"
     source_path.write_text(source)
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(source_path), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    native_cxx.build_executable(
+        [source_path],
+        executable,
+        compile_args=("-std=c++20", "-O0"),
+        compile_timeout=30,
+        link_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     return executable
 
 

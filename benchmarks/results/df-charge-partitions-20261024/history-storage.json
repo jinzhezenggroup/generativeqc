@@ -1,0 +1,57 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "01bafb62c67b868e4284b0f0d2ee1dbea9ec3b26",
+  "file_count": 6,
+  "total_bytes": 393057,
+  "retention": "Complete original historical bytes retained in deterministic gzip. No sample, work count, failure or numerical evidence changed. Original names are recoverable with the shared restore tool.",
+  "files": [
+    {
+      "path": "benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json",
+      "bytes": 78117,
+      "sha256": "2a69c6f4f317f366646f090d773c5368e6fe7682f93cee3f3811e1954b14bcbc",
+      "stored_path": "benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json.gz",
+      "stored_bytes": 13081,
+      "stored_sha256": "0045cab1279a7aff18fd3d06ec28110de1f3ee5d51d1ef5eda25e86b48f95a6a"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json",
+      "bytes": 78097,
+      "sha256": "e89f6c5f9d1e7fe4b401be07ec7f37fdfdaaf7ecabc2c37f92ec2ef42b50a6e2",
+      "stored_path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json.gz",
+      "stored_bytes": 13116,
+      "stored_sha256": "fc832c4d81eae22ed89bd676635a429b14d937217b427962d95dede1483a6c47"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json",
+      "bytes": 69134,
+      "sha256": "55b6edc814d4c803f20f1464d1fdea415b881b733d8febe153491dfad0b5bd15",
+      "stored_path": "benchmarks/results/rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json.gz",
+      "stored_bytes": 14392,
+      "stored_sha256": "388df18c853aee1f7d244b3826a6c2bfad8728d727a0c80b6f2e925b7276c1ec"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json",
+      "bytes": 61755,
+      "sha256": "65491e58acdf868817a174d435cc4d0546b402eda14f306e4e71b769b211b8f9",
+      "stored_path": "benchmarks/results/rtx5090-a5473bf-water-octamer-s4-def2-svp-spherical-b1.json.gz",
+      "stored_bytes": 9489,
+      "stored_sha256": "6131fbc1d7a940c1223b3be876404b59cb3b778d064f23a076f23da2324b583f"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-2335e71-issue-41-completion-evidence.json",
+      "bytes": 58281,
+      "sha256": "73e64a4ea9cc628321d16ff8ab1e96481f12fdcc71c2f9836fef134005c76a3a",
+      "stored_path": "benchmarks/results/rtx5090-2335e71-issue-41-completion-evidence.json.gz",
+      "stored_bytes": 14066,
+      "stored_sha256": "60bb74f8bc8efdfabf357d79811dd811854cbdca02902e7b3c2714ca8ca398bf"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-profile.json",
+      "bytes": 47673,
+      "sha256": "3e729e7cd888e0c055fab5441bb3f7017cd54bcd993c3182b299a09e7e47672b",
+      "stored_path": "benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-profile.json.gz",
+      "stored_bytes": 8124,
+      "stored_sha256": "c7a3d61637ff54a0fffaaba68a9d8b05d4d6f075de025b119a1a06e4ab41c0e6"
+    }
+  ]
+}

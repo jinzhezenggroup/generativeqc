@@ -154,11 +154,11 @@ def test_pbe0_auto_force_uses_strict_final_state() -> None:
 
 @pytest.mark.parametrize("name", ("M06-2X", "MN15"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> None:
-    """Generated split hybrids may use AUTO energy, but force AUTO is not qualified."""
+def test_split_hybrid_auto_shares_the_public_force_route(name: str, spin: str) -> None:
+    """XC code generation does not change the shared J/K arithmetic capability."""
     from generativeqc import Calculator, GridSpec, KsOptions
 
-    calc = Calculator(
+    calculator = Calculator(
         method=f"{name.lower()}-{spin}",
         device="cuda",
         basis="sto-3g",
@@ -167,7 +167,7 @@ def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> No
             grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
         ),
     )
-    assert "forces" not in calc.capabilities.supported_properties
+    assert "forces" in calculator.capabilities.supported_properties
 
 
 @pytest.mark.parametrize(
@@ -178,7 +178,9 @@ def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> No
         ("B3LYP", "fp64"),
         ("B3LYP", "auto"),
         ("M06-2X", "fp64"),
+        ("M06-2X", "auto"),
         ("MN15", "fp64"),
+        ("MN15", "auto"),
         ("PBE0-alias", "fp64"),
         ("PBE0-alias", "auto"),
     ),
@@ -242,6 +244,13 @@ def test_public_cuda_global_hybrid_force(
     with calc.prepare_batch(
         [atoms], multiplicities=[multiplicity], warm_start=True
     ) as batch:
+        # This gate qualifies the generated stationary owner's retained work
+        # and lifetime. Native PBE0/B3LYP promotion can otherwise bypass that
+        # owner entirely. The fresh moved call below still uses default routing,
+        # so its comparison also covers parity with the native prepared route.
+        monkeypatch.setattr(
+            batch, "_native_dft_force_eligible", lambda index=None: False
+        )
         # Retain the executed owner evidence without changing the force route.
         # A descriptor count alone cannot establish which native source ran.
         force_work = []

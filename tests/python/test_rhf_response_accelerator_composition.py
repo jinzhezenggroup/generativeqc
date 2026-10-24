@@ -48,6 +48,7 @@ PREFIX = r"""
 #include <string>
 #include <vector>
 #include "hf/rhf_frame_response.hpp"
+#include "response/solve.hpp"
 using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
 constexpr double kResidualTolerance = 1e-10;
@@ -81,10 +82,11 @@ void run(double screen, int accelerator, bool cached, bool fail_physical=false,
   const std::size_t o=1,v=2;
   hf::RHFFrameResponseResult result;
   result.applied_screening=screen;
-  response::GmresOptions options;
-  options.absolute_tolerance=1e-12; options.relative_tolerance=0;
-  options.true_residual_every=options.restart;
-  const auto zplan=response::prepare_gmres(2,options);
+  hf::RHFFrameResponseOptions options;
+  auto& gmres_options=options.gmres;
+  gmres_options.absolute_tolerance=1e-12; gmres_options.relative_tolerance=0;
+  gmres_options.true_residual_every=gmres_options.restart;
+  const auto zplan=response::prepare_gmres(2,gmres_options);
   std::vector<double> rhs{2.,6.},diagonal{2.,3.},exact_image;
   Owner owner;owner.fail_physical=fail_physical;owner.fail_audit=fail_audit;
   std::optional<Inverse> inverse;

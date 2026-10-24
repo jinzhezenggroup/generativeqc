@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "scf/cuda/matrix_index.cuh"
+#include "scf/cuda/scf_incremental_policy.cuh"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -70,7 +71,7 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= static_cast<std::size_t>(batch_size) * matrix_size) return;
   const std::int32_t system = static_cast<std::int32_t>(element / matrix_size);
-  if (active[system] == 0) return;
+  if (active != nullptr && active[system] == 0) return;
   const std::size_t local = element % matrix_size;
   const std::size_t row = local % n;
   const std::size_t column = local / n;
@@ -78,7 +79,7 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
   const double* values = eigenvalues + static_cast<std::size_t>(system) * n;
   double result = 0.0;
   for (std::size_t orbital = 0; orbital < n; ++orbital) {
-    if (!(values[orbital] > 1.0e-10)) {
+    if (!(values[orbital] > 1.0e-10) || !isfinite(values[orbital])) {
       failed[system] = 1;
       return;
     }
@@ -90,7 +91,8 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
 
 __global__ void matrix_product_kernel(std::int32_t batch_size, std::int32_t nbf, const double* left,
                                       bool transpose_left, const double* right,
-                                      const std::uint8_t* active, double* output, double scale) {
+                                      const std::uint8_t* active, double* output, double scale,
+                                      bool transpose_right, std::int32_t reduction_rank) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t matrix_size = n * n;
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -102,10 +104,13 @@ __global__ void matrix_product_kernel(std::int32_t batch_size, std::int32_t nbf,
   const std::size_t column = local / n;
   const std::size_t offset = static_cast<std::size_t>(system) * matrix_size;
   double value = 0.0;
-  for (std::size_t k = 0; k < n; ++k) {
+  const auto rank = reduction_rank < 0 ? n : static_cast<std::size_t>(reduction_rank);
+  for (std::size_t k = 0; k < rank; ++k) {
     const std::size_t left_index =
         transpose_left ? matrix_index(k, row, n) : matrix_index(row, k, n);
-    value += left[offset + left_index] * right[offset + matrix_index(k, column, n)];
+    const auto right_index =
+        transpose_right ? matrix_index(column, k, n) : matrix_index(k, column, n);
+    value += left[offset + left_index] * right[offset + right_index];
   }
   output[element] = scale * value;
 }
@@ -180,11 +185,14 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
 }
 
 /**
- * Build ΔD against the last accepted exact-linear anchor. A 0xffffffff update
+ * Build ΔD against the retained provider anchor. A 0xffffffff update
  * count denotes the first build. Later full rebuilds happen after the configured
  * number of delta applications or while the previous accepted density RMS is
- * still above the late-SCF gate. Resetting the Fock anchor to hcore makes the
- * downstream builder usable for both cases: it always computes hcore + G(input).
+ * still above the late-SCF gate. A stationary screened HF item can instead
+ * latch full-only energy refinement for the rest of this solve through the
+ * convergence controller, which also discards the cross-operator energy baseline.
+ * Resetting the Fock anchor to hcore
+ * makes the downstream builder usable for both cases: it always computes hcore + G(input).
  */
 __global__ void prepare_incremental_direct_jk_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
@@ -203,15 +211,16 @@ __global__ void prepare_incremental_direct_jk_kernel(
   const std::size_t local = element % vector_size;
   const std::size_t physical_element = element % matrix_size;
   const std::uint32_t updates = delta_updates[system];
-  const bool first_build = updates == 0xffffffffU;
-  const bool periodic_rebuild =
-      !first_build && rebuild_interval != 0U && updates >= rebuild_interval;
+  const bool first_build = updates == kIncrementalDirectJkUnanchored;
+  const bool full_energy_refinement = updates == kIncrementalDirectJkFullEnergyRefinement;
+  const bool periodic_rebuild = !first_build && !full_energy_refinement && rebuild_interval != 0U &&
+                                updates >= rebuild_interval;
   bool density_rebuild = false;
   if (!first_build && density_rms_threshold > 0.0) {
     const double previous_rms = density_rms[system];
     density_rebuild = !isfinite(previous_rms) || previous_rms > density_rms_threshold;
   }
-  const bool rebuild = first_build || periodic_rebuild || density_rebuild;
+  const bool rebuild = first_build || periodic_rebuild || density_rebuild || full_energy_refinement;
   if (local == 0U) {
     full_build[system] = rebuild ? 1U : 0U;
     if (rebuild)
@@ -234,11 +243,12 @@ __global__ void prepare_incremental_direct_jk_kernel(
   }
 }
 
-/** Advance the retained full-Fock/density anchor after one completed Direct-J/K build. */
+/** Only full builds replace a screened anchor; unscreened anchors may roll forward. */
 __global__ void finalize_incremental_direct_jk_kernel(
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf, const double* density,
-    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
-    double* fock, std::uint32_t* delta_updates, const std::uint8_t* full_build) {
+    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
+    bool fixed_full_density_anchor, const double* density, const double* hcore,
+    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
+    std::uint32_t* delta_updates, const std::uint8_t* full_build) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
@@ -248,12 +258,18 @@ __global__ void finalize_incremental_direct_jk_kernel(
   if (active != nullptr && active[system] == 0) return;
   const std::size_t local = element % vector_size;
   const std::size_t physical_element = element % matrix_size;
+  // A full provider result is already F[D]. Preserve it bitwise rather than
+  // adding and subtracting hcore, which can reintroduce energy-tail noise.
   const double combined =
-      fock[element] + anchor_fock[element] - hcore[system * matrix_size + physical_element];
+      full_build[system] != 0U
+          ? fock[element]
+          : fock[element] + anchor_fock[element] - hcore[system * matrix_size + physical_element];
   fock[element] = combined;
-  anchor_density[element] = density[element];
-  anchor_fock[element] = combined;
-  if (local == 0U) {
+  if (!fixed_full_density_anchor || full_build[system] != 0U) {
+    anchor_density[element] = density[element];
+    anchor_fock[element] = combined;
+  }
+  if (local == 0U && delta_updates[system] != kIncrementalDirectJkFullEnergyRefinement) {
     delta_updates[system] = full_build[system] != 0U ? 0U : delta_updates[system] + 1U;
   }
 }
@@ -307,9 +323,11 @@ void launch_build_orthogonalizer_kernel(dim3 grid, dim3 block, std::size_t share
 void launch_matrix_product_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                   cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
                                   const double* left, bool transpose_left, const double* right,
-                                  const std::uint8_t* active, double* output, double scale) {
+                                  const std::uint8_t* active, double* output, double scale,
+                                  bool transpose_right, std::int32_t reduction_rank) {
   matrix_product_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, left, transpose_left, right, active, output, scale);
+      batch_size, nbf, left, transpose_left, right, active, output, scale, transpose_right,
+      reduction_rank);
 }
 
 void launch_broadcast_spin_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -365,12 +383,13 @@ void launch_prepare_incremental_direct_jk_kernel(
 
 void launch_finalize_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
-    std::int32_t spin_count, std::int32_t nbf, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
-    std::uint32_t* delta_updates, const std::uint8_t* full_build) {
+    std::int32_t spin_count, std::int32_t nbf, bool fixed_full_density_anchor,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* fock, std::uint32_t* delta_updates,
+    const std::uint8_t* full_build) {
   finalize_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, density, hcore, active, anchor_density, anchor_fock, fock,
-      delta_updates, full_build);
+      batch_size, spin_count, nbf, fixed_full_density_anchor, density, hcore, active,
+      anchor_density, anchor_fock, fock, delta_updates, full_build);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

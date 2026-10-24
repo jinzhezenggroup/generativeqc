@@ -25,7 +25,11 @@ if TYPE_CHECKING:
     from generativeqc_compiler.common.lowering_provider import LoweringCandidate
 
 Schedule = Literal[
-    "occupied-cpu", "occupied-cuda", "column-scaled-cpu", "checked-pair-cuda"
+    "occupied-cpu",
+    "occupied-cuda",
+    "occupied-scalar-cuda",
+    "column-scaled-cpu",
+    "checked-pair-cuda",
 ]
 
 

@@ -50,7 +50,8 @@ FockBuildSpec make_rsh_primary_fock_spec(FockSpin spin, double short_range_excha
 }
 
 FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_exchange,
-                                            double long_range_exchange, double omega) {
+                                            double long_range_exchange, double omega,
+                                            FockApproximation approximation) {
   if (!std::isfinite(short_range_exchange) || !std::isfinite(long_range_exchange) ||
       !std::isfinite(omega) || omega < 0.0)
     throw std::invalid_argument(
@@ -60,7 +61,7 @@ FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_ex
   spec.coulomb.present = false;
   const double spin_factor = spin == FockSpin::Restricted ? -0.5 : -1.0;
   spec.exchange = {true, spin_factor * (long_range_exchange - short_range_exchange),
-                   FockOperator::LongRange, omega, FockApproximation::Exact};
+                   FockOperator::LongRange, omega, approximation};
   return spec;
 }
 
@@ -75,8 +76,7 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
     throw std::invalid_argument("WB97M-V composition requires CPU or CUDA Fock execution");
   auto expected_primary_spec =
       make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange);
-  // Range-separated DF currently fits only the ordinary full-range J/K owner.
-  // The LR correction remains an exact Direct provider with its own operator/omega identity.
+  // Each fitted radial operator has its own metric and immutable omega identity.
   const bool fitted_primary =
       primary.spec.coulomb.approximation == FockApproximation::DensityFitted &&
       primary.spec.exchange.approximation == FockApproximation::DensityFitted;
@@ -87,11 +87,15 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
   const auto expected_primary =
       resolve_fock_build(expected_primary_spec, backend, primary.screening_tolerance,
                          primary.metric_relative_threshold);
-  const auto expected_correction =
-      resolve_fock_build(make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
-                                                       dft::generated::kWb97mvLongExchange,
-                                                       dft::generated::kWb97mvOmega),
-                         backend, primary.screening_tolerance);
+  const auto expected_correction = resolve_fock_build(
+      make_rsh_correction_fock_spec(
+          spin, dft::generated::kWb97mvShortExchange, dft::generated::kWb97mvLongExchange,
+          dft::generated::kWb97mvOmega, correction.spec.exchange.approximation),
+      backend, primary.screening_tolerance, correction.metric_relative_threshold);
+  if (correction.spec.exchange.approximation == FockApproximation::DensityFitted &&
+      (!fitted_primary ||
+       correction.metric_relative_threshold != primary.metric_relative_threshold))
+    throw std::invalid_argument("long-range DF requires a matching fitted primary and cutoff");
   if (correction.backend != backend || primary != expected_primary ||
       correction != expected_correction || nonlocal.variant != dft::nlc::Vv10Variant::vv10 ||
       nonlocal.b != dft::generated::kWb97mvNonlocalB ||
@@ -135,6 +139,7 @@ struct RksEvaluation {
   double energy{};
   dft::EnergyComponents components;
   dft::XcDensityDiagnostic density_diagnostic;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 struct RksXcEvaluator {
@@ -146,6 +151,7 @@ struct RksXcEvaluator {
   Direct direct{};
   CachedDirect cached_direct{};
   const dft::SemilocalPointProgram* program{};
+  const dft::RestrictedSemilocalPointProgram* restricted_program{};
   const dft::SemilocalFamilyMetadata* metadata{};
 
   RksXcEvaluator(Direct value, CachedDirect cached = nullptr)
@@ -153,13 +159,16 @@ struct RksXcEvaluator {
   RksXcEvaluator(Direct value, dft::SemilocalFamily family, CachedDirect cached = nullptr)
       : direct(value), cached_direct(cached), metadata(&dft::semilocal_family_metadata(family)) {}
   RksXcEvaluator(const dft::SemilocalPointProgram& value) : program(&value) {}
+  RksXcEvaluator(const dft::RestrictedSemilocalPointProgram& value) : restricted_program(&value) {}
 
   [[nodiscard]] unsigned ao_order() const noexcept {
+    if (restricted_program) return restricted_program->ingredient_mask == 1U ? 0U : 1U;
     if (program) return program->ingredient_mask == 1U ? 0U : 1U;
     return metadata && !metadata->requires_gradient ? 0U : 1U;
   }
 
   [[nodiscard]] std::uint32_t domain_version() const noexcept {
+    if (restricted_program) return restricted_program->domain_version;
     if (program) return program->domain_version;
     return metadata ? metadata->domain_version : 1U;
   }
@@ -172,6 +181,11 @@ struct RksXcEvaluator {
                              const Matrix& density, dft::XcDensitySource source, std::size_t tile,
                              double exchange_scale, double correlation_scale,
                              const dft::RksAoCache* cache = nullptr) const {
+    if (restricted_program) {
+      if (exchange_scale != 1.0 || correlation_scale != 1.0)
+        throw std::invalid_argument("restricted semilocal RKS does not accept legacy XC scaling");
+      return dft::integrate_semilocal_rks(basis, grid, density, *restricted_program, tile, source);
+    }
     if (program) {
       if (exchange_scale != 1.0 || correlation_scale != 1.0)
         throw std::invalid_argument("generic semilocal RKS does not accept legacy XC scaling");
@@ -498,10 +512,11 @@ dft::XcIntegral evaluate_cam_b3lyp_xc_rks(const dft::AoBasis& basis, const dft::
 template <class PrimaryPlan>
 RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
                            const dft::AoBasis& basis, const dft::MolecularGrid& grid,
-                           const Matrix& density, RksXcEvaluator evaluate_xc,
-                           const char* method_name, dft::XcDensitySource source,
-                           std::size_t retained_capacity, std::size_t tile, double exchange_scale,
-                           double correlation_scale, dft::nlc::Vv10Plan* nonlocal_correlation,
+                           const dft::MolecularGrid& nonlocal_grid, const Matrix& density,
+                           RksXcEvaluator evaluate_xc, const char* method_name,
+                           dft::XcDensitySource source, std::size_t retained_capacity,
+                           std::size_t tile, double exchange_scale, double correlation_scale,
+                           dft::nlc::Vv10Plan* nonlocal_correlation,
                            dft::nlc::Vv10DensityDomain nonlocal_domain,
                            const dft::RksAoCache* ao_cache,
                            std::optional<dft::XcIntegral> xc_override = std::nullopt) {
@@ -509,12 +524,14 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(density);
   RksEvaluation result;
+  result.coulomb_exchange_work = jk.coulomb_exchange_work;
   result.fock = assemble_fock(strategy, ints.hcore, jk).alpha;
   const auto primary_energy = contract_fock_energy_components(strategy, jk, density);
   double exact_exchange = primary_energy.exchange;
   DirectJkMatrices correction_jk;
   if (long_range_correction) {
     correction_jk = long_range_correction->build(density);
+    result.coulomb_exchange_work.add(correction_jk.coulomb_exchange_work);
     const auto& correction_strategy = long_range_correction->strategy();
     if (correction_jk.exchange_alpha.size() != result.fock.size())
       throw std::runtime_error("RSH correction exchange dimensions do not match the Fock matrix");
@@ -530,8 +547,8 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
   result.density_diagnostic = xc.density_diagnostic;
   dft::nlc::Vv10Integral nonlocal;
   if (nonlocal_correlation)
-    nonlocal = dft::nlc::integrate_vv10_rks(basis, grid, density, *nonlocal_correlation, tile, {},
-                                            nonlocal_domain);
+    nonlocal = dft::nlc::integrate_vv10_rks(basis, nonlocal_grid, density, *nonlocal_correlation,
+                                            tile, {}, nonlocal_domain);
   // The semilocal/nonlocal AO tiles and potentials are live together with
   // these J/Fock buffers. Their reported peaks exclude borrowed D/factors.
   const auto scientific_peak =
@@ -596,8 +613,6 @@ ScfResult run_rks(
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
-    // DF changes only the full-range primary. The separate LR provider must
-    // still satisfy the exact Direct contract below.
     const bool primary_exchange =
         strategy.spec.exchange.present &&
         (strategy.spec.exchange.approximation == FockApproximation::Exact ||
@@ -607,10 +622,12 @@ ScfResult run_rks(
         correction.backend == FockBackend::Cpu && correction.spec.spin == FockSpin::Restricted &&
         correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
         correction.spec.exchange.present &&
-        correction.spec.exchange.approximation == FockApproximation::Exact &&
+        (correction.spec.exchange.approximation == FockApproximation::Exact ||
+         (correction.spec.exchange.approximation == FockApproximation::DensityFitted &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted)) &&
         correction.spec.exchange.op == FockOperator::LongRange;
     if (!primary_exchange || !correction_exchange)
-      throw std::invalid_argument("RSH RKS requires full-range primary K plus direct long-range K");
+      throw std::invalid_argument("RSH RKS requires full-range primary K plus a matched LR owner");
   }
   if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
     throw std::invalid_argument(std::string(method_name) +
@@ -624,9 +641,8 @@ ScfResult run_rks(
   // auxiliary request would incorrectly replace it with the orbital basis.
   if (!plan.matches_system(grid.system()) || basis.packed != dft::AoBasis(system).packed)
     throw std::invalid_argument("RKS refuses a stale geometry, basis, charge or spin binding");
-  if (long_range_correction &&
-      (!long_range_correction->matches(system, nullptr, long_range_correction->strategy(), -1, 0) ||
-       long_range_correction->one_electron().nbf != ints.nbf))
+  if (long_range_correction && (!long_range_correction->matches_system(system) ||
+                                long_range_correction->one_electron().nbf != ints.nbf))
     throw std::invalid_argument("RSH correction refuses a stale or incompatible source binding");
 
   const std::size_t n = ints.nbf;
@@ -665,6 +681,7 @@ ScfResult run_rks(
   }
   Diis diis(options.diis_history, true);
   ScfResult result;
+  result.dft_diagnostic.coulomb_exchange_work = CoulombExchangeWork::empty();
   result.initial_density_used = initial_density != nullptr;
   auto& ks = result.dft_diagnostic;
   ks.occupations = {occupied, occupied};
@@ -785,12 +802,14 @@ ScfResult run_rks(
           require_full_xc));
     }
     auto physical =
-        evaluate_rks(plan, long_range_correction, basis, grid, current_density, evaluate_xc,
-                     method_name, {options.xc_density_route, factor.get(), identity},
+        evaluate_rks(plan, long_range_correction, basis, grid,
+                     options.nonlocal_grid ? *options.nonlocal_grid : grid, current_density,
+                     evaluate_xc, method_name, {options.xc_density_route, factor.get(), identity},
                      runtime::add_capacity(retained_capacity(current_density), extra_live_bytes),
                      options.xc_tile_points, options.semilocal_exchange_scale,
                      options.semilocal_correlation_scale, nonlocal_correlation, nonlocal_domain,
                      ao_cache ? &*ao_cache : nullptr, std::move(xc_override));
+    result.dft_diagnostic.coulomb_exchange_work.add(physical.coulomb_exchange_work);
     const auto& record = physical.density_diagnostic;
     if (record.executed == dft::XcDensityRoute::OccupiedOrbitals)
       ++diagnostic.orbital_calls;
@@ -1006,8 +1025,24 @@ ScfResult run_rks(
                          ks.physical_residual < residual_tolerance &&
                          (!ordinary_primary || residual_max_abs(final_residual) <=
                                                    std::min(1.0e-8, options.density_tolerance));
-      runtime::sample_cpu_capacity(runtime::add_capacity(
-          retained_capacity(density), runtime::vector_capacities(final.fock, final_residual)));
+      if (result.converged && evaluate_xc.program) {
+        // Export diagonalizes this last F[D], not the pre-rebuild operator.
+        // Certify its projector now so a rejected closure can spend the
+        // unused SCF budget instead of publishing an unexportable state.
+        orbitals = generalized_eigen(final.fock, orthogonalizer, n);
+        projected = density_from_orbitals(orbitals.vectors, n, occupied, 2.0);
+        const double canonical_change = density_rms(projected, density);
+        double maximum_change = 0.0;
+        for (std::size_t index = 0; index < density.size(); ++index)
+          maximum_change = std::max(maximum_change, std::abs(projected[index] - density[index]));
+        result.density_rms = std::max(result.density_rms, canonical_change);
+        ks.density_change = result.density_rms;
+        result.converged = canonical_change < std::min(1.0e-8, options.density_tolerance) &&
+                           maximum_change <= 1.0e-8;
+      }
+      runtime::sample_cpu_capacity(
+          runtime::add_capacity(retained_capacity(density),
+                                runtime::vector_capacities(final.fock, final_residual, projected)));
       result.energy = final.energy;
       if (result.converged && options.retain_ks_state)
         result.ks_physical_fock = std::move(final.fock);
@@ -1051,12 +1086,15 @@ ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
       strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
       strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.exchange.present &&
       strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
-      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx &&
-      strategy.spec.exchange.coefficient == -0.125;
-  if (!pbe0_exchange || options.semilocal_exchange_scale != 0.75 ||
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
+  // The prepared spin-resolved Fock coefficient, not a named hybrid, owns a.
+  const double exact_exchange_fraction = -2.0 * strategy.spec.exchange.coefficient;
+  if (!pbe0_exchange || !std::isfinite(exact_exchange_fraction) || exact_exchange_fraction <= 0.0 ||
+      exact_exchange_fraction > 1.0 ||
+      options.semilocal_exchange_scale != 1.0 - exact_exchange_fraction ||
       options.semilocal_correlation_scale != 1.0)
     throw std::invalid_argument(
-        "PBE0 COSX RKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
+        "COSX RKS requires physical full-range exchange and complementary PBE scales");
   return run_rks(
       plan, nullptr, basis, grid, options, initial_density,
       RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, evaluate_pbe_xc_rks_cached),
@@ -1097,6 +1135,17 @@ ScfResult run_r2scan_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis
 ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
                             const dft::SemilocalPointProgram& program,
+                            const std::vector<double>* initial_density) {
+  dft::validate_semilocal_point_program(program);
+  if (program.domain_version == 5U)
+    throw std::invalid_argument("density-work RKS requires an explicit restricted point program");
+  return run_rks(plan, nullptr, basis, grid, options, initial_density, RksXcEvaluator(program),
+                 program.identifier, nullptr);
+}
+
+ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const dft::RestrictedSemilocalPointProgram& program,
                             const std::vector<double>* initial_density) {
   dft::validate_semilocal_point_program(program);
   return run_rks(plan, nullptr, basis, grid, options, initial_density, RksXcEvaluator(program),
@@ -1149,7 +1198,8 @@ ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan
                          const std::vector<double>* initial_density) {
   require_wb97mv_composition(primary.strategy(), correction.strategy(), nonlocal.parameters());
   if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-      nonlocal.resources().point_count != grid.point_count())
+      nonlocal.resources().point_count !=
+          (options.nonlocal_grid ? options.nonlocal_grid->point_count() : grid.point_count()))
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_rks(primary, &correction, basis, grid, options, initial_density,
                  RksXcEvaluator(evaluate_wb97mv_xc_rks, dft::SemilocalFamily::Wb97mv), "WB97M-V",

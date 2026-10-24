@@ -209,7 +209,8 @@ def stationary_cuda_allocation_bytes(
             2 * primitives
             + 4 * aos
             + 22 * tasks
-            + (3 + 3 * sources) * atoms
+            + (5 + 3 * sources) * atoms
+            + 1  # atom prefix offsets and optional Bragg radii
             + 3 * points
             + 2 * spins * aos * aos
         )

@@ -176,16 +176,57 @@ def empty_spin_neighbors(
     return np.asarray(rows), names
 
 
+def validation_header(identifier: str, consumer: str) -> tuple[str, dict[str, str]]:
+    """Bind a scalar ABI probe to both actual force spin consumers when asked.
+
+    Only the probe header is adapted. Production SCF emission is never patched,
+    and byte membership in the actual Cartesian force source is mandatory for
+    both spins, rather than assuming an explicitly lowered point is the force.
+    """
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+    from generativeqc_compiler.xc.geometry_cuda import _emit_composed_point
+    from generativeqc_compiler.xc.scalar_schedule import (
+        XcScalarConsumer,
+        select_xc_scalar_schedule,
+    )
+    from generativeqc_compiler.xc.split_hybrid_codegen import (
+        emit_split_hybrid_device,
+        emit_split_hybrid_device_body,
+    )
+
+    selected = XcScalarConsumer(consumer)
+    header = emit_split_hybrid_device(identifier)
+    if selected is XcScalarConsumer.SCF_POINT:
+        return header, {}
+    schedule = select_xc_scalar_schedule(consumer=selected, scalar_type="double")
+    baseline, _, _ = emit_split_hybrid_device_body(identifier)
+    body, _, _ = emit_split_hybrid_device_body(
+        identifier, lower_integer_powers=schedule.lower_integer_powers
+    )
+    hashes = {}
+    for spin in ("unpolarized", "polarized"):
+        spec = resolve_method(identifier, spin=spin).primitives[0].functional
+        force = _emit_composed_point(SPLIT_HYBRIDS[identifier]["functional_code"], spec)
+        if force.count(body) != 1:
+            raise RuntimeError("point probe must contain the actual force scalar body")
+        hashes[spin] = hashlib.sha256(force.encode()).hexdigest()
+    if header.count(baseline) != 1:
+        raise RuntimeError("unexpected split-hybrid point header composition")
+    return header.replace(baseline, body, 1), hashes
+
+
 def validate(
     backend: str,
     work: Path,
     cuda_arch: str | None,
     required_libxc: str,
     libxc_archive: Path,
+    *,
+    consumer: str = "scf_point",
 ) -> dict[str, object]:
     from pyscf.dft import libxc
 
-    from tools.generate_xc_split_hybrid_cuda import emit_split_hybrid_device
     from tools.split_hybrid_wide_oracle import evaluate as evaluate_wide
 
     if required_libxc != "7.0.0":
@@ -206,8 +247,9 @@ def validate(
         )
     work.mkdir(parents=True, exist_ok=True)
     hashes = {}
+    force_hashes = {}
     for name, filename, _, _ in METHODS:
-        source = emit_split_hybrid_device(name)
+        source, force_hashes[name] = validation_header(name, consumer)
         (work / filename).write_text(source, encoding="utf-8")
         hashes[name] = hashlib.sha256(source.encode()).hexdigest()
     original = ROOT / "tests/native/split_hybrid_point_probe.cpp"
@@ -266,6 +308,8 @@ def validate(
     )
     report = {
         "backend": backend,
+        "consumer": consumer,
+        "force_source_sha256": force_hashes,
         "libxc_version": version,
         "libxc_global_fhc_verified": True,
         "git_sha": identity,
@@ -383,6 +427,9 @@ def validate(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("host", "cuda"), required=True)
+    parser.add_argument(
+        "--consumer", choices=("scf_point", "stationary_force"), default="scf_point"
+    )
     parser.add_argument("--cuda-arch")
     parser.add_argument("--require-libxc", default="7.0.0")
     parser.add_argument("--libxc-archive", type=Path, required=True)
@@ -392,7 +439,12 @@ def main() -> int:
     work = output.parent / ("points-" + args.backend)
     try:
         report = validate(
-            args.backend, work, args.cuda_arch, args.require_libxc, args.libxc_archive
+            args.backend,
+            work,
+            args.cuda_arch,
+            args.require_libxc,
+            args.libxc_archive,
+            consumer=args.consumer,
         )
     # Fail closed and retain diagnostics for unexpected compiler/oracle errors.
     except Exception as error:  # noqa: BLE001

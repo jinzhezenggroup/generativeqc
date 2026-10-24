@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "methods/geometry.hpp"
 #include "methods/gfn2_runtime_bridge.hpp"
 
 namespace generativeqc::methods::detail {
@@ -55,7 +56,8 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
   Gfn2PreparedCalculation(const Capabilities& capabilities, const core::System& system,
                           const generativeqc_method_descriptor& descriptor,
                           core::ContextState& context)
-      : capabilities_(capabilities),
+      : PreparedCalculation(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         atoms_(system.atoms),
         charge_(system.charge),
         multiplicity_(system.multiplicity),
@@ -87,15 +89,13 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
   [[nodiscard]] std::size_t atom_count() const noexcept override { return atoms_.size(); }
   [[nodiscard]] const Capabilities& capabilities() const noexcept override { return capabilities_; }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     std::vector<std::int32_t> atomic_numbers;
-    std::vector<double> positions;
     atomic_numbers.reserve(atoms_.size());
-    positions.reserve(3u * atoms_.size());
     for (const core::Atom& atom : atoms_) {
       atomic_numbers.push_back(atom.atomic_number);
-      positions.insert(positions.end(), atom.position.begin(), atom.position.end());
     }
+    const auto positions = geometry::coordinates(atoms_);
 
     Gfn2RuntimeRequest request;
     request.atomic_numbers = atomic_numbers;
@@ -169,7 +169,7 @@ generativeqc_status validate_xtb_system(generativeqc_method method, const core::
 
 std::unique_ptr<PreparedCalculation> prepare_xtb_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
   if (context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
       context.requested_backend != GENERATIVEQC_BACKEND_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,

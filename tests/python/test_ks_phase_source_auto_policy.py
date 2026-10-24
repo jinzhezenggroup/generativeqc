@@ -3,81 +3,49 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 from conftest import NativeCxx
+from test_preliminary_cuda_control import probe
+
+pytest_plugins = ("test_preliminary_cuda_control",)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_unset_selection_reaches_the_bounded_auto_policy() -> None:
-    """Unset and explicit auto share admission; explicit 0 skips all setup."""
-    solver = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    prepare = solver[solver.index("  void prepare_phase_source(bool cold)") :]
-    prepare = prepare[: prepare.index("phase_source = std::make_unique")]
-    assert "if (!selection) return;" not in prepare
-    assert "const auto requested = direct_jk_source_selection(selection);" in prepare
-    assert "if (requested == DirectJkSourceSelection::disabled) return;" in prepare
-    assert "requested == DirectJkSourceSelection::automatic" in prepare
-    assert "direct_jk_source_auto_refusal(" in prepare
+# Default/explicit-auto/off wiring is exercised by the compiled CUDA probe's
+# cold, warm, external-seed and capacity-refusal executions. The host test below
+# independently executes its admission policy; source spelling is not a gate.
 
 
-def test_warm_energy_handoff_is_counted_and_preserves_the_final_state() -> None:
-    """A resident energy is not an incumbent warm baseline, even at identical D."""
-    solver = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    finish = solver[
-        solver.index("  bool finish() {") : solver.index("  void rebase_warm_energy()")
-    ]
-    assert finish.index("retire_phase_source(!is_failed)") < finish.index(
-        "rebase_warm_energy()"
-    )
-    assert "auditing_phase && output.converged && warm_updates" in finish
-    assert "clear_warm_state();" in finish
-    assert (
-        "use_warm && !device_chunk_mode && !phase_source && std::isfinite(warm_energy)"
-        in " ".join(solver.split())
-    )
-    rebase = solver[
-        solver.index("  void rebase_warm_energy()") : solver.index(
-            "  void enqueue_range_correction("
-        )
-    ]
-    assert "++output.fock_builds;" in rebase
-    assert "++output.precision.post_scf_fock_builds;" in rebase
-    assert "++movement.warm_energy_rebase_fock_actions;" in rebase
-    assert "PrecisionWorkEventKind::PostScfFock" in rebase
-    assert "PrecisionWorkPhase::Finalization" in rebase
-    assert "warm_energy = rebased.electronic_energy;" in rebase
-    assert "warm_energy_correction = rebased.electronic_energy_correction;" in rebase
-    for forbidden in (
-        "assemble_fock(",
-        "stage_xc(",
-        "++output.iterations",
-        "output.energy =",
-        "output.energy_change =",
-        "output.converged =",
-        "options.energy_tolerance =",
-        "options.density_tolerance =",
-    ):
-        assert forbidden not in rebase
-
-
-def test_native_cold_seed_provenance_is_not_an_external_density() -> None:
-    """Only native preparation, never a warm projection, broadens seed eligibility."""
-    header = (ROOT / "src/dft/cuda_ks.hpp").read_text()
-    solver = " ".join((ROOT / "src/dft/cuda_ks.cpp").read_text().split())
-    owner = " ".join((ROOT / "src/methods/dft_method.cpp").read_text().split())
-    assert "CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External" in header
-    assert (
-        "(!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm"
-        in solver
-    )
-    assert "prepared ? dft::CudaKsSeedOrigin::NativeColdGuess" in owner
-    assert (
-        "!attempt && !reuse && preliminary_seeds[i] ? dft::CudaKsSeedOrigin::NativeColdGuess"
-        in owner
-    )
-    assert solver.index("direct_jk_source_auto_refusal(") < solver.index(
-        "phase_source = std::make_unique<DirectJkSourceLease>"
-    )
+@pytest.mark.parametrize(
+    "route,scenario,origins,cold_eligibility",
+    [
+        ("cold", "success", [True], [True]),
+        ("warm", "success", [False], [False]),
+        ("explicit", "success", [False], [False]),
+        ("both", "success", [False], [False]),
+        ("no-reuse", "success", [True], [True]),
+        ("preparation-skipped", "success", [False], [True]),
+        ("cold", "nonconverged", [True, False], [True, True]),
+        ("warm", "nonconverged", [False, False], [False, True]),
+    ],
+)
+def test_native_cold_seed_provenance_is_not_an_external_density(
+    cuda_control_probe: Path,
+    route: str,
+    scenario: str,
+    origins: list[bool],
+    cold_eligibility: list[bool],
+) -> None:
+    """Exercise owner provenance and the provider’s real cold-source admission."""
+    result = probe(cuda_control_probe, route, scenario)
+    assert result["status"] == "returned"
+    assert result["phase_source_cold"] == cold_eligibility
+    assert [bool(attempt["native_cold"]) for attempt in result["trace"]] == origins
+    for attempt in result["trace"]:
+        if attempt["native_cold"]:
+            assert attempt["seed"] == 2
+            assert not attempt["warm"] and not attempt["reuse"]
 
 
 def test_screened_cold_candidates_preserve_rhf_policy(
@@ -87,10 +55,24 @@ def test_screened_cold_candidates_preserve_rhf_policy(
     source = tmp_path / "policy.cpp"
     source.write_text(r"""
 #include <limits>
+#include <bit>
 #include "scf/cuda/direct_jk_source_policy.hpp"
 using namespace generativeqc::scf::cuda_execution;
-constexpr auto screened = DirectJkSourceAutoPolicy::screened_cold;
+constexpr auto screened = DirectJkSourceAutoPolicy::screened_hybrid_cold;
+constexpr auto pure = DirectJkSourceAutoPolicy::screened_cold;
 constexpr auto generic = DirectJkSourceAutoPolicy::generic_f;
+constexpr auto small = DirectJkSourceAutoPolicy::small_screened_cold;
+static_assert(!direct_jk_source_auto_refusal(64,64,8,0,true,false,small,1e-12));
+static_assert(!direct_jk_source_auto_refusal(96,100,100,2,true,false,small,1e-12));
+static_assert(!direct_jk_source_auto_refusal(128,128,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(63,64,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(128,129,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,3,true,true,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,7,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,false,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,true,false,small,0.0));
+static_assert(direct_jk_source_value_ceiling(DirectJkSourceSelection::automatic,small,2)
+              ==(512ULL<<20));
 constexpr auto automatic = DirectJkSourceSelection::automatic;
 static_assert(direct_jk_source_selection(nullptr)==automatic);
 static_assert(direct_jk_source_selection("auto")==automatic);
@@ -101,8 +83,15 @@ static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,false,false,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,0.0));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,-1e-12));
-static_assert(direct_jk_source_auto_refusal(63,128,8,2,true,false,screened,1e-12));
-static_assert(direct_jk_source_auto_refusal(64,127,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(23,128,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(64,23,8,2,true,false,screened,1e-12));
+static_assert(!direct_jk_source_auto_refusal(24,25,8,2,true,false,screened,1e-12));
+static_assert(!direct_jk_source_auto_refusal(96,100,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(24,25,8,2,true,false,pure,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,true,false,pure,1e-12));
+static_assert(!direct_jk_source_auto_refusal(128,128,8,2,true,false,pure,1e-12));
+static_assert(direct_jk_source_auto_refusal(63,128,8,3,true,true,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(64,127,8,3,true,true,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(64,128,7,2,true,false,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,2,true,false,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,0,true,false,screened,1e-12));
@@ -111,6 +100,8 @@ static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true,screened,0.0))
 static_assert(direct_jk_source_auto_refusal(64,128,8,3,true,false,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(64,128,8,4,true,true,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(63,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(64,127,8,3,true,true));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,2)==(16ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,3)==(8ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,generic,2)==(8ULL<<30));
@@ -124,7 +115,36 @@ static_assert(direct_jk_source_allowance(768,100,required,overhead,maximum,8ULL<
 static_assert(direct_jk_source_allowance(768,100,required,overhead,
                                         required+overhead+values-1,16ULL<<30)<values);
 static_assert(direct_jk_source_allowance(768,100,maximum,1,maximum,16ULL<<30)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,screened)
+              ==(1ULL<<20));
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,generic)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,pure)==0);
+static_assert(direct_jk_source_allowance(23,8,required,overhead,maximum,1ULL<<20,screened)==0);
+static_assert(direct_jk_source_allowance(24,3,required,overhead,maximum,1ULL<<20,screened)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,required+overhead,1ULL<<20,
+                                        screened)==0);
 int main() {
+  for (const auto* mask : {"", "-1", "+1", "0X1", "0x", "1 ", "268435456", "4294967296"})
+    if (direct_jk_resident_bucket_policy(mask, nullptr).valid) return 2;
+  for (const auto* ceiling : {"", "-1", "+1", "18446744073709551616", "0x", "1 "})
+    if (direct_jk_resident_bucket_policy(nullptr, ceiling).valid) return 3;
+  const auto defaults = direct_jk_resident_bucket_policy(nullptr, nullptr, 16ULL << 30);
+  if (!defaults.valid || defaults.mask != (1U << 28) - 1 || defaults.ceiling != (16ULL << 30))
+    return 4;
+  const auto partial = direct_jk_resident_bucket_policy("0x1555", "2147483648");
+  if (!partial.valid || partial.mask != 0x1555 || partial.ceiling != (2ULL << 30)) return 5;
+  const auto disabled = direct_jk_resident_bucket_policy("0", "0");
+  if (!disabled.valid || disabled.mask || disabled.ceiling) return 6;
+  std::array<std::size_t,28> bytes{};
+  bytes.fill(100);
+  // The highest-degree bucket fits; the rest must stream. No over-admission.
+  if (direct_jk_fit_resident_buckets(bytes,100,(1U<<28)-1)!=(1U<<27)) return 7;
+  if (direct_jk_fit_resident_buckets(bytes,99,(1U<<28)-1)!=0) return 8;
+  if (direct_jk_fit_resident_buckets(bytes,2800,(1U<<28)-1)!=(1U<<28)-1) return 9;
+  if (direct_jk_fit_resident_buckets(bytes,300,1)!=1) return 10;
+  bytes[27]=std::numeric_limits<std::size_t>::max();
+  const auto bounded=direct_jk_fit_resident_buckets(bytes,200,(1U<<28)-1);
+  if ((bounded&(1U<<27)) || std::popcount(bounded)!=2) return 11;
   return !direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,
                                        std::numeric_limits<double>::quiet_NaN());
 }

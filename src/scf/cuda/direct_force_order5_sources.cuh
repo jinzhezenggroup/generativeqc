@@ -18,6 +18,26 @@ struct Order5SourceRoots {
   static constexpr unsigned angular_order = 5U;
   static constexpr unsigned component_count = ShellClass == kDpppShellClass ? 162U : 108U;
 
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kDpppShellClass)
+      return generated_weighted_eri::dppp_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDpdsShellClass)
+      return generated_weighted_eri::dpds_force_relative(geometry, weights);
+    else
+      return generated_weighted_eri::ddps_force_relative(geometry, weights);
+  }
+
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradientF32 evaluate_mixed(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kDpppShellClass)
+      return generated_weighted_eri::dppp_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kDpdsShellClass)
+      return generated_weighted_eri::dpds_force_fp32(geometry, weights);
+    else if constexpr (ShellClass == kDdpsShellClass)
+      return generated_weighted_eri::ddps_force_fp32(geometry, weights);
+  }
+
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate(
       const generated_weighted_eri::Geometry& geometry, const double* weights) {
     if constexpr (ShellClass == kDpppShellClass) {

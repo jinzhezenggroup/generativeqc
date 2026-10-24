@@ -10,6 +10,10 @@ The older shared incremental CUDA J/K experiment (#1803) showed a useful K delta
 
 ## Operator-level policy
 
+The one-delta screened refresh policy below is superseded by the
+[fixed-full-density anchor decision](../implemented/numerics/2026-10-15-incremental-fixed-full-anchor.md).
+The late-SCF gate and strict physical finalization remain applicable.
+
 Incremental execution is admitted by the resolved Fock-provider contract rather than by a named functional. The common policy:
 
 - requires strict-FP64 exact Direct J/K,

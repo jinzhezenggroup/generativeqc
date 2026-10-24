@@ -95,8 +95,8 @@ square root of the A orbit weights to reproduce the dense coordinate metric.
 Singular extrapolation systems drop the oldest entry; nonfinite or extreme
 coefficients cannot be silently accepted. Setting `diis_size=0` disables DIIS.
 This describes CPU/conventional and default supplied-problem semantics; native
-CUDA DF energies select a separate
-[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies).
+CUDA DF amplitude owners, including the forward solve for analytic forces, select a separate
+[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies-and-forces).
 
 A candidate converges only when both energy change and the maximum absolute
 elements of R1/R2 meet their tolerances. Before acceptance, a fresh execution
@@ -153,6 +153,80 @@ result.write("ccsd-state.json")
 This remains the internal correctness interface, with the reference/provider
 domain and failure rules above. GPU, open-shell, frozen-core, triples and
 derivative requests cannot be inferred from this CPU facade.
+
+
+## Compiler-first native CPU RCCSD residual path (#762)
+
+The original `solve(...)` / `energy(..., backend="cpu")` remains a toolchain-free
+NumPy TensorIR correctness baseline. An **explicit** `backend="cpu-native"`
+selects the same restricted `build_ccsd_program(..., form="optimized")`
+TensorIR through the existing native CPU code generator and checked C++ ABI.
+The complete physical energy, singles residual, doubles residual and energy
+components execute in that compiled program for every Jacobi/DIIS trial.
+The fully **expanded independent TensorIR** is still interpreted on the CPU
+only at convergence acceptance: removing that oracle would weaken the check.
+
+```python
+from pathlib import Path
+from tools.generativeqc_cc import energy
+
+state = energy(
+    snapshot,
+    provider,
+    backend="cpu-native",
+    compiler=Path("c++"),            # optional, defaults to CXX/c++
+    cache=Path("/tmp/rccsd-cpu-jit"),  # optional persistent native cache
+)
+assert state.converged
+assert state.state.provenance["equation_backend"] == "native-cpu-tensorir"
+```
+
+Preparation calls `emit_cpu` with the existing exact native/solver resource
+budgets *before* reading any AO block. Unsupported primitives, excessive
+work/nodes/storage and altered executor configuration fail rather than running
+NumPy in the main iteration. Native FP64 errors are reported as failed numerical
+iterations, preserving the last finite amplitude. The optional CPU compiler
+is never discovered or run for the original `backend="cpu"` baseline, and
+this change does not enable a JIT or CUDA requirement for ordinary package
+installs or other solver backends. No custom CC equations or solver loop are
+generated: the compiled graph is the original TensorIR science identity.
+
+For a CPU-only numerical check:
+
+```bash
+PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  python -m pytest tests/python/test_cc_solver.py -k native_cpu_ccsd -q
+```
+
+### Reproducible CPU endpoint evidence
+
+`benchmarks.rccsd_cpu_compiled_endpoint` measures the **complete supplied-MO
+RCCSD solver call**, rather than an isolated tensor kernel. It runs NumPy
+reference, native cold compilation and native cached replay in separate
+processes; each process reports its own wall clock, peak RSS, energy/residual
+and resource budgets. It repeats at one and four BLAS threads, with the same
+scientific inputs. This scope excludes upstream HF and AO generation.
+
+```bash
+PYTHONPATH=.:python python -m benchmarks.rccsd_cpu_compiled_endpoint \
+  --fixture h2o --threads 1 4 --output /tmp/rccsd-cpu.json
+```
+
+| CPU scientific call | Owner after this PR | Role / retirement rule |
+| --- | --- | --- |
+| RCCSD iterative E/R1/R2, native-selected | Optimized TensorIR -> native CPU compiler | New explicit compiled endpoint; qualify before default promotion |
+| RCCSD expanded E/R1/R2 | Separate TensorIR NumPy interpreter | Independent final convergence oracle; deliberately retained |
+| RCCSD default reference iterations | TensorIR NumPy interpreter | Compatibility/performance exception until complete CPU endpoint qualification |
+| Restricted/unrestricted iteration control, DIIS and AO/MO providers | Native/Python runtime and shared providers | Not compiler-science debt; avoid generating solver control |
+| UCCSD iterative E/R | Shared native CPU TensorIR compiler | Existing compiler-first endpoint; not modified here |
+
+**Promotion status:** the native CPU route is an explicit, independently
+qualified endpoint, not a claim of whole-endpoint speedup or a default-path
+change. Profile compile cold/warm, complete single-/multi-thread CPU
+endpoints, and process peak memory before considering default promotion.
+Retain the NumPy expanded equation as an independent oracle. CPU compiler
+source, the scientific TensorIR identity, runtime settings and artifact
+cache must remain versioned; no GPU performance is inferred from this path.
 
 ## Molecular evidence and reproduction
 

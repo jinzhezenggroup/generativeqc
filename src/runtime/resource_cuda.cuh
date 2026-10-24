@@ -65,7 +65,8 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
   // call: a driver callback may destroy another registered resource.
   {
     std::lock_guard<std::mutex> lock(device_resource_mutex);
-    if (bytes > ledger->limit - ledger->live) {
+    if (ledger->live > ledger->limit || ledger->provider_reserved > ledger->limit - ledger->live ||
+        bytes > ledger->limit - ledger->live - ledger->provider_reserved) {
       ++ledger->rejected;
       return cudaErrorMemoryAllocation;
     }
@@ -92,6 +93,8 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
           *output, DeviceAllocationOwner{ledger, bytes, ++device_allocation_generation});
       if (ledger->journal) ledger->journal->record(0, device_allocation_generation, bytes);
       ledger->peak = std::max(ledger->peak, ledger->live);
+      ledger->admission_peak =
+          std::max(ledger->admission_peak, ledger->live + ledger->provider_reserved);
       ++ledger->allocations;
       if (bytes > std::numeric_limits<std::uint64_t>::max() - ledger->requested_bytes) {
         ledger->requested_bytes_overflow = true;

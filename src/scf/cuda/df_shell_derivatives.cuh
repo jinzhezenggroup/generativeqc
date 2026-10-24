@@ -12,9 +12,13 @@ namespace generativeqc::scf {
  */
 struct DfShellBasisView {
   DfDerivativeBasisView basis;
+  // Both orbital and auxiliary metadata may use six-term packing when the
+  // complete auxiliary basis includes g. Orbital lists leave g empty; auxiliary
+  // lists include it with the original public AO offsets and clipped panels.
+  std::size_t expansion_terms{3};
   const std::int32_t* shell_ids{};
   const std::int64_t* ao_offsets{};
-  std::size_t begin[4]{}, count[4]{};
+  std::size_t begin[5]{}, count[5]{};
   // Zero keeps heterogeneous per-shell bounds. A positive count is a caller
   // invariant for a homogeneous signature slice, passed uniformly at launch.
   std::size_t primitives{};
@@ -46,18 +50,22 @@ enum class DfDerivativePairs { full, symmetric, packed };
  * public weights, executed primitive products, Cartesian component work, and
  * public weight loads (including zeros), in that order.
  * They are diagnostic atomics and must be disabled in promotion timings.
- * full_domain selects all 64 s/p/d/f classes; false retains the original seven
+ * full_domain selects orbital s/p/d/f and auxiliary through g; false retains the original seven
  * non-SSS s/p classes for comparison. Variants 0/1/2 select the compiler's warp,
  * packed-warp and compact-subgroup schedules, with identical mathematics.
+ * mixed is a private consumer-authorized candidate, never schedule admission.
+ * Optional precision_work has three uint64 entries: attempted mixed tasks,
+ * primitive products prepared by those attempts, and complete strict retries.
+ * Representability guards discard a rejected task before its first scatter;
+ * this is not by itself a physical force-error certificate.
  */
-cudaError_t launch_df_shell_derivative_panel(DfShellBasisView orbital, DfShellBasisView auxiliary,
-                                             const double* positions, std::size_t auxiliary_begin,
-                                             std::size_t auxiliary_count, const double* weights,
-                                             double* gradient, unsigned long long* counters,
-                                             cudaStream_t stream, bool full_domain = false,
-                                             unsigned variant = 0,
-                                             DfDerivativePairs pairs = DfDerivativePairs::full,
-                                             DfShellDiagnostics* diagnostics = nullptr);
+cudaError_t launch_df_shell_derivative_panel(
+    DfShellBasisView orbital, DfShellBasisView auxiliary, const double* positions,
+    std::size_t auxiliary_begin, std::size_t auxiliary_count, const double* weights,
+    double* gradient, unsigned long long* counters, cudaStream_t stream, bool full_domain = false,
+    unsigned variant = 0, DfDerivativePairs pairs = DfDerivativePairs::full,
+    DfShellDiagnostics* diagnostics = nullptr, bool mixed = false,
+    unsigned long long* precision_work = nullptr);
 
 /** Launch one primitive-signature shell-group product.
  * The first/second orbital views each contain exactly one angular/signature
@@ -70,20 +78,20 @@ cudaError_t launch_df_shell_derivative_group(
     const double* positions, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     const double* weights, double* gradient, unsigned long long* counters, cudaStream_t stream,
     bool full_domain, unsigned variant, DfDerivativePairs pairs, bool triangle,
-    DfShellDiagnostics* diagnostics = nullptr);
+    DfShellDiagnostics* diagnostics = nullptr, bool mixed = false,
+    unsigned long long* precision_work = nullptr);
 /** Batch homogeneous block ranges in bounded kernel parameters.
  * The host spans contain disjoint signature slices sharing each basis and AO
  * offsets. Each block belongs to one signature; full/symmetric/packed coverage
  * matches the individual-group launcher. No per-triple task list or additional
  * device allocation is created. Larger signature domains flush bounded packets.
  */
-cudaError_t launch_df_shell_derivative_packets(std::span<const DfShellBasisView> orbital_groups,
-                                               std::span<const DfShellBasisView> auxiliary_groups,
-                                               const double* positions, std::size_t begin,
-                                               std::size_t count, const double* weights,
-                                               double* gradient, unsigned long long* counters,
-                                               cudaStream_t stream, bool full_domain,
-                                               unsigned variant, DfDerivativePairs pairs,
-                                               DfShellDiagnostics* diagnostics = nullptr);
+cudaError_t launch_df_shell_derivative_packets(
+    std::span<const DfShellBasisView> orbital_groups,
+    std::span<const DfShellBasisView> auxiliary_groups, const double* positions, std::size_t begin,
+    std::size_t count, const double* weights, double* gradient, unsigned long long* counters,
+    cudaStream_t stream, bool full_domain, unsigned variant, DfDerivativePairs pairs,
+    DfShellDiagnostics* diagnostics = nullptr, bool mixed = false,
+    unsigned long long* precision_work = nullptr);
 
 }  // namespace generativeqc::scf

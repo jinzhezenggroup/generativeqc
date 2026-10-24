@@ -6,6 +6,7 @@ import time
 import typing
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
+from itertools import chain
 
 import numpy as np
 from generativeqc_compiler.common.arrays import immutable
@@ -98,6 +99,14 @@ def _single_workspace_bytes(n: typing.Any, options: typing.Any) -> typing.Any:
         + 8 * (restart + 1) ** 2
         + 4 * (options.max_iterations + 2)
     )
+
+
+def _validate_resident_engine(operator: typing.Any) -> None:
+    """Validate a borrowed vector owner even when no Krylov action will run."""
+    engine = getattr(operator, "_krylov_engine", None)
+    validate = getattr(engine, "validate_problem", None)
+    if callable(validate):
+        validate(operator.problem)
 
 
 def _block_workspace_bytes(
@@ -232,9 +241,13 @@ class DiagonalPreconditioner:
     def __init__(
         self, diagonal: typing.Any, *, relative_threshold: typing.Any = 1e-14
     ) -> None:
-        value = np.asarray(diagonal, dtype=np.float64)
-        if value.ndim != 1 or not np.isfinite(value).all():
-            raise ValueError("preconditioner diagonal must be a finite vector")
+        raw = np.asarray(diagonal)
+        if raw.ndim != 1 or raw.dtype.kind not in "iuf" or not np.isfinite(raw).all():
+            raise ValueError("preconditioner diagonal must be a finite real vector")
+        with np.errstate(over="ignore", invalid="ignore"):
+            value = np.asarray(raw, dtype=np.float64)
+        if not np.isfinite(value).all():
+            raise ValueError("preconditioner diagonal must be representable in FP64")
         if not np.isfinite(relative_threshold) or relative_threshold < 0:
             raise ValueError("relative_threshold must be finite and nonnegative")
         scale = max(float(np.max(np.abs(value))), 1.0)
@@ -248,10 +261,31 @@ class DiagonalPreconditioner:
         self.inverse = immutable(1.0 / value)
 
     def apply(self, vector: typing.Any) -> typing.Any:
-        value = np.asarray(vector, dtype=np.float64)
-        if value.shape != self.diagonal.shape:
+        raw = np.asarray(vector)
+        if raw.shape != self.diagonal.shape:
             raise ValueError("preconditioner vector shape mismatch")
+        if raw.dtype.kind not in "iuf" or not np.isfinite(raw).all():
+            raise ValueError("preconditioner vector must be finite real data")
+        with np.errstate(over="ignore", invalid="ignore"):
+            value = np.asarray(raw, dtype=np.float64)
+        if not np.isfinite(value).all():
+            raise ValueError("preconditioner vector must be representable in FP64")
         return self.inverse * value
+
+
+def _native_host_eligible(
+    operator: typing.Any, preconditioner: typing.Any, *, has_consumer: bool = False
+) -> bool:
+    """Keep single and sequential native CPU admission on the same residency policy."""
+    return (
+        getattr(operator, "_krylov_engine", None) is None
+        and operator.dimension > 0
+        and getattr(operator, "device_workspace_bytes", 0) == 0
+        and (
+            preconditioner is None or isinstance(preconditioner, DiagonalPreconditioner)
+        )
+        and not has_consumer
+    )
 
 
 @dataclass(frozen=True)
@@ -292,7 +326,12 @@ class SolveResult:
 
 @dataclass(frozen=True)
 class MultiRHSResult:
-    """Results and aggregate costs for one multi-RHS strategy."""
+    """Results and aggregate costs for one multi-RHS strategy.
+
+    ``dimension`` preserves the row count of an empty request. Its default keeps
+    existing positional construction compatible; nonempty results carry their
+    dimension in each solution as before.
+    """
 
     results: tuple[SolveResult, ...]
     strategy: str
@@ -301,6 +340,7 @@ class MultiRHSResult:
     peak_workspace_bytes: int
     rhs_rank: int
     rank_deficient_rhs: bool
+    dimension: int = 0
 
     @property
     def converged(self) -> typing.Any:
@@ -309,7 +349,7 @@ class MultiRHSResult:
     @property
     def solution(self) -> typing.Any:
         if not self.results:
-            return np.empty((0, 0))
+            return np.empty((self.dimension, 0), dtype=np.float64)
         return np.column_stack([result.solution for result in self.results])
 
     def _aggregate_seconds(self, field: str) -> float:
@@ -370,12 +410,19 @@ class _HostKrylovEngine:
         return float(np.dot(left, right))
 
     def apply(self, operator: typing.Any, value: typing.Any) -> typing.Any:
-        return np.asarray(operator.apply(value), dtype=np.float64)
+        return self._action_result(operator.apply(value), "operator")
+
+    def _action_result(self, value: typing.Any, name: str) -> np.ndarray:
+        """Check method callback shape/domain before any narrowing conversion."""
+        raw = np.asarray(value)
+        if raw.shape != (self.dimension,) or raw.dtype.kind not in "iuf":
+            raise ValueError(f"{name} must return a real vector of operator dimension")
+        return np.asarray(raw, dtype=np.float64)
 
     def precondition(self, preconditioner: typing.Any, value: typing.Any) -> typing.Any:
         if preconditioner is None:
             return self.copy(value)
-        return np.asarray(preconditioner.apply(value), dtype=np.float64)
+        return self._action_result(preconditioner.apply(value), "preconditioner")
 
     def orthogonalize(
         self,
@@ -425,7 +472,7 @@ def _solve_single(
     resident_recycle: typing.Any = None,
     solution_consumer: typing.Any = None,
 ) -> typing.Any:
-    """Restarted GMRES with one control flow and pluggable vector residency."""
+    """Compatibility/foreign-engine GMRES; admitted CPU solves use the shared native owner."""
     b_host = np.asarray(rhs, dtype=np.float64)
     if b_host.ndim != 1 or not np.isfinite(b_host).all():
         raise ValueError("GMRES RHS must be a finite vector")
@@ -681,7 +728,10 @@ class KrylovRecycleSpace:
 
     ``vector_engine=resident`` keeps projection and replacement on that exact
     owner. Close/reset this space before closing the borrowed resident owner.
-    Default host storage and explicit host-result updates remain supported.
+    Eligible CPU FP64 directions are retained, projected and replaced by the
+    native owner. Resident, explicitly seeded/transported and foreign-data
+    compatibility spaces retain their declared engines. Native errors never
+    trigger a second Python numerical attempt.
     """
 
     def __init__(
@@ -711,7 +761,82 @@ class KrylovRecycleSpace:
                     "resident recycle owner/problem mismatch"
                 )
         self._vectors = []
+        self._native_owner = None
+        self._native_library = None
+        self._native_checked = False
+        self._native_allowed = vector_engine is None
         self.generation = 0
+
+    def _native_capacity(self, dimension: int) -> typing.Any:
+        """Query native admission without allocating retained or working vectors."""
+        if not self._native_allowed or not dimension or self._vectors:
+            return None
+        if (
+            self._native_owner is not None
+            and self._native_owner.dimension == dimension
+            and self._native_owner.limits == (self.max_vectors, self.max_bytes)
+        ):
+            return self._native_owner.capacity
+        if not self._native_checked:
+            from . import _native
+
+            self._native_library = _native.optional_response_recycle_library()
+            self._native_checked = True
+        if self._native_library is None:
+            return None
+        from ._response_recycle_native import capacity
+
+        return capacity(
+            self._native_library, dimension, self.max_vectors, self.max_bytes
+        )[1]
+
+    def _host_vectors(self) -> typing.Any:
+        """Materialize native vectors only for explicit identity/transport diagnostics."""
+        if self._native_owner is not None:
+            return self._native_owner.vectors()
+        return self._vectors
+
+    def _host_compatibility(self) -> None:
+        """Switch unsupported input domains explicitly, not after a native error.
+
+        Existing native directions remain authoritative until a successful
+        compatibility update. They stream through one reusable column buffer,
+        so a reduced destination capacity never copies the complete old space.
+        """
+        self._native_allowed = False
+
+    def _ensure_native(self, dimension: int) -> typing.Any:
+        """Acquire only after the enclosing solve has admitted its entire reservation."""
+        if not dimension and self._native_owner is not None:
+            if self._native_owner.state().vector_count:
+                raise ValueError("recycled vector dimension mismatch")
+            self._native_owner.close()
+            self._native_owner = None
+        if not self._native_allowed:
+            self._host_compatibility()
+            return None
+        capacity = self._native_capacity(dimension)
+        if capacity is None:
+            return None
+        if self._native_owner is not None and self._native_owner.dimension != dimension:
+            if self._native_owner.state().vector_count:
+                raise ValueError("recycled vector dimension mismatch")
+            self._native_owner.close()
+            self._native_owner = None
+        if self._native_owner is None:
+            from ._response_recycle_native import NativeRecycle
+
+            self._native_owner = NativeRecycle(
+                self._native_library, dimension, self.max_vectors, self.max_bytes
+            )
+        return self._native_owner
+
+    @property
+    def _vector_count(self) -> int:
+        """Read retained capacity use without publishing native vector arrays."""
+        if self._native_owner is not None:
+            return self._native_owner.state().vector_count
+        return len(self._vectors)
 
     @property
     def key(self) -> typing.Any:
@@ -724,7 +849,7 @@ class KrylovRecycleSpace:
                 "problem": self.key,
                 "generation": self.generation,
                 "vectors": (
-                    [hashlib_sha(v) for v in self._vectors]
+                    [hashlib_sha(v) for v in self._host_vectors()]
                     if self._engine is None
                     else [v.slot for v in self._vectors]
                 ),
@@ -737,12 +862,17 @@ class KrylovRecycleSpace:
         """Bytes held by the independently retained immutable vectors."""
         if self._engine is not None:
             return len(self._vectors) * self._engine.dimension * 8
+        if self._native_owner is not None:
+            return self._native_owner.state().storage_bytes
         return sum(vector.nbytes for vector in self._vectors)
 
     def projection_bytes(self, dimension: typing.Any) -> typing.Any:
         """Reserve the output guess and one scaled retained-vector temporary."""
         if type(dimension) is not int or dimension < 0:
             raise ValueError("dimension must be a nonnegative integer")
+        capacity = self._native_capacity(dimension)
+        if capacity is not None:
+            return capacity.projection_workspace_bytes
         return 2 * dimension * 8
 
     def update_bytes(self, dimension: typing.Any) -> typing.Any:
@@ -754,6 +884,16 @@ class KrylovRecycleSpace:
         """
         if dimension == 0:
             return 0
+        if self._native_owner is not None and not self._native_allowed:
+            from ._response_recycle_native import capacity
+
+            native = capacity(
+                self._native_library, dimension, self.max_vectors, self.max_bytes
+            )[1].update_workspace_bytes
+            return native + 2 * dimension * 8
+        native = self._native_capacity(dimension)
+        if native is not None:
+            return native.update_workspace_bytes
         capacity = min(self.max_vectors, dimension, self.max_bytes // (dimension * 8))
         return (capacity + 3) * dimension * 8
 
@@ -785,7 +925,19 @@ class KrylovRecycleSpace:
                     problem, self._engine.from_host(b), self._engine
                 )
                 return self._engine.to_host(guess)
+        if not b.flags.aligned:
+            self._host_compatibility()
+        native = self._ensure_native(b.size)
+        if native is not None:
+            return native.project(b)
         guess = np.zeros(b.size)
+        if self._native_owner is not None:
+            for vector in self._native_owner.iter_vectors():
+                if vector.shape != b.shape:
+                    raise ValueError("recycled vector dimension mismatch")
+                np.multiply(vector, np.dot(vector, b), out=vector)
+                guess += vector
+            return guess
         for vector in self._vectors:
             if vector.shape != b.shape:
                 raise ValueError("recycled vector dimension mismatch")
@@ -816,8 +968,36 @@ class KrylovRecycleSpace:
                 solution = self._engine.from_host(result.solution)
                 basis = [self._engine.from_host(value) for value in result.basis.T]
                 return self._update_vectors(problem, solution, basis, self._engine)
+        solution = np.asarray(result.solution)
+        basis = np.asarray(result.basis)
+        if not n and self._native_owner is not None:
+            self._native_owner.close()
+            self._native_owner = None
+        if basis.ndim == 2 and basis.shape[1] == 0:
+            basis = np.empty((n, 0), dtype=np.float64)
+        if (
+            solution.ndim != 1
+            or basis.ndim != 2
+            or basis.shape[0] != n
+            or any(
+                value.dtype != np.float64 or not value.flags.aligned
+                for value in (solution, basis)
+            )
+        ):
+            self._host_compatibility()
+        native = self._ensure_native(n)
+        if native is not None:
+            native.update(solution, basis, self.max_vectors, self.max_bytes)
+            self.generation += 1
+            return self
         return self._update_vectors(
-            problem, result.solution, result.basis.T, _HostKrylovEngine(n)
+            problem,
+            result.solution,
+            result.basis.T,
+            _HostKrylovEngine(n),
+            retained=self._native_owner.iter_vectors()
+            if self._native_owner is not None
+            else None,
         )
 
     def _update_vectors(
@@ -826,6 +1006,8 @@ class KrylovRecycleSpace:
         solution: typing.Any,
         basis: typing.Any,
         engine: typing.Any,
+        *,
+        retained: typing.Any = None,
     ) -> typing.Any:
         """One bounded replacement policy for host and device vector storage."""
         self.assert_compatible(problem)
@@ -840,7 +1022,9 @@ class KrylovRecycleSpace:
         replacement = []
         # Retain old directions first and stop as soon as capacity is reached;
         # no full candidate matrix is created.
-        candidates = (*self._vectors, solution, *basis)
+        candidates = chain(
+            self._vectors if retained is None else retained, (solution,), basis
+        )
         try:
             for candidate in candidates:
                 if len(replacement) == capacity:
@@ -870,6 +1054,9 @@ class KrylovRecycleSpace:
         if self._engine is not None:
             for vector in self._vectors:
                 vector.release()
+        if self._native_owner is not None:
+            self._native_owner.close()
+            self._native_owner = None
         self._vectors = replacement
         self.generation += 1
         return self
@@ -883,7 +1070,13 @@ class KrylovRecycleSpace:
         if self._engine is not None:
             for vector in self._vectors:
                 vector.release()
+        if self._native_owner is not None:
+            self._native_owner.close()
+            self._native_owner = None
         self._vectors = []
+        self._native_allowed = self._engine is None
+        self._native_checked = False
+        self._native_library = None
         self.generation += 1
         return self
 
@@ -909,7 +1102,7 @@ class KrylovRecycleSpace:
         if not hasattr(problem, "dimension") or type(problem.dimension) is not int:
             raise TypeError("transport destination must expose an integer dimension")
         transported = []
-        for vector in self._vectors:
+        for vector in self._host_vectors():
             host_vector = (
                 self._engine.to_host(vector) if self._engine is not None else vector
             )
@@ -960,10 +1153,14 @@ def solve(
 
     solution_consumer runs synchronously on the converged engine-native
     solution before host publication and must not retain engine-owned leases.
+    CPU host-vector requests use the shared native controller when installed.
+    Device providers, explicit vector engines, general preconditioners and
+    solution consumers retain their existing control paths until qualified.
     """
     # A live reference lease must hold even when a zero RHS skips all actions.
     validate_current = getattr(operator, "validate_current", lambda: None)
     validate_current()
+    _validate_resident_engine(operator)
     options = GMRESOptions() if options is None else options
     if solution_consumer is not None and not callable(solution_consumer):
         raise TypeError("solution_consumer must be callable")
@@ -995,13 +1192,50 @@ def solve(
             raise ResponseCompatibilityError(
                 "recycle vectors belong to another resident owner"
             )
-        recycled_vectors = len(recycle._vectors)
+        if not resident_recycle:
+            recycle._native_allowed = recycle._native_allowed and (
+                engine is None and getattr(operator, "device_workspace_bytes", 0) == 0
+            )
+        recycled_vectors = recycle._vector_count
         reservation = (
             recycle.storage_bytes
             + recycle.projection_bytes(operator.dimension)
             + recycle.update_bytes(operator.dimension)
         )
-    required = _single_workspace_bytes(operator.dimension, options) + reservation
+        if (
+            recycle._native_owner is not None
+            and recycle._native_allowed
+            and initial_guess is None
+            and b.dtype == np.float64
+            and not b.flags.aligned
+        ):
+            # Plan the streamed compatibility transition without changing the
+            # retained owner's mode before whole-solve admission succeeds.
+            reservation += 2 * operator.dimension * 8
+    native_library = None
+    if _native_host_eligible(
+        operator, preconditioner, has_consumer=solution_consumer is not None
+    ):
+        from . import _native
+
+        native_library = _native.optional_response_library()
+    # Admission includes the same diagnostic publications as execution. Host
+    # recycling needs an internal basis even when the caller does not retain it.
+    basis_requested = collect_basis or (recycle is not None and not resident_recycle)
+    if native_library is not None:
+        from ._response_native import workspace_bytes
+
+        required = (
+            workspace_bytes(
+                native_library,
+                operator.dimension,
+                options,
+                collect_basis=basis_requested,
+            )
+            + reservation
+        )
+    else:
+        required = _single_workspace_bytes(operator.dimension, options) + reservation
     # Old best-cycle and current Arnoldi vectors may overlap. Resident recycle
     # replacement additionally overlaps both old and new retained spaces.
     retained_capacity = (
@@ -1033,20 +1267,32 @@ def solve(
             recycle_seconds += time.perf_counter() - recycle_started
         workspace = getattr(engine, "solver_workspace", nullcontext)
         with workspace():
-            result = _solve_single(
-                operator,
-                rhs,
-                replace(
-                    options,
-                    max_workspace_bytes=options.max_workspace_bytes - reservation,
-                ),
-                initial_guess=initial_guess,
-                preconditioner=preconditioner,
-                collect_basis=collect_basis
-                or (recycle is not None and not resident_recycle),
-                resident_recycle=recycle if resident_recycle else None,
-                solution_consumer=solution_consumer,
+            solve_options = replace(
+                options, max_workspace_bytes=options.max_workspace_bytes - reservation
             )
+            if native_library is not None:
+                from ._response_native import solve_host
+
+                result = solve_host(
+                    native_library,
+                    operator,
+                    rhs,
+                    solve_options,
+                    initial_guess=initial_guess,
+                    preconditioner=preconditioner,
+                    collect_basis=basis_requested,
+                )
+            else:
+                result = _solve_single(
+                    operator,
+                    rhs,
+                    solve_options,
+                    initial_guess=initial_guess,
+                    preconditioner=preconditioner,
+                    collect_basis=basis_requested,
+                    resident_recycle=recycle if resident_recycle else None,
+                    solution_consumer=solution_consumer,
+                )
         validate_current()
         if recycle is not None and result.converged and not resident_recycle:
             recycle_started = time.perf_counter()
@@ -1371,6 +1617,7 @@ def _solve_many_impl(
     """Compare sequential, blocked and recycled multi-RHS response solves."""
     validate_current = getattr(operator, "validate_current", lambda: None)
     validate_current()
+    _validate_resident_engine(operator)
     if strategy not in ("sequential", "blocked", "recycled"):
         raise ValueError("strategy must be sequential, blocked or recycled")
     if strategy == "blocked" and preconditioner is not None:
@@ -1379,6 +1626,12 @@ def _solve_many_impl(
             "or recycled, or add an explicitly tested block preconditioner"
         )
     options = GMRESOptions() if options is None else options
+    if not isinstance(options, GMRESOptions):
+        raise TypeError("multi-RHS options must be GMRESOptions")
+    if preconditioner is not None and not callable(
+        getattr(preconditioner, "apply", None)
+    ):
+        raise TypeError("preconditioner must provide a callable apply action")
     values = operator.problem.validate_rhs(rhs)
     consumers = (
         (None,) * values.shape[1]
@@ -1390,6 +1643,28 @@ def _solve_many_impl(
     ):
         raise ValueError("solution_consumers must match the multi-RHS column count")
     started = time.perf_counter()
+    if recycle is not None:
+        recycle.assert_compatible(operator.problem)
+        if recycle._engine is not None and recycle._engine is not getattr(
+            operator, "_krylov_engine", None
+        ):
+            raise ResponseCompatibilityError(
+                "recycle vectors belong to another resident owner"
+            )
+    if values.shape[1] == 0:
+        # Admission/lifetime checks still apply, but no SVD, vector engine,
+        # workspace reservation, preconditioner or consumer is executed.
+        validate_current()
+        return MultiRHSResult(
+            (),
+            strategy,
+            time.perf_counter() - started,
+            0,
+            0,
+            0,
+            False,
+            dimension=values.shape[0],
+        )
     # validate_rhs publishes an owned immutable array for real ResponseProblems.
     # Charge it even when a test/custom operator happens to return a view.
     input_bytes = values.nbytes
@@ -1449,42 +1724,70 @@ def _solve_many_impl(
                 answer.require_converged()
             return answer
         rank = int(np.linalg.matrix_rank(values, tol=1e-12)) if nrhs else 0
-        results = []
-        actions = 0
         peak = input_bytes + rank_workspace
-        retained_results = 0
-        for column in range(values.shape[1]):
-            # solve owns all recycle reservations. Only earlier results and the
-            # shared RHS copy remain outside it; the current result is already
-            # included in solve's bound and must not be counted a second time.
-            retained = input_bytes + retained_results
-            remaining = options.max_workspace_bytes - retained
-            if remaining <= 0:
-                results.extend(
-                    _workspace_failure(
-                        values.shape[0], values.shape[1] - column, retained
-                    )
-                )
-                peak = max(peak, retained)
-                break
-            result = solve(
+        native_sequence = None
+        if (
+            strategy == "sequential"
+            and _native_host_eligible(
                 operator,
-                values[:, column],
-                options=replace(options, max_workspace_bytes=remaining),
-                recycle=recycle if use_recycle else None,
+                preconditioner,
+                has_consumer=any(consumer is not None for consumer in consumers),
+            )
+            and values.dtype == np.float64
+            and values.flags.aligned
+            and values.strides[0] > 0
+            and values.strides[1] >= 0
+            and all(stride % values.itemsize == 0 for stride in values.strides)
+        ):
+            from . import _native
+
+            native_sequence = _native.optional_response_sequence_library()
+        if native_sequence is not None:
+            from ._response_native import solve_sequence
+
+            results, actions, sequence_peak = solve_sequence(
+                native_sequence,
+                operator,
+                values,
+                replace(options, max_workspace_bytes=available),
                 preconditioner=preconditioner,
                 collect_basis=collect_basis,
-                solution_consumer=consumers[column],
             )
-            peak = max(peak, retained + result.workspace_bytes)
-            results.append(result)
-            actions += result.operator_actions
-            if result.reason == "workspace_limit":
-                # No later column can gain capacity. Share the immutable failure
-                # result rather than allocating a zero solution for every RHS.
-                results.extend([result] * (values.shape[1] - column - 1))
-                break
-            retained_results += result.solution.nbytes + result.basis.nbytes
+            peak = max(peak, input_bytes + sequence_peak)
+        else:
+            results = []
+            actions = 0
+            retained_results = 0
+            for column in range(values.shape[1]):
+                # Compatibility/resident schedules keep their current per-solve
+                # reservations; native sequential requests do not enter this loop.
+                retained = input_bytes + retained_results
+                remaining = options.max_workspace_bytes - retained
+                if remaining <= 0:
+                    results.extend(
+                        _workspace_failure(
+                            values.shape[0], values.shape[1] - column, retained
+                        )
+                    )
+                    peak = max(peak, retained)
+                    break
+                result = solve(
+                    operator,
+                    values[:, column],
+                    options=replace(options, max_workspace_bytes=remaining),
+                    recycle=recycle if use_recycle else None,
+                    preconditioner=preconditioner,
+                    collect_basis=collect_basis,
+                    solution_consumer=consumers[column],
+                )
+                peak = max(peak, retained + result.workspace_bytes)
+                results.append(result)
+                actions += result.operator_actions
+                if result.reason == "workspace_limit":
+                    # A refused tail shares one immutable diagnostic vector.
+                    results.extend([result] * (values.shape[1] - column - 1))
+                    break
+                retained_results += result.solution.nbytes + result.basis.nbytes
         answer = MultiRHSResult(
             tuple(results),
             strategy,

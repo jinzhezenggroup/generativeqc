@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 
+#include "dft/global_hybrid_composition.hpp"
 #include "generativeqc/generativeqc.h"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -46,12 +47,23 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   if (!code) return GENERATIVEQC_STATUS_SUCCESS;
   if (input->spin_channels != 1 && input->spin_channels != 2)
     return reject(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid KS spin channel count");
-  if (backend != GENERATIVEQC_BACKEND_CUDA ||
-      descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
-      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+  // XC point evaluation is independent of the full-range J/K approximation.
+  // Only a manifest-qualified complete fitted J/K and force consumer may be
+  // substituted for Direct; other registered hybrids remain Direct-only.
+  const bool direct_jk = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE;
+  const bool fitted_jk = (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
+                          descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
+                         dft::cuda_global_hybrid_df_admitted(code);
+  // Direct arithmetic belongs to the shared Fock modules, independently of XC.
+  // Fitted consumers retain their separate strict-precision contract.
+  const bool precision_admitted =
+      descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
+      (direct_jk && descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO);
+  if (backend != GENERATIVEQC_BACKEND_CUDA || !precision_admitted || (!direct_jk && !fitted_jk) ||
       input->xc_execution_schedule != GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                  "split-global-hybrid KS requires CUDA, direct J/K, device-fused XC and FP64");
+                  "split-global-hybrid KS requires CUDA, qualified Direct/DF J/K, "
+                  "device-fused XC and supported provider precision");
   if (first.coefficient != 1.0 || second.coefficient != 1.0 ||
       input->semilocal_range_omega != 0.0 || input->has_nonlocal_correlation != 0 ||
       descriptor.method == GENERATIVEQC_METHOD_PBE_D4_RKS)
@@ -60,13 +72,12 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   if (input->exchange_term_count != 1)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                   "split-global-hybrid KS requires one nonzero full-range exact-exchange term");
-  const auto composition = dft::generated::split_hybrid_composition(code);
-  if (!composition.matched || !composition.exact_exchange_denominator)
+  const auto composition = dft::global_hybrid_composition(code);
+  if (!composition.present || !composition.fixed_semilocal)
     return reject(GENERATIVEQC_STATUS_INTERNAL_ERROR,
                   "split-hybrid registry composition is missing");
   const auto& exchange = input->exchange_terms[0];
-  const double exact = static_cast<double>(composition.exact_exchange_numerator) /
-                       static_cast<double>(composition.exact_exchange_denominator);
+  const double exact = composition.exact_exchange;
   const double divisor = input->spin_channels == 1 ? 2.0 : 1.0;
   if (exchange.operator_kind != GENERATIVEQC_KS_EXCHANGE_FULL_RANGE || exchange.omega != 0.0 ||
       exchange.coefficient != exact || exchange.fock_coefficient != -exact / divisor)

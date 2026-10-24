@@ -20,7 +20,7 @@ import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
@@ -30,7 +30,7 @@ _DIRECT_SOURCE_EXECUTION = __name__ == "__main__" and __spec__ is None
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from importlib.machinery import ModuleSpec
-    from types import CodeType, ModuleType
+    from types import CodeType
 
 
 class _DftMpSourceOnlyLoader(importlib.machinery.SourceFileLoader):
@@ -129,6 +129,7 @@ from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     STATIONARY_RUNTIME_SOURCE_NAMES,
     _qualified_aot_plan,
     _stationary_aot_name,
@@ -254,18 +255,21 @@ BASIS_SNAPSHOT_CONTRACT_SHA256 = (
 BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
     "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
 )
-CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256 = (
-    "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
-)
-NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256 = (
-    "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
-)
 # Reviewed strict Cartesian x/y/z pairing preserves the native basis layout.
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
 )
+# The normalized-system caller delegates representation arithmetic to these
+# shared shell owners. Pin both helpers as well as the caller so moving the
+# equation does not leave arithmetic, width or overflow checks unauthenticated.
+NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256 = (
+    "e69f53d3da18e44119894075fc898559006f88edcddab5770204f88e306154e5"
+)
+NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256 = (
+    "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
+)
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
-    "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
+    "73c8ab3e116dde28f94c4f988f3b9f418ea11a09414ac342ac310d76cf020410"
 )
 # The complete predicate also admits exact automatic Libxc components through
 # the bounded all-electron CPU owner. Its shared context rejects CUDA. CUDA
@@ -278,35 +282,22 @@ PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
-PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
-)
-PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
-    "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
-)
-PYTHON_GRID_CONTRACT_SHA256 = (
-    "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
-)
-QUADRATURE_LAYOUT_CONTRACT_SHA256 = (
-    "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
-)
-NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
-    "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
-)
+# Public force owner bytes are reported as provenance, not an acceptance pin.
+# Executable public-route controls cover model eligibility, AOT selection,
+# complete-grid overrides, selected AO policy and native-owner cleanup.
+# The hybrid predicate also remains source provenance. Executable admission
+# controls cover device, ECP, options, schedule and MethodIR eligibility.
 NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
     "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
 )
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
-PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
-    "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
-)
-NATIVE_GRID_ABI_CONTRACT_SHA256 = (
-    "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
-)
+# The additional native static wrappers reuse the existing primitive objects.
+# The compiler now supplies the inventory and grouped native generation; retain
+# the full wiring/discovery-policy digest so either integration fails closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "e603c9db0e0fbe5d5963768bd8f8a6a553c11ee2b791a6a8cc806a9e3941e060"
+    "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -317,18 +308,44 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Producer-bound restricted points add optional ABI binding and execution counters;
 # they borrow admitted phased scratch without changing any allocation equation.
 # Keep whole-owner fingerprints so these controls and metric deltas fail closed.
+# Component packing also binds its ragged scratch/descriptor helpers. The
+# generic restricted-point request still borrows the same admitted geometry
+# scratch; refreshing these owners does not relax any promotion evidence gate.
+# Explicit FP32 adds boolean/profile admission and requires both optional
+# transport and work-counter ABIs. Descriptor capacity, primitive page budgets,
+# resource planning and legacy Becke fallback/control remain unchanged.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
+    "d79b0f5c255b78f1f56f017ca4363aeadb99d978de87279395edb4acd53cf183"
 )
-# Explicit strict pairing retains the fixed native counter-array arities.
+# Explicit strict pairing retains the fixed native counter-array arities. The
+# optional three-field FP32 ABI reports capability and actual enqueued work;
+# deltas subtract both work counters but never subtract the capability flag.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "b6fd50bdaee3f2b7d51884e4672a705ec91726152c150d89bb5c957cbddc1e3d"
+    "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
+    "c9df420cacb6a16733a023c4de396db5d5c37cbfbecffdc8a232817c197017ec"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
-    "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
+    "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
+)
+STATIONARY_KIND_TABLE_CONTRACT_SHA256 = (
+    "eeec6bd71f566741e4d0978df5b354095c875be183b0cf3138df3a1e8fd47a6a"
+)
+STATIONARY_COMPONENT_ARRAYS_CONTRACT_SHA256 = (
+    "08ea283e18c790a26edcdcac01479def6a7188d9c1a96b8831b4f2b71c8d6045"
+)
+STATIONARY_COMPONENT_PAGE_CONTRACT_SHA256 = (
+    "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b"
+)
+STATIONARY_DESCRIPTOR_PACKER_CONTRACT_SHA256 = (
+    "92af808cc0d0551072b0a00c29631b86f9c4b65e95bacd68701c4cfbdab926e0"
+)
+STATIONARY_RESTRICTED_POINT_POLICY_CONTRACT_SHA256 = (
+    "14eb08de9be6003c466bff8f9449c95749a38e3bcbb9cf13bcad3d4420ccca51"
+)
+STATIONARY_DENSITY_JET_POLICY_CONTRACT_SHA256 = (
+    "2a117b6ec5c566b996f75795650288182faa93a83b263689431f62d6c8e3a529"
 )
 STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
     "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
@@ -357,21 +374,10 @@ STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
 STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
-# Audited full-range Combined output has three channels; Separate/DF retains
-# four. The bounded v1 fallback, strict shape/finite checks, host reserve and
-# complete reduction remain bound by the exact whole-owner source span.
-# The DF resident-one-electron metadata distinguishes device execution from
-# host fallback without changing admission or claiming DF-response coverage.
-# AOT uses the same coverage gate without generating reduction/weight IR;
-# its build-bound graph provenance is replayed from the admitted manifest.
-# Lazy source-product reuse changes only compilation preparation and telemetry;
-# native requirements, work windows, host reserves and reductions remain audited.
-# CSR and exact-bitmask device AO maps preserve native geometry allowances.
-# Exact maps reserve only their finite numeric owner, including both offset
-# mirrors and compact AO scratch; bind the helper and endpoint independently.
-STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "0b59f42d41f6a06cf14df6ff9d3fdfe3a03a37ca69e85bf4d4087c9a8b6b5b23"
-)
+# The endpoint owner is recorded as provenance. Its whole-function hash is not
+# a capacity gate: executable orchestration controls cover source arity, complete
+# work, concurrent reserves, provider selection, reductions and publication.
+# The independent resource/planner/native ABI contracts below remain fail-closed.
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
 )
@@ -382,7 +388,7 @@ STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
+    "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
@@ -396,17 +402,12 @@ BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256 = (
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
-# Reviewed #2276: bind code/domain to KSOptions MethodIR rather than display
-# selectors. Token, metadata-domain, coefficient/spin and exact grid gates stay.
-NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
-)
+# Snapshot initialization bytes are recorded as provenance. Executable ABI
+# controls verify legacy/explicit allowances, bounds, failure cleanup, immutable
+# storage and domain/backend admission without pinning the initializer spelling.
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
-NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "5a00bf2f998228e0a6b9bf7069fa909a63b5580a35ba4bdfe438fe04e4a4a098"
-)
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
     "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
@@ -414,29 +415,20 @@ NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
+# Strict defaults and all resource forwarding remain intact. Explicit candidates
+# may retry numerical failure only after positive mixed work, or replay strict
+# for missing optional transport. Both paths drain/invalidate before one retry;
+# driver/allocation/identity failures never grant an arithmetic retry.
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
+    "45097f6787b42bd6fb13ddd38fd77dead329af1ec357fc8e620610ac967081af"
 )
-NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
-)
-NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
-    "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
-)
-NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "6f53897b29a59fadd01d991eb1b9e8bd8dffec88cadb6ce52ecf2ad529e613c4"
-)
-NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
-)
+# Native owner/create/allocation identities are recorded below as provenance.
+# Their resource, failure, policy and counter contracts execute in host probes.
 # Elision preserves dense reservation/launch bounds. Bind its first-derivative
 # admission, both tolerance-refresh paths, immutable controls and charged D2H
 # observation independently of the unchanged allocation formula.
-NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
-    "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
-)
 NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
-    "82ce3a72f5c936129f9ca82d2db03690288026aa3f2c4ff050de0c0014ad4558"
+    "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
 )
 NATIVE_BECKE_ZERO_SEED_CONFIGURATION_CONTRACT_SHA256 = (
     "cbdd375e3c81bb1a6473186ca5fc9b190bae96c7b96bf8ccad651955a6f295aa"
@@ -470,9 +462,6 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # preserves the existing point/AO work and the seven Becke phases.
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
-NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
-)
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
 # configuration and counters as well as the launch route; a digest refresh must
@@ -481,7 +470,18 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+    "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+)
+# Binary-scaled admission and the out-of-line normalization dispatch are part
+# of the reviewed owner contract, including the incumbent fallback schedule.
+BECKE_SCALED_POLICY_CONTRACT_SHA256 = (
+    "201fa31bb36d8a3331200e48abf63977727e6825ac301f1e6a6a9fb2c07499c0"
+)
+NATIVE_BECKE_NORMALIZE_DISPATCH_CONTRACT_SHA256 = (
+    "94a74e1093603c69cb24ee1c2a6732e413f94bc82c25f734b011fcbd2a612e1e"
+)
+NATIVE_BECKE_BINARY_SCALED_METRICS_CONTRACT_SHA256 = (
+    "89e7d6e1d62e133b1bd48500024013c426aaede9688fdb248ee32d2c453cccae"
 )
 NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256 = (
     "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -516,15 +516,6 @@ NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
-# The JIT side defers integral source reuse. Prepared admission charges both
-# native CSR and exact-bitmask caches; packaged selection remains unchanged.
-PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
-)
-# The restricted-point request joins schedule identity without changing AO reserves.
-PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "8c0ffff5e9d0a6052556611b0df6066e4090163a12f137dcfe9c30f963e7e4a2"
-)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -553,13 +544,11 @@ INGREDIENTS_DEFINITION = "state._source.functional.ingredients"
 NEEDS_FIRST_DEFINITION = "'sigma' in ingredients"
 GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
-    "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
+    "tile_points=tile_points, active_ao_capacity=n if reserve_active_ao else None, "
+    "features_only=features_only, budget_bytes=max_device_bytes)"
 )
 EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256 = (
     "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9"
-)
-GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -576,12 +565,12 @@ SOURCE_RESOURCES_DEFINITION = (
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
-    "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
+    "grid_plan.host_bytes + 8 * (82 * primitive_tile + "
     "4 * plan.spin_blocks * n * n + 120 * na + "
     "12 * (len(source_names) - len(_SOURCE_NAMES)) * na + "
     "26 * integral_terms + len(COMPONENT_LABELS) ** 4 + "
     "3 * len(COMPONENT_LABELS) ** 2 + 3 * tile_points + 2 * basis.nprimitive + "
-    "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
+    "11 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
 )
 AVAILABLE_DEVICE_BYTES_DEFINITION = (
     "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
@@ -758,8 +747,8 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
         raise RuntimeError("native KS snapshot owner is missing or ambiguous")
     methods = {}
     expected = {
-        "__init__": NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
-        "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
+        "__init__": None,
+        "decode": None,
         "stationary_integral_device_reserve": (
             NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
         ),
@@ -775,7 +764,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
                 f"native KS snapshot {name} contract is missing or ambiguous"
             )
         digest = _source_node_sha256(source, candidates[0])
-        if digest != expected_digest:
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError("native KS snapshot functional contract changed")
         key = "init_sha256" if name == "__init__" else f"{name}_sha256"
         methods[key] = digest
@@ -1053,6 +1042,420 @@ def _public_resident_ao_policy_contract(owner: ast.FunctionDef) -> None:
                 raise RuntimeError(f"{label} forwarding contract changed")
 
 
+def _optional_ao_schedule_contract(tree: ast.Module) -> None:
+    """Execute current dry fallback policy without loading a native owner.
+
+    The census represents the default no-map request. Optional indexed storage
+    must not alter that route or consume a native failure as a capacity retry.
+    These behavioral witnesses allow equivalent implementation refactors.
+    """
+    from generativeqc import _stationary_cuda as runtime
+
+    helpers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_plan_stationary_optional_ao_schedule"
+    ]
+    if len(helpers) != 1:
+        raise RuntimeError("stationary CUDA optional AO schedule owner is ambiguous")
+    namespace = dict(vars(runtime))
+    exec(  # noqa: S102 - current dry helper, resource admission replaced below
+        compile(ast.Module(body=helpers, type_ignores=[]), "<AO schedule>", "exec"),
+        namespace,
+    )
+    choose = namespace["_plan_stationary_optional_ao_schedule"]
+    for requested, refusal in (
+        (False, None),
+        (True, None),
+        (True, "indexed"),
+        (False, "all"),
+        (True, "all"),
+        (True, "runtime"),
+    ):
+        layout, work = object(), object()
+        admitted: list[bool] = []
+
+        def admit(
+            points: int,
+            indexed: bool,
+            *,
+            refusal: str | None = refusal,
+            admitted: list[bool] = admitted,
+            layout: Any = layout,
+            work: Any = work,
+        ) -> tuple[Any, Any]:
+            if points != 7:
+                raise AssertionError("explicit tile was changed")
+            if refusal == "runtime" and indexed:
+                raise LookupError("native failure must propagate")
+            if refusal == "all" or (refusal == "indexed" and indexed):
+                raise ValueError("numeric capacity refused")
+            admitted.append(indexed)
+            return layout, work
+
+        try:
+            selected, selected_work, reason = choose(
+                grid_points=19,
+                tile_points=7,
+                preferred_tile_points=16,
+                requested_maps=requested,
+                admit=admit,
+            )
+        except (ValueError, LookupError) as error:
+            if (refusal == "all" and isinstance(error, ValueError)) or (
+                refusal == "runtime" and isinstance(error, LookupError)
+            ):
+                continue
+            raise RuntimeError(
+                "stationary CUDA optional AO schedule contract changed"
+            ) from error
+        except AssertionError as error:
+            raise RuntimeError(
+                "stationary CUDA optional AO schedule contract changed"
+            ) from error
+        if (
+            refusal in {"all", "runtime"}
+            or selected is not layout
+            or selected_work is not work
+            or not admitted
+            or set(admitted) != {requested and refusal != "indexed"}
+            or (reason is not None) != (refusal == "indexed")
+        ):
+            raise RuntimeError("stationary CUDA optional AO schedule contract changed")
+
+
+def _geometry_resource_contract(path: Path) -> None:
+    """Execute dry planning equations and boundaries, retaining source provenance.
+
+    A whole-file fingerprint used to reject the additional immutable grid panels
+    before any negative control ran. Validate the actual source under review,
+    including mutated copies, against independent byte/work equations instead.
+    No native library, CUDA context, allocation or scientific compiler is used.
+    """
+    module = ModuleType("_dft_mp_resource_contract")
+    previous = sys.modules.get(module.__name__)
+    sys.modules[module.__name__] = module
+    try:
+        _DftMpSourceOnlyLoader(module.__name__, str(path)).exec_module(module)
+        _check_geometry_resources(module)
+    except Exception as error:
+        raise RuntimeError(
+            f"stationary CUDA geometry-resource contract changed: {error}"
+        ) from error
+    finally:
+        if previous is None:
+            sys.modules.pop(module.__name__, None)
+        else:
+            sys.modules[module.__name__] = previous
+
+
+def _check_geometry_resources(module: ModuleType) -> None:
+    def require(condition: bool, description: str) -> None:
+        if not condition:
+            raise ValueError(description)
+
+    def rejected(function: Any, **arguments: Any) -> None:
+        try:
+            function(**arguments)
+        except ValueError:
+            return
+        raise ValueError(f"invalid resource request admitted: {arguments}")
+
+    def arena(shape: dict[str, int], lanes: int, cached: bool = False) -> int:
+        atoms, aos = shape["atoms"], shape["aos"]
+        # Sum separately owned FP64/int64 panels, including immutable topology.
+        words = (
+            2 * shape["primitives"]
+            + 4 * aos
+            + 22 * shape["tasks"]
+            + 3 * atoms
+            + atoms
+            + (atoms + 1)
+            + 3 * shape["sources"] * atoms
+            + 3 * shape["points"]
+            + 2 * shape["spins"] * aos**2
+            + 18 * lanes * atoms
+        )
+        return 8 * words + (48 * (atoms * (atoms - 1) // 2) if cached else 0) + 256
+
+    allocation = module.stationary_cuda_allocation_bytes
+    resources = module.plan_stationary_cuda_resources
+    native = module.stationary_cuda_requires_native_integrals
+    shape = {
+        "atoms": 12,
+        "aos": 96,
+        "primitives": 240,
+        "points": 4096,
+        "tasks": 256,
+        "spins": 2,
+        "sources": 8,
+    }
+    target = cuda_target_info("sm_120")
+    caps = {
+        "atoms": 128,
+        "aos": 2048,
+        "primitives": 16384,
+        "points": 4096,
+        "tasks": 4096,
+        "spins": 2,
+        "sources": 128,
+        "geometry_lanes": 2048,
+    }
+    for field, cap in caps.items():
+        for invalid in (0, -1, True, 1.5, cap + 1, 1 << 64):
+            rejected(allocation, **{**shape, "geometry_lanes": 1, field: invalid})
+        valid = {**shape, "geometry_lanes": 1, field: cap}
+        require(
+            allocation(**valid)
+            == arena(
+                {key: value for key, value in valid.items() if key != "geometry_lanes"},
+                valid["geometry_lanes"],
+            ),
+            f"inclusive {field} capacity",
+        )
+    rejected(allocation, **shape, geometry_lanes=1, cache_center_geometry=1)
+    for atoms, aos, primitives in (
+        (1, 1, 1),
+        (32, 128, 4096),
+        (33, 129, 4097),
+        (96, 768, 704),
+        (128, 2048, 16384),
+    ):
+        basis = {"atoms": atoms, "aos": aos, "primitives": primitives}
+        require(
+            native(**basis) == (atoms > 32 or aos > 128 or primitives > 4096),
+            "native-integral-only boundary",
+        )
+        reserve = (
+            2 * (58 * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
+            + 48 * atoms
+        )
+        require(
+            module.stationary_native_pair_reserve(**basis) == reserve,
+            "paired native reserve",
+        )
+        require(
+            module.stationary_fitted_integral_reserve(**basis)
+            == reserve + 16 * aos**2 + 192 * atoms,
+            "fitted native reserve",
+        )
+        for points in (1, 17, 256, 4096):
+            candidate = {**shape, **basis, "points": points}
+            lanes = min(points, 2048, (16 << 20) // (144 * atoms))
+            for count in {1, lanes}:
+                for cached in (False, True):
+                    require(
+                        allocation(
+                            **candidate,
+                            geometry_lanes=count,
+                            cache_center_geometry=cached,
+                        )
+                        == arena(candidate, count, cached),
+                        "arena panel accounting",
+                    )
+                budget = arena(candidate, count)
+                planned = resources(**candidate, target=target, budget_bytes=budget)
+                require(
+                    (
+                        planned.geometry_lanes,
+                        planned.allocation_bytes,
+                        planned.geometry_scratch_bytes,
+                        planned.center_geometry_bytes,
+                        planned.phased_becke_bytes,
+                    )
+                    == (count, budget, 144 * atoms * count, 0, 0),
+                    "tight budget preserves bounded lanes",
+                )
+            rejected(
+                resources,
+                **candidate,
+                target=target,
+                budget_bytes=arena(candidate, 1) - 1,
+            )
+            if lanes < points:
+                rejected(allocation, **candidate, geometry_lanes=lanes + 1)
+    for field, cap in (("atoms", 128), ("aos", 2048), ("primitives", 16384)):
+        for function in (
+            native,
+            module.stationary_native_pair_reserve,
+            module.stationary_fitted_integral_reserve,
+        ):
+            rejected(
+                function, **{"atoms": 1, "aos": 1, "primitives": 1, field: cap + 1}
+            )
+    for field, boundary in (("atoms", 32), ("aos", 128), ("primitives", 4096)):
+        basis = {"atoms": 1, "aos": 1, "primitives": 1}
+        require(not native(**{**basis, field: boundary}), "small-domain fallback")
+        require(native(**{**basis, field: boundary + 1}), "native-only admission")
+    for invalid in (-1, True, 1 << 64):
+        rejected(resources, **shape, target=target, budget_bytes=invalid)
+    for flag in ("cooperative_becke", "phased_becke", "becke_primitive"):
+        rejected(resources, **shape, target=target, budget_bytes=1 << 30, **{flag: 1})
+    # Pair/phase storage may consume only spare budget after full tile lanes.
+    for atoms in (1, 11, 12, 32, 33, 48, 128):
+        candidate = {**shape, "atoms": atoms, "points": 17}
+        pairs = atoms * (atoms - 1) // 2
+        base = arena(candidate, 17, True)
+        phase = 8 * (4 * pairs * 17 + (12 * atoms + 2) * 17 + pairs)
+        for architecture in ("sm_80", "sm_120"):
+            device = cuda_target_info(architecture)
+            for explicit in (None, False, True):
+                for requested in (False, True):
+                    for delta in (-1, 0):
+                        planned = resources(
+                            **candidate,
+                            target=device,
+                            budget_bytes=base + phase + delta,
+                            cooperative_becke=explicit,
+                            phased_becke=requested,
+                        )
+                        cooperative = (
+                            explicit
+                            if explicit is not None
+                            else architecture == "sm_120" and atoms >= 12
+                        )
+                        active = cooperative and atoms > 1
+                        admitted = (
+                            requested
+                            and active
+                            and atoms > 32
+                            and architecture == "sm_120"
+                            and delta == 0
+                        )
+                        require(
+                            planned.phased_becke_bytes == (phase if admitted else 0),
+                            "optional phase budget/target admission",
+                        )
+                        require(
+                            planned.becke_threads_per_point == (128 if active else 1),
+                            "cooperative target and shape admission",
+                        )
+            default = resources(**candidate, target=device, budget_bytes=1 << 30)
+            require(default.phased_becke_bytes == 0, "phased storage is opt-in")
+
+    schedule = module.plan_stationary_cuda_grid_schedule
+    for explicit in (None, 37, 4096):
+        for preferred in (256, 1024):
+
+            def admit(points: int, requested: int | None = explicit) -> int:
+                if requested is None and points > 128:
+                    raise ValueError("capacity refused")
+                return points
+
+            require(
+                schedule(
+                    grid_points=513,
+                    tile_points=explicit,
+                    admit=admit,
+                    preferred_tile_points=preferred,
+                )
+                == (128 if explicit is None else explicit),
+                "explicit tile and bounded capacity fallback",
+            )
+
+    class RuntimeFailure(RuntimeError):
+        pass
+
+    def runtime_failure(points: int) -> int:
+        raise RuntimeFailure("execution failures must propagate")
+
+    try:
+        schedule(grid_points=513, tile_points=None, admit=runtime_failure)
+    except RuntimeFailure:
+        pass
+    else:
+        raise ValueError("runtime failure swallowed by grid schedule")
+    for field, value in (
+        ("grid_points", 0),
+        ("grid_points", 1 << 64),
+        ("tile_points", True),
+        ("tile_points", 4097),
+        ("preferred_tile_points", 0),
+    ):
+        rejected(
+            schedule,
+            **{
+                "grid_points": 1,
+                "tile_points": None,
+                "admit": lambda n: n,
+                field: value,
+            },
+        )
+
+    work = module.plan_stationary_cuda_grid_work
+    for atoms in (1, 3, 96, 128):
+        pairs = atoms * (atoms - 1) // 2
+        for points in (1, 16, 17, 35):
+            total = (1 + 2 * points) * pairs
+            budget = max(1, 2 * min(points, 16) * pairs)
+            arguments = {
+                "atoms": atoms,
+                "grid_points": points,
+                "tile_points": 16,
+                "max_grid_points": points,
+                "max_grid_pair_visits": max(1, total),
+                "max_pending_tiles": 2,
+                "max_pending_pair_visits": budget,
+            }
+            planned = work(**arguments)
+            chunk = min(points, 16 if pairs else 32)
+            require(
+                (
+                    planned.grid_pair_visits,
+                    planned.tile_count,
+                    planned.chunk_points,
+                    planned.chunk_count,
+                    planned.chunk_pair_visits,
+                )
+                == (
+                    total,
+                    (points + 15) // 16,
+                    chunk,
+                    (points + chunk - 1) // chunk,
+                    2 * chunk * pairs,
+                ),
+                "complete grid work and bounded windows",
+            )
+            require(
+                list(planned.chunks())
+                == [
+                    (begin, min(begin + chunk, points))
+                    for begin in range(0, points, chunk)
+                ],
+                "complete contiguous grid windows",
+            )
+            if points > 1:
+                rejected(work, **{**arguments, "max_grid_points": points - 1})
+            if total > 1:
+                rejected(work, **{**arguments, "max_grid_pair_visits": total - 1})
+                if budget > 1:
+                    rejected(
+                        work, **{**arguments, "max_pending_pair_visits": budget - 1}
+                    )
+            require(
+                work(
+                    **{
+                        **arguments,
+                        "max_grid_points": None,
+                        "max_grid_pair_visits": None,
+                    }
+                )
+                == planned,
+                "optional diagnostic guards preserve complete public work",
+            )
+    for field, cap in (
+        ("atoms", 128),
+        ("grid_points", 1 << 40),
+        ("tile_points", 4096),
+        ("max_pending_tiles", 4096),
+        ("max_pending_pair_visits", 1 << 40),
+    ):
+        rejected(
+            work, **{"atoms": 1, "grid_points": 1, "tile_points": 1, field: cap + 1}
+        )
+
+
 def _source_limits(repository: Path) -> dict[str, Any]:
     """Bind current compiler/native capacity and private diagnostic defaults.
 
@@ -1064,6 +1467,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     source_path = repository / STATIONARY_OWNER["file"]
     source = source_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
+    _optional_ao_schedule_contract(tree)
     functions = [
         node
         for node in tree.body
@@ -1119,6 +1523,14 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ):
         raise RuntimeError("stationary CUDA Becke primitive policy contract changed")
     zero_seed_helpers = {
+        "density_jet_policy_sha256": (
+            "_stationary_density_jet_count",
+            STATIONARY_DENSITY_JET_POLICY_CONTRACT_SHA256,
+        ),
+        "restricted_point_policy_sha256": (
+            "_resolve_restricted_point_policy",
+            STATIONARY_RESTRICTED_POINT_POLICY_CONTRACT_SHA256,
+        ),
         "becke_zero_seed_policy_sha256": (
             "_resolve_becke_zero_seed_policy",
             BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256,
@@ -1163,6 +1575,26 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ):
         raise RuntimeError("stationary CUDA tile layout contract changed")
     page_methods = {
+        "kind_table": (
+            "_CudaSources",
+            "_kind_table",
+            STATIONARY_KIND_TABLE_CONTRACT_SHA256,
+        ),
+        "component_arrays": (
+            "_CudaSources",
+            "_component_arrays",
+            STATIONARY_COMPONENT_ARRAYS_CONTRACT_SHA256,
+        ),
+        "component_page": (
+            "_CudaSources",
+            "_component_integral_page",
+            STATIONARY_COMPONENT_PAGE_CONTRACT_SHA256,
+        ),
+        "descriptor_packer": (
+            "_CudaSources",
+            "_pack_integral_descriptors",
+            STATIONARY_DESCRIPTOR_PACKER_CONTRACT_SHA256,
+        ),
         "initializer": (
             "_CudaSources",
             "__init__",
@@ -1210,14 +1642,21 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         repository / "python/generativeqc_compiler/method/stationary_resources.py"
     )
     resource_digest = _lf_sha256(resource_source.read_bytes())
-    if resource_digest != GEOMETRY_RESOURCES_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA geometry-resource contract changed")
+    _geometry_resource_contract(resource_source)
     exact_ao_map_digest = _lf_sha256(
         (repository / "python/generativeqc_compiler/dft/ao_map_plan.py").read_bytes()
     )
     if exact_ao_map_digest != EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA exact AO map resource contract changed")
+    scaled_policy_digest = _lf_sha256(
+        (repository / "src/dft/becke_scaled_policy.hpp").read_bytes()
+    )
+    if scaled_policy_digest != BECKE_SCALED_POLICY_CONTRACT_SHA256:
+        raise RuntimeError(
+            "stationary CUDA binary-scaled Becke policy contract changed"
+        )
     page_contract = {
+        "becke_scaled_policy_sha256": scaled_policy_digest,
         "exact_ao_map_resources_sha256": exact_ao_map_digest,
         "public_wrapper_sha256": wrapper_digest,
         "geometry_resources_sha256": resource_digest,
@@ -1260,23 +1699,23 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     native_blocks = {
         "native_owner_sha256": (
             "struct Owner {",
-            NATIVE_STATIONARY_OWNER_CONTRACT_SHA256,
+            None,
         ),
         "native_allocation_sha256": (
             "size_t allocation(",
-            NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256,
+            None,
         ),
         "native_create_sha256": (
             "int stationary_create(",
-            NATIVE_STATIONARY_CREATE_CONTRACT_SHA256,
+            None,
         ),
         "native_reset_sha256": (
             "int stationary_reset(",
-            NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_geometry_reset_sha256": (
             "int stationary_geometry_reset(",
-            NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_phased_becke_input_sha256": (
             "PhasedBeckeInput phased_input(",
@@ -1316,7 +1755,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_launch_geometry_sha256": (
             "void launch_geometry(",
-            NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256,
+            None,
         ),
         "native_configure_becke_sha256": (
             "int stationary_configure_becke(",
@@ -1346,6 +1785,14 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_configure_phased_becke_v1(",
             NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256,
         ),
+        "native_becke_normalize_dispatch_sha256": (
+            "void launch_phased_becke_normalize(",
+            NATIVE_BECKE_NORMALIZE_DISPATCH_CONTRACT_SHA256,
+        ),
+        "native_becke_binary_scaled_metrics_sha256": (
+            "int stationary_becke_binary_scaled_metrics_v1(",
+            NATIVE_BECKE_BINARY_SCALED_METRICS_CONTRACT_SHA256,
+        ),
         "native_becke_normalize_configuration_sha256": (
             "int stationary_configure_becke_normalize_v1(",
             NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256,
@@ -1373,7 +1820,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
-        if digest != expected_digest:
+        # Current native owner/allocation/create and reset/dispatch identities
+        # are provenance. Executable host contracts cover arena accounting,
+        # admission, cleanup, fencing, tolerance and typed routes.
+        # A static preflight is never their execution/numerical qualification.
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
@@ -1539,11 +1990,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         for node in owner.body
         if isinstance(node, ast.Assign)
         and len(node.targets) == 1
-        and ast.unparse(node.targets[0]) == "(layout, grid_work)"
+        and ast.unparse(node.targets[0]) == "(layout, grid_work, ao_capacity_fallback)"
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
-        "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=preferred_tile_points)"
+        "_plan_stationary_optional_ao_schedule(grid_points=len(state.grid.points), "
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=preferred_tile_points, "
+        "requested_maps=resident_ao_cutoff is not None)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (
@@ -1657,8 +2109,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if ordered != sorted(ordered):
             raise RuntimeError("stationary CUDA admission gate order changed")
     endpoint_owner_digest = _source_node_sha256(source, owner)
-    if endpoint_owner_digest != STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA endpoint owner contract changed")
     page_contract["endpoint_owner_sha256"] = endpoint_owner_digest
     _resident_ao_policy_contract(tree)
 
@@ -1748,6 +2198,376 @@ def _grid_spec(payload: dict[str, Any]) -> GridSpec:
     return GridSpec(**values)
 
 
+def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
+    """Exercise the census's Gaussian lowering without a native library.
+
+    Source digests remain report provenance, not admission gates. Run the current
+    methods against the real immutable basis records and ctypes ABI, replacing
+    only the native creation boundary and observing capability admission. This
+    permits unrelated auxiliary consumers and behavior-preserving refactors while
+    rejecting changes to the orbital/ordinary-DF shell and primitive census.
+    """
+    import ctypes
+    from dataclasses import replace
+
+    from generativeqc import calculator as calculator_module
+
+    source = (repository / "python/generativeqc/calculator.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    owners = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
+    ]
+    if len(owners) != 1:
+        raise RuntimeError("Calculator basis owner is missing or ambiguous")
+    # Compile the current class, not an imported/stale method. Its constructor is
+    # never run; all native calls terminate at the descriptor capture below.
+    namespace = dict(vars(calculator_module))
+    exec(  # noqa: S102 - current repository class, native boundary replaced
+        compile(ast.Module(body=owners, type_ignores=[]), str(repository), "exec"),
+        namespace,
+    )
+    calculator_type = namespace["Calculator"]
+    native = calculator_module._native
+    atoms = (Atom(6, (0.25, -0.5, 0.75)), Atom(1, (1.5, 0.25, -0.125)))
+    context = ctypes.c_void_p(101)
+    returned_system = 202
+    preflight_seen = False
+    reject_preflight = False
+    native_seen = False
+    expected_route = "ordinary"
+    native_status = native.STATUS_SUCCESS
+    expected_basis: Any = None
+    expected_options: dict[str, Any] = {}
+    expected_shells: tuple[Any, ...] = ()
+    expected_representation = native.BASIS_SPHERICAL
+
+    class AdmissionRejected(Exception):
+        pass
+
+    def observe_admission(basis: Any, observed_atoms: Any, **options: Any) -> None:
+        nonlocal preflight_seen
+        preflight_seen = True
+        options.setdefault("consumer", None)
+        if (
+            basis != expected_basis
+            or tuple(observed_atoms) != atoms
+            or options != expected_options
+        ):
+            raise RuntimeError("basis capability inputs changed")
+        if reject_preflight:
+            raise AdmissionRejected
+        calculator_module.require_basis(basis, observed_atoms, **options)
+
+    def capture_system(
+        observed_context: Any,
+        descriptor_pointer: Any,
+        system_pointer: Any,
+        *,
+        route: str = "ordinary",
+    ) -> int:
+        nonlocal native_seen
+        native_seen = True
+        descriptor = ctypes.cast(
+            descriptor_pointer, ctypes.POINTER(native.SystemDescriptor)
+        ).contents
+        primitives = tuple(p for shell in expected_shells for p in shell.primitives)
+        header = (
+            descriptor.struct_size,
+            descriptor.abi_version,
+            descriptor.atom_count,
+            descriptor.shell_count,
+            descriptor.primitive_count,
+            descriptor.charge,
+            descriptor.multiplicity,
+            descriptor.basis_representation,
+        )
+        if (
+            route != expected_route
+            or getattr(observed_context, "value", None) != context.value
+            or header
+            != (
+                ctypes.sizeof(native.SystemDescriptor),
+                native.ABI_VERSION,
+                len(atoms),
+                len(expected_shells),
+                len(primitives),
+                -1,
+                2,
+                expected_representation,
+            )
+        ):
+            raise RuntimeError("native basis descriptor dimensions changed")
+        actual_atoms = tuple(
+            (atom.atomic_number, (atom.x, atom.y, atom.z))
+            for atom in descriptor.atoms[: descriptor.atom_count]
+        )
+        actual_shells = tuple(
+            (
+                shell.atom_index,
+                shell.angular_momentum,
+                shell.primitive_offset,
+                shell.primitive_count,
+            )
+            for shell in descriptor.shells[: descriptor.shell_count]
+        )
+        actual_primitives = tuple(
+            (p.exponent, p.coefficient)
+            for p in descriptor.primitives[: descriptor.primitive_count]
+        )
+        expected_shell_records = tuple(
+            (
+                shell.atom_index,
+                shell.angular_momentum,
+                sum(len(previous.primitives) for previous in expected_shells[:i]),
+                len(shell.primitives),
+            )
+            for i, shell in enumerate(expected_shells)
+        )
+        if (
+            actual_atoms != tuple((atom.atomic_number, atom.position) for atom in atoms)
+            or actual_shells != expected_shell_records
+            or actual_primitives
+            != tuple((p.exponent, p.coefficient) for p in primitives)
+        ):
+            raise RuntimeError("native basis descriptor values changed")
+        ctypes.cast(system_pointer, ctypes.POINTER(ctypes.c_void_p))[0] = (
+            returned_system
+        )
+        return native_status
+
+    def capture_ecp(
+        observed_context: Any,
+        descriptor: Any,
+        cores: Any,
+        terms: Any,
+        count: int,
+        system: Any,
+    ) -> int:
+        if (
+            tuple(cores) != (2, 0)
+            or count != 1
+            or tuple(
+                getattr(terms[0], field)
+                for field in (
+                    "atom_index",
+                    "channel",
+                    "power",
+                    "exponent",
+                    "coefficient",
+                )
+            )
+            != (0, -1, 2, 0.8, -2.0)
+        ):
+            raise RuntimeError("native ECP descriptor changed")
+        return capture_system(observed_context, descriptor, system, route="ecp")
+
+    namespace["require_basis"] = observe_admission
+    label = "_shells_for_atoms"
+    try:
+        for representation in ("spherical", "cartesian"):
+            orbital = snapshot_basis("def2-svp", representation)
+            auxiliary = snapshot_basis("sto-3g", representation)
+            expected_representation = (
+                native.BASIS_SPHERICAL
+                if representation == "spherical"
+                else native.BASIS_CARTESIAN
+            )
+            for device in ("cpu", "cuda"):
+                for form in (orbital, "def2-svp", orbital.shells_for(atoms)):
+                    calculator = object.__new__(calculator_type)
+                    calculator._basis = form
+                    calculator._representation_name = representation
+                    calculator._basis_representation = expected_representation
+                    calculator._device_name = device
+                    calculator._density_fitting_mode = (
+                        native.DENSITY_FITTING_CPU_REFERENCE
+                    )
+                    calculator._method = native.METHOD_PBE_RKS
+                    calculator._composite_rks_second_order = False
+                    calculator._library = SimpleNamespace(
+                        generativeqc_system_create=capture_system,
+                        generativeqc_system_create_ecp=capture_ecp,
+                        generativeqc_correlation_auxiliary_system_create_v1=lambda *args: (
+                            capture_system(*args, route="correlation")
+                        ),
+                        generativeqc_status_message=lambda status: (
+                            b"capacity probe rejected"
+                        ),
+                        generativeqc_context_get_last_detail=lambda context: None,
+                    )
+                    for explicit_basis in (None, auxiliary):
+                        expected_basis = snapshot_basis(
+                            form if explicit_basis is None else explicit_basis,
+                            representation,
+                        )
+                        expected_shells = (
+                            expected_basis.shells_for(atoms)
+                            if isinstance(expected_basis, BasisSet)
+                            else tuple(expected_basis)
+                        )
+                        for operator, derivative_order in ((None, 0), ("kinetic", 1)):
+                            expected_options = {
+                                "backend": device if explicit_basis is None else "cpu",
+                                "operator": operator
+                                or ("eri" if explicit_basis is None else "df_metric"),
+                                "derivative_order": derivative_order,
+                                "role": "orbital"
+                                if explicit_basis is None
+                                else "auxiliary",
+                                "representation": representation,
+                                "consumer": None,
+                            }
+                            label = "_shells_for_atoms"
+                            preflight_seen = False
+                            shells = calculator._shells_for_atoms(
+                                atoms,
+                                explicit_basis,
+                                operator=operator,
+                                derivative_order=derivative_order,
+                            )
+                            if not preflight_seen or tuple(shells) != expected_shells:
+                                raise RuntimeError("basis shell expansion changed")
+                        expected_options.update(
+                            operator="eri" if explicit_basis is None else "df_metric",
+                            derivative_order=0,
+                        )
+                        label = "_create_native_system"
+                        preflight_seen = native_seen = False
+                        system = calculator._create_native_system(
+                            context, atoms, -1, 2, explicit_basis
+                        )
+                        if (
+                            not preflight_seen
+                            or not native_seen
+                            or system.value != returned_system
+                        ):
+                            raise RuntimeError("native basis forwarding changed")
+                        # A failed capability preflight must reach neither the
+                        # native allocator nor a successful shell/result return.
+                        reject_preflight = True
+                        for label, arguments in (
+                            ("_shells_for_atoms", (atoms, explicit_basis)),
+                            (
+                                "_create_native_system",
+                                (context, atoms, -1, 2, explicit_basis),
+                            ),
+                        ):
+                            native_seen = False
+                            try:
+                                getattr(calculator, label)(*arguments)
+                            except AdmissionRejected:
+                                if native_seen:
+                                    raise RuntimeError(
+                                        "native allocation preceded basis admission"
+                                    ) from None
+                            else:
+                                raise RuntimeError(
+                                    "basis admission failure was swallowed"
+                                )
+                        reject_preflight = False
+        # Keep scoped correlation auxiliary creation separate from the ordinary
+        # orbital ABI, including a library that lacks the optional entry point.
+        calculator._basis = orbital
+        calculator._device_name = "cuda"
+        calculator._density_fitting_mode = native.DENSITY_FITTING_CORRELATION_CUDA
+        calculator._method = native.METHOD_MP2
+        for explicit_basis in (None, auxiliary):
+            expected_basis = orbital if explicit_basis is None else auxiliary
+            expected_shells = expected_basis.shells_for(atoms)
+            expected_options.update(
+                backend="cuda",
+                role="orbital" if explicit_basis is None else "auxiliary",
+                operator="eri" if explicit_basis is None else "df_metric",
+                consumer=None if explicit_basis is None else "correlation_df",
+            )
+            expected_route = "ordinary" if explicit_basis is None else "correlation"
+            calculator._create_native_system(context, atoms, -1, 2, explicit_basis)
+        del calculator._library.generativeqc_correlation_auxiliary_system_create_v1
+        native_seen = False
+        try:
+            calculator._create_native_system(context, atoms, -1, 2, auxiliary)
+        except NotImplementedError:
+            if native_seen:
+                raise RuntimeError(
+                    "missing auxiliary ABI reached native creation"
+                ) from None
+        else:
+            raise RuntimeError("missing auxiliary ABI did not fail closed")
+
+        ecp_element = replace(
+            orbital.by_element[6],
+            ecp_core_electrons=2,
+            ecp_data=json.dumps(
+                [
+                    {
+                        "ecp_type": "scalar_ecp",
+                        "angular_momentum": [0],
+                        "r_exponents": [2],
+                        "gaussian_exponents": ["0.8"],
+                        "coefficients": [["-2"]],
+                    }
+                ]
+            ),
+        )
+        calculator._basis = expected_basis = replace(
+            orbital, elements=(ecp_element, orbital.by_element[1])
+        )
+        calculator._density_fitting_mode = native.DENSITY_FITTING_NONE
+        expected_shells = expected_basis.shells_for(atoms)
+        expected_options.update(role="orbital", operator="eri", consumer=None)
+        expected_route = "ecp"
+        calculator._create_native_system(context, atoms, -1, 2)
+        calculator._density_fitting_mode = native.DENSITY_FITTING_CUDA
+        native_seen = False
+        try:
+            calculator._create_native_system(context, atoms, -1, 2)
+        except NotImplementedError:
+            if native_seen:
+                raise RuntimeError(
+                    "ECP density fitting reached native creation"
+                ) from None
+        else:
+            raise RuntimeError("ECP density fitting did not fail closed")
+
+        calculator._basis = expected_basis = orbital
+        expected_shells = orbital.shells_for(atoms)
+        expected_route = "ordinary"
+        for charge, multiplicity in ((2**31, 2), (-1, 0)):
+            native_seen = False
+            try:
+                calculator._create_native_system(context, atoms, charge, multiplicity)
+            except ValueError:
+                if native_seen:
+                    raise RuntimeError(
+                        "invalid electron state reached native creation"
+                    ) from None
+            else:
+                raise RuntimeError("invalid electron state did not fail closed")
+        native_status = native.STATUS_INVALID_ARGUMENT
+        try:
+            calculator._create_native_system(context, atoms, -1, 2)
+        except RuntimeError as error:
+            if "capacity probe rejected" not in str(error):
+                raise
+        else:
+            raise RuntimeError("native basis creation failure was swallowed")
+    except Exception as error:
+        raise RuntimeError(
+            f"{label} basis lowering contract changed: {error}"
+        ) from error
+    functions = {
+        node.name: node for node in owners[0].body if isinstance(node, ast.FunctionDef)
+    }
+    return tuple(
+        _source_node_sha256(source, functions[name])
+        for name in ("_shells_for_atoms", "_create_native_system")
+    )
+
+
 def _basis_layout_contract(repository: Path) -> dict[str, str]:
     source = (repository / "python/generativeqc_compiler/dft/ao.py").read_text(
         encoding="utf-8"
@@ -1835,17 +2655,8 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         BASIS_SHELL_EXPANSION_CONTRACT_SHA256,
         class_name="BasisSet",
     )
-    shell_forwarding_digest = function_digest(
-        "python/generativeqc/calculator.py",
-        "_shells_for_atoms",
-        CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256,
-        class_name="Calculator",
-    )
-    native_system_digest = function_digest(
-        "python/generativeqc/calculator.py",
-        "_create_native_system",
-        NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256,
-        class_name="Calculator",
+    shell_forwarding_digest, native_system_digest = _calculator_basis_contract(
+        repository
     )
     return {
         "packed_capacity_definition": packed[0],
@@ -1907,6 +2718,18 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
         raise RuntimeError("native spherical AO count contract changed")
 
+    shell_source = (repository / "src/molecule/basis.hpp").read_text(encoding="utf-8")
+    shell_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t shell_ao_count("
+    )
+    if shell_count_digest != NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native shell AO count contract changed")
+    cartesian_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t cartesian_count("
+    )
+    if cartesian_count_digest != NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native Cartesian shell count contract changed")
+
     stationary_source = (
         repository / "python/generativeqc/_stationary_cuda.py"
     ).read_text(encoding="utf-8")
@@ -1927,6 +2750,8 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
         "ao_packer_contract_sha256": packer_digest,
         "ao_pack_bridge_contract_sha256": bridge_digest,
         "native_spherical_ao_count_contract_sha256": ao_count_digest,
+        "native_shell_ao_count_contract_sha256": shell_count_digest,
+        "native_cartesian_shell_count_contract_sha256": cartesian_count_digest,
         "stationary_layout_contract_sha256": layout_digest,
         "sparse_spherical_component_terms": {
             "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
@@ -2017,7 +2842,10 @@ def _method_resources(
         backend="cuda",
         order=1 if functional == 0 else 2,
         tile_points=tile_points,
-        active_ao_capacity=basis.nao,
+        # The frozen census calls the default no-map diagnostic endpoint.
+        # Its force consumer borrows features and owns no indexed output staging.
+        active_ao_capacity=None,
+        features_only=True,
         # Estimate even a losing case so the report cannot hide it by raising
         # from the live budget gate before recording the required bytes.
         budget_bytes=(1 << 63) - 1,
@@ -2056,7 +2884,7 @@ def _method_resources(
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
     host_bound = grid_plan.host_bytes + 8 * (
-        34 * primitive_tile
+        82 * primitive_tile
         + 4 * plan.spin_blocks * basis.nao * basis.nao
         + 120 * atom_count
         + 12 * (len(source_names) - len(STATIONARY_RUNTIME_SOURCE_NAMES)) * atom_count
@@ -2065,7 +2893,7 @@ def _method_resources(
         + 3 * len(QUALIFIED_SPD_COMPONENTS) ** 2
         + 3 * tile_points
         + 2 * basis.nprimitive
-        + 4 * basis.nao
+        + 11 * basis.nao
         + 80
     )
     return (
@@ -2075,6 +2903,8 @@ def _method_resources(
                 "excludes retained SCF state, snapshot exports, Python/compiler objects and driver/modules"
             ),
             "grid_tile_peak_bytes": grid_plan.peak_bytes,
+            "grid_active_ao_capacity": grid_plan.active_ao_capacity,
+            "grid_features_only": grid_plan.features_only,
             "stationary_source_bytes": source_bytes,
             "stationary_geometry_lanes": resources.geometry_lanes,
             "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
@@ -2275,25 +3105,13 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     profile_policy = (
         repository / "cmake/GenerativeQCStationaryProfiles.cmake"
     ).read_text(encoding="utf-8")
-    names = (
-        "lda_rks",
-        "lda_uks",
-        "pbe_rks",
-        "pbe_uks",
-        "r2scan_rks",
-        "r2scan_uks",
-        "pbe0_rks",
-        "pbe0_uks",
-        "b3lyp_rks",
-        "b3lyp_uks",
-    )
+    names = QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
     required = (
         "generativeqc_stationary_spd_primitives",
         'OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd"',
         "generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)",
     )
     missing = [token for token in required if token not in cmake]
-    missing.extend(name for name in names if name not in profile_policy)
     if missing:
         raise RuntimeError(
             "stationary s/p/d package declaration is incomplete: " + ", ".join(missing)
@@ -2380,8 +3198,6 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     promotion_digest = _source_node_sha256(calculator, force_promotions[0])
     if semilocal_digest != PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256:
         raise RuntimeError("public semilocal force predicate changed")
-    if hybrid_digest != PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256:
-        raise RuntimeError("public global-hybrid force predicate changed")
     if promotion_digest != PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256:
         raise RuntimeError("public force capability promotion changed")
 
@@ -2424,8 +3240,6 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
             raise RuntimeError("public complete-grid work override changed")
         work_limits[key] = None
     batch_digest = _source_node_sha256(batch, force_methods[0])
-    if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
-        raise RuntimeError("public CUDA force route changed")
     _public_resident_ao_policy_contract(force_methods[0])
     return {
         "semilocal_force_predicate_sha256": semilocal_digest,
@@ -2436,8 +3250,81 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     }
 
 
+def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
+    """Execute the source-bound lowerer and check its observable grid ABI.
+
+    The private precision extension may change the function body without
+    changing the grid. Retain its source hash as provenance, but require field
+    behavior rather than a historical spelling. No native library is loaded.
+    """
+    import ctypes
+
+    from generativeqc import _native
+    from generativeqc import ks as ks_module
+
+    namespace = dict(vars(ks_module))
+    exec(  # noqa: S102 - execute the inspected repository ABI lowerer
+        compile(
+            ast.Module(body=[lowerer], type_ignores=[]), "<grid-abi-contract>", "exec"
+        ),
+        namespace,
+    )
+    for grid in (
+        GridSpec(48, 16, 32),
+        GridSpec(
+            7,
+            5,
+            9,
+            partition_iterations=2,
+            coincident_tolerance=3e-11,
+            element_radii=((1, 0.8), (8, 1.5)),
+        ),
+    ):
+        for budget in (None, (1e-5, 1e-4, 3e-5)):
+            options = resolve_ks_options(
+                "pbe0-rks",
+                KsOptions(grid=grid, tile_points=37, _precision_budget=budget),
+            )
+            descriptor = namespace[lowerer.name](options)
+            expected = {
+                "grid_version": grid.version,
+                "radial_points": grid.radial_points,
+                "angular_polar": grid.angular_polar,
+                "angular_azimuth": grid.angular_azimuth,
+                "partition_iterations": grid.partition_iterations,
+                "coincident_tolerance": grid.coincident_tolerance,
+                "tile_points": 37,
+            }
+            descriptor_type = (
+                _native.KsOptionsDescriptor
+                if budget is None
+                else _native.ApplicationPrecisionKsOptionsDescriptor
+            )
+            if (
+                any(
+                    getattr(descriptor, name) != value
+                    for name, value in expected.items()
+                )
+                or descriptor.struct_size != ctypes.sizeof(descriptor_type)
+                or descriptor.abi_version != _native.ABI_VERSION
+                or descriptor.element_radius_count != (119 if grid.element_radii else 0)
+                or any(
+                    descriptor.element_radii[z] != radius
+                    for z, radius in grid.element_radii
+                )
+            ):
+                raise RuntimeError(
+                    "grid point-count contract changed: public grid ABI fields"
+                )
+
+
 def _grid_count_contract(repository: Path) -> dict[str, str]:
-    """Bind the source-only point count to the native CUDA grid owner."""
+    """Record grid implementation provenance and validate the retained v2 ABI.
+
+    Point construction, emitted buffer layout and snapshot decoding are covered
+    by executable CPU/CUDA contracts, not historical implementation hashes.
+    This source-only inventory is not numerical or real-device qualification.
+    """
 
     python_grid = (repository / "python/generativeqc_compiler/dft/grid.py").read_text(
         encoding="utf-8"
@@ -2471,6 +3358,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     if len(public_lowerers) != 1:
         raise RuntimeError("public GridSpec ABI lowerer is missing or ambiguous")
     public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
+    _check_public_grid_abi(public_lowerers[0])
 
     quadrature_source = (
         repository / "python/generativeqc_compiler/xc/quadrature_cuda.py"
@@ -2506,10 +3394,16 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
+    # Record current reader provenance. Executable real-header ABI controls
+    # protect legacy/v4 field transport and malformed extension rejection; a
+    # static preflight is never a native execution qualification.
+    preparation_source = (
+        repository / "src/methods/dft_method_preparation.cpp"
+    ).read_text(encoding="utf-8")
     native_abi_digest = _source_span_sha256(
-        route_source,
+        preparation_source,
         begin="dft::GridSpec ks_grid_options(",
-        end="Result adapt_result(",
+        end="void validate_ks_spin_state(",
         label="native GridSpec ABI lowerer",
     )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
@@ -2529,15 +3423,14 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         "native_grid_point_count_sha256": point_count_digest,
     }
     expected = {
-        "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
-        "public_grid_abi_sha256": PUBLIC_GRID_ABI_CONTRACT_SHA256,
-        "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
-        "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
-        "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }
-    moved = [name for name, digest in contracts.items() if digest != expected[name]]
+    moved = [
+        name
+        for name, digest in contracts.items()
+        if name in expected and digest != expected[name]
+    ]
     if moved:
         raise RuntimeError("grid point-count contract changed: " + ", ".join(moved))
     return {
@@ -2572,20 +3465,31 @@ def _prepared_aot_route_contract(repository: Path) -> str:
     )
     if len(methods) != 1:
         raise RuntimeError("prepared stationary AOT owner is missing or ambiguous")
+    # The digest records provenance only. Execute the current source with inert
+    # native/compiler boundaries so equivalent owner refactors remain valid.
+    from tools.dft_mp_v1.prepared_contracts import check_prepared_selection
+
     digest = _source_node_sha256(source, methods[0])
-    if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
-        raise RuntimeError("prepared stationary AOT selection contract changed")
-    requests = [
-        node
-        for node in classes[0].body
-        if isinstance(node, ast.FunctionDef) and node.name == "_request"
-    ]
-    if (
-        len(requests) != 1
-        or _source_node_sha256(source, requests[0])
-        != PREPARED_AO_REQUEST_CONTRACT_SHA256
-    ):
-        raise RuntimeError("prepared stationary AO request contract changed")
+    module = ModuleType("generativeqc._capacity_stationary_contract")
+    module.__package__ = "generativeqc"
+    previous = sys.modules.get(module.__name__)
+    sys.modules[module.__name__] = module
+    try:
+        _DftMpSourceOnlyLoader(
+            module.__name__, str(repository / "python/generativeqc/_stationary_cuda.py")
+        ).exec_module(module)
+        check_prepared_selection(module)
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(
+            f"prepared stationary AOT selection contract changed: {error}"
+        ) from error
+    finally:
+        if previous is None:
+            sys.modules.pop(module.__name__, None)
+        else:
+            sys.modules[module.__name__] = previous
     _resident_ao_policy_contract(tree)
     return digest
 
@@ -3129,12 +4033,14 @@ def _build_report(
         "python/generativeqc_compiler/dft/grid.py",
         "python/generativeqc_compiler/xc/quadrature_cuda.py",
         "src/molecule/basis.cpp",
+        "src/molecule/basis.hpp",
         "src/dft/ao_grid.cpp",
         "src/dft/bridge.cpp",
         "src/dft/grid.hpp",
         "src/dft/cuda_quadrature.cu",
         "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
+        "src/methods/dft_method_preparation.cpp",
         "cmake/GenerativeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)

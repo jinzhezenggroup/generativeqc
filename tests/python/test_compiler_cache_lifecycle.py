@@ -32,8 +32,11 @@ def cache_workers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         " assert 'SCCACHE_STARTUP_NOTIFY' not in os.environ\n"
         " child = subprocess.Popen([sys.executable, '-c', "
         "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
-        " (root / (endpoint.parent.name + '.json')).write_text(json.dumps(\n"
+        " record = root / (endpoint.parent.name + '.json')\n"
+        " pending = record.with_suffix('.tmp')\n"
+        " pending.write_text(json.dumps(\n"
         "  {'server':os.getpid(), 'child':child.pid, 'endpoint':str(endpoint), 'cache':os.environ['SCCACHE_DIR']}))\n"
+        " pending.replace(record)\n"
         " if os.environ.get('QC_TEST_STARTUP') == 'fail':\n"
         "  print('server startup failed', flush=True); sys.exit(17)\n"
         " if os.environ.get('QC_TEST_STARTUP') != 'hang': endpoint.touch()\n"
@@ -103,14 +106,32 @@ def test_owned_workers_stop_on_every_outcome(
 
 
 @pytest.mark.parametrize("startup,code", [("fail", 17), ("hang", 124)])
-def test_startup_uses_the_same_budget_and_cleans_children(
+def test_startup_failure_and_timeout_clean_children(
     cache_workers: Path, monkeypatch: pytest.MonkeyPatch, startup: str, code: int
 ) -> None:
     monkeypatch.setenv("QC_TEST_STARTUP", startup)
-    result = compiler_cache.run_cached_compiler(["success"], 0.2, label="probe")
+    # Both cleanup paths need time to start Python and fork the recorded child.
+    # The short-budget contract is checked separately below.
+    result = compiler_cache.run_cached_compiler(["success"], 2, label="probe")
     assert result.returncode == code
-    assert result.duration_seconds < 1.2
+    assert result.timed_out == (startup == "hang")
+    assert result.duration_seconds < 3
+    if startup == "fail":
+        assert "server startup failed" in result.stderr
     _assert_workers_stopped(cache_workers, 1)
+
+
+def test_hanging_startup_uses_short_budget(
+    cache_workers: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("QC_TEST_STARTUP", "hang")
+    result = compiler_cache.run_cached_compiler(["success"], 0.2, label="probe")
+    assert result.returncode == 124 and result.timed_out
+    assert result.duration_seconds < 1.2
+    # Expiry may precede the Python fixture's PID receipt. The longer-budget
+    # test above requires a real child; still check any receipt produced here.
+    count = len(list(cache_workers.glob("gqc-scc-*.json")))
+    _assert_workers_stopped(cache_workers, count)
 
 
 @pytest.mark.parametrize(
@@ -296,3 +317,87 @@ def test_disk_policy_override_cannot_hide_default_shared_root(
     monkeypatch.setattr(compiler_cache.sys, "platform", "linux")
     with pytest.raises(ValueError, match="outside the shared"):
         compiler_cache.run_cached_compiler(["success"], 2, label="probe")
+
+
+@pytest.mark.parametrize("outcome", ["owner-exit", "worker-crash"])
+def test_explicit_owner_death_reclaims_private_cache_groups(
+    cache_workers: Path, outcome: str
+) -> None:
+    """A separate-session server must not outlive a killed outer worker."""
+    owner_read, owner_write = os.pipe()
+    environment = {
+        **os.environ,
+        "GENERATIVEQC_COMPILER_OWNER_FD": str(owner_read),
+    }
+    worker = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; "
+                "from generativeqc_compiler.common.compiler_cache import "
+                "CompilerCacheLauncher,run_cached_compiler; "
+                f"launcher=CompilerCacheLauncher(Path({str(cache_workers / 'sccache')!r}),"
+                "'sccache','sccache 0.16.0'); "
+                "run_cached_compiler(['timeout'],30,label='owner death',launcher=launcher)"
+            ),
+        ],
+        env=environment,
+        pass_fds=(owner_read,),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    sentinel = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 3
+        while not list(cache_workers.glob("gqc-scc-*.json")):
+            assert time.monotonic() < deadline, worker.communicate(timeout=1)
+            time.sleep(0.01)
+        if outcome == "worker-crash":
+            worker.kill()
+        else:
+            os.close(owner_write)
+            owner_write = -1
+        worker.communicate(timeout=3)
+        # On abrupt worker death its TemporaryDirectory cannot run cleanup;
+        # the process lifetime guarantee does not claim removal of crash debris.
+        records = list(cache_workers.glob("gqc-scc-*.json"))
+        assert len(records) == 1
+        record = json.loads(records[0].read_text())
+        deadline = time.monotonic() + 2
+        while any(_running(record[key]) for key in ("server", "child")):
+            assert time.monotonic() < deadline, record
+            time.sleep(0.01)
+        assert sentinel.poll() is None
+        # The watchdog also holds the lease until its cleanup finishes.
+        deadline = time.monotonic() + 2
+        while True:
+            with compiler_cache._sccache_slot(deadline) as (slot, _):
+                released = str(slot / "cache") == record["cache"]
+            if released:
+                break
+            assert time.monotonic() < deadline, "private cache lease survived cleanup"
+            time.sleep(0.01)
+    finally:
+        os.close(owner_read)
+        if owner_write >= 0:
+            os.close(owner_write)
+        if worker.poll() is None:
+            worker.kill()
+        worker.wait()
+        # Also reclaim test-owned groups when deliberately testing a broken
+        # launcher, so a failed regression never leaves fake cache servers alive.
+        for path in cache_workers.glob("gqc-scc-*.json"):
+            record = json.loads(path.read_text())
+            if _running(record["server"]):
+                os.killpg(record["server"], signal.SIGKILL)
+            endpoint = Path(record["endpoint"])
+            endpoint.unlink(missing_ok=True)
+            if endpoint.parent.exists():
+                endpoint.parent.rmdir()
+        sentinel.kill()
+        sentinel.wait()

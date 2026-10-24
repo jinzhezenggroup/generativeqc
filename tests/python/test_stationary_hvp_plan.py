@@ -90,9 +90,18 @@ def test_plan_identity_depends_on_semantics_not_method_name() -> None:
     assert alias.to_payload() == pbe.to_payload()
 
 
-def test_unqualified_range_exchange_primitive_still_fails_closed() -> None:
-    with pytest.raises(UnsupportedMethod, match="second-order rule"):
-        plan("CAM-B3LYP")
+def test_range_exchange_composes_second_integral_rules_without_public_promotion() -> (
+    None
+):
+    ranged = plan("CAM-B3LYP")
+    assert {"exchange_short_range", "exchange_long_range"} <= set(ranged.source_names)
+    for source in ("exchange_short_range", "exchange_long_range"):
+        assert ranged.integral_block(source, terms=2).response_inputs == (
+            "density_left",
+            "density_right",
+        )
+    with pytest.raises(NotImplementedError, match="native geometric"):
+        ranged.require_native_endpoint("cpu")
 
 
 def test_builtin_full_range_exchange_composes_without_method_dispatch() -> None:
@@ -167,21 +176,22 @@ def test_primitive_rule_cannot_collide_with_envelope_source(
         plan("PBE0")
 
 
-def test_tau_meta_gga_fails_closed_until_tau_response_is_registered() -> None:
-    with pytest.raises(UnsupportedMethod, match="ingredients"):
-        plan("R2SCAN")
+def test_tau_meta_gga_and_vv10_have_explicit_compiler_second_order_rules() -> None:
+    assert plan("R2SCAN").active_ingredients == ("rho", "sigma", "tau")
+    composite = plan("WB97M-V")
+    assert len(composite.source_names) == 12
+    assert {"nonlocal_ao", "nonlocal_grid", "nonlocal_weight"} <= set(
+        composite.source_names
+    )
+    assert composite.primitive_rules[0].identifier == "semilocal-rho-sigma-tau-v1"
 
 
-def test_ecp_and_non_scf_point_models_do_not_inherit_hessian_support() -> None:
+def test_ecp_source_envelope_and_non_scf_point_model_gate() -> None:
     method = resolve_method("PBE")
-    with pytest.raises(UnsupportedMethod, match="all-electron"):
-        StationaryHVPPlan(
-            method,
-            StationaryMeanField(
-                SCF_POINT_MODEL,
-                hamiltonian="scalar-semilocal-ecp",
-            ),
-        )
+    ecp = StationaryHVPPlan(
+        method, StationaryMeanField(SCF_POINT_MODEL, hamiltonian="scalar-semilocal-ecp")
+    )
+    assert {"ecp_local", "ecp_nonlocal"} <= set(ecp.source_names)
     with pytest.raises(UnsupportedMethod, match="SCF point model"):
         StationaryHVPPlan(method, StationaryMeanField("interior-v1"))
 

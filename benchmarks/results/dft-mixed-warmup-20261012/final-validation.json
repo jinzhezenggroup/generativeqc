@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-13",
+  "tested_source_commit": "7d2babc8022ca152139571239887d921f0baccc6",
+  "integrated_master": "ef225164173b3b20a5f5666370ad81a314a707da",
+  "library_sha256": "143ca37d31a1db659d0de4ef3d4f33ffc049c531b97bd3edca7e07c2e5fc55d9",
+  "provider_probe_sha256": "4cb32cfb64788ba974be46614db3ee80b8f6597c8d7934e6c98810e04f89d77f",
+  "phase_probe_sha256": "9d53502edfe276508b0fce09a8c5c2259390f3630dbefafe5b58dfcfb924f2bd",
+  "slurm_job": 7939,
+  "node": "n1",
+  "visible_devices": "1",
+  "native_mixed_census_and_independent_J_K_oracles": "PASS",
+  "memcheck_errors": 0,
+  "gpu_cases_passed": 25,
+  "gpu_scope": "24 PBE0/PBE/r2SCAN bounded-warmup cases plus one PBE0/B3LYP resident/fallback, seed/lifetime/budget regression; source-matched compiler files after master integration",
+  "focused_host_cases_passed": 136,
+  "compiler_modules": 535,
+  "compiler_structure_errors": 0,
+  "native_build": "PASS",
+  "sphinx_warnings_as_errors": "PASS",
+  "performance_scope": "No new timing claim: complete E+force screens retain their frozen pre-integration source/artifact identities. This final artifact additionally includes formatting and terminal handoff-failure handling.",
+  "gpu_log": {
+    "sha256": "689540a90cbd8af1b0db76dabbf6e79814a5973390c8032b3ece4db44b513a20",
+    "bytes": 806,
+    "text": "sccache 0.16.0\nslurm_job=7939 visible_devices=1\n7d2babc8022ca152139571239887d921f0baccc6\nef225164173b3b20a5f5666370ad81a314a707da\n143ca37d31a1db659d0de4ef3d4f33ffc049c531b97bd3edca7e07c2e5fc55d9  .artifacts/threshold/final-20261013/libgenerativeqc-final.so\n4cb32cfb64788ba974be46614db3ee80b8f6597c8d7934e6c98810e04f89d77f  .artifacts/threshold/final-20261013/generativeqc_cuda_fock_provider_tests\n9d53502edfe276508b0fce09a8c5c2259390f3630dbefafe5b58dfcfb924f2bd  .artifacts/threshold/final-20261013/ks_phase_values_probe\nCUDA mixed Coulomb work census and strict exchange PASS\n========= COMPUTE-SANITIZER\nCUDA mixed Coulomb work census and strict exchange PASS\n========= ERROR SUMMARY: 0 errors\n.........................                                                [100%]\n25 passed in 147.84s (0:02:27)\n"
+  }
+}

@@ -1,5 +1,7 @@
 import typing
 from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -16,7 +18,7 @@ from generativeqc._dft_gradient import (
     xc_geometry_topology_identity,
     xc_regularization_identity,
 )
-from generativeqc._ks_snapshot import _scf_xc_points
+from generativeqc._ks_snapshot import NativeKsSnapshot, _scf_xc_points
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.fixtures import basis_arguments
 from generativeqc_compiler.xc import functional
@@ -297,6 +299,160 @@ def test_stationary_contract_accepts_consistent_rks_and_uks(
     assert contract.family == expected_family
     assert contract.to_payload()["force_capability"] == "unsupported"
     assert contract.identity == StationaryDerivativeContract(value.identity).identity
+
+
+@pytest.mark.parametrize("allowance", (1e-8, 1e-5, 1e-4))
+def test_all_force_compositions_inherit_only_the_native_allowance(
+    allowance: float,
+) -> None:
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source._batch = SimpleNamespace(_ensure_open=lambda: None)
+    source.stationarity_tolerance = allowance
+    value = replace(state(), physical_residual=allowance / 2, _source=source)
+    force = StationaryDerivativeContract.for_native_force(value)
+    assert force.allow_budget_stationarity is (allowance > 1e-8)
+    assert force._validate_arrays(value) is value
+    if allowance > 1e-8:
+        with pytest.raises(ValueError, match="physical residual"):
+            StationaryDerivativeContract(value.identity)._validate_arrays(value)
+    with pytest.raises(ValueError):
+        force.validate(value)
+
+
+def test_force_budget_needs_native_allowance_and_never_relaxes_response_default() -> (
+    None
+):
+    value = replace(state(), physical_residual=2e-6)
+    loose = StationaryDerivativeContract(value.identity, allow_budget_stationarity=True)
+    with pytest.raises(ValueError, match="physical residual"):
+        loose._validate_arrays(value)
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source._batch = SimpleNamespace(_ensure_open=lambda: None)
+    source.stationarity_tolerance = 1e-5
+    value = replace(value, _source=source)
+    assert loose._validate_arrays(value) is value
+    with pytest.raises(ValueError, match="physical residual"):
+        StationaryDerivativeContract(value.identity)._validate_arrays(value)
+    with pytest.raises(ValueError):
+        loose.validate(value)
+    with pytest.raises(AttributeError, match="immutable"):
+        source.stationarity_tolerance = 1e-4
+
+
+@pytest.fixture
+def authenticated_state(monkeypatch: pytest.MonkeyPatch) -> typing.Any:
+    """Use the real content proof with a controllable native lifetime boundary."""
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source.stationarity_tolerance = 1e-5
+    value = state()
+    # A native-authorized density discrepancy exercises the difference between
+    # force and strict response policies even with a zero reported residual.
+    density = value.density.copy()
+    density[0, 0, 0] += 2e-6
+    value = replace(value, density=density, _source=source)
+    source._identity = value.identity
+    source._residual = value.physical_residual
+    source._arrays = {
+        name: getattr(value, name).copy()
+        for name in (
+            "density",
+            "fock",
+            "coefficients",
+            "orbital_energies",
+            "occupations",
+            "weighted_density",
+            "overlap",
+        )
+    }
+    live = SimpleNamespace(current=True)
+
+    def check_current(snapshot: NativeKsSnapshot) -> None:
+        if not live.current:
+            raise ValueError("stale native snapshot")
+
+    monkeypatch.setattr(NativeKsSnapshot, "check_current", check_current)
+    return value, live
+
+
+def test_repeated_validation_keeps_policy_and_native_lifetime_gates(
+    authenticated_state: typing.Any,
+) -> None:
+    value, live = authenticated_state
+    force = StationaryDerivativeContract.for_native_force(value)
+    assert force.validate(value) is value
+    assert StationaryDerivativeContract.for_native_force(value).validate(value) is value
+    with pytest.raises(ValueError, match="density reconstruction"):
+        StationaryDerivativeContract(value.identity).validate(value)
+    assert force.validate(value) is value
+    live.current = False
+    with pytest.raises(ValueError, match="stale"):
+        force.validate(value)
+
+
+@pytest.mark.parametrize("flag", ["successful", "converged", "physical"])
+def test_repeated_validation_rechecks_state_gates(
+    authenticated_state: typing.Any,
+    flag: str,
+) -> None:
+    value, _ = authenticated_state
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    object.__setattr__(value, flag, False)
+    with pytest.raises(ValueError, match="successful converged physical"):
+        contract.validate(value)
+
+
+def test_repeated_validation_rechecks_native_allowance(
+    authenticated_state: typing.Any,
+) -> None:
+    value, _ = authenticated_state
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    object.__setattr__(value._source, "stationarity_tolerance", 1e-8)
+    with pytest.raises(ValueError, match="density reconstruction"):
+        contract.validate(value)
+
+
+@pytest.mark.parametrize("change", ["replace", "shape", "writable", "alias"])
+def test_repeated_validation_rejects_changed_array_contents_or_interpretation(
+    authenticated_state: typing.Any,
+    change: str,
+) -> None:
+    value, _ = authenticated_state
+    if change in ("writable", "alias"):
+        backing = value.overlap.copy()
+        array = backing.view()
+        if change == "alias":
+            array.flags.writeable = False
+        object.__setattr__(value, "overlap", array)
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    if change == "replace":
+        object.__setattr__(value, "overlap", 2 * value.overlap)
+    elif change == "shape":
+        value.overlap.shape = (4,)
+    else:
+        backing[0, 0] = -1
+    with pytest.raises(ValueError):
+        contract.validate(value)
+
+
+def test_validated_state_does_not_extend_its_own_lifetime(
+    authenticated_state: typing.Any,
+) -> None:
+    import weakref
+
+    value, _ = authenticated_state
+    value = replace(value)
+    source = value._source
+    StationaryDerivativeContract.for_native_force(value).validate(value)
+    reference = weakref.ref(value)
+    del value
+    assert reference() is None
+    assert source is authenticated_state[0]._source
 
 
 @pytest.mark.parametrize(
@@ -791,3 +947,97 @@ def test_finite_xc_components_cannot_publish_an_overflowed_total() -> None:
 
     with pytest.raises(ArithmeticError, match="nonfinite total"):
         _ = XcDirectionalComponents(1e308, 1e308, 0.0).total
+
+
+@pytest.mark.parametrize(
+    "allowance", [0.0, -1e-8, np.nan, np.inf, np.nextafter(1e-4, np.inf)]
+)
+def test_budget_contract_revalidates_native_allowance_bounds(allowance: float) -> None:
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source.stationarity_tolerance = allowance
+    value = replace(state(), _source=source)
+    with pytest.raises(ValueError, match="invalid native stationary force allowance"):
+        StationaryDerivativeContract(
+            value.identity, allow_budget_stationarity=True
+        )._validate_arrays(value)
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("opt_in", [False, True])
+def test_budget_contract_keeps_density_reconstruction_relaxation_native_and_opt_in(
+    native: bool, opt_in: bool
+) -> None:
+    source = object.__new__(NativeKsSnapshot) if native else SimpleNamespace()
+    source._handle = 0
+    source.stationarity_tolerance = 1e-5
+    value = state()
+    density = value.density.copy()
+    density[0, 0, 0] += 2e-6
+    value = replace(value, density=density, _source=source)
+    contract = StationaryDerivativeContract(
+        value.identity, allow_budget_stationarity=opt_in
+    )
+    if native and opt_in:
+        assert contract._validate_arrays(value) is value
+    else:
+        with pytest.raises(ValueError, match="density reconstruction mismatch"):
+            contract._validate_arrays(value)
+
+
+@pytest.mark.parametrize(
+    "field,message",
+    [
+        ("weighted_density", "weighted-density"),
+        ("coefficients", "S-orthonormal"),
+        ("fock", "Fock eigen residual"),
+    ],
+)
+def test_budget_contract_preserves_strict_orbital_and_weighted_density_algebra(
+    field: str, message: str
+) -> None:
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source.stationarity_tolerance = 1e-4
+    value = state()
+    array = getattr(value, field).copy()
+    array[0, 0, 0] += 2e-6
+    value = replace(value, **{field: array}, _source=source)
+    with pytest.raises(ValueError, match=message):
+        StationaryDerivativeContract(
+            value.identity, allow_budget_stationarity=True
+        )._validate_arrays(value)
+
+
+@pytest.mark.parametrize("allowance", [None, 1e-8, 1e-5])
+@pytest.mark.parametrize("residual", [0.0, 2e-6, 2e-5])
+def test_cuda_force_entry_validates_native_budget_before_device_work(
+    monkeypatch: pytest.MonkeyPatch, allowance: float | None, residual: float
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    class ValidatedBeforeDevice(Exception):
+        pass
+
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    if allowance is not None:
+        source.stationarity_tolerance = allowance
+    value = replace(state(), physical_residual=residual, _source=source)
+
+    def validate(
+        contract: StationaryDerivativeContract, observed: StationaryKsState
+    ) -> None:
+        assert observed is value
+        assert contract.allow_budget_stationarity is (
+            allowance is not None and allowance > 1e-8
+        )
+        contract._validate_arrays(observed)
+        raise ValidatedBeforeDevice
+
+    monkeypatch.setattr(StationaryDerivativeContract, "validate", validate)
+    expected = ValidatedBeforeDevice if residual <= (allowance or 1e-8) else ValueError
+    with pytest.raises(expected):
+        runtime._complete_rks_cuda_gradient_diagnostic(
+            value, None, compiler=None, cache=Path("unused")
+        )

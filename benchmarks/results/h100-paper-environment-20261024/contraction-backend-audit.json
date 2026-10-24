@@ -1,0 +1,26 @@
+{
+  "archived_gpu4pyscf_contraction_backend": "UNAVAILABLE in the inspected retained originals; missing package field does not prove absence",
+  "inspected": [
+    {
+      "revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/jobs.json.xz",
+      "sha256": "9a0dc3721d2db5b9af52af4baff224edef32eaf5b86b571613c4ab4b5fe713a4",
+      "contains_cutensor_or_contraction_engine": false
+    },
+    {
+      "revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/provenance.json.xz",
+      "sha256": "b447e2ca30965206e175410cfbf26a98ce99049a1af7181479adcd2133f1d6fa",
+      "contains_cutensor_or_contraction_engine": false
+    },
+    {
+      "revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/gpu4pyscf.json.xz",
+      "sha256": "744e1f5b2fbf89d16d02a49691b3b84d6d423d7d5535322b0e66c621b00fc763",
+      "contains_cutensor_or_contraction_engine": false
+    }
+  ],
+  "current_CPU_import_observation": "UserWarning: using cupy as the tensor contraction engine; import then failed cudaErrorInsufficientDriver on CPU",
+  "actual_H100_import_and_engine": "NOT_RUN",
+  "interpretation": "software/backend confounder remains explicit; no hardware-only comparison claimed"
+}

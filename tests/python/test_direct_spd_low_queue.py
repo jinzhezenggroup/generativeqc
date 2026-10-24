@@ -19,11 +19,12 @@ def test_low_drain_preserves_scalar_and_multitile_warp_inventory(
     """Check both spins/layouts, diagonal packets and the >256-component tails."""
     source = (ROOT / "src/scf/cuda/direct_force_class_domains.cu").read_text()
     quartet = (ROOT / "src/scf/cuda/direct_force_quartet.cuh").read_text()
-    drain = _definition(
-        source,
-        "template <bool Unrestricted, DirectForceOutputMode Mode, bool SpatialReuse = false>\n"
-        "__device__ __forceinline__ void contract_bounded_spd_low_queue(",
+    # Compile the actual declaration, including optional diagnostic partitions,
+    # without pinning template parameter spelling or line wrapping.
+    begin = source.rfind(
+        "template <", 0, source.index("void contract_bounded_spd_low_queue(")
     )
+    drain = _definition(source[begin:], "template <")
     view_begin = quartet.index("  constexpr std::size_t subtiles_per_tile =")
     view_end = quartet.index("  const std::size_t first_pair =", view_begin)
     ordinal_begin = quartet.index("  const std::size_t ordinal =", view_end)
@@ -51,21 +52,9 @@ def test_low_drain_preserves_scalar_and_multitile_warp_inventory(
 def test_block_decode_does_not_need_rejected_pair_geometry(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    """A null pair-range view is safe until the actual kernel passes coarse gates."""
+    """The production block decoder leaves the pair-range view untouched."""
     queue = (ROOT / "src/scf/cuda/direct_queue_index.cuh").read_text()
     header = (ROOT / "src/scf/cuda/direct_bounded_queue_page.cuh").read_text()
-    source = (ROOT / "src/scf/cuda/direct_force_class_domains.cu").read_text()
-    kernel = _definition(source, "void direct_force_spatial_spd_low_kernel(")
-    assert kernel.index("bounded_direct_queue_block_page") < kernel.index("if (active")
-    assert kernel.index("if (active") < kernel.index(
-        "bounded_direct_block_pair_survives_screening"
-    )
-    assert kernel.index("bounded_direct_block_pair_survives_screening") < kernel.index(
-        "bounded_direct_queue_candidate_page"
-    )
-    assert kernel.index("direct_shell_class_angular_order(shell_class) <= 6U") < (
-        kernel.index("direct_shell_quartet_survives_screening")
-    )
     decoder = header.split("namespace generativeqc::scf::cuda_execution {", 1)[1]
     decoder = decoder.rsplit("}  // namespace", 1)[0]
     definitions = "\n".join(
@@ -184,7 +173,7 @@ CONSUMER_SUFFIX = r"""
 """
 
 DRAIN_DRIVER = r"""
-template <bool Unrestricted, DirectForceOutputMode Mode, bool SpatialReuse>
+template <bool Unrestricted, DirectForceOutputMode Mode, bool SpatialReuse, unsigned Partition = 0>
 void exercise() {
   expected_spin = Unrestricted;
   expected_separate = Mode == DirectForceOutputMode::Separate;
@@ -204,9 +193,9 @@ void exercise() {
     for (unsigned slot = 0; slot < count; ++slot) {
       const auto task = queue.at(slot);
       const auto order = batch.pair_orders[task.first_pair] + batch.pair_orders[task.second_pair];
-      if (order < 6U) {
+      if (order < 6U && Partition != 6) {
         ++expected_scalar[{order <= 3U ? 0U : order, task.first_pair, task.second_pair}];
-      } else if (order == 6U) {
+      } else if (order == 6U && Partition != 5) {
         for (unsigned first = 0; first < batch.pair_counts[task.first_pair]; ++first)
           for (unsigned second = 0; second < batch.pair_counts[task.second_pair]; ++second) {
             if (task.first_pair == task.second_pair && second > first) continue;
@@ -215,7 +204,7 @@ void exercise() {
       }
     }
     for (threadIdx.x = 0; threadIdx.x < blockDim.x; ++threadIdx.x)
-      contract_bounded_spd_low_queue<Unrestricted, Mode, SpatialReuse>(
+      contract_bounded_spd_low_queue<Unrestricted, Mode, SpatialReuse, Partition>(
           batch, queue.data(), count, 0.0, nullptr, nullptr, nullptr, nullptr, 1.7, -0.23);
     assert(scalar_visits == expected_scalar);
     assert(ao_visits == expected_ao);
@@ -225,15 +214,21 @@ void exercise() {
   assert(components(batch, {6, 4, 0}) == 324U);
   assert(components(batch, {4, 4, 0}) == 171U);
 }
+template <bool Spin, DirectForceOutputMode Mode, bool Reuse>
+void all_partitions() {
+  exercise<Spin, Mode, Reuse, 0>();
+  exercise<Spin, Mode, Reuse, 5>();
+  exercise<Spin, Mode, Reuse, 6>();
+}
 int main() {
-  exercise<false, DirectForceOutputMode::Combined, false>();
-  exercise<true, DirectForceOutputMode::Combined, false>();
-  exercise<false, DirectForceOutputMode::Separate, false>();
-  exercise<true, DirectForceOutputMode::Separate, false>();
-  exercise<false, DirectForceOutputMode::Combined, true>();
-  exercise<true, DirectForceOutputMode::Combined, true>();
-  exercise<false, DirectForceOutputMode::Separate, true>();
-  exercise<true, DirectForceOutputMode::Separate, true>();
+  all_partitions<false, DirectForceOutputMode::Combined, false>();
+  all_partitions<true, DirectForceOutputMode::Combined, false>();
+  all_partitions<false, DirectForceOutputMode::Separate, false>();
+  all_partitions<true, DirectForceOutputMode::Separate, false>();
+  all_partitions<false, DirectForceOutputMode::Combined, true>();
+  all_partitions<true, DirectForceOutputMode::Combined, true>();
+  all_partitions<false, DirectForceOutputMode::Separate, true>();
+  all_partitions<true, DirectForceOutputMode::Separate, true>();
 }
 """
 

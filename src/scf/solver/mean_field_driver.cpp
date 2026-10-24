@@ -153,17 +153,6 @@ Matrix build_fock(const PreparedFockPlan& plan, const Matrix& hcore, const Matri
   return assemble_fock(plan.strategy(), hcore, plan.build(density)).alpha;
 }
 
-/** Build the Pulay energy-weighted density from the exact determinant returned
- * to force consumers and the physical Fock evaluated at that same density.
- * A frame obtained from F[D_old] may project the returned D, but its orbital
- * energies must not be reused after rebuilding F[D]. */
-Matrix physical_weighted_density(const Matrix& density, const Matrix& fock, std::size_t n,
-                                 double occupation_weight) {
-  Matrix weighted = multiply(multiply(density, fock, n), density, n);
-  for (double& value : weighted) value /= occupation_weight;
-  return weighted;
-}
-
 /** Substitute only the provider of this actual matrix. Iterative matrices may
  * be DIIS-extrapolated, so their frames never authorize physical-state reuse. */
 EigenResult diagonalize(const PreparedFockPlan& plan, const Matrix& matrix,
@@ -196,7 +185,7 @@ void finalize_scf(const PreparedFockPlan& plan, const integrals::IntegralData& i
   final_fock = build_fock(plan, ints.hcore, density);
   result.energy = electronic_energy(density, ints.hcore, final_fock) + ints.nuclear_repulsion;
   if (compute_forces) {
-    const Matrix weighted = physical_weighted_density(density, final_fock, n, 2.0);
+    const Matrix weighted = reference::physical_weighted_density(density, final_fock, n, 2.0);
     result.forces =
         gradient::analytic_forces(ints, density, weighted, plan.energy_derivative(density));
   }

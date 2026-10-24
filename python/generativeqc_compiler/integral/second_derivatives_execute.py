@@ -151,6 +151,7 @@ def compile_second_derivative(
                 "src/tensor/cuda_runtime.cuh",
                 "src/runtime/bounded_workspace.hpp",
                 "src/runtime/cuda_resources.cuh",
+                "src/runtime/cuda_device_scope.hpp",
                 "src/runtime/resource_cuda.cuh",
                 "src/runtime/resource_ledger.hpp",
                 "src/runtime/residency_boundaries.hpp",

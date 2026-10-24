@@ -35,6 +35,7 @@
 #include "backends/cuda/gfn2_scc_setup_topology.hpp"
 #include "backends/cuda/gfn2_terminal_classical_energy.cuh"
 #include "dft/dispersion/d4_reference.hpp"
+#include "generated_gfn2_electronic_native.cuh"
 #include "model/gfn2/aes2.hpp"
 #include "model/gfn2/basis.hpp"
 #include "model/gfn2/coordination.hpp"
@@ -56,9 +57,8 @@
 #include "runtime/gfn2_cuda_execution.hpp"
 #include "runtime/gfn2_cuda_topology_staging.hpp"
 #include "runtime/molecular_request.hpp"
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
-#include "generated_gfn2_electronic_native.cuh"
 
 namespace generativeqc::xtb::detail {
 namespace {

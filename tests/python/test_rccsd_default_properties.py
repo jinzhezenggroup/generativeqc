@@ -1,98 +1,118 @@
-"""Exercise the actual default-selection guards without native SCF execution."""
+"""Exercise output selection through real facades without native SCF execution."""
 
 from __future__ import annotations
 
-import ast
+import ctypes
 import typing
-from pathlib import Path
-from types import MethodType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
-from generativeqc import _native as NATIVE
-from generativeqc.calculator import Calculator
+from generativeqc import Calculator, _native
 
-ROOT = Path(__file__).resolve().parents[2]
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+
 SUPPORTED = frozenset({"energy", "forces"})
+ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+
+
+class _NativeRequest(Exception):
+    """Stop at the native execution boundary, recording its output contract."""
+
+    def __init__(self, outputs: typing.Iterable[typing.Any]) -> None:
+        self.force_buffers = tuple(
+            (bool(output.forces), output.force_count) for output in outputs
+        )
 
 
 @pytest.fixture(params=("singlepoint", "batch"))
-def selector(request: pytest.FixtureRequest) -> typing.Any:
+def selector(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> tuple[bool, typing.Callable[..., tuple[tuple[bool, int], ...]]]:
     batched = request.param == "batch"
-    # The public singlepoint wrapper serializes context ownership; property
-    # selection lives in the common execution method it calls.
-    filename, owner, method = (
-        ("batch.py", "PreparedBatch", "execute")
-        if batched
-        else ("calculator.py", "Calculator", "_singlepoint")
-    )
-    tree = ast.parse(
-        (ROOT / "python/generativeqc" / filename).read_text(encoding="utf-8")
-    )
-    cls = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == owner
-    )
-    function = next(
-        node
-        for node in cls.body
-        if isinstance(node, ast.FunctionDef) and node.name == method
-    )
-    guard = next(
-        node
-        for node in function.body
-        if isinstance(node, ast.If) and ast.unparse(node.test) == "properties is None"
-    )
-    wrapper = ast.parse("def select(self, properties):\n    return properties\n")
-    wrapper.body[0].body.insert(0, guard)
-    namespace = {"_native": NATIVE}
-    # Only checked-in repository code is compiled; no external payload is read.
-    code = compile(ast.fix_missing_locations(wrapper), filename, "exec")
-    exec(code, namespace)  # noqa: S102
-    return batched, namespace["select"]
 
+    def handle(*args: typing.Any) -> int:
+        args[-1]._obj.value = 1
+        return _native.STATUS_SUCCESS
 
-def _owner(batched: bool, method: int, *, fitted: bool = False) -> SimpleNamespace:
-    calculator = SimpleNamespace(
-        _method=method,
-        _method_name={
-            NATIVE.METHOD_RCCSD: "rccsd",
-            NATIVE.METHOD_RCCSD_T: "rccsd(t)",
-            NATIVE.METHOD_MP2: "mp2",
-            NATIVE.METHOD_RHF: "rhf",
-        }[method],
-        _device_name="cpu",
-        _density_fitting_mode=int(fitted),
-        _ks_options=None,
-        _capabilities=SimpleNamespace(supported_properties=SUPPORTED),
+    def available(method: int, output: typing.Any) -> int:
+        output._obj.value = 1
+        return _native.STATUS_SUCCESS
+
+    def execute_calculation(handle: object, output: typing.Any) -> int:
+        raise _NativeRequest((output._obj,))
+
+    def execute_batch(
+        handle: object, inputs: object, count: int, outputs: typing.Any, size: int
+    ) -> int:
+        raise _NativeRequest(outputs)
+
+    def success(*args: object) -> int:
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(
+        generativeqc_method_available=available,
+        generativeqc_context_create=handle,
+        generativeqc_context_destroy=success,
+        generativeqc_system_destroy=success,
+        generativeqc_calculation_prepare=handle,
+        generativeqc_calculation_execute=execute_calculation,
+        generativeqc_calculation_destroy=success,
+        generativeqc_batch_prepare=handle,
+        generativeqc_batch_execute=execute_batch,
+        generativeqc_batch_destroy=success,
+        generativeqc_batch_get_system_count=lambda owner: 1,
     )
-    # The actual facade guard delegates default selection to this checked-in
-    # helper. Bind it rather than copying the policy or returning a test stub.
-    calculator._default_properties = MethodType(
-        Calculator._default_properties, calculator
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    install_registry_stub(library, SUPPORTED)
+    # Basis/system construction is outside this selection contract. The real
+    # facade still validates requests and builds the native output descriptors.
+    monkeypatch.setattr(
+        Calculator, "_create_native_system", lambda *args, **kwargs: ctypes.c_void_p(1)
     )
-    return SimpleNamespace(_calculator=calculator) if batched else calculator
+
+    def select(
+        method: str,
+        properties: typing.Any = None,
+        *,
+        fitted: bool = False,
+    ) -> tuple[tuple[bool, int], ...]:
+        calculator = Calculator(
+            method=method, device="cpu", density_fitting="cpu" if fitted else "none"
+        )
+        try:
+            with pytest.raises(_NativeRequest) as caught:
+                if batched:
+                    with calculator.prepare_batch([ATOMS], warm_start=False) as batch:
+                        batch.execute(properties=properties)
+                else:
+                    calculator.singlepoint(ATOMS, properties=properties)
+            return caught.value.force_buffers
+        finally:
+            calculator.clear_cache()
+
+    return batched, select
 
 
 def test_rccsd_omitted_properties_remain_energy_only(selector: typing.Any) -> None:
-    batched, select = selector
-    assert select(_owner(batched, NATIVE.METHOD_RCCSD), None) == {"energy"}
+    _, select = selector
+    assert select("rccsd") == ((False, 0),)
 
 
 @pytest.mark.parametrize("properties", (("energy",), ("energy", "forces")))
 def test_explicit_rccsd_requests_are_not_replaced(
     selector: typing.Any, properties: tuple[str, ...]
 ) -> None:
-    batched, select = selector
-    assert select(_owner(batched, NATIVE.METHOD_RCCSD), properties) is properties
+    _, select = selector
+    expected = (True, 6) if "forces" in properties else (False, 0)
+    assert select("rccsd", properties) == (expected,)
 
 
-@pytest.mark.parametrize("method", (NATIVE.METHOD_RHF, NATIVE.METHOD_RCCSD_T))
+@pytest.mark.parametrize("method", ("rhf", "rccsd(t)"))
 def test_other_method_defaults_remain_unchanged(
-    selector: typing.Any, method: int
+    selector: typing.Any, method: str
 ) -> None:
-    batched, select = selector
-    assert select(_owner(batched, method), None) is SUPPORTED
+    _, select = selector
+    assert select(method) == ((True, 6),)
 
 
 @pytest.mark.parametrize("fitted", (False, True))
@@ -100,5 +120,30 @@ def test_existing_mp2_default_policy_is_preserved(
     selector: typing.Any, fitted: bool
 ) -> None:
     batched, select = selector
-    expected = {"energy"} if fitted and not batched else SUPPORTED
-    assert select(_owner(batched, NATIVE.METHOD_MP2, fitted=fitted), None) == expected
+    expected = (False, 0) if fitted and not batched else (True, 6)
+    assert select("mp2", fitted=fitted) == (expected,)
+
+
+@pytest.mark.parametrize(
+    ("properties", "error", "message"),
+    (
+        ("energy", TypeError, "iterable of property names"),
+        ((), ValueError, "must include 'energy'"),
+        (("forces",), ValueError, "must include 'energy'"),
+        (
+            ("energy", "dipole"),
+            ValueError,
+            "unsupported properties|does not support properties",
+        ),
+        ([[]], TypeError, "hashable property names"),
+    ),
+)
+def test_invalid_rccsd_requests_fail_before_native_execution(
+    selector: typing.Any,
+    properties: typing.Any,
+    error: type[Exception],
+    message: str,
+) -> None:
+    _, select = selector
+    with pytest.raises(error, match=message):
+        select("rccsd", properties)

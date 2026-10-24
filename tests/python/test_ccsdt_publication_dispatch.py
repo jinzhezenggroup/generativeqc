@@ -1,24 +1,19 @@
 """Publication control flow using sentinels, not a CUDA mathematical oracle.
 
-Execute the repository result method without importing native-runtime owners.
+Call the imported result method with intercepted execution boundaries.
 """
 
 from __future__ import annotations
 
-import ast
 import typing
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "tools/generativeqc_cc/triples_complete_gradient.py"
+from tools.generativeqc_cc import triples_complete_gradient as gradient_owner
 
-
-class PublicationError(RuntimeError):
-    pass
+PublicationError = gradient_owner.ImplicitSolveError
 
 
 class Record(SimpleNamespace):
@@ -29,34 +24,13 @@ class Record(SimpleNamespace):
 
 
 @pytest.fixture
-def publication() -> typing.Any:
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    cls = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "BoundCCSDTGradient"
-    )
-    method = next(
-        node
-        for node in cls.body
-        if isinstance(node, ast.FunctionDef) and node.name == "_result"
-    )
-    environment = {
-        "typing": typing,
-        "np": np,
-        "CCSDGradientResult": lambda *args: args,
-        "ImplicitSolveError": PublicationError,
-    }
-    # Execute only the selected, trusted repository method, not supplied code.
-    exec(  # noqa: S102
-        compile(ast.Module(body=[method], type_ignores=[]), str(SOURCE), "exec"),
-        environment,
-    )
-    return environment["_result"], environment
+def publication(monkeypatch: pytest.MonkeyPatch) -> typing.Any:
+    monkeypatch.setattr(gradient_owner, "CCSDGradientResult", lambda *args: args)
+    return gradient_owner.BoundCCSDTGradient._result, monkeypatch
 
 
 def _owner(
-    environment: typing.Any, *, cuda: bool = True, chunk: int | None = 1
+    monkeypatch: pytest.MonkeyPatch, *, cuda: bool = True, chunk: int | None = 1
 ) -> typing.Any:
     calls: list[tuple] = []
     arrays = tuple(np.array([float(i)]) for i in range(8))
@@ -132,15 +106,17 @@ def _owner(
         _run=run,
         _assert_current=lambda: calls.append(("current",)),
     )
-    environment.update(
-        triples_energy=cpu,
-        _triples_arrays=lambda bound: arrays,
-        _validate=validate,
-        _check_denominators=guard,
-        TriplesTileEnumerator=tiles,
-        build_tile_triples_program=program,
-        _tile_input_feeds=feeds,
-    )
+    for name, value in {
+        "triples_energy": cpu,
+        "_triples_arrays": lambda bound: arrays,
+        "_validate": validate,
+        "_check_denominators": guard,
+        "TriplesTileEnumerator": tiles,
+        "build_tile_triples_program": program,
+        "_tile_input_feeds": feeds,
+    }.items():
+        monkeypatch.setattr(gradient_owner, name, value)
+
     return obj, calls
 
 
@@ -190,7 +166,7 @@ def test_denominator_failure_precedes_execution(publication: typing.Any) -> None
     def fail(*args: typing.Any) -> typing.NoReturn:
         raise ValueError("denominator rejected")
 
-    publication[1]["_check_denominators"] = fail
+    publication[1].setattr(gradient_owner, "_check_denominators", fail)
     with pytest.raises(ValueError, match="denominator rejected"):
         _publish(publication, state)
     assert not any(call[0] in ("cpu", "execute") for call in calls)
@@ -229,7 +205,7 @@ def test_shared_input_guard_is_not_bypassed(publication: typing.Any) -> None:
     def fail(*args: typing.Any) -> typing.NoReturn:
         raise ValueError("invalid triples input")
 
-    publication[1]["_validate"] = fail
+    publication[1].setattr(gradient_owner, "_validate", fail)
     with pytest.raises(ValueError, match="invalid triples input"):
         _publish(publication, state)
     assert not any(call[0] in ("cpu", "execute", "denominators") for call in calls)
@@ -257,10 +233,12 @@ def test_nonfinite_energy_is_rejected_before_result_construction(
     if cuda:
         state._run = lambda *args: {"triples_energy": triples / 4}
     else:
-        publication[1]["triples_energy"] = lambda *args: triples
+        publication[1].setattr(gradient_owner, "triples_energy", lambda *args: triples)
 
     constructed = []
-    publication[1]["CCSDGradientResult"] = lambda *args: constructed.append(args)
+    publication[1].setattr(
+        gradient_owner, "CCSDGradientResult", lambda *args: constructed.append(args)
+    )
     with pytest.raises(PublicationError, match="nonfinite"):
         _publish(publication, state)
     assert constructed == []

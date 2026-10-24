@@ -1,9 +1,9 @@
-"""Installed live native LDA/PBE RKS response adapter.
+"""Installed live native graph-qualified RKS response adapter.
 
 This module binds a current native KS snapshot to the production closed-shell
-CPKS equations, semilocal XC response kernel, exact J-only FockPlan provider,
-and installed Krylov solver.  It owns no SCF implementation and does not infer
-UKS, meta-GGA, hybrid, ECP, or density-fitted response capability.
+CPKS equations, qualified XC response kernel, exact FockPlan provider, and
+native resident Krylov solver. It owns no SCF implementation and does not infer
+UKS, meta-GGA, range/nonlocal, ECP, or density-fitted response capability.
 """
 
 from __future__ import annotations
@@ -17,16 +17,16 @@ from time import perf_counter
 import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.dft.features import density_features, spin_densities
 from generativeqc_compiler.xc.potential import assemble_coefficients
 
 from ._dft_gradient import StationaryDerivativeContract, StationaryKsState
 from .fock import FockBuildSpec, FockPlan, FockTerm
-from .ks import resolve_ks_method
 from .profiles import canonical_hash
 from .response_operator import CPKSResponseOperator, cpks_operator_identity
 from .response_problem import ResponseUnsupported
-from .response_solver import solve, solve_many
+from .response_solver import GMRESOptions, SolveResult, solve, solve_many
 from .response_xc import FixedDensityXCDerivativeKernel
 
 __all__ = [
@@ -282,7 +282,7 @@ class _RKSIntegralSourceView:
 
 
 class _PreparedRKSJBackend:
-    """Exact J-only response through the installed method-neutral FockPlan."""
+    """Exact full-range J/K response through the method-neutral FockPlan."""
 
     def __init__(
         self,
@@ -307,8 +307,8 @@ class _PreparedRKSJBackend:
                 approximation="exact",
             ),
             exchange=FockTerm(
-                present=False,
-                coefficient=0.0,
+                present=bool(state._source.coefficients[2]),
+                coefficient=state._source.coefficients[2],
                 operator="full_range",
                 approximation="exact",
             ),
@@ -325,9 +325,13 @@ class _PreparedRKSJBackend:
         self.geometry_hash = _geometry_hash(basis)
         self.basis_hash = _basis_hash(basis)
         diagnostics = self._plan.diagnostics
-        if diagnostics["resolved"]["exchange"]["present"]:
+        if (
+            diagnostics["resolved"]["exchange"]["present"]
+            != specification.exchange.present
+        ):
             self._plan.close()
-            raise RuntimeError("RKS response J owner unexpectedly enabled exchange")
+            raise RuntimeError("RKS response owner changed exchange admission")
+        self.supports_full_range_exchange = specification.exchange.present
         if diagnostics["resolved"]["coulomb"]["approximation"] != "exact":
             self._plan.close()
             raise RuntimeError("RKS response J owner changed Coulomb approximation")
@@ -389,7 +393,9 @@ class _PreparedRKSJBackend:
         if result.coulomb is None:
             raise RuntimeError("RKS response J owner returned no Coulomb matrix")
         coulomb = immutable(result.coulomb)
-        exchange = immutable(np.zeros_like(coulomb))
+        exchange = immutable(
+            result.exchange if result.exchange is not None else np.zeros_like(coulomb)
+        )
         self.statistics["actions"] += 1
         self.statistics["seconds"] += perf_counter() - started
         self.statistics["host_input_bytes"] += value.nbytes
@@ -401,7 +407,7 @@ class _PreparedRKSJBackend:
 
 
 class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
-    """Bind the common feature-Hessian contraction to the native SCF point model."""
+    """Bind either spin feature-Hessian contraction to its native SCF point model."""
 
     def __init__(
         self,
@@ -416,7 +422,7 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
             spec,
             basis,
             state.grid,
-            state.density[0],
+            state.density if spec.spin == "polarized" else state.density[0],
             tile_points=tile_points,
         )
         self.identity = canonical_hash(
@@ -424,7 +430,7 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
                 "kernel": self.identity,
                 "point_model": state.identity.regularization_identity,
                 "native_state": state.identity.to_payload(),
-                "derivative": "unpolarized-cartesian-directional-v1",
+                "derivative": f"{spec.spin}-cartesian-directional-v1",
             }
         )
 
@@ -441,13 +447,22 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
         features = density_features(jets, density, ingredients=ingredients)
         delta = density_features(jets, direction, ingredients=ingredients)
         zero = np.zeros((2, jets.shape[1], 3))
-        coefficients = self.state._source.evaluate_rks_response_points(
-            "sigma" in self.spec.ingredients,
-            features["rho"].sum(axis=0),
-            features.get("gradient", zero).sum(axis=0),
-            delta["rho"].sum(axis=0),
-            delta.get("gradient", zero).sum(axis=0),
-        )
+        if self.spec.spin == "polarized":
+            coefficients = self.state._source.evaluate_uks_response_points(
+                "sigma" in self.spec.ingredients,
+                features["rho"],
+                features.get("gradient", zero),
+                delta["rho"],
+                delta.get("gradient", zero),
+            )
+        else:
+            coefficients = self.state._source.evaluate_rks_response_points(
+                "sigma" in self.spec.ingredients,
+                features["rho"].sum(axis=0),
+                features.get("gradient", zero).sum(axis=0),
+                delta["rho"].sum(axis=0),
+                delta.get("gradient", zero).sum(axis=0),
+            )
         if "sigma" not in self.spec.ingredients:
             coefficients.pop("gradient")
         return assemble_coefficients(jets, coefficients, weights)
@@ -503,7 +518,7 @@ class _NativeCudaRKSXCKernel(_NativeRKSXCKernel):
 
 
 class NativeRKSResponse(CPKSResponseOperator):
-    """Live all-electron LDA/PBE RKS response with installed scientific owners."""
+    """Live all-electron RKS response admitted by generated kernel metadata."""
 
     @classmethod
     def from_native(
@@ -530,17 +545,43 @@ class NativeRKSResponse(CPKSResponseOperator):
         state = StationaryKsState.from_native(batch, basis, grid, index=index)
         backend = kernel = None
         try:
+            record = next(
+                (
+                    item
+                    for item in SEMILOCAL_FAMILIES
+                    if item["code"] == state._source.functional_code
+                ),
+                None,
+            )
+            execution = state._source._batch._calculator.ks_options.execution_plan
             if (
-                state.identity.method not in ("lda-rks", "pbe-rks")
-                or state.identity.spin != "unpolarized"
+                state.identity.spin != "unpolarized"
                 or state._source.hamiltonian != "all-electron"
+                or record is None
+                or record["requires_tau"]
+                or record["cuda_fast_paths"]["response"] != "qualified"
+                or (
+                    state._source.coefficients[:2] != (1.0, 1.0)
+                    and record["cuda_fast_paths"]["component_scaling"] != "qualified"
+                )
+                or state._source.model_terms
+                or execution.nonlocal_correlation is not None
+                or any(term.operator != "full-range" for term in execution.exchange)
+                or state._source._density_fitting_requested
             ):
                 raise ResponseUnsupported(
-                    "native CPKS requires all-electron RKS LDA/PBE"
+                    "native CPKS requires all-electron RKS and complete qualified semilocal/full-range sources; "
+                    "tau, range exchange and nonlocal response are not implemented"
                 )
-            if state._source.coefficients != (1.0, 1.0, 0.0):
-                raise ResponseUnsupported("native CPKS requires unscaled LDA/PBE RKS")
-            _, expected = resolve_ks_method(state.identity.method)
+            if state._source.backend != "cuda" and state._source.coefficients != (
+                1.0,
+                1.0,
+                0.0,
+            ):
+                raise ResponseUnsupported(
+                    "CPU CPKS point bridge requires unscaled semilocal sources"
+                )
+            expected = state._source.functional
             spec = expected if functional is None else functional
             if spec.identity != state.identity.functional_identity:
                 raise ValueError("native CPKS functional identity mismatch")
@@ -609,14 +650,23 @@ class NativeRKSResponse(CPKSResponseOperator):
                 backend,
                 kernel,
                 perturbation_labels=perturbation_labels,
+                exact_exchange_fraction=-2.0 * state._source.coefficients[2],
             )
-            result = cls(problem, backend, kernel)
+            result = cls(
+                problem,
+                backend,
+                kernel,
+                exact_exchange_fraction=-2.0 * state._source.coefficients[2],
+            )
             result.state = state
             result._basis = basis
             result._source = _RKSIntegralSourceView(basis)
             result._reference_identity = reference.identity
             result._backend_identity = backend.identity
             result._contract = StationaryDerivativeContract(state.identity)
+            result._device_budget_bytes = device_budget_bytes
+            result._last_resident_solve = None
+            result._last_execution = "host"
             result.validate_current()
             return result
         except Exception:
@@ -646,7 +696,11 @@ class NativeRKSResponse(CPKSResponseOperator):
             or self.xc_kernel.grid.identity != self.state.identity.grid_identity
             or self.xc_kernel.basis.identity != self.state.identity.basis_identity
             or self.problem.operator_identity
-            != cpks_operator_identity(self.backend, self.xc_kernel)
+            != cpks_operator_identity(
+                self.backend,
+                self.xc_kernel,
+                exact_exchange_fraction=self.exact_exchange_fraction,
+            )
         ):
             raise ValueError("native CPKS state/provider/kernel identity mismatch")
         self.backend.validate_reference(self.problem.reference)
@@ -662,8 +716,12 @@ class NativeRKSResponse(CPKSResponseOperator):
             "execution": "cuda" if cuda else "cpu",
             "coulomb_execution": "cuda" if cuda else "cpu",
             "xc_ao_features_points_assembly": "cuda" if cuda else "cpu",
-            "orbital_transforms": "host",
-            "krylov_execution": "host",
+            "orbital_transforms": "cuda"
+            if self._last_execution == "native-cuda"
+            else "host",
+            "krylov_execution": self._last_execution,
+            "default_scalar_solver": "native-cuda" if cuda else "host",
+            "last_resident_solve": self._last_resident_solve,
             "owned_device_bytes": (
                 self.backend.device_resident_bytes + xc["device_bytes"]
             )
@@ -672,9 +730,9 @@ class NativeRKSResponse(CPKSResponseOperator):
             "xc": xc,
             "snapshot_export": dict(self.state._source.export_work),
             "memory_scope": (
-                "retained response J/XC allocations only; excludes borrowed SCF, "
-                "preparation temporaries, host arrays/Krylov, context and "
-                "library-private memory"
+                "retained J/XC bytes; last_resident_solve includes orbital/Krylov arena. "
+                "Excludes borrowed SCF, preparation temporaries, caller arrays, context "
+                "and library-private memory"
             ),
         }
 
@@ -685,8 +743,33 @@ class NativeRKSResponse(CPKSResponseOperator):
         options: typing.Any = None,
         **kwargs: typing.Any,
     ) -> typing.Any:
-        """Run the installed shared scalar GMRES on this live response owner."""
+        """Use native resident scalar GMRES on CUDA, without a host retry."""
+        if self.state._source.backend == "cuda":
+            return self.solve_resident(rhs, options=options, **kwargs)
         return solve(self, rhs, options=options, **kwargs)
+
+    def solve_resident(
+        self,
+        rhs: typing.Any,
+        *,
+        options: GMRESOptions | None = None,
+        initial_guess: typing.Any = None,
+        raise_on_failure: bool = False,
+    ) -> SolveResult:
+        """Solve one RHS using C++/CUDA orbital and Krylov owners.
+
+        This endpoint intentionally excludes host preconditioners/recycling and
+        molecular Hessians; it never treats partial response sources as complete.
+        """
+        from ._resident_cpks import solve_resident
+
+        return solve_resident(
+            self,
+            rhs,
+            options=options,
+            initial_guess=initial_guess,
+            raise_on_failure=raise_on_failure,
+        )
 
     def solve_many(
         self,
@@ -697,6 +780,8 @@ class NativeRKSResponse(CPKSResponseOperator):
         **kwargs: typing.Any,
     ) -> typing.Any:
         """Run the installed shared multi-RHS GMRES on this live response owner."""
+        self.validate_current()
+        self._last_execution = "host"
         return solve_many(
             self,
             rhs,
@@ -714,6 +799,7 @@ class NativeRKSResponse(CPKSResponseOperator):
         """Apply the validated response-induced Fock contribution."""
         self.validate_current()
         result = super().induced_fock(delta_density, transpose=transpose)
+        self._last_execution = "host"
         self.validate_current()
         return result
 

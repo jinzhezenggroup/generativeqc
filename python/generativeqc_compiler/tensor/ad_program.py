@@ -64,6 +64,7 @@ from .ir import (
     slice_tensor,
     sqrt,
     transpose,
+    where,
 )
 from .precision import derivative_precision_provenance
 from .program import Program
@@ -83,9 +84,9 @@ ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def _input_groups(program: Program) -> dict[str, tuple[Node, ...]]:
-    """Group live occurrences of each named input without interpreter imports."""
+    """Group declared input occurrences, including disconnected AD arguments."""
     groups: dict[str, list[Node]] = {}
-    for node in program.live_nodes:
+    for node in program.nodes:
         if node.op == "input":
             groups.setdefault(node.attrs["name"], []).append(node)
     return {name: tuple(nodes) for name, nodes in groups.items()}
@@ -735,6 +736,8 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
         return cast(inputs[0], node.spec.dtype)
     if node.op in COMPARISONS:
         return compare(node.op, *inputs)
+    if node.op == "where":
+        return where(*inputs)
     if node.op == "multiply":
         return multiply(*inputs)
     if node.op == "divide":
@@ -782,6 +785,20 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
         )
     if node.op == "runtime_indexed_scatter_add":
         return runtime_indexed_scatter_add(
+            inputs[0],
+            tuple(zip(node.attrs["axes"], inputs[1:], strict=True)),
+            node.spec.indices,
+        )
+    if node.op == "runtime_cartesian_select":
+        return runtime_cartesian_select(
+            inputs[0],
+            tuple(
+                (axis, mapping, node.spec.indices[axis])
+                for axis, mapping in zip(node.attrs["axes"], inputs[1:], strict=True)
+            ),
+        )
+    if node.op == "runtime_cartesian_scatter_add":
+        return runtime_cartesian_scatter_add(
             inputs[0],
             tuple(zip(node.attrs["axes"], inputs[1:], strict=True)),
             node.spec.indices,
@@ -951,6 +968,70 @@ def _dense_symmetry_adjoint(bar: Node, spec: TensorSpec) -> Node:
     )
 
 
+def _external_mask_validation(values: typing.Iterable[Node]) -> Node:
+    """Retain eager domains without summing potentially huge finite values."""
+    guards = []
+    for value in values:
+        zero = _zero_like(value)
+        guards.append(reduce_sum(zero, tuple(range(len(zero.spec.indices)))))
+    validation = _combine([constant(1, TensorSpec(role="constant")), *guards])
+    assert validation is not None
+    return validation
+
+
+def _external_mask_zero_forward(program: Program) -> list[Node]:
+    """Reuse forward rules with zero directions to check every live AD domain."""
+    from .autodiff import _real_derivative_nodes
+
+    needed = _real_derivative_nodes(program)
+    tangents: dict[Node, Node] = {}
+    for node in program.live_nodes:
+        if node not in needed:
+            continue
+        if node.op in ("input", "constant"):
+            tangent = _zero_like(node)
+        elif node.op == "where":
+            condition, left, right = node.inputs
+            tangent = where(condition, tangents[left], tangents[right])
+        else:
+            tangent = _jvp_graph(node, [tangents[operand] for operand in node.inputs])
+            if tangent is None:
+                raise ValueError(
+                    "external-mask validation requires real forward values"
+                )
+        tangents[node] = tangent
+    return [
+        value for root in program.outputs.values() for value in (root, tangents[root])
+    ]
+
+
+def _validate_external_mask_inputs(
+    program: Program,
+    inputs: Mapping[str, Node],
+    mode: str,
+    *,
+    allow_comparison_where: bool = False,
+) -> None:
+    """Qualify requested real inputs even when disconnected from primal outputs."""
+    from .autodiff import _validate_reference_context
+
+    if any(node.spec.dtype != "float64" for node in inputs.values()):
+        raise ValueError(f"generated external-mask {mode} requires float64 real arrays")
+    _validate_reference_context(
+        Program(
+            {
+                **{
+                    f"primal_{i}": node
+                    for i, node in enumerate(program.outputs.values())
+                },
+                **{f"input_{i}": node for i, node in enumerate(inputs.values())},
+            },
+            program.definitions,
+        ),
+        allow_comparison_where=allow_comparison_where,
+    )
+
+
 def linearize(
     program: Program,
     tangent_inputs: typing.Any,
@@ -958,24 +1039,69 @@ def linearize(
     outputs: typing.Any = None,
     packed: typing.Any = None,
     max_elements: int = DEFAULT_MAX_ELEMENTS,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> JVPProgram:
     """Generate a demand-driven forward derivative :class:`Program`.
 
     The generated program takes the original inputs plus ``d_<name>`` tangent
     inputs and returns ``d_<output>`` tangents.  Only requested tangent inputs
     and output tangents are generated.
+
+    ``allow_comparison_where`` also admits primal comparison selectors without
+    differentiating Boolean edges. At switches the selected branch defines the
+    reported value; no differentiability claim is made.
+
+    ``allow_external_mask_where`` explicitly admits first-order fixed external
+    Boolean selectors on generic FP64 arrays. This domain retains every live
+    primal and forward-domain check, including unreturned outputs and zero
+    directions. Its native qualification is the materializing CPU owner only.
     """
     if not isinstance(program, Program):
         raise TypeError("linearize requires a Program")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     primal_hash = program.logical_hash
     program, _layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
     )
     selected_outputs = _select_names(program.outputs, outputs, "output")
     needed = _ancestors(selected_outputs.values())
-    if any(node.spec.dtype == "bool" for node in needed):
+    external_where = (allow_external_mask_where or allow_comparison_where) and any(
+        node.op == "where" for node in program.live_nodes
+    )
+    if external_where:
+        # Reuse the reference domain proof, never widen AD_PRIMITIVES. Further
+        # restrict this consumer to the actually qualified FP64 generation domain.
+        from .autodiff import _validate_reference_context
+
+        _validate_reference_context(
+            program, allow_comparison_where=allow_comparison_where
+        )
+        if any(
+            node.spec.dtype not in ("bool", "float64") for node in program.live_nodes
+        ):
+            raise ValueError("generated external-mask JVP requires float64 real arrays")
+        if packed or any(key.startswith("precision_") for key in program.provenance):
+            raise ValueError(
+                "generated external-mask JVP does not admit packed or precision policies"
+            )
+        if any(
+            program.provenance.get(key)
+            for key in (
+                "external_mask_where_jvp",
+                "external_mask_where_vjp",
+                "comparison_where_jvp",
+                "comparison_where_vjp",
+            )
+        ):
+            raise ValueError("higher-order external-mask generation is unsupported")
+        needed = set(program.live_nodes)
+    elif any(node.spec.dtype == "bool" for node in needed):
         raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     inputs = _input_nodes(program)
     requested = _select_names(
@@ -983,6 +1109,12 @@ def linearize(
         tangent_inputs,
         "tangent input",
     )
+    if external_where and not requested:
+        raise ValueError("external-mask JVP requires a declared differentiable input")
+    if external_where:
+        _validate_external_mask_inputs(
+            program, requested, "JVP", allow_comparison_where=allow_comparison_where
+        )
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -991,26 +1123,65 @@ def linearize(
                 f"generated tangent name collides with input/output: {generated}"
             )
         tangent_nodes[name] = _derivative_input(node, generated)
+    derivative_nodes = needed
+    if external_where:
+        from .autodiff import _real_derivative_nodes
+
+        derivative_nodes = _real_derivative_nodes(program)
     tangents: dict[Node, Node | None] = {}
     generated_nodes = []
     for node in program.nodes:
         if node not in needed:
             continue
+        if external_where and node not in derivative_nodes:
+            continue
         if node.op == "input":
             tangent = tangent_nodes.get(node.attrs["name"])
+            if external_where and tangent is None:
+                tangent = _zero_like(node)
         elif node.op == "constant":
-            tangent = None
+            tangent = _zero_like(node) if external_where else None
+        elif external_where and node.op == "where":
+            condition, left, right = node.inputs
+            left_tangent, right_tangent = tangents[left], tangents[right]
+            if left_tangent is None or right_tangent is None:
+                raise ValueError("external-mask JVP requires real branch tangents")
+            tangent = where(condition, left_tangent, right_tangent)
         else:
             tangent = _jvp_graph(node, [tangents[operand] for operand in node.inputs])
         tangents[node] = tangent
         if tangent is not None:
             generated_nodes.append(tangent)
+    validation = None
+    if external_where:
+        # Zero BEFORE reduction: reducing the primal itself could overflow despite
+        # every primal element being finite. Output edges retain eager validation
+        # through serialization, CSE/DCE and empty requested-output shapes.
+        validation_values = []
+        for root in program.outputs.values():
+            root_tangent = tangents[root]
+            if root_tangent is None:
+                raise ValueError("external-mask JVP requires live output tangents")
+            validation_values.extend((root, root_tangent))
+        # Attach validation with an exact +1 multiplier. Adding a zero guard
+        # to the tangent would turn a selected -0.0 into +0.0; multiplication
+        # preserves every finite FP64 value, including signed zero/subnormals.
+        if allow_comparison_where:
+            # Even predicate-only and disconnected requested directions must be
+            # checked when replaying a serialized derivative without the facade.
+            validation_values.extend(tangent_nodes.values())
+        validation = _external_mask_validation(validation_values)
     derivative_outputs = {}
     output_map = {}
     for name, node in selected_outputs.items():
         tangent = tangents[node]
         if tangent is None:
             tangent = _zero_like(node)
+            generated_nodes.append(tangent)
+        if external_where:
+            if validation is None:
+                raise ValueError("external-mask JVP requires live-domain validation")
+            tangent = multiply(tangent, broadcast(validation, tangent.spec.indices, ()))
             generated_nodes.append(tangent)
         derivative_name = f"{TANGENT_PREFIX}{name}"
         derivative_outputs[derivative_name] = tangent
@@ -1031,8 +1202,42 @@ def linearize(
             "packed_inputs": program.provenance.get("packed_inputs", {}),
             "generation": "demand-driven",
             **derivative_precision_provenance(program),
+            **(
+                {
+                    (
+                        "comparison_where_jvp"
+                        if allow_comparison_where
+                        else "external_mask_where_jvp"
+                    ): {
+                        "version": 1,
+                        "domain": (
+                            "primal-comparison-generic-finite-fp64"
+                            if allow_comparison_where
+                            else "fixed-external-mask-generic-finite-fp64"
+                        ),
+                        "native_qualification": "materializing-cpu-only",
+                        "validation": "all-live-primal-and-forward-domains",
+                    }
+                }
+                if external_where
+                else {}
+            ),
         },
     )
+    if external_where:
+        # The result is a first-order execution artifact, not a new AD input
+        # space. Keep this boundary in typed feeds so reconstruction without
+        # descriptive provenance cannot turn it into an unqualified higher order.
+        generated_program = _rebuild(
+            generated_program,
+            {
+                node: input_tensor(
+                    node.attrs["name"], replace(node.spec, differentiable=False)
+                )
+                for node in generated_program.nodes
+                if node.op == "input" and node.spec.differentiable
+            },
+        )
     return JVPProgram(
         generated_program,
         primal_hash,
@@ -1050,6 +1255,8 @@ def transpose_program(
     inputs: typing.Any = None,
     packed: typing.Any = None,
     max_elements: int = DEFAULT_MAX_ELEMENTS,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> VJPProgram:
     """Generate a demand-driven reverse derivative :class:`Program`.
 
@@ -1057,11 +1264,23 @@ def transpose_program(
     cotangent inputs and returns ``bar_<input>`` cotangents.  Reverse programs
     are generated only for primal nodes on a path from a requested input to a
     requested output.
+
+    ``allow_comparison_where`` additionally admits primal comparison selectors,
+    propagating adjoints only through real branch edges.
+
+    ``allow_external_mask_where`` admits first-order fixed external Boolean
+    selectors on generic finite FP64 arrays. It preserves all live primal and
+    forward domains plus every requested cotangent feed. Native qualification
+    is the materializing CPU owner only; selectors have no adjoints.
     """
     if not isinstance(program, Program):
         raise TypeError("transpose_program requires a Program")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     primal_hash = program.logical_hash
     program, layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
@@ -1070,7 +1289,35 @@ def transpose_program(
         program.outputs, cotangent_outputs, "cotangent output"
     )
     needed = _ancestors(selected_outputs.values())
-    if any(node.spec.dtype == "bool" for node in needed):
+    external_where = (allow_external_mask_where or allow_comparison_where) and any(
+        node.op == "where" for node in program.live_nodes
+    )
+    if external_where:
+        from .autodiff import _validate_reference_context
+
+        _validate_reference_context(
+            program, allow_comparison_where=allow_comparison_where
+        )
+        if any(
+            node.spec.dtype not in ("bool", "float64") for node in program.live_nodes
+        ):
+            raise ValueError("generated external-mask VJP requires float64 real arrays")
+        if packed or any(key.startswith("precision_") for key in program.provenance):
+            raise ValueError(
+                "generated external-mask VJP does not admit packed or precision policies"
+            )
+        if any(
+            program.provenance.get(key)
+            for key in (
+                "external_mask_where_jvp",
+                "external_mask_where_vjp",
+                "comparison_where_jvp",
+                "comparison_where_vjp",
+            )
+        ):
+            raise ValueError("higher-order external-mask generation is unsupported")
+        needed = set(program.live_nodes)
+    elif any(node.spec.dtype == "bool" for node in needed):
         raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     differentiable = {
         name: node
@@ -1078,10 +1325,18 @@ def transpose_program(
         if node.spec.differentiable
     }
     selected_inputs = _select_names(differentiable, inputs, "input")
+    if external_where:
+        _validate_external_mask_inputs(
+            program,
+            selected_inputs,
+            "VJP",
+            allow_comparison_where=allow_comparison_where,
+        )
     groups = _input_groups(program)
     roots = (node for name in selected_inputs for node in groups[name])
     relevant = needed & _descendants_of(program, roots)
     bars: dict[Node, Node | None] = {}
+    cotangent_nodes = []
     for name, node in selected_outputs.items():
         generated = f"{COTANGENT_PREFIX}{name}"
         if generated in _input_nodes(program) or generated in program.outputs:
@@ -1089,6 +1344,7 @@ def transpose_program(
                 f"generated cotangent name collides with input/output: {generated}"
             )
         cotangent = _derivative_input(node, generated)
+        cotangent_nodes.append(cotangent)
         bars[node] = (
             cotangent if bars.get(node) is None else _combine([bars[node], cotangent])
         )
@@ -1099,12 +1355,21 @@ def transpose_program(
         bar = bars.get(node)
         if bar is None:
             continue
-        contributions = _vjp_graph(
-            node,
-            bar,
-            tuple(operand in relevant for operand in node.inputs),
-            max_elements=max_elements,
-        )
+        active = tuple(operand in relevant for operand in node.inputs)
+        if external_where and node.op == "where":
+            condition = node.inputs[0]
+            zero = broadcast(
+                constant(0, TensorSpec(dtype=bar.spec.dtype, role="constant")),
+                bar.spec.indices,
+                (),
+            )
+            contributions = [
+                None,
+                where(condition, bar, zero) if active[1] else None,
+                where(condition, zero, bar) if active[2] else None,
+            ]
+        else:
+            contributions = _vjp_graph(node, bar, active, max_elements=max_elements)
         for operand, contribution in zip(node.inputs, contributions, strict=True):
             if contribution is None:
                 continue
@@ -1114,6 +1379,13 @@ def transpose_program(
                 if bars.get(operand) is None
                 else _combine([bars[operand], contribution])
             )
+    validation = (
+        _external_mask_validation(
+            [*_external_mask_zero_forward(program), *cotangent_nodes]
+        )
+        if external_where
+        else None
+    )
     derivative_outputs = {}
     output_map = {}
     for name, node in selected_inputs.items():
@@ -1127,6 +1399,10 @@ def transpose_program(
             generated_nodes.extend([inverse, bar])
         elif node.spec.symmetries:
             bar = _dense_symmetry_adjoint(bar, node.spec)
+            generated_nodes.append(bar)
+        if external_where:
+            assert validation is not None
+            bar = multiply(bar, broadcast(validation, bar.spec.indices, ()))
             generated_nodes.append(bar)
         derivative_name = f"{COTANGENT_PREFIX}{name}"
         derivative_outputs[derivative_name] = bar
@@ -1145,8 +1421,39 @@ def transpose_program(
             "packed_inputs": program.provenance.get("packed_inputs", {}),
             "generation": "demand-driven",
             **derivative_precision_provenance(program),
+            **(
+                {
+                    (
+                        "comparison_where_vjp"
+                        if allow_comparison_where
+                        else "external_mask_where_vjp"
+                    ): {
+                        "version": 1,
+                        "domain": (
+                            "primal-comparison-generic-finite-fp64"
+                            if allow_comparison_where
+                            else "fixed-external-mask-generic-finite-fp64"
+                        ),
+                        "native_qualification": "materializing-cpu-only",
+                        "validation": "all-live-primal-and-forward-domains-and-cotangent-feeds",
+                    }
+                }
+                if external_where
+                else {}
+            ),
         },
     )
+    if external_where:
+        generated_program = _rebuild(
+            generated_program,
+            {
+                node: input_tensor(
+                    node.attrs["name"], replace(node.spec, differentiable=False)
+                )
+                for node in generated_program.nodes
+                if node.op == "input" and node.spec.differentiable
+            },
+        )
     return VJPProgram(
         generated_program,
         primal_hash,

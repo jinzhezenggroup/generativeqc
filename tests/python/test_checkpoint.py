@@ -383,26 +383,31 @@ def test_atomic_publish_failure_preserves_old_file(
     inspect_checkpoint(path)
 
 
+@pytest.mark.parametrize("initial_guess", [None, "auto"])
 def test_size_limits_resource_headroom_and_disabled_warm_starts(
     tmp_path: typing.Any,
+    initial_guess: typing.Any,
 ) -> None:
     path = tmp_path / "state"
-    save(path)
+    save(path, initial_guess=initial_guess)
+    calculator = calc(initial_guess=initial_guess)
     with (
-        calc().prepare_batch([H2], warm_start=False) as target,
+        calculator.prepare_batch([H2], warm_start=False) as target,
         pytest.raises(CheckpointError, match="warm-enabled"),
     ):
         target.load_checkpoint(path)
-    with calc().prepare_batch([H2]) as target:
+    with calculator.prepare_batch([H2]) as target:
         with pytest.raises(MemoryError, match="max_bytes"):
             target.load_checkpoint(path, max_bytes=100)
         target.execute(strict=True)
         with pytest.raises(MemoryError):
             target.save_checkpoint(path, max_bytes=100)
-    # Sufficient for HF alone, deliberately insufficient for checkpoint staging.
-    with calc(resource_budget=ResourceBudget(host_bytes=1 << 20)).prepare_batch(
-        [H2]
-    ) as target:
+    # Admit the selected cold policy exactly, leaving no checkpoint headroom.
+    # Automatic Huckel includes preparation workspace beyond the Hcore inventory.
+    peak = calculator.estimate_resources([H2]).peak_bytes["host"]
+    with calc(
+        initial_guess=initial_guess, resource_budget=ResourceBudget(host_bytes=peak)
+    ).prepare_batch([H2]) as target:
         with pytest.raises(MemoryError, match="headroom"):
             target.load_checkpoint(path)
         assert target.execute(strict=True).items[0].restart_origin == "cold"
@@ -512,9 +517,18 @@ def test_no_checkpoint_cold_run_remains_available_after_clear(
     DEVICE != "cuda", reason="real-GPU cross-backend test runs under Slurm"
 )
 @pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("explicit_controls", [False, True])
 def test_backend_independent_cpu_cuda_restart_both_directions(
-    tmp_path: typing.Any, fitted: typing.Any
+    tmp_path: typing.Any, fitted: typing.Any, explicit_controls: bool
 ) -> None:
+    # CUDA RHF has qualified defaults distinct from the strict CPU defaults.
+    # Matching explicit controls permit exact restart; differing defaults must
+    # retain conservative classification and require an explicit warm import.
+    controls = (
+        {"energy_tolerance": 1e-10, "density_tolerance": 1e-8}
+        if explicit_controls
+        else {}
+    )
     path = tmp_path / "state"
     for source_device, target_device in (("cpu", "cuda"), ("cuda", "cpu")):
         for method, charge, mult in (("rhf", 0, 1), ("uhf", 1, 2)):
@@ -522,6 +536,7 @@ def test_backend_independent_cpu_cuda_restart_both_directions(
                 device=source_device,
                 method=method,
                 density_fitting=source_device if fitted else "none",
+                **controls,
             ).prepare_batch([H2], charges=[charge], multiplicities=[mult]) as source:
                 cold = source.execute(strict=True).items[0]
                 source.save_checkpoint(path)
@@ -529,11 +544,17 @@ def test_backend_independent_cpu_cuda_restart_both_directions(
                 device=target_device,
                 method=method,
                 density_fitting=target_device if fitted else "none",
+                **controls,
             ).prepare_batch([H2], charges=[charge], multiplicities=[mult]) as target:
-                assert (
-                    target.load_checkpoint(path)["items"][0]["compatibility"]
-                    == "exact_restart"
-                )
+                if explicit_controls or method == "uhf":
+                    report = target.load_checkpoint(path)
+                    expected = "exact_restart"
+                else:
+                    with pytest.raises(CheckpointError, match="numerical controls"):
+                        target.load_checkpoint(path)
+                    report = target.load_checkpoint(path, allow_warm=True)
+                    expected = "warm_start_compatible"
+                assert report["items"][0]["compatibility"] == expected
                 warm = target.execute(strict=True).items[0]
             assert warm.executed_backend == (
                 "cuda" if target_device == "cuda" else "cpu_reference"
@@ -604,30 +625,31 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
 
 
 @pytest.mark.parametrize(
-    "variable",
+    "variable,value",
     [
-        "GENERATIVEQC_FINAL_FOCK_REBUILD",
-        "GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING",
-        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
-        "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
-        "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
-        "GENERATIVEQC_CANONICAL_RSH_VALUES",
-        "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD",
+        ("GENERATIVEQC_FINAL_FOCK_REBUILD", "1"),
+        ("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING", "1"),
+        ("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "1"),
+        ("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "1"),
+        ("GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION", "1"),
+        ("GENERATIVEQC_CANONICAL_RSH_VALUES", "1"),
+        ("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1"),
+        ("GENERATIVEQC_DF_COULOMB_RESPONSE", "slices"),
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(
-    tmp_path: typing.Any, monkeypatch: typing.Any, variable: typing.Any
+    tmp_path: typing.Any, monkeypatch: typing.Any, variable: str, value: str
 ) -> None:
     path = tmp_path / "state"
     monkeypatch.delenv(variable, raising=False)
     save(path)
-    monkeypatch.setenv(variable, "1")
+    monkeypatch.setenv(variable, value)
     with calc().prepare_batch([H2]) as target:
         with pytest.raises(CheckpointError, match="numerical controls"):
             target.load_checkpoint(path)
         report = target.load_checkpoint(path, allow_warm=True)
         assert report["items"][0]["compatibility"] == "warm_start_compatible"
-        assert os.environ[variable] == "1"
+        assert os.environ[variable] == value
         target.save_checkpoint(tmp_path / "reexport")
     source = inspect_checkpoint(tmp_path / "reexport").items[0]
     assert source["controls"]["runtime_policy"][variable] is None

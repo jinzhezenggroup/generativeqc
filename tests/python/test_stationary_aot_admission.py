@@ -16,7 +16,7 @@ from generativeqc_compiler.method.stationary_gradient import (
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
-@pytest.mark.parametrize("name", ["M06-2X", "MN15"])
+@pytest.mark.parametrize("name", ["MN15"])
 def test_unrepresented_hybrids_have_no_exact_package_coverage(
     name: str, spin: str
 ) -> None:
@@ -60,7 +60,8 @@ def test_altered_semilocal_composition_does_not_alias_a_packaged_plan() -> None:
 
 
 @pytest.mark.parametrize(
-    "profile_name", ["pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks"]
+    "profile_name",
+    ["pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks", "m06_2x_rks", "m06_2x_uks"],
 )
 @pytest.mark.parametrize("component", [False, True])
 @pytest.mark.parametrize(
@@ -143,11 +144,9 @@ def test_hybrid_aot_admission_without_generation(
             "0" if original[0] != "0" else "1"
         ) + original[1:]
     elif failure in {"weight_profile", "weight_spin"}:
-        other = (
-            profile_name.replace("pbe0", "b3lyp")
-            if profile_name.startswith("pbe0")
-            else profile_name.replace("b3lyp", "pbe0")
-        )
+        other = ("b3lyp" if profile_name.startswith("pbe0") else "pbe0") + profile_name[
+            -4:
+        ]
         if failure == "weight_spin":
             other = profile_name[:-3] + (
                 "uks" if profile_name.endswith("rks") else "rks"

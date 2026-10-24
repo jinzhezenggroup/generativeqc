@@ -1,11 +1,14 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "dft/grid_task_view.cuh"
@@ -20,6 +23,62 @@ namespace {
 // Scientific pair formulas and output-demand closures have one compiler owner.
 using PairKernelValues = generated::PairValues;
 
+__device__ bool same_double_bits(double left, double right) {
+  return __double_as_longlong(left) == __double_as_longlong(right);
+}
+
+// Admission 0 selects bounded pair arithmetic, 1 selects its generic fallback,
+// and 2 retains already-computed outputs under an independently equal key.
+__global__ void mark_cached_pair_outputs_kernel(int* admission, const int* mismatch) {
+  if (threadIdx.x == 0 && *mismatch == 0) *admission = 2;
+}
+
+__global__ void cache_work_kernel(const int* mismatch, std::uint64_t* counters) {
+  if (threadIdx.x != 0) return;
+  if (mismatch) ++counters[0];
+  if (mismatch && *mismatch == 0)
+    ++counters[1];
+  else
+    ++counters[2];
+}
+
+__global__ void force_key_compare_kernel(std::size_t n, double b, double c, const double* weights,
+                                         const double* density, const double* gradient,
+                                         const double* retained, const int* domain_error,
+                                         const int* pair_error, int* mismatch) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  const double rho = density[i];
+  const double gx = gradient[3 * i], gy = gradient[3 * i + 1], gz = gradient[3 * i + 2];
+  const double sigma = gx * gx + gy * gy + gz * gz;
+  const auto local = generated::local_scales_cuda<Vv10Variant::vv10, true>(rho, sigma, b, c);
+  double weighted = weights[i] * rho;
+  if (weighted == 0.0 && weights[i] != 0.0) weighted = 0.0;
+  // These are all density-dependent inputs of feature/geometry pair closures
+  // and their row finalizers. Gradient direction is consumed independently by
+  // the new AO geometry pass and does not enter these cached scalar seeds.
+  const double values[] = {
+      local.omega, local.kappa, local.domega_drho, local.domega_dsigma, local.dkappa_drho,
+      weighted,    rho};
+  const auto prior_invalid = reinterpret_cast<const std::uint64_t*>(retained + 7 * n);
+  bool same = !*domain_error && !*pair_error && *prior_invalid == 0;
+  for (unsigned k = 0; k < 7; ++k)
+    same = same && isfinite(values[k]) && same_double_bits(values[k], retained[k * n + i]);
+  if (!same) atomicExch(mismatch, 1);
+}
+
+__global__ void store_force_key_kernel(std::size_t n, const double* density, double* workspace,
+                                       const int* collect_error, const int* domain_error,
+                                       const int* pair_error) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < n) workspace[6 * n + i] = density[i];
+  // Active indices are dead after packing. Retain the previous generation's
+  // failure status before a new domain/collection resets its own error flags.
+  if (i == 0)
+    *reinterpret_cast<std::uint64_t*>(workspace + 7 * n) =
+        (*collect_error != 0 || *domain_error != 0 || *pair_error != 0) ? 1U : 0U;
+}
+
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
                                                double kj, double row_inverse_kappa) {
@@ -27,6 +86,48 @@ __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, 
     return generated::pair_values_vv10_rational<Geometry>(r2, wi, wj, ki, kj, row_inverse_kappa);
   return generated::pair_values<Variant, Features, Geometry, true>(r2, wi, wj, ki, kj,
                                                                    row_inverse_kappa);
+}
+
+/** Borrow external outputs only when all live input and output spans are disjoint.
+ * point_derivative may alias the input gradient: local scales already consumed
+ * that gradient before this schedule begins. The final energy may still alias
+ * workspace because it is written after every pair consumer has completed. */
+bool parallel_pair_outputs_disjoint(std::size_t npoint, const double* points, const double* density,
+                                    const void* workspace, std::size_t workspace_bytes,
+                                    double* vrho, double* vsigma, double* point_derivative,
+                                    double* weight_derivative) {
+  using Span = std::pair<const void*, std::size_t>;
+  const auto bytes = npoint * sizeof(double);
+  const std::array<Span, 3> inputs{
+      {{points, 3 * bytes}, {density, bytes}, {workspace, workspace_bytes}}};
+  const std::array<Span, 4> outputs{
+      {{vrho, bytes}, {vsigma, bytes}, {point_derivative, 3 * bytes}, {weight_derivative, bytes}}};
+  const auto overlaps = [](Span a, Span b) {
+    if (!a.first || !b.first) return false;
+    const auto left = reinterpret_cast<std::uintptr_t>(a.first);
+    const auto right = reinterpret_cast<std::uintptr_t>(b.first);
+    return left <= right ? right - left < a.second : left - right < b.second;
+  };
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    for (const auto input : inputs)
+      if (overlaps(outputs[i], input)) return false;
+    for (std::size_t j = 0; j < i; ++j)
+      if (overlaps(outputs[i], outputs[j])) return false;
+  }
+  return true;
+}
+
+/** Default scope: large molecular VV10, with an explicit ordered fallback.
+ * The generated FP64 atomic/shuffle schedule needs no architecture whitelist.
+ * Explicit parallel selection admits small real-device qualification fixtures;
+ * neither preference bypasses numerical or output-lease guards. */
+bool prefer_parallel_pairs(std::size_t npoint) {
+  const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
+  if (selector && *selector)
+    return std::string_view(selector) == "parallel" ||
+           std::string_view(selector) == "parallel-wide" ||
+           std::string_view(selector) == "parallel-packet";
+  return npoint >= 65536;
 }
 
 unsigned launch_blocks(std::size_t count, unsigned threads) {
@@ -162,11 +263,14 @@ __global__ void pair_kernel_ordered(
     const double* domega_dsigma, const double* dkappa_drho, const double* weighted_density,
     const std::uint64_t* active_indices, const std::uint64_t* active_count, double beta,
     double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
-    double* weight_derivative, int* failed, const int* bounds_rejected = nullptr) {
+    double* weight_derivative, int* failed, const int* bounds_rejected = nullptr,
+    bool mixed_pair_arithmetic = false, std::uint64_t* arithmetic_work = nullptr) {
   static_assert(!Prevalidated || (Variant == Vv10Variant::vv10 && Features && MaskZeroRows));
   // Both launch variants read the same stream-ordered device predicate. Exactly
   // one traverses pairs, with no host readback or change to reduction order.
-  if (bounds_rejected != nullptr && ((*bounds_rejected == 0) != Prevalidated)) return;
+  if (bounds_rejected != nullptr &&
+      (*bounds_rejected == 2 || ((*bounds_rejected == 0) != Prevalidated)))
+    return;
   const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= row_count) return;
   const auto i = row_offset + lane;
@@ -208,6 +312,7 @@ __global__ void pair_kernel_ordered(
   double sum_sigma = 0.0;
   double coordinate_sum[3]{0.0, 0.0, 0.0};
   const auto nactive = *active_count;
+  std::uint64_t mixed_pairs = 0;
   // The preflight proved every pair and row-chain bound. Only this admitted
   // specialization changes feature summation rounding; the general route keeps
   // its original one-pass chain, without a rejected-prefix replay.
@@ -219,6 +324,12 @@ __global__ void pair_kernel_ordered(
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
     const auto pair = [&]() {
+      PairKernelValues mixed{};
+      if (mixed_pair_arithmetic && generated::try_pair_values_fp32<Variant, Features, Geometry>(
+                                       r2, wi, omega[j], ki, kappa[j], row_inverse_kappa, mixed)) {
+        ++mixed_pairs;
+        return mixed;
+      }
       if constexpr (Prevalidated)
         return generated::pair_values_vv10_admitted<Geometry>(r2, wi, omega[j], ki, kappa[j]);
       else
@@ -243,6 +354,13 @@ __global__ void pair_kernel_ordered(
       coordinate_sum[1] += radial * dy;
       coordinate_sum[2] += radial * dz;
     }
+  }
+
+  if (arithmetic_work) {
+    atomicAdd(reinterpret_cast<unsigned long long*>(arithmetic_work),
+              static_cast<unsigned long long>(mixed_pairs));
+    atomicAdd(reinterpret_cast<unsigned long long*>(arithmetic_work + 1),
+              static_cast<unsigned long long>(nactive - mixed_pairs));
   }
 
   energy_terms[i] = coefficient * weighted_i * (beta + 0.5 * sum_phi);
@@ -278,7 +396,9 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
                            const std::uint64_t* active_count, double beta, double* energy_terms,
                            double* vrho, double* vsigma, double* point_derivative,
                            double* weight_derivative, int* failed,
-                           const int* bounds_rejected = nullptr) {
+                           const int* bounds_rejected = nullptr, bool parallel_pairs = false,
+                           bool mixed_pair_arithmetic = false,
+                           std::uint64_t* arithmetic_work = nullptr) {
   constexpr unsigned threads = 128;
   const auto max_rows_per_launch =
       static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
@@ -288,17 +408,72 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
     pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows><<<blocks, threads, 0, stream>>>(
         first, count, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected, mixed_pair_arithmetic,
+        arithmetic_work);
     runtime::cuda_resource_check(cudaGetLastError());
     if constexpr (Variant == Vv10Variant::vv10 && Features && MaskZeroRows) {
       if (bounds_rejected != nullptr) {
-        pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows, true>
-            <<<blocks, threads, 0, stream>>>(first, count, coefficient, points, density, omega,
-                                             kappa, domega_drho, domega_dsigma, dkappa_drho,
-                                             weighted_density, active_indices, active_count, beta,
-                                             energy_terms, vrho, vsigma, point_derivative,
-                                             weight_derivative, failed, bounds_rejected);
-        runtime::cuda_resource_check(cudaGetLastError());
+        if (parallel_pairs) {
+          // Admission bounds npoint to 2^32, below this launch's row capacity.
+          // All four kernels borrow only expired output slots on this stream.
+          const generated::ParallelPairInputs input{layout.point_count,
+                                                    points,
+                                                    density,
+                                                    omega,
+                                                    kappa,
+                                                    domega_drho,
+                                                    domega_dsigma,
+                                                    dkappa_drho,
+                                                    weighted_density,
+                                                    active_indices,
+                                                    active_count,
+                                                    coefficient,
+                                                    beta,
+                                                    bounds_rejected,
+                                                    mixed_pair_arithmetic,
+                                                    arithmetic_work};
+          const generated::ParallelPairOutputs output{
+              energy_terms, vrho, vsigma, point_derivative, weight_derivative, failed};
+          generated::parallel_pair_initialize<Geometry>
+              <<<blocks, threads, 0, stream>>>(input, output);
+          runtime::cuda_resource_check(cudaGetLastError());
+          const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
+          if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
+            // Keep the qualified strict schedule independent of FP32 admission
+            // state. Mixed packets carry each point's immutable scale proof
+            // through the existing rotation instead of retesting every pair.
+            if (mixed_pair_arithmetic)
+              generated::parallel_pair_packet_kernel<Geometry, true>
+                  <<<680, threads, 0, stream>>>(input, output);
+            else
+              generated::parallel_pair_packet_kernel<Geometry>
+                  <<<680, threads, 0, stream>>>(input, output);
+          } else if (selector && std::string_view(selector) == "parallel-wide") {
+            // Both kernels use the same admitted device count. Exactly one
+            // executes, preserving small-domain occupancy without a host read.
+            generated::parallel_pair_kernel<Geometry, 4, false, true>
+                <<<680, threads, 0, stream>>>(input, output);
+            runtime::cuda_resource_check(cudaGetLastError());
+            generated::parallel_pair_kernel<Geometry, 8, true, true>
+                <<<680, threads, 0, stream>>>(input, output);
+          } else {
+            generated::parallel_pair_kernel<Geometry><<<680, threads, 0, stream>>>(input, output);
+          }
+          runtime::cuda_resource_check(cudaGetLastError());
+          generated::parallel_pair_zero_rows<<<680, threads, 0, stream>>>(input, output);
+          runtime::cuda_resource_check(cudaGetLastError());
+          generated::parallel_pair_finalize<Geometry>
+              <<<blocks, threads, 0, stream>>>(input, output);
+          runtime::cuda_resource_check(cudaGetLastError());
+        } else {
+          pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows, true>
+              <<<blocks, threads, 0, stream>>>(
+                  first, count, coefficient, points, density, omega, kappa, domega_drho,
+                  domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
+                  energy_terms, vrho, vsigma, point_derivative, weight_derivative, failed,
+                  bounds_rejected, mixed_pair_arithmetic, arithmetic_work);
+          runtime::cuda_resource_check(cudaGetLastError());
+        }
       }
     }
   }
@@ -312,23 +487,29 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       const std::uint64_t* active_indices, const std::uint64_t* active_count,
                       double beta, double* energy_terms, double* vrho, double* vsigma,
                       double* point_derivative, double* weight_derivative, int* failed,
-                      const int* bounds_rejected = nullptr) {
+                      const int* bounds_rejected = nullptr, bool parallel_pairs = false,
+                      bool mixed_pair_arithmetic = false,
+                      std::uint64_t* arithmetic_work = nullptr) {
   if (layout.mask_zero_weight_rows)
     launch_pair_rows_impl<Variant, Features, Geometry, true>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected, parallel_pairs,
+        mixed_pair_arithmetic, arithmetic_work);
   else
     launch_pair_rows_impl<Variant, Features, Geometry, false>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected, parallel_pairs,
+        mixed_pair_arithmetic, arithmetic_work);
 }
 
 constexpr unsigned kOrderedEnergyLoadThreads = 128U;
 
 __global__ void reduce_energy_ordered_kernel(std::size_t npoint, const double* energy_terms,
-                                             double* energy, int* failed) {
+                                             double* energy, int* failed,
+                                             const int* admission = nullptr) {
+  if (admission && *admission == 2) return;
   if (blockIdx.x != 0) return;
   __shared__ double staged[kOrderedEnergyLoadThreads];
   double sum = 0.0;
@@ -416,7 +597,8 @@ __global__ void collect_total_features_kernel(generativeqc::dft::GridTaskView vi
 __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effective_weights,
                                         const double* point_derivative, double* seeds,
                                         const int* collect_error, const int* domain_error,
-                                        const int* pair_error) {
+                                        const int* pair_error, const int* cache_mismatch) {
+  if (cache_mismatch && *cache_mismatch == 0) return;
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= npoint) return;
   bool failed = *collect_error != 0 || *domain_error != 0 || *pair_error != 0;
@@ -442,6 +624,36 @@ __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effect
 }
 
 }  // namespace
+
+void enqueue_vv10_cache_work_cuda(cudaStream_t stream, const int* mismatch,
+                                  std::uint64_t* counters) {
+  cache_work_kernel<<<1, 1, 0, stream>>>(mismatch, counters);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
+void enqueue_vv10_store_force_key_cuda(cudaStream_t stream, std::size_t point_count,
+                                       const double* density, double* workspace,
+                                       const int* collect_error, const int* domain_error,
+                                       const int* pair_error) {
+  store_force_key_kernel<<<launch_blocks(point_count, 128), 128, 0, stream>>>(
+      point_count, density, workspace, collect_error, domain_error, pair_error);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
+void enqueue_vv10_force_key_compare_cuda(cudaStream_t stream, std::size_t point_count,
+                                         Vv10Parameters parameters, const double* weights,
+                                         const double* density, const double* gradient,
+                                         const double* retained_workspace, const int* domain_error,
+                                         const int* pair_error, int* mismatch) {
+  if (parameters.variant != Vv10Variant::vv10 || !point_count || !stream || !weights || !density ||
+      !gradient || !retained_workspace || !domain_error || !pair_error || !mismatch)
+    throw std::invalid_argument("invalid exact VV10 force key comparison");
+  runtime::cuda_resource_check(cudaMemsetAsync(mismatch, 0, sizeof(int), stream));
+  force_key_compare_kernel<<<launch_blocks(point_count, 128), 128, 0, stream>>>(
+      point_count, parameters.b, parameters.c, weights, density, gradient, retained_workspace,
+      domain_error, pair_error, mismatch);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
 
 void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_count,
                                         double density_threshold, const double* weights,
@@ -480,7 +692,7 @@ void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_c
                                         const double* effective_weights,
                                         const double* point_derivative, double* seeds,
                                         const int* collect_error, const int* domain_error,
-                                        const int* pair_error) {
+                                        const int* pair_error, const int* cache_mismatch) {
   if (stream == nullptr || !point_count || effective_weights == nullptr ||
       point_derivative == nullptr || seeds == nullptr || collect_error == nullptr ||
       domain_error == nullptr || pair_error == nullptr)
@@ -488,7 +700,7 @@ void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_c
   constexpr unsigned threads = 128;
   pack_force_seeds_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
       point_count, effective_weights, point_derivative, seeds, collect_error, domain_error,
-      pair_error);
+      pair_error, cache_mismatch);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
@@ -523,7 +735,8 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
                               const double* density_gradient, void* workspace,
                               std::size_t workspace_bytes, double* energy, double* vrho,
                               double* vsigma, double* point_derivative, double* weight_derivative,
-                              int* numerical_error) {
+                              int* numerical_error, const int* cache_mismatch,
+                              bool mixed_pair_arithmetic, std::uint64_t* arithmetic_work) {
   // The resident entry point can be called without Vv10Plan::prepare. Preserve
   // that owner's scientific parameter domain before touching the caller stream.
   if ((parameters.variant != Vv10Variant::vv10 && parameters.variant != Vv10Variant::rvv10) ||
@@ -552,8 +765,16 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   if (layout.geometry != (point_derivative != nullptr && weight_derivative != nullptr) ||
       (point_derivative == nullptr) != (weight_derivative == nullptr))
     throw std::invalid_argument("resident VV10 CUDA geometry outputs disagree with layout");
+  if (cache_mismatch &&
+      (parameters.variant != Vv10Variant::vv10 || !layout.features ||
+       !layout.mask_zero_weight_rows || layout.point_count > (std::uint64_t{1} << 32) ||
+       std::fabs(parameters.coefficient) > 0x1p32))
+    throw std::invalid_argument("exact VV10 component reuse is outside its admitted owner domain");
 
   runtime::CudaDeviceScope device(device_id);
+  if (arithmetic_work)
+    runtime::cuda_resource_check(
+        cudaMemsetAsync(arithmetic_work, 0, 2 * sizeof(std::uint64_t), stream));
   auto* cursor = static_cast<double*>(workspace);
   auto take = [&](std::size_t count) {
     auto* out = cursor;
@@ -620,14 +841,23 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   // exists. Borrow its first word for a predicate on this same stream. No new
   // allocation, retained state, or cross-invocation identity is introduced.
   int* bounds_rejected = nullptr;
+  bool parallel_pairs = false;
   if (parameters.variant == Vv10Variant::vv10 && layout.features && layout.mask_zero_weight_rows &&
       npoint <= (std::uint64_t{1} << 32) && std::fabs(parameters.coefficient) <= 0x1p32) {
+    parallel_pairs = prefer_parallel_pairs(npoint) &&
+                     parallel_pair_outputs_disjoint(npoint, points_xyz, density, workspace,
+                                                    layout.workspace_bytes, vrho, vsigma,
+                                                    point_derivative, weight_derivative);
     bounds_rejected = reinterpret_cast<int*>(block_offsets);
     runtime::cuda_resource_check(cudaMemsetAsync(bounds_rejected, 0, sizeof(int), stream));
     admit_molecular_pair_domain_kernel<<<blocks, threads, 0, stream>>>(
         npoint, points_xyz, density, omega, kappa, domega_drho, domega_dsigma, dkappa_drho,
         weighted_density, bounds_rejected);
     runtime::cuda_resource_check(cudaGetLastError());
+    if (cache_mismatch) {
+      mark_cached_pair_outputs_kernel<<<1, 1, 0, stream>>>(bounds_rejected, cache_mismatch);
+      runtime::cuda_resource_check(cudaGetLastError());
+    }
   }
 
   const double beta = std::pow(3.0 / (parameters.b * parameters.b), 0.75) / 32.0;
@@ -643,25 +873,25 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
             energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-            bounds_rejected);
+            bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
       else
         launch_pair_rows<Vv10Variant::rvv10, true, false>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
             energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-            bounds_rejected);
+            bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::rvv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
           energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-          bounds_rejected);
+          bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     } else {
       launch_pair_rows<Vv10Variant::rvv10, false, false>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
           energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-          bounds_rejected);
+          bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     }
   } else {
     if (layout.features) {
@@ -670,29 +900,29 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
             energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-            bounds_rejected);
+            bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
       else
         launch_pair_rows<Vv10Variant::vv10, true, false>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
             energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-            bounds_rejected);
+            bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::vv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
           energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-          bounds_rejected);
+          bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     } else {
       launch_pair_rows<Vv10Variant::vv10, false, false>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
           energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
-          bounds_rejected);
+          bounds_rejected, parallel_pairs, mixed_pair_arithmetic, arithmetic_work);
     }
   }
   reduce_energy_ordered_kernel<<<1, kOrderedEnergyLoadThreads, 0, stream>>>(
-      npoint, energy_terms, energy, numerical_error);
+      npoint, energy_terms, energy, numerical_error, bounds_rejected);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 

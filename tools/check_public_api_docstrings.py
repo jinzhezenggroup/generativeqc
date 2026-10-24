@@ -47,6 +47,23 @@ PLACEHOLDER = re.compile(
     r"\b(?:TODO|FIXME|TBD|XXX|placeholder|undocumented)\b", re.IGNORECASE
 )
 DEFINITION = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+NUMPY_PUBLIC_DTYPES = {
+    "bool",
+    "bool_",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "float32",
+    "float64",
+    "complex64",
+    "complex128",
+}
+NUMPY_PUBLIC_CONSTANTS = {"e", "pi", "inf", "nan"}
 
 
 @dataclass(frozen=True)
@@ -376,7 +393,7 @@ def _resolve_export(
             and value.func.attr == "dtype"
             and len(value.args) == 1
             and isinstance(value.args[0], ast.Constant)
-            and value.args[0].value in ("bool", "float32", "float64")
+            and value.args[0].value in NUMPY_PUBLIC_DTYPES
             and not value.keywords
         ):
             numpy_binding = _binding(tree, value.func.value.id, node.lineno)
@@ -386,6 +403,18 @@ def _resolve_export(
                 for alias in numpy_binding.names
             ):
                 return Declaration(path, symbol, "dtype", node)
+        if (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.attr in NUMPY_PUBLIC_DTYPES | NUMPY_PUBLIC_CONSTANTS
+        ):
+            numpy_binding = _binding(tree, value.value.id, node.lineno)
+            if isinstance(numpy_binding, ast.Import) and any(
+                alias.name == "numpy" and (alias.asname or alias.name) == value.value.id
+                for alias in numpy_binding.names
+            ):
+                kind = "dtype" if value.attr in NUMPY_PUBLIC_DTYPES else "constant"
+                return Declaration(path, symbol, kind, node)
         try:
             _checked_literal(tree, node)
         except (ValueError, TypeError) as error:

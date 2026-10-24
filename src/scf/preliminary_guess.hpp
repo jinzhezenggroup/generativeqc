@@ -9,6 +9,10 @@
 #include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
 
+namespace generativeqc::integrals {
+struct IntegralData;
+}
+
 namespace generativeqc::scf {
 class PreparedFockPlan;
 }
@@ -29,6 +33,23 @@ std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
 void validate_preliminary_target(const core::System& system, const ResolvedFockBuild& strategy,
                                  const ScfOptions& options);
 
+/** Resolve AUTO_CPU/AUTO_HUCKEL_CPU to their provider or no policy for this topology.
+ * Controls are validated before fallback. Explicit choices remain unchanged.
+ * Call before both cold execution and warm-retry diagnostics so unsupported
+ * neighbors cannot affect another item's policy or retry/allocation contract.
+ */
+void resolve_automatic_preliminary_guess(const core::System& system,
+                                         const ResolvedFockBuild& strategy, ScfOptions& options);
+
+/** Prepare Huckel against the target's actual overlap without constructing a
+ * second molecular Fock owner. The caller validates the target domain and
+ * supplies its idle eigen operation; failed supplied operations never retry
+ * with a different backend. Preparation is bounded before atomic allocation. */
+std::optional<std::vector<double>> prepare_huckel_initial_density(
+    const core::System& system, const integrals::IntegralData& target,
+    const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
+    const EigenOperation& eigen);
+
 /** Strict same-basis admission. No symmetry/trace repair or metric transport.
  * Ownership moves only after the raw candidate passes the existing ensemble gate. */
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
@@ -37,7 +58,8 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
 
 /** Prepare one bounded cold seed without executing the immutable target.
  * MINAO borrows the target's idle eigen operation for overlap, occupation
- * construction and strict admission. CPU callers retain the reference default;
+ * construction and strict admission. Host-scalar HF supplies its native owner;
+ * other callers retain their existing default operation when none is supplied.
  * a failing supplied operation never silently retries on the reference backend.
  */
 std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
@@ -53,7 +75,8 @@ using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
  */
 ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOptions& options,
                                      const std::vector<double>* initial_density,
-                                     std::size_t retained_target_bytes, const TargetSolve& solve);
+                                     std::size_t retained_target_bytes, const TargetSolve& solve,
+                                     const EigenOperation& eigen = {});
 
 }  // namespace generativeqc::scf::initial_guess
 #endif

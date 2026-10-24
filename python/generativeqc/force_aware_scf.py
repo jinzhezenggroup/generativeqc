@@ -1,9 +1,10 @@
 """Opt-in force-aware SCF effort allocation for geometry-optimization research.
 
-This module owns only the NUM03 error-allocation policy.  It does not provide a
-geometry optimizer and it does not replace the progressive orchestration owned
-by PROG04.  A consumer supplies the current geometry/force signal and executes
-the returned, already-defined SCF convergence level.
+The shared native metadata runtime executes eligible NUM03 decisions and final
+observable gates. This module retains typed policy/calibration presentation and
+explicit compatibility. It does not provide a geometry optimizer or replace
+PROG04 progressive execution. A consumer supplies the current geometry/force
+signal and executes the returned, already-defined SCF convergence level.
 
 The calibration is empirical and limited-domain.  In particular, a density
 update RMS is a solver-state diagnostic; it is not silently relabeled as a
@@ -567,6 +568,9 @@ class ForceAwareScfPolicy:
         Use strict effort near stationarity, without a trusted force signal,
         outside calibration, or in strict reproducible mode. Relaxation requires
         a sustained safe streak; the returned decision carries the next state.
+        Native/load errors propagate without a Python numerical retry. Missing
+        protocols, customized typed inputs and unbounded Python counters retain
+        their explicit compatibility policy.
         """
         _identity(method, "method")
         _identity(basis_id, "basis identity")
@@ -575,6 +579,79 @@ class ForceAwareScfPolicy:
             raise ValueError("geometry step index must be a nonnegative integer")
         if not 0 <= state.level_index < len(self.levels):
             raise ValueError("SCF effort state belongs to another policy")
+        force = current_force_max
+        if not self.strict_reproducible and force is not None:
+            force = _number(force, "current force maximum")
+        if (
+            type(self) is ForceAwareScfPolicy
+            and type(self.estimator) is ScfForceErrorEstimator
+            and type(state) is ScfEffortState
+            and all(type(level) is ScfEffortLevel for level in self.levels)
+        ):
+            from . import _scf_effort_native
+
+            native = _scf_effort_native.decide(self, state, force, method, basis_id)
+            if native is not None:
+                result, domain = native
+                reason, history = _scf_effort_native.reasons(result, domain)
+                moved = self._transition(
+                    state,
+                    result.level_index,
+                    step_index=step_index,
+                    geometry_id=geometry_id,
+                    reason=history,
+                    safe_streak=result.safe_streak,
+                )
+                estimate = (
+                    ScfForceErrorEstimate(
+                        result.energy_abs,
+                        result.force_max_abs,
+                        result.force_rms,
+                        self.estimator.identity,
+                        method,
+                        basis_id,
+                        self.estimator.diagnostic_kind,
+                        result.diagnostic_value,
+                        (
+                            "SCF diagnostic-to-observable relation is empirical, not a rigorous bound",
+                            "method/basis pair is in the recorded calibration domain",
+                            f"diagnostic kind is exactly {self.estimator.diagnostic_kind}",
+                        ),
+                    )
+                    if result.has_estimate
+                    else None
+                )
+                return ScfEffortDecision(
+                    ("strict", "strict_fallback", "hold", "relax", "tighten")[
+                        result.action
+                    ],
+                    self.levels[result.level_index],
+                    moved,
+                    reason,
+                    result.allowed_energy_error,
+                    result.allowed_force_error,
+                    estimate,
+                )
+        return self._propose_next_python(
+            state,
+            method=method,
+            basis_id=basis_id,
+            geometry_id=geometry_id,
+            step_index=step_index,
+            current_force_max=force,
+        )
+
+    def _propose_next_python(
+        self,
+        state: ScfEffortState,
+        *,
+        method: str,
+        basis_id: str,
+        geometry_id: str,
+        step_index: int,
+        current_force_max: typing.Any | None,
+    ) -> ScfEffortDecision:
+        """Compatibility for old native protocols and customized policy/predictor types."""
         allowed_energy = self.intermediate_energy_error
         if self.strict_reproducible or current_force_max is None:
             reason = (
@@ -751,6 +828,61 @@ class ForceAwareScfPolicy:
         _finite = float(energy)
         if not math.isfinite(_finite):
             raise ValueError("final energy must be finite")
+        native = None
+        if (
+            type(self) is ForceAwareScfPolicy
+            and type(level) is ScfEffortLevel
+            and type(self.strict_level) is ScfEffortLevel
+            and type(target_model_id) is str
+            and type(observed_model_id) is str
+        ):
+            from . import _scf_effort_native
+
+            native = _scf_effort_native.verify(
+                self,
+                observed_model_id == target_model_id,
+                level == self.strict_level,
+                converged,
+                _finite,
+                change,
+                density,
+                force,
+            )
+        status, reasons = (
+            native
+            if native is not None
+            else self._verify_final_python(
+                target_model_id,
+                observed_model_id,
+                level,
+                converged,
+                change,
+                density,
+                force,
+            )
+        )
+        return OptimizationFinalVerification(
+            status,
+            tuple(reasons),
+            target_model_id,
+            observed_model_id,
+            force,
+            self.optimizer_force_tolerance,
+            change,
+            density,
+        )
+
+    def _verify_final_python(
+        self,
+        target_model_id: str,
+        observed_model_id: str,
+        level: ScfEffortLevel,
+        converged: bool,
+        change: float,
+        density: float,
+        force: float,
+    ) -> tuple[str, tuple[str, ...]]:
+        """Compatibility for old native protocols and customized policy types."""
         reasons = []
         if observed_model_id != target_model_id:
             reasons.append("final model identity does not match target")
@@ -771,13 +903,4 @@ class ForceAwareScfPolicy:
             if reasons
             else "observed_met"
         )
-        return OptimizationFinalVerification(
-            status,
-            tuple(reasons),
-            target_model_id,
-            observed_model_id,
-            force,
-            self.optimizer_force_tolerance,
-            change,
-            density,
-        )
+        return status, tuple(reasons)

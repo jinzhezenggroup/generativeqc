@@ -1,5 +1,15 @@
 # Generated ECP AO and fixed-weight consumers
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/ecp-consumers-171/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/ecp-consumers-171/raw-evidence.zip
+```
+
+
 This qualifies the replacement of the CUDA AO primitive/component and
 fixed-weight derivative contractions with compiler-owned lowering. The supported
 scalar ECP domain, quadrature, reduction order, FP64 storage and complete direct
@@ -60,7 +70,7 @@ is retained. DFT/ECP and broader angular/element capabilities remain open.
 Verify or restore the byte-checked evidence:
 
 ```sh
-python -m tools.unpack_evidence benchmarks/results/ecp-consumers-171 --output /tmp/ecp-consumers
+python -m tools.unpack_evidence benchmarks/results/ecp-consumers-171 --archive .artifacts/retention-archives-20261024/ecp-consumers-171/raw-evidence.zip --output /tmp/ecp-consumers
 ```
 
 Export the stated baseline, overlay `source-overlay.tar.gz` for the candidate,

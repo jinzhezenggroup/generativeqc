@@ -1,5 +1,7 @@
 #include "scf/cuda/arena.hpp"
 
+#include <algorithm>
+
 #include "runtime/bounded_workspace.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_metadata.hpp"
@@ -8,21 +10,19 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
-                 std::size_t shell_count, std::size_t shell_pair_count,
-                 std::size_t shell_pair_block_count, std::size_t bounded_generated_task_capacity,
-                 std::size_t shell_pair_primitive_count, std::size_t psss_resident_task_count,
-                 std::size_t psss_resident_ket_pair_count, std::size_t shell_quartet_tile_count,
-                 std::size_t fp32_shell_quartet_tile_count,
-                 std::size_t generated_shell_task_capacity,
-                 std::size_t ppps_resident_ket_task_capacity,
-                 std::size_t generic_order5_tile_capacity, std::size_t primitives,
-                 std::size_t diis_history, std::size_t eigensolver_profile_capacity,
-                 std::size_t spin_count, bool persistent_eri, bool transformed_direct,
-                 bool shell_class_profiling, bool inactive_eigensolver_profiling,
-                 bool bounded_fock_class_timing, bool bounded_direct_streaming,
-                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout,
-                 bool incremental_diis_gram, bool matrix_library_workspace) {
+bool make_layout(
+    std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
+    std::size_t shell_count, std::size_t shell_pair_count, std::size_t shell_pair_block_count,
+    std::size_t bounded_generated_task_capacity, std::size_t shell_pair_primitive_count,
+    std::size_t psss_resident_task_count, std::size_t psss_resident_ket_pair_count,
+    std::size_t shell_quartet_tile_count, std::size_t fp32_shell_quartet_tile_count,
+    std::size_t generated_shell_task_capacity, std::size_t ppps_resident_ket_task_capacity,
+    std::size_t generic_order5_tile_capacity, std::size_t primitives, std::size_t diis_history,
+    std::size_t eigensolver_profile_capacity, std::size_t spin_count, bool persistent_eri,
+    bool transformed_direct, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    bool bounded_fock_class_timing, bool bounded_direct_streaming, bool mixed_precision_fock,
+    bool incremental_direct_jk, ArenaLayout& layout, bool incremental_diis_gram,
+    bool matrix_library_workspace, bool structured_matrix_workspace, bool fp32_block_screening) {
   std::size_t matrix_size = 0;
   std::size_t eri_size = 0;
   std::size_t matrices = 0;
@@ -38,6 +38,7 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
   std::size_t ppps_signature_elements = 0;
   std::size_t nbf_plus_one = 0;
   std::size_t pair_product = 0;
+  std::size_t gradient_work_elements = 0;
   if (!generativeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
       !generativeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
       !generativeqc::runtime::checked_multiply(batch_size, matrix_size, matrices) ||
@@ -54,7 +55,8 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
           ppps_resident_ket_task_capacity == 0 ? 0 : shell_pair_count, kPppsSignatureBucketCount,
           ppps_signature_elements) ||
       !generativeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
-      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product))
+      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product) ||
+      !generativeqc::runtime::checked_multiply(batch_size, 3, gradient_work_elements))
     return false;
   const std::size_t pair_count = pair_product / 2;
   if (persistent_eri && !generativeqc::runtime::checked_multiply(batch_size, eri_size, eris)) {
@@ -151,6 +153,11 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                                 made.bounded_direct_shell_pair_block_bounds) ||
       !workspace.append<double>(bounded_direct_streaming ? batch_size : 0,
                                 made.bounded_direct_system_density_bounds) ||
+      !workspace.append<float>(
+          bounded_direct_streaming && fp32_block_screening ? shell_pair_block_count : 0,
+          made.bounded_direct_fp32_block_bounds) ||
+      !workspace.append<float>(bounded_direct_streaming && fp32_block_screening ? batch_size : 0,
+                               made.bounded_direct_fp32_density_bounds) ||
       !workspace.append<double>(
           bounded_direct_streaming ? batch_size * detail::kDirectShellPairClassCount : 0,
           made.bounded_direct_system_pair_density_bounds) ||
@@ -286,6 +293,11 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<double>(spin_matrices, made.temporary) ||
       !workspace.append<double>(matrix_library_workspace ? spin_matrices : 0,
                                 made.masked_matrix_output) ||
+      !workspace.append<double>(
+          matrix_library_workspace && transformed_direct && structured_matrix_workspace
+              ? std::max(spin_matrices, direct_spin_matrices)
+              : 0,
+          made.basis_matrix_scratch) ||
       !workspace.append<double>(spin_matrices, made.eigensystem) ||
       !workspace.append<double>(spin_matrices, made.coefficients) ||
       !workspace.append<double>(batch_size * spin_count * nbf, made.eigenvalues) ||
@@ -331,11 +343,13 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<double>(batch_size, made.energy_change) ||
       !workspace.append<double>(batch_size, made.density_rms) ||
       !workspace.append<double>(atoms * 3, made.forces) ||
+      !workspace.append<unsigned long long>(gradient_work_elements, made.gradient_precision_work) ||
       !workspace.append<std::uint8_t>(batch_size, made.active) ||
       !workspace.append<std::uint8_t>(batch_size, made.converged) ||
       !workspace.append<std::uint8_t>(batch_size, made.failed) ||
       !workspace.append<std::uint8_t>(batch_size, made.final_fock_reuse_mask) ||
       !workspace.append<std::uint32_t>(1, made.final_fock_rebuild_count) ||
+      !workspace.append<std::uint64_t>(batch_size, made.executed_fock_builds) ||
       !workspace.append<std::uint8_t>(batch_size * spin_count, made.spin_active) ||
       !workspace.append<std::uint32_t>(batch_size, made.iterations) ||
       !workspace.append<int>(batch_size * spin_count, made.solver_info) ||

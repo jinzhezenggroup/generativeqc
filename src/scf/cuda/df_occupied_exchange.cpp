@@ -10,6 +10,7 @@
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
 namespace generativeqc::scf::cuda_df {
@@ -55,14 +56,21 @@ generativeqc_status build_streamed_projected_exchange(
       // Raw [mu,nu,P] has contiguous P. Each mu projects its contracted nu
       // directly into U[mu,i,P]; lda=a preserves prior raw-auxiliary blocks.
       const auto blas = trace_call("streamed_occupied_raw_projection", plan.stream, [&] {
-        return cublasDgemmStridedBatched(
-            plan.blas, CUBLAS_OP_N, column_major ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(q),
-            static_cast<int>(rank), static_cast<int>(n), &one, raw, static_cast<int>(q), q * n,
-            coefficients, static_cast<int>(column_major ? n : rank), 0, &zero, target + p,
-            static_cast<int>(a), ar, static_cast<int>(count));
+        return scf_matrix_product_batched_view(plan,
+                                               {{raw, q, q * n},
+                                                {coefficients, column_major ? n : rank, 0},
+                                                {target + p, a, ar},
+                                                q,
+                                                rank,
+                                                n,
+                                                count,
+                                                false,
+                                                !column_major,
+                                                one,
+                                                zero},
+                                               "project streamed raw DF factors", detail);
       });
-      if (blas != CUBLAS_STATUS_SUCCESS)
-        return blas_failure(blas, "project streamed raw DF factors", detail);
+      if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
       trace_counter("occupied_projection_products", count);
       trace_counter("occupied_projection_flops", 2 * q * count * n * rank);
     }
@@ -71,13 +79,11 @@ generativeqc_status build_streamed_projected_exchange(
     // back to symmetric whitening cancels in the complete K Gram. These
     // private factors are never published as a final symmetric-C projection.
     const auto blas = trace_call("streamed_occupied_metric_projection", plan.stream, [&] {
-      return cublasDgemm(plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(a),
-                         static_cast<int>(count * rank), static_cast<int>(a), &one,
-                         plan.metric_eigenvectors + system * a * a, static_cast<int>(a), target,
-                         static_cast<int>(a), &zero, transformed, static_cast<int>(a));
+      return scf_matrix_product_view(
+          plan, true, false, a, count * rank, a, plan.metric_eigenvectors + system * a * a, a,
+          target, a, transformed, a, one, zero, "whiten streamed occupied DF factors", detail);
     });
-    if (blas != CUBLAS_STATUS_SUCCESS)
-      return blas_failure(blas, "whiten streamed occupied DF factors", detail);
+    if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
     // The scale pass already touches every transformed element once. Store the
     // divided value straight into the retained slot instead of launching a
     // second device-to-device copy over the same projection payload.
@@ -107,13 +113,12 @@ generativeqc_status build_streamed_projected_exchange(
     // Columns of each (a*rank,rows) panel are output AO rows. Every matrix
     // block is produced exactly once, including partial row/column tails.
     const auto blas = trace_call("streamed_occupied_exchange_gemm", plan.stream, [&] {
-      return cublasDgemm(plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(nr),
-                         static_cast<int>(nc), static_cast<int>(ar), &weight, projections[left],
-                         static_cast<int>(ar), projections[right], static_cast<int>(ar), &zero,
-                         output + r + c * n, static_cast<int>(n));
+      return scf_matrix_product_view(plan, true, false, nr, nc, ar, projections[left], ar,
+                                     projections[right], ar, output + r + c * n, n, weight, zero,
+                                     "contract streamed occupied DF factors", detail);
     });
-    if (blas != CUBLAS_STATUS_SUCCESS) {
-      status = blas_failure(blas, "contract streamed occupied DF factors", detail);
+    if (blas != GENERATIVEQC_STATUS_SUCCESS) {
+      status = blas;
       return false;
     }
     trace_counter("occupied_exchange_products", 1);
@@ -192,6 +197,10 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
                                             const double* coefficients, std::size_t rank,
                                             bool column_major, double weight, double* exchange,
                                             std::string& detail) {
+  if (plan.resident_raw_coulomb) {
+    detail = "pure-J raw storage cannot supply occupied exchange";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   plan.revoke_projection_leases();
   using namespace runtime::cuda_trace;
   TraceOperation trace(
@@ -233,12 +242,12 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // contracted AO index directly, retaining U[mu,i,Q] in one existing
     // buffer. Flattening (i,Q) then sums every auxiliary contribution inside
     // GEMM: K = w U U^T. This also works for nonsymmetric diagnostic B.
-    const auto n = static_cast<int>(plan.nbf), a = static_cast<int>(plan.naux);
-    const auto r = static_cast<int>(rank), ar = a * r;
+    const auto n = plan.nbf, a = plan.naux;
+    const auto r = rank, ar = a * r;
     const double one = 1, zero = 0;
     const auto* b = plan.three_center + system * plan.stored_tensor_elements_per_system;
     auto* u = plan.auxiliary_tile_values;
-    cublasStatus_t status = CUBLAS_STATUS_SUCCESS;
+    generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
     if (packed) {
       runtime::cuda_trace::TraceRegion projection("ri_k_occupied_packed_projection", plan.stream);
       launch_project_packed_df(plan.stream, plan.nbf, plan.naux, rank, column_major, b,
@@ -249,13 +258,21 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       trace_counter("packed_projection_launches", 1);
     } else {
       status = trace_call("ri_k_occupied_projection_gemm", plan.stream, [&] {
-        return cublasDgemmStridedBatched(plan.blas, CUBLAS_OP_N,
-                                         column_major ? CUBLAS_OP_N : CUBLAS_OP_T, a, r, n, &one, b,
-                                         a, plan.naux * plan.nbf, coefficients,
-                                         column_major ? n : r, 0, &zero, u, a, plan.naux * rank, n);
+        return scf_matrix_product_batched_view(plan,
+                                               {{b, a, plan.naux * plan.nbf},
+                                                {coefficients, column_major ? n : r, 0},
+                                                {u, a, plan.naux * rank},
+                                                a,
+                                                r,
+                                                n,
+                                                n,
+                                                false,
+                                                !column_major,
+                                                one,
+                                                zero},
+                                               "resident occupied DF projection", detail);
       });
-      if (status != CUBLAS_STATUS_SUCCESS)
-        return blas_failure(status, "resident occupied DF projection", detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
     bool triangular = false;
     auto* output = exchange + system * plan.matrix_elements;
@@ -279,27 +296,12 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       trace_counter("occupied_exchange_reduction_elements", gram_splits * plan.matrix_elements);
     } else
       status = trace_call("ri_k_occupied_exchange_gemm", plan.stream, [&] {
-        // K is a Gram matrix even when the three-center fixture is not AO
-        // symmetric. Reduce its product domain before BLAS, then mirror the
-        // result. Providers without SYRK retain the exact full GEMM route.
-        const auto product = [&](auto handle) {
-          if constexpr (requires {
-                          cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, ar, &weight,
-                                      u, ar, &zero, output, n);
-                        }) {
-            if (plan.triangular_exchange) {
-              triangular = true;
-              return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, ar, &weight, u, ar,
-                                 &zero, output, n);
-            }
-          }
-          return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n, n, ar, &weight, u, ar, u, ar,
-                             &zero, output, n);
-        };
-        return product(plan.blas);
+        // Triangle ownership is a semantic property. The prepared provider
+        // uses SYRK where supported or retains the original full GEMM.
+        return scf_occupied_gram(plan, n, ar, weight, u, output, plan.triangular_exchange,
+                                 triangular, "resident occupied DF K product", detail);
       });
-    if (status != CUBLAS_STATUS_SUCCESS)
-      return blas_failure(status, "resident occupied DF K product", detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (triangular && !gram_splits) {
       runtime::cuda_trace::TraceRegion mirror("ri_k_occupied_mirror", plan.stream);
       launch_mirror_exchange_triangle(blocks_for(plan.matrix_elements), kThreads, plan.stream,
@@ -330,9 +332,7 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // writer revokes it. Publication as a scientific final-state lease remains
     // the responsibility of the method owner after its iteration has drained.
     plan.completed_occupied_projection_rank = rank;
-    return status == CUBLAS_STATUS_SUCCESS
-               ? GENERATIVEQC_STATUS_SUCCESS
-               : blas_failure(status, "resident occupied DF K product", detail);
+    return status;
   }
 
   // Only the tiled fallback accumulates partial auxiliary products into K.
@@ -427,16 +427,23 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // U = C^T L_row^T has [rank,row_count] column-major layout. Host B is
     // already C^T in that convention and includes sqrt(occupation).
     auto status = trace_call("ri_k_occupied_gemm", plan.stream, [&] {
-      return cublasDgemmStridedBatched(
-          plan.blas, column_major ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(rank),
-          static_cast<int>(count), static_cast<int>(plan.nbf), &one, coefficients,
-          static_cast<int>(column_major ? plan.nbf : rank), 0, plan.exchange_intermediate,
-          static_cast<int>(plan.nbf), count * plan.nbf, &zero, output, static_cast<int>(rank),
-          rank * count, static_cast<int>(qcount));
+      return scf_matrix_product_batched_view(
+          plan,
+          {{coefficients, column_major ? plan.nbf : rank, 0},
+           {plan.exchange_intermediate, plan.nbf, count * plan.nbf},
+           {output, rank, rank * count},
+           rank,
+           count,
+           plan.nbf,
+           qcount,
+           column_major,
+           false,
+           one,
+           zero},
+          "occupied DF projection", detail);
     });
     trace_counter("occupied_projection_products", qcount);
-    return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
-                                           : blas_failure(status, "occupied DF projection", detail);
+    return status;
   };
   for (std::size_t qbegin = 0; qbegin < plan.naux; qbegin += auxiliary_tile) {
     const auto qcount = std::min(auxiliary_tile, plan.naux - qbegin);
@@ -464,15 +471,22 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
         // stream. No full three-center temporary or rank-dependent allocation.
         const auto stride = rcount * ccount;
         auto blas = trace_call("ri_k_occupied_gemm", plan.stream, [&] {
-          return cublasDgemmStridedBatched(
-              plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(rcount),
-              static_cast<int>(ccount), static_cast<int>(rank), &weight,
-              plan.exchange_contributions, static_cast<int>(rank), rank * rcount, column,
-              static_cast<int>(rank), rank * ccount, &zero, plan.exchange_intermediate,
-              static_cast<int>(rcount), stride, static_cast<int>(qcount));
+          return scf_matrix_product_batched_view(
+              plan,
+              {{plan.exchange_contributions, rank, rank * rcount},
+               {column, rank, rank * ccount},
+               {plan.exchange_intermediate, rcount, stride},
+               rcount,
+               ccount,
+               rank,
+               qcount,
+               true,
+               false,
+               weight,
+               zero},
+              "occupied DF K product", detail);
         });
-        if (blas != CUBLAS_STATUS_SUCCESS)
-          return blas_failure(blas, "occupied DF K product", detail);
+        if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
         trace_counter("occupied_exchange_products", qcount);
         launch_reduce_exchange_row_tile_kernel(blocks_for(stride), kThreads, 0, plan.stream,
                                                plan.nbf, rbegin, rcount, cbegin, ccount, qcount,

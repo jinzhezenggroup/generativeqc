@@ -161,10 +161,9 @@ std::vector<AoExpansion> ao_expansions(unsigned l,
 std::size_t ao_count(const core::System& system) noexcept {
   std::size_t count = 0;
   for (const core::Shell& shell : system.shells) {
-    const std::size_t functions = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
-                                      ? 2 * static_cast<std::size_t>(shell.angular_momentum) + 1
-                                      : cartesian_count(shell.angular_momentum);
-    if (functions > std::numeric_limits<std::size_t>::max() - count) return 0;
+    const std::size_t functions =
+        shell_ao_count(shell.angular_momentum, system.basis_representation);
+    if (!functions || functions > std::numeric_limits<std::size_t>::max() - count) return 0;
     count += functions;
   }
   return count;

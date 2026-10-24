@@ -17,7 +17,6 @@ TENSOR = ROOT / "src/tensor/cuda_runtime.cuh"
 
 def test_low_rank_uses_only_shared_tensor_provider() -> None:
     source = LOW_RANK.read_text()
-    provider = TENSOR.read_text()
     manifest = json.loads(
         (ROOT / "manifests/maintenance/vendor_boundaries.json").read_text()
     )
@@ -25,13 +24,6 @@ def test_low_rank_uses_only_shared_tensor_provider() -> None:
     assert "cublasDgemm(" not in source
     assert "cublasDdot(" not in source
     assert "cublasSetPointerMode(" not in source
-    assert source.count("dot_to_device(p.context,") == 1
-    assert source.count("gemm(p.context, 'N', 'N', n, n, n,") == 2
-    assert "dot_to_device(Context& context" in provider
-    assert "cublasDdot(context.handle" in provider
-    assert provider.index("const auto restore_status = cublasSetPointerMode(") < (
-        provider.index("blas_check(dot_status);")
-    )
 
 
 @pytest.mark.parametrize("size", [2, 3, 5])

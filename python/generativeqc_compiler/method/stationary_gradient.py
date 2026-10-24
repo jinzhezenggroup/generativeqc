@@ -23,11 +23,11 @@ from generativeqc_compiler.tensor import (
     add,
     constant,
     einsum,
-    execute,
     input_tensor,
     reduce_sum,
     transpose_program,
 )
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 
 from .nonlocal_correlation import NonlocalCorrelationPrimitive
@@ -88,13 +88,15 @@ class StationaryMeanField:
             "interior-v1",
             SCF_POINT_MODEL,
             LIBXC_WORK_DOMAIN,
+            DENSITY_WORK_DOMAIN,
             "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
         ):
             raise UnsupportedMethod("unsupported XC point-model contract")
         if self.hamiltonian not in ("all-electron", "scalar-semilocal-ecp"):
             raise UnsupportedMethod("unsupported stationary hamiltonian contract")
+        if self.coulomb not in ("direct-full-range", "density-fitted-full-rank"):
+            raise UnsupportedMethod("unsupported stationary coulomb contract")
         supported = {
-            "coulomb": "direct-full-range",
             "occupations": "fixed-integer",
             "topology_policy": "stable-explicit-grid-v1",
             "dtype": "float64",
@@ -612,4 +614,6 @@ class StationaryGradientPlan:
         if not isinstance(components, Mapping):
             raise TypeError("gradient components must be a mapping")
         program = self.reduction_program(atoms=atoms, sources=components.keys())
+        from generativeqc_compiler.tensor import execute
+
         return execute(program, components, max_bytes=max_bytes).outputs["gradient"]

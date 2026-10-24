@@ -1,0 +1,10 @@
+{
+  "api_version": "2025.12",
+  "module": "generativeqc.experimental.array_api",
+  "tests_revision": "6c0b59f9ecd654f0c356614f2e421c9993f676d2",
+  "spec_revision": "5f847a3858875c682ae901aa22b0413bf24be9da",
+  "extensions": ["linalg", "fft"],
+  "max_examples": 100,
+  "numpy_minimum": "2.1.3",
+  "array_api_compat_minimum": "1.15.0"
+}

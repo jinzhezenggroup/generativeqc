@@ -16,6 +16,11 @@ Matrix density_from_orbitals(const Matrix& coefficients, std::size_t n, std::siz
 /** Form the energy-weighted density used in the stationary overlap/Pulay term. */
 Matrix energy_weighted_density(const Matrix& coefficients, const std::vector<double>& energies,
                                std::size_t n, std::size_t occupied, double occupation_weight = 2.0);
+/** Pulay density D F[D] D / occupation_weight from the returned determinant.
+ * Use the physical Fock at that same density, never a DIIS-extrapolated Fock or
+ * orbital energies belonging to a previous SCF iterate. */
+Matrix physical_weighted_density(const Matrix& density, const Matrix& fock, std::size_t n,
+                                 double occupation_weight = 2.0);
 /** Restricted electronic energy, excluding nuclear repulsion. */
 double electronic_energy(const Matrix& density, const Matrix& hcore, const Matrix& fock);
 /** Unrestricted electronic energy with separate unit-occupation spin densities. */

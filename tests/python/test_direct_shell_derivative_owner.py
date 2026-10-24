@@ -69,16 +69,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     range_body = " ".join(consumer[range_begin:range_end].split())
     assert "detail::BoundedDirectBlockDomain block_domain" in range_body
     assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
-    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
-    bounded_begin = bounded.index(
-        "void launch_bounded_direct_range_exchange_force_kernel("
-    )
-    bounded_end = bounded.index(
-        "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
-    )
-    bounded_body = " ".join(bounded[bounded_begin:bounded_end].split())
-    assert "detail::BoundedDirectBlockDomain block_domain" in bounded_body
-    assert bounded_body.count("false, true, block_domain);") == 2
+    # Compiled range-dispatch tests cover domain/omega/force-purpose forwarding
+    # for every admitted basis bound; the number of template launches is not ABI.
 
 
 def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
@@ -93,11 +85,15 @@ def _assert_full_range_derivative_layout(body: str) -> None:
     normalized = " ".join(body.split())
     assert "bool separate_sources" in normalized
     assert (
-        "std::vector<double> result((separate_sources ? 2U : 1U) * coordinates)"
+        "std::vector<double> result((separate_sources ? 2U : 1U) * batch.total_atoms * 3U)"
         in normalized
     )
     assert (
-        "cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream)"
+        "const auto output_elements = (separate_sources ? 2U : 1U) * coordinates"
+        in normalized
+    )
+    assert (
+        "cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream)"
         in normalized
     )
     assert (
@@ -109,12 +105,23 @@ def _assert_full_range_derivative_layout(body: str) -> None:
 def test_full_range_derivative_shares_one_queue_and_download() -> None:
     """Work reduction is source reuse, not removal of an observable component."""
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    body = enqueue + host
     _assert_full_range_derivative_layout(body)
     assert body.count("launch_bounded_shell_energy_derivative(") == 1
-    assert body.count("cudaMemcpyAsync(") == 1
+    # Executed transfer counts, including opt-in qualification receipts, belong
+    # to the compiled host-lifetime tests rather than lexical API-call counts.
+    assert "enqueue_generated_full_range_energy_derivatives(" in host
+    assert "enqueue_generated_full_range_energy_derivatives(" in resident
+    assert "CudaDerivativeConvention::Force" in resident
     assert "for (unsigned source" not in body
     dispatcher = _source("src/scf/cuda/direct_bounded_fallback.cu")
     assert "DirectRangeOperator::FullSources" in dispatcher
@@ -124,6 +131,32 @@ def test_full_range_derivative_shares_one_queue_and_download() -> None:
     contraction = _source("src/scf/cuda/direct_force_quartet.cuh")
     assert "if (coefficient == 0.0 && exchange_weight == 0.0) return;" in contraction
     assert "SeparateSources ? 2U : 1U" in contraction
+
+
+def test_shared_full_range_queue_preserves_bilinear_seed() -> None:
+    """Resident force transport must not change the retained response seed ABI."""
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    assert "bool bilinear" in host
+    assert "allow_spatial_default, bilinear" in " ".join(host.split())
+    assert "allow_spatial_default, false" in " ".join(resident.split())
+    assert "if (bilinear)" in enqueue
+    assert "b.direct_force_seed = p.direct_spin" in enqueue
+    assert "unrestricted || bilinear" in enqueue
+    assert host.index("validate_generated_full_range_derivative_inputs(") < host.index(
+        "HostResultDrain"
+    )
+    assert resident.index(
+        "validate_generated_full_range_derivative_inputs("
+    ) < resident.index("cudaGetDevice(")
 
 
 @pytest.mark.parametrize(
@@ -138,9 +171,12 @@ def test_full_range_derivative_layout_rejects_understated_storage(
     before: str, after: str
 ) -> None:
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    body = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    body += cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
     assert before in body
     with pytest.raises(AssertionError):
         _assert_full_range_derivative_layout(body.replace(before, after))
@@ -237,7 +273,7 @@ int main() {
                 assert(route.generic_exchange == (want_k && !expected && !canonical));
                 assert(route.generated_coulomb == (want_j && expected_shell && !mixed_j));
                 assert(route.canonical_coulomb ==
-                       (want_j && !route.generated_coulomb && canonical && !mixed_j));
+                       (want_j && !route.generated_coulomb && canonical));
                 assert(route.generic_coulomb ==
                        (want_j && !route.generated_coulomb && !route.canonical_coulomb));
                 assert(int(route.generated_coulomb) + int(route.canonical_coulomb) +
@@ -276,7 +312,8 @@ int main() {
 
 def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
-    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    # Preserve the producer/flag audit without depending on call-site wrapping.
+    owner = " ".join(_source("src/scf/cuda/direct_coulomb.cpp").split())
     assert "const bool bounded_through_f = through_f;" in direct
     assert "dispatch.canonical_coulomb || dispatch.canonical_exchange" in direct
     assert "mixed_j, plan->canonical_pairs != nullptr" in direct
@@ -455,18 +492,29 @@ def test_channel_dispatch_is_independent(
     dispatch_start = source.index("const auto dispatch =", device_start)
     dispatch_end = source.index(";", dispatch_start) + 1
     device_dispatch = source[dispatch_start:dispatch_end]
+    availability_start = source.index(
+        "const bool generated_exchange_available =", device_start
+    )
+    availability_end = source.index(";", availability_start) + 1
+    exchange_availability = source[availability_start:availability_end]
     harness = (
         "#include <cassert>\n"
         + header[start:end]
         + r"""
 DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
-    bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
-    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false) {
+    bool generated_exchange_capability, bool want_j, bool want_k, bool mixed_j,
+    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false,
+    bool mixed_exchange = false) {
   struct Channel { bool present; };
   struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
   struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
   auto* plan = &storage;
+  const auto direct_jk_generated_exchange_value_available =
+      [generated_exchange_capability](const auto&, const auto&) {
+        return generated_exchange_capability;
+      };
 """
+        + exchange_availability
         + device_dispatch
         + r"""
   return dispatch;
@@ -489,7 +537,11 @@ int main() {
            int(both.generic_coulomb) == int(j));
     assert(int(both.generated_exchange) + int(both.canonical_exchange) +
            int(both.generic_exchange) == int(k));
-    if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
+    if (mixed) {
+      assert(!both.generated_coulomb);
+      assert(both.canonical_coulomb == (j && canonical));
+      assert(both.generic_coulomb == (j && !canonical));
+    }
     const auto ordinary = device_dispatch(generated_j, generated_k, j, k, mixed,
                                            canonical, false);
     assert(ordinary.generated_coulomb == both.generated_coulomb);
@@ -498,6 +550,16 @@ int main() {
     assert(ordinary.canonical_exchange == both.canonical_exchange);
     assert(ordinary.generic_coulomb == both.generic_coulomb);
     assert(ordinary.generic_exchange == both.generic_exchange);
+    // A strict generated K source cannot satisfy explicitly mixed K, even
+    // when its radial operator is available. J retains its own precision.
+    const auto lowered_k = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                            canonical, false, false, false, true);
+    assert(!lowered_k.generated_exchange);
+    assert(lowered_k.canonical_exchange == (k && canonical));
+    assert(lowered_k.generic_exchange == (k && !canonical));
+    assert(lowered_k.generated_coulomb == both.generated_coulomb);
+    assert(lowered_k.canonical_coulomb == both.canonical_coulomb);
+    assert(lowered_k.generic_coulomb == both.generic_coulomb);
     // MD owns J separately; normal dispatch must still select exactly the
     // same K provider and must not compute J a second time.
     const auto md = device_dispatch(generated_j, generated_k, j, k, mixed,
@@ -591,11 +653,9 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
         "exchange && exchange->force_capability && exchange->shared && exchange->force"
         in bridge
     )
-    assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr && '
-        "cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U"
-        in " ".join(bridge.split())
-    )
+    # The executable selector probe in test_one_electron_implicit_cooperative
+    # covers default and explicit mappings. Keep this audit about borrowing
+    # prepared Direct metadata, independently of selector expression syntax.
     assert "hcore_schedule, 1.0, output, source->stream" in bridge
     assert "1, 1.0, output, source->stream" in bridge
     assert (
@@ -648,15 +708,34 @@ def test_stationary_integral_layout_rejects_understated_channels(
         _assert_stationary_integral_layout(*sources)
 
 
+def _generic_cuda_integral_gradient(methods: str) -> str:
+    # The scientific owner has no input index. Its forwarding batch overload
+    # may move independently, so select the complete definition by its ABI.
+    begin = methods.index("generativeqc_status cuda_integral_gradient(")
+    candidates = methods[begin:].split("generativeqc_status cuda_integral_gradient(")
+    definitions = [
+        cpp_function_definition(
+            "generativeqc_status cuda_integral_gradient(" + candidate,
+            "cuda_integral_gradient",
+        )
+        for candidate in candidates[1:]
+    ]
+    implementations = [
+        body
+        for body in definitions
+        if "std::size_t index," not in body[: body.index("{")]
+    ]
+    assert len(implementations) == 1
+    return implementations[0]
+
+
 def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> None:
     methods = _source("src/methods/dft_method.cpp")
     api = _source("src/api/c_api_ks_snapshot.cpp")
     snapshot = _source("python/generativeqc/_ks_snapshot.py")
     stationary = _source("python/generativeqc/_stationary_cuda.py")
 
-    begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("Result execute(bool compute_forces)", begin)
-    body = methods[begin:end]
+    body = _generic_cuda_integral_gradient(methods)
     assert "const bool range_exchange = execution_plan_.range_exchange;" in body
     _assert_stationary_integral_layout(body, api, snapshot)
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in body
@@ -676,3 +755,28 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     assert "records -= ao_integral_primitive_records" in stationary
     assert '"one_electron_device_peak_bytes"' in stationary
     assert "additional_device_peak_bound=peak" in stationary
+
+
+@pytest.mark.parametrize("position", ["start", "end"])
+def test_generic_stationary_cuda_rejects_method_specific_integral_policy(
+    monkeypatch: pytest.MonkeyPatch, position: str
+) -> None:
+    """Narrowing extraction must still reject family policy anywhere inside."""
+    original_source = _source
+    methods = original_source("src/methods/dft_method.cpp")
+    body = _generic_cuda_integral_gradient(methods)
+    offset = body.index("{") + 1 if position == "start" else body.rindex("}")
+    policy = (
+        "\nif (execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp) "
+        "return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;\n"
+    )
+    mutated = methods.replace(body, body[:offset] + policy + body[offset:], 1)
+
+    def source(relative: str) -> str:
+        if relative == "src/methods/dft_method.cpp":
+            return mutated
+        return original_source(relative)
+
+    monkeypatch.setattr(f"{__name__}._source", source)
+    with pytest.raises(AssertionError):
+        test_generic_stationary_cuda_reuses_complete_prepared_integral_sources()

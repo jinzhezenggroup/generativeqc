@@ -22,7 +22,7 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
         Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
     ).read_text(encoding="utf-8")
     begin = source.index("generativeqc_status cuda_integral_gradient(")
-    end = source.index("Result execute(bool compute_forces)", begin)
+    end = source.index("Result execute_impl(bool compute_forces)", begin)
     bridge = source[begin:end]
     assert "resident_final_stationary_weights" in bridge
     assert "resident_weights.density" in bridge
@@ -436,14 +436,31 @@ def test_complete_cuda_force_matches_independent_engine(
             assert warm.iterations == 1
         work = batch._stationary_cuda_execution.last_work
         assert work["prepared_execution_reused"]
-        assert work["ao_collocation_point_visits"] == work["grid_points"]
-        assert work["geometry_point_visits"] == 2 * work["grid_points"]
-        assert work["nonlocal_execution"] == "resident-full-grid-device-seeds"
-        assert work["nonlocal_feature_source"] == "exact-final-scf-device-binding"
+        geometry_hit = work.get("geometry_response_cache_hits", 0)
+        if geometry_hit:
+            assert os.environ.get("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE") == "1"
+            assert work["geometry_response_evaluations"] == 0
+            assert work["geometry_response_retained_host_bytes"] > 0
+            assert work["nonlocal_execution"] == "exact-density-geometry-reuse"
+            assert work["nonlocal_feature_source"] == "retained-density-only-response"
+            assert work["grid_density_source"] == "retained-density-only-response"
+        else:
+            assert work["nonlocal_execution"] == "resident-full-grid-device-seeds"
+            assert work["nonlocal_feature_source"] == "exact-final-scf-device-binding"
+            assert work["grid_density_source"] == "exact-final-scf-device-binding"
+        assert work["ao_collocation_point_visits"] == (
+            0 if geometry_hit else work["grid_points"]
+        )
+        assert work["geometry_point_visits"] == (
+            0 if geometry_hit else 2 * work["grid_points"]
+        )
         assert work["nonlocal_feature_d2h_bytes"] == 0
         assert work["nonlocal_seed_h2d_bytes"] == 0
         assert work["nonlocal_dense_pair_capacity"] == work["grid_points"] ** 2
-        assert work["nonlocal_seed_generation"] > 0
+        if geometry_hit:
+            assert work["nonlocal_seed_generation"] is None
+        else:
+            assert work["nonlocal_seed_generation"] > 0
         assert "nonlocal_pair_evaluations" not in work
         assert len(work["source_names"]) == 12
         assert work["two_electron_quartet_traversals"] is None

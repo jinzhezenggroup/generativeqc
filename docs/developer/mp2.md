@@ -7,13 +7,39 @@ forces use the same fitted RHF/correlation Hamiltonian, fixed-rank metric branch
 native response solver, and bounded generated DF derivative consumers. CUDA
 RI-MP2 currently provides energy only; a CUDA force request fails explicitly
 instead of falling back to the host. The separate `ump2` method provides
-conventional CPU FP64 energy on validated UHF references, using the same
+conventional CPU FP64 energy and analytic forces on validated UHF references, using the same
 compiler-owned spin-labelled equation inventory as the bounded UMP2 core.
 Internal [fixed-orbital UMP2 cotangents](ump2_adjoints.md) provide unrelaxed MO
-integral/orbital-energy weights; they do not enable public UMP2 forces.
+integral/orbital-energy weights. The native complete UMP2 force path adds the
+shared spin-response, relaxed overlap and shell-local derivative consumers; see
+[UMP2 derivatives](ump2_adjoints.md#complete-native-nuclear-forces).
 Neither method includes ROHF-MP2, frozen core, ECP, complex orbitals, screened or approximate
 correlation, Hessians, or mixed precision. No performance replacement is implied
 by the numerical qualification.
+
+The explicit `density_fitting="correlation_cuda"` MP2 mode is a separate
+reference contract: conventional exact RHF, with density fitting only in the
+correlation Hamiltonian. It provides CUDA energy and analytic forces, and
+shares the physical DF source/metric and RHF-frame response owners with
+DF-RCCSD(T). See [DF-CBS](../user/ccsdt_cbs.md#correlation-only-df-cbs-on-cuda)
+for the composite method and auxiliary-identity requirements. It does not
+change the legacy DF-HF RI-MP2 selector, or introduce a reference-package
+production consumer.
+
+The compiler reuses the ordered spatial MP2 energy algebra, contracts the
+Q-major `Bov` Gram tensor and differentiates the energy with respect to factors
+and all four epsilon positions. The runtime sums repeated occupied/virtual
+epsilon cotangents for fixed-canonical audits. Molecular response instead uses
+full occupied/virtual Fock cotangents from the noncanonical MP2 amplitude
+equation; their diagonals match those combined epsilon seeds, but their
+off-diagonals preserve same-space stationarity without inverse same-space gaps.
+It never adds both sources. The runtime embeds the compressed factor VJP through the original
+physical pair projection, and consumes the original source token. The nuclear
+sink differentiates three-center integrals and the metric; conventional RHF
+orbital/nuclear response closes the total derivative. The MP2-only source
+demand omits all CC four-index core blocks, amplitudes and Lambda iterations.
+The current generated scratch still scales as `O(nocc² nvir²)`; it is not a
+streamed arbitrary-size MP2 response implementation.
 
 ```python
 from generativeqc import Calculator
@@ -49,6 +75,59 @@ result = ri.singlepoint(
     properties=("energy", "forces"),
 )
 ```
+
+## CUDA E+F source reuse
+
+Conventional CUDA MP2 borrows the qualified exact RHF interaction source used
+by CC. When admitted, resident reference ERIs survive energy, adjoint, orbital
+response and relaxed-weight replay; otherwise a compact source generates
+bounded unscreened device tiles. The source is tied to the current geometry,
+basis, reference and device. A unique resident owner returns its executable to
+the prepared warm cache only after the complete endpoint finishes.
+
+The compiler's source-tile planner admits cross-shell AO tiles for device-backed
+energy and force consumers. Force admission covers all streamed block shapes,
+simultaneously live outputs, response workspace and bounded derivative scratch,
+not just the energy's occupied–virtual block. Scientific equations, full-force
+stationarity and residual gates are unchanged. A memory refusal releases the
+optional source once and retries the existing bounded compatibility provider;
+it does not reinterpret a numerical failure as permission to retry.
+
+Set `GENERATIVEQC_MP2_REFERENCE_SOURCE=0` to disable the source handoff.
+`GENERATIVEQC_MP2_ENERGY_SOURCE_TILING=0` and
+`GENERATIVEQC_MP2_FORCE_SOURCE_TILING=0` independently retain shell-sized source
+tiles. `GENERATIVEQC_DF_PROGRESS_TRACE` records completed source reads, transform
+summands and transfers; it is diagnostic replay, not a substitute for endpoint
+timing. The public conventional CUDA path still stages MO blocks on the host;
+source reuse is not a claim that the complete response/adjoint is GPU-resident.
+
+Conventional CUDA E+F may additionally retain an optional six-block MO symmetry
+cover: OVOV, OOVV, OVOO, OVVV, OOOO, and VVVV. The energy adjoint, orbital RHS,
+response actions and relaxed-weight replay borrow compatible blocks in the
+same canonical frame instead of repeating their AO-to-MO transformations.
+Construction runs on CUDA; returned blocks remain host-owned. Admission limits
+the cache to one quarter of the remaining correlation phase budget and charges
+its actual vector capacities alongside producer scratch and the full force
+consumer. A memory refusal drops the optional cache and restores bounded force
+reconstruction without changing the reference or swallowing numerical errors.
+CPU, energy-only and RI paths do not build this cache. Full VVVV storage is
+quartic, so admission is optional rather than an arbitrary-basis work bound.
+
+`GENERATIVEQC_MP2_FORCE_MO_CACHE=0` disables only this optional cache for
+qualification. Disabling force source tiling also disables its construction,
+preserving the diagnostic shell-sized route. The progress journal records
+`mp2_force_mo_cache_bytes` and actual `borrowed_mo_blocks` reads; positive cache
+storage alone is not evidence that a consumer reused it. Same-basis CBS groups
+can instead borrow the correction calculation's compatible CC blocks; see the
+[CBS workflow](../user/ccsdt_cbs.md).
+
+Run `benchmarks/mp2_cuda_ef_endpoint.py` under a finite-time Slurm GPU allocation
+to qualify cold and prepared-warm **energy plus analytic forces**, with an
+optional independent PySCF gradient oracle and untimed work journal. Source,
+library and input provenance accompany the results. This does not enable CUDA
+RI-MP2 forces or enlarge the native force domain available to CBS composition.
+
+## Response and force contracts
 
 CPU RI-MP2 analytic forces complete C2 by composing the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
@@ -117,6 +196,32 @@ zero without introducing a zero denominator. The correlation consumer never
 allocates complete molecular T2 or AO ERIs. CPU RHF preparation uses dense AO
 ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 
+## Conventional factorized derivative staging
+
+The common host pullback stores the first factorized shell stage as separate
+Coulomb, exchange and correlation regions. With shell width `di`, `N` orbitals,
+`O` occupied orbitals and `V=N-O`, it uses `di*O*(2*N+V^2)` doubles when this is
+smaller than the admitted legacy `di*N^3` buffer. Its internal explicit staged
+layout remains available for bounded comparison. The second transform omits
+structurally zero slots and preserves the original occupied exchange / virtual
+correlation reduction order, including the overlapping Coulomb diagonal.
+
+Dense weights retain the original eightfold projection and staged layout.
+Second, third and shell-local buffers, ordered factorized callbacks and atom
+scatter remain unchanged. The production resource plan conservatively admits
+the legacy first buffer; this representation change supplies no measured
+endpoint telemetry and does not retire the remaining materializations in
+[#1626](https://github.com/jinzhezenggroup/generativeqc/issues/1626).
+
+`tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
+translation unit with an independent direct tensor oracle, the explicit staged
+layout and expanded dense weights. Synthetic and independent PySCF molecular
+ERI center derivatives cover all four slots, repeated atoms, Cartesian d and
+spherical d/f shells. Source-bound accumulation counters and allocation
+lifetimes qualify this host transform; complete endpoint and device evidence
+must be assessed separately. See the
+[decision note](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md).
+
 ## Native path and placement
 
 ### Dense Native Orbital Oracle Admission
@@ -163,7 +268,7 @@ shell-stage materializations should be retained.
 C / C++ / Python public prepare
   -> method registry -> Mp2Prepared
   -> existing RHF driver, requested owned physical reference
-  -> conventional: CG10 RawSource + cyclic staged MO transforms
+  -> conventional: shared exact interaction source / RawSource fallback + cyclic MO transforms
   -> RI: shared DF source + metric factor + occupied/virtual three-center transform
   -> CG08 energy equation -> generated native CPU or CG09 CUDA tile program
   -> native compensated scalar fold
@@ -204,10 +309,12 @@ commutator residual and canonical density drift. GPU computation of Fock,
 orbitals and reference energy remains on device; its reference validation and
 matrix snapshots are disclosed host staging.
 
-Conventional correlation AO tiles come from the existing **CPU values-only
-source**. CUDA mode uploads those tiles, performs all four cyclic transforms
-with CG10 cuBLAS, downloads bounded MO tiles, reorders exchange on host, and
-uploads them through CG09's host-input ABI.
+Conventional CUDA correlation and response borrow the qualified RHF device
+source described in [CUDA E+F source reuse](#cuda-ef-source-reuse). The bounded
+compatibility fallback uses the existing CPU values-only source and uploads
+its AO tiles. Both routes perform four cyclic CUDA MO transforms, download
+bounded MO tiles, reorder exchange on the host, and upload energy tiles through
+CG09's host-input ABI. CPU force execution retains its original source route.
 
 RI mode builds the RHF reference and correlation integrals from the same
 orbital/auxiliary systems and metric threshold. `density_fitting="cpu"` selects

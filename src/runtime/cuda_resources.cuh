@@ -8,30 +8,10 @@
 #include <utility>
 
 #include "bounded_workspace.hpp"
+#include "cuda_device_scope.hpp"
 #include "resource_cuda.cuh"
 
 namespace generativeqc::runtime {
-
-inline void cuda_resource_check(cudaError_t status) {
-  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
-  if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
-}
-
-class CudaDeviceScope {
- public:
-  using StatusChecker = void (*)(cudaError_t);
-
-  explicit CudaDeviceScope(int device, StatusChecker check = cuda_resource_check) {
-    check(cudaGetDevice(&previous_));
-    check(cudaSetDevice(device));
-  }
-  CudaDeviceScope(const CudaDeviceScope&) = delete;
-  CudaDeviceScope& operator=(const CudaDeviceScope&) = delete;
-  ~CudaDeviceScope() { (void)cudaSetDevice(previous_); }
-
- private:
-  int previous_{};
-};
 
 class OwnedCudaStream {
  public:
@@ -92,8 +72,13 @@ class OwnedCudaStream {
 
 class OwnedCudaEvent {
  public:
+  using StatusChecker = CudaDeviceScope::StatusChecker;
+
   OwnedCudaEvent() = default;
-  explicit OwnedCudaEvent(int device, unsigned flags = cudaEventDefault) { create(device, flags); }
+  explicit OwnedCudaEvent(int device, unsigned flags = cudaEventDefault,
+                          StatusChecker check = cuda_resource_check) {
+    create(device, flags, check);
+  }
   OwnedCudaEvent(const OwnedCudaEvent&) = delete;
   OwnedCudaEvent& operator=(const OwnedCudaEvent&) = delete;
   OwnedCudaEvent(OwnedCudaEvent&& other) noexcept { move_from(other); }
@@ -106,18 +91,20 @@ class OwnedCudaEvent {
   }
   ~OwnedCudaEvent() { reset(); }
 
-  void create(int device, unsigned flags = cudaEventDefault) {
+  void create(int device, unsigned flags = cudaEventDefault,
+              StatusChecker check = cuda_resource_check) {
     if (event_) throw std::logic_error("CUDA event already owned");
-    CudaDeviceScope guard(device);
-    cuda_resource_check(cudaEventCreateWithFlags(&event_, flags));
+    CudaDeviceScope guard(device, check);
+    check(cudaEventCreateWithFlags(&event_, flags));
+    check_ = check;
     device_ = device;
   }
 
-  void record(cudaStream_t stream) const { cuda_resource_check(cudaEventRecord(event_, stream)); }
-  void synchronize() const { cuda_resource_check(cudaEventSynchronize(event_)); }
+  void record(cudaStream_t stream) const { check_(cudaEventRecord(event_, stream)); }
+  void synchronize() const { check_(cudaEventSynchronize(event_)); }
   [[nodiscard]] float elapsed_since(const OwnedCudaEvent& begin) const {
     float milliseconds = 0;
-    cuda_resource_check(cudaEventElapsedTime(&milliseconds, begin.event_, event_));
+    check_(cudaEventElapsedTime(&milliseconds, begin.event_, event_));
     return milliseconds;
   }
 
@@ -136,10 +123,12 @@ class OwnedCudaEvent {
 
  private:
   void move_from(OwnedCudaEvent& other) noexcept {
+    check_ = other.check_;
     device_ = other.device_;
     event_ = std::exchange(other.event_, nullptr);
     other.device_ = -1;
   }
+  StatusChecker check_{cuda_resource_check};
   int device_{-1};
   cudaEvent_t event_{};
 };

@@ -27,7 +27,7 @@ def test_wrong_partition_is_rejected_at_every_measure_scale(scale: float) -> Non
 
 
 @pytest.mark.parametrize("bad", [np.nan, np.inf, -1.0])
-def test_invalid_atomic_measure_is_rejected(bad: float) -> None:
+def test_invalid_measure_or_inconsistent_partition_is_rejected(bad: float) -> None:
     with pytest.raises(ValueError):
         _validate_partition_provenance([bad], [0.0], [0.5])
 
@@ -103,3 +103,59 @@ def test_h2_grid_matches_independent_scalar_partition_without_mass_amplification
     # The oracle is a separate scalar hypot/Becke implementation, not response AD.
     assert np.max(np.abs(fractions - weights / raw)) < 2e-14
     _validate_partition_provenance(raw, weights, fractions)
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1.0, 1e100])
+def test_signed_measures_preserve_dimensionless_ownership(scale: float) -> None:
+    raw = scale * np.array([-2.0, 3.0, -4.0, 0.0])
+    fractions = np.array([0.25, 0.75, 0.0, 0.3])
+    _validate_partition_provenance(raw, raw * fractions, fractions)
+
+
+@pytest.mark.parametrize(
+    "raw,weight,fraction",
+    [
+        (-2.0, 0.5, 0.25),
+        (-2.0, -3.0, 0.5),
+        (-2.0, -0.5, 0.75),
+        (-2.0, -0.5, -0.25),
+        (-2.0, -0.5, 1.25),
+        (-2.0, np.inf, 0.25),
+        (-2.0, np.nan, 0.25),
+        (-2.0, -0.5, np.nan),
+        (-np.inf, -0.5, 0.25),
+        (0.0, -1e-100, 0.5),
+        (-2.0, 1e-20, 0.0),
+        (1e300, -1e-300, 0.0),
+        (-1e300, 1e-300, 0.0),
+    ],
+)
+def test_signed_measures_still_reject_corrupt_provenance(
+    raw: float, weight: float, fraction: float
+) -> None:
+    with pytest.raises(ValueError):
+        _validate_partition_provenance([raw], [weight], [fraction])
+
+
+@pytest.mark.parametrize("level", [0, 2, 3])
+def test_treutler_signed_grid_matches_moving_partition(level: int) -> None:
+    from generativeqc import Atom, GridSpec
+    from generativeqc_compiler.dft.grid import MolecularGrid
+
+    atoms = (Atom(8, (0.0, 0.0, 0.0)), Atom(1, (0.0, 1.4, 1.1)))
+    grid = MolecularGrid(atoms, GridSpec.treutler(level))
+    motion = np.array([[0.1, 0.2, -0.1], [-0.2, 0.1, 0.3]])
+    negative = 0
+    for raw, actual in zip(grid._raw_tiles(4096), grid.tiles(4096), strict=True):
+        owners = np.asarray(raw.owners)
+        response = partition_response(
+            raw.points,
+            grid.centers,
+            point_motion=motion[owners],
+            center_motion=motion,
+            atomic_radii=grid.spec.partition_radii(atoms),
+        )
+        fractions = response.weights[np.arange(len(owners)), owners]
+        _validate_partition_provenance(raw.weights, actual.weights, fractions)
+        negative += int(np.count_nonzero(raw.weights < 0))
+    assert negative > 0

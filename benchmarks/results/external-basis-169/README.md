@@ -84,5 +84,12 @@ allocation. Preserve Slurm's `CUDA_VISIBLE_DEVICES`. See
 provenance, capability and future higher-l/ECP integration requirements.
 
 Routine log/XML files named in this historical account are now represented in
-[the retention audit](../retention-238/migration.json), with extracted measurements,
+[the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
+
+The eight detailed JSON receipts now use deterministic `.json.gz` storage to
+stay within the unchanged aggregate evidence budget. Decompression reproduces
+every original byte; `storage.json` binds compressed and uncompressed sizes
+and SHA-256 values. The historical `checksums.json` retains its original
+uncompressed identities. Read these receipts with the shared
+`tools.generativeqc_validation.record.load_json` reader or `gzip.open`.

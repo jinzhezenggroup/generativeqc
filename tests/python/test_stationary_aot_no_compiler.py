@@ -1,6 +1,5 @@
 """A packaged all-electron force request must not discover an NVCC compiler."""
 
-import ast
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -9,31 +8,13 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+from _stationary_artifact_test_support import stationary_route
 from generativeqc import _dft_gradient, _native, _stationary_cuda
 from generativeqc._snapshot_grid_cache import SnapshotGridCache
 from generativeqc.batch import PreparedBatch
 from generativeqc_compiler import dft
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.method import resolve_method
-
-
-def _evaluate_selector(node: ast.expr, values: dict[str, object]) -> object:
-    if isinstance(node, ast.Name):
-        return values[node.id]
-    if isinstance(node, ast.Constant):
-        return node.value
-    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
-        return any(bool(_evaluate_selector(value, values)) for value in node.values)
-    if (
-        isinstance(node, ast.Compare)
-        and len(node.ops) == 1
-        and isinstance(node.ops[0], ast.Is)
-        and len(node.comparators) == 1
-    ):
-        return _evaluate_selector(node.left, values) is _evaluate_selector(
-            node.comparators[0], values
-        )
-    raise AssertionError(f"unsupported selector expression: {ast.dump(node)}")
 
 
 def test_gpu_qualification_guards_bind_current_source_owners(
@@ -61,120 +42,118 @@ def test_gpu_qualification_guards_bind_current_source_owners(
             guarded()
 
 
-def _artifact_selector(function_name: str, artifact_name: str) -> ast.IfExp:
-    source = (
-        Path(__file__).resolve().parents[2] / "python/generativeqc/_stationary_cuda.py"
-    )
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    functions = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == function_name
-    ]
-    assert len(functions) == 1
-    function = functions[0]
-    eager_sources = [
-        node
-        for node in ast.walk(function)
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "primitive_source"
-            for target in node.targets
-        )
-    ]
-    assert eager_sources == []
-    component_compiler_guards = [
-        node
-        for node in ast.walk(function)
-        if isinstance(node, ast.If)
-        and {"component_mode", "compiler"}
-        <= {child.id for child in ast.walk(node.test) if isinstance(child, ast.Name)}
-        and any(isinstance(child, ast.Raise) for child in node.body)
-    ]
-    assert component_compiler_guards == []
-    assignments = [
-        node
-        for node in ast.walk(function)
-        if isinstance(node, ast.Assign)
-        and isinstance(node.value, ast.IfExp)
-        and any(
-            isinstance(target, ast.Name) and target.id == artifact_name
-            for target in node.targets
-        )
-    ]
-    assert len(assignments) == 1
-    selector = assignments[0].value
-    assert isinstance(selector, ast.IfExp)
-    assert isinstance(selector.body, ast.Call)
-    assert isinstance(selector.body.func, ast.Name)
-    assert selector.body.func.id == "compile_stationary_cuda"
-    assert isinstance(selector.orelse, ast.Call)
-    assert isinstance(selector.orelse.func, ast.Name)
-    assert selector.orelse.func.id == "load_stationary_aot_artifact"
-    source_calls = {
-        node.func.id
-        for node in ast.walk(selector.body.args[0])
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    assert isinstance(selector.body.args[0], ast.Lambda)
-    assert "cached_derivative_cuda_source" in source_calls
-    assert not {"derivative_cuda_sources", "emit_first_derivative_cuda"} & source_calls
-    assert not {
-        node.func.id
-        for node in ast.walk(selector.orelse)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    } & {
-        "cached_derivative_cuda_source",
-        "derivative_cuda_sources",
-        "emit_first_derivative_cuda",
-    }
-    return selector
-
-
+@pytest.mark.parametrize("entrypoint", ("cold", "prepared"))
+@pytest.mark.parametrize("materialize", (False, True))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize(
-    ("function_name", "artifact_name"),
-    [
-        ("ensure", "stationary_artifact"),
-        ("_complete_rks_cuda_gradient_diagnostic", "artifact"),
-    ],
-)
-@pytest.mark.parametrize(
-    ("aot_present", "ecp", "component_mode", "expected_jit"),
+    ("aot", "ecp", "component_mode", "expected_jit"),
     [
         (True, False, False, False),
         (False, False, False, True),
         (True, True, False, True),
         (True, False, True, False),
         (False, True, True, True),
+        (False, False, True, True),
     ],
-    ids=("sp-aot", "missing-aot", "ecp-jit", "component-aot", "combined-jit"),
+    ids=(
+        "sp-aot",
+        "missing-aot",
+        "ecp-jit",
+        "component-aot",
+        "combined-jit",
+        "component-jit",
+    ),
 )
-def test_stationary_artifact_selector_keeps_source_emission_in_jit_branch(
-    function_name: str,
-    artifact_name: str,
-    aot_present: bool,
+def test_stationary_artifact_route_keeps_source_emission_lazy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    entrypoint: str,
+    materialize: bool,
+    spin: str,
+    aot: bool,
     ecp: bool,
     component_mode: bool,
     expected_jit: bool,
 ) -> None:
-    selector = _artifact_selector(function_name, artifact_name)
-    values = {
-        "aot_directory": object() if aot_present else None,
-        "ecp": ecp,
-        "component_mode": component_mode,
-    }
-    assert bool(_evaluate_selector(selector.test, values)) is expected_jit
+    """Execute both real routes; a cache hit never needs the source provider."""
+    from generativeqc_compiler.method.stationary_cuda import QUALIFIED_SPD_COMPONENTS
+
+    class Selected(Exception):
+        pass
+
+    probe = stationary_route(
+        monkeypatch, tmp_path, entrypoint, component_mode=component_mode, spin=spin
+    )
+    emitted = []
+    source = object()
+
+    def emit(requests: object, **options: object) -> object:
+        assert expected_jit
+        assert requests == probe.requests
+        assert options["target"] is probe.target
+        assert options["component_domain"] == (("xx",) if component_mode else None)
+        emitted.append(True)
+        return source
+
+    def compile_source(provider: object, **options: object) -> None:
+        assert expected_jit, "packaged route attempted JIT compilation"
+        assert callable(provider), "source emission must be deferred until a cache miss"
+        assert not emitted, "source was emitted before the compiler requested it"
+        if materialize:
+            assert provider() is source
+        raise Selected
+
+    def load(directory: object, **options: object) -> None:
+        assert not expected_jit, "runtime JIT request used packaged scientific code"
+        assert directory == tmp_path
+        assert options["spin"] == spin
+        assert options["functional"] == 1
+        assert options["iterations"] == 3
+        assert options["architecture"] == probe.target.architecture
+        assert options["component_domain"] == (
+            QUALIFIED_SPD_COMPONENTS if component_mode else None
+        )
+        raise Selected
+
+    monkeypatch.setattr(_stationary_cuda, "cached_derivative_cuda_source", emit)
+    monkeypatch.setattr(_stationary_cuda, "compile_stationary_cuda", compile_source)
+    monkeypatch.setattr(_stationary_cuda, "load_stationary_aot_artifact", load)
+    with pytest.raises(Selected):
+        probe.run(aot=aot, ecp=ecp)
+    assert bool(emitted) is (expected_jit and materialize)
+
+
+@pytest.mark.parametrize("entrypoint", ("cold", "prepared"))
+@pytest.mark.parametrize("component_mode", (False, True))
+def test_missing_stationary_package_fails_without_jit_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    entrypoint: str,
+    component_mode: bool,
+) -> None:
+    probe = stationary_route(
+        monkeypatch, tmp_path, entrypoint, component_mode=component_mode
+    )
+
+    def missing(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError("missing packaged stationary CUDA artifact")
+
+    monkeypatch.setattr(_stationary_cuda, "load_stationary_aot_artifact", missing)
+    with pytest.raises(FileNotFoundError, match="missing packaged"):
+        probe.run(aot=True)
 
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("missing_artifact", (False, True))
+@pytest.mark.parametrize("tile_points", (None, 256))
 def test_public_aot_force_does_not_probe_nvcc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     missing_artifact: bool,
     method: str,
     spin: str,
+    tile_points: int | None,
 ) -> None:
     class Basis:
         shells = ()
@@ -201,14 +180,21 @@ def test_public_aot_force_does_not_probe_nvcc(
         identity=SimpleNamespace(ingredients=("rho", "sigma"), spin=spin),
         grid=SimpleNamespace(points=np.zeros((1, 3))),
     )
-    monkeypatch.setattr(
-        _dft_gradient.StationaryKsState, "from_native", lambda *args, **kwargs: state
-    )
+
+    def from_native(
+        observed_batch: object, observed_basis: object, **kwargs: object
+    ) -> SimpleNamespace:
+        assert observed_batch is batch and isinstance(observed_basis, Basis)
+        assert kwargs["index"] == 0
+        assert kwargs["allow_budget_stationarity"] is True
+        return state
+
+    monkeypatch.setattr(_dft_gradient.StationaryKsState, "from_native", from_native)
     target = cuda_target_info("sm_120")
 
     def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
         assert kwargs["compiler"] is None
-        assert kwargs["tile_points"] is None
+        assert kwargs["tile_points"] == tile_points
         assert kwargs["max_grid_points"] is None
         assert kwargs["max_grid_pair_visits"] is None
         assert kwargs["target"] is target
@@ -237,13 +223,28 @@ def test_public_aot_force_does_not_probe_nvcc(
     )
     if missing_artifact:
         with pytest.raises(FileNotFoundError, match="missing packaged"):
-            PreparedBatch._public_dft_cuda_force(batch, 0, ())
+            PreparedBatch._public_dft_cuda_force(batch, 0, (), tile_points=tile_points)
     else:
-        force, work = PreparedBatch._public_dft_cuda_force(batch, 0, ())
+        force, work = PreparedBatch._public_dft_cuda_force(
+            batch, 0, (), tile_points=tile_points
+        )
         np.testing.assert_array_equal(force, -np.ones((2, 3)))
         assert work["tensor_executions"] == 0
+        workload = work["force_active_ao_policy"]["workload"]
+        assert workload["tile_points"] == tile_points
+        assert workload["tile_policy"] == (
+            "budget-auto" if tile_points is None else "fixed"
+        )
     source.close.assert_called_once()
     assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)
+
+
+@pytest.mark.parametrize("tile_points", (True, 0, -1, 256.0, "256"))
+def test_explicit_force_tile_rejects_invalid_request_before_owner_use(
+    tile_points: object,
+) -> None:
+    with pytest.raises(ValueError, match="force tile size must be a positive integer"):
+        PreparedBatch._public_dft_cuda_force(None, 0, (), tile_points=tile_points)
 
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))

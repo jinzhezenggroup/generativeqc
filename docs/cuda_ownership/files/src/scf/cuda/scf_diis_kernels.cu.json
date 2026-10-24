@@ -2,7 +2,7 @@
   "path": "src/scf/cuda/scf_diis_kernels.cu",
   "role": "runtime",
   "subsystem": "scf_tensor",
-  "reason": "Native launch wrappers select DIIS schedules; method-specific residual Gram construction, history retirement, solve and Fock extrapolation are classified below.",
+  "reason": "Native launch wrappers select DIIS schedules; method-specific residual Gram construction, history retirement and solve are classified below. Fock coefficient application delegates to shared TensorIR lowering.",
   "regions": [
     {
       "start": "__global__ void diis_dot_partials_kernel",
@@ -11,10 +11,10 @@
       "reason": "DIIS-specific circular live-history selection and deterministic residual Gram partials, including substitution of the pending current residual. This is not a generic reduction API."
     },
     {
-      "start": "template <bool CooperativeDots, bool IncrementalGram, bool CachedGram = false>",
+      "start": "__global__ void update_diis_kernel(",
       "stop": "void launch_update_diis_kernel(",
       "role": "scientific",
-      "reason": "Native DIIS Gram assembly, normalization, augmented solve, dependent-history retirement and Fock extrapolation, including local state glue. Conservatively includes pre-existing arithmetic reclassified from runtime; this is not physical code growth or retirement."
+      "reason": "Native DIIS Gram assembly, normalization, augmented solve and dependent-history retirement, including local state glue. Final Fock publication binds a shared compiler-generated chronological history contraction."
     }
   ]
 }

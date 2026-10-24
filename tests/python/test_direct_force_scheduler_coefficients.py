@@ -1,146 +1,218 @@
-"""Guard the method-neutral native Direct force coefficient routing."""
+"""Execute the fused shell RSH force consumer's coefficient contract on the host.
 
+The complete production consumer, density algebra, indexing and force scatter
+are compiled unchanged. Only integral derivatives and CUDA annotations are
+substituted; independent ERI/device qualification remains in the CUDA suites.
+"""
+
+from __future__ import annotations
+
+import ctypes as ct
+import math
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pytest
+from _cpp_source_support import cpp_function_definition
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
+    emit_direct_fock_accumulation_header,
+)
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _source(relative: str) -> str:
-    return (ROOT / relative).read_text(encoding="utf-8")
-
-
-def test_native_force_contractions_expose_scaled_entry_points() -> None:
-    expected = {
-        "src/scf/cuda/direct_force_low_order.cuh": (
-            "contract_two_electron_force_ssss_task_scaled",
-            "contract_two_electron_force_psss_task_scaled",
+@pytest.fixture(scope="module")
+def fused_shell_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> ct.CDLL:
+    directory = tmp_path_factory.mktemp("fused-shell-force-coefficients")
+    (directory / "cuda_runtime.h").write_text(
+        "#pragma once\n#include <algorithm>\n#include <cmath>\n"
+        "#define __device__\n#define __host__\n#define __forceinline__ inline\n"
+        "using std::min; using std::max;\n"
+        "inline void atomicAdd(double* p, double value) { *p += value; }\n"
+    )
+    (directory / "generated_direct_fock_accumulation.cuh").write_text(
+        emit_direct_fock_accumulation_header()
+    )
+    source = (ROOT / "src/scf/cuda/direct_force_quartet.cuh").read_text()
+    consumer = cpp_function_definition(
+        source,
+        "contract_two_electron_force_quartet_subtile_rsh_scaled",
+        include_template=True,
+    )
+    cpp = directory / "probe.cpp"
+    cpp.write_text(PREFIX + consumer + SUFFIX)
+    library = directory / "probe.so"
+    native_cxx.build_shared(
+        [cpp],
+        library,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-ffp-contract=off",
+            "-fno-fast-math",
+            "-I" + str(directory),
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
         ),
-        "src/scf/cuda/direct_force_order2.cuh": (
-            "contract_two_electron_force_psps_task_scaled",
-            "contract_two_electron_force_pair_order2_task_scaled",
-        ),
-        "src/scf/cuda/direct_force_order3.cuh": (
-            "contract_two_electron_force_order3_task_scaled",
-        ),
-        "src/scf/cuda/direct_force_quartet.cuh": (
-            "contract_two_electron_force_quartet_subtile_scaled",
-        ),
-    }
-    for path, symbols in expected.items():
-        source = _source(path)
-        for symbol in symbols:
-            assert symbol in source
-        assert "direct_force_density_coefficient_scaled<Unrestricted>" in source
-
-
-def test_bounded_native_launchers_forward_explicit_force_coefficients() -> None:
-    expected = {
-        "src/scf/cuda/direct_bounded_exact_force.hpp": "launch_contract_bounded_exact_low_order_force_page_kernel_scaled",
-        "src/scf/cuda/direct_bounded_fallback.hpp": "launch_bounded_direct_shell_quartet_kernel_scaled",
-        "src/scf/cuda/direct_bounded_dddd.hpp": "launch_bounded_direct_dddd_streaming_kernel_scaled",
-    }
-    for path, symbol in expected.items():
-        source = _source(path)
-        assert symbol in source
-        assert "double coulomb_coefficient" in source
-        assert "double exchange_coefficient" in source
-
-
-def test_hf_compatibility_wrappers_keep_historical_coefficients() -> None:
-    for path in (
-        "src/scf/cuda/direct_force_low_order.cuh",
-        "src/scf/cuda/direct_force_order2.cuh",
-        "src/scf/cuda/direct_force_order3.cuh",
-        "src/scf/cuda/direct_force_quartet.cuh",
-    ):
-        source = _source(path)
-        assert "Unrestricted ? -1.0 : -0.5" in source
-        assert ", 1.0," in source
-
-
-def test_top_level_shell_force_dispatch_forwards_explicit_coefficients() -> None:
-    header = _source("src/scf/cuda/direct_angular_force.hpp")
-    source = _source("src/scf/cuda/direct_angular_force.cu")
-    for symbol in (
-        "launch_two_electron_force_psss_resident_bra_kernel_scaled",
-        "dispatch_angular_force_quartets_scaled",
-    ):
-        assert symbol in header
-        assert symbol in source
-    assert "double coulomb_coefficient" in header
-    assert "double exchange_coefficient" in header
-    assert header.count("DirectForceOutputMode output_mode") == 3
-    for symbol in (
-        "contract_direct_force_class_task",
-        "contract_direct_force_precontracted_task",
-        "contract_two_electron_force_quartet_subtile_scaled",
-    ):
-        assert symbol in source
-    assert "contract_two_electron_force_ssss_task<" not in source
-    assert "contract_two_electron_force_psss_task<" not in source
-    assert "contract_two_electron_force_psps_task<" not in source
-    assert "contract_two_electron_force_pair_order2_task<" not in source
-    assert "contract_two_electron_force_order3_task<" not in source
-    assert "contract_two_electron_force_quartet_subtile<" not in source
-    for path in (
-        "src/scf/cuda/direct_angular_force.cu",
-        "src/scf/cuda/direct_bounded_exact_force.cu",
-        "src/scf/cuda/direct_bounded_fallback.cu",
-    ):
-        consumer = _source(path)
-        assert '"scf/cuda/direct_force_execution.cuh"' in consumer
-        assert "contract_direct_force_" in consumer
-        assert "contract_two_electron_force_order3_task_scaled<" not in consumer
-
-
-def test_top_level_hf_shell_dispatch_pins_historical_coefficients() -> None:
-    source = _source("src/scf/cuda/direct_angular_force.cu")
-    assert source.count("unrestricted ? -1.0 : -0.5") >= 2
-    assert "generated_shell_class_mask, 1.0, exchange_coefficient" in source
-
-
-def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
-    header = _source("src/scf/cuda/direct_bounded_fallback.hpp")
-    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
-    contraction = _source("src/scf/cuda/direct_bounded_contraction.cuh")
-    quartet = _source("src/scf/cuda/direct_force_quartet.cuh")
-    provider = _source("src/scf/cuda/direct_jk_kernels.cu")
-    assert "enum class DirectRangeOperator" in header
-    assert "launch_bounded_direct_range_exchange_force_kernel" in header
-    assert "DirectRangeOperator::Long" in bounded
-    assert "generativeqc::integrals::CoulombRange::Short" in bounded
-    assert "DirectRangeOperator::Short" in provider
-    assert "contract_bounded_direct_force_subtile_range_scaled" in contraction
-    assert "contract_two_electron_force_quartet_subtile_range_scaled" in quartet
-    assert "launch_bounded_shell_range_exchange_derivative" in provider
-    assert "RshSources = 3" in header
-    assert "DirectRangeOperator::RshSources" in bounded
-    assert "launch_bounded_direct_rsh_force_kernel" in header
-    assert "contract_bounded_direct_rsh_force_subtile" in contraction
-    assert "contract_two_electron_force_quartet_subtile_rsh_scaled" in quartet
-    assert "launch_bounded_shell_rsh_derivatives" in provider
-    fused_begin = quartet.index(
-        "contract_two_electron_force_quartet_subtile_rsh_scaled("
+        compile_timeout=60,
     )
-    fused = quartet[fused_begin:]
-    assert "if (coulomb_coefficient != 0.0)" in fused
-    assert (
-        "short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0" in fused
-    )
-    assert "CoulombRange::Long, omega" in fused
+    probe = ct.CDLL(str(library))
+    probe.forces.argtypes = [
+        ct.c_bool,
+        ct.POINTER(ct.c_double),
+        ct.c_double,
+        ct.c_double,
+        ct.c_double,
+        ct.POINTER(ct.c_double),
+    ]
+    probe.forces.restype = None
+    return probe
 
 
-def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
-    """Keep bounded streaming disjoint from the retired order-three AO formula."""
+def check_forces(
+    probe: ct.CDLL,
+    unrestricted: bool,
+    alpha: list[float],
+    beta: list[float],
+    coefficients: tuple[float, float, float],
+) -> None:
+    """Independently contract the two distinct ordered (11|00) permutations."""
+    density = (ct.c_double * 8)(*alpha, *beta)
+    output = (ct.c_double * 18)()
+    probe.forces(unrestricted, density, *coefficients, output)
+    cj, short_ck, long_ck = coefficients
+    # Do not form an inactive channel's potentially overflowing intermediates.
+    coulomb = 0.0
+    if cj:
+        total_00 = alpha[0] + (beta[0] if unrestricted else 0.0)
+        total_11 = alpha[3] + (beta[3] if unrestricted else 0.0)
+        coulomb = cj * total_00 * total_11
+    exchange = 0.0
+    if short_ck or long_ck:
+        exchange = alpha[1] * alpha[2]
+        if unrestricted:
+            exchange += beta[1] * beta[2]
+    weights = (coulomb, short_ck * exchange, long_ck * exchange)
+    full = (2.0, 3.0, 5.0)
+    long = (0.5, 0.75, 1.25)
+    gradients = (full, tuple(a - b for a, b in zip(full, long, strict=True)), long)
+    expected = []
+    for weight, gradient in zip(weights, gradients, strict=True):
+        response = [weight * value for value in gradient]
+        expected.extend((*response, *(-value for value in response)))
+    assert all(math.isfinite(value) for value in output)
+    assert list(output) == pytest.approx(expected, rel=2e-14, abs=2e-14)
+    for channel, coefficient in enumerate(coefficients):
+        if coefficient == 0.0:
+            assert list(output)[channel * 6 : (channel + 1) * 6] == [0.0] * 6
 
-    bounded = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
-        encoding="utf-8"
+
+@pytest.mark.parametrize("unrestricted", (False, True))
+@pytest.mark.parametrize(
+    "coefficients",
+    (
+        (1.7, -0.15, -0.63),
+        (1.0, 0.0, 0.0),
+        (0.0, -0.37, 0.0),
+        (0.0, 0.0, -0.37),
+        (0.0, -0.15, -0.63),
+        (0.0, 0.0, 0.0),
+    ),
+)
+def test_fused_shell_force_coefficients_match_independent_sources(
+    fused_shell_probe: ct.CDLL,
+    unrestricted: bool,
+    coefficients: tuple[float, float, float],
+) -> None:
+    check_forces(
+        fused_shell_probe,
+        unrestricted,
+        [0.2, 0.1, 0.1, 0.3],
+        [0.13, 0.05, 0.05, 0.17],
+        coefficients,
     )
-    assert (
-        "contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>"
-        in " ".join(bounded.split())
-    )
-    dispatcher = (ROOT / "src/scf/cuda/direct_bounded_contraction.cuh").read_text(
-        encoding="utf-8"
-    )
-    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(3)" not in dispatcher
+
+
+@pytest.mark.parametrize("unrestricted", (False, True))
+@pytest.mark.parametrize("disabled", ("exchange", "coulomb", "both"))
+def test_fused_shell_disabled_sources_do_not_overflow(
+    fused_shell_probe: ct.CDLL, unrestricted: bool, disabled: str
+) -> None:
+    if disabled == "exchange":
+        alpha = [1.0, 1e200, 1e200, 1.0]
+        beta = [1.0, -1e200, -1e200, 1.0]
+        coefficients = (1.0, 0.0, 0.0)
+    elif disabled == "coulomb":
+        alpha = beta = [1e308, 1.0, 1.0, 1e308]
+        coefficients = (0.0, -0.15, -0.5)
+    else:
+        alpha = beta = [1e308] * 4
+        coefficients = (0.0, -0.0, 0.0)
+    check_forces(fused_shell_probe, unrestricted, alpha, beta, coefficients)
+
+
+PREFIX = r"""
+#include <array>
+#include <cmath>
+#include "generated_direct_fock_accumulation.cuh"
+#include "integrals/range_moments.hpp"
+#include "scf/cuda/direct_force_scatter.cuh"
+#include "scf/cuda/direct_gradient_types.cuh"
+#include "scf/cuda/direct_queue_index.cuh"
+#include "scf/cuda/scalar_math.cuh"
+namespace generativeqc::scf::cuda_execution {
+
+// Integral responses are transport inputs here. The real consumer must apply
+// signed J/SR/LR weights and recover the second atom's translational response.
+template<unsigned Order, class Scalar>
+Scalar dispatch_contracted_eri_cartesian_source_shell_class(
+    unsigned, const DeviceBatch&, std::int32_t, std::int32_t, std::int32_t,
+    std::int32_t, std::int32_t, std::int64_t,
+    integrals::CoulombRange range = integrals::CoulombRange::Full,
+    double = 0.0) {
+  return range == integrals::CoulombRange::Long
+      ? Scalar{0.0, 0.5, 0.75, 1.25} : Scalar{0.0, 2.0, 3.0, 5.0};
+}
+// The order-zero instantiation does not call the higher-order integral owners.
+CartesianQuartetGradient contracted_eri_cartesian_source_order2_generated_gradient(
+    const DeviceBatch&, int, int, int, int, int);
+CartesianQuartetGradient contracted_eri_cartesian_source_order4_gradient(
+    const DeviceBatch&, int, int, int, int, int);
+CartesianQuartetGradient contracted_eri_cartesian_source_order5_gradient(
+    const DeviceBatch&, int, int, int, int, int);
+CartesianQuartetGradient contracted_eri_cartesian_source_order6_gradient(
+    const DeviceBatch&, int, int, int, int, int);
+"""
+
+SUFFIX = r"""
+}  // namespace generativeqc::scf::cuda_execution
+extern "C" void forces(bool unrestricted, const double* density, double cj,
+                       double short_ck, double long_ck, double* output) {
+  using namespace generativeqc::scf::cuda_execution;
+  const std::int32_t systems[]{0,0}, shells[]{1,0}, atoms[]{0,1};
+  const std::int64_t offsets[]{0,1,2};
+  const std::uint8_t angular[]{0,0}, active[]{1};
+  const double bounds[]{1,1,1,1};
+  DeviceBatch batch{};
+  batch.direct_nbf = 2;
+  batch.total_atoms = 2;
+  batch.shell_pair_systems = systems;
+  batch.shell_pair_first = batch.shell_pair_second = shells;
+  batch.shell_direct_ao_offsets = offsets;
+  batch.shell_atoms = atoms;
+  batch.shell_angular = angular;
+  const ActiveShellQuartetTile task{0,1,0};
+  const std::uint32_t count = 1;
+  if (unrestricted)
+    contract_two_electron_force_quartet_subtile_rsh_scaled<true,0>(
+        batch,&count,&task,0.0,bounds,density,active,output,cj,short_ck,long_ck,0.37,0,0);
+  else
+    contract_two_electron_force_quartet_subtile_rsh_scaled<false,0>(
+        batch,&count,&task,0.0,bounds,density,active,output,cj,short_ck,long_ck,0.37,0,0);
+}
+"""

@@ -18,41 +18,41 @@ def emit_direct_pair_materialized_support() -> str:
     return r"""
 #if defined(__CUDACC__)
 #include "generated_direct_shell_pair_hermite.cuh"
+#include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
+#include "scf/cuda/direct_force_work.hpp"
 #include "scf/cuda/direct_screening.cuh"
 
 namespace generativeqc::scf::cuda_execution {
-
-/** Optional qualification counters. Production passes no allocation. */
-struct MaterializedDirectPairWork {
-  unsigned long long bra_preparations{}, ket_preparations{}, coulomb_preparations{};
-  unsigned long long component_contractions{}, published_components{};
-};
 
 /** Canonical whole-shell owners use fewer idle lanes in small domains.
  * These compile-time bounds cover every s/p/d/f composition, not just the
  * most frequent shell class. Legacy packet consumers retain 256 lanes. */
 __host__ __device__ inline constexpr unsigned canonical_materialized_component_lanes(
     unsigned order) {
-  return order >= 3 && order <= 5 ? 32 : 256;
+  return order <= 5 ? 32 : 256;
 }
 __host__ __device__ inline constexpr unsigned canonical_materialized_component_slots(
     unsigned order) {
-  const unsigned maximum = order == 3 ? 27 : order == 4 ? 81 : order == 5 ? 162 :
-                           order == 6 ? 324 : order == 7 ? 648 : order == 8 ? 1296 : 2160;
+  unsigned maximum = 1;
+  for (unsigned shell = 0; shell < 4; ++shell) {
+    const unsigned angular = order / 4 + (shell < order % 4);
+    maximum *= (angular + 1) * (angular + 2) / 2;
+  }
   const unsigned lanes = canonical_materialized_component_lanes(order);
   return (maximum + lanes - 1) / lanes;
 }
 
 /** One CTA-owned recurrence, bounded independently of primitive contraction
  * length. No primitive/AO quartet tensor or geometry-dependent global cache. */
-template <unsigned AngularOrder>
+template <unsigned AngularOrder, typename Scalar = double>
 struct MaterializedDirectPairRecurrence {
-  static_assert(AngularOrder >= 3 && AngularOrder <= kMaximumCoulombOrder);
-  using Pair = ShellPairHermiteCoefficients<double, kMaximumAngularMomentum,
-                                            kMaximumAngularMomentum>;
+  static_assert(AngularOrder <= kMaximumCoulombOrder);
+  static constexpr unsigned pair_angular =
+      AngularOrder < kMaximumAngularMomentum ? AngularOrder : kMaximumAngularMomentum;
+  using Pair = ShellPairHermiteCoefficients<Scalar, pair_angular, pair_angular>;
   Pair bra[3], ket[3];
-  CoulombAuxiliary<double, AngularOrder> coulomb;
+  CoulombAuxiliary<Scalar, AngularOrder> coulomb;
   PrimitivePairData first, second;
   double coefficients[4];
 };
@@ -71,7 +71,8 @@ __device__ inline void prepare_materialized_direct_pair(
     unsigned axis_begin = 0U, unsigned axis_end = 3U) {
   for (unsigned axis = axis_begin; axis < axis_end; ++axis) {
     const double a = vec_axis(first, axis), b = vec_axis(second, axis), ab = a - b;
-    fill_shell_pair_hermite_geometry<kMaximumAngularMomentum, kMaximumAngularMomentum>(
+    using Scalar = std::remove_reference_t<decltype(coefficients[axis].at(0, 0, 0))>;
+    fill_shell_pair_hermite_geometry<Pair::kIDimension - 1, Pair::kJDimension - 1, Scalar>(
         first_angular, second_angular, vec_axis(cached.product_center, axis), a, b,
         cached.exponent_sum, qexp(-cached.reduced_exponent * ab * ab), coefficients[axis]);
   }
@@ -82,18 +83,24 @@ __device__ inline void prepare_materialized_direct_pair(
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
 template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
-          unsigned ComponentLanes = detail::kDirectQuartetTileSize>
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double>
 __device__ inline void contract_materialized_direct_pair_fock(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
     double* fock, const std::uint64_t* generated_mask,
-    MaterializedDirectPairRecurrence<AngularOrder>& shared,
+    MaterializedDirectPairRecurrence<AngularOrder, Scalar>& shared,
     MaterializedDirectPairWork* work = nullptr, bool coulomb_only = false,
     bool exchange_only = false, double* checked_components = nullptr,
     bool hf_exchange = false,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
-    std::uint64_t* canonical_work = nullptr) {
+    std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr) {
+  constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
+  // Mixed owners already publish one complete recurrence per shell quartet.
+  // Disjoint axis writers borrow immutable geometry and retire at the existing
+  // barriers; strict and legacy packet scheduling remain unchanged.
+  constexpr bool parallel_pair_axes = mixed || (AngularOrder == 3 && ComponentLanes == 32);
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
@@ -108,6 +115,15 @@ __device__ inline void contract_materialized_direct_pair_fock(
   if (generated_mask && (*generated_mask & (std::uint64_t{1} << shell_class))) return;
   const std::size_t n = batch.direct_nbf, physical = std::size_t(system) * n * n;
   const std::size_t spin = 2 * physical, ao_begin = std::size_t(system) * n;
+  if constexpr (mixed) {
+    if ((range != generativeqc::integrals::CoulombRange::Full && separate_coulomb) ||
+        (!separate_coulomb && !separate_exchange) ||
+        (separate_exchange && Unrestricted) || exchange_only || hf_exchange) {
+      if (threadIdx.x == 0 && separate_coulomb)
+        atomicAdd(separate_coulomb + physical, static_cast<double>(NAN));
+      return;
+    }
+  }
   const auto first_count = shell_ao_pair_count(batch, first_pair);
   const auto second_count = shell_ao_pair_count(batch, second_pair);
   const auto count = first_pair == second_pair ? first_count * (first_count + 1) / 2
@@ -132,6 +148,12 @@ __device__ inline void contract_materialized_direct_pair_fock(
         direct_ao_quartet_survives_schwarz(schwarz_bounds, physical, n,
                                           i[slot], j[slot], k[slot], l[slot],
                                           screening_tolerance);
+    if constexpr (mixed) {
+      // Coulomb-only zero-density pruning cannot reject exchange-active orbits.
+      if (admitted[slot] && !separate_exchange && (!fock || coulomb_only))
+        admitted[slot] = direct_coulomb_density_active<Unrestricted>(
+            n, physical, spin, density, i[slot], j[slot], k[slot], l[slot]);
+    }
     any_admitted |= admitted[slot];
   }
   if (!__syncthreads_or(any_admitted)) return;
@@ -146,14 +168,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
   for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
     // Read immutable cached geometry directly: shared.first is not published
     // until the existing barrier, so other axis owners must not borrow it yet.
-    if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+    if constexpr (parallel_pair_axes) {
       if (threadIdx.x < 3U)
         prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra], li, lj, first, second,
                                          shared.bra, threadIdx.x, threadIdx.x + 1U);
     }
     if (threadIdx.x == 0) {
       shared.first = batch.shell_primitive_pairs[bra];
-      if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+      if constexpr (!parallel_pair_axes)
         prepare_materialized_direct_pair(shared.first, li, lj, first, second, shared.bra);
       const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
       const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
@@ -164,26 +186,43 @@ __device__ inline void contract_materialized_direct_pair_fock(
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
       // All three axes retire with the unchanged Coulomb publication barrier.
-      if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+      if constexpr (parallel_pair_axes) {
         if (threadIdx.x < 3U)
           prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket], lk, ll, third, fourth,
                                            shared.ket, threadIdx.x, threadIdx.x + 1U);
       }
       if (threadIdx.x == 0) {
         shared.second = batch.shell_primitive_pairs[ket];
-        if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+        if constexpr (!parallel_pair_axes)
           prepare_materialized_direct_pair(shared.second, lk, ll, third, fourth, shared.ket);
         const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
         const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
         shared.coefficients[2] = batch.primitive_coefficients[c];
         shared.coefficients[3] = batch.primitive_coefficients[d];
         const auto p = shared.first.exponent_sum, q = shared.second.exponent_sum;
-        if (range == generativeqc::integrals::CoulombRange::Full)
-          fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                                    shared.second.product_center, shared.coulomb);
-        else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                    shared.second.product_center, range, omega, shared.coulomb))
-          shared.coulomb.at(0, 0, 0, 0) = NAN;
+        if constexpr (mixed) {
+          // Cached geometry and Gaussian bases remain FP64. Only the shared
+          // Hermite/Coulomb recurrence and its component contraction narrow.
+          const Vec3<Scalar> bra_center{shared.first.product_center.x,
+                                       shared.first.product_center.y,
+                                       shared.first.product_center.z};
+          const Vec3<Scalar> ket_center{shared.second.product_center.x,
+                                       shared.second.product_center.y,
+                                       shared.second.product_center.z};
+          if (range == generativeqc::integrals::CoulombRange::Full)
+            fill_coulomb<AngularOrder>(EvaluationReal<Scalar>{p * q / (p + q)}, bra_center,
+                                      ket_center, shared.coulomb);
+          else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), bra_center,
+                        ket_center, range, omega, shared.coulomb))
+            shared.coulomb.at(0, 0, 0, 0) = scalar<Scalar>(NAN);
+        } else {
+          if (range == generativeqc::integrals::CoulombRange::Full)
+            fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
+                                      shared.second.product_center, shared.coulomb);
+          else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
+                      shared.second.product_center, range, omega, shared.coulomb))
+            shared.coulomb.at(0, 0, 0, 0) = NAN;
+        }
         if (work) {
           atomicAdd(&work->ket_preparations, 1ULL);
           atomicAdd(&work->coulomb_preparations, 1ULL);
@@ -198,11 +237,11 @@ __device__ inline void contract_materialized_direct_pair_fock(
             batch.direct_ao_coefficients[ao_begin + l[slot]];
         const double weight = coefficient * shared.coefficients[0] * shared.coefficients[1] *
                              shared.coefficients[2] * shared.coefficients[3];
-        value[slot] += weight * consume_cartesian_coulomb<AngularOrder>(
+        value[slot] += weight * scalar_value(consume_cartesian_coulomb<AngularOrder, Scalar>(
             shared.first.exponent_sum, shared.second.exponent_sum,
             direct_ao_angular(batch, ao_begin + i[slot]), direct_ao_angular(batch, ao_begin + j[slot]),
             direct_ao_angular(batch, ao_begin + k[slot]), direct_ao_angular(batch, ao_begin + l[slot]),
-            shared.bra, shared.ket, shared.coulomb);
+            shared.bra, shared.ket, shared.coulomb));
         if (work) atomicAdd(&work->component_contractions, 1ULL);
       }
       // Retire all readers before the next ket replaces the shared recurrence.
@@ -222,18 +261,26 @@ __device__ inline void contract_materialized_direct_pair_fock(
       if (separate_coulomb || separate_exchange) {
         if (separate_coulomb)
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              separate_coulomb, i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
+              runtime::CompensatedOutput{separate_coulomb, coulomb_correction},
+              i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
         if (separate_exchange)
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              separate_exchange, i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
+              runtime::CompensatedOutput{separate_exchange, exchange_correction},
+              i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
       } else {
-        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
+        // Exported-reference HF owns a correction plane; ordinary and
+        // independent J/K callers retain their existing accumulation sinks.
+        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+            runtime::CompensatedOutput{fock, batch.reference_fock_correction},
             i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
       }
     }
     if (canonical_work) {
       atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work), 1ULL);
       atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work + 1), 1ULL);
+    }
+    if constexpr (mixed) {
+      if (mixed_work) atomicAdd(reinterpret_cast<unsigned long long*>(mixed_work), 1ULL);
     }
     if (work) atomicAdd(&work->published_components, 1ULL);
   }

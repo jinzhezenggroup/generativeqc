@@ -1,4 +1,4 @@
-"""Opt-in Linux GCC dependency collection for offline CPU AOT objects.
+"""Opt-in native Linux dependency collection for offline CPU/CUDA AOT objects.
 
 A GCC depfile observes headers, not the complete downstream toolchain. Reuse
 requires a separately asserted, exact toolchain manifest; discovery never
@@ -7,12 +7,16 @@ upgrades that assertion. Collection alone does not qualify an existing object.
 
 from __future__ import annotations
 
+import hashlib
 import math
+import os
 import platform
 import re
+import shlex
 import shutil
 import stat
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,22 +37,44 @@ SCHEMA = "generativeqc.libxc-cpu-closure/v1"
 # CPATH, GCC_EXEC_PREFIX, LD_PRELOAD, compiler-cache settings, etc. are not inherited.
 CPU_ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"}
 _SIMPLE_FLAGS = frozenset({"-std=c99", "-O0", "-O1", "-O2", "-O3", "-fPIC"})
+_CLANGXX_TOKEN_BYTES = 64 * 1024 * 1024
+# Clang dump records have tab-separated spelling/flags/location fields. Literal
+# newlines are representable; literal tabs in non-whitespace spellings are not.
+_CLANGXX_LITERAL = r"(?:wide_|utf8_|utf16_|utf32_)?string_literal"
+_CLANGXX_RECORD = (
+    rf"(?:{_CLANGXX_LITERAL} '[^\t]*'|unknown '[ \t\r\n\v\f]+'|"
+    rf"(?!(?:eof|unknown|{_CLANGXX_LITERAL})\b)[a-z_][a-z_0-9]* '[^\t\r\n]*')"
+    r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+)
 
 
 def _system_gcc() -> Path:
     return Path("/usr/bin/gcc").resolve()
 
 
+def _system_clang() -> Path:
+    return Path("/usr/bin/clang").resolve()
+
+
+def _system_gxx() -> Path:
+    return Path("/usr/bin/g++").resolve()
+
+
+def _system_clangxx() -> Path:
+    return Path("/usr/bin/clang++").resolve()
+
+
 @dataclass(frozen=True)
 class CpuToolchainManifest:
-    """Caller-owned trust boundary for inputs GCC cannot enumerate via -M.
+    """Caller-owned trust boundary for inputs a C depfile cannot enumerate.
 
     Every record has role ``toolchain-file``, an absolute file identity and its
     expected hash. ``complete`` asserts an immutable compilation snapshot covers
     all downstream executables, loaded libraries, specs/configuration and header
     search namespaces (including absent/shadowing headers and PCH). It must not
     be set from a guessed list or from the depfile. The collector verifies listed
-    files and requires the actual driver, cc1 and assembler, but cannot prove the
+    files and requires the actual driver and selected executable jobs (GCC cc1/as
+    or the admitted Clang integrated frontend/assembler), but cannot prove the
     caller's coverage assertion. An incomplete manifest is still diagnostic.
     """
 
@@ -157,11 +183,53 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     return tuple(sorted(set(words)))
 
 
-def _validate_flags(flags: tuple[str, ...]) -> None:
+def _gcc_job_arguments(line: str) -> list[str]:
+    """Decode GCC -### words as data, including its quoted dollar escape.
+
+    GCC double-quotes arguments and escapes quote, backslash and dollar inside
+    them. POSIX shlex preserves the backslash before dollar; stripping those
+    after tokenization can confuse an actual preceding backslash with quoting.
+    Consume each quoted escape exactly once, without shell interpretation.
+    """
+    words: list[str] = []
+    word: list[str] = []
+    quoted = False
+    started = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == '"':
+            quoted = not quoted
+            started = True
+        elif quoted and char == "\\":
+            index += 1
+            if index == len(line) or line[index] not in '\\"$':
+                raise ValueError("unsupported-gxx-job-model")
+            word.append(line[index])
+        elif char.isspace() and not quoted:
+            if started:
+                words.append("".join(word))
+                word = []
+                started = False
+        else:
+            word.append(char)
+            started = True
+        index += 1
+    if quoted:
+        raise ValueError("unsupported-gxx-job-model")
+    if started:
+        words.append("".join(word))
+    return words
+
+
+def _validate_flags(flags: tuple[str, ...], *, cxx: bool = False) -> None:
     if not isinstance(flags, tuple):
         raise TypeError("flags must be a tuple")
+    allowed = (_SIMPLE_FLAGS - {"-std=c99"}) | {"-std=c++20"} if cxx else _SIMPLE_FLAGS
+    if cxx and flags.count("-std=c++20") != 1:
+        raise ValueError("C++ requires explicit C++20")
     for flag in flags:
-        if isinstance(flag, str) and flag in _SIMPLE_FLAGS:
+        if isinstance(flag, str) and flag in allowed:
             continue
         if isinstance(flag, str) and flag.startswith("-I"):
             directory = Path(flag[2:])
@@ -170,22 +238,147 @@ def _validate_flags(flags: tuple[str, ...]) -> None:
         raise ValueError("unsupported CPU compiler flag")
 
 
+def _clang_cxx_job_arguments(line: str) -> list[str]:
+    """Decode quoted Clang -### words using LLVM sys::printArg's protocol.
+
+    LLVM escapes quote, backslash and dollar once inside each quoted argument.
+    POSIX shlex leaves the dollar escape intact. Admit only the observed fully
+    quoted protocol; no shell expansion, concatenation or escape stripping.
+    """
+    words = []
+    index = 0
+    while index < len(line):
+        if line[index].isspace():
+            index += 1
+            continue
+        if line[index] != '"':
+            raise ValueError("unsupported-clang-job-model")
+        index += 1
+        word = []
+        while index < len(line) and line[index] != '"':
+            if line[index] == "\\":
+                index += 1
+                if index == len(line) or line[index] not in '\\"$':
+                    raise ValueError("unsupported-clang-job-model")
+            word.append(line[index])
+            index += 1
+        if index == len(line):
+            raise ValueError("unsupported-clang-job-model")
+        words.append("".join(word))
+        index += 1
+        if index < len(line) and not line[index].isspace():
+            raise ValueError("unsupported-clang-job-model")
+    return words
+
+
+def _validate_clang_cxx_tokens(text: str) -> None:
+    """Validate complete Clang token records as data.
+
+    Literal tabs in non-whitespace spellings have ambiguous dump framing and
+    remain unsupported. Ordinary/multiline raw strings are not identifiers.
+    """
+    # Validate every record, exactly one final EOF, and unambiguous field/line
+    # framing before interpreting a spelling. This is not a substring search
+    # through arbitrary diagnostics or source/literal text.
+    eof = r"eof ''\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n)*{eof}", text) is None:
+        raise ValueError("unsupported-clangxx-token-stream")
+    if re.search(r"^[a-z_][a-z_0-9]* '(?:module|import)'\t", text, re.MULTILINE):
+        raise ValueError("unsupported-clangxx-module-token")
+
+
+def _validate_clang_cxx_macro_records(text: str, sentinel: str) -> None:
+    """Read directive records only after Clang raw-lexes its -dD projection.
+
+    The compiler owns literal/comment classification. A fake #define inside a
+    multiline literal is one string token, never a directive event. This reads
+    compiler records, not C++ expressions or a second preprocessor.
+    """
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n?)+", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    suffix = r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    end = (
+        rf"raw_identifier '{re.escape(sentinel)}'{suffix}"
+        rf"(?:\nunknown '[ \t\r\n\v\f]+'{suffix})*"
+    )
+    if re.search(rf"(?:^|\n){end}$", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    directive: list[tuple[str, str]] | None = None
+
+    def check_definition() -> None:
+        if directive is None or len(directive) < 3:
+            return
+        if directive[0] != ("hash", "#"):
+            return
+        action = directive[1]
+        kind, name = directive[2]
+        if action == ("raw_identifier", "pragma") and name in {
+            "push_macro",
+            "pop_macro",
+        }:
+            raise ValueError("unsupported-clangxx-macro-stack")
+        if action == ("raw_identifier", "undef") and name == "_GLIBCXX_USE_CXX11_ABI":
+            raise ValueError("unsupported-clangxx-abi")
+        if action != ("raw_identifier", "define"):
+            return
+        if kind != "raw_identifier":
+            raise ValueError("unsupported-clangxx-macro-stream")
+        if name == "_GLIBCXX_USE_CXX11_ABI":
+            if directive[3:] != [("numeric_constant", "1")]:
+                raise ValueError("unsupported-clangxx-abi")
+        elif name in {
+            "_GLIBCXX_DEBUG",
+            "_GLIBCXX_PARALLEL",
+            "_GLIBCXX_PROFILE",
+            "_LIBCPP_VERSION",
+        }:
+            raise ValueError("unsupported-clangxx-abi")
+
+    for match in re.finditer(_CLANGXX_RECORD, text):
+        head, flags, _ = match[0].rsplit("\t", 2)
+        kind, spelling = head.split(" ", 1)
+        spelling = spelling[1:-1]
+        if kind == "unknown":
+            if "\n" in spelling or "\r" in spelling:
+                check_definition()
+                directive = None
+            continue
+        if kind == "hash" and "[StartOfLine]" in flags:
+            check_definition()
+            directive = []
+        if directive is not None:
+            directive.append((kind, spelling))
+    check_definition()
+
+
 def collect_cpu_closure(
     variant: SourceVariant,
     source_path: Path,
     *,
     compiler: str = "gcc",
+    compiler_family: str = "gcc",
+    language: str = "c",
     flags: tuple[str, ...] = ("-std=c99", "-O1", "-fPIC"),
     toolchain: CpuToolchainManifest | None = None,
     timeout: float = 60,
 ) -> CpuClosureResult:
     """Collect actual system/user headers and verify an explicit toolchain.
 
-    Supports only native Linux ELF GCC C, plain object flags and absolute -I
+    Supports native Linux ELF GCC C by default; ``compiler_family="clang"``
+    explicitly admits system Clang C with disabled default configuration and an
+    observed integrated frontend/assembler job. Supports plain flags and absolute -I
     directories, under ``CPU_ENVIRONMENT``. Wrappers, plugins, response files,
     alternate targets/sysroots, inherited environments and other compilers fail
     closed. The recipe includes the physical source path: __FILE__ and quoted
     include resolution make it part of object identity. Time macros are errors.
+
+    ``language="c++"`` explicitly admits native system G++ or, with
+    ``compiler_family="clang"``, Clang++ with a ``.cpp``
+    source and exactly one ``-std=c++20`` flag. Pass ``compiler="g++"`` or
+    ``compiler="clang++"`` respectively, with explicit flags; the C defaults do
+    not select this domain. Actual frontend/assembler jobs, C++ ABI macros and
+    include search configuration are observed. PCH,
+    modules, alternate ABI flags and link closure remain unsupported.
 
     The caller must hold the asserted immutable snapshot through compilation and
     collection, use the returned flags/compiler/environment/working directory,
@@ -201,8 +394,13 @@ def collect_cpu_closure(
         raise TypeError("toolchain must be CpuToolchainManifest")
     if sys.platform != "linux" or variant.backend != "cpu":
         return CpuClosureResult(None, None, ("unsupported-cpu-platform-or-backend",))
+    if compiler_family not in {"gcc", "clang"}:
+        return CpuClosureResult(None, None, ("unsupported-compiler-family",))
+    if language not in {"c", "c++"}:
+        return CpuClosureResult(None, None, ("unsupported-source-language",))
+    is_cxx = language == "c++"
     try:
-        _validate_flags(flags)
+        _validate_flags(flags, cxx=is_cxx)
     except (ValueError, TypeError):
         return CpuClosureResult(None, None, ("unsupported-cpu-flags",))
     executable = shutil.which(compiler, path=CPU_ENVIRONMENT["PATH"])
@@ -210,9 +408,15 @@ def collect_cpu_closure(
         return CpuClosureResult(None, None, ("compiler-not-found",))
     path = Path(executable).resolve()
     source = source_path.absolute()
-    if path != _system_gcc():
+    is_clang = compiler_family == "clang"
+    system_driver = (
+        (_system_clangxx if is_cxx else _system_clang)
+        if is_clang
+        else (_system_gxx if is_cxx else _system_gcc)
+    )
+    if path != system_driver():
         return CpuClosureResult(None, None, ("unsupported-compiler-wrapper",))
-    if source.suffix != ".c":
+    if source.suffix != (".cpp" if is_cxx else ".c"):
         return CpuClosureResult(None, None, ("unsupported-source-language",))
     deadline = time.monotonic() + timeout
     working_directory = str(Path.cwd())
@@ -237,25 +441,88 @@ def collect_cpu_closure(
         if str(Path.cwd()) != working_directory:
             raise ValueError("working-directory-changed")
 
-    def query(arguments: list[str]) -> str:
+    def check_clang_selection() -> None:
+        if not (is_clang or is_cxx):
+            return
+        selected = shutil.which(compiler, path=CPU_ENVIRONMENT["PATH"])
+        if (
+            selected is None
+            or Path(selected).resolve() != path
+            or system_driver() != path
+        ):
+            raise ValueError("compiler-selection-changed")
+
+    def query(
+        arguments: list[str],
+        *,
+        diagnostic: bool = False,
+        token_budget: int | None = None,
+        input_fds: tuple[int, ...] = (),
+        failure_reason: str = "compiler-command-failed",
+    ) -> str:
         check_working_directory()
+        check_clang_selection()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError
-        result = run_compiler(
-            [str(path), *arguments],
-            remaining,
-            label="CPU AOT closure",
-            environment=dict(CPU_ENVIRONMENT),
-        )
+        if is_clang and "--no-default-config" not in arguments:
+            arguments = ["--no-default-config", *arguments]
+        if is_clang and is_cxx and "--driver-mode=g++" not in arguments:
+            arguments = ["--driver-mode=g++", *arguments]
+        limited = False
+        if token_budget is None:
+            result = run_compiler(
+                [str(path), *arguments],
+                remaining,
+                label="CPU AOT closure",
+                environment=dict(CPU_ENVIRONMENT),
+            )
+            output = result.stderr if diagnostic else result.stdout
+        else:
+            # Keep the existing finite process-group owner. This helper execs
+            # the same verified driver in-place, with both outputs going to an
+            # anonymous bounded file; its fd/limit are observation provenance,
+            # not object compiler flags or a second compiler/cache owner.
+            helper = (
+                "import os,resource,sys; "
+                "fd=int(sys.argv[1]); limit=int(sys.argv[2]); "
+                "resource.setrlimit(resource.RLIMIT_CORE,(0,0)); "
+                "resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit)); "
+                "os.dup2(fd,1); os.dup2(fd,2); "
+                "os.execv(sys.argv[3],sys.argv[3:])"
+            )
+            with tempfile.TemporaryFile() as capture:
+                result = run_compiler(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-S",
+                        "-c",
+                        helper,
+                        str(capture.fileno()),
+                        str(token_budget),
+                        str(path),
+                        *arguments,
+                    ],
+                    remaining,
+                    label="CPU AOT token observation",
+                    environment=dict(CPU_ENVIRONMENT),
+                    pass_fds=(capture.fileno(), *input_fds),
+                )
+                limited = os.fstat(capture.fileno()).st_size >= token_budget
+                capture.seek(0)
+                output = "" if limited else capture.read(token_budget).decode("utf-8")
         check_working_directory()
+        check_clang_selection()
         if result.timed_out:
             raise TimeoutError
+        if limited:
+            raise ValueError("clangxx-token-output-limit")
         if result.returncode:
-            raise ValueError("compiler-command-failed")
+            raise ValueError(failure_reason)
         # Remove record terminators only: GCC quotes a filename's terminal
         # space/tab, and trimming that whitespace destroys dependency identity.
-        return result.stdout.rstrip("\r\n")
+        return output.rstrip("\r\n")
 
     def snapshot(files: tuple[CacheDependency, ...]) -> None:
         for item in files:
@@ -284,14 +551,21 @@ def collect_cpu_closure(
                 carry = data[-32:]
 
     try:
+        # A named FIFO can satisfy executable lookup; never open a nonregular
+        # Clang input while waiting for ELF bytes outside the process deadline.
+        executable_hash = hash_input(path) if is_clang or is_cxx else None
         with path.open("rb") as stream:
             magic = stream.read(4)
         if magic != b"\x7fELF":
             return failure("unsupported-compiler-wrapper")
-        executable_hash = hash_input(path)
+        if executable_hash is None:
+            executable_hash = hash_input(path)
         version = query(["--version"])
         # __GNUC__ is also defined by clang; require GCC's driver banner/query.
-        if "Free Software Foundation" not in version or not re.fullmatch(
+        if is_clang:
+            if not re.search(r"\bclang version [0-9]+\.", version):
+                return failure("unsupported-compiler")
+        elif "Free Software Foundation" not in version or not re.fullmatch(
             r"[0-9]+(?:\.[0-9]+)*", query(["-dumpfullversion"])
         ):
             return failure("unsupported-compiler")
@@ -301,6 +575,18 @@ def collect_cpu_closure(
         if target.split("-", 1)[0] != platform.machine():
             return failure("unsupported-cpu-target")
         effective_flags = (*flags, "-Werror=date-time")
+        if is_clang:
+            # Do not enter Clang's user/system/default configuration domain.
+            # Explicitly select its integrated assembler; verify the actual job.
+            effective_flags = (
+                "--no-default-config",
+                "-fintegrated-as",
+                *effective_flags,
+            )
+            if is_cxx:
+                # Canonical clang++ commonly resolves to the clang executable.
+                # Preserve C++ driver semantics after resolving that symlink.
+                effective_flags = ("--driver-mode=g++", *effective_flags)
         if hash_input(source) != variant.source_sha256:
             return failure("source-mismatch")
         check_time_macros(source)
@@ -311,10 +597,16 @@ def collect_cpu_closure(
             "flags": list(effective_flags),
             "working_directory": working_directory,
         }
+        if is_clang or is_cxx:
+            recipe["compiler"]["executable"] = str(path)
+        if is_cxx:
+            recipe["language"] = "c++20"
         snapshot(manifest.files)
         required = {str(path)}
         downstream = {}
-        for name in ("cc1", "as"):
+        for name in (
+            () if is_clang else (("cc1plus", "as") if is_cxx else ("cc1", "as"))
+        ):
             tool = query(["-print-prog-name=" + name])
             found = shutil.which(tool, path=CPU_ENVIRONMENT["PATH"])
             if found is None:
@@ -322,8 +614,258 @@ def collect_cpu_closure(
             resolved = str(Path(found).resolve())
             required.add(resolved)
             downstream[name] = resolved
+            if is_cxx:
+                hash_input(Path(resolved))
+                with Path(resolved).open("rb") as stream:
+                    if stream.read(4) != b"\x7fELF":
+                        return failure("unsupported-downstream-tool")
         observed = {str(Path(item.identity).resolve()) for item in manifest.files}
-        specs = query(["-dumpspecs"])
+
+        def clang_context() -> dict[str, Any]:
+            resource = query(["--no-default-config", "-print-resource-dir"])
+            if not Path(resource).is_absolute() or not Path(resource).is_dir():
+                raise ValueError("unsupported-clang-resource-directory")
+            plan = query(
+                [*effective_flags, "-###", "-c", str(source), "-o", "/dev/null"],
+                diagnostic=True,
+            )
+            # -### is a diagnostic protocol, not a shell script to execute.
+            # Admit exactly one quoted cc1 object job in the driver executable.
+            lines = [
+                line for line in plan.splitlines() if line.lstrip().startswith('"')
+            ]
+            if len(lines) != 1:
+                raise ValueError("unsupported-clang-job-model")
+            job = (
+                _clang_cxx_job_arguments(lines[0]) if is_cxx else shlex.split(lines[0])
+            )
+
+            def selected(option: str) -> str | None:
+                if job.count(option) != 1:
+                    return None
+                index = job.index(option) + 1
+                return job[index] if index < len(job) else None
+
+            if (
+                len(job) < 2
+                or not Path(job[0]).is_absolute()
+                or Path(job[0]).resolve() != path
+                or job[1] != "-cc1"
+                or "-emit-obj" not in job
+                or "-no-integrated-as" in job
+                or "-fno-integrated-as" in job
+                or selected("-triple") != target
+                or selected("-resource-dir") != resource
+                or selected("-x") != ("c++" if is_cxx else "c")
+                or (is_cxx and job.count("-std=c++20") != 1)
+                or any(
+                    arg in job for arg in ("-load", "-plugin", "-isysroot", "-fmodules")
+                )
+                or job[-1] != str(source)
+            ):
+                raise ValueError("unsupported-clang-job-model")
+            context = {
+                "resource_directory": resource,
+                "object_job": job,
+                "driver_plan": plan,
+            }
+            if is_cxx:
+                macros = query([*effective_flags, "-dM", "-E", str(source)])
+                if not re.search(
+                    r"^#define __cplusplus 202002L$", macros, re.MULTILINE
+                ) or not re.search(
+                    r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
+                ):
+                    raise ValueError("unsupported-clangxx-abi")
+                # -dD omits consumed pragma stack events. Poison only their
+                # names before preprocessing so Clang also checks destringized
+                # and token-pasted _Pragma expansions, without banning the
+                # ordinary _Pragma macros used by system/C++ headers. The gate
+                # changes observation only, never the actual object flags.
+                with tempfile.TemporaryFile() as stack_guard:
+                    stack_guard.write(b"#pragma GCC poison push_macro pop_macro\n")
+                    stack_guard.flush()
+                    stack_guard.seek(0)
+                    query(
+                        [
+                            *effective_flags,
+                            "-E",
+                            "-include",
+                            f"/proc/self/fd/{stack_guard.fileno()}",
+                            str(source),
+                        ],
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(stack_guard.fileno(),),
+                        failure_reason="unsupported-clangxx-macro-stack",
+                    )
+                # -dD includes ordinary output, so its text is not itself a
+                # directive/event protocol. Let the same Clang raw lexer own
+                # literal boundaries before interpreting active definitions.
+                macro_history = query(
+                    [*effective_flags, "-E", "-dD", str(source)],
+                    token_budget=_CLANGXX_TOKEN_BYTES,
+                )
+                sentinel = "generativeqc_macro_end_" + canonical_hash(
+                    {"history": macro_history}
+                )
+                with tempfile.TemporaryFile() as projection:
+                    projection.write(
+                        (macro_history + "\n" + sentinel + "\n").encode("utf-8")
+                    )
+                    projection.flush()
+                    projection.seek(0)
+                    raw_tokens = query(
+                        [
+                            *effective_flags,
+                            "-fsyntax-only",
+                            "-Xclang",
+                            "-dump-raw-tokens",
+                            "-x",
+                            "c++",
+                            f"/proc/self/fd/{projection.fileno()}",
+                        ],
+                        diagnostic=True,
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(projection.fileno(),),
+                    )
+                _validate_clang_cxx_macro_records(raw_tokens, sentinel)
+                # C++20 named modules can compile from .cpp without -fmodules;
+                # neither the driver job nor dependency headers expose that
+                # declaration. Reuse Clang's preprocessed lexer, not a second
+                # C++ parser. Conservatively exclude module/import spellings as
+                # tokens (including otherwise ordinary contextual identifiers).
+                tokens = query(
+                    [
+                        *effective_flags,
+                        "-fsyntax-only",
+                        "-Xclang",
+                        "-dump-tokens",
+                        str(source),
+                    ],
+                    diagnostic=True,
+                    token_budget=_CLANGXX_TOKEN_BYTES,
+                )
+                _validate_clang_cxx_tokens(tokens)
+                search = query(
+                    [*effective_flags, "-E", "-v", str(source)], diagnostic=True
+                )
+                include_search = re.search(
+                    r'(#include "\.\.\." search starts here:.*?End of search list\.)',
+                    search,
+                    re.DOTALL,
+                )
+                gcc_selection = re.findall(
+                    r"^Selected GCC installation: (.+)$", search, re.MULTILINE
+                )
+                if (
+                    include_search is None
+                    or len(gcc_selection) != 1
+                    or not Path(gcc_selection[0]).is_absolute()
+                    or not Path(gcc_selection[0]).is_dir()
+                ):
+                    raise ValueError("unsupported-clangxx-include-search")
+                context.update(
+                    macros=macros,
+                    macro_history_sha256=canonical_hash(
+                        {"macro_history": macro_history}
+                    ),
+                    token_stream_sha256=canonical_hash({"tokens": tokens}),
+                    include_search=include_search[1],
+                    gcc_installation=gcc_selection[0],
+                    # Includes multilib selection and ignored search paths;
+                    # changes must be observed even with identical headers.
+                    search_diagnostics=search,
+                )
+            return context
+
+        def gcc_cxx_context() -> dict[str, Any]:
+            plan = query(
+                [*effective_flags, "-###", "-c", str(source), "-o", "/dev/null"],
+                diagnostic=True,
+            )
+            # GCC selects a temporary assembly pathname for every dry run.
+            # Validate the cc1plus -> as handoff before normalizing that one
+            # nonsemantic name; never execute diagnostic text.
+            jobs = []
+            for line in plan.splitlines():
+                if not line[:1].isspace():
+                    continue
+                tokens = _gcc_job_arguments(line)
+                if tokens:
+                    if not Path(tokens[0]).is_absolute():
+                        # Native GCC may spell its PATH-selected assembler as
+                        # `as`. Resolve only that known handoff in the exact
+                        # child PATH; the independent tool query must agree.
+                        selected = (
+                            shutil.which("as", path=CPU_ENVIRONMENT["PATH"])
+                            if tokens[0] == "as"
+                            else None
+                        )
+                        if selected is None:
+                            raise ValueError("unsupported-gxx-job-model")
+                        tokens[0] = str(Path(selected).resolve())
+                    jobs.append(tokens)
+            if len(jobs) != 2:
+                raise ValueError("unsupported-gxx-job-model")
+            frontend, assembler = jobs
+            if (
+                str(Path(frontend[0]).resolve()) != downstream["cc1plus"]
+                or str(Path(assembler[0]).resolve()) != downstream["as"]
+                or frontend.count(str(source)) != 1
+                or frontend.count("-o") != 1
+                or assembler.count("-o") != 1
+                or "-std=c++20" not in frontend
+                or any(
+                    arg.startswith(("@", "-fplugin", "-fmodule", "-flto"))
+                    for arg in frontend
+                )
+            ):
+                raise ValueError("unsupported-gxx-job-model")
+            output_index = frontend.index("-o") + 1
+            assembly_index = assembler.index("-o") + 1
+            if output_index >= len(frontend) or assembly_index >= len(assembler):
+                raise ValueError("unsupported-gxx-job-model")
+            assembly = frontend[output_index]
+            if (
+                not Path(assembly).is_absolute()
+                or not assembly.endswith(".s")
+                or assembler[assembly_index] != "/dev/null"
+                or assembler[-1] != assembly
+                or assembler.count(assembly) != 1
+            ):
+                raise ValueError("unsupported-gxx-job-model")
+            frontend[output_index] = "<assembly-output>"
+            assembler[-1] = "<assembly-output>"
+            macros = query([*effective_flags, "-dM", "-E", str(source)])
+            if not re.search(
+                r"^#define __cplusplus 202002L$", macros, re.MULTILINE
+            ) or not re.search(
+                r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
+            ):
+                raise ValueError("unsupported-gxx-abi")
+            search = query([*effective_flags, "-E", "-v", str(source)], diagnostic=True)
+            match = re.search(
+                r'(#include "\.\.\." search starts here:.*?End of search list\.)',
+                search,
+                re.DOTALL,
+            )
+            if match is None:
+                raise ValueError("unsupported-gxx-include-search")
+            return {
+                "specs": query(["-dumpspecs"]),
+                "object_jobs": jobs,
+                "macros": macros,
+                "include_search": match[1],
+            }
+
+        def compiler_context() -> Any:
+            return (
+                clang_context()
+                if is_clang
+                else (gcc_cxx_context() if is_cxx else query(["-dumpspecs"]))
+            )
+
+        specs = compiler_context()
         # -M alone cannot observe __has_include branches which include no file,
         # or diagnostics/time macro expansions. Bind actual preprocessor output
         # too, without confusing it with the downstream toolchain closure.
@@ -347,9 +889,36 @@ def collect_cpu_closure(
                 raise ValueError("relative-header-path")
             if str(source) not in names:
                 raise ValueError("source-missing-from-dependencies")
+            if is_cxx and any(Path(name + ".gch").exists() for name in names):
+                raise ValueError("unsupported-gxx-pch")
             return names
 
+        def clang_headers() -> set[str]:
+            trace = query([*effective_flags, "-E", "-H", str(source)], diagnostic=True)
+            traced = set()
+            for line in trace.splitlines():
+                match = re.fullmatch(r"\.+ (.+)", line)
+                if match is None:
+                    continue
+                header_path = match[1]
+                # Clang's make output normalizes literal backslashes to '/'
+                # and leaves filename tabs unquoted. A real normalized/split
+                # decoy is not evidence of the header actually opened. Admit
+                # only trace paths with an unambiguous make representation.
+                if (
+                    "\\" in header_path
+                    or any(ord(char) < 32 or ord(char) == 127 for char in header_path)
+                    or header_path.endswith(" ")
+                    or not Path(header_path).is_absolute()
+                ):
+                    raise ValueError("unsupported-clang-dependency-path")
+                traced.add(header_path)
+            return traced
+
         names = scan()
+        traced = clang_headers() if is_clang else set()
+        if is_clang and traced != set(names) - {str(source)}:
+            return failure("clang-header-trace-mismatch")
         headers = tuple(
             CacheDependency("header", name, hash_input(Path(name)))
             for name in names
@@ -362,7 +931,7 @@ def collect_cpu_closure(
             *manifest.files,
             CacheDependency(
                 "system-header-manifest",
-                "gcc-M",
+                "clang-M" if is_clang else "gcc-M",
                 canonical_hash([item.to_payload() for item in headers]),
             ),
             CacheDependency(
@@ -372,7 +941,9 @@ def collect_cpu_closure(
             ),
             CacheDependency(
                 "cpu-build-context",
-                "gcc-native",
+                ("clangxx-c++20-native" if is_cxx else "clang-native")
+                if is_clang
+                else ("gxx-c++20-native" if is_cxx else "gcc-native"),
                 canonical_hash(
                     {
                         "schema": SCHEMA,
@@ -396,7 +967,7 @@ def collect_cpu_closure(
             or hash_input(path) != executable_hash
         ):
             return failure("source-or-compiler-changed")
-        if query(["--version"]) != version or query(["-dumpspecs"]) != specs:
+        if query(["--version"]) != version or compiler_context() != specs:
             return failure("compiler-configuration-changed")
         if (
             canonical_hash(
@@ -405,6 +976,8 @@ def collect_cpu_closure(
             != preprocessed
         ):
             return failure("preprocessor-output-changed")
+        if is_clang and clang_headers() != traced:
+            return failure("clang-header-trace-changed")
         for name, resolved in downstream.items():
             found = shutil.which(
                 query(["-print-prog-name=" + name]), path=CPU_ENVIRONMENT["PATH"]
@@ -419,6 +992,7 @@ def collect_cpu_closure(
             return failure("source-or-compiler-changed")
         reasons = []
         check_working_directory()
+        check_clang_selection()
         if not manifest.complete:
             reasons.append("toolchain-manifest-incomplete")
         if not required <= observed:
@@ -431,11 +1005,18 @@ def collect_cpu_closure(
             complete=not reasons,
         )
         # A compiler cache may not enumerate cc1/config/opaque assembler inputs.
-        # Transport the observed closure identity into a real GCC compile option
+        # Transport the observed closure identity into a real driver option
         # so those changes invalidate its command identity as well as our store.
         # Hash the unsalted payload once; the final key includes the returned flag
         # without any self-reference. Partial observations remain non-reusable.
-        recipe["flags"].append("-frandom-seed=" + canonical_hash(closure.to_payload()))
+        salt = canonical_hash(closure.to_payload())
+        recipe["flags"].append(
+            # No debug flags are admitted. This Clang option supplies command
+            # identity without injecting a macro into scientific C expressions.
+            "-fdebug-compilation-dir=generativeqc-closure-" + salt
+            if is_clang
+            else "-frandom-seed=" + salt
+        )
         closure = closure_from_probe_recipe(
             recipe,
             backend="cpu",
@@ -444,6 +1025,598 @@ def collect_cpu_closure(
             complete=not reasons,
         )
         return CpuClosureResult(closure, recipe, tuple(reasons), headers)
+    except TimeoutError:
+        return failure("collection-timed-out")
+    except OSError:
+        return failure("dependency-file-unavailable")
+    except (ValueError, UnicodeError) as error:
+        return failure(str(error))
+
+
+@dataclass(frozen=True)
+class CudaToolchainManifest(CpuToolchainManifest):
+    """Explicit immutable NVCC/host/device/header/search-namespace snapshot.
+
+    The inherited file records bind exact bytes. ``complete`` also asserts all
+    loaded libraries, configuration, downstream tools, absent/shadowing/PCH
+    namespaces and opaque inputs are covered and remain immutable through the
+    pre/object/post bracket. Neither dryrun, depfiles nor ldd prove coverage.
+    """
+
+
+@dataclass(frozen=True)
+class CudaClosureResult(CpuClosureResult):
+    """Observed CUDA recipe and closure; reasons prevent reusable identity."""
+
+
+_CUDA_FLAGS = frozenset({"-std=c++17", "-O0", "-O1", "-O2", "-O3", "--fmad=false"})
+_CUDA_PATH = re.compile(r"/[A-Za-z0-9_./+\-]+")
+_CUDA_ASSIGNMENTS = frozenset(
+    {
+        "_HERE_",
+        "_NVVM_BRANCH_",
+        "_SPACE_",
+        "_CUDART_",
+        "_THERE_",
+        "_TARGET_SIZE_",
+        "_TARGET_DIR_",
+        "TOP",
+        "CICC_PATH",
+        "NVVMIR_LIBRARY_DIR",
+        "LD_LIBRARY_PATH",
+        "PATH",
+        "INCLUDES",
+        "LIBRARIES",
+        "CUDAFE_FLAGS",
+        "PTXAS_FLAGS",
+    }
+)
+
+
+def _cuda_path(path: Path) -> None:
+    if not path.is_absolute() or _CUDA_PATH.fullmatch(str(path)) is None:
+        raise ValueError("unsupported-cuda-path-spelling")
+
+
+def _nvcc_dependencies(text: str) -> tuple[str, ...]:
+    # NVCC 12.9 emits an extra target separator space. Preserve the GCC parser
+    # contract; normalize only this fixed diagnostic target, never filenames.
+    if text.startswith("closure :"):
+        text = "closure:" + text[len("closure :") :]
+    names = parse_gcc_dependencies(text)
+    for name in names:
+        _cuda_path(Path(name))
+    return names
+
+
+def _cuda_host_job(
+    words: list[str], nvcc: Path, source: Path, flags: tuple[str, ...], stage: int
+) -> None:
+    """Admit only the observed stock host stages, inputs and bounded options."""
+    stages = {
+        0: ("-E", str(source), source.stem + ".cpp4.ii"),
+        2: ("-E", str(source), source.stem + ".cpp1.ii"),
+        6: ("-c", source.stem + ".cudafe1.cpp", "/dev/null"),
+    }
+    if stage not in stages:
+        raise ValueError("unsupported-nvcc-job-model")
+    mode, input_name, output_name = stages[stage]
+    scalar = {
+        "-m64",
+        "-Wno-psabi",
+        "-Werror=date-time",
+        "-D__CUDA_ARCH_LIST__=800",
+        "-D__CUDA_ARCH__=800",
+        "-D__NV_LEGACY_LAUNCH",
+        "-D__CUDACC__",
+        "-D__NVCC__",
+        "-DCUDA_DOUBLE_MATH_FUNCTIONS",
+        "-D__CUDACC_VER_MAJOR__=12",
+        "-D__CUDACC_VER_MINOR__=9",
+        "-D__CUDA_API_VER_MAJOR__=12",
+        "-D__CUDA_API_VER_MINOR__=9",
+        "-D__NVCC_DIAG_PRAGMA_SUPPORT__=1",
+        "-D__CUDACC_DEVICE_ATOMIC_BUILTINS__=1",
+        "-I" + str(nvcc.parent / "..") + "/targets/x86_64-linux/include",
+        *(flag for flag in flags if flag != "--fmad=false"),
+    }
+    seen = set()
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word in {mode, input_name}:
+            if word in seen:
+                raise ValueError("unsupported-nvcc-job-model")
+            seen.add(word)
+        elif word in {"-x", "-include", "-o"}:
+            expected = {"-x": "c++", "-include": "cuda_runtime.h", "-o": output_name}[
+                word
+            ]
+            if word in seen or index + 1 >= len(words) or words[index + 1] != expected:
+                raise ValueError("unsupported-nvcc-job-model")
+            seen.add(word)
+            index += 1
+        elif (
+            word not in scalar
+            and re.fullmatch(r"-D__CUDACC_VER_BUILD__=[0-9]+", word) is None
+        ):
+            raise ValueError("unsupported-nvcc-job-model")
+        index += 1
+    if not {mode, input_name, "-x", "-o"} <= seen:
+        raise ValueError("unsupported-nvcc-job-model")
+
+
+def _cuda_jobs(
+    plan: str, nvcc: Path, host: Path, source: Path, flags: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Read the admitted 12.9 diagnostic model without executing shell text."""
+    device = {
+        (nvcc.parent / ".." / "nvvm" / "bin" / "cicc").resolve(): "cicc",
+        (nvcc.parent / "cudafe++").resolve(): "cudafe++",
+        (nvcc.parent / "ptxas").resolve(): "ptxas",
+        (nvcc.parent / "fatbinary").resolve(): "fatbinary",
+    }
+    jobs = []
+    assignments = {}
+    for line in plan.splitlines():
+        if not line.startswith("#$ "):
+            raise ValueError("unsupported-nvcc-diagnostic")
+        body = line[3:]
+        assignment = re.match(r"([A-Za-z_][A-Za-z_0-9]*)=", body)
+        if assignment:
+            if (
+                jobs
+                or assignment[1] not in _CUDA_ASSIGNMENTS
+                or any(marker in body for marker in ("`", "$(", "\n", ";", "&&", "||"))
+            ):
+                raise ValueError("unsupported-nvcc-configuration")
+            assignments[assignment[1]] = body[assignment.end() :]
+            continue
+        words = shlex.split(body)
+        if not words or any(
+            marker in body for marker in ("`", ";", "&&", "||", "|", "<", ">")
+        ):
+            raise ValueError("unsupported-nvcc-job-model")
+        command = words[0]
+        if command == "$CICC_PATH/cicc":
+            command = str(nvcc.parent / ".." / "nvvm" / "bin" / "cicc")
+        elif command in {"cudafe++", "ptxas", "fatbinary"}:
+            command = str(nvcc.parent / command)
+        if "$" in command or any("$" in word for word in words[1:]):
+            raise ValueError("unsupported-nvcc-job-model")
+        program = Path(command)
+        if not program.is_absolute():
+            raise ValueError("unsupported-nvcc-job-model")
+        program = program.resolve()
+        if program != host and program not in device:
+            raise ValueError("unsupported-nvcc-job-model")
+        if program == host:
+            _cuda_host_job(words[1:], nvcc, source, flags, len(jobs))
+        if any(
+            word.startswith(
+                (
+                    "@",
+                    "-fplugin",
+                    "--options-file",
+                    "-isysroot",
+                    "--sysroot",
+                )
+            )
+            or word in {"-rdc=true", "-dc", "-dlink", "-dlto"}
+            for word in words[1:]
+        ):
+            raise ValueError("unsupported-nvcc-job-model")
+        jobs.append(str(program))
+    # Whole-program object: host preprocessing, device frontend/assembler,
+    # fatbinary embedding and host object compilation; no linker/nvlink job.
+    expected_jobs = (
+        str(host),
+        str((nvcc.parent / "cudafe++").resolve()),
+        str(host),
+        str((nvcc.parent / "../nvvm/bin/cicc").resolve()),
+        str((nvcc.parent / "ptxas").resolve()),
+        str((nvcc.parent / "fatbinary").resolve()),
+        str(host),
+    )
+    if tuple(jobs) != expected_jobs:
+        raise ValueError("unsupported-nvcc-job-model")
+    # Only the stock 12.9 whole-program diagnostic environment is admitted.
+    # No shell expansion/evaluation of these values takes place here.
+    top = str(nvcc.parent / "..")
+    target_dir = "targets/" + platform.machine() + "-linux"
+    expected_assignments = {
+        "_NVVM_BRANCH_": "nvvm",
+        "_SPACE_": " ",
+        "_CUDART_": "cudart",
+        "_HERE_": str(nvcc.parent),
+        "_THERE_": str(nvcc.parent),
+        "_TARGET_SIZE_": "",
+        "_TARGET_DIR_": target_dir,
+        "TOP": top,
+        "CICC_PATH": top + "/nvvm/bin",
+        "NVVMIR_LIBRARY_DIR": top + "/nvvm/libdevice",
+        "LD_LIBRARY_PATH": top + "/lib:",
+        "PATH": top + "/nvvm/bin:" + str(nvcc.parent) + ":" + CPU_ENVIRONMENT["PATH"],
+        "INCLUDES": '"-I' + top + "/" + target_dir + '/include"',
+        "LIBRARIES": '"-L'
+        + top
+        + "/"
+        + target_dir
+        + '/lib/stubs" "-L'
+        + top
+        + "/"
+        + target_dir
+        + '/lib"',
+        "CUDAFE_FLAGS": "",
+        "PTXAS_FLAGS": "",
+    }
+    if {k: v.strip() for k, v in assignments.items()} != {
+        k: v.strip() for k, v in expected_assignments.items()
+    }:
+        raise ValueError("unsupported-nvcc-configuration")
+    return tuple(jobs)
+
+
+def collect_cuda_closure(
+    variant: SourceVariant,
+    source_path: Path,
+    *,
+    compiler: str,
+    target: str,
+    host_compiler: str = "/usr/bin/g++",
+    flags: tuple[str, ...] = ("-std=c++17", "-O1", "--fmad=false"),
+    toolchain: CudaToolchainManifest | None = None,
+    timeout: float = 60,
+) -> CudaClosureResult:
+    """Observe an explicit Linux ELF NVCC 12.9 whole-program sm_80 object recipe.
+
+    Accept only the native system G++ host driver and bounded plain flags/absolute
+    include paths. The caller must compile with the returned canonical driver,
+    flags, environment and cwd under its immutable complete snapshot, and require
+    equal reusable pre/post keys. No object is compiled, stored or retroactively
+    qualified here. Dryrun jobs are diagnostics, never executable build scripts.
+    Other releases/targets, wrappers, RDC/LTO, response/plugin/sysroot domains and
+    ambiguous filenames fail closed. Ordinary runtime/import never calls NVCC.
+    """
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be positive and finite")
+    manifest = toolchain or CudaToolchainManifest()
+    if not isinstance(manifest, CudaToolchainManifest):
+        raise TypeError("toolchain must be CudaToolchainManifest")
+    if (
+        sys.platform != "linux"
+        or platform.machine() != "x86_64"
+        or variant.backend != "cuda"
+    ):
+        return CudaClosureResult(None, None, ("unsupported-cuda-platform-or-backend",))
+    if target != "sm_80":
+        return CudaClosureResult(None, None, ("unsupported-cuda-target",))
+    deadline = time.monotonic() + timeout
+    cwd = str(Path.cwd())
+    source = source_path.absolute()
+    entry = Path(compiler)
+    host_entry = Path(host_compiler)
+    recipe = None
+    headers: tuple[CacheDependency, ...] = ()
+    dependencies: tuple[CacheDependency, ...] = ()
+    selections: dict[Path, Path] = {}
+    identities: dict[Path, str] = {}
+    prefixes: dict[Path, bytes] = {}
+    macro_inputs = {source}
+
+    def failure(reason: str) -> CudaClosureResult:
+        closure = (
+            None
+            if recipe is None
+            else closure_from_probe_recipe(
+                recipe,
+                backend="cuda",
+                target=target,
+                dependencies=dependencies,
+                complete=False,
+            )
+        )
+        return CudaClosureResult(closure, recipe, (reason,), headers)
+
+    def check_context() -> None:
+        if str(Path.cwd()) != cwd:
+            raise ValueError("working-directory-changed")
+        for selected, resolved in selections.items():
+            if selected.resolve() != resolved:
+                raise ValueError("dependency-selection-changed")
+
+    def digest(path: Path) -> str:
+        check_context()
+        if time.monotonic() >= deadline:
+            raise TimeoutError
+        _cuda_path(path)
+        if not stat.S_ISREG(path.stat().st_mode):
+            raise ValueError("nonregular-dependency-file")
+        selections.setdefault(path, path.resolve())
+        # A regular input can be replaced with a FIFO between stat and open.
+        # Never wait for a writer outside the finite collection deadline.
+        descriptor = os.open(
+            path.resolve(), os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+        )
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("nonregular-dependency-file")
+            checksum = hashlib.sha256()
+            prefix = b""
+            carry = b""
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError
+                checksum.update(chunk)
+                prefix = (prefix + chunk)[:4]
+                if path in macro_inputs and re.search(
+                    rb"__(?:DATE|TIME|TIMESTAMP)__", carry + chunk
+                ):
+                    raise ValueError("unsupported-time-macro")
+                carry = chunk[-32:]
+            value = checksum.hexdigest()
+            prefixes[path] = prefix
+        if time.monotonic() >= deadline:
+            raise TimeoutError
+        check_context()
+        return value
+
+    def remember(path: Path) -> str:
+        value = digest(path)
+        identities[path] = value
+        return value
+
+    def snapshot() -> None:
+        for path, value in identities.items():
+            if digest(path) != value:
+                raise ValueError("dependency-changed")
+        for item in manifest.files:
+            if digest(Path(item.identity)) != item.content_sha256:
+                raise ValueError("dependency-changed")
+
+    def query(driver: Path, arguments: list[str], diagnostic: bool = False) -> str:
+        check_context()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError
+        result = run_compiler(
+            [str(driver), *arguments],
+            remaining,
+            label="CUDA AOT closure",
+            environment=dict(CPU_ENVIRONMENT),
+        )
+        check_context()
+        if result.timed_out:
+            raise TimeoutError
+        if result.returncode:
+            raise ValueError("compiler-command-failed")
+        return (result.stderr if diagnostic else result.stdout).rstrip("\r\n")
+
+    try:
+        _cuda_path(Path(cwd))
+        _cuda_path(source)
+        _cuda_path(entry)
+        _cuda_path(host_entry)
+        if source.suffix != ".cu" or source.resolve() != source:
+            return failure("unsupported-source-language-or-selection")
+        if not isinstance(flags, tuple):
+            return failure("unsupported-cuda-flags")
+        for flag in flags:
+            if isinstance(flag, str) and flag in _CUDA_FLAGS:
+                continue
+            if isinstance(flag, str) and flag.startswith("-I"):
+                directory = Path(flag[2:])
+                _cuda_path(directory)
+                if directory.is_dir():
+                    selections[directory] = directory.resolve()
+                    continue
+            return failure("unsupported-cuda-flags")
+        nvcc = entry.resolve()
+        host = host_entry.resolve()
+        if host != _system_gxx() or nvcc.name != "nvcc":
+            return failure("unsupported-compiler-wrapper")
+        for path in (entry, host_entry, nvcc, host):
+            remember(path)
+            if prefixes[path] != b"\x7fELF":
+                return failure("unsupported-compiler-wrapper")
+        version = query(nvcc, ["--version"])
+        if not re.search(r"release 12\.9, V12\.9\.[0-9]+", version):
+            return failure("unsupported-nvcc-version")
+        help_text = query(nvcc, ["--help"])
+        if any(
+            option not in help_text
+            for option in (
+                "--frandom-seed",
+                "--dryrun",
+                "--generate-dependencies",
+            )
+        ):
+            return failure("unsupported-nvcc-options")
+        host_version = query(host, ["--version"])
+        host_target = query(host, ["-dumpmachine"])
+        if (
+            "Free Software Foundation" not in host_version
+            or not re.fullmatch(r"(?:x86_64|aarch64)-[^\s]*linux[^\s]*", host_target)
+            or host_target.split("-", 1)[0] != platform.machine()
+        ):
+            return failure("unsupported-host-compiler")
+        host_specs = query(host, ["-dumpspecs"])
+        required = {str(nvcc), str(host)}
+        for name in ("cc1plus", "as"):
+            selected = query(host, ["-print-prog-name=" + name])
+            found = shutil.which(selected, path=CPU_ENVIRONMENT["PATH"])
+            if found is None:
+                return failure("downstream-tool-not-found")
+            path = Path(found)
+            remember(path)
+            if prefixes[path] != b"\x7fELF":
+                return failure("unsupported-downstream-wrapper")
+            required.add(str(path.resolve()))
+        profile = nvcc.parent / "nvcc.profile"
+        remember(profile)
+        required.add(str(profile.resolve()))
+        libdevice = (nvcc.parent / ".." / "nvvm/libdevice/libdevice.10.bc").resolve()
+        remember(libdevice)
+        required.add(str(libdevice))
+        effective = [
+            "--compiler-bindir=" + str(host),
+            "--gpu-architecture=" + target,
+            *flags,
+            "-Xcompiler=-Werror=date-time",
+        ]
+        if remember(source) != variant.source_sha256:
+            return failure("source-mismatch")
+        recipe = {
+            "emission_identity": variant.emission_identity,
+            "translation_unit_sha256": variant.source_sha256,
+            "compiler": {
+                "executable": str(nvcc),
+                "executable_sha256": identities[nvcc],
+                "version": version,
+            },
+            "flags": effective,
+            "working_directory": cwd,
+            "environment": dict(CPU_ENVIRONMENT),
+            "source": str(source),
+        }
+        snapshot()
+
+        def context() -> dict[str, Any]:
+            plan = query(
+                nvcc,
+                [
+                    *effective,
+                    "--dryrun",
+                    "--keep",
+                    "-c",
+                    str(source),
+                    "-o",
+                    "/dev/null",
+                ],
+                True,
+            )
+            jobs = _cuda_jobs(plan, nvcc, host, source, flags)
+            for job in jobs:
+                path = Path(job)
+                if path not in identities:
+                    remember(path)
+                if prefixes[path] != b"\x7fELF":
+                    raise ValueError("unsupported-downstream-wrapper")
+                required.add(job)
+            return {
+                "plan": plan,
+                "jobs": jobs,
+                "host_version": host_version,
+                "host_target": host_target,
+                "host_specs": host_specs,
+                "preprocessed": query(nvcc, [*effective, "-E", str(source)]),
+            }
+
+        observed_context = context()
+
+        def scan() -> tuple[str, ...]:
+            names = _nvcc_dependencies(
+                query(nvcc, [*effective, "-M", "-MT", "closure", str(source)])
+            )
+            if str(source) not in names:
+                raise ValueError("source-dependency-missing")
+            return names
+
+        names = scan()
+
+        def trace_headers() -> tuple[str, ...]:
+            diagnostic = query(
+                nvcc,
+                [*effective, "-Xcompiler=-H", "-M", "-MT", "closure", str(source)],
+                True,
+            )
+            traced = set()
+            for line in diagnostic.splitlines():
+                match = re.fullmatch(r"\.+ (.+)", line)
+                if match is not None:
+                    _cuda_path(Path(match[1]))
+                    traced.add(match[1])
+            # NVCC's implicit runtime census is not fully exposed by host -H.
+            # Every witnessed user/device header must nevertheless be in -M,
+            # with unambiguous original spelling even when decoys exist.
+            if not traced <= set(names) - {str(source)}:
+                raise ValueError("nvcc-header-trace-mismatch")
+            return tuple(sorted(traced))
+
+        traced = trace_headers()
+        macro_inputs.update(Path(name) for name in names)
+        headers = tuple(
+            CacheDependency("header", name, remember(Path(name)))
+            for name in names
+            if name != str(source)
+        )
+        dependencies = (
+            *headers,
+            *manifest.files,
+            CacheDependency(
+                "system-header-manifest",
+                "nvcc-12.9-M",
+                canonical_hash([item.to_payload() for item in headers]),
+            ),
+            CacheDependency(
+                "cuda-device-toolchain-manifest",
+                "explicit-caller-snapshot",
+                canonical_hash([item.to_payload() for item in sorted(manifest.files)]),
+            ),
+            CacheDependency(
+                "cuda-build-context",
+                "nvcc-12.9-native",
+                canonical_hash(
+                    {
+                        "schema": "generativeqc.libxc-cuda-closure/v1",
+                        "source": str(source),
+                        "cwd": cwd,
+                        "environment": CPU_ENVIRONMENT,
+                        "context": observed_context,
+                        "traced_headers": traced,
+                        "selected": {str(k): str(v) for k, v in selections.items()},
+                        "files": {str(k): v for k, v in identities.items()},
+                    }
+                ),
+            ),
+        )
+        snapshot()
+        if (
+            scan() != names
+            or context() != observed_context
+            or trace_headers() != traced
+        ):
+            return failure("compiler-context-changed")
+        if (
+            query(nvcc, ["--version"]) != version
+            or query(host, ["--version"]) != host_version
+        ):
+            return failure("compiler-version-changed")
+        if query(host, ["-dumpspecs"]) != host_specs:
+            return failure("host-configuration-changed")
+        snapshot()
+        observed = {str(Path(item.identity).resolve()) for item in manifest.files}
+        reasons = []
+        if not manifest.complete:
+            reasons.append("toolchain-manifest-incomplete")
+        if not required <= observed:
+            reasons.append("downstream-toolchain-not-covered")
+        closure = closure_from_probe_recipe(
+            recipe,
+            backend="cuda",
+            target=target,
+            dependencies=dependencies,
+            complete=not reasons,
+        )
+        effective.append("--frandom-seed=" + canonical_hash(closure.to_payload()))
+        closure = closure_from_probe_recipe(
+            recipe,
+            backend="cuda",
+            target=target,
+            dependencies=dependencies,
+            complete=not reasons,
+        )
+        return CudaClosureResult(closure, recipe, tuple(reasons), headers)
     except TimeoutError:
         return failure("collection-timed-out")
     except OSError:

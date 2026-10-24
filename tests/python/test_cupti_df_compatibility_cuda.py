@@ -27,12 +27,17 @@ from tools.generativeqc_posthf.fixtures import (
 )
 from tools.generativeqc_posthf.mp2 import restricted_mp2
 from tools.generativeqc_posthf.sources import CudaDFSource
+from tools.residency_allocation import allocation_identity
 
 
 def capture_case(name: str, output: Path) -> None:
     """Capture real calls, preserve journals, then compare source and fixture work."""
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU capture requires Slurm"
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve(strict=True)
+    receipt = os.environ.get("GENERATIVEQC_QZ_ALLOCATION_RECEIPT")
+    receipt_hash = os.environ.get("GENERATIVEQC_QZ_ALLOCATION_SHA256")
+    _, allocation = allocation_identity(
+        library, Path(receipt) if receipt else None, receipt_hash
+    )
     collector = Path(os.environ["GENERATIVEQC_CUPTI_COLLECTOR"]).resolve(strict=True)
     library_hash = file_hash(library)
     collector_hash = file_hash(collector)
@@ -41,8 +46,17 @@ def capture_case(name: str, output: Path) -> None:
     runtime.cudaDeviceSynchronize.restype = ctypes.c_int
     runtime.cudaDeviceSynchronize.argtypes = []
     assert runtime.cudaDeviceSynchronize() == 0
-    profiler = CuptiCapture(collector)
-    inventory = SourceInventory(collector, native)
+    allocation_options = (
+        {
+            "native_library": library,
+            "qz_receipt": Path(receipt),
+            "qz_receipt_sha256": receipt_hash,
+        }
+        if receipt
+        else {}
+    )
+    profiler = CuptiCapture(collector, **allocation_options)
+    inventory = SourceInventory(collector, native, **allocation_options)
     regions = {
         1: {"name": "source-prepare", "role": "prepare"},
         2: {"name": "host-df-mp2", "role": "replay"},
@@ -89,7 +103,7 @@ def capture_case(name: str, output: Path) -> None:
     summary = {
         "fixture": name,
         "fixture_array_hash": meta["array_hash"],
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "allocation": allocation,
         "library_sha256": library_hash,
         "collector_sha256": collector_hash,
         "reference_kind": "committed-independent-same-Hamiltonian-fixture",
@@ -110,6 +124,12 @@ def capture_case(name: str, output: Path) -> None:
     )
     assert file_hash(library) == library_hash
     assert file_hash(collector) == collector_hash
+    assert (
+        allocation_identity(library, Path(receipt) if receipt else None, receipt_hash)[
+            1
+        ]
+        == allocation
+    )
     assert diagnostics["source_annotations_intact"], diagnostics["issues"]
     counts = diagnostics["by_role"]["compatibility"]
     assert counts["source_transfer_calls"] == metrics["host_staged_tiles"] > 0
@@ -131,7 +151,6 @@ def capture_case(name: str, output: Path) -> None:
 def test_real_generated_df_event_boundaries(name: str, tmp_path: Path) -> None:
     if not os.environ.get("GENERATIVEQC_CUPTI_COLLECTOR"):
         pytest.skip("requires optional CUPTI collector and scheduled qualification")
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU capture requires Slurm"
     destination = (
         Path(os.environ.get("GENERATIVEQC_CUPTI_DF_EVIDENCE", tmp_path)) / name
     )

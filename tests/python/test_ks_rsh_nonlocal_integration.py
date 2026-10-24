@@ -6,21 +6,34 @@ failure propagation, not CUDA numerics or performance.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "scf/cuda_value_work.hpp"
+using cudaStream_t = void*;
+using cudaStreamCaptureStatus = int;
+constexpr int cudaStreamCaptureStatusNone = 0, cudaStreamCaptureStatusInvalidated = 2;
+constexpr int cudaSuccess = 0;
+int cudaStreamIsCapturing(cudaStream_t, int* capture) { *capture = cudaStreamCaptureStatusNone; return cudaSuccess; }
 constexpr unsigned kCudaKsChunkCapacity = 2;
 std::vector<std::string> events;
 std::string fail_phase;
@@ -36,6 +49,7 @@ void check(int status, const std::string& = {}) {
 }
 int cudaGetLastError() { return 0; }
 namespace scf {
+using generativeqc::scf::observe_cuda_value_dispatch;
 template<class... T> generativeqc_status enqueue_prepared_cuda_rsh_values(T&&...) {
   event("fused"); return fused_status;
 }
@@ -65,6 +79,9 @@ namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-12; }
 namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T&&...) { event("domain"); }
 template<class... T> void enqueue_vv10_cuda_device(T&&...) { event("pairs"); }
+template<class... T> void enqueue_vv10_force_key_compare_cuda(T&&...) { event("compare"); }
+template<class... T> void enqueue_vv10_cache_work_cuda(T&&...) { event("work"); }
+template<class... T> void enqueue_vv10_store_force_key_cuda(T&&...) { event("store"); }
 }
 namespace cuda_ks_detail {
 void assemble_fock(void*, std::size_t, unsigned, double*, double*, double*, double,
@@ -73,10 +90,20 @@ void assemble_fock(void*, std::size_t, unsigned, double*, double*, double*, doub
 }
 }
 struct Owner {
+  struct { struct {
+    generativeqc::scf::CoulombExchangeWork coulomb_exchange_work =
+        generativeqc::scf::CoulombExchangeWork::empty();
+  } dft_diagnostic; } output;
   int provider = 0, correction = 0, *range_correction = &correction;
   bool has_range_correction = true, device_nonlocal = true;
   Xc xc_owner;
   Xc* xc = &xc_owner;
+  Xc nonlocal_xc_owner;
+  Xc* nonlocal_xc = nullptr;
+  struct { std::size_t point_count() const { return 1; } } nonlocal_grid;
+  void merge_grid_views(const CudaXcView& primary, const CudaXcView& secondary) {
+    event("merge"); *primary.potential += *secondary.potential;
+  }
   double buffer = 0.0, result = 0.0;
   double *density = &buffer, *j = &buffer, *exchange = &buffer, *range_exchange = &buffer;
   double *hcore = &buffer, *fock = &result;
@@ -85,6 +112,12 @@ struct Owner {
   double *nonlocal_effective_weights = &buffer, *nonlocal_effective_density = &buffer;
   double *nonlocal_effective_gradient = &buffer, *nonlocal_workspace = &buffer;
   double *nonlocal_vrho = &buffer, *nonlocal_vsigma = &buffer;
+  double *nonlocal_energy = &buffer;
+  bool nonlocal_cache_enabled = false, nonlocal_cache_ready = false, nonlocal_cache_mixed = false;
+  std::string nonlocal_cache_schedule;
+  int *nonlocal_cache_mismatch = nullptr;
+  std::uint64_t *nonlocal_cache_counters = nullptr;
+  std::uint64_t* mixed_coulomb_work_counter() { return nonlocal_cache_counters; }
   int error = 0, *jk_error = &error, *range_jk_error = &error, *enabled = &error;
   int *nonlocal_domain_error = &error, *nonlocal_pair_error = &error;
   int device = 0;
@@ -104,11 +137,15 @@ struct Owner {
 DRIVER = r"""
 };
 int main(int argc, char** argv) {
-  if (argc != 4) return 99;
+  if (argc != 5) return 99;
   const std::string route = argv[1];
   fail_phase = argv[3];
   Owner owner;
   owner.device_nonlocal = std::string(argv[2]) == "1";
+  if (std::string(argv[4]) == "1") {
+    owner.nonlocal_xc = &owner.nonlocal_xc_owner;
+    owner.nonlocal_xc_owner.result = 0.0;
+  }
   owner.has_range_correction = route != "no-range";
   if (route == "fallback" || route == "primary-failure" || route == "correction-failure")
     fused_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -130,42 +167,48 @@ int main(int argc, char** argv) {
 
 
 @pytest.fixture(scope="module")
-def submission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def submission_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("  void enqueue_one(unsigned slot)")
     end = source.index("    const auto blocks =", start)
     body = source[start:end] + "  }\n"
+    # Execute the production delegation as well, so pair failures still cross
+    # the same submission boundary after the cache helper was introduced.
+    pairs = cpp_function_definition(source, "observe_value_dispatch")
+    pairs += cpp_function_definition(source, "enqueue_nonlocal_pairs")
     folder = tmp_path_factory.mktemp("ks-rsh-nonlocal-join")
     unit, binary = folder / "probe.cpp", folder / "probe"
-    unit.write_text(PREFIX + body + DRIVER)
-    result = subprocess.run(
-        [
-            compiler,
+    unit.write_text(PREFIX + pairs + body + DRIVER)
+    return native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "include"),
-            str(unit),
-            "-o",
-            str(binary),
+            "-I",
+            str(ROOT / "src"),
         ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+        compile_timeout=45,
+        link_timeout=45,
     )
-    assert result.returncode == 0, result.stderr
-    return binary
 
 
-def _run(probe: Path, route: str, nonlocal_body: bool, failure: str = "") -> str:
+def _run(
+    probe: Path,
+    route: str,
+    nonlocal_body: bool,
+    failure: str = "",
+    *,
+    independent: bool = False,
+) -> str:
     result = subprocess.run(
-        [str(probe), route, str(int(nonlocal_body)), failure],
+        [str(probe), route, str(int(nonlocal_body)), failure, str(int(independent))],
         capture_output=True,
         text=True,
         check=True,
@@ -213,3 +256,14 @@ def test_nonlocal_failure_stops_submission(
     fock = ["fused"] if route == "fused" else ["fused", "primary", "correction"]
     expected = ":".join(["FAIL", *fock, *phases[: phases.index(phase) + 1]])
     assert _run(submission_probe, route, True, phase) == expected
+
+
+def test_independent_grid_merges_after_both_contributions(
+    submission_probe: Path,
+) -> None:
+    assert _run(submission_probe, "fused", True, independent=True) == (
+        "OK:fused:semilocal:features:grid:domain:pairs:nonlocal:merge:assemble"
+    )
+    assert _run(submission_probe, "fused", True, "merge", independent=True) == (
+        "FAIL:fused:semilocal:features:grid:domain:pairs:nonlocal:merge"
+    )

@@ -61,6 +61,27 @@ int main() {
   if(!reference_resident_values_auto_refusal(64,127,8,3,true,true)) return 30;
   if(!reference_resident_values_auto_refusal(63,128,8,3,true,true)) return 31;
   if(!reference_resident_values_auto_refusal(64,128,7,3,true,true)) return 32;
+  using generativeqc::scf::cuda_execution::reference_resident_bucket_policy;
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES");
+  auto policy=reference_resident_bucket_policy();
+  if(!policy.valid || policy.mask!=(1U<<28)-1 || policy.ceiling!=(8ULL<<30)) return 33;
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","0x8000201",1);
+  setenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES","0x40000000",1);
+  policy=reference_resident_bucket_policy();
+  if(!policy.valid || policy.mask!=(1U|(1U<<9)|(1U<<27)) || policy.ceiling!=(1ULL<<30)) return 34;
+  for(const char* invalid:{"", "-1", "+1", " 1", "1 ", "0x10000000", "0x", "garbage"}) {
+    setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK",invalid,1);
+    if(reference_resident_bucket_policy().valid) return 35;
+  }
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","0",1);
+  for(const char* invalid:{"", "-1", "0x", "18446744073709551616", "1.0"}) {
+    setenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES",invalid,1);
+    if(reference_resident_bucket_policy().valid) return 36;
+  }
+  setenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES","0",1);
+  policy=reference_resident_bucket_policy();
+  if(!policy.valid || policy.mask || policy.ceiling) return 37;
 }
 """)
     subprocess.run(

@@ -14,6 +14,8 @@ from fractions import Fraction
 
 import numpy as np
 
+from generativeqc_compiler.common.array_execution import current_execution
+
 from .precision import describe_precision
 from .program import Program
 from .scaled_arithmetic import scaled_bilinear_value
@@ -111,6 +113,8 @@ def _evaluate(
         ).reshape(node.spec.shape)
     if op == "cast":
         return operands[0].astype(node.spec.dtype, copy=True)
+    if op == "where":
+        return np.where(*operands)
     if op in ("equal", "not_equal", "greater", "greater_equal", "less", "less_equal"):
         return getattr(np, op)(operands[0], operands[1])
     if op == "add":
@@ -143,7 +147,14 @@ def _evaluate(
             arguments.extend((value, list(labels)))
         # optimize=False keeps a deterministic direct reference contraction;
         # contraction-tree selection is a separate lowering concern.
-        result = np.einsum(*arguments, list(a["output"]), optimize=False)
+        # Some NumPy einsum kernels read a zero-stride value even when the
+        # reduction extent is zero. Preserve the empty contraction identity
+        # without inspecting backing bytes outside the logical operands.
+        result = (
+            np.zeros(node.spec.shape, dtype=node.spec.dtype)
+            if any(value.size == 0 for value in operands)
+            else np.einsum(*arguments, list(a["output"]), optimize=False)
+        )
         return result * _coefficient(a["coefficient"], node.spec.dtype)
     if op == "runtime_indexed_select":
         value, maps = operands[0], operands[1:]
@@ -363,6 +374,9 @@ def execute(
     programs share a fixture. Returned arrays never alias each other, inputs,
     or interpreter views. Every output/debug entry is an independent snapshot.
     """
+    execution = current_execution()
+    if execution is not None and namespace is None:
+        return execution.tensor(program, feeds, debug=debug, max_bytes=max_bytes)
     if namespace is not None and namespace is not np:
         from .namespace_interpreter import execute_namespace
 

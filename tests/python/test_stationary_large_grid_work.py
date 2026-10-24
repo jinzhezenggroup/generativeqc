@@ -10,6 +10,7 @@ from types import CodeType, FunctionType, SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc import _stationary_cuda as runtime
 from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
 from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_resources import (
@@ -178,7 +179,7 @@ def _geometry_loop(scope: dict[str, typing.Any]) -> None:
         "exec",
     )
     compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
-    FunctionType(compiled, scope)()
+    FunctionType(compiled, {**vars(runtime), **scope})()
 
 
 @pytest.mark.parametrize("resident", [False, True])
@@ -452,8 +453,13 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     # Attribute it independently of the stationary source and paired reserves.
     grid_binding_host_bytes = 32 << 10
     assert grid.host_bytes - cpu_grid.host_bytes == grid_binding_host_bytes
-    host = host_without_binding + grid_binding_host_bytes
+    # Component packing reserves bounded mixed-radix scratch and linear AO
+    # topology even with scalar packing, so later mode changes remain admitted.
+    component_packing_host_bytes = 8 * (48 * 4096 + 7 * aos)
+    host = host_without_binding + grid_binding_host_bytes + component_packing_host_bytes
     assert plan["host"] == host < 256 << 20
+    # The grid owner retains (natom + 1) prefix offsets and natom partition radii.
+    source += 8 * ((atoms + 1) + atoms)
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
     assert plan["grid"].peak_bytes + source + reserve < 512 << 20

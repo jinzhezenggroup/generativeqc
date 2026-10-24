@@ -27,6 +27,8 @@ def test_generated_local_scales_compile_for_a_cuda_device(tmp_path: Path) -> Non
     (tmp_path / "cmath").write_text(
         "__host__ __device__ double sqrt(double);\n"
         "__host__ __device__ double pow(double, double);\n"
+        "__host__ __device__ bool signbit(double);\n"
+        "__host__ __device__ bool isfinite(double);\n"
         "namespace std { __host__ double sqrt(double); "
         "__host__ double pow(double, double); }\n"
     )
@@ -37,6 +39,16 @@ def test_generated_local_scales_compile_for_a_cuda_device(tmp_path: Path) -> Non
         "#define __device__ __attribute__((device))\n"
         "#define __global__ __attribute__((global))\n"
         "#define __CUDACC__ 1\n"
+        # The header also declares pair-schedule kernels. Model their CUDA
+        # dependencies without weakening the host-only std math boundary.
+        "struct Dim { unsigned x, y, z; };\n"
+        "extern __device__ Dim blockIdx, blockDim, threadIdx, gridDim;\n"
+        "__device__ double __shfl_down_sync(unsigned, double, unsigned, int=32);\n"
+        "__device__ int __shfl_sync(unsigned, int, int, int=32);\n"
+        "__device__ double __shfl_sync(unsigned, double, int, int=32);\n"
+        "__device__ double atomicAdd(double*, double);\n"
+        "__device__ unsigned long long atomicAdd(unsigned long long*, unsigned long long);\n"
+        "__device__ int atomicExch(int*, int);\n"
         "namespace generativeqc::dft::nlc {enum class Vv10Variant {vv10,rvv10};}\n"
         '#include "generated.hpp"\n'
         "__global__ void probe(double* out) {\n"
@@ -47,26 +59,36 @@ def test_generated_local_scales_compile_for_a_cuda_device(tmp_path: Path) -> Non
         "(value.omega,value.kappa);\n"
         "out[0]=value.omega;\n}\n"
     )
-    subprocess.run(
-        [
-            compiler,
-            "-x",
-            "cuda",
-            "--cuda-device-only",
-            "-nocudainc",
-            "-nocudalib",
-            "--cuda-gpu-arch=sm_80",
-            "-std=c++17",
-            "-fsyntax-only",
-            "-I",
-            str(tmp_path),
-            str(source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    command = [
+        compiler,
+        "-x",
+        "cuda",
+        "--cuda-device-only",
+        "-nocudainc",
+        "-nocudalib",
+        "--cuda-gpu-arch=sm_80",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I",
+        str(tmp_path),
+        str(source),
+    ]
+    result = subprocess.run(
+        command, check=False, capture_output=True, text=True, timeout=30
     )
+    assert result.returncode == 0, result.stderr
+
+    # Keep the modeled math boundary observable: a host-only std overload must
+    # still fail when called by device code, even with scheduling declarations.
+    source.write_text(
+        source.read_text()
+        + "__global__ void host_only_probe(double* out) { out[0]=std::sqrt(out[0]); }\n"
+    )
+    rejected = subprocess.run(
+        command, check=False, capture_output=True, text=True, timeout=30
+    )
+    assert rejected.returncode != 0, "device code accepted a host-only math call"
+    assert "sqrt" in rejected.stderr, rejected.stderr
 
 
 @pytest.mark.parametrize("compiler_name", ["g++", "clang++"])

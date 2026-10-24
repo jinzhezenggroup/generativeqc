@@ -1,0 +1,77 @@
+{
+  "scope": "blocked-goal audit; resource remains accepted/queued, not cancelled or declared terminal",
+  "status_readback": {
+    "success": true,
+    "data": {
+      "name": "h100-paper-smoke-20261024-9dcc-r2",
+      "status": "QUEUING",
+      "project": "\u539f\u5b50\u7ea7\u5316\u5b66\u53cd\u5e94\u57fa\u5ea7\u6a21\u578b2.0",
+      "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 32,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "excluded_nodes": [
+        "qb-prod-gpu095"
+      ],
+      "priority": 20,
+      "priority_level": "NORMAL",
+      "created_at": "1792833265000"
+    }
+  },
+  "latest_available_event_readback": {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "time": "2026-10-24 17:14:42",
+          "type": "Warning",
+          "reason": "SetPodTemplateSchedulerName",
+          "message": "Another scheduler is specified when gang-scheduling is enabled and it will not be overwritten"
+        },
+        {
+          "time": "2026-10-24 17:14:42",
+          "type": "Normal",
+          "reason": "SuccessfulCreateService",
+          "message": "Created service: <redacted>-worker-0"
+        },
+        {
+          "time": "2026-10-24 17:14:42",
+          "type": "Normal",
+          "reason": "SuccessfulCreatePod",
+          "message": "Created pod: <redacted>-worker-0"
+        },
+        {
+          "time": "2026-10-24 17:14:47",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "0/697 nodes are unavailable: 697 normal project exceeded remaining quota. Current used(CPU=325.00,Memory=3210.00,GPU=16.00), current request(CPU=20.00,Memory=200.00,GPU=1.00), quota(CPU=-1.00,Memory=-1.00,GPU=16.00)."
+        },
+        {
+          "time": "2026-10-24 17:14:49",
+          "type": "Warning",
+          "reason": "Unschedulable",
+          "message": "Error pod <redacted>-worker-0 condition message: 0/697 nodes are unavailable: 697 normal project exceeded remaining quota. Current used(CPU=325.00,Memory=3210.00,GPU=16.00), current request(CPU=20.00,Memory=200.00,GPU=1.00), quota(CPU=-1.00,Memory=-1.00,GPU=16.00)."
+        }
+      ]
+    }
+  },
+  "event_time_limitation": "event timestamps are retained as returned; no unobserved current quota inferred",
+  "blocker": "actual allocation unavailable; latest scheduler event reports project GPU quota16/16 versus request1; root-only release cannot proceed",
+  "same_condition_consecutive_goal_turns": "at least three verified queue-only continuation turns",
+  "no_independent_required_work_remaining_before_allocation": true,
+  "runtime_artifacts_frozen": true,
+  "source_goal_unchanged": true,
+  "not_complete": [
+    "three actual allocated-H100 E+F smokes",
+    "actual-output CPU replay and review",
+    "commit/fork push/PR/requiredCI/exactheadAPPROVED/protectedmerge/delivered verification"
+  ],
+  "resource_action_taken": "NONE",
+  "next_owner": "root coordinator; wake this Chat after actual allocation and frozen release"
+}
