@@ -351,6 +351,11 @@
       "owner": "Bounded WB full cold energy and force endpoint qualification",
       "reason": "Lossless full native/GPU4 paired and moved trajectories, exact source inventory delta and cache/build/validation provenance. Historical receipts are compacted with byte-exact restoration; no storage cap changes.",
       "review_document": "benchmarks/results/wb-range-reuse-20261023/README.md"
+    },
+    "scf-convergence-probes-20261024": {
+      "owner": "SCF/DFT convergence and complete-endpoint diagnosis",
+      "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
+      "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md"
     }
   },
   "files": [
@@ -777,6 +782,14 @@
       "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
       "bytes": 246592,
       "sha256": "c5dec36131a0344ff6aa61e1e1e76bbf34b23955c31515c7efa24d7c7f1bd79a"
+    },
+    {
+      "path": "benchmarks/results/scf-convergence-probes-20261024/evidence.json.xz",
+      "family": "scf-convergence-probes-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
+      "bytes": 472836,
+      "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
