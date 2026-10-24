@@ -43,8 +43,11 @@ iteration limit is modified to force equal work.
 ## Evidence and limitations
 
 `bundle.json.xz` retains exact raw UTF-8 streams with byte counts and SHA-256,
-independent references, source/harness checks, native/runtime binary identities,
-compiler-cache receipts, actual launch assessments and rejected experiments.
+independent references, native/runtime binary identities, compiler-cache
+statistics, actual launch assessments and rejected experiments. Source/harness
+checks retain the observed checked-file counts, failed-line lists and original
+byte identities. Repeated full source listings and raw build logs are in the
+[verified history snapshot](../retention-granularity-20261024/README.md).
 `manifest.json` authenticates every stream. `qualification.json` is independently
 recomputed, not trusted as a passing flag. `evidence.json.gz` is the shared numerical
 validation envelope; `publication.json` binds the selected files.
@@ -81,8 +84,9 @@ offline verifier must still reject these records.
 
 ## Fresh GPU reproduction
 
-Restore the exact base, apply `source.patch`, and authenticate the bundled full
-candidate source manifest. For the control, restore the same base and copy only
+Restore the historical snapshot linked above for the full manifests and old
+execution scripts. Restore the exact base, apply `source.patch`, and authenticate
+the recovered full candidate source manifest. For the control, restore the same base and copy only
 the shared benchmark receipt helper/source-hash axes and endpoint-helper test;
 authenticate the separate full control manifest. Do not transplant a binary from
 another toolchain, libc or driver installation. The bundle retains the exact
@@ -120,7 +124,8 @@ ccache. Its first device matrix reports 38 passes and four `KeyError:
 J output name. The test now explicitly compares Combined's two-electron output to
 the independent J reference (LDA/PBE have zero exact exchange), preserving every
 vector/tolerance gate. No production source is changed for this adaptation.
-The failed matrix/source/build receipts remain in the integration bundle.
+The failed matrix remains in the integration bundle; full source/build streams
+are recoverable from the pinned historical snapshot.
 
 Integration uses a new full device/sanitizer gate and fresh, discarded priming
 before five new interleaved pairs per size. The same >2% / 4-of-5 matched-work warm

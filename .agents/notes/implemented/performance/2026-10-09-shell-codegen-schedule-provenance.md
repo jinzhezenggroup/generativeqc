@@ -622,3 +622,10 @@ Require independent numerical oracles, bounded architecture resource
 gates, and source-matched complete molecular endpoints before
 promoting generated CUDA. When new evidence supersedes a choice, add
 a new decision and link it rather than rewriting this snapshot.
+
+## Historical driver recovery (2026-10-24)
+
+The issue-specific benchmark commands above refer to source-era drivers now in
+the [verified recovery snapshot](../../../../benchmarks/results/retention-granularity-20261024/README.md). Restore their original bytes and
+source environment before following those commands. The historical rationale
+and numerical qualification in this note are unchanged.

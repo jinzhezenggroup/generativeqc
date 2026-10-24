@@ -419,3 +419,10 @@ exact-head CI/current-head GPU requalification before merge.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+## Historical driver recovery (2026-10-24)
+
+The issue-specific benchmark commands above refer to source-era drivers now in
+the [verified recovery snapshot](../../../benchmarks/results/retention-granularity-20261024/README.md). Restore their original bytes and
+source environment before following those commands. The historical rationale
+and numerical qualification in this note are unchanged.

@@ -5,7 +5,7 @@
     "benchmarks/results/cuda-ownership/df/validation.json.xz",
     "benchmarks/results/cuda-ownership/df/raw-source.json.xz",
     "benchmarks/results/cuda-ownership/df/README.md",
-    "benchmarks/results/issue308-shell-schedules/summary.json"
+    "benchmarks/results/issue308-shell-schedules/measurements.storage.json"
   ],
   "generated_capability": "Bulk and bounded raw coordinate derivatives and externally weighted responses share generated center channels. The compiler directs four-lane primitive partitions; generic runtime owns traversal, subgroup reduction, range mapping and physical-atom scatter. Shell-block lowering shares primitive geometry/Boys/moments across all 64 s/p/d/f triples with generated warp, packed and compact subgroup schedules and immediate weighted contraction; compact scheduling defaults on for qualified resident 192--384-AO sm_120 endpoints.",
   "missing_capability": "None for the retired DF integral/coordinate-response duplicate. HF density-weight construction and the spectral inverse reverse map remain native method adapters; the separate df_response_weights entry owns their current device/GEMV path and opt-in control. An equivalent TensorIR method consumer is not integrated.",

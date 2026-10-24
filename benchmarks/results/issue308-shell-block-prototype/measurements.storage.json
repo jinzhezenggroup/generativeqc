@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.historical-measurements.v1",
+  "record_count": 11,
+  "storage": {
+    "path": "measurements.json.xz",
+    "bytes": 25972,
+    "sha256": "d45154109cc7dd10eb24fb50d1494d54a2875173b89ef47bf846d132e5c5cd3c"
+  },
+  "recovery_manifest": "benchmarks/results/retention-granularity-20261024/snapshot.manifest.json",
+  "source_revision": "8e74c66de97e2bfacd655976888c0e0abb252ace",
+  "scope": "Historical records only; every JSON number, string and array order retained. Original formatting, scripts, patches and ancillary files are recoverable from the pinned snapshot."
+}

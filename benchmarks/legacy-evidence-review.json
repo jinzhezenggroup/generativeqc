@@ -10,11 +10,6 @@
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
       "review_document": "benchmarks/results/ks-resident-final-validation-default-20261011/README.md"
     },
-    "direct-phase-moved-20261023": {
-      "owner": "#2678 source-matched Direct PBE0/48 public-observable E+F slice",
-      "reason": "Full source/SDK and scientific environment manifests retain exact dependency bytes, Git modes/OIDs, compiler commands and original identities for the bounded dual-engine cohort; no executable SDK binaries, policy change or parent-scope promotion.",
-      "review_document": "benchmarks/results/direct-phase-moved-20261023/README.md"
-    },
     "fitted-range-cold-20261024": {
       "owner": "bounded fitted-primary exact range cold endpoint qualification",
       "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
@@ -22,33 +17,8 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
-    },
-    "issue308-device-diis": {
-      "owner": "issue308-device-diis",
-      "reason": "Reviewed retained large evidence for Cold CUDA DF DIIS and complete 768-AO forces (#308). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue308-device-diis/README.md"
-    },
-    "native-memory-arena-20261011": {
-      "owner": "native FP64 cross-size arena complete-endpoint qualification",
-      "reason": "Lossless XZ recompression retains the exact original 6,352,916 decoded JSON bytes, including all cold/warm/moved-warm measurements, independent references, source and script receipts, full logs and unfavorable serial-scratch evidence. No observations, policy caps or acceptance decisions change; original and decoded identities are pinned in storage.json.",
-      "review_document": "benchmarks/results/native-memory-arena-20261011/README.md"
-    },
-    "xc-contractions": {
-      "owner": "xc-contractions",
-      "reason": "Reviewed retained large evidence for Native CPU XC contraction evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/xc-contractions/README.md"
-    },
-    "cuda-ownership": {
-      "owner": "cuda-ownership",
-      "reason": "Reviewed retained large evidence for CUDA ownership retirement evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/cuda-ownership/README.md"
-    },
-    "weighted-eri-144": {
-      "owner": "weighted-eri-144",
-      "reason": "Reviewed retained large evidence for Weighted ERI derivative gates (#144). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/weighted-eri-144/README.md"
     },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
@@ -60,13 +30,8 @@
       "reason": "Lossless bundle retains all 168 complete native calls in separate paired, pilot, diagnostic and moved cohorts, independent reference vectors, exact source inventory delta, upstream import patch, package/cache/build/test provenance, original runners and initial failed integration assertions. No cap change or timing-population mixing.",
       "review_document": "benchmarks/results/occupied-xc-cold-20261023/README.md"
     },
-    "df-one-step-warm-20260926": {
-      "owner": "DF complete-endpoint qualification",
-      "reason": "Consolidated exact measured scalar samples, independent oracle arrays and grouped semantic work counters; replaces per-size companions without dropping observations. Historical intermediate runs remain in Git.",
-      "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md"
-    },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -80,16 +45,6 @@
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
       "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
     },
-    "issue394-deferred": {
-      "owner": "issue394-deferred",
-      "reason": "Reviewed retained large evidence for Deferred SSS Rys prototype. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue394-deferred/README.md"
-    },
-    "retention-238": {
-      "owner": "retention-238",
-      "reason": "Reviewed retained large evidence for Evidence retention audit. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/retention-238/README.md"
-    },
     "pbe0-spd-spatial-reuse-20261011": {
       "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
       "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
@@ -99,21 +54,6 @@
       "owner": "Explicit spatial bisection complete energy and force endpoints",
       "reason": "Lossless all-repeat numerical vectors, paired and moved endpoints, authenticated source delta and compiler/cache/device validation. Historical endpoint receipts compact losslessly; caps unchanged.",
       "review_document": "benchmarks/results/xc-spatial-bisection-20261023/README.md"
-    },
-    "spatial-density-sources": {
-      "owner": "spatial-density-sources",
-      "reason": "Reviewed retained large evidence for Prepared spatial density sources (#235 C1 / #299). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/spatial-density-sources/README.md"
-    },
-    "issue404-combined-rys": {
-      "owner": "issue404-combined-rys",
-      "reason": "Reviewed retained large evidence for Combined low-angular Rys endpoint qualification (#404). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue404-combined-rys/README.md"
-    },
-    "generated-df-values-142": {
-      "owner": "generated-df-values-142",
-      "reason": "Reviewed retained large evidence for Generated DF value promotion (#142). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/generated-df-values-142/README.md"
     },
     "fast-source-screening-20261023": {
       "owner": "Fast hybrid proposal source screening",
@@ -125,45 +65,15 @@
       "reason": "Retain all 192 source-matched populations and 768 complete E/F calls, unchanged independent oracle receipts, executed controls and Fast solve work, all 18 accuracy failures, final geometry tests and sanitizer provenance. Superseded timing payloads have verified published-Git recovery; duplicate older oracle inputs remain in the successor tree. No numerical waiver, external archive or increased budget.",
       "review_document": "benchmarks/results/readme-final-20261022/README.md"
     },
-    "posthf-147": {
-      "owner": "posthf-147",
-      "reason": "Reviewed retained large evidence for CG10: owned RHF references and bounded MO providers. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/posthf-147/README.md"
-    },
-    "issue206-stable-response": {
-      "owner": "issue206-stable-response",
-      "reason": "Reviewed retained large evidence for Full-rank response and physical force-state evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue206-stable-response/README.md"
-    },
-    "issue308-768ao-response": {
-      "owner": "issue308-768ao-response",
-      "reason": "Reviewed retained large evidence for Fix the 768-AO response scaling cliff. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue308-768ao-response/README.md"
-    },
     "vv10-warp-packet-20261015": {
       "owner": "guarded FP64 rotating-partner VV10 pair traversal",
       "reason": "Compact complete 3/12-atom off/on E/F records, independent references, exact source/library inventory, semantic pair work and sanitizer receipts. Larger original-limit failures remain separately retained; no profiler database, binary, storage-budget increase or 96-atom completion claim.",
       "review_document": "benchmarks/results/vv10-warp-packet-20261015/README.md"
     },
-    "scf-direct-native-rtx5090": {
-      "owner": "scf-direct-native-rtx5090",
-      "reason": "Reviewed retained large evidence for Direct-native extraction validation. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/scf-direct-native-rtx5090/README.md"
-    },
     "df-one-electron-schedule-20261023": {
       "owner": "DF one-electron schedule endpoint qualification",
       "reason": "Lossless bundle retains all 128 complete calls in separate controlled-pair, pilot, profile and moved cohorts, including negative timing evidence, numerical vectors, source delta, package/cache/build/test provenance and exact runners. All storage limits remain unchanged.",
       "review_document": "benchmarks/results/df-one-electron-schedule-20261023/README.md"
-    },
-    "tensor-resource-scheduler-508": {
-      "owner": "tensor-resource-scheduler-508",
-      "reason": "Reviewed retained large evidence for TensorIR resource-aware scheduler qualification (#508). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/tensor-resource-scheduler-508/README.md"
-    },
-    "issue404-407-df": {
-      "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "df-md-charge-splits-20261023": {
       "owner": "bounded DF Hermite charge-partition endpoint qualification",
@@ -174,11 +84,6 @@
       "owner": "bounded automatic SM 12.0 DF charge-source partitions",
       "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
       "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
-    },
-    "issue206-metric-gemv": {
-      "owner": "issue206-metric-gemv",
-      "reason": "Reviewed retained large evidence for FP64 cuBLAS metric response dots (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue206-metric-gemv/README.md"
     },
     "r2scan3c-final-validation-20261015": {
       "owner": "r2SCAN-3c Direct/DF resident final-validation qualification",
@@ -204,16 +109,6 @@
       "owner": "README default-grid complete endpoint measurements",
       "reason": "All 256 stock-configuration receipts retain actual E/F arrays, cold/warm samples, Fast audit/fallback work, all 64 unsupported DF populations and the partial reference warm failure. No scientific qualification is inferred; large logs stay ignored and limits are unchanged.",
       "review_document": "benchmarks/results/readme-defaults-20261020/README.md"
-    },
-    "pbe0-restricted-point-default-20261010": {
-      "owner": "producer-bound restricted PBE0 complete default-route qualification",
-      "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
-      "review_document": "benchmarks/results/pbe0-restricted-point-default-20261010/README.md"
-    },
-    "fock-strategies": {
-      "owner": "fock-strategies",
-      "reason": "Reviewed retained large evidence for Independent Fock provider production comparison. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/fock-strategies/README.md"
     },
     "pbe0-implicit-class-force-20261010": {
       "owner": "explicit composed PBE0 Hcore and class-major force endpoints",
@@ -245,13 +140,6 @@
       "reason": "Two separately authenticated cohorts retain all 528 complete E/F calls, moved controls, independent references and failed AOT assembly receipts. Lossless compression retains original work, timing and numerical arrays; no scientific or storage budget is relaxed.",
       "review_document": "benchmarks/results/df-raw-coulomb-20261023/README.md"
     },
-    "local-autotune-136": {
-      "owner": "local-autotune-136",
-      "reason": "Reviewed retained large evidence for User-local autotuning acceptance (#136). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/local-autotune-136/README.md",
-      "lossless_record": "benchmarks/results/local-autotune-136/evidence.json.xz",
-      "recovery_manifest": "benchmarks/results/unified-k-work-20261009/storage-recovery.json"
-    },
     "cbs-reference-errors-cpu-20261023": {
       "owner": "issue2681 bounded frozen-source native CPU reference-error slice",
       "reason": "Complete independent H2/water records retain all full-precision native endpoint returns, original progress/logs, modes, source/library/build provenance and failed capacity preflights. All original raw bytes remain recoverable; no historical rows, thresholds, scientific gates, per-file or review budgets are changed.",
@@ -267,70 +155,20 @@
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
       "review_document": "benchmarks/results/exact-integral-response-20261014/README.md"
     },
-    "df-final-occupied-endpoint-20260926": {
-      "owner": "DF complete-endpoint qualification",
-      "reason": "Consolidated exact measured scalar samples, independent oracle arrays and grouped semantic work counters; replaces per-size companions without dropping observations. Historical intermediate runs remain in Git.",
-      "review_document": "benchmarks/results/df-final-occupied-endpoint-20260926/README.md"
-    },
-    "issue206-device-response": {
-      "owner": "issue206-device-response",
-      "reason": "Reviewed retained large evidence for Device response weights for retained DF values (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue206-device-response/README.md"
-    },
-    "issue409-packed-values": {
-      "owner": "issue409-packed-values",
-      "reason": "Reviewed retained large evidence for Exact packed DF values: scoped Phase-A qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue409-packed-values/README.md"
-    },
-    "readme-repaired-20261021": {
-      "owner": "README common-accuracy complete E/F comparison",
-      "reason": "Superseded complete endpoint data are retained through the byte-verified published Git snapshot. Original numerical references and timing/work tables remain in the checkout; no accuracy failure or historical observation is relabelled.",
-      "review_document": "benchmarks/results/readme-repaired-20261021/README.md"
-    },
-    "local-spaces-182": {
-      "owner": "local-spaces-182",
-      "reason": "Reviewed retained large evidence for Restricted local-space evidence (#182). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/local-spaces-182/README.md"
-    },
     "vv10-range-followups-20261014": {
       "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
       "reason": "Lossless complete raw JSON, all endpoint force vectors and independent references retain automatic 4 GiB populations, partial 96-atom timeouts and rejected convergence experiments. No experiment becomes a default observation; no sample/deadline/gate or storage-limit change. Detailed source inventories use shared lossless storage.",
       "review_document": "benchmarks/results/vv10-range-followups-20261014/README.md"
-    },
-    "density-sources-gpu": {
-      "owner": "density-sources-gpu",
-      "reason": "Reviewed retained large evidence for Bounded GPU density sources (#235 B / #297). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/density-sources-gpu/README.md"
     },
     "pbe0-resident-tiles-20261003": {
       "owner": "ordinary resident-grid tile qualification",
       "reason": "Lossless consolidated 144 native and 72 independent reference endpoint records, including all cold/moved regressions, with exact source/binary/job and resource/work receipts. Consolidation avoids duplicate per-record metadata; no profiler trace, binary, or relaxed storage limit is included.",
       "review_document": "benchmarks/results/pbe0-resident-tiles-20261003/README.md"
     },
-    "cg01": {
-      "owner": "cg01",
-      "reason": "Reviewed retained large evidence for CG01 protocol evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/cg01/README.md"
-    },
-    "one-electron-values-rtx5090": {
-      "owner": "one-electron-values-rtx5090",
-      "reason": "Reviewed retained large evidence for Generated one-electron CUDA values. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "docs/developer/one_electron_codegen.md"
-    },
     "vv10-wide-pair-20261014": {
       "owner": "experimental large-domain VV10 pair schedule",
       "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
       "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
-    },
-    "ecp-policy-171": {
-      "owner": "ecp-policy-171",
-      "reason": "Reviewed retained large evidence for ECP generated admission policy qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/ecp-policy-171/README.md"
-    },
-    "readme-wb97mv-20261014": {
-      "owner": "README WB97M-V native endpoint refresh",
-      "reason": "Retain compact direct/DF charts and seven complete source-bound WB97M-V populations; unchanged functionals reference the previous archive. Native 3/12-atom points are remeasured in fresh processes after separate compilation-cache priming, with original 3-atom observations losslessly retained and references shared unchanged. DF/48 remains visible without a matching reference; only incomplete DF/96 is omitted. SVG presentation sharing is pixel-identical and fits the unchanged aggregate budget. No raw run archive, production default promotion or policy-cap change is introduced.",
-      "review_document": "benchmarks/results/readme-wb97mv-20261014/README.md"
     },
     "df-g-shell-20261021": {
       "owner": "default auxiliary-g response partition qualification",
@@ -341,16 +179,6 @@
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
       "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
       "review_document": "benchmarks/results/readme-refresh-20261015/README.md"
-    },
-    "ecp-real-f-171": {
-      "owner": "ecp-real-f-171",
-      "reason": "Reviewed retained large evidence for Real LANL2DZ Au f-projector qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/ecp-real-f-171/README.md"
-    },
-    "spatial-tasks": {
-      "owner": "spatial-tasks",
-      "reason": "Reviewed retained large evidence for Bounded spatial AO task evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/spatial-tasks/README.md"
     },
     "pbe0-cuda-schedule-20261006": {
       "owner": "ordinary CUDA force schedule qualification",
@@ -417,22 +245,6 @@
       "role": "diagnostic-and-validation-receipts",
       "bytes": 140660,
       "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
-    },
-    {
-      "path": "benchmarks/results/direct-phase-moved-20261023/scientific-environment.json.xz",
-      "family": "direct-phase-moved-20261023",
-      "classification": "required-compact-accepted-evidence",
-      "role": "scientific-environment-provenance",
-      "bytes": 610368,
-      "sha256": "243fc173c6cfa04e214abf08cb7ac407216a9df931ab3251cfecdd47bd4d6b77"
-    },
-    {
-      "path": "benchmarks/results/direct-phase-moved-20261023/sdk.json.xz",
-      "family": "direct-phase-moved-20261023",
-      "classification": "required-compact-accepted-evidence",
-      "role": "source-sdk-build-provenance",
-      "bytes": 863856,
-      "sha256": "09b6d6277fa2a5d60f5a8775ef425dd81cf8670a5573ce3a11954f713fca39eb"
     },
     {
       "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
@@ -677,16 +489,16 @@
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 737308,
-      "sha256": "aee8ec43398dcdaacef7e43e5ccc086e03c4328a9d674e8666e9dd8240c4e154",
+      "bytes": 375072,
+      "sha256": "13af6f5df073207897e6400eff44f4e818228b53b2035f907ff353c086e0740c",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
     },
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 599132,
-      "sha256": "4fa1fd8b7a8873090eea1d68f4cb212c8d4455ebfe69159b99bd7ad8106e7e00",
+      "bytes": 202072,
+      "sha256": "587cacf3e9783d393e1e0610d1ff2bf38569c8ae62ba21d2cf84802c34850f9c",
       "classification": "required-compact-accepted-evidence",
       "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
     },

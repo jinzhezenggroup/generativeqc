@@ -32,6 +32,7 @@ if bundle_path.exists():
     assert len(decoded) == manifest["decoded_bytes"]
     payload = json.loads(decoded)
     assert payload["schema"] == manifest["schema"]
+    assert payload["schema"] == "generativeqc.cuda-schedule-evidence-bundle.v2"
     assert payload["base_commit"] == manifest["base_commit"]
     assert payload["base_commit"] == base_commit
     assert payload["artifacts"].keys() == manifest["artifacts"].keys()
@@ -50,15 +51,22 @@ if bundle_path.exists():
         target.write_bytes(data)
     arguments.directory = expanded / "campaign"
     assert (expanded / "support/exit").read_text().strip() == "0"
+    # These are historical file-verification receipts, not numerical gates.
+    # Retain the observed counts/failed lines and original hashes; the repeated
+    # full source listings are available through the verified recovery snapshot.
+    source_checks = payload["source_checks"]
+    expected_checks = set()
     for mode in ("base", arguments.candidate):
         for kind in ("source", "harness"):
             for stage in ("before", "after"):
-                receipt = expanded / f"support/{mode}-{kind}-{stage}.txt"
-                assert receipt.exists()
-                lines = receipt.read_text().splitlines()
-                assert lines and all(line.endswith(": OK") for line in lines), receipt
-        lines = (expanded / f"support/{mode}-binaries-after.txt").read_text().splitlines()
-        assert lines and all(line.endswith(": OK") for line in lines), mode
+                expected_checks.add(f"support/{mode}-{kind}-{stage}.txt")
+        expected_checks.add(f"support/{mode}-binaries-after.txt")
+    assert set(source_checks) == expected_checks
+    for name, receipt in source_checks.items():
+        assert type(receipt["checked_files"]) is int and receipt["checked_files"] > 0
+        assert receipt["failed_lines"] == [], name
+        original = payload["archived_provenance"]["members"][name]
+        assert all(receipt[key] == original[key] for key in ("bytes", "sha256")), name
 phases = ("cold", "warm", "moved", "moved-warm")
 identities = {}
 runtime_identities = {}
