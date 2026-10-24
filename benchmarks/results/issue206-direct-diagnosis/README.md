@@ -1,5 +1,14 @@
 # Direct build capabilities and strict-force diagnosis
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue206-direct-diagnosis`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 These records explain failures retained in [#421](https://github.com/jinzhezenggroup/vibeqc/pull/421).
 They contain no replacement clean timings and do not qualify the original failed
 acceptance. #206 remains open. All GPU probes ran in finite Slurm RTX 5090 jobs;

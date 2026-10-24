@@ -1,5 +1,14 @@
 # Direct-native extraction validation
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/scf-direct-native-rtx5090`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 `validation.json` records complete Release build samples and matched prepared
 endpoints for the exact parent and extracted source identities. It retains each
 numerical comparison, geometry, timing repeat, iteration count and library hash.
