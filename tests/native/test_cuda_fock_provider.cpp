@@ -2926,9 +2926,15 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)>
           generated_value_plan(generated_value_raw, &destroy_cuda_direct_jk_plan);
-      require((std::string(generated_value_diagnostic.schedule).find("coulomb+exchange") !=
-               std::string::npos) == (angular <= 2),
-              "automatic generated exchange admission/class fallback mismatch");
+      // MD-J can replace the overall diagnostic label while generated K remains
+      // selected. Check the value dispatch contract; independent J/K comparisons
+      // below still exercise this plan for both spin populations and AO orders.
+      require(direct_jk_generated_exchange_value_available(
+                  *generated_value_plan, make_hf_fock_spec(FockSpin::Restricted)) == (angular <= 2),
+              ("automatic generated exchange admission/class fallback mismatch: l=" +
+               std::to_string(angular) + " representation=" + std::to_string(representation) +
+               " schedule=" + generated_value_diagnostic.schedule)
+                  .c_str());
 
       CudaDirectJkPlan* fallback_raw{};
       CudaDirectJkDiagnostic fallback_diagnostic;
