@@ -143,6 +143,7 @@ struct CudaKsPlan {
   std::unique_ptr<Impl> impl_ = std::make_unique<Impl>();
   std::vector<Call> calls;
   bool history_retained_at_retry{}, stale_state_at_begin{};
+  bool failure_injection{true};
   unsigned warm_replacements{};
   bool has_warm_start() const noexcept;
   bool failed() const noexcept;
@@ -151,6 +152,7 @@ struct CudaKsPlan {
   void invalidate_final_state() noexcept;
   int transfers() const { return 0; }
   void fail_if_requested(const std::string& stage) {
+    if (!failure_injection) return;
     const bool second = scenario.starts_with("second-");
     auto error = second ? scenario.substr(7) : scenario;
     std::string failure_stage = "begin";
@@ -208,11 +210,22 @@ struct CudaKsPlan {
     calls.back().export_density = export_density;
     const bool first = calls.size() == 1;
     const bool nonconverged = scenario == "both-nonconverged" ||
-        (first && (scenario == "nonconverged" || scenario.starts_with("second-")));
+        (first && (scenario == "nonconverged" || scenario.starts_with("second-") ||
+                   scenario == "census-unknown" || scenario == "census-overflow"));
     scf::ScfResult value;
     value.converged = !nonconverged && (!impl_->is_failed || scenario == "failed-converged");
     value.iterations = first ? 7U : 3U;
     value.fock_builds = *completed_fock_builds();
+    value.dft_diagnostic.coulomb_exchange_work = {
+        true, first ? (std::uint64_t{1} << 33) + 11 : 5,
+        first ? (std::uint64_t{1} << 34) + 22 : 10};
+    if (first && scenario == "census-unknown")
+      value.dft_diagnostic.coulomb_exchange_work.complete = false;
+    if (first && scenario == "census-overflow")
+      value.dft_diagnostic.coulomb_exchange_work.coulomb_applications =
+          std::numeric_limits<std::uint64_t>::max();
+    if (scenario == "census-zero")
+      value.dft_diagnostic.coulomb_exchange_work = scf::CoulombExchangeWork::empty();
     value.dft_diagnostic.history = std::make_shared<int>(1);
     if (first) discarded_history = value.dft_diagnostic.history;
     if (value.converged && !impl_->is_failed) {
@@ -314,6 +327,20 @@ int main(int argc, char** argv) {
     return 0;
   }
   scenario = argv[2];
+  if (route == "neighbor") {
+    Owner owner;
+    owner.systems_.resize(2);
+    owner.items_.resize(2);
+    owner.items_[1].plan->cuda.failure_injection = false;
+    const auto results = owner.execute({}, false);
+    const auto& failed = results[0].calculation.ks_diagnostic->coulomb_exchange_work;
+    const auto& neighbor = results[1].calculation.ks_diagnostic->coulomb_exchange_work;
+    std::cout << "{\"failed_complete\":" << failed.complete
+              << ",\"neighbor_complete\":" << neighbor.complete
+              << ",\"neighbor_j\":" << neighbor.coulomb_applications
+              << ",\"neighbor_k\":" << neighbor.exchange_applications << "}";
+    return 0;
+  }
   Owner owner;
   auto& item = owner.items_[0];
   auto& plan = *item.plan;
@@ -372,8 +399,17 @@ int main(int argc, char** argv) {
             << ",\"warm_replacements\":" << cuda.warm_replacements
             << ",\"final_ready\":" << cuda.impl_->final_state_ready
             << ",\"stale_state\":" << cuda.stale_state_at_begin
-            << ",\"retained_history\":" << cuda.history_retained_at_retry
-            << ",\"trace\":[";
+            << ",\"retained_history\":" << cuda.history_retained_at_retry;
+  const auto* value_work = result.ks_diagnostic ?
+      &result.ks_diagnostic->coulomb_exchange_work : nullptr;
+  const bool certified = value_work && value_work->complete;
+  std::cout << ",\"jk_complete\":" << certified << ",\"jk_j\":";
+  if (certified) std::cout << value_work->coulomb_applications;
+  else std::cout << "null";
+  std::cout << ",\"jk_k\":";
+  if (certified) std::cout << value_work->exchange_applications;
+  else std::cout << "null";
+  std::cout << ",\"trace\":[";
   for (unsigned i = 0; i < cuda.calls.size(); ++i) {
     const auto& call = cuda.calls[i];
     if (i) std::cout << ",";
@@ -562,6 +598,9 @@ def test_prepared_cuda_failure_gets_one_fresh_hcore_attempt(
     assert result["discarded_focks"] == ((1 << 33) + 7 if exported else 0)
     assert result["returned_iterations"] == 3 and result["returned_focks"] == 5
     assert result["complete"] == exported
+    assert result["jk_complete"] == exported
+    assert result["jk_j"] == ((1 << 33) + 16 if exported else None)
+    assert result["jk_k"] == ((1 << 34) + 32 if exported else None)
     assert result["final_ready"]
     assert result["warm_replacements"] == 1
     assert not result["stale_state"] and not result["retained_history"]
@@ -732,6 +771,8 @@ def test_iteration_failures_preserve_retry_classification(
     assert not result["stale_state"] and not result["retained_history"]
     if retryable:
         assert result["attempts"] == 2 and not result["complete"]
+        assert not result["jk_complete"]
+        assert result["jk_j"] is result["jk_k"] is None
 
 
 @pytest.mark.parametrize(
@@ -755,3 +796,35 @@ def test_failed_replay_revokes_final_state_and_next_public_call_recovers(
     assert result["final_ready"] and result["warm_ready"]
     assert not result["stale_state"] and not result["retained_history"]
     assert result["preparations"] == 2 and result["warm_replacements"] == 1
+    assert result["jk_complete"]
+    first_cuda_attempt = scenario == "preparation-runtime"
+    assert result["jk_j"] == ((1 << 33) + 11 if first_cuda_attempt else 5)
+    assert result["jk_k"] == ((1 << 34) + 22 if first_cuda_attempt else 10)
+
+
+@pytest.mark.parametrize("scenario", ["census-unknown", "census-overflow"])
+def test_unobserved_or_overflowed_attempt_cannot_be_repaired_by_retry(
+    cuda_control_probe: Path, scenario: str
+) -> None:
+    result = probe(cuda_control_probe, scenario=scenario)
+    assert result["status"] == "returned" and result["calls"] == 2
+    assert not result["jk_complete"]
+    assert result["jk_j"] is result["jk_k"] is None
+
+
+def test_certified_executed_zero_is_distinct_from_unavailable(
+    cuda_control_probe: Path,
+) -> None:
+    result = probe(cuda_control_probe, scenario="census-zero")
+    assert result["jk_complete"] and result["jk_j"] == result["jk_k"] == 0
+
+
+@pytest.mark.parametrize("stage", ["enqueue", "finish"])
+def test_failed_attempt_does_not_poison_a_neighbor_census(
+    cuda_control_probe: Path, stage: str
+) -> None:
+    result = probe(cuda_control_probe, "neighbor", f"{stage}-numerical")
+    assert not result["failed_complete"]
+    assert result["neighbor_complete"]
+    assert result["neighbor_j"] == (1 << 33) + 11
+    assert result["neighbor_k"] == (1 << 34) + 22

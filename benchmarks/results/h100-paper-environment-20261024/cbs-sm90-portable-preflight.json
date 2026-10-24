@@ -1,0 +1,15 @@
+[
+  {
+    "command": [
+      "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+      "-B",
+      "-c",
+      "from pathlib import Path;import json;from generativeqc_compiler.integral.production_profile import resolve_production_profile;p=resolve_production_profile(Path('python/generativeqc_compiler/integral/production_shell_classes.json'),architecture='sm_90',profile='portable_cuda');print(json.dumps({'profile':p.profile,'tuned':p.tuned,'portable':p.portable,'target':str(p.target),'selection_count':len(p.selections)}))"
+    ],
+    "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/cbs-qualified",
+    "returncode": 0,
+    "stdout": "{\"profile\": \"portable_cuda\", \"tuned\": false, \"portable\": true, \"target\": \"CudaTargetInfo(architecture='sm_90', compute_capability_major=9, compute_capability_minor=0, warp_size=32, maximum_threads_per_block=1024, maximum_threads_per_sm=2048, maximum_blocks_per_sm=32, registers_per_sm=65536, maximum_registers_per_thread=255, shared_memory_per_block=49152, shared_memory_per_block_optin=232448, shared_memory_per_sm=233472, sm_count=None, required_cuda_features=('fp64', 'fp64_atomic_add'), minimum_cuda_toolkit='12.0', cuda_toolkit_version='', nvcc_version='', ptxas_version='', driver_version='', generator_abi=1, tuning_maximum_registers=192, tuning_maximum_packed_registers=224, tuning_maximum_stack_bytes=128, tuning_maximum_shared_bytes=49152, packed_register_caps=(192, 208))\", \"selection_count\": 0}\n",
+    "stderr": "",
+    "scope": "host original supported portable-profile resolution only; separate same-scientific-source/portable-schedule H100 cohort, no device/science claim"
+  }
+]

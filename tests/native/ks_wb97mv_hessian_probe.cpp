@@ -225,6 +225,11 @@ void run(bool unrestricted, const std::string& mode, bool full) {
                         cudaMemcpyHostToDevice, lease.stream));
   dft::CudaKsWb97mvHessian endpoint;
   dft::CudaKsWb97mvHessianOptions options;
+  if (mode.find("directional-exact") != std::string::npos) options.max_frozen_exact_bytes = 0;
+  if (mode.find("physical-cpks") != std::string::npos) options.max_resident_cpks_bytes = 0;
+  if (mode.find("serial-one-electron") != std::string::npos)
+    options.one_electron.parallel_streams = 0;
+  if (mode.find("serial-grid") != std::string::npos) options.grid.replay_nuclear_maps = false;
   if (mode.find("batch-chunked") != std::string::npos)
     options.exact.max_batch_projection_bytes = fitted ? 32ULL << 10 : 512;
   if (mode.find("unbatched") != std::string::npos) {
@@ -323,6 +328,15 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   }
   const auto work = endpoint.work();
   std::cout << ",\"device_bytes\":" << work.device_bytes
+            << ",\"cpks_operator_columns\":" << work.cpks_operator_columns
+            << ",\"cpks_cached_actions\":" << work.cpks_cached_actions
+            << ",\"cpks_physical_checks\":" << work.cpks_physical_checks
+            << ",\"frozen_exact_bytes\":" << work.frozen_exact_bytes
+            << ",\"frozen_exact_columns\":" << work.frozen_exact_columns
+            << ",\"frozen_exact_contractions\":" << work.frozen_exact_contractions
+            << ",\"parallel_one_electron_bytes\":"
+            << work.one_electron.integrals.parallel_workspace_bytes
+            << ",\"parallel_one_electron_actions\":" << work.one_electron.integrals.parallel_actions
             << ",\"directions\":" << work.completed_directions
             << ",\"induced_actions\":" << work.induced.actions
             << ",\"raw_df_value_passes\":" << work.raw_df.value_passes

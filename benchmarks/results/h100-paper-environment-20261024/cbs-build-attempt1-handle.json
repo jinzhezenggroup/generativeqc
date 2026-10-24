@@ -1,0 +1,9 @@
+[
+  {
+    "pid": 2740855,
+    "start_ticks": "1707810253",
+    "script": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/build-supervisor.py",
+    "script_sha256": "1b60caa2b2c51ecc90a02a0387a336f0223a63308c42d7cd57f84d9ff7b81d5f",
+    "scope": "CPU configure/build only; root-authorized portable-schedule cohort"
+  }
+]

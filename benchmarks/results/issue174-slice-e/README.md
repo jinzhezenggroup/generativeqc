@@ -1,5 +1,15 @@
 # Issue #174 slice-E precision cost matrix
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue174-slice-e/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/issue174-slice-e/raw-evidence.zip
+```
+
+
 This directory records the slice-E measurement of the **existing** precision
 policy: complete solves at identical numerical controls for the `fp64` and
 `auto` policies. It selects no policy, promotes nothing, and is not acceptance
@@ -16,7 +26,7 @@ artifacts; `raw-evidence.manifest.json` records the archive digest, every member
 byte count and digest, and the source commit.
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/issue174-slice-e --output /tmp/slice-e
+python -m tools.unpack_evidence benchmarks/results/issue174-slice-e --archive .artifacts/retention-archives-20261024/issue174-slice-e/raw-evidence.zip --output /tmp/slice-e
 ```
 
 Members:

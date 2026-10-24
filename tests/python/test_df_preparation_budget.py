@@ -402,6 +402,7 @@ int main() {
       resident_split.reserved_headroom_bytes != split.reserved_headroom_bytes ||
       resident_split.response_bytes < response_floor ||
       !resident_values.stores_full_three_center ||
+      resident_values.peak_workspace_bytes > resident_split.value_bytes ||
       resident_values.value_storage.rank_capacity != 160 ||
       resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 15;
   for (const auto unchanged : {

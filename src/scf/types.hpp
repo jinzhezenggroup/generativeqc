@@ -41,7 +41,7 @@ struct IncrementalDirectJkDiagnostic {
   std::uint64_t bypass_full_builds{};
   /** Strict full physical builds performed by ordinary finalization. */
   std::uint64_t post_scf_full_builds{};
-  /** Number of times a successful delta build became the next anchor. */
+  /** Successful delta-to-anchor promotions; zero for fixed screened anchors. */
   std::uint64_t anchor_updates{};
   /** Largest absolute alpha/beta delta-density element observed. */
   double max_abs_delta_density{};
@@ -200,8 +200,8 @@ struct ScfOptions {
  *
  * These capabilities describe execution semantics, not backend identity. CPU
  * and CUDA therefore resolve the same accepted-iterate policy before lowering,
- * while a lower that performs density-weighted screening can request the
- * stricter refresh cadence needed to bound omitted delta contributions.
+ * while a lower that performs density-weighted screening retains a full-density
+ * anchor to bound the number of omitted delta contributions.
  */
 struct IncrementalDirectJkCapabilities {
   bool provider_eligible{};
@@ -213,6 +213,8 @@ struct IncrementalDirectJkCapabilities {
 struct IncrementalDirectJkPolicy {
   bool requested{};
   bool active{};
+  /** Screened deltas reference the last full build, never another screened delta. */
+  bool fixed_full_density_anchor{};
   unsigned requested_rebuild_interval{};
   unsigned effective_rebuild_interval{};
   double density_rms_threshold{};
@@ -228,10 +230,12 @@ inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strate
 
 /** Resolve one policy before CPU/CUDA lowering.
  *
- * A density-weighted screened lower is allowed at most one accepted delta build
- * before a full-density refresh. This keeps screening omissions from accumulating
- * through an arbitrarily long anchor chain. Exact-linear lowers retain the
- * caller's requested cadence, including zero for no periodic refresh.
+ * Density-weighted screened lowers retain the last full-density anchor across
+ * delta builds. Each reconstruction contains only the full-anchor and current
+ * delta screening omissions, rather than a growing chain of omissions. Both
+ * screened and exact-linear lowers honor the requested refresh cadence, including
+ * zero for no periodic refresh. Exact-linear lowers may roll the anchor forward
+ * after each delta because they do not omit density-dependent work.
  */
 inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
     const ScfOptions& options, IncrementalDirectJkCapabilities capabilities) noexcept {
@@ -240,10 +244,10 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
   policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
   const bool screened_lower =
       capabilities.density_weighted_screening && options.screening_tolerance != 0.0;
+  policy.fixed_full_density_anchor = screened_lower;
   policy.density_rms_threshold =
       screened_lower ? options.incremental_direct_jk_density_rms_threshold : 0.0;
-  policy.effective_rebuild_interval =
-      screened_lower ? 1U : options.incremental_direct_jk_rebuild_interval;
+  policy.effective_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
   policy.active = policy.requested && capabilities.provider_eligible &&
                   !capabilities.conflicting_precision_policy;
   return policy;

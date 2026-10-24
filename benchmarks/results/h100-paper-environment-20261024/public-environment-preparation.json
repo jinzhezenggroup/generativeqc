@@ -1,0 +1,104 @@
+{
+  "schema": "generativeqc.public-environment-preparation.v1",
+  "as_of_frozen_utc": "2026-10-24T12:22:13.020846+00:00",
+  "status_at_freeze": "READY_FOR_ROOT_ALLOCATION_GATE_NOT_DEVICE_QUALIFIED",
+  "scope": "CPU preparation and lossless relocation only; actual H100 endpoint records are separate",
+  "target": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1",
+  "project": "\u516c\u5171\u79d1\u7814\u9879\u76ee",
+  "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+  "group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+  "expected_job_name": "h100-paper-smoke-public-20261024-9dcc-r1",
+  "caps": {
+    "calls": 3,
+    "fresh_processes": 3,
+    "per_process_seconds": 3600,
+    "job_seconds": 14400,
+    "termination_grace_seconds": 30,
+    "automatic_retries": 0
+  },
+  "pins": {
+    "qz_smoke.py": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/qz_smoke.py",
+      "sha256": "36a14e43c1a0dd01f34b4ef076e2c9abe9250c7f49a6722616bdeca346f3bdb4",
+      "bytes": 22442,
+      "mode": "0o644"
+    },
+    "gate_wait.py": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/gate_wait.py",
+      "sha256": "b35b3f18a054922f47e1700a2918544a9b2e63131f213eebd596e3b7bb1f865c",
+      "bytes": 12212,
+      "mode": "0o644"
+    },
+    "finalize_release.py": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/finalize_release.py",
+      "sha256": "76edfc8e70f90862c1c4fbff156d54c08a7fd8df46b49b21bafd4016e59b492b",
+      "bytes": 7604,
+      "mode": "0o644"
+    },
+    "build_support.py": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/build_support.py",
+      "sha256": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+      "bytes": 1168,
+      "mode": "0o644"
+    },
+    "job-entry-public-v2.sh": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/job-entry-public-v2.sh",
+      "sha256": "fbb38f63c5a71c8135beca4b48d403a68f68bcf6872a9887180a9771c1c4c0c8",
+      "bytes": 1576,
+      "mode": "0o755"
+    },
+    "prepared-smoke-plan-public-v2.json": {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/assets/prepared-smoke-plan-public-v2.json",
+      "sha256": "6440f197355a6cdf7296141490e9c0928b83a40a625c12b6ca4557abb7c1384a",
+      "bytes": 7202,
+      "mode": "0o644"
+    }
+  },
+  "freeze_sha256": "d555657c5f1df204820ec2607572c6f2acf24bff7fce29dfe5b40b924f3d215f",
+  "readiness_sha256": "4a1b39c771286ce73045b80f0331f5c5caf31e50b9a89198cb0354a77fce4f08",
+  "target_actual_readback_sha256": "c0145488a01ac9f429cc04f6a28ea7ebeece5efe112b0d5f822e3e726a72c667",
+  "actual_readback_files": 40661,
+  "actual_readback_bytes": 5717381795,
+  "symlinks": 8,
+  "gpu4pyscf_cpu_import": {
+    "status": "FAIL",
+    "error": "CUDARuntimeError: cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA runtime version"
+  },
+  "scientific_calls_at_freeze": 0,
+  "device_qualification_at_freeze": "NOT_RUN",
+  "large_original_asset_refs": [
+    {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/incoming-v1/env-materialization-validation-v1.json",
+      "bytes": 2951205,
+      "sha256": "9169a18a2a3e4a33f38405694b056247dde119cf53ad912edcf8bf8ca4262acf",
+      "retention": "original retained under persistent public task root; not included in this small diagnostic export"
+    },
+    {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/incoming-v1/target-independent-readback-v1.json",
+      "bytes": 9564248,
+      "sha256": "c0145488a01ac9f429cc04f6a28ea7ebeece5efe112b0d5f822e3e726a72c667",
+      "retention": "original retained under persistent public task root; not included in this small diagnostic export"
+    },
+    {
+      "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/incoming-v1/public-route-minimal-closure-v2.json",
+      "bytes": 11215299,
+      "sha256": "ae052f1fe6e93ba61a8a3d74609f29e57bae07702b72a08d62c0b12a4dc6de4f",
+      "retention": "original retained under persistent public task root; not included in this small diagnostic export"
+    }
+  ],
+  "repository_capsules": {
+    "public-cpu-receipts-v2.json.xz": {
+      "bytes": 13404,
+      "sha256": "3c2d492bff0dd5619e8d7f20ccbfca170292c502a2f1a28a64b09f07f511d04a"
+    },
+    "public-transport-negatives-v1.json.xz": {
+      "bytes": 5864,
+      "sha256": "09aad623576c0ee317ba507fdde4519eb5c53b16cc30355eef37108ad933f7e3"
+    },
+    "public-frozen-transport-v2.json.xz": {
+      "bytes": 22160,
+      "sha256": "1be13348114315b4768ba858b76c6f35d38d9e31c3fe550a930824118c9bb807"
+    }
+  },
+  "relocation_policy": "Only pinned common image files were materialized locally with O_EXCL and original modes; original startup hooks and module search surface preserved; no SDK rebuild or original-source edits."
+}

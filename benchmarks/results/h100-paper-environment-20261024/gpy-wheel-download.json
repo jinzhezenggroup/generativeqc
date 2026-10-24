@@ -1,0 +1,16 @@
+{
+  "returncode": 0,
+  "output": "Collecting gpu4pyscf-cuda12x==1.8.1\n  Downloading gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (456 bytes)\nCollecting cupy-cuda12x==13.6.0\n  Downloading cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl.metadata (2.4 kB)\nDownloading gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (151.7 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 151.7/151.7 MB 23.5 MB/s  0:00:06\nDownloading cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl (113.0 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 113.0/113.0 MB 22.2 MB/s  0:00:05\nSaved ./h100-paper-environment-20261024/assets/gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl\nSaved ./h100-paper-environment-20261024/assets/cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl\nSuccessfully downloaded gpu4pyscf-cuda12x cupy-cuda12x\n",
+  "assets": [
+    {
+      "name": "gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "bytes": 151734684,
+      "sha256": "42dd9c619ff587dd393232d39c8894950956bace29d83765ce630bf7ad5d686c"
+    },
+    {
+      "name": "cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl",
+      "bytes": 113039337,
+      "sha256": "77ba6745a130d880c962e687e4e146ebbb9014f290b0a80dbc4e4634eb5c3b48"
+    }
+  ]
+}

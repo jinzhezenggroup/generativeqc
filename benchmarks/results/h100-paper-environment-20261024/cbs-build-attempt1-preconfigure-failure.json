@@ -1,0 +1,9 @@
+[
+  {
+    "dist_status": "{\"Disabled\":\"disabled\"}\n",
+    "cache_after": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/hdd/project/chemicalreaction/czxs25220150/1890-df-response-1020/compiler-cache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+    "events": "{\"utc\": \"2026-10-24T06:28:15.915619+00:00\", \"phase\": \"owned_sccache\", \"pid\": 2740857, \"start_ticks\": \"1707810260\", \"port\": 42757}\n",
+    "supervisor_still_exists": false,
+    "server_still_exists": false
+  }
+]

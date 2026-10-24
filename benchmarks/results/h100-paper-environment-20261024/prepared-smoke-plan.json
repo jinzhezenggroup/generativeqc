@@ -1,0 +1,121 @@
+{
+  "schema": "generativeqc.h100-environment-smoke-plan.v1",
+  "execution_authority": "PREPARED ONLY; root must bind a real allocated H100 and freeze a separate final plan",
+  "job_name": null,
+  "allocation_proof": null,
+  "allocation_proof_sha256": null,
+  "root_coordinator_chat": "01a10e8f-7b0a-7b52-a330-b2de34309210",
+  "protocol_manifest": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/adapter-prepared-v3/protocol-manifest-v2.json",
+  "protocol_manifest_sha256": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761",
+  "adapter": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/adapter-prepared-v3/qz_smoke.py",
+  "adapter_sha256": "a540bc5a6da30f3b605a9a56c91668ac8a896b44126972c733e111420f46400b",
+  "sources": {
+    "cbs": {
+      "revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "root": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/cbs-qualified",
+      "driver": "benchmarks/readme_cbs.py",
+      "driver_sha256": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+      "library": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/build/cbs-sm90-portable-attempt2/libgenerativeqc.so",
+      "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+      "inventory": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/output/cbs-source-inventory.json",
+      "inventory_sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924",
+      "build_preflight": {
+        "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+        "status": "PASS",
+        "source_sha256": "5fbd9791c6c645fffc02d07af7c5335899a9a30a3e31526c903da5b6b0227b6a",
+        "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+        "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+        "target": "sm90",
+        "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+        "generated_artifacts_sha256": "c10a415add1edf31495d078807a3b00f3cefe9f195d6db632784bb07c1e45852",
+        "profile_resolution_receipt_sha256": "39204957f2fc5e50e2526684eba1b8df521bcdd05a9cfa23b43d75a0bf7995a5",
+        "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+        "native_profile": "portable_cuda",
+        "profile_match": "portable",
+        "tuned": false,
+        "auto_sm90_outcome": "ValueError"
+      },
+      "build_preflight_sha256": "ab8bf4143e581563132a99ffbfd817112ea604c1abe3974e7ead9dd55d10a3c7",
+      "cohort": "cbs-frozen-science-portable-cuda-sm90.v1",
+      "native_profile": "portable_cuda",
+      "target": "sm90",
+      "tuned": false,
+      "hardware_only": false,
+      "qualified_patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad"
+    },
+    "hf_dft": {
+      "revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+      "root": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/hf-dft-cbd4",
+      "driver": "benchmarks/readme_defaults.py",
+      "driver_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+      "library": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/build/hf-sm90-portable-attempt1/libgenerativeqc.so",
+      "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+      "inventory": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/output/hf-source-inventory.json",
+      "inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+      "build_preflight": {
+        "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+        "status": "PASS",
+        "source_sha256": "927745c665c018a9d0b97e8ca9b29b1c3a09339375074d4c8f8b7bdf4f305aa5",
+        "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+        "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+        "target": "sm90",
+        "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+        "generated_artifacts_sha256": "618d880d7d5215b916007436c602ea7f3b21a9472c6510721995fcc824c83856",
+        "profile_resolution_receipt_sha256": "fe536e269fd98665ebfdf847e8bdd1cff8e5fe2673abb7222917a98b0662ccb6",
+        "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+        "native_profile": "portable_cuda",
+        "profile_match": "portable",
+        "tuned": false,
+        "auto_sm90_outcome": "ValueError"
+      },
+      "build_preflight_sha256": "839adc6f2fe7a55c0d2b947a21070f8aadc8672311130ab3c86d637a8967fa89",
+      "cohort": "hf-dft-frozen-science-sm90.v1",
+      "native_profile": "portable_cuda",
+      "target": "sm90",
+      "tuned": false,
+      "hardware_only": false,
+      "provenance_patch_sha256": "3ebd93ce481b47058e20990f99f11a1c9d349d6780cc5a63286583bbd3316041"
+    }
+  },
+  "expected_packages": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pyscf": "2.14.0",
+    "gpu4pyscf-cuda12x": "1.8.1",
+    "cupy-cuda12x": "13.6.0",
+    "gpu4pyscf-libxc-cuda12x": "0.8.1",
+    "pyscf-dispersion": "1.5.0",
+    "cutensor-cu12": null,
+    "sccache": "0.16.0"
+  },
+  "hf_inputs": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets",
+  "qm7": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/qm7.mat",
+  "qm7_sha256": "fd6c26c1086887310518e6a6da778253bc5d3ceb8166007a679a740fff9ee6ea",
+  "setup_calls": [
+    "native-hf",
+    "gpu4pyscf-hf",
+    "cbs-c2"
+  ],
+  "caps": {
+    "calls": 3,
+    "fresh_processes": 3,
+    "per_process_seconds": 3600,
+    "job_seconds": 14400,
+    "termination_grace_seconds": 30,
+    "automatic_retries": 0
+  },
+  "required_environment": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "GENERATIVEQC_JIT_SCCACHE_ROOT": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/jit-slots",
+    "compiler_cache": "verified sccache 0.16.0 on task env PATH; preserve shared cache and assigned CUDA visibility"
+  },
+  "unavailable_historical": {
+    "hf_original_5852_package_archive": "UNAVAILABLE",
+    "c2_displaced_energy_originals": "UNAVAILABLE; #2705",
+    "old_gpu4pyscf_contraction_engine": "UNAVAILABLE in inspected originals"
+  },
+  "scientific_acceptance": "INCOMPLETE; no H100 calls yet"
+}

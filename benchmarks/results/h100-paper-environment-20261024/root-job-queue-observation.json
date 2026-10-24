@@ -1,0 +1,18 @@
+{
+  "scope": "coordination observation from root live audit; not an allocation proof",
+  "job_name": "h100-paper-smoke-20261024-9dcc-r1",
+  "state": "QUEUING",
+  "root_reported_event": "project GPU quota used16/16, request1",
+  "instance_node": null,
+  "instance_hostname": null,
+  "actual_allocation_proof": "UNAVAILABLE",
+  "root_release_marker": "NOT_CREATED",
+  "scientific_endpoint_calls": "NOT_STARTED",
+  "authorization_boundary": "keep same accepted Job/gate; no resubmit or project/workspace/priority change; root-only release",
+  "root_coordinator_chat": "01a10e8f-7b0a-7b52-a330-b2de34309210",
+  "requested_priority": 4,
+  "stored_priority": 20,
+  "stored_priority_level": "NORMAL",
+  "effective_HIGH": "UNAVAILABLE; no public submit/stored scale conversion contract established",
+  "priority_mapping_source": "root current Inspire changelog audit, reported in coordinator message"
+}

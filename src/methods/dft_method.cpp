@@ -139,11 +139,15 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
     // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
     // The primary provider needs its established allowance even when it also
     // owns derivatives; tightening that cap can silently evict its MD-J source.
+    // A lazy exchange-only derivative lease never consumes MD-J values.
+    // Reserving that optional Coulomb engine here can reject the complete
+    // force before allocation, even though the bounded derivative fits. Its
+    // core capacity remains charged; only SCF retains the optional J margin.
     const auto cartesian_nao =
         purpose == KsProviderPurpose::derivative_only ? molecule::cartesian_ao_count(system) : 0U;
-    return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
-                                                 system.shells.size(), primitives,
-                                                 direct_derivative_order, true, cartesian_nao);
+    return scf::cuda_direct_coulomb_device_bytes(
+        1, molecule::ao_count(system), system.atoms.size(), system.shells.size(), primitives,
+        direct_derivative_order, purpose == KsProviderPurpose::scf, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;
@@ -2559,6 +2563,9 @@ class KsPreparedBatch final : public PreparedBatch,
           try {
             items_[i].plan->cuda_plan()->enqueue_iteration();
           } catch (...) {
+            target_coulomb_exchange_work[i].complete = false;
+            if (results[i].calculation.ks_diagnostic)
+              results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;
@@ -2576,6 +2583,9 @@ class KsPreparedBatch final : public PreparedBatch,
             finish(i, cuda->result(false));
             results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
+            target_coulomb_exchange_work[i].complete = false;
+            if (results[i].calculation.ks_diagnostic)
+              results[i].calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
             items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;

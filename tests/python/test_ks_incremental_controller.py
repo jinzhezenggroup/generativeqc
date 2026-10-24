@@ -83,7 +83,7 @@ struct Consumer {
   bool incremental_proposals_active=false;
   bool incremental_energy_refinement=false;
   unsigned incremental_energy_full_builds=0;
-  bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=false;
+  bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=true;
   unsigned incremental_delta_updates=0;
   std::size_t elements=1,matrix=1;
   int stream=0;
@@ -95,11 +95,12 @@ struct Consumer {
       *incremental_max_abs_delta_density=&maximum,*j=&jv,*incremental_anchor_j=&ja,
       *exchange=&kv,*incremental_anchor_exchange=&ka,*range_exchange=&rv,
       *incremental_anchor_range_exchange=&ra;
-  Consumer(bool automatic=false, bool eligible=true) {
-    options.incremental_direct_jk=!automatic;
+  Consumer(bool automatic=false, bool eligible=true, bool explicit_request=false,
+           unsigned interval=3) {
+    options.incremental_direct_jk=!automatic || explicit_request;
     options.incremental_direct_jk_auto=automatic;
     options.screening_tolerance=0.0;
-    options.incremental_direct_jk_rebuild_interval=0;
+    options.incremental_direct_jk_rebuild_interval=interval;
     scf::ResolvedFockBuild strategy;
     strategy.backend=scf::FockBackend::Cuda;
     strategy.screening_tolerance=1e-12;
@@ -120,7 +121,14 @@ struct Consumer {
     const int grid_spec=0;
     const auto default_grid_spec=[] { return 0; };
     const auto configured_chunk_width=[] { return 1U; };
+    has_range_correction=!automatic;
     std::optional<scf::ResolvedFockBuild> range_correction;
+    if(has_range_correction) {
+      range_correction=strategy;
+      range_correction->spec.coulomb.present=false;
+      range_correction->spec.exchange.present=true;
+      range_correction->spec.exchange.approximation=scf::FockApproximation::Exact;
+    }
     struct {bool any_lower_precision()const{return false;}} precision_schedule;
 """
     unit += source[policy_start:policy_end]
@@ -154,9 +162,10 @@ struct Consumer {
     final_closure=closure;
     const auto* input=prepare_incremental_jk_density();
     // Independent linear J/K oracle for the actual reconstruction controller.
-    jv=2*(*input); kv=3*(*input);
+    jv=2*(*input); kv=3*(*input); rv=5*(*input);
     finalize_incremental_jk_components();
-    require(jv==2*d && kv==3*d,"full/delta raw J/K reconstruction changed the operator");
+    require(jv==2*d && kv==3*d && (!has_range_correction || rv==5*d),
+            "full/delta raw J/K/range-K reconstruction changed the operator");
     ++output.iterations;
     d+=0.125;
   }
@@ -168,6 +177,17 @@ int main(int argc,char** argv) {
       Consumer admitted(true);
       require(admitted.incremental_direct_jk_policy.requested && admitted.incremental_direct_jk,
               "eligible automatic constructor did not activate the controller");
+      require(!admitted.incremental_direct_jk_policy.fixed_full_density_anchor &&
+                  admitted.incremental_direct_jk_policy.effective_rebuild_interval==1,
+              "automatic KS inherited the explicit fixed-anchor experiment");
+      admitted.build(false);
+      const double first_anchor=admitted.a;
+      admitted.build(false);
+      require(admitted.pending_incremental_delta && admitted.a!=first_anchor,
+              "automatic KS stopped advancing its qualified rolling anchor");
+      admitted.build(false);
+      require(!admitted.pending_incremental_delta,
+              "automatic KS without proposals lost its one-delta refresh bound");
       Consumer outside(true, false);
       require(!outside.incremental_direct_jk_policy.requested && !outside.incremental_direct_jk,
               "out-of-domain automatic constructor activated the controller");
@@ -177,6 +197,26 @@ int main(int argc,char** argv) {
       runtime::active_device_resource_ledger=nullptr;
       require(!budgeted.incremental_direct_jk_policy.requested && !budgeted.incremental_direct_jk,
               "ledger-bound automatic constructor activated uncharged storage");
+      return 0;
+    }
+    if(std::string(argv[1])=="explicit-precedence") {
+      for(bool eligible:{false,true}) {
+        for(unsigned interval:{0U,3U}) {
+          Consumer explicit_owner(true,eligible,true,interval);
+          require(explicit_owner.incremental_direct_jk &&
+                      explicit_owner.incremental_direct_jk_policy.fixed_full_density_anchor &&
+                      explicit_owner.incremental_direct_jk_policy.effective_rebuild_interval==interval,
+                  "automatic selector overrode explicit screened anchor/cadence");
+          explicit_owner.build(false);
+          const double first_anchor=explicit_owner.a;
+          explicit_owner.build(false);
+          require(explicit_owner.pending_incremental_delta && explicit_owner.a==first_anchor,
+                  "explicit screened delta replaced the full-density anchor");
+          explicit_owner.build(false);
+          require(explicit_owner.pending_incremental_delta && explicit_owner.a==first_anchor,
+                  "automatic refresh cadence replaced the explicit interval");
+        }
+      }
       return 0;
     }
     if(std::string(argv[1])=="bounded-proposals") {
@@ -207,8 +247,10 @@ int main(int argc,char** argv) {
         probe.options.density_tolerance=1e-5;
         probe.build(false);
         for(unsigned i=0;i<interval;++i) {
+          const double anchor=probe.a;
           probe.build(false);
           require(probe.pending_incremental_delta,"proposal epoch refreshed prematurely");
+          require(probe.a!=anchor,"bounded KS proposals stopped advancing their rolling anchor");
           require(probe.incremental_energy_full_builds==0,
                   "a screened proposal manufactured full-density energy history");
         }
@@ -321,18 +363,24 @@ int main(int argc,char** argv) {
     const unsigned accepted=std::stoul(argv[1]);
     Consumer c;
     require(c.incremental_direct_jk && c.incremental_direct_jk_policy.active &&
-                c.incremental_direct_jk_policy.effective_rebuild_interval==1,
-            "native options bypassed the prepared provider screening cadence");
-    for(unsigned i=0;i<accepted;++i)c.build(false);
+                c.incremental_direct_jk_policy.effective_rebuild_interval==3 &&
+                c.incremental_direct_jk_policy.fixed_full_density_anchor,
+            "native options bypassed the prepared provider full-anchor policy");
+    for(unsigned i=0;i<accepted;++i) {
+      const double anchor=c.a;
+      const bool delta=c.incremental_delta_admitted();
+      c.build(false);
+      if(delta) require(c.a==anchor,"screened delta replaced the full-density anchor");
+    }
     c.build(true);
     const auto& work=c.output.incremental_direct_jk;
-    const auto full=(accepted+1)/2,delta=accepted/2;
+    const auto full=(accepted+3)/4,delta=accepted-full;
     require(work.anchor_full_builds==full && work.delta_builds==delta,
-            "screened controller did not alternate accepted full/delta builds");
+            "screened controller did not honor the requested full-anchor cadence");
     require(work.periodic_rebuilds==full-1 && work.post_scf_full_builds==1,
             "periodic and final full builds lost their distinct accounting");
     if(accepted==2) require(work.periodic_rebuilds==0,"early convergence invented a refresh");
-    if(accepted>=3) require(work.periodic_rebuilds>0,"required refresh branch did not execute");
+    if(accepted>=5) require(work.periodic_rebuilds>0,"required refresh branch did not execute");
   } catch(const std::exception& error) {std::cerr<<error.what();return 1;}
   return 0;
 }
@@ -437,3 +485,17 @@ def test_constructor_auto_admission_preserves_domain_and_ledger_fallback(
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_explicit_request_takes_precedence_over_auto_selector(
+    controller_probe: Path,
+) -> None:
+    """Both selectors retain explicit anchors/cadence inside and outside auto admission."""
+    result = subprocess.run(
+        [controller_probe, "explicit-precedence"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr

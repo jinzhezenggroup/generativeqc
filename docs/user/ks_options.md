@@ -355,6 +355,21 @@ legacy selector retains its PBE0 RKS restriction. The public planning guard is u
 resource ledger rather than allocating unaccounted incremental anchor/closure
 storage.
 
+Explicit screened incremental builds outside the bounded Standard proposal
+policy retain the last full-density J/K anchor: every
+delta is relative to that density, and does not replace the anchor with another
+screened reconstruction. This prevents screening omissions from accumulating
+through a chain of delta builds without forcing full/delta alternation. The
+`GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL` control sets the maximum
+number of delta builds between full refreshes (default 8; 0 disables periodic
+refresh). The optional density-RMS gate can still request an earlier full build.
+Unscreened exact-linear providers may advance the anchor after each delta.
+The `anchor_updates` diagnostic counts those advances, not fixed-anchor deltas.
+This explicit fixed-anchor policy remains opt-in and is not a speedup guarantee.
+The guarded automatic KS owner retains its qualified rolling-anchor policy:
+at most one delta per full build when proposals are disabled, or the bounded
+proposal chain described below when they are enabled.
+
 Incremental solves return to full-density J/K builds once the density-change and
 physical-residual gates are satisfied, even if the energy-change gate is not yet
 satisfied. This full-density energy refinement keeps the original DIIS history
@@ -370,7 +385,8 @@ resident final-state validation policies can use bounded screened ΔD proposals.
 ΔD admission adds no functional-name restriction: J/K linearity is independent
 of XC family, while the ordinary Standard model/grid and resource guards still
 apply.
-The requested rebuild interval bounds each proposal chain, capped at eight;
+These proposals retain their rolling anchors. The requested rebuild interval
+bounds each proposal chain, capped at eight;
 zero also selects this finite cap. These operators only propose SCF steps:
 screening tolerances are not an accumulated-error certificate. Acceptance still
 requires two consecutive full-density energies and the complete physical and

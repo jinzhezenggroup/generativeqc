@@ -23,6 +23,10 @@ struct CudaWb97mvGridOptions {
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
   bool nuclear_response{false};
+  /** Replay the immutable affine mixed-contraction schedule with staged inputs.
+   * Extra storage remains subordinate to max_workspace_bytes; unavailable graph
+   * resources retain ordinary precompiled CUDA launches, never CPU execution. */
+  bool replay_nuclear_maps{true};
   std::uint64_t max_nuclear_affine_terms{1ULL << 34};
 };
 
@@ -48,6 +52,7 @@ struct CudaWb97mvGridWork {
   std::uint64_t reference_pairs{}, response_pairs{}, response_actions{};
   std::uint64_t nuclear_reference_pairs{}, nuclear_response_pairs{}, nuclear_affine_terms{};
   std::uint64_t nuclear_directions{}, nuclear_contractions{};
+  std::uint64_t nuclear_graph_replays{};
 };
 
 /** Pure checked sizing. Pair storage and total ordered-pair WORK are separate
@@ -62,8 +67,9 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape& shape,
 /** Native WB97M-V semilocal + bilateral VV10 density kernel on a fixed grid.
  * Scalar gradients/JVPs and feature/potential maps are compiler AD, generated
  * at build time. Includes physical spin coupling, tau halves, both VV10 legs,
- * ordered-pair traversal and the local beta term. No allocation, interpreter,
- * runtime compilation, CPU contraction, device switch or hidden fallback.
+ * ordered-pair traversal and the local beta term. Optional CUDA graph resources
+ * are created during prepare; actions do not allocate. No interpreter, runtime
+ * compilation, CPU contraction, device switch or hidden fallback.
  * Each call fences at numerical/authentication gates; only status/active-count
  * metadata reaches the host. A failed action leaves public output unchanged
  * before publication; a CUDA error during publication invalidates that output.
@@ -72,6 +78,7 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape& shape,
 class CudaWb97mvGridResponse {
  public:
   CudaWb97mvGridResponse() = default;
+  ~CudaWb97mvGridResponse();
   CudaWb97mvGridResponse(const CudaWb97mvGridResponse&) = delete;
   CudaWb97mvGridResponse& operator=(const CudaWb97mvGridResponse&) = delete;
   CudaWb97mvGridResponse(CudaWb97mvGridResponse&&) = delete;
@@ -116,6 +123,10 @@ class CudaWb97mvGridResponse {
   cudaError_t authenticate(cudaStream_t stream) noexcept;
   cudaError_t evaluate(bool response) noexcept;
   cudaError_t evaluate_nuclear(bool response) noexcept;
+  cudaError_t build_nuclear_graph() noexcept;
+  cudaError_t enqueue_nuclear_mixed(const double* left_ao, const double* mixed_ao,
+                                    const double* left_weights, const double* mixed_weights,
+                                    const double* left_points, cudaStream_t stream) noexcept;
   CudaWb97mvGridShape shape_{};
   CudaWb97mvGridOptions options_{};
   CudaWb97mvGridReference reference_{};
@@ -123,6 +134,7 @@ class CudaWb97mvGridResponse {
   void* workspace_{};
   bool ready_{};
   bool nuclear_ready_{};
+  cudaGraphExec_t nuclear_graph_{};
 };
 
 }  // namespace generativeqc::dft

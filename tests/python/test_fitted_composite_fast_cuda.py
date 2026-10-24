@@ -225,7 +225,14 @@ def test_fitted_composite_pending_retry_and_evidence_expiry(
             for item in energies.items:
                 assert item.forces is None
                 assert not (item.precision or {}).get("gradient")
-                assert item.precision_validation.solve_count == 2
+                # An energy-only call may use a qualified strict endpoint or
+                # an audited fallback. Neither may inherit the preceding
+                # force work/evidence; the number of complete solves is not
+                # the scientific or lifetime contract.
+                assert item.converged and abs(item.energy - expected["energy"]) < 1e-7
+                report = item.precision_validation
+                assert report.solves
+                assert all(solve.force_evaluations == 0 for solve in report.solves)
             assert result.items[1].precision["gradient"]["returned_mode"] == "mixed"
     finally:
         calculator.clear_cache()

@@ -123,9 +123,15 @@ void evaluate(const std::string& mode) {
       shape.primitives > 4096)
     throw std::runtime_error("probe shape exceeds finite limits");
   response::CudaWb97mvGridOptions options;
-  const bool nuclear = mode == "nuclear";
+  const bool nuclear = mode.rfind("nuclear", 0) == 0;
   options.nuclear_response = nuclear;
+  options.replay_nuclear_maps = mode != "nuclear-serial";
   std::cin >> options.pair_tile_points >> options.max_pair_evaluations;
+  if (mode == "nuclear-tight") {
+    auto serial = options;
+    serial.replay_nuclear_maps = false;
+    check(response::cuda_wb97mv_grid_workspace(shape, serial, options.max_workspace_bytes));
+  }
   std::size_t bytes{};
   check(response::cuda_wb97mv_grid_workspace(shape, options, bytes));
   cudaStream_t stream{}, other{};
@@ -201,6 +207,19 @@ void evaluate(const std::string& mode) {
     std::cout << ",\"mixed\":";
     array(scalar, 1);
     const auto pair_work = grid.work().nuclear_response_pairs;
+    // A replay must not retain the caller's previous left-input pointers.
+    const auto relocate = [&](double* source, std::size_t count) {
+      auto* replacement = storage.allocate(count);
+      check(cudaMemcpyAsync(replacement, source, count * sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream));
+      check(cudaMemsetAsync(source, 0, count * sizeof(double), stream));
+      return replacement;
+    };
+    left_ao = relocate(left_ao, panel);
+    mixed_ao = relocate(mixed_ao, panel);
+    left_weights = relocate(left_weights, shape.points);
+    mixed_weights = relocate(mixed_weights, shape.points);
+    left_points = relocate(left_points, 3 * shape.points);
     check(cudaMemsetAsync(right_ao, 0, panel * sizeof(double), stream));
     check(cudaMemsetAsync(moving, 0, matrices * sizeof(double), stream));
     check(cudaMemsetAsync(right_weights, 0, shape.points * sizeof(double), stream));
@@ -279,6 +298,7 @@ void evaluate(const std::string& mode) {
               << ",\"nuclear_response_pairs\":" << work.nuclear_response_pairs
               << ",\"nuclear_affine_terms\":" << work.nuclear_affine_terms
               << ",\"nuclear_contractions\":" << work.nuclear_contractions
+              << ",\"nuclear_graph_replays\":" << work.nuclear_graph_replays
               << ",\"nuclear_lifecycle\":true}\n";
     check(cudaStreamDestroy(other));
     check(cudaStreamDestroy(stream));

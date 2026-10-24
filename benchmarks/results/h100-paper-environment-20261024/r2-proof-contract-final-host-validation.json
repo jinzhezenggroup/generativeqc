@@ -1,0 +1,33 @@
+{
+  "scope": "final host-only finalizer regression checks, no GPU/real marker/resource",
+  "results": [
+    {
+      "options": [],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.390s\n\nOK\n"
+    },
+    {
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.310s\n\nOK\n"
+    }
+  ],
+  "files": {
+    "scripts/adapter-prepared-v4/replay.py": "b8b003939523f0a56720544591923fcdb9556bfd188eeee239fb2e83a390e14a",
+    "scripts/adapter-prepared-v4/qz_smoke.py": "e57fcbdffb689ec637346105ad5a976fe57dd29df5ed26d35eb21c3c4a419496",
+    "scripts/adapter-prepared-v4/test_qz_smoke.py": "212be810e0ae93161423f01618ec13c2b86bf5583214694c64cd54b3c8406724",
+    "scripts/adapter-prepared-v4/protocol-manifest-v2.json": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761",
+    "scripts/gate-wait-v2/build_support.py": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+    "scripts/gate-wait-v2/test_gate_wait.py": "bb3f088263b450b34b3b66c9715472f8d8842dbbc6b5e824f568b00645f918a6",
+    "scripts/gate-wait-v2/job-entry.sh": "bde1f032705322cfde208d850ea4039b9523013fdd8d4544fcfea9a53d989bf1",
+    "scripts/gate-wait-v2/test_finalize_release.py": "6f5163be85b1cdad24c15baa9fcd9c57653a216e216f4da9ce8e0e76d5f5e608",
+    "scripts/gate-wait-v2/gate_wait.py": "5c143bd54839e9101d60a903d3b9b53d8ae5f0ace5da9c985db380ffaaf31796",
+    "scripts/gate-wait-v2/finalize_release.py": "e0db16a10c29de9c17e0ab57d03514fd1f8241829564d0fb6212785aaa59a6a0"
+  },
+  "r2_output_absent": true,
+  "freeze": "No further v4/gate-v2/source/DSO writes after this final staged validation."
+}

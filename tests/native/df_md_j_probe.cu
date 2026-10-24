@@ -39,7 +39,10 @@ core::System read_system() {
     core::Shell shell;
     std::size_t primitives{};
     std::cin >> shell.atom_index >> shell.angular_momentum >> primitives;
-    if (!primitives || primitives > 16 || shell.angular_momentum > 4)
+    // Long s-shell contractions exercise the automatic source-work policy.
+    // The independent 16 MiB owner budgets below still bound actual storage;
+    // accepting a larger input count does not enlarge those resource limits.
+    if (!primitives || primitives > 128 || shell.angular_momentum > 4)
       throw std::runtime_error("fixture exceeds primitive/angular bound");
     shell.primitives.resize(primitives);
     for (auto& primitive : shell.primitives)

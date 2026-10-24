@@ -1,0 +1,1 @@
+/usr/bin/timeout --kill-after=30 14400 /bin/bash /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh

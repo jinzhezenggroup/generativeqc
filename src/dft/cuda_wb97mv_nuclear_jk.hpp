@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
 
 #include "integrals/cuda_one_electron_response.hpp"
 
@@ -30,6 +31,11 @@ struct CudaWb97mvJkOptions {
    * tiles retain group/incidence sum order; zero disables optional batching. */
   std::size_t max_batch_projection_bytes{16ULL << 20};
   std::size_t max_groups{100'000};
+  /** Bounded canonical-source replay when the complete ordered schedule does
+   * not fit. The global source/work bounds still apply across every tile.
+   * Zero disables this fallback; it never enlarges the caller's arena. */
+  std::size_t source_tile{1024};
+  std::size_t max_source_groups{100'000};
   std::size_t radial_tile{64};  ///< Primitive streaming bound, in [1,64].
   std::uint64_t max_primitive_component_evaluations{67'108'864};
   std::uint64_t max_projection_terms{268'435'456};
@@ -70,6 +76,7 @@ struct CudaWb97mvJkWork {
   std::size_t batched_workspace_bytes{};
   std::uint64_t integral_launches{}, projection_launches{}, reduction_launches{};
   std::uint64_t integral_source_builds{}, resident_integral_hits{};
+  std::size_t streaming_tiles{}, source_groups{};
 };
 
 /** Host-only checked closure/work/arena admission, without CUDA initialization.
@@ -77,8 +84,8 @@ struct CudaWb97mvJkWork {
  * each requested radial kernel/omega. No name parsing, discovery or JIT exists. */
 cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape,
                                      std::span<const integrals::CudaOneElectronShell> shells,
-                                     const CudaWb97mvJkOptions& options,
-                                     std::size_t& bytes) noexcept;
+                                     const CudaWb97mvJkOptions& options, std::size_t& bytes,
+                                     std::string* detail = nullptr) noexcept;
 
 /** Native compiler-AD J/K nuclear source, with signed symmetric D and dD.
  * Raw value/gradient/gradient-JVP are evaluated once per primitive component and

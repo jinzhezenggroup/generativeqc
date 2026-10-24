@@ -15,7 +15,47 @@ void check(cudaError_t error) {
 void require(bool valid, const char* message) {
   if (!valid) throw std::invalid_argument(message);
 }
+// Shared host-only plan: aggregate owners reserve the exact scalar baseline
+// through the same topology, charge accounting and admission as preparation.
+struct Plan {
+  std::vector<integrals::CudaOneElectronShell> shells;
+  integrals::CudaOneElectronOptions options;
+  std::size_t bytes{}, device_bytes{};
+  Plan(const core::System& system, const integrals::CudaOneElectronShape& shape,
+       const integrals::CudaOneElectronOptions& requested)
+      : options(requested) {
+    require(shape.atoms == system.atoms.size(), "one-electron atom count differs from basis");
+    std::size_t primitive_begin{}, ao_begin{};
+    for (const auto& shell : system.shells) {
+      const auto angular = static_cast<std::size_t>(shell.angular_momentum);
+      require(angular <= 3, "one-electron angular momentum exceeds the linked source limit");
+      const auto count = system.basis_representation == core::kSphericalBasis
+                             ? 2 * angular + 1
+                             : (angular + 1) * (angular + 2) / 2;
+      shells.push_back(
+          {shell.atom_index, angular, primitive_begin, shell.primitives.size(), ao_begin, count});
+      require(shell.primitives.size() <= SIZE_MAX - primitive_begin && count <= SIZE_MAX - ao_begin,
+              "one-electron topology overflow");
+      primitive_begin += shell.primitives.size();
+      ao_begin += count;
+    }
+    require(primitive_begin == shape.primitives && ao_begin == shape.nao,
+            "one-electron topology differs from the native normalized basis");
+    require(shape.atoms <= options.max_workspace_bytes / sizeof(double),
+            "one-electron effective charges exceed the device budget");
+    options.max_workspace_bytes -= shape.atoms * sizeof(double);
+    check(integrals::cuda_one_electron_workspace(shape, shells, options, bytes));
+    require(bytes <= options.max_workspace_bytes,
+            "one-electron arena plus effective charges exceed the device budget");
+    device_bytes = bytes + shape.atoms * sizeof(double);
+  }
+};
 }  // namespace
+std::size_t cuda_ks_one_electron_workspace(const core::System& system,
+                                           const integrals::CudaOneElectronShape& shape,
+                                           const integrals::CudaOneElectronOptions& options) {
+  return Plan(system, shape, options).device_bytes;
+}
 struct CudaKsOneElectronResponse::Impl {
   methods::PreparedBatch& batch;
   std::size_t item;
@@ -78,29 +118,12 @@ generativeqc_status CudaKsOneElectronResponse::prepare(
     cudaStreamCaptureStatus capture{};
     check(cudaStreamIsCapturing(candidate->stream, &capture));
     require(capture == cudaStreamCaptureStatusNone, "one-electron preparation cannot capture");
-    std::vector<integrals::CudaOneElectronShell> shells;
-    std::vector<double> charges;
-    std::size_t primitive_begin{}, ao_begin{};
-    for (const auto& shell : system.shells) {
-      const auto angular = static_cast<std::size_t>(shell.angular_momentum);
-      const auto count = system.basis_representation == core::kSphericalBasis
-                             ? 2 * angular + 1
-                             : (angular + 1) * (angular + 2) / 2;
-      shells.push_back(
-          {shell.atom_index, angular, primitive_begin, shell.primitives.size(), ao_begin, count});
-      primitive_begin += shell.primitives.size();
-      ao_begin += count;
-    }
-    require(primitive_begin == shape.primitives && ao_begin == shape.nao,
-            "one-electron topology differs from the native normalized basis");
-    for (const auto& atom : system.atoms) charges.push_back(atom.ionic_charge());
     const integrals::CudaOneElectronShape integral_shape{shape.atoms, shape.primitives, shape.nao};
-    std::size_t bytes{};
-    check(integrals::cuda_one_electron_workspace(integral_shape, shells, options, bytes));
-    require(shape.atoms <= (SIZE_MAX - bytes) / sizeof(double) &&
-                bytes + shape.atoms * sizeof(double) <= options.max_workspace_bytes,
-            "one-electron arena plus effective charges exceed the device budget");
-    candidate->device_bytes = bytes + shape.atoms * sizeof(double);
+    const Plan plan(system, integral_shape, options);
+    const auto bytes = plan.bytes;
+    std::vector<double> charges;
+    for (const auto& atom : system.atoms) charges.push_back(atom.ionic_charge());
+    candidate->device_bytes = plan.device_bytes;
     check(cudaMalloc(&candidate->arena, candidate->device_bytes));
     auto* device_charges = reinterpret_cast<double*>(static_cast<char*>(candidate->arena) + bytes);
     // This is native immutable input packing from integer ionic charges, not a
@@ -114,8 +137,8 @@ generativeqc_status CudaKsOneElectronResponse::prepare(
     const integrals::CudaOneElectronReference reference{
         lease.basis,       device_charges,     device,
         candidate->stream, Impl::authenticate, candidate.get()};
-    check(candidate->response.prepare(integral_shape, shells, options, reference, candidate->arena,
-                                      bytes));
+    check(candidate->response.prepare(integral_shape, plan.shells, plan.options, reference,
+                                      candidate->arena, bytes));
     impl_ = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

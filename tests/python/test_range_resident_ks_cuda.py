@@ -3,16 +3,32 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+
+def _auxiliary_basis(fitted: bool) -> Any:
+    """Load the same pinned JK-fit inputs used by independent fitted E/F gates.
+
+    The public runtime deliberately bundles only a small set of basis names;
+    a reference-engine name does not make that auxiliary table available there.
+    """
+    if not fitted:
+        return None
+    from test_df_fast_public_cuda import auxiliary_bases
+
+    from benchmarks._cases import benchmark_cases
+
+    return auxiliary_bases(benchmark_cases()["water-def2-svp-spherical"])[0]
 
 
 @pytest.mark.parametrize(
     "policy", ["full", "partial", "refused", "auto", "auto-refused"]
 )
-@pytest.mark.parametrize("fitted_primary", [False, True])
+@pytest.mark.parametrize("fitted", (False, True))
 def test_range_source_preserves_complete_geometry_and_warm_results(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, fitted_primary: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, fitted: bool
 ) -> None:
     """Exercise real source consumption, derivatives, retirement and new geometry.
 
@@ -65,14 +81,11 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
-            # The exact range correction owns its cache independently of the
-            # full-range primary. An orbital basis is a valid small auxiliary
-            # fixture; off/on compares the identical fitted approximation.
-            auxiliary_basis="def2-svp" if fitted_primary else None,
-            density_fitting="cuda" if fitted_primary else None,
             basis_representation="spherical",
             device="cuda",
             precision="fp64",
+            density_fitting="cuda" if fitted else None,
+            auxiliary_basis=_auxiliary_basis(fitted),
             max_iterations=100,
             energy_tolerance=1e-12,
             density_tolerance=1e-10,
@@ -101,7 +114,10 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         consumed = [
             r["value"] for r in rows if r.get("key") == "phase_resident_fock_actions"
         ]
-        if enabled and policy not in {"refused", "auto-refused"}:
+        admitted = enabled and policy not in {"refused", "auto-refused"}
+        # Fitted primary plus exact LR is an explicit composition candidate;
+        # automatic selection must retain its existing fallback.
+        if admitted:
             assert any(built) and any(consumed), "optional source was never consumed"
         else:
             assert not any(built) and not any(consumed)
@@ -124,15 +140,24 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         np.testing.assert_allclose(ordinary.forces, cached.forces, atol=1e-7, rtol=0)
 
 
-@pytest.mark.parametrize("policy", ["full", "partial", "auto"])
+@pytest.mark.parametrize(
+    ("policy", "fitted"),
+    [
+        ("full", False),
+        ("partial", False),
+        ("auto", False),
+        ("full", True),
+        ("partial", True),
+        ("auto", True),
+    ],
+)
 @pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])
-@pytest.mark.parametrize("fitted_primary", [False, True])
 def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     policy: str,
+    fitted: bool,
     invalidate: str,
-    fitted_primary: bool,
 ) -> None:
     """Retained and retired sources must both certify the same warm density.
 
@@ -178,11 +203,11 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     calculator = Calculator(
         method="wb97m-v",
         basis="def2-svp",
-        auxiliary_basis="def2-svp" if fitted_primary else None,
-        density_fitting="cuda" if fitted_primary else None,
         basis_representation="spherical",
         device="cuda",
         precision="fp64",
+        density_fitting="cuda" if fitted else None,
+        auxiliary_basis=_auxiliary_basis(fitted),
         max_iterations=100,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
