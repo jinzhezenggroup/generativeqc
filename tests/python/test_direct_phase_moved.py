@@ -618,6 +618,14 @@ class OracleContractTests(unittest.TestCase):
 
 
 class CpuWorkerTests(unittest.TestCase):
+    def test_cpu_fixture_ignores_cached_helper_on_parent_package(self) -> None:
+        cached = types.ModuleType("benchmarks.readme_defaults_accuracy")
+        cached.__file__ = campaign.__file__
+        cached.solve = mock.Mock(side_effect=AssertionError("cached helper executed"))
+        with mock.patch("benchmarks.readme_defaults_accuracy", cached, create=True):
+            self.test_cpu_checkpoint_failure_retention_and_no_duplicate_solves()
+        cached.solve.assert_not_called()
+
     def test_absent_allocation_rejected_before_scientific_import_or_output(
         self,
     ) -> None:
@@ -690,6 +698,9 @@ class CpuWorkerTests(unittest.TestCase):
                 )
                 with (
                     mock.patch.dict("sys.modules", modules),
+                    mock.patch(
+                        "benchmarks.readme_defaults_accuracy", reference, create=True
+                    ),
                     mock.patch.dict("os.environ", {"SLURM_JOB_ID": "123"}),
                     mock.patch.object(
                         campaign.os, "getuid", return_value=456, create=True
