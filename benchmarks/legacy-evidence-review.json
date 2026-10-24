@@ -394,7 +394,7 @@
     },
     "host-lr-eri-20261025": {
       "owner": "opt-in host LR ERI endpoint experiment",
-      "reason": "Lossless receipts retain all six same-source formal A/B/C endpoints, separate primers and profiling populations, independent-reference qualification inputs, actual LR work and transfer counts, source/build/test provenance, and the 96-atom host-admission limitation. Large profiler databases remain ignored; no storage limit or default policy changes.",
+      "reason": "Lossless receipts retain all six same-source formal A/B/C endpoints, separate primers and profiling populations, independent-reference qualification inputs, actual LR work and transfer counts, source/build/test provenance, and the 96-atom host-admission limitation. Large profiler databases remain ignored; no storage limit or default policy changes. The separate automatic-default cohort retains original abbreviated-revision receipts with an archive/build binding, paired complete E+F, independent gates and source-work diagnostics; corrupt progress logs remain excluded.",
       "review_document": "benchmarks/results/host-lr-eri-20261025/README.md"
     }
   },
@@ -934,6 +934,14 @@
       "role": "complete-observables-lr-work-and-source-build-validation-receipts",
       "bytes": 131828,
       "sha256": "08fb25b3b7ef01f9c80a01a302cf473b97a4fa38deb389698d06f2af5ad2071c"
+    },
+    {
+      "path": "benchmarks/results/host-lr-eri-20261025/default.json.xz",
+      "family": "host-lr-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "automatic-default-paired-endpoints-and-verified-abbreviated-source-binding",
+      "bytes": 182068,
+      "sha256": "6ffb615f4c9041284bfaee7b445a4c28a9922acc8b9bc290c73f05413c120c4d"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
