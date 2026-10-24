@@ -207,9 +207,12 @@ Unsupported functional/response pairs fail during preparation. See the
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:
 it requests up to 32 original tiles within an **additional** per-owner device
-allowance of 32 MiB per density-product jet: 32 MiB for a one-jet contraction
-and 128 MiB for a four-jet contraction. This is a resource-shape policy, not a
-functional-name selector. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+allowance of 32 MiB times the larger of the AO and density-product jet counts:
+32 MiB when both have one jet, and 128 MiB when either has four jets. GGA keeps
+four AO jets even though its density product needs only one, so its retained
+AO panels receive the same capacity as other four-jet consumers. Selection
+uses these panel dimensions independently of the functional name. The admitted
+count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
 overrides the request; zero or one explicitly retains the one-tile executor.
 `GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
 also retains the incumbent; an explicit byte cap is never scaled by the jet count.

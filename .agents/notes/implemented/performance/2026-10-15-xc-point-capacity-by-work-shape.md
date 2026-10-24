@@ -3,6 +3,10 @@
 Status: implemented; qualified complete endpoints, bounded incumbent retry retained
 Date: 2026-10-15
 
+The [live-panel capacity extension](2026-10-24-xc-capacity-by-live-panels.md)
+subsequently includes AO jets in the automatic allowance. The historical
+measurements and density-jet-only decision below remain unchanged.
+
 ## Problem
 
 The rejected force-point launch experiment in
