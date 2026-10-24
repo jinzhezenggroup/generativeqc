@@ -369,7 +369,7 @@
     },
     "fitted-range-cold-20261024": {
       "owner": "bounded fitted-primary exact range cold endpoint qualification",
-      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps.",
+      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
       "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md"
     }
   },
@@ -845,6 +845,14 @@
       "role": "complete-source-build-test-and-execution-provenance",
       "bytes": 608544,
       "sha256": "0ddb9f78f3a8b4fdb6545d18cb6a77569c6660a039afcf93028292a41fd431d0"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
+      "family": "fitted-range-cold-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "current-parent-complete-observables-and-source-build-test-receipts",
+      "bytes": 717272,
+      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

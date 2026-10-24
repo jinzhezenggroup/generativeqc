@@ -107,13 +107,42 @@ fitted-primary range admission. Their original implementations and qualification
 remain authoritative. The remaining production delta is the lazy derivative
 capacity repair and the fitted high-angular cache fallback. Historical source
 identities and all 50 calls above remain unchanged; they are not reassigned to
-this newer combined tree. A fresh integration bridge is required before claiming
-its complete endpoint timing or parity.
+this newer combined tree.
+
+The fresh bridge measures source `b69d38fb8bf6c6c369f63917ef8f6032708a1a15`,
+core SHA-256 `2093ae0501d80e3b885897606b083ff5fde0ba4ae25762963664534bcb9326e2`.
+All **32 records / 66 complete calls** pass independent observable gates: seven
+methods in Direct/DF Standard and GPU4, WB97M-V DF Fast, original/displaced
+geometry and water108. These are single screening observations, kept separate
+from both historical populations above; they do not establish a new statistical
+speedup or the all-method cold target.
+
+| Current-parent bridge | Native cold / warm (s) | GPU4 cold / warm (s) |
+| --- | ---: | ---: |
+| water96 WB97M-V DF Standard | 317.736 / 39.039 | 385.779 / 132.806 |
+| water96 WB97M-V DF Fast | 324.638 / 39.958 | separate allocation; no timing pair |
+| water108 WB97M-V DF Standard | 673.204 / 54.855 | 492.145 / 171.437 |
+
+The same-owner displaced water96 calls take 271.433 / 40.156 s and pass their
+independent moved reference. Water108 cold remains slower despite successful
+capacity admission. Current-source native DIIS, independent fitted composition
+and factor-lifetime checks pass, as do 24 Direct/high-angular, 40 DF MD, 61
+checkpoint, 40 range, six fitted Fast and one failure-injection Python tests.
+
+The screen retained legacy experimental controls. This narrower PR source does
+not include spatial bisection/force-grid transport or the separate DF charge
+partition PR #2723: spatial order `2` skips SCF spatial admission here, and the
+old force-grid control has no consumer. Thus the semilocal rows are **not current
+default timings**. WB97M-V already excludes that semilocal spatial admission.
+All executed controls remain in the raw records/recipes. Separate supported-
+spatial and newly composed-source campaigns continue outside this bridge;
+their timings must not be pooled with it.
 
 ## Offline reproduction and retention review
 
 ```bash
 PYTHONPATH=python:. python benchmarks/results/fitted-range-cold-20261024/reproduce.py
+PYTHONPATH=python:. python benchmarks/results/fitted-range-cold-20261024/reproduce_integration.py
 ```
 
 The stdlib/NumPy reader authenticates each raw receipt, manifest delta, source
@@ -124,6 +153,10 @@ work trees and the explicit failed record. It reuses the retained
 source manifest. No GPU, external archive or native library is required.
 
 `endpoints.json.xz` stores full original endpoints and the moved reference.
+`integration.json.xz` separately stores all 66 current-parent calls and their
+full source manifest, build/cache/allocation/test receipts, runners and explicit
+reference-reuse contract. Its offline reader authenticates every member and
+rechecks the original dense/moved references; it does not trust stored pass flags.
 `provenance.json.xz` stores lossless source-manifest deltas, exact source patches,
 build/cache/allocation/test/sanitizer receipts, runners, the complete work trace
 and the separate larger oracle. These are the minimum retained ingredients for

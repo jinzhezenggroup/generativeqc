@@ -58,3 +58,24 @@ The [retained campaign](../../../benchmarks/results/fitted-range-cold-20261024/R
 authenticates complete raw endpoints, unchanged historical failure, manifests,
 binary/build/cache/allocation/test receipts and both production-equivalence
 bridges. Its offline reproducer independently checks all 50 complete calls.
+
+## Current-parent bridge
+
+Source `b69d38fb8bf6c6c369f63917ef8f6032708a1a15`, core SHA-256
+`2093ae0501d80e3b885897606b083ff5fde0ba4ae25762963664534bcb9326e2`, integrates
+the newer ordered/affine DIIS, XC and automatic range policies without changing
+this derivative-only capacity repair. All 66 new complete calls independently
+qualify. Water108 still completes under its unchanged cap at 673.204 / 54.855 s
+versus GPU4 492.145 / 171.437 s; the larger cold gap remains open. Water96 WB DF
+Standard is 317.736 / 39.039 s versus 385.779 / 132.806 s. These are single
+observations, not a replacement five-pair performance population.
+
+The retained bridge includes seven-method Direct/DF, Fast and displaced results,
+plus native DIIS/composition/factor checks and 172 passing GPU Python tests.
+Its semilocal screen accidentally retained spatial-order value 2 from a separate
+local candidate absent from this narrower PR: that setting skips spatial SCF
+admission here. Keep those receipts and controls visible and do not label them
+current-default timings. The separate supported-spatial screen and restoration
+of the DF-charge/spatial composition are ongoing performance work, not changes
+to this capacity claim. `reproduce_integration.py` rechecks the complete new
+population separately from the historical 50 calls.
