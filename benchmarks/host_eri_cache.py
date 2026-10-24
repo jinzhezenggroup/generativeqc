@@ -1,4 +1,4 @@
-"""Same-binary LR Direct/GPU/GPU+RAM complete E+F experiment.
+"""Same-binary full/LR Direct/GPU/GPU+RAM complete E+F experiment.
 
 Run each tier in a fresh process within the same finite Slurm allocation. The
 ordinary README driver owns geometry, fitted input identity, default scientific
@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tier", choices=("direct", "gpu", "host", "auto"))
+    parser.add_argument("--source-operator", choices=("long", "full"), default="long")
+    parser.add_argument(
+        "--gpu-mask", help="explicit common GPU mask for controlled partial-cache arms"
+    )
     parser.add_argument("--gpu-bytes", type=int, default=16 << 30)
     parser.add_argument("--host-bytes", type=int, default=32 << 30)
     parser.add_argument("--tile-bytes", type=int, default=256 << 20)
@@ -39,23 +43,28 @@ def main() -> None:
         parser.error("invalid cache or staging capacity")
     if args.tile_bytes % 8:
         parser.error("FP64 staging capacity must be divisible by eight")
+    prefix = (
+        "GENERATIVEQC_KS_RANGE_"
+        if args.source_operator == "long"
+        else "GENERATIVEQC_KS_"
+    )
     controls = {
-        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "0" if args.tier == "direct" else "1",
+        f"{prefix}RESIDENT_VALUES": "0" if args.tier == "direct" else "1",
         "GENERATIVEQC_KS_RESIDENT_MAX_BYTES": str(args.gpu_bytes),
-        "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES": str(
-            args.host_bytes if args.tier == "host" else 0
-        ),
-        "GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES": str(args.tile_bytes),
-        "GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK": args.host_mask,
+        f"{prefix}HOST_MAX_BYTES": str(args.host_bytes if args.tier == "host" else 0),
+        f"{prefix}HOST_TILE_BYTES": str(args.tile_bytes),
+        f"{prefix}HOST_BUCKET_MASK": args.host_mask,
         "GENERATIVEQC_CUDA_KS_CHUNK": "1",
     }
     # Freeze automatic GPU bucket fitting identically in B and C. An inherited
     # explicit mask would silently turn the experiment into a different policy.
     os.environ.pop("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK", None)
+    if args.gpu_mask is not None:
+        controls["GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"] = args.gpu_mask
     if args.tier == "auto":
         for name in (
-            "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
-            "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
+            f"{prefix}RESIDENT_VALUES",
+            f"{prefix}HOST_MAX_BYTES",
         ):
             controls.pop(name)
             os.environ.pop(name, None)
@@ -84,17 +93,24 @@ def main() -> None:
         record: dict[str, Any],
         retain: Callable[[dict[str, Any]], None],
     ) -> None:
-        if native_args.method != "wb97m-v" or native_args.mode != "df":
+        supported = (
+            native_args.method == "wb97m-v" and native_args.mode == "df"
+            if args.source_operator == "long"
+            else native_args.method in {"pbe0", "b3lyp"}
+            and native_args.mode == "direct"
+        )
+        if not supported:
             raise ValueError(
-                "this experiment qualifies only fitted WB97M-V with exact LR K"
+                "choose WB97M-V DF for LR, or exact PBE0/B3LYP for full ERIs"
             )
         record["host_eri_experiment"] = {
             "tier": args.tier,
+            "source_operator": args.source_operator,
             "source_identity_kind": args.source_kind,
             "controls": controls,
             "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "trace": os.environ.get("GENERATIVEQC_DF_PROGRESS_TRACE"),
-            "timing_qualification": "single screening observation; no default promotion",
+            "timing_qualification": "single complete observation; compare only source-matched populations",
         }
         return original(native_args, atoms, record, retain)
 

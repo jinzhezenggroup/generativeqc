@@ -568,22 +568,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
-    // Default host backing is restricted to the admitted cold strict LR
-    // source. Preserve GPU priority and leave most available job RAM unused.
-    // Explicit zero disables it; the complete numeric budget also charges VRAM.
-    const auto automatic_host = has_range_correction && source_cold_phase && !mixed_source &&
-                                        !std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES")
+    // Operator-specific ceilings preserve independent full/LR controls. The
+    // cold strict source keeps GPU priority and leaves most job RAM available.
+    // Full-range values serve both J(total) and K(spin), with unchanged weights.
+    const auto* host_limit =
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"
+                                         : "GENERATIVEQC_KS_HOST_MAX_BYTES");
+    const auto automatic_host = has_exchange && source_cold_phase && !mixed_source && !host_limit
                                     ? runtime::automatic_host_cache_bytes()
                                     : 0;
     const auto host = direct_jk_resident_bucket_policy(
-        std::getenv("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"),
-        std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"), automatic_host);
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"
+                                         : "GENERATIVEQC_KS_HOST_BUCKET_MASK"),
+        host_limit, automatic_host);
     const auto host_tile = direct_jk_resident_bucket_policy(
-        nullptr, std::getenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES"), 256ULL << 20);
-    if (has_range_correction &&
-        (!host.valid || !host_tile.valid ||
-         (host.ceiling && (!host_tile.ceiling || host_tile.ceiling > (512ULL << 20) ||
-                           host_tile.ceiling % sizeof(double)))))
+        nullptr,
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES"
+                                         : "GENERATIVEQC_KS_HOST_TILE_BYTES"),
+        256ULL << 20);
+    if (!host.valid || !host_tile.valid ||
+        (host.ceiling && (!host_tile.ceiling || host_tile.ceiling > (512ULL << 20) ||
+                          host_tile.ceiling % sizeof(double))))
       throw std::invalid_argument("invalid KS host ERI cache capacity, bucket mask or tile size");
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
@@ -644,19 +649,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
-    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
-                                options.reference_memory_budget_bytes
-                                    ? options.reference_memory_budget_bytes
-                                    : std::numeric_limits<std::size_t>::max(),
-                                selection,
-                                has_range_correction ? "cuda_ks_range_resident_values_prepare"
-                                                     : "cuda_ks_resident_values_prepare",
-                                source_cold_phase, generic_fock, phase_source_screening,
-                                buckets.ceiling, false, auto_policy, buckets.mask, spins,
-                                (automatic_range || fitted_range_source) &&
-                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
-                                has_range_correction && !mixed_source ? host.ceiling : 0, host.mask,
-                                host_tile.ceiling),
+    check(phase_source->prepare(
+              device, {system}, options.max_iterations, direct_nbf, required,
+              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
+                                                    : std::numeric_limits<std::size_t>::max(),
+              selection,
+              has_range_correction ? "cuda_ks_range_resident_values_prepare"
+                                   : "cuda_ks_resident_values_prepare",
+              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
+              auto_policy, buckets.mask, spins,
+              (automatic_range || fitted_range_source ||
+               (has_exchange && host.ceiling && !mixed_source)) &&
+                  !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+              has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));

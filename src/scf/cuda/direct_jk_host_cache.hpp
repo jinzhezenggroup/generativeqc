@@ -8,7 +8,7 @@
 
 namespace generativeqc::scf {
 
-/** Experimental geometry-bound FP64 backing for omitted LR buckets.
+/** Experimental geometry-bound FP64 backing for omitted full/LR buckets.
  * Pageable values never enter a device kernel. Two pinned/device tile pairs
  * overlap sequential H2D transfers with the existing compensated contraction.
  * ready protects pinned reuse; consumed protects device reuse. The provider
