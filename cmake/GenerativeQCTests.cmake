@@ -81,7 +81,8 @@ function(generativeqc_add_ordered_gram_host_admission_test)
                              "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(generativeqc_ordered_gram_host_admission_tests PRIVATE cxx_std_20)
   target_link_options(generativeqc_ordered_gram_host_admission_tests PRIVATE
-                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel")
+                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel"
+                      "LINKER:--export-dynamic-symbol=cudaPeekAtLastError")
   add_test(NAME generativeqc_ordered_gram_host_admission_tests
            COMMAND "${Python3_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/ordered_gram_host_admission.py"
