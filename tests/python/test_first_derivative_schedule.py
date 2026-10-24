@@ -1,7 +1,7 @@
 """Finite compiler schedules and independently checked permutation semantics."""
 
 import typing
-from itertools import product
+from itertools import permutations, product
 
 import numpy as np
 import pytest
@@ -53,12 +53,26 @@ def test_inventory_matches_exhaustive_ordered_consumers(
     labels when reducing center symmetries during first-use planning.
     """
     expected = {("nuclear", ())}
-    for operator in schedule.COMPONENT_OPERATORS:
+    for operator in ("overlap", "kinetic", "nuclear_attraction", "four_center_eri"):
         rank = 4 if operator == "four_center_eri" else 2
-        expected.update(
-            schedule.derivative_binding(operator, labels).request
-            for labels in product(domain, repeat=rank)
-        )
+        for components in product(domain, repeat=rank):
+            orbit = []
+            for axes in permutations("xyz"):
+                mapping = dict(zip("xyz", axes, strict=True))
+                labels = tuple(
+                    "".join(sorted(mapping[axis] for axis in label))
+                    for label in components
+                )
+                if rank == 4:
+                    first = tuple(sorted(labels[:2]))
+                    second = tuple(sorted(labels[2:]))
+                    orbit.append(tuple(sorted((first, second))))
+                else:
+                    orbit.append(tuple(sorted(labels)))
+            canonical = min(orbit)
+            if rank == 4:
+                canonical = canonical[0] + canonical[1]
+            expected.add((operator, canonical))
     assert schedule.derivative_requests(domain) == tuple(sorted(expected))
 
 
