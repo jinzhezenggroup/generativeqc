@@ -181,6 +181,13 @@ metric normalization, the augmented pivoted solve, dependent-history retirement,
 and fallback semantics remain native solver policy. The specialization preserves
 the historical FP64 reduction order.
 
+Normalized KS DIIS uses partial-pivot forward elimination and back substitution,
+then validates the affine coefficient constraint `sum(c) = 1` with the shared
+CPU/CUDA policy in `solver/diis_affine.hpp`. Nonfinite or
+inaccurate affine solves retire the oldest history and retry; at two histories,
+failure retains the current Fock. This acceptance check applies to every
+normalized reduction route and leaves SCF convergence tolerances unchanged.
+
 Ordinary CUDA HF keeps its serial DIIS default. CUDA KS automatically admits
 the separately charged physical-slot Gram cache for at least 512 AOs and a
 history capacity of at least two, using the ordered reducer. Smaller KS owners
