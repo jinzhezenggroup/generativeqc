@@ -61,3 +61,11 @@ controlled experiments; unset full-range disk retains Direct. The faster RAM
 tier and the natural incremental/generated schedule are unaffected. This is an
 empirical method boundary, not a universal disk-bandwidth or per-bucket cost
 model. Broadening the automatic disk tier needs new complete endpoint evidence.
+
+The [retained LR cohort](../../../../benchmarks/results/disk-eri-20261025/README.md)
+uses identical 108-atom source/binary and GPU selection. Complete cold E+F is
+681.193 s with Direct for omitted values, 363.250 s with RAM, 493.574 s with
+NVMe, and 462.319 s with a 2 GiB RAM ceiling plus NVMe. Disk profiles verify
+physical reads alongside logical work; gains are not attributed to page cache.
+Each arm has 28 SCF iterations/29 Focks. The single observations support this
+LR fallback hierarchy, not a general per-bucket latency model.

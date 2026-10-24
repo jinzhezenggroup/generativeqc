@@ -2172,7 +2172,8 @@
         ".agents/notes/implemented/performance/2026-10-25-temporary-eri-spill.md",
         "tests/python/test_temporary_cache_file.py",
         "tests/python/test_range_resident_values_cuda.py",
-        "tests/python/test_full_host_ks_cuda.py"
+        "tests/python/test_full_host_ks_cuda.py",
+        "benchmarks/results/disk-eri-20261025/README.md"
       ]
     }
   ]

@@ -239,6 +239,11 @@
       "owner": "VV10 same-binary reuse ablation (#2677)",
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
       "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
+    },
+    "disk-eri-20261025": {
+      "owner": "#2766 bounded temporary-file ERI qualification",
+      "reason": "Compact original complete E+F receipts preserve profitable LR and slower full-range disk results, physical versus logical I/O, source/build inventories, independent gates, GPU/sanitizer and final default-policy validation, plus setup and missing-consumption failures. Large binary and raw journals remain untracked.",
+      "review_document": "benchmarks/results/disk-eri-20261025/README.md"
     }
   },
   "files": [
@@ -833,6 +838,14 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
+    },
+    {
+      "path": "benchmarks/results/disk-eri-20261025/measurements.json.xz",
+      "family": "disk-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "temporary-spill-endpoints-physical-io-default-policy-and-negative-control",
+      "bytes": 240916,
+      "sha256": "568478688c01fab26526a6dd6b5dffbabad0bdd04a687754b5c12a7fae55cdd1"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
