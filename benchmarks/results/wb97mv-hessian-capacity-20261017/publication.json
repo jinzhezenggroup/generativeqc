@@ -1,0 +1,52 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Two formerly rejected native capacity cases complete unchanged resource gates. Tetramer full GPU comparison and dimer independent CPU gradient full matrix pass unchanged numerical gates, as do four complete native fallback pairs. The stock def2-SVP GPU comparator fails, and the larger-system performance target remains failed; neither is promoted.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6390,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "0fa54fd7cc3bfeb7a312e9a3d8628889cee06f57bd6759544fd57ca4cf6f79d8"
+    },
+    {
+      "bytes": 48360,
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "sha256": "25fa3b8bd9f37ee6e03655b1e731290a56dcf41bf580844e991ae7b36790231e"
+    },
+    {
+      "bytes": 4784,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "032c78f2f307c8364e1aa452f9cecae960d764cb4a3aa80f240280530fd0c8c0"
+    },
+    {
+      "bytes": 3123,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "c7cc838c9eb9ece5a9289cc52e5ff68cc96a98e684ed8779f4ef301af9b71a4f"
+    },
+    {
+      "bytes": 106368,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "25a90d81d280ea655f9b93d8453def6a039126c94d4b01c1eb405aad2399533d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ],
+    "notes": "Finite Slurm requests and verified compiler cache; exact recorded CLI/library hashes bind native source 618f7e3. Archive fixture driver 9abfe3b independently of cwd/HEAD, including fresh-worker tetramer support. Failed comparators remain failed; oracle staging paths are documented in README."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "618f7e3ddf616f7960e9e3fc9df6aa31fda26107"
+  }
+}

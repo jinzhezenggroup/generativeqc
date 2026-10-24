@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "data": {
+    "name": "h100-paper-smoke-20261024-9dcc-r1",
+    "status": "QUEUING",
+    "project": "\u539f\u5b50\u7ea7\u5316\u5b66\u53cd\u5e94\u57fa\u5ea7\u6a21\u578b2.0",
+    "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+    "resource": {
+      "cpu": 20,
+      "memory_gib": 200,
+      "gpu": 1,
+      "nodes": 1,
+      "shared_memory_gib": 32,
+      "gpu_type": "NVIDIA H100 (80GB)"
+    },
+    "excluded_nodes": [
+      "qb-prod-gpu095"
+    ],
+    "priority": 20,
+    "priority_level": "NORMAL",
+    "created_at": "1792830662000"
+  }
+}

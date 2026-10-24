@@ -3,6 +3,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "cc/reference_input.hpp"
 #include "dft/ks_final_state.hpp"
@@ -512,6 +513,30 @@ void identity_rejection() {
   }
 }
 
+void preflight_failure_diagnostics() {
+  const std::vector<std::pair<std::function<void(Fixture&)>, const char*>> changes{
+      {[](auto& a) { ++a.physical.identity.model.owner; }, "physical identity mismatch"},
+      {[](auto& a) { ++a.candidate.identity.model.owner; }, "orbital identity mismatch"},
+      {[](auto& a) { a.physical.physical = false; }, "physical state not established"},
+      {[](auto& a) { a.physical.density.clear(); }, "density spin shape mismatch"},
+      {[](auto& a) { a.physical.fock.clear(); }, "Fock spin shape mismatch"},
+      {[](auto& a) { a.candidate.spins.clear(); }, "orbital spin shape mismatch"},
+      {[](auto& a) { ++a.candidate.fock_density_generation; }, "Fock-density generation mismatch"}};
+  for (const auto& [change, expected] : changes) {
+    Fixture a;
+    change(a);
+    VerifiedKsFinalState output;
+    output.density = {{123.0}};
+    std::string detail;
+    require(!validate_ks_final_state(a.id, a.s, a.h, a.physical, a.candidate, a.limits, false,
+                                     output, detail),
+            "invalid preflight evidence passed");
+    require(detail.find(expected) != std::string::npos,
+            "KS rejection did not identify the failed preflight predicate");
+    require(output.density.empty(), "rejected KS evidence retained previous output");
+  }
+}
+
 void model_and_state_rejection() {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const std::vector<std::function<void(Fixture&)>> changes{
@@ -563,6 +588,7 @@ int main() {
     cuda_split_hybrid_identity();
 #endif
     identity_rejection();
+    preflight_failure_diagnostics();
     model_and_state_rejection();
     std::cout << "KS final-state contract tests passed\n";
     return 0;

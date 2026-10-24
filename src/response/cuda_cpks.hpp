@@ -59,6 +59,46 @@ struct CudaCpksResult {
   bool converged() const noexcept { return status == CudaCpksStatus::converged; }
 };
 
+/** Optional bounded representation of one immutable, linear CPKS operator.
+ * The caller owns the device storage and keeps the exact reference/provider
+ * alive and unchanged. Reset explicitly before changing either source. Columns
+ * are built on CUDA from physical unit rotations, never from fitted residuals.
+ * Every cached solve still checks its true residual with the physical provider.
+ * This noncopyable lease is for repeated RHSs, not a detached numerical oracle. */
+class CudaCpksOperatorCache {
+ public:
+  CudaCpksOperatorCache() = default;
+  CudaCpksOperatorCache(const CudaCpksOperatorCache&) = delete;
+  CudaCpksOperatorCache& operator=(const CudaCpksOperatorCache&) = delete;
+  void reset(double* values, std::size_t bytes) noexcept {
+    values_ = values;
+    bytes_ = bytes;
+    ready_ = false;
+    columns_ = actions_ = checks_ = 0;
+  }
+  std::size_t columns() const noexcept { return columns_; }
+  std::size_t actions() const noexcept { return actions_; }
+  std::size_t physical_checks() const noexcept { return checks_; }
+
+ private:
+  double* values_{};
+  std::size_t bytes_{}, dimension_{}, columns_{}, actions_{}, checks_{};
+  CudaCpksShape shape_{};
+  CudaCpksReference reference_{};
+  CudaCpksInducedFock provider_{};
+  void* context_{};
+  bool ready_{};
+  friend cudaError_t solve_cuda_cpks(const CudaCpksShape&, const CudaCpksOptions&,
+                                     const CudaCpksReference&, const double*, const double*,
+                                     CudaCpksInducedFock, void*, double*, double*, void*,
+                                     std::size_t, cudaStream_t, CudaCpksResult&,
+                                     CudaCpksOperatorCache*) noexcept;
+};
+
+/** Host-only storage requirement; zero denotes an empty rotation space. */
+cudaError_t cuda_cpks_operator_workspace(const CudaCpksShape& shape, const CudaCpksOptions& options,
+                                         std::size_t& bytes) noexcept;
+
 /** Pure host sizing/admission, with overflow and complete workspace budget gates. */
 cudaError_t cuda_cpks_workspace(const CudaCpksShape& shape, const CudaCpksOptions& options,
                                 std::size_t& bytes) noexcept;
@@ -102,6 +142,7 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
                             void* context, double* density_direction,
                             double* weighted_density_direction, void* workspace,
                             std::size_t workspace_bytes, cudaStream_t stream,
-                            CudaCpksResult& result) noexcept;
+                            CudaCpksResult& result,
+                            CudaCpksOperatorCache* operator_cache = nullptr) noexcept;
 
 }  // namespace generativeqc::response

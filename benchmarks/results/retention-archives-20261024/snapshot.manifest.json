@@ -1,0 +1,80 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "f5d8df5a0d2c5ba4602e8aaaa5eefe94147a28fc",
+  "history_rewritten": false,
+  "scope": "Seven historical raw benchmark ZIPs not directly consumed as current scientific test fixtures or publication members. Member manifests and readme summaries remain in the working tree. Original payloads remain unchanged in existing Git history.",
+  "file_count": 7,
+  "total_bytes": 1090500,
+  "files": [
+    {
+      "path": "benchmarks/results/ecp-consumers-171/raw-evidence.zip",
+      "bytes": 485607,
+      "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c",
+      "git_blob_sha1": "ce3022140f32d69f53e3d607d57c3084ff6d24ce",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/ecp-consumers-171/README.md",
+      "member_manifest": "benchmarks/results/ecp-consumers-171/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/issue283-host-response/raw-evidence.zip",
+      "bytes": 143684,
+      "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9",
+      "git_blob_sha1": "3f4dc9cfc7f9a309ed7f9c946b1c4f1e53134e0a",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/issue283-host-response/README.md",
+      "member_manifest": "benchmarks/results/issue283-host-response/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip",
+      "bytes": 142575,
+      "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960",
+      "git_blob_sha1": "be3d6538d47dfbdf3dd26240b4b4ce96f48f9388",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/ecp-projector-171/review-qualification/README.md",
+      "member_manifest": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/issue174-slice-e/raw-evidence.zip",
+      "bytes": 99835,
+      "sha256": "5965ee285b48bfd618bc94cc0c170d2ce069145b538c5e0d6b7a7a3ee318f5fc",
+      "git_blob_sha1": "acf2fde2527f9657d0ab288c5c076c2acb48a695",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/issue174-slice-e/README.md",
+      "member_manifest": "benchmarks/results/issue174-slice-e/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/rccsd-149-bc-review/raw-evidence.zip",
+      "bytes": 81918,
+      "sha256": "04a091ebadea2fbc318a6953eb6567c5334a951327e9760124e616497e2ec38e",
+      "git_blob_sha1": "6d99b1d052bcbdf40b096c9de39a7751a0e0ff1f",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/rccsd-149-bc-review/README.md",
+      "member_manifest": "benchmarks/results/rccsd-149-bc-review/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/issue308-host-baseline/raw-evidence.zip",
+      "bytes": 78672,
+      "sha256": "d0514da2ec67475d3086ae57cf2f49540e80056075d070de8e768339822b7f28",
+      "git_blob_sha1": "6c8e14aeaf5fd08ada3424c566891ec4642fb3c3",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/issue308-host-baseline/README.md",
+      "member_manifest": "benchmarks/results/issue308-host-baseline/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    },
+    {
+      "path": "benchmarks/results/ks-final-state-review-162/raw-evidence.zip",
+      "bytes": 58209,
+      "sha256": "39fc6ac7a36335f7e488fb51227e88a6b81efe37d4bd56fdcc0a0cf0a0611d6d",
+      "git_blob_sha1": "a96465c830c1f95b099c91c6b827b076918ed366",
+      "checkout": "git-history",
+      "summary": "benchmarks/results/ks-final-state-review-162/README.md",
+      "member_manifest": "benchmarks/results/ks-final-state-review-162/raw-evidence.manifest.json",
+      "consumer_review": "Reviewed as a historical archive rather than a directly consumed scientific fixture or active publication member."
+    }
+  ]
+}

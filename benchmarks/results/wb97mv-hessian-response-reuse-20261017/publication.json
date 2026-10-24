@@ -1,0 +1,52 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Covered independent matrices, strict prior-native parity, independent component/coupled oracles and full bounded fallback parity pass unchanged numerical gates. Observed preparation+Hessian wins are scoped to the measured diagnostic ladder; no broad formal performance/scaling promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 8735,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "8656f5fe1bc1111bdc2293fe8ccd4ae8e0c667a7b7d166d239b0f871d39fd045"
+    },
+    {
+      "bytes": 121564,
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "sha256": "2df9e939e931a45d0b999a41466f02bd956af255374b5c96f04faecf889ffcfe"
+    },
+    {
+      "bytes": 8488,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "56807d6dc5bc4e94a7f4e3600e6b82f696fe5417f847ee1563b8631ddeb0cb06"
+    },
+    {
+      "bytes": 1573,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "a4febed443c4ba58bb0f9ddb1f994a2ca5bf6ef368e58744a6da69d85fb692c0"
+    },
+    {
+      "bytes": 201812,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "222b07389f63eccb2808c0bb5f95dce97ea482ca1c1c8ae90fd9a53c3189659e"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ],
+    "notes": "Finite single-GPU Slurm required; checks measured binaries and clean archived source. Benchmark controller/reference are Python, native C++ child is Python/JIT-free. See README and retained qualification scripts."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "51a87a04fdb8ef8e17bd8f6b848f2fcdc77f60af"
+  }
+}

@@ -93,3 +93,22 @@ def test_format_audit_counts_stored_and_expanded_bytes_separately() -> None:
     assert report["totals"]["compact_bytes"] == 3 * len(b'{"samples":[1,2,3]}')
     damaged = audit_json({prefix + "truncated.json.xz": lzma.compress(plain)[:-5]})
     assert damaged["errors"] and not damaged["totals"]
+
+
+@pytest.mark.parametrize("damage", ["header", "crc"])
+def test_gzip_error_preserves_valid_file_audit(damage: str) -> None:
+    plain = b'{ "energy": -1.0 }\n'
+    damaged = bytearray(gzip.compress(plain, mtime=0))
+    if damage == "header":
+        damaged[0] ^= 1
+    else:
+        damaged[-8] ^= 1
+    prefix = "benchmarks/results/example/"
+    good = {prefix + "good.json": plain}
+    expected = audit_json(good)
+    result = audit_json({prefix + "bad.json.gz": bytes(damaged), **good})
+    assert result["totals"] == expected["totals"]
+    assert result["formats"] == expected["formats"]
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["path"] == prefix + "bad.json.gz"
+    assert result["errors"][0]["error"]

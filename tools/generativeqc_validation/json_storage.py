@@ -9,6 +9,7 @@ from __future__ import annotations
 import gzip
 import lzma
 import re
+import zlib
 from collections import Counter
 
 from tools.generativeqc_validation.storage_json import decode_storage_json
@@ -58,7 +59,7 @@ def audit_json(blobs: dict[str, bytes]) -> dict:
                 xz_original_bytes=len(lzma.compress(plain, preset=6)),
                 xz_compact_bytes=len(lzma.compress(compact, preset=6)),
             )
-        except (ValueError, OSError, EOFError, lzma.LZMAError) as error:
+        except (ValueError, OSError, EOFError, lzma.LZMAError, zlib.error) as error:
             errors.append({"path": path, "error": str(error)})
             continue
         totals.update(row)

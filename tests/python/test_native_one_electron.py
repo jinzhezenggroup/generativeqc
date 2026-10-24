@@ -46,7 +46,7 @@ def _fixture(spherical: bool = False, removal: bool = False) -> dict:
 
 
 def _write_fixture(
-    fixture: dict, path: Path, *, tile: int = 64, reject: int = 0
+    fixture: dict, path: Path, *, tile: int = 64, reject: int = 0, schedule: int = 0
 ) -> None:
     with path.open("wb") as output:
         np.array(
@@ -56,6 +56,7 @@ def _write_fixture(
                 fixture["spherical"],
                 tile,
                 reject,
+                schedule,
             ],
             dtype=np.uint64,
         ).tofile(output)
@@ -69,13 +70,15 @@ def _write_fixture(
         np.asarray(fixture["weights"], dtype=np.float64).tofile(output)
 
 
-def _native(fixture: dict, tmp_path: Path, *, tile: int = 64, reject: int = 0) -> tuple:
+def _native(
+    fixture: dict, tmp_path: Path, *, tile: int = 64, reject: int = 0, schedule: int = 0
+) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_ONE_ELECTRON_PROBE")
     if not executable:
         pytest.skip("requires a native one-electron probe and allocated Slurm GPU")
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
     source, result = tmp_path / "source.bin", tmp_path / "result.bin"
-    _write_fixture(fixture, source, tile=tile, reject=reject)
+    _write_fixture(fixture, source, tile=tile, reject=reject, schedule=schedule)
     process = subprocess.run(
         [executable, str(source), str(result)],
         capture_output=True,
@@ -231,6 +234,24 @@ def test_native_radial_tiles_and_rigid_translation(
     np.testing.assert_allclose(translated[:2], matrices[:2], atol=3e-12, rtol=3e-12)
     np.testing.assert_allclose(translated[2:], 0, atol=3e-12, rtol=0)
     np.testing.assert_allclose(response[1], 0, atol=3e-12, rtol=0)
+
+
+@pytest.mark.parametrize("schedule", [1, 2, 3, 4])
+@pytest.mark.parametrize("spherical", [False, True])
+def test_parallel_ordered_one_electron_and_bounded_fallback(
+    schedule: int, spherical: bool, tmp_path: Path
+) -> None:
+    """Parallel primitive chains retain physical-center and radial fold order."""
+    fixture = _fixture(spherical, removal=True)
+    (expected_matrices, expected_vectors), parallel = _native(fixture, tmp_path)
+    (matrices, vectors), selected = _native(fixture, tmp_path, schedule=schedule)
+    np.testing.assert_allclose(matrices, expected_matrices, atol=3e-12, rtol=3e-12)
+    np.testing.assert_allclose(vectors, expected_vectors, atol=3e-12, rtol=3e-12)
+    assert parallel["parallel_tasks"] > 0
+    assert parallel["parallel_actions"] > 0
+    assert bool(selected["parallel_tasks"]) == (schedule == 4)
+    assert selected["components"] == parallel["components"]
+    assert selected["projections"] == parallel["projections"]
 
 
 @pytest.mark.parametrize("reject", range(1, 7))

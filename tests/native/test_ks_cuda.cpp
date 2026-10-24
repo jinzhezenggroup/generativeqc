@@ -679,6 +679,8 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
             detail);
   }
 
+  require(plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "successful CUDA KS replay did not publish its observed value work");
   ks_cuda_fail_next_runtime_for_test_v1();
   bool failed_begin = false;
   try {
@@ -689,11 +691,17 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
   require(failed_begin && plan.failed() && plan.has_warm_start() &&
               plan.warm_density() == frozen_density,
           "failed begin damaged the independent last-good warm representation");
+  require(!plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "failed CUDA KS begin retained a previous solve's value census");
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "failed begin kept a final-state token eligible");
   const auto recovered = plan.run();
   require(recovered.converged && std::abs(recovered.energy - reference.energy) < 1e-10,
           "failed begin prevented exact warm-seed recovery");
+  require(recovered.dft_diagnostic.coulomb_exchange_work.complete &&
+              recovered.dft_diagnostic.coulomb_exchange_work.coulomb_applications > 0 &&
+              recovered.dft_diagnostic.coulomb_exchange_work.exchange_applications > 0,
+          "explicit recovery did not own a fresh CUDA value-provider census");
 
   // An explicit non-idempotent density is not identified by the old frame,
   // even on this same owner. Frozen cache updates must leave the old seed live.
@@ -2658,111 +2666,164 @@ void minao_gpu_case() {
 int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+  std::string active_control = "device preflight";
+  const auto run_control = [&](const std::string& name, const auto& run) {
+    active_control = name;
+    run();
+  };
   try {
     if (argc == 2 && std::string(argv[1]) == "--minao") {
-      minao_gpu_case();
+      run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--incremental") {
-      run_exact_exchange_case(true);
-      run_exact_exchange_case(false);
+      run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
+      run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
       std::cout << "Native CUDA incremental KS physical-state and fresh-solve gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
-      ks_density_provider_cases();
+      run_control("ks_density_provider_cases()", [&] { ks_density_provider_cases(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
-      ks_cold_factor_cases();
+      run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });
       std::cout << "Native CUDA DF cold-factor proof, fallback and physical-state gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
       for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
-        run_density_fitted_exchange_case(true, true, selection);
-        run_density_fitted_exchange_case(false, true, selection);
+        run_control(std::string("run_density_fitted_exchange_case(true, true, selection)") +
+                        " [selection=" + std::string(selection ? selection : "<default>") + "]",
+                    [&] { run_density_fitted_exchange_case(true, true, selection); });
+        run_control(std::string("run_density_fitted_exchange_case(false, true, selection)") +
+                        " [selection=" + std::string(selection ? selection : "<default>") + "]",
+                    [&] { run_density_fitted_exchange_case(false, true, selection); });
       }
       std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-wb-composition") {
       for (const bool restricted : {true, false}) {
-        run_wb97mv_nonlocal_composition_case(restricted, true);
+        run_control(std::string("run_wb97mv_nonlocal_composition_case(restricted, true)") +
+                        " [restricted=" + std::to_string(restricted) + "]",
+                    [&] { run_wb97mv_nonlocal_composition_case(restricted, true); });
       }
       std::cout << "Native CUDA fitted WB97M-V composition independent CPU gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--fast-anchor-delta") {
-      run_fast_anchor_delta_case();
+      run_control("run_fast_anchor_delta_case()", [&] { run_fast_anchor_delta_case(); });
       std::cout
           << "Native CUDA Fast anchor default, independent oracle and lifetime gates passed\n";
       return 0;
     }
-    minao_gpu_case();
-    ks_density_provider_cases();
-    prepared_cuda_fock_seam();
-    registered_functional_code_seam();
+    run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
+    run_control("ks_density_provider_cases()", [&] { ks_density_provider_cases(); });
+    run_control("prepared_cuda_fock_seam()", [&] { prepared_cuda_fock_seam(); });
+    run_control("registered_functional_code_seam()", [&] { registered_functional_code_seam(); });
     for (const auto* ao_selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
-      precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection);
-      precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      run_control(
+          std::string(
+              "precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection); });
+      run_control(
+          std::string(
+              "precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection); });
       // UKS avoids optional strict-RKS chunks, retaining a complete FP64 census.
-      precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection);
+      run_control(
+          std::string(
+              "precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection); });
     }
-    pbe0_auto_local_ao_composition_case();
+    run_control("pbe0_auto_local_ao_composition_case()",
+                [&] { pbe0_auto_local_ao_composition_case(); });
     if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
+      active_control = "enable KS chunk environment";
       require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
+      active_control = "enable KS replay environment";
       require(::setenv("GENERATIVEQC_CUDA_KS_REPLAY", "1", 1) == 0,
               "could not enable CUDA RKS replay qualification");
       for (bool pbe : {false, true}) {
-        compare_rks_chunk_history(pbe);
-        run_case(2, true, pbe);
+        run_control(
+            std::string("compare_rks_chunk_history(pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+            [&] { compare_rks_chunk_history(pbe); });
+        run_control(std::string("run_case(2, true, pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                    [&] { run_case(2, true, pbe); });
       }
-      compare_pbe0_chunk_history();
-      compare_rsh_chunk_history();
-      compare_wb97mv_nonlocal_chunk_history();
+      run_control("compare_pbe0_chunk_history()", [&] { compare_pbe0_chunk_history(); });
+      run_control("compare_rsh_chunk_history()", [&] { compare_rsh_chunk_history(); });
+      run_control("compare_wb97mv_nonlocal_chunk_history()",
+                  [&] { compare_wb97mv_nonlocal_chunk_history(); });
+      active_control = "restore KS replay environment";
       require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
+      active_control = "restore KS chunk environment";
       require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
               "could not restore CUDA KS synchronization baseline");
     }
-    public_wb97mv_cuda_case(false);
-    public_wb97mv_cuda_case(true);
-    rejected_api_requests_revoke_tokens();
-    run_exact_exchange_case(true);
-    run_exact_exchange_case(false);
-    ks_cold_factor_cases();
-    run_density_fitted_exchange_case(true);
-    run_density_fitted_exchange_case(true, false);
-    run_density_fitted_exchange_case(false);
-    run_density_fitted_exchange_case(true, true, "1");
-    run_density_fitted_exchange_case(false, true, "1");
-    run_density_fitted_exchange_case(true, true, nullptr);
-    run_density_fitted_exchange_case(false, true, nullptr);
-    run_range_exchange_case(true);
-    run_range_exchange_case(false);
-    run_density_fitted_range_exchange_case(true);
-    run_density_fitted_range_exchange_case(false);
-    run_wb97mv_semilocal_rsh_case(true);
-    run_wb97mv_semilocal_rsh_case(false);
-    run_wb97mv_nonlocal_composition_case(true);
-    run_wb97mv_nonlocal_composition_case(false);
-    run_wb97mv_nonlocal_composition_case(true, true);
-    run_wb97mv_nonlocal_composition_case(false, true);
-    run_fast_anchor_delta_case();
+    run_control("public_wb97mv_cuda_case(false)", [&] { public_wb97mv_cuda_case(false); });
+    run_control("public_wb97mv_cuda_case(true)", [&] { public_wb97mv_cuda_case(true); });
+    run_control("rejected_api_requests_revoke_tokens()",
+                [&] { rejected_api_requests_revoke_tokens(); });
+    run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
+    run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
+    run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });
+    run_control("run_density_fitted_exchange_case(true)",
+                [&] { run_density_fitted_exchange_case(true); });
+    run_control("run_density_fitted_exchange_case(true, false)",
+                [&] { run_density_fitted_exchange_case(true, false); });
+    run_control("run_density_fitted_exchange_case(false)",
+                [&] { run_density_fitted_exchange_case(false); });
+    run_control("run_density_fitted_exchange_case(true, true, \"1\")",
+                [&] { run_density_fitted_exchange_case(true, true, "1"); });
+    run_control("run_density_fitted_exchange_case(false, true, \"1\")",
+                [&] { run_density_fitted_exchange_case(false, true, "1"); });
+    run_control("run_density_fitted_exchange_case(true, true, nullptr)",
+                [&] { run_density_fitted_exchange_case(true, true, nullptr); });
+    run_control("run_density_fitted_exchange_case(false, true, nullptr)",
+                [&] { run_density_fitted_exchange_case(false, true, nullptr); });
+    run_control("run_range_exchange_case(true)", [&] { run_range_exchange_case(true); });
+    run_control("run_range_exchange_case(false)", [&] { run_range_exchange_case(false); });
+    run_control("run_density_fitted_range_exchange_case(true)",
+                [&] { run_density_fitted_range_exchange_case(true); });
+    run_control("run_density_fitted_range_exchange_case(false)",
+                [&] { run_density_fitted_range_exchange_case(false); });
+    run_control("run_wb97mv_semilocal_rsh_case(true)",
+                [&] { run_wb97mv_semilocal_rsh_case(true); });
+    run_control("run_wb97mv_semilocal_rsh_case(false)",
+                [&] { run_wb97mv_semilocal_rsh_case(false); });
+    run_control("run_wb97mv_nonlocal_composition_case(true)",
+                [&] { run_wb97mv_nonlocal_composition_case(true); });
+    run_control("run_wb97mv_nonlocal_composition_case(false)",
+                [&] { run_wb97mv_nonlocal_composition_case(false); });
+    run_control("run_wb97mv_nonlocal_composition_case(true, true)",
+                [&] { run_wb97mv_nonlocal_composition_case(true, true); });
+    run_control("run_wb97mv_nonlocal_composition_case(false, true)",
+                [&] { run_wb97mv_nonlocal_composition_case(false, true); });
+    run_control("run_fast_anchor_delta_case()", [&] { run_fast_anchor_delta_case(); });
     for (bool pbe : {false, true}) {
-      run_case(2, true, pbe);
-      run_hydroxyl(pbe);
-      for (unsigned atoms : {1U, 2U, 3U}) run_case(atoms, false, pbe);
+      run_control(std::string("run_case(2, true, pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                  [&] { run_case(2, true, pbe); });
+      run_control(std::string("run_hydroxyl(pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                  [&] { run_hydroxyl(pbe); });
+      for (unsigned atoms : {1U, 2U, 3U})
+        run_control(std::string("run_case(atoms, false, pbe)") + " [pbe=" + std::to_string(pbe) +
+                        "]" + " [atoms=" + std::to_string(atoms) + "]",
+                    [&] { run_case(atoms, false, pbe); });
     }
-    run_case(2, true, 2U);
-    run_case(2, false, 2U);
+    run_control("run_case(2, true, 2U)", [&] { run_case(2, true, 2U); });
+    run_control("run_case(2, false, 2U)", [&] { run_case(2, false, 2U); });
     std::cout << "Native CUDA LDA/PBE/r2SCAN KS SCF, physical-state, warm/failure/resource gates "
                  "passed\n";
     return 0;
   } catch (const std::exception& error) {
-    std::cerr << error.what() << '\n';
+    std::cerr << "KS control " << active_control << ": " << error.what() << '\n';
     return 1;
   }
 }

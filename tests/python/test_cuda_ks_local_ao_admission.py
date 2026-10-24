@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,12 +29,10 @@ def _definition(source: str, signature: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def admission_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: object
+) -> Path:
     """Compile real point capabilities, XC layout/resource logic and SCF guard."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("requires c++ and ccache")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("    const char* ao_selection = std::getenv(")
     end = source.index("    if (host_unfused &&", start)
@@ -121,7 +117,7 @@ namespace generated = generativeqc::dft::generated;
 namespace cuda_xc_detail {
 using CudaXcPointLauncher = void (*)();
 using CudaXcPointBatchLauncher = void (*)();
-template <unsigned F, bool R> void launch_points() {}
+template <unsigned F, bool R, bool Specialized = false> void launch_points() {}
 template <unsigned Mask> void launch_split_hybrid_points() {}
 void launch_mixed_pbe_points() {}
 void launch_mixed_pbe_point_batches() {}
@@ -189,10 +185,10 @@ int main(int argc, char** argv) {
 }
 """
     )
-    built = subprocess.run(
-        [
-            cache,
-            compiler,
+    native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=[
             "-std=c++20",
             "-O2",
             "-Wall",
@@ -206,17 +202,11 @@ int main(int argc, char** argv) {
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(unit),
-            "-o",
-            str(executable),
         ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
+        link_args=["-fsanitize=undefined", "-fno-sanitize-recover=undefined"],
+        compile_timeout=60,
+        link_timeout=60,
     )
-    assert built.returncode == 0, built.stderr
     return executable
 
 

@@ -427,7 +427,7 @@ def _compiler_action(fixture: dict) -> tuple:
     return energy, potential, np.array(fock), contraction
 
 
-def _native_action(fixture: dict, tile: int = 3) -> dict:
+def _native_action(fixture: dict, tile: int = 3, *, mode: str = "nuclear") -> dict:
     path = os.environ.get("GENERATIVEQC_CUDA_WB97MV_GRID_PROBE")
     if not path:
         pytest.skip("requires optional native CUDA WB97M-V grid probe")
@@ -454,7 +454,7 @@ def _native_action(fixture: dict, tile: int = 3) -> dict:
     )
     header = f"{len(fixture['centers'])} {len(fixture['primitives'])} {fixture['nao']} {len(fixture['points'])} {fixture['spins']} {tile} 16777216\n"
     process = subprocess.run(
-        [path, "nuclear"],
+        [path, mode],
         input=header + " ".join(map(repr, values.tolist())),
         text=True,
         capture_output=True,
@@ -473,6 +473,19 @@ def _native_action(fixture: dict, tile: int = 3) -> dict:
     np.testing.assert_array_equal(result["retained_mixed"], result["mixed"])
     assert result["nuclear_contractions"] == 2
     return result
+
+
+@pytest.mark.parametrize("spins", [1, 2])
+def test_nuclear_graph_and_capacity_fallback_match(spins: int) -> None:
+    """Replay, explicit launches and tight-budget fallback publish the same data."""
+    fixture = _data(spins)
+    replay = _native_action(fixture)
+    assert replay["nuclear_graph_replays"] == 2
+    for mode in ("nuclear-serial", "nuclear-tight"):
+        serial = _native_action(fixture, mode=mode)
+        assert serial["nuclear_graph_replays"] == 0
+        for field in ("energy", "potential", "response", "mixed"):
+            np.testing.assert_array_equal(replay[field], serial[field])
 
 
 @pytest.mark.parametrize("spins", [1, 2])
