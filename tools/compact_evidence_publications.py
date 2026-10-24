@@ -505,8 +505,10 @@ def compact_publication(
 
 
 def _updated_review_rows(
-    existing: list[dict], changes: list[tuple[str, str, bytes]],
-    originals: dict[str, bytes], threshold: int,
+    existing: list[dict],
+    changes: list[tuple[str, str, bytes]],
+    originals: dict[str, bytes],
+    threshold: int,
 ) -> list[dict]:
     if type(threshold) is not int or threshold <= 0:
         raise ValueError("invalid legacy review threshold")

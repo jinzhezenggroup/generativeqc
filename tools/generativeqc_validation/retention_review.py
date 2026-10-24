@@ -203,7 +203,7 @@ def expand_legacy_large_review(
     files: list[dict] = []
     errors: list[str] = []
     for path in paths:
-        name = path[len(prefix):]
+        name = path[len(prefix) :]
         if "/" in name or not name.endswith(".json") or name == ".json":
             errors.append(f"{path}: invalid legacy family record path")
             continue
@@ -213,7 +213,10 @@ def expand_legacy_large_review(
         except (TypeError, ValueError, UnicodeError):
             errors.append(f"{path}: invalid legacy family JSON")
             continue
-        if not isinstance(payload, dict) or payload.get("schema") != LEGACY_LARGE_REVIEW_FAMILY_SCHEMA:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != LEGACY_LARGE_REVIEW_FAMILY_SCHEMA
+        ):
             errors.append(f"{path}: unsupported legacy family schema")
             continue
         if payload.get("family") != family:
