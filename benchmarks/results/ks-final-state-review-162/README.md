@@ -1,5 +1,15 @@
 # Verified KS final-state review validation
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/ks-final-state-review-162/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/ks-final-state-review-162/raw-evidence.zip
+```
+
+
 Clean source `5129a8db666efcf3dedacc8a24f2dbf205b96bd7`; RTX 5090, CUDA 12.9.86, Release,
 sm_120, AOT shells disabled. Slurm job 9628 used `main` and
 `--gres=gpu:5090:1` with an explicit finite time limit and preserved device visibility.
@@ -19,7 +29,7 @@ now converts CUDA column-major storage to the detached row-major contract.
 device/toolchain, commands and results. The verified archive contains full
 logs, all measured source hashes and the allocation-only reproduction runner.
 Restore with `python -m tools.unpack_evidence
-benchmarks/results/ks-final-state-review-162 --output /tmp/ks-review`.
+benchmarks/results/ks-final-state-review-162 --archive .artifacts/retention-archives-20261024/ks-final-state-review-162/raw-evidence.zip --output /tmp/ks-review`.
 Invoke the restored runner inside a finite Slurm GPU allocation, passing the
 source directory, a new output directory, and `ks`; adjust its Python path to
 the validation environment. Build with CMake Release, CUDA on, AOT shells off,
