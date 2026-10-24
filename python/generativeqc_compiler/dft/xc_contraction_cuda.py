@@ -451,19 +451,30 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
           // intermediate FMAs finite. Keep their exact ordering and rounding.
           for (I k = 0; k < @TILE@; ++k)
             value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
-        } else if (cross)
-          for (I k = 0; k < @TILE@; ++k) {
-            if constexpr (std::is_same_v<Arithmetic, double>) {
-              const double prior = value;
+        } else if (cross) {
+          if constexpr (std::is_same_v<Arithmetic, double>) {
+            const double tile_prior = value;
+            for (I k = 0; k < @TILE@; ++k)
               value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
-              // Fusion must not lose a finite grouped cross term when its
-              // first addition overflows before the opposite leg cancels it.
-              if (!(fabs(value) <= 0x1.fffffffffffffp1023))
-                value = prior + (am[k][x]*wn[k][y]+wm[k][x]*an[k][y]);
-            } else
+            // A nonfinite FMA accumulator cannot become finite in a later
+            // FMA. A finite tile therefore needs no per-term range checks and
+            // has exactly the incumbent operation order. Otherwise replay
+            // from the saved accumulator with the original grouped fallback:
+            // opposite cross legs can cancel an intermediate overflow.
+            if (!(fabs(value) <= 0x1.fffffffffffffp1023)) {
+              value = tile_prior;
+              for (I k = 0; k < @TILE@; ++k) {
+                const double prior = value;
+                value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
+                if (!(fabs(value) <= 0x1.fffffffffffffp1023))
+                  value = prior + (am[k][x]*wn[k][y]+wm[k][x]*an[k][y]);
+              }
+            }
+          } else {
+            for (I k = 0; k < @TILE@; ++k)
               value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
           }
-        else if (reuse_diagonal)
+        } else if (reuse_diagonal)
           for (I k = 0; k < @TILE@; ++k) {
             if constexpr (std::is_same_v<Arithmetic, double>)
               value = fma(am[k][x], wn[k][y], value);

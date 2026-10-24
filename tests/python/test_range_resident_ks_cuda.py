@@ -117,7 +117,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         admitted = enabled and policy not in {"refused", "auto-refused"}
         # Fitted primary plus exact LR is an explicit composition candidate;
         # automatic selection must retain its existing fallback.
-        if admitted and not (fitted and policy == "auto"):
+        if admitted:
             assert any(built) and any(consumed), "optional source was never consumed"
         else:
             assert not any(built) and not any(consumed)
@@ -148,6 +148,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         ("auto", False),
         ("full", True),
         ("partial", True),
+        ("auto", True),
     ],
 )
 @pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])

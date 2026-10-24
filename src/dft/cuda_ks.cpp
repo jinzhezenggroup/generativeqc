@@ -18,6 +18,7 @@
 
 #include "dft/application_precision.hpp"
 #include "dft/cuda_ks_cold_factor_policy.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
@@ -274,11 +275,10 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
-  return sum(
-      layout.partition(
-          n, spins, std::max(1U, history), exact_exchange, range_correction, incremental_direct_jk,
-          history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr),
-      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
+                              incremental_direct_jk,
+                              cuda_ks_incremental_diis_gram_requested(n, history), nullptr),
+             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
 struct CudaKsPlan::Impl : KsStateStorage {
@@ -340,7 +340,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool occupied_xc_frame_ready{};
   const bool occupied_xc_requested = [] {
     const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
-    return value && value[0] == '1' && value[1] == '\0';
+    // Request the existing exact-frame route automatically. Admission still
+    // requires the canonical frame that formed this D, strict FP64 meta-GGA
+    // work, and a smaller occupied domain; explicit 0 restores matrix products.
+    return !value || (value[0] == '1' && value[1] == '\0');
   }();
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
@@ -510,16 +513,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     const auto& strategy = provider.strategy();
     const auto& source_strategy = has_range_correction ? *range_correction : strategy;
-    // A fitted primary may explicitly cache only its separate exact LR term.
-    // The lease owns immutable ERIs on the KS stream; it never represents the
-    // fitted J/K tensor, changes the Hamiltonian, or lends derivative storage.
-    // Keep this new composition opt-in and strict until endpoint qualification
-    // establishes a bounded automatic domain. Fully fitted LR is distinct.
-    const bool fitted_range_source =
-        requested == DirectJkSourceSelection::forced && fitted_coulomb && fitted_exchange &&
-        has_range_correction && range_provider && spins == 1 &&
-        !precision_schedule.any_lower_precision() &&
-        source_strategy.spec.exchange.approximation == scf::FockApproximation::Exact;
+    // A strict range cache belongs to the independent Direct correction even
+    // when the full-range primary is fitted. Automatic selection still passes
+    // the cold-reuse, angular, grid and complete-capacity gates below. Its
+    // omitted buckets use the ordinary exact provider; primary DF stays intact.
+    const bool fitted_range_source = has_range_correction && range_provider && !mixed_source;
     // Public ledgers have no reserved quartic allowance yet. A forced request
     // must not bypass their complete resource plan or alter precision/ranges.
     if (((fitted_coulomb || fitted_exchange) && !fitted_range_source) || incremental_direct_jk ||
@@ -536,7 +534,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
     // The fitted composition qualifies generated SPD consumers only. Higher
     // angular sources require their own primary-provider census/consumer proof.
-    if (fitted_range_source && maximum_angular > 2) return;
+    if ((fitted_coulomb || fitted_exchange) && fitted_range_source && maximum_angular > 2) return;
     // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
@@ -1453,9 +1451,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !std::all_of(integrals.hcore.begin(), integrals.hcore.end(), finite))
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
-    incremental_diis_gram = history >= 2 && scf::cuda_execution::incremental_diis_gram_requested();
-    ordered_diis_gram =
-        incremental_diis_gram && scf::cuda_execution::ordered_incremental_diis_gram_requested();
+    incremental_diis_gram = cuda_ks_incremental_diis_gram_requested(n, history);
+    // Automatic promotion preserves the original scalar dot order. Explicit
+    // enable/reducer selections retain their established diagnostic semantics.
+    ordered_diis_gram = incremental_diis_gram &&
+                        ((!std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM") &&
+                          !std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION")) ||
+                         scf::cuda_execution::ordered_incremental_diis_gram_requested());
     device = fock_binding.device_id;
     stream = fock_binding.stream;
     if (range_provider) {

@@ -34,9 +34,9 @@ def orbital_probe(
         _method(source, signature)
         for signature in (
             "  void invalidate_warm_orbitals()",
+            "  void restore_held_fitted_factor()",
             "  void clear_warm_state()",
             "  void publish_warm_seed()",
-            "  void restore_held_fitted_factor()",
             "  void audit_phase_source()",
             "  void retire_phase_source(bool audit)",
             "  void enqueue()",

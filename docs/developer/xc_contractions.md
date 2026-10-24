@@ -72,14 +72,31 @@ Strict FP64 tiled density and potential inner products use explicit FP64
 `fma`, even when the surrounding CUDA build disables implicit contraction.
 Storage and accumulation remain FP64, with the same reduction index order and
 one accumulator. Fusion changes rounding; cross potential products also add
-their two legs sequentially. If a fused cross step becomes nonfinite, it retries
-the original grouped two-product expression so a cancelling leg cannot turn a
-previously finite step into an intermediate overflow. Independent E/V and
+their two legs sequentially. Cross products check the accumulator after each
+shared-memory point tile. A finite result proves that no earlier FMA accumulator
+in that tile became nonfinite. Otherwise the tile replays from its saved initial
+accumulator, checking each step and retrying the original grouped two-product
+expression when needed. A cancelling leg therefore retains the original finite
+domain without a range check on every ordinary term. Independent E/V and
 complete energy/force gates qualify the arithmetic on their recorded source. The range-sensitive diagonal fallback retains its
 original two-product expression, and FP32/mixed products keep their separate
 arithmetic contract.
 
 ## Explicit native execution
+
+The CUDA KS owner automatically requests occupied-orbital density features for
+eligible strict-FP64 meta-GGA proposals. Only the token-bound canonical frame
+that actually formed the accepted density can supply the four orbital jets,
+and a tile uses it only when its occupied rank is smaller than its active AO
+count. Existing density scratch holds the projection; potential assembly still
+uses the original AO jets. No extra allocation or screening change is required.
+
+Every completion retires that frame lease. Held confirmations, rejected probes,
+imported densities, mixed precision, nonlocal and response work, and missing or
+stale frames retain matrix contraction. LDA/GGA's one-jet route is unchanged.
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=0` disables the request for comparison or
+rollback; unset or `1` requests it without bypassing any admission check.
+Other explicit values also retain matrix contraction.
 
 The CUDA density-feature reduction uses one warp per spin/grid point for
 32 or more AOs. Lanes traverse adjacent AO components and reduce the existing

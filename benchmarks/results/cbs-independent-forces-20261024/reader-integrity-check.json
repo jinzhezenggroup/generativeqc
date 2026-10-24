@@ -1,0 +1,44 @@
+{
+  "scope": "offline restoration integrity only; zero new scientific calls",
+  "before_fix": {
+    "status": "FAIL",
+    "test": "test_collection_task_path_is_not_trusted_from_inputs",
+    "tests_run": 1,
+    "failure": "AssertionError: ValueError not raised",
+    "raw_stream_bytes": "UNAVAILABLE; diagnostic observed in tool output"
+  },
+  "after_fix": {
+    "status": "PASS",
+    "tests_run": 3,
+    "pack_sha256": "82eae53f55ead86a268a247501c593c292d4308406b005c1c1899c250d1c2d33",
+    "test_sha256": "bc8957a6d618e03e9887fdbf15a9d888c32af109df20abb57096d1f7009444e4"
+  },
+  "actual_C4_roundtrip": {
+    "scope": "actual C4 raw roundtrip and strict replay only; zero energy calls",
+    "status": "PASS",
+    "raw_files": 20,
+    "raw_json_bytes": 323973,
+    "stored_bytes": 22384,
+    "stored_sha256": "84999e8301a7f79ede8e3540cfc2b3775ad3561b13df2dbf51162ff9dec255e8",
+    "strict_exit": 1,
+    "C4": "PASS",
+    "C7": "INCOMPLETE",
+    "stdout": "{\"status\": \"INCOMPLETE\", \"molecules\": [{\"carbon\": 4, \"status\": \"PASS\"}, {\"carbon\": 7, \"status\": \"INCOMPLETE\"}]}\r\n",
+    "stderr": ""
+  },
+  "assembled_force_terms": {
+    "before_fix": {
+      "status": "FAIL",
+      "tests_run": 1,
+      "failure": "AssertionError: AssertionError not raised",
+      "raw_stream_bytes": "UNAVAILABLE; diagnostic observed in tool output"
+    },
+    "after_fix": {
+      "status": "PASS",
+      "replay_tests_run": 6,
+      "replay_sha256": "8c96136a4e42fe3a39593b86eb1128c3af00c12b4627ffeed6226d1d3f217303"
+    },
+    "actual_receipts_replayed": 5,
+    "scientific_gates_changed": false
+  }
+}

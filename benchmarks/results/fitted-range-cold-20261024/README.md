@@ -99,6 +99,17 @@ All pass. Host capacity-policy checks pass 38 tests. Benchmark and accuracy
 drivers are byte-identical to Stage29; the explicit larger-oracle reuse contract
 and original oracle are retained and rechecked offline.
 
+## Current-parent integration boundary
+
+The PR subsequently integrates parent `9363e9f93`, including upstream staged
+ordered DIIS, affine coefficient validation, occupied-XC defaults and automatic
+fitted-primary range admission. Their original implementations and qualification
+remain authoritative. The remaining production delta is the lazy derivative
+capacity repair and the fitted high-angular cache fallback. Historical source
+identities and all 50 calls above remain unchanged; they are not reassigned to
+this newer combined tree. A fresh integration bridge is required before claiming
+its complete endpoint timing or parity.
+
 ## Offline reproduction and retention review
 
 ```bash

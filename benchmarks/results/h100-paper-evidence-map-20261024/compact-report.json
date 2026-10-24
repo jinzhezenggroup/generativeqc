@@ -1,0 +1,1601 @@
+{
+  "schema": "generativeqc.paper-evidence-replay.v1",
+  "offline_integrity_status": "PASS",
+  "h100_core_status": "INCOMPLETE",
+  "negative_records": [
+    {
+      "family": "energy",
+      "input": "C1",
+      "attempt": "initial",
+      "status": "FAIL",
+      "error": "TypeError: SCF.get_grad() missing 2 required positional arguments: 'mo_coeff' and 'mo_occ'",
+      "outcome": {
+        "exit_code": 1,
+        "time_limit_seconds": 21600
+      },
+      "locator": "benchmarks/results/cbs-independent-energy-20261023/failures/C1.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "later_success_does_not_erase_failure": true
+    }
+  ],
+  "source_blob_count": 147,
+  "native_source": {
+    "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+    "variant": "candidate",
+    "library_sha256": "65a401ed3db8fb303a5146f134cdb227af78928affe27e1f7571c09f270112de",
+    "base_archive_sha256": "dc5aad9325885642a2b1209e5a25424fb7addd9fc839860daff97cd43a8e6ee8",
+    "patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad",
+    "build_type": "Release",
+    "cuda_architecture": "sm120",
+    "cuda_version": "12.9.1",
+    "compiler": "GCC 11.4.0",
+    "compiler_cache": "ccache 4.5.1",
+    "file_sha256": {
+      "src/response/native_gmres.cpp": "ae03aac4eadc18c42b5e2a9705083e4726f345bf26c5f717e424f6754c66041e",
+      "src/response/native_gmres.hpp": "adfcb0bd4d1af3016c37c7fd301d850ad73380e41b2229a6bfe051a21674c668",
+      "benchmarks/readme_cbs.py": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+      "python/generativeqc/cbs.py": "696bd25e6ceac23ba557e5fe7437089ffd06b985b4b98e2ea698a43bd44d4027",
+      "python/generativeqc/_response_native.py": "02c7ea9ff860ab3a670079b33628cf9a32c592f79ca3db35fb4d18c45e5c5a52",
+      "python/generativeqc/response_solver.py": "8628555616718adbe6d2ad3a6f5ecee58c53b1b1cacfe2b15c1aff0c4381cfc8"
+    }
+  },
+  "energy": {
+    "gate_eh": 5e-08,
+    "comparisons": [
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 2.2666313270747196e-12
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 4.973799150320701e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 1.4210854715202004e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 6.394884621840902e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 2.842170943040401e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 2.2453150450019166e-12
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 5.199751740292413e-11
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 1.0658141036401503e-13
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 1.4210854715202004e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 1.0658141036401503e-13
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 7.105427357601002e-14
+      },
+      {
+        "carbon": 1,
+        "qm7_index": 0,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 5.199041197556653e-11
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 2.6005864128819667e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 1.7337242752546445e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 1.7195134205394424e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 1.1226575225009583e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 7.815970093361102e-13
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 3.311129148642067e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 6.485265657829586e-10
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 1.6058265828178264e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 1.7195134205394424e-12
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 7.105427357601002e-13
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 7.815970093361102e-13
+      },
+      {
+        "carbon": 3,
+        "qm7_index": 8,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 6.499476512544788e-10
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 2.6432189770275727e-12
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 5.684341886080801e-13
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 8.810729923425242e-13
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 2.8990143619012088e-12
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 2.6432189770275727e-12
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 5.5990767577895895e-12
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 7.981100225151749e-10
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 6.252776074688882e-13
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 8.242295734817162e-13
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 3.694822225952521e-13
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 2.5863755581667647e-12
+      },
+      {
+        "carbon": 4,
+        "qm7_index": 48,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 7.981384442246053e-10
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 6.508571459562518e-12
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 1.1368683772161603e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 2.5579538487363607e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 8.526512829121202e-14
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 5.400124791776761e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 6.707523425575346e-12
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 1.2512089142546756e-09
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 9.663381206337363e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 3.126388037344441e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 3.723243935382925e-12
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 4.831690603168681e-13
+      },
+      {
+        "carbon": 5,
+        "qm7_index": 183,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 1.2474572486098623e-09
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 4.206412995699793e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 1.1368683772161603e-13
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 3.694822225952521e-13
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 1.4495071809506044e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 1.5063505998114124e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 5.8548721426632255e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 1.7451782241550973e-09
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 0.0
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 1.9895196601282805e-13
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 5.229594535194337e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 1.5631940186722204e-12
+      },
+      {
+        "carbon": 6,
+        "qm7_index": 293,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 1.7374759408994578e-09
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 3.069544618483633e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "low/mp2",
+        "absolute_error_eh": 7.958078640513122e-13
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "low/rhf",
+        "absolute_error_eh": 3.979039320256561e-13
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "high/mp2",
+        "absolute_error_eh": 2.2168933355715126e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "high/rhf",
+        "absolute_error_eh": 2.1032064978498966e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "standard",
+        "term": "composite",
+        "absolute_error_eh": 1.3073986337985843e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "absolute_error_eh": 2.3729853637632914e-09
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "low/mp2",
+        "absolute_error_eh": 4.718003765447065e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "low/rhf",
+        "absolute_error_eh": 3.979039320256561e-13
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "high/mp2",
+        "absolute_error_eh": 2.5011104298755527e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "high/rhf",
+        "absolute_error_eh": 1.8758328224066645e-12
+      },
+      {
+        "carbon": 7,
+        "qm7_index": 5604,
+        "policy": "fast",
+        "term": "composite",
+        "absolute_error_eh": 2.37639596889494e-09
+      }
+    ],
+    "count": 72,
+    "max_error_eh": 2.37639596889494e-09
+  },
+  "directional": {
+    "gate_eh_per_bohr": 5e-06,
+    "comparisons": [
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.2186828314509832e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.5123738289057193e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.2169471975704421e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.6716945484569062e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.2213363325894178e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "low/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.5008164753072678e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "high/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.7055234845936296e-09
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "high/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.3310612998092275e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "high/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 2.0929944149344903e-09
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "high/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.1123100470203373e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "composite",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 8.444141800720284e-10
+      },
+      {
+        "carbon": 4,
+        "policy": "standard",
+        "term": "composite",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 2.3297564630091194e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.2275609025157522e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.5212518999704883e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.2101191654853918e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.664866516371856e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.221486998614213e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "low/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.500967141332063e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "high/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 1.67935435783223e-09
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "high/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.3336782124853674e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "high/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 2.0960904739339425e-09
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "high/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.1120004411203921e-08
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "composite",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 6.960731756613936e-10
+      },
+      {
+        "carbon": 4,
+        "policy": "fast",
+        "term": "composite",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 2.314922362568056e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 3.0248359450882334e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.3838711650248671e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 3.2973542196906673e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.3281976281369302e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 2.970049107261369e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "low/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.4367193645285076e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "high/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 5.7946955172617776e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "high/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 6.1424224435079056e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "high/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 3.004058781678337e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "high/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 2.340885561780137e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "composite",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 6.451835191101374e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "standard",
+        "term": "composite",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 9.93801724680915e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 2.990017392533184e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/df-ccsd(t)",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.387353020280372e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 3.295072793340747e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.3284257707719222e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 2.965186219824889e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "low/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 1.4372056532721555e-08
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "high/mp2",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 5.8405084635802795e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "high/mp2",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 6.096609497189404e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "high/rhf",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 3.0041939040603705e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "high/rhf",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 2.3410206841621706e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "composite",
+        "step_bohr": 0.0001,
+        "error_eh_per_bohr": 6.484474723671141e-09
+      },
+      {
+        "carbon": 7,
+        "policy": "fast",
+        "term": "composite",
+        "step_bohr": 3e-05,
+        "error_eh_per_bohr": 9.905377714239383e-09
+      }
+    ],
+    "count": 48,
+    "raw_files": 40,
+    "raw_bytes": 636570,
+    "max_by_carbon": {
+      "4": 2.3297564630091194e-08,
+      "7": 1.4372056532721555e-08
+    }
+  },
+  "translation": {
+    "gate_eh_per_bohr": 1e-06,
+    "count": 24,
+    "max_residual_eh_per_bohr": 1.2624908070195135e-12
+  },
+  "cpu_reference": [
+    {
+      "case": "h2-dz-tz",
+      "term": "composite",
+      "energy_error_eh": 3.5282887722587475e-13,
+      "max_force_error_eh_per_bohr": 5.704963671609997e-10,
+      "force_rms_eh_per_bohr": 3.335494776865558e-10
+    },
+    {
+      "case": "h2-dz-tz",
+      "term": "correction_ccsdt",
+      "energy_error_eh": 3.375077994860476e-13,
+      "max_force_error_eh_per_bohr": 1.551104730768138e-12,
+      "force_rms_eh_per_bohr": 9.068376186163841e-13
+    },
+    {
+      "case": "h2-dz-tz",
+      "term": "mp2_low",
+      "energy_error_eh": 6.661338147750939e-15,
+      "max_force_error_eh_per_bohr": 5.5727557984885934e-14,
+      "force_rms_eh_per_bohr": 3.23799922269644e-14
+    },
+    {
+      "case": "h2-dz-tz",
+      "term": "hf_low",
+      "energy_error_eh": 3.552713678800501e-15,
+      "max_force_error_eh_per_bohr": 5.930737671799857e-14,
+      "force_rms_eh_per_bohr": 3.445021222572868e-14
+    },
+    {
+      "case": "h2-dz-tz",
+      "term": "mp2_high",
+      "energy_error_eh": 1.7985612998927536e-14,
+      "max_force_error_eh_per_bohr": 4.027229903724727e-10,
+      "force_rms_eh_per_bohr": 2.354585450799008e-10
+    },
+    {
+      "case": "h2-dz-tz",
+      "term": "hf_high",
+      "energy_error_eh": 9.769962616701378e-15,
+      "max_force_error_eh_per_bohr": 9.929938815655959e-13,
+      "force_rms_eh_per_bohr": 5.793588397343116e-13
+    },
+    {
+      "case": "water-algebra",
+      "term": "composite",
+      "energy_error_eh": 3.126388037344441e-13,
+      "max_force_error_eh_per_bohr": 1.744659901825596e-07,
+      "force_rms_eh_per_bohr": 9.866621968858819e-08
+    },
+    {
+      "case": "water-algebra",
+      "term": "correction_ccsdt",
+      "energy_error_eh": 1.4210854715202004e-13,
+      "max_force_error_eh_per_bohr": 1.4781053933599075e-07,
+      "force_rms_eh_per_bohr": 8.847149381403256e-08
+    },
+    {
+      "case": "water-algebra",
+      "term": "mp2_low",
+      "energy_error_eh": 1.5631940186722204e-13,
+      "max_force_error_eh_per_bohr": 9.100162406266987e-08,
+      "force_rms_eh_per_bohr": 5.4257038536334214e-08
+    },
+    {
+      "case": "water-algebra",
+      "term": "hf_low",
+      "energy_error_eh": 1.7053025658242404e-13,
+      "max_force_error_eh_per_bohr": 1.3891596206683232e-12,
+      "force_rms_eh_per_bohr": 6.910174795906399e-13
+    },
+    {
+      "case": "water-algebra",
+      "term": "mp2_high",
+      "energy_error_eh": 2.842170943040401e-14,
+      "max_force_error_eh_per_bohr": 1.0975919453870553e-07,
+      "force_rms_eh_per_bohr": 6.311307725237724e-08
+    },
+    {
+      "case": "water-algebra",
+      "term": "hf_high",
+      "energy_error_eh": 5.684341886080802e-14,
+      "max_force_error_eh_per_bohr": 1.2444351105145302e-12,
+      "force_rms_eh_per_bohr": 7.203230695572485e-13
+    }
+  ],
+  "coverage": {
+    "schema": "generativeqc.paper-evidence-map.v1",
+    "scope": "Incremental CPU/offline historical index; not the final H100 report",
+    "parent_issues": {
+      "2724": "OPEN",
+      "2739": "OPEN"
+    },
+    "snapshot_upstream": "72e0a7e5a011592428b5625acdfa6f19168645ac",
+    "protocol_adapter": {
+      "owner_issue": 2725,
+      "path": "benchmarks/results/h100-paper-protocol-20261024/",
+      "schema_status": "FIXED_PREPARED_UNMERGED_CONTRACT",
+      "contract": "Read-only reference to the protocol owner prepared contract; not upstream-delivered or execution/scientific acceptance. HF old-manifest comparability gaps remain unchanged.",
+      "schema": "generativeqc.h100-paper-protocol.v1",
+      "attempt_schema": "generativeqc.h100-paper-attempt.v1",
+      "field_adapter": {
+        "row_identity": "cells[].id",
+        "input": "cells[].input",
+        "input_sha256": "cells[].input_sha256",
+        "arms": "cells[].arms",
+        "source": "sources",
+        "reference": "references",
+        "process_key": "(cell, arm, repeat); each retry has its own attempt id",
+        "unavailable": "null"
+      },
+      "execution_authority": false,
+      "commit": "df5c44a81c5d73210a8d2f7f09ba4930d7f67210",
+      "manifest_path": "benchmarks/results/h100-paper-protocol-20261024/manifest.json",
+      "manifest_bytes": 69646,
+      "manifest_sha256": "dd96c17e702101d21352deb4f867ab0fbb7bce66700222d49fc67bbdef23185e",
+      "delivered": false,
+      "h100_qualified": false
+    },
+    "paper": {
+      "repository": "jinzhezenggroup/generativeqc-paper",
+      "commit": "294a0817a75f7bd2d66db49f24a35db42e015c40",
+      "archive": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "edited": false,
+      "results_anchors": [
+        "sections/results.tex:77-81",
+        "sections/results.tex:177-186",
+        "sections/results.tex:468-474",
+        "figures/scripts/results_cbs_cost.py"
+      ],
+      "freeze_status": "UNCHANGED",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "git_blob": "659dbc905633cfdb2a4dbdb998bdea0d56ac7c8d"
+        },
+        {
+          "path": "notes/section_workflow.md",
+          "git_blob": "5320d745f58f69bb02610fa179684d4b3106983f"
+        },
+        {
+          "path": "notes/claims_evidence.md",
+          "git_blob": "029eab34dbd7549d36ee2a9107888caebdbf5be0"
+        },
+        {
+          "path": "sections/results.tex",
+          "git_blob": "8ca2346629b75327b83783cd22f16bfa2038b43c"
+        },
+        {
+          "path": "figures/scripts/results_cbs_cost.py",
+          "git_blob": "94205afcddf1b22f4a5a80d5baf66999a6dd81f0"
+        }
+      ]
+    },
+    "claims": [
+      {
+        "claim": "A6",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 85,
+        "frozen_text": "| A6 | \u3014\u7368\u7acb\u3015C2 \u4e59\u70f7\u7684\u7d44\u5206\u8207\u8907\u5408\u80fd\u91cf\uff0c\u4ee5\u53ca\u6cbf\u4e00\u500b\u6b78\u4e00\u5316\u65b9\u5411\u7684\u529b\u6295\u5f71\uff0c\u90fd\u8207\u91cd\u65b0\u6536\u6582\u7684 PySCF \u4e00\u81f4 | A | `cbs-fast-memory-20261021/timings.md@7522994` L81\uff08Standard\uff1amax \u0394E 3.965e-12 Eh\uff0cmax directional error 5.454e-9 Eh/Bohr\uff09\u3001L121\uff08Fast\uff1a6.290e-10 Eh\uff0c5.416e-9 Eh/Bohr\uff09\uff1bREADME L83\u201385\u3002Standard \u9580\u6abb\u70ba 5e-8 Eh \u8207 5e-6 Eh/Bohr\u3002Fast \u7684\u8907\u5408\u9580\u6abb\u70ba 1e-5 Eh\u3001\u7d04 1.46969e-4 Eh/Bohr\uff0c\u5404\u7d44\u5206\u70ba\u7d04 2.38273e-6 Eh\u30013.50188e-5 Eh/Bohr\uff1b\u5176\u5be6\u6e2c\u8aa4\u5dee\u4e5f\u4f4e\u65bc Standard \u9580\u6abb\uff08`benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994`\uff0c`points` \u8207 `fast.points` \u4e2d carbon=2 \u7684 `checks[].component_limits`\uff09\u3002\u5169\u500b\u6b65\u9577 1e-4\u30013e-5 Bohr\uff08`benchmarks/results/readme-cbs-20261013/README.md@7522994` L123\u2013126\uff09\uff1b2026-10-22 \u5be9\u7a3f\u52d8\u8aa4 | \u6709\u8b49\u64da | \u53ea\u8986\u84cb C2\uff1b\u662f\u65b9\u5411\u6295\u5f71\uff0c\u4e0d\u662f\u5168\u529b\u5411\u91cf\uff08timings L58\uff09 |",
+        "evidence": [
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "Retain the frozen C2 directional result with its original scope. Exact original displaced-energy/driver recovery remains unavailable (#2705); this slice does not requalify C2."
+      },
+      {
+        "claim": "A7",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 86,
+        "frozen_text": "| A7 | \u3014\u7368\u7acb\u3015\u6c34\u5206\u5b50\u5728\u5169\u7a2e DF \u6a21\u578b\u3001\u539f\u59cb\u548c\u4f4d\u79fb\u5e7e\u4f55\u4e0b\uff0c\u5168\u529b\u5411\u91cf\u90fd\u8207 PySCF \u91cd\u65b0\u6536\u6582\u7684\u4e2d\u5fc3\u5dee\u5206\u4e00\u81f4 | A | `cbs-fast-memory-20261021/README.md@7522994` L87\u201394\uff1a20 \u500b\u5b8c\u6574\u7aef\u9ede\uff1b\u6700\u5927\u8907\u5408\u8aa4\u5dee\uff1a\u80fd\u91cf 6.293e-9 Eh\uff0c\u6700\u5927\u529b 3.886e-8 Eh/Bohr\uff0cRMS 2.422e-8 Eh/Bohr\uff1b\u6b65\u9577 3e-5 Bohr | \u6709\u8b49\u64da | \u57fa\u7d44\u5c0d\u662f STO-3G/def2-SVP\uff0c\u5c6c\u4ee3\u6578\u6e2c\u8a66\uff0c\u4e0d\u662f\u7269\u7406 CBS \u57fa\u7d44\u5e8f\u5217\uff1b\u53ea\u8b49\u660e\u7d44\u5408\u8207\u5c0e\u6578\u7684\u5be6\u73fe\u6b63\u78ba |",
+        "evidence": [
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "cpu",
+            "locator": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz@1c7a3e969e357042b91f6452fb8b6b227bb70e8d"
+          },
+          {
+            "family": "cpu",
+            "locator": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz@1c7a3e969e357042b91f6452fb8b6b227bb70e8d"
+          }
+        ],
+        "proposed_wording": "Retain the frozen synthetic water DF algebra validation. It does not validate a physical CBS limit and is separate from the conventional CPU H2/water slice."
+      },
+      {
+        "claim": "A9",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 88,
+        "frozen_text": "| A9 | \uff08\u4e0d\u5229\uff09C1\u3001C3\u2013C7 \u6c92\u6709\u7368\u7acb\u7cbe\u5ea6\u9a57\u8b49 | A | `cbs-fast-memory-20261021/timings.md@7522994` L62\u201368 \u6a19 \"unchecked \u2021\"\uff1bREADME L85\uff1a\"Independent full-vector alkane coverage is not claimed for the other sizes\" | \u9700\u88dc\u6578\u64da | \u81f3\u5c11\u8981\u88dc\uff1aC3\u2013C7 \u7684\u80fd\u91cf\u8207 PySCF\uff08\u540c\u4e00 RI-JK/JKFIT \u6a21\u578b\uff09\u6bd4\u8f03\uff1b\u518d\u9078\u4e00\u500b\u8f03\u5927\u7684\u70f7\u70c3\u505a\u65b9\u5411\u6216\u5168\u5411\u91cf\u529b\u6aa2\u67e5\u3002\u88dc\u5be6\u9a57 issue\uff1ajinzhezenggroup/generativeqc#2679 |",
+        "evidence": [
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/inputs.json@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C1.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C3.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C4.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C5.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C6.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "energy",
+            "locator": "benchmarks/results/cbs-independent-energy-20261023/receipts/C7.json.xz@334e7f489870dccc22ae8864c01f2353aa9689a4"
+          },
+          {
+            "family": "forces",
+            "locator": "benchmarks/results/cbs-independent-forces-20261024/inputs.json.xz@594343670cfdea574e5b1c6821b51165ce004f97"
+          },
+          {
+            "family": "forces",
+            "locator": "benchmarks/results/cbs-independent-forces-20261024/receipts.json.xz@594343670cfdea574e5b1c6821b51165ce004f97"
+          }
+        ],
+        "proposed_wording": "For the frozen RTX 5090 native cohort, independent PySCF energies now cover C1 and C3-C7 in both policies; C4 and C7 additionally pass one directional projection at two steps and translation controls. Full-vector alkane qualification remains unavailable."
+      },
+      {
+        "claim": "C5",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 131,
+        "frozen_text": "| C5 | Direct \u03c9B97M-V\u300196 \u539f\u5b50\uff1awarm \u52a0\u901f 3.74\u00d7\uff08Standard\uff09\u30013.96\u00d7\uff08Fast\uff09\uff1bcold \u52a0\u901f 1.16\u00d7\u30011.30\u00d7 | C | `readme-repaired-20261021/README.md@7522994` L22\u201323\uff1b`timings.md@7522994` L196\u2013198\uff1awarm 32.703\uff0f30.848 vs 122.178 s\uff1bcold 326.516\uff0f291.151 vs 378.663 s | \u6709\u8b49\u64da | warm \u662f\u540c\u4e00\u5e7e\u4f55\u3001\u5f9e\u5404\u81ea\u7684 cold \u5bc6\u5ea6\u91cd\u65b0\u958b\u59cb\uff1b\u4e0d\u4ee3\u8868\u5e7e\u4f55\u512a\u5316\u6216 MD \u4e2d\u6bcf\u4e00\u6b65\u7684\u6027\u80fd |",
+        "evidence": [
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "Retain the frozen RTX 5090 Direct WB97M-V cold/warm observations and their original definitions. No accepted H100 comparison has been imported."
+      },
+      {
+        "claim": "C7",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 133,
+        "frozen_text": "| C7 | \uff08\u4e0d\u5229\uff09DF \u03c9B97M-V \u7684 cold \u5728 48 \u548c 96 \u539f\u5b50\u6642\u6162\u65bc GPU4PySCF | C | `timings.md@7522994` L100\u2013102\uff1a96 \u539f\u5b50 cold 729.892\uff0f716.594 vs 385.670 s\uff080.53\u00d7\u30010.54\u00d7\uff09\uff1b\u672c\u8868\u8a08\u7b97\uff1a48 \u539f\u5b50 0.49\u00d7\u30010.50\u00d7 | \u6709\u8b49\u64da | \u2014 |",
+        "evidence": [
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "Retain the adverse frozen RTX 5090 DF WB97M-V observations. The planned H100 Direct WB97M-V cells cannot update this DF claim."
+      },
+      {
+        "claim": "C16",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 142,
+        "frozen_text": "| C16 | \u786c\u4ef6\u4ee3\u8868\u6027 | C | HF/DFT \u8207 CBS \u7684\u6578\u64da\u90fd\u5728 RTX 5090 \u4e0a\u6e2c\u5f97\uff08`conditions.md@7522994` L31\uff1b`cbs-fast-memory-20261021/README.md@7522994` L124\u2013127\uff09 | \u9700\u88dc\u6578\u64da | \u662f\u5426\u8981\u5728 H100/H200 \u7b49\u6578\u64da\u4e2d\u5fc3\u5361\u4e0a\u88dc\u6e2c\uff08\u5169\u985e\u5361\u7684 FP64 \u6027\u80fd\u5dee\u7570\u9700\u67e5\u5b98\u65b9\u898f\u683c\uff09 |",
+        "evidence": [
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/conditions.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_hfdft",
+            "locator": "benchmarks/results/readme-repaired-20261021/qualification.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "All manuscript endpoint performance observations remain historical RTX 5090 observations. H100 core receipts are pending; this map establishes no second-device ranking."
+      },
+      {
+        "claim": "D2",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 151,
+        "frozen_text": "| D2 | \u3014F\u2248S\u3015CBS Fast \u76f8\u5c0d Standard \u7684\u8017\u6642\u6bd4\uff1aC1\u2013C7 \u4f9d\u6b21\u70ba 1.13\uff0f1.10\uff0f1.19\uff0f1.28\uff0f1.29\uff0f1.34\uff0f1.32\u00d7\uff1bC7 \u5f9e 1447.813 s \u964d\u5230 1093.350 s | D | `cbs-fast-memory-20261021/timings.md@7522994` L10\u201316\uff08\u672c\u8868\u8a08\u7b97\uff09\uff1bREADME L28\u201330\uff081.324\u00d7\uff09 | \u6709\u8b49\u64da | \u6bcf\u9ede\u4e00\u6b21\u89c0\u6e2c\uff0c\u6c92\u6709\u4ea4\u932f\u91cd\u8907\uff1b\u66f2\u7dda\u672c\u8eab\u4e0d\u69cb\u6210\u7d71\u8a08\u7d50\u8ad6\uff08`cbs-fast-lambda-20261021/README.md@7522994` L15\u201318\uff09\u3002CCSD \u8fed\u4ee3\uff1aStandard 15\u201321 \u6b21\uff0cFast 12\u201313 \u6b21\uff1bC7 \u7684 \u039b \u6642\u9593 798.776 s \u964d\u5230 513.805 s\uff08timings L41\u201347\u3001L80\u201386\u3001L120\u2013126\uff09 |",
+        "evidence": [
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/timings.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          },
+          {
+            "family": "archive_cbs",
+            "locator": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "Retain the archived Standard/Fast cold observations as single observations per point, without repeat variance or a hardware-only interpretation. Independent accuracy additions do not create new timings."
+      },
+      {
+        "claim": "D3",
+        "paper_path": "notes/claims_evidence.md",
+        "paper_line": 152,
+        "frozen_text": "| D3 | \u039b \u7684 FP32 \u9810\u6536\u6582\uff08\u5c0d\u7167\u6d88\u878d\uff09\uff1aC4 \u4e2d\u4f4d\u8017\u6642 87.304 s \u964d\u5230 80.513 s\uff08\u22127.78%\uff09\uff1bC6 \u4e00\u5c0d 611.895 s \u964d\u5230 539.205 s\uff08\u221211.88%\uff09 | D | `benchmarks/results/cbs-fast-lambda-20261021/README.md@7522994` L19\u201336 | \u6709\u8b49\u64da | C4\uff1a\u540c\u4e00\u5f35 n1 RTX 5090\uff0c\u6bcf\u500b\u8b8a\u9ad4\u4e09\u500b\u65b0\u9032\u7a0b\u4ea4\u66ff\u904b\u884c\uff1b\u7bc4\u570d 87.204\u201387.351 s \u8207 80.453\u201380.718 s\u3002\u3014F\u2248S\u3015\u516d\u500b\u7d50\u679c\u90fd\u901a\u904e Standard \u5c0d\u7167\u3002C6 \u53ea\u6709\u4e00\u5c0d\u3002\u8207 D2 \u7684\u6bd4\u8f03\u57fa\u6e96\u4e0d\u540c |",
+        "evidence": [
+          {
+            "family": "archive_lambda",
+            "locator": "benchmarks/results/cbs-fast-lambda-20261021/README.md@7522994e2e2e477e11c41cb2c2dbe74a2ce600e9"
+          }
+        ],
+        "proposed_wording": "Retain the separately controlled historical Lambda ablation. H100 Standard/Fast total costs cannot establish Lambda causality; an accepted conditional #2736 study would be required."
+      }
+    ],
+    "historical_coverage": [
+      {
+        "id": "six-QM7-energy",
+        "family": "energy",
+        "independent_energy": "PASS",
+        "independent_directional": "UNAVAILABLE except separate C4/C7 slice",
+        "independent_full_vector": "UNAVAILABLE",
+        "internal_parity": "historical separate evidence",
+        "scope": "C1/C3/C4/C5/C6/C7; Standard/Fast; five constituents plus composite; source-frozen full RI-JK/JKFIT model, not true CBS limit accuracy"
+      },
+      {
+        "id": "C4-C7-directions",
+        "family": "forces",
+        "independent_energy": "reuses energy slice",
+        "independent_directional": "PASS",
+        "independent_full_vector": "UNAVAILABLE",
+        "scope": "one seed-709 normalized direction per molecule, two steps; no native displaced-energy check"
+      },
+      {
+        "id": "conventional-CPU",
+        "family": "cpu",
+        "independent_energy": "PASS",
+        "independent_full_vector": "PASS within fixture scope",
+        "scope": "physical H2 DZ/TZ and synthetic water algebra; conventional exact only; DF correlation/full RI-JK/CUDA/current-master UNAVAILABLE"
+      },
+      {
+        "id": "C2-original",
+        "family": "archive_cbs",
+        "independent_directional": "HISTORICALLY_REPORTED",
+        "exact_original_displaced_energy_and_driver_recovery": "UNAVAILABLE",
+        "follow_up_issue": 2705,
+        "scope": "Do not promote paper A6 to newly replayed acceptance"
+      },
+      {
+        "id": "water-DF-algebra",
+        "family": "archive_cbs",
+        "independent_full_vector": "HISTORICALLY_REPORTED",
+        "scope": "Paper A7 synthetic STO-3G/def2-SVP algebra; separate from physical CBS and the conventional CPU fixture"
+      },
+      {
+        "id": "VV10-paired-full-force",
+        "family": "archive_hfdft",
+        "exact_original_paired_full_force_recovery": "UNAVAILABLE",
+        "follow_up_issue": 2706
+      }
+    ],
+    "review_delivery": [
+      {
+        "pr": 2685,
+        "merge": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+        "head": "c856f9986a117cf41ea8d4bb3b0ff902bd201970",
+        "formal_latest_head_approval": "APPROVED",
+        "review": "PRR_kwDOUFEw6s8AAAABT9Z4dw",
+        "scope": "historical energy only"
+      },
+      {
+        "pr": 2721,
+        "merge": "594343670cfdea574e5b1c6821b51165ce004f97",
+        "head": "9c04cf6effc55aa2a474a334fa00c8bb12c2cb05",
+        "formal_latest_head_approval": "ABSENT",
+        "latest_bot_review": "COMMENTED",
+        "process_exception": "Externally merged without formal APPROVED; numerical replay does not erase this exception"
+      },
+      {
+        "pr": 2719,
+        "merge": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+        "head": "dc11714a6793a78c98e3b8bcdc3c81e9b7719587",
+        "formal_latest_head_approval": "ABSENT",
+        "latest_bot_review": "COMMENTED",
+        "process_exception": "Externally merged without formal APPROVED; numerical replay does not erase this exception"
+      }
+    ],
+    "h100_core": [
+      {
+        "id": "C2-QM7-1",
+        "kind": "CBS",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "cbs-c2",
+        "protocol_input_sha256": "46866a8df4733f92e31f0dcf9ef78fd7239311069c698a4ef0555db5363a4a91",
+        "protocol_arms": [
+          "standard",
+          "fast"
+        ]
+      },
+      {
+        "id": "C4-QM7-48",
+        "kind": "CBS",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "cbs-c4",
+        "protocol_input_sha256": "d50f232d935c767033515d4a33aa0e16ce34e2d442a6acd5160a2b7fdd58a7f8",
+        "protocol_arms": [
+          "standard",
+          "fast"
+        ]
+      },
+      {
+        "id": "C7-QM7-5604",
+        "kind": "CBS",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "cbs-c7",
+        "protocol_input_sha256": "9a86fbaddb33c43f9e24f72ef0ddb459d065fddb15b0164bbbb96dac51acec5e",
+        "protocol_arms": [
+          "standard",
+          "fast"
+        ]
+      },
+      {
+        "id": "PBE0-Direct-water48",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water48-pbe0-direct",
+        "protocol_input_sha256": "0c7def283849733029bbf9cd9a91519f076e84d607cc6f7a18560a3fd6a7d4cd",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "PBE0-DF-water48",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water48-pbe0-df",
+        "protocol_input_sha256": "d33c923063a1c43fd2400afcaf094ec07f0fd460dd432864f15b06530d1031ff",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "WB97M-V-Direct-water48",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water48-wb97m-v-direct",
+        "protocol_input_sha256": "17d44df7afa9996b0abf7df72301bf4758eadbde9f4523ce321001d14d2596ea",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "r2SCAN-3c-DF-water48",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water48-r2scan-3c-df",
+        "protocol_input_sha256": "d0992c9786f0c9feb1415ec5225015ff5365a22efa72bbf51112c984b74bb80a",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "PBE0-Direct-water96",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water96-pbe0-direct",
+        "protocol_input_sha256": "4d3894fdcf030e42e4d2d0300dc5e3e085e7a20deed00b88bd6c426408a2db31",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "PBE0-DF-water96",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water96-pbe0-df",
+        "protocol_input_sha256": "bf8f1b2febfd7d9b2d04d5e632d17210c54bb58d4be9b57a95d4c89385c98fdb",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "WB97M-V-Direct-water96",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water96-wb97m-v-direct",
+        "protocol_input_sha256": "03c18d243ced417acc7ae0dc324f54145f1665febded4f50c62f8d73b1d4d0e3",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      },
+      {
+        "id": "r2SCAN-3c-DF-water96",
+        "kind": "HF/DFT",
+        "receipt_status": "UNAVAILABLE",
+        "qualification": "PENDING",
+        "counts": {
+          "attempted": null,
+          "complete": null,
+          "qualified": null,
+          "rejected": null,
+          "unavailable": null,
+          "imported": 0
+        },
+        "count_scope": "Campaign counts not observed by offline mapper; null means unavailable, imported counts only this map",
+        "protocol_cell_id": "water96-r2scan-3c-df",
+        "protocol_input_sha256": "0b2105c17f77e4976cda41a8a15fd3887d586dc9df8db5322e1e72bcf5a25718",
+        "protocol_arms": [
+          "standard",
+          "fast",
+          "gpu4pyscf"
+        ]
+      }
+    ],
+    "optional": {
+      "2734": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+      "2735": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+      "2736": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+      "2737": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE",
+      "2738": "TRIGGERED_ONLY_NOT_RUN_BY_THIS_SLICE"
+    },
+    "limits": [
+      "No new native/oracle/H100/GPU calls",
+      "No hardware-only attribution or universal H100/H200 ranking",
+      "Historical single/cold and within-process warm are not independent repeat populations",
+      "Only qualified arm pairs may enter performance ratios; no reference-runtime denominator",
+      "CBS 32 GiB numeric budget is not a measured peak-memory claim",
+      "Core Direct WB97M-V does not update paper C7 DF WB97M-V",
+      "Standard/Fast timing alone does not establish H100 Lambda causality; conditional #2736 required",
+      "Failed initial C1 oracle and capacity/timeout histories remain in pinned raw capsules and PR records"
+    ]
+  },
+  "performance": {
+    "qualified_h100_pairs_imported": 0,
+    "ratios": [],
+    "reason": "No accepted H100 receipts imported; reference runtime is not a denominator"
+  }
+}
