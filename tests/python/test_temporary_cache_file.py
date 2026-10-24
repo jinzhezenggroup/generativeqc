@@ -30,7 +30,17 @@ int main(int argc, char** argv) {
   const std::filesystem::path directory = argv[1];
   if (TemporaryCacheFile::allowance(directory) < 16384) return 77;
   auto names = [&] { std::size_t n=0; for (const auto& p: std::filesystem::directory_iterator(directory)) ++n; return n; };
+  auto open_files = [&] {
+    std::size_t n = 0;
+    for (const auto& fd: std::filesystem::directory_iterator("/proc/self/fd")) {
+      std::error_code error;
+      const auto target = std::filesystem::read_symlink(fd.path(), error).string();
+      if (!error && target.starts_with(directory.string()+"/generativeqc-eri-")) ++n;
+    }
+    return n;
+  };
   const auto before = names();
+  const auto descriptors_before = open_files();
   {
     TemporaryCacheFile refused;
     require(!refused.reserve(directory, 0));
@@ -43,6 +53,7 @@ int main(int argc, char** argv) {
     require(file.reserve(directory, 16384));
     require(!file.reserve(directory, 16384));
     require(names() == before); // no visible path even while the owner is live
+    require(open_files() == descriptors_before + 1);
     std::array<unsigned char, 4096> expected{}, actual{};
     for(std::size_t i=0;i<expected.size();++i) expected[i] = (i*71+9)%251;
     require(file.write(3, expected.data(), expected.size()));
@@ -65,6 +76,7 @@ int main(int argc, char** argv) {
     require(truncated && !file.read(0, actual.data(), actual.size()));
   }
   require(names() == before);
+  require(open_files() == descriptors_before); // unlinked storage was actually closed
   std::cout << "temporary file contracts passed\n";
 }
 """)
