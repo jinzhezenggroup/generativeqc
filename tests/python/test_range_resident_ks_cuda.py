@@ -3,8 +3,24 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+
+def _auxiliary_basis(fitted: bool) -> Any:
+    """Load the same pinned JK-fit inputs used by independent fitted E/F gates.
+
+    The public runtime deliberately bundles only a small set of basis names;
+    a reference-engine name does not make that auxiliary table available there.
+    """
+    if not fitted:
+        return None
+    from test_df_fast_public_cuda import auxiliary_bases
+
+    from benchmarks._cases import benchmark_cases
+
+    return auxiliary_bases(benchmark_cases()["water-def2-svp-spherical"])[0]
 
 
 @pytest.mark.parametrize(
@@ -69,7 +85,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             device="cuda",
             precision="fp64",
             density_fitting="cuda" if fitted else None,
-            auxiliary_basis="cc-pvdz-jkfit" if fitted else None,
+            auxiliary_basis=_auxiliary_basis(fitted),
             max_iterations=100,
             energy_tolerance=1e-12,
             density_tolerance=1e-10,
@@ -190,7 +206,7 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         device="cuda",
         precision="fp64",
         density_fitting="cuda" if fitted else None,
-        auxiliary_basis="cc-pvdz-jkfit" if fitted else None,
+        auxiliary_basis=_auxiliary_basis(fitted),
         max_iterations=100,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
