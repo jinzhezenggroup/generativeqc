@@ -6,6 +6,12 @@ The test checks the value-only dispatch contract and retains the independent
 ERI/J/K, spin, representation and fallback comparisons. No production Fock
 barrier change or performance gain is asserted.
 
+The corrected full provider test passes ordinarily and under synccheck (zero
+errors); the public water3 Direct-HF endpoint also completes.
+`provider-validation.json.xz` binds those outputs to the source, binary, commands
+and Slurm allocations. This is integrated-source qualification, not a separate
+standalone-master GPU build. Applicable pre-commit checks pass.
+
 ## Standalone synchronization controls
 
 `graph_synccheck_probe.cu` links only CUDA. A producer stores 7; a consumer
