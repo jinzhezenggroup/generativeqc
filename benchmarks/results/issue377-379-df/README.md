@@ -169,3 +169,10 @@ python benchmarks/results/issue377-379-df/restore-endpoints.py \
 
 No observation, failed gate, numerical array, source identity or storage cap
 changes. Other source/profile/reference records remain at their existing paths.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

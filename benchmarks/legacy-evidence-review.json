@@ -336,6 +336,11 @@
       "owner": "ordinary CUDA force schedule qualification",
       "reason": "Two separately authenticated frozen-source populations retain exact complete endpoint vectors, matched warm work, independent references, source/binary/cache/sanitizer receipts and rejected experiments. Each lossless bundle stays below 1 MiB and the complete publication below the unchanged 2 MiB review budget; no binaries, profiler traces, external archive or policy exception is introduced.",
       "review_document": "benchmarks/results/pbe0-cuda-schedule-20261006/README.md"
+    },
+    "scf-validation-gemm-20261024": {
+      "owner": "independent optional physical-validation GEMM qualification",
+      "reason": "Lossless complete endpoint records retain all 328 independently checked calls, paired work and statistics, moved references, full measured source inputs, build and sanitizer evidence, and failed attempts. Historical JSON compression preserves every original byte without changing storage limits.",
+      "review_document": "benchmarks/results/scf-validation-gemm-20261024/README.md"
     }
   },
   "files": [
@@ -722,6 +727,22 @@
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
+    },
+    {
+      "path": "benchmarks/results/scf-validation-gemm-20261024/endpoints.json.xz",
+      "family": "scf-validation-gemm-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-and-independent-moved-references",
+      "bytes": 500048,
+      "sha256": "8ff3395641e4db3704676b36a5579547c5274e2d7f9dcb0c9f93148ce0492263"
+    },
+    {
+      "path": "benchmarks/results/scf-validation-gemm-20261024/provenance.json.xz",
+      "family": "scf-validation-gemm-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-source-build-test-and-execution-provenance",
+      "bytes": 608544,
+      "sha256": "0ddb9f78f3a8b4fdb6545d18cb6a77569c6660a039afcf93028292a41fd431d0"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

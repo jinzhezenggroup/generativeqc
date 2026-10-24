@@ -121,3 +121,10 @@ The batch helper itself allocates one finite Slurm job after compilation. Preser
 Slurm's device visibility. Run the root GPU tests with `VIBEQC_RESOURCE_CUDA_TEST=1`
 inside a finite allocation and provide `CUDACXX`. Regenerate the rounded table
 with `python tools/generate_df_rys2_table.py`; its output is byte-reproducible.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.
