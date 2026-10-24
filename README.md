@@ -124,41 +124,38 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF and DFT energy + analytic forces** on an RTX 5090
-(2026-10-13–15), compared with GPU4PySCF under matched FP64, basis, and grid
-settings. Cold includes construction, preparation, and the first calculation
-(compiler caches retained); warm reuses a fixed converged density. Measurements retain
-their individually identified source/build identities. The ωB97M-V native refresh
-includes direct populations through 96 atoms and DF through 48 atoms; missing
-independent references remain explicitly unchecked. Other functionals retain their prior evidence.
-Native ωB97M-V at 3/12 atoms uses primed compilation caches but fresh measurement
-processes and Calculators; reference timings remain historical.
+**HF/DFT energy + analytic forces — RTX 5090**
 
-**Direct J/K**
+Standard and Fast outperform GPU4PySCF in **44/58** and **45/58** accuracy-qualified warm cases.
+For 96-atom Direct ωB97M-V, warm speedups are **3.89× (Standard)** and **4.14× (Fast)**.
 
-![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-wb97mv-20261014/dft-cold-warm.svg)
+![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
-**Density fitting (DF)** — both engines use cc-pVDZ-JKFIT.
-Only native ωB97M-V DF/96 is omitted because no complete E+F call was obtained;
-DF/48 remains visible without a matching reference.
+![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
 
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-wb97mv-20261014/df-cold-warm.svg)
-
-See the [direct timing table](benchmarks/results/readme-wb97mv-20261014/timings.md),
-[DF timing table](benchmarks/results/readme-wb97mv-20261014/df-timings.md),
-and [protocol, accuracy, and provenance](benchmarks/results/readme-wb97mv-20261014/README.md).
+Default XC/VV10 grids, native SCF policies and full grid-response forces;
+plotted points pass common independent energy/force accuracy gates.
+Cold includes setup; warm is the median of three frozen-density calls.
+Gaps mark accuracy failures.
+See [measurements and conditions](benchmarks/results/readme-final-20261022/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 
-![Complete GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
+![Standard and Fast GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
 
 MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
 DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
 gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
 correlation within each basis group. Timings cover the
 complete two-group E+F endpoint, not just SCF or summed component timings.
-See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-full-20261014/timings.md)
-and [inputs, protocol and limitations](benchmarks/results/readme-cbs-full-20261014/README.md).
+[Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
+convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
+by FP64 final solves, independent residual checks and response. The curves use one fresh
+complete call per mode and molecule, with the same binary and GPU within each
+pair; they do not imply a speedup for every case. All Fast points pass
+constituent and composite energy/full-force checks against Standard.
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-memory-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-memory-20261021/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
 identical-Hamiltonian speedup measurements.

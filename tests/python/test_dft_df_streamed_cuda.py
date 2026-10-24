@@ -33,13 +33,15 @@ def test_streamed_dft_cold_warm_and_geometry(
     ]
     calc = Calculator(
         method=method,
-        basis="sto-3g",
+        # The larger orbital basis leaves a useful streamed interval between
+        # the mandatory metric scratch and complete resident tensor storage.
+        basis="def2-svp",
         auxiliary_basis="def2-svp",
         basis_representation="cartesian",
         device="cuda",
         precision="fp64",
         density_fitting="cuda",
-        density_fitting_memory_budget_bytes=8704 * 1024,
+        density_fitting_memory_budget_bytes=20 * 1024 * 1024,
         ks_options=KsOptions(grid=GridSpec()),
         max_iterations=200,
         energy_tolerance=1e-12,

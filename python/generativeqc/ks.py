@@ -152,6 +152,12 @@ class KsOptions:
     hybrids consume MethodIR-owned full-range exact exchange through common J/K.
     CUDA hybrids and unsupported primitive families fail closed. A different
     model requires a new prepared owner.
+
+    nonlocal_grid independently prescribes VV10/rVV10 quadrature. When omitted,
+    Treutler XC grids keep VV10 at level 3 even if XC is tighter; an explicit
+    legacy XC grid retains the shared-grid path. Supplying the same complete
+    GridSpec explicitly also retains sharing. Matching point counts alone
+    never authorize sharing points or weights.
     """
 
     functional: FunctionalSpec | None = None
@@ -164,6 +170,7 @@ class KsOptions:
     # Finite capacity for the full-grid pair/force owners. Actual allocation is
     # shape-sized; a caller-specified smaller cap remains a hard admission gate.
     nonlocal_memory_budget_bytes: int = 1 << 30
+    nonlocal_grid: GridSpec | None = None
     _precision_budget: tuple[float, float, float] | None = field(
         default=None, repr=False
     )
@@ -191,6 +198,10 @@ class KsOptions:
             raise ValueError("provide KS functional or composition, not both")
         if self.grid is not None and not isinstance(self.grid, GridSpec):
             raise TypeError("KS grid must be a GridSpec or None")
+        if self.nonlocal_grid is not None and not isinstance(
+            self.nonlocal_grid, GridSpec
+        ):
+            raise TypeError("KS nonlocal_grid must be a GridSpec or None")
         if self.grid_accuracy not in ("standard", "tight"):
             raise ValueError("KS grid_accuracy must be 'standard' or 'tight'")
         checked_int(self.tile_points, "KS XC tile points")
@@ -212,6 +223,15 @@ class KsOptions:
         if self._method_ir is None:
             raise ValueError("resolve KS options against a method first")
         return self._method_ir
+
+    @property
+    def has_separate_nonlocal_grid(self) -> bool:
+        """Whether native-normalized quadratures require independent owners."""
+        return self.nonlocal_grid is not None and (
+            self.grid is None
+            or _canonical_grid_spec(self.nonlocal_grid)
+            != _canonical_grid_spec(self.grid)
+        )
 
     @property
     def execution_plan(self) -> typing.Any:
@@ -275,6 +295,11 @@ class KsOptions:
         }
         if self._precision_budget is not None:
             payload["application_precision_budget"] = self._precision_budget
+        if self.has_separate_nonlocal_grid:
+            payload["nonlocal_grid"] = asdict(self.nonlocal_grid)
+            payload["nonlocal_grid_provenance"] = grid_policy_provenance(
+                self.nonlocal_grid
+            )
         if self._method_ir is not None:
             payload["method_ir"] = self._method_ir.to_payload()
             payload["method_ir_identity"] = self._method_ir.identity
@@ -302,6 +327,18 @@ class ProfiledKsSelection:
 
     options: KsOptions | None
     exact_profile_match: bool = False
+
+
+def _canonical_grid_spec(spec: GridSpec) -> GridSpec:
+    """Mirror native v1's implicit unit-radius representation for equality."""
+    if spec.version != 1:
+        return spec
+    return replace(
+        spec,
+        element_radii=tuple(
+            (number, radius) for number, radius in spec.element_radii if radius != 1.0
+        ),
+    )
 
 
 def _native_execution_plan(method_ir: typing.Any) -> typing.Any:
@@ -622,6 +659,19 @@ def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
         and plan.nonlocal_correlation is None
         and not plan.post_scf
         and ks_coefficients(method_ir) == (1.0, 1.0, 0.0)
+    )
+
+
+def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Admit only the independently qualified physical-spin WB97M-V composition.
+
+    Compiler primitive rules are wider than public molecular qualification.
+    Compare resolved mathematics, not a user-provided selector or identifier.
+    """
+    return (
+        isinstance(method_ir, MethodIR)
+        and method_ir.semantic_payload()
+        == resolve_method("WB97M-V", spin=method_ir.spin).semantic_payload()
     )
 
 
@@ -980,42 +1030,30 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if (
-            "tau" in expected.ingredients
-            and not compile_ks_execution_plan(native_named_ir).exchange
-        ):
-            # The v2 policy has no qualified pure meta-GGA profile. Preserve
-            # the existing explicit v1 default rather than assigning a GGA grid.
-            if options.grid_accuracy != "standard":
-                raise NotImplementedError(
-                    "r2SCAN grid accuracy profiles require an explicit GridSpec"
-                )
-            grid = GridSpec()
-        elif _is_pbe_d4_composition(named_ir):
-            grid = GridPolicy(options.grid_accuracy).resolve(
-                "pbe-rks", derivative_order=0
-            )
-        elif ks_coefficients(method_ir)[2] != 0.0:
-            raise NotImplementedError(
-                "global-hybrid grid policy requires an explicit GridSpec"
-            )
-        else:
-            grid_method = method
-            if parse_automatic_libxc_selector(method) is not None:
-                family = "lda" if expected.ingredients == ("rho",) else "pbe"
-                grid_method = (
-                    f"{family}-{'uks' if method_ir.spin == 'polarized' else 'rks'}"
-                )
-            grid = GridPolicy(options.grid_accuracy).resolve(
-                grid_method, derivative_order=0
-            )
+        grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
+    nonlocal_grid = options.nonlocal_grid
+    if (
+        nonlocal_grid is None
+        and grid.version == 4
+        and grid.level != 3
+        and compile_ks_execution_plan(method_ir).nonlocal_correlation is not None
+    ):
+        # GPU4PySCF configures XC and nonlocal grids independently. Retain the
+        # level-3 VV10 default when XC selects a different Treutler level.
+        # Explicit legacy tensor grids preserve their established shared path.
+        nonlocal_grid = GridSpec.treutler(3)
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(
             "KS tail/spin domain does not match the selected method"
         )
     result = replace(
-        options, functional=resolved, composition=None, grid=grid, scf_domain=domain
+        options,
+        functional=resolved,
+        composition=None,
+        grid=grid,
+        nonlocal_grid=nonlocal_grid,
+        scf_domain=domain,
     )
     object.__setattr__(result, "_method_ir", method_ir)
     return result
@@ -1114,11 +1152,14 @@ def profiled_ks_options(
     ).options
 
 
-def native_ks_options(options: typing.Any) -> typing.Any:
+def native_ks_options(
+    options: typing.Any, *, library: typing.Any = None, backend: int = 0
+) -> typing.Any:
     """Lower one compiler KS execution plan into the current semantic C ABI.
 
-    The ABI carries MethodIR primitives directly.  No named-method/family code
-    and no historical suffix version is selected here.
+    Already-selected libraries own compiled exact-identity catalog programs.
+    Custom/noncatalog graphs and missing-symbol/library-free metadata retain
+    explicit compiler lowering; a selected native refusal never retries it.
     """
     import ctypes
 
@@ -1133,6 +1174,100 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         radii = (ctypes.c_double * 119)(*[fill] * 119)
         for z, radius in grid.element_radii:
             radii[z] = radius
+
+    domain = options.scf_domain.encode("ascii")
+    if (
+        options.nonlocal_grid is not None
+        and options.execution_plan.nonlocal_correlation is None
+    ):
+        raise ValueError("nonlocal_grid requires a nonlocal correlation term")
+    split_grid = options.has_separate_nonlocal_grid
+    nonlocal_descriptor = None
+    if split_grid:
+        if library is not None:
+            try:
+                query = library.generativeqc_ks_nonlocal_grid_version_v1
+            except AttributeError as error:
+                raise NotImplementedError(
+                    "native library lacks independent VV10 grids"
+                ) from error
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 1:
+                raise NotImplementedError(
+                    "unsupported native independent-grid transport"
+                )
+        nonlocal_spec = options.nonlocal_grid
+        nonlocal_radii = None
+        if nonlocal_spec.element_radii:
+            fill = 0.0 if nonlocal_spec.version >= 2 else 1.0
+            nonlocal_radii = (ctypes.c_double * 119)(*[fill] * 119)
+            for atomic_number, radius in nonlocal_spec.element_radii:
+                nonlocal_radii[atomic_number] = radius
+        nonlocal_descriptor = _native.KsOptionsDescriptor(
+            struct_size=ctypes.sizeof(_native.KsOptionsDescriptor),
+            abi_version=_native.ABI_VERSION,
+            scf_domain=domain,
+            grid_version=nonlocal_spec.version,
+            radial_points=nonlocal_spec.radial_points,
+            angular_polar=nonlocal_spec.angular_polar,
+            angular_azimuth=nonlocal_spec.angular_azimuth,
+            partition_iterations=nonlocal_spec.partition_iterations,
+            coincident_tolerance=nonlocal_spec.coincident_tolerance,
+            tile_points=options.tile_points,
+            element_radii=nonlocal_radii,
+            element_radius_count=119 if nonlocal_radii is not None else 0,
+            xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
+            if options.xc_schedule == "device_fused"
+            else _native.XC_EXECUTION_HOST_UNFUSED,
+        )
+        nonlocal_descriptor._radii_owner = nonlocal_radii
+
+    def bind_nonlocal_grid(descriptor: typing.Any) -> None:
+        """Retain every borrowed grid field through native preparation."""
+        if nonlocal_descriptor is not None:
+            descriptor.nonlocal_grid_version = 1
+            descriptor.nonlocal_grid = ctypes.pointer(nonlocal_descriptor)
+            descriptor._nonlocal_grid_owner = nonlocal_descriptor
+
+    descriptor_type = (
+        _native.NonlocalGridKsOptionsDescriptor
+        if split_grid
+        else _native.ApplicationPrecisionKsOptionsDescriptor
+        if options._precision_budget is not None
+        else _native.KsOptionsDescriptor
+    )
+    descriptor = descriptor_type(
+        struct_size=ctypes.sizeof(descriptor_type),
+        abi_version=_native.ABI_VERSION,
+        scf_domain=domain,
+        grid_version=grid.version,
+        radial_points=grid.radial_points,
+        angular_polar=grid.angular_polar,
+        angular_azimuth=grid.angular_azimuth,
+        partition_iterations=grid.partition_iterations,
+        coincident_tolerance=grid.coincident_tolerance,
+        tile_points=options.tile_points,
+        element_radii=radii,
+        element_radius_count=119 if radii is not None else 0,
+        xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
+        if options.xc_schedule == "device_fused"
+        else _native.XC_EXECUTION_HOST_UNFUSED,
+    )
+    descriptor._domain_owner = domain
+    descriptor._radii_owner = radii
+    bind_nonlocal_grid(descriptor)
+    if options._precision_budget is not None:
+        descriptor.application_energy_budget = options._precision_budget[0]
+        descriptor.application_max_force_budget = options._precision_budget[1]
+        descriptor.application_rms_force_budget = options._precision_budget[2]
+    from ._ks_catalog_native import select_catalog_plan
+
+    if select_catalog_plan(library, options.method_ir, backend, descriptor):
+        if descriptor_type is not _native.KsOptionsDescriptor:
+            prefix = _native.KsOptionsDescriptor.from_buffer(descriptor)
+            prefix._extension_owner = descriptor
+            return prefix
+        return descriptor
 
     if _is_pbe_d4_composition(options.method_ir):
         semilocal = typing.cast("SemilocalXCPrimitive", options.method_ir.primitives[0])
@@ -1190,12 +1325,6 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         nonlocal_variant = 0
         nonlocal_b = nonlocal_c = nonlocal_coefficient = 0.0
 
-    domain = options.scf_domain.encode("ascii")
-    descriptor_type = (
-        _native.ApplicationPrecisionKsOptionsDescriptor
-        if options._precision_budget is not None
-        else _native.KsOptionsDescriptor
-    )
     descriptor = descriptor_type(
         ctypes.sizeof(descriptor_type),
         _native.ABI_VERSION,
@@ -1224,7 +1353,7 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         nonlocal_c,
         nonlocal_coefficient,
         options.nonlocal_memory_budget_bytes if nonlocal_primitive is not None else 0,
-        *(options._precision_budget or ()),
+        *(options._precision_budget or ((0.0, 0.0, 0.0) if split_grid else ())),
     )
     # ctypes pointer fields do not own their pointees.  Retain every borrowed
     # object for exactly as long as the short-lived descriptor is alive.
@@ -1233,7 +1362,8 @@ def native_ks_options(options: typing.Any) -> typing.Any:
     descriptor._components_owner = components
     descriptor._exchange_owner = exchange_terms
     descriptor._radii_owner = radii
-    if options._precision_budget is not None:
+    bind_nonlocal_grid(descriptor)
+    if descriptor_type is not _native.KsOptionsDescriptor:
         prefix = _native.KsOptionsDescriptor.from_buffer(descriptor)
         prefix._extension_owner = descriptor
         return prefix

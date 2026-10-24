@@ -1,0 +1,32 @@
+{
+  "schema": "generativeqc.readme-gpu4pyscf96.v1",
+  "benchmark_source_commit": "69c4549f260e8c46cdd69f2f59e09b0a1f7d9c4a",
+  "scope": "GPU4PySCF wb97m-v/def2-SVP water-96 Direct and mixed-RSH DF only",
+  "process_timeout_seconds": null,
+  "launcher_sha256": "348ddcb2ccea1dbf6ddd1aeefde99a38be8b84f23a2c4c6ffad162aba7102d5f",
+  "basis_file_sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+  "populations": {
+    "none": {
+      "file": "direct-reference.json.xz",
+      "raw_sha256": "3ec31cce7e160e18f716c7d0ac41cde446233884bfa9f0c75f1d973fad7dc2d6",
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": null
+      },
+      "slurm_job_id": "10159",
+      "allocation_receipt": "JobId=10159 JobName=readme-wb97mv96-direct UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=2-00:00:00 TimeMin=N/A SubmitTime=2026-10-18T14:36:44 EligibleTime=2026-10-18T14:36:44 AccrueTime=Unknown StartTime=2026-10-18T14:36:44 EndTime=2026-10-20T14:36:44 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-18T14:36:44 Scheduler=Main Partition=main AllocNode:Sid=localhost:1879458 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=64G,node=1,billing=8 AllocTRES=cpu=8,mem=64G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryNode=64G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+      "execution_receipt": "2026-10-18T14:36:44,901797600+08:00\nJobId=10159 JobName=readme-wb97mv96-direct UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=2-00:00:00 TimeMin=N/A SubmitTime=2026-10-18T14:36:44 EligibleTime=2026-10-18T14:36:44 AccrueTime=Unknown StartTime=2026-10-18T14:36:44 EndTime=2026-10-20T14:36:44 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-18T14:36:44 Scheduler=Main Partition=main AllocNode:Sid=localhost:1879458 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=64G,node=1,billing=8 AllocTRES=cpu=8,mem=64G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryNode=64G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nCUDA_VISIBLE_DEVICES=0\nindex, uuid, name\n0, GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d, NVIDIA GeForce RTX 5090\n2026-10-18T18:13:24,155187583+08:00\n"
+    },
+    "cuda": {
+      "file": "df-reference.json.xz",
+      "raw_sha256": "ebb5048add5c987034320e6afcb660e62651f9280127b5f5b921f238aa511384",
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": null
+      },
+      "slurm_job_id": "10160",
+      "allocation_receipt": "JobId=10160 JobName=readme-wb97mv96-df UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=2-00:00:00 TimeMin=N/A SubmitTime=2026-10-18T14:37:16 EligibleTime=2026-10-18T14:37:16 AccrueTime=Unknown StartTime=2026-10-18T14:37:16 EndTime=2026-10-20T14:37:16 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-18T14:37:16 Scheduler=Main Partition=main AllocNode:Sid=localhost:1879905 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=64G,node=1,billing=8 AllocTRES=cpu=8,mem=64G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryNode=64G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+      "execution_receipt": "2026-10-18T14:37:17,039591078+08:00\nJobId=10160 JobName=readme-wb97mv96-df UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=2-00:00:00 TimeMin=N/A SubmitTime=2026-10-18T14:37:16 EligibleTime=2026-10-18T14:37:16 AccrueTime=Unknown StartTime=2026-10-18T14:37:16 EndTime=2026-10-20T14:37:16 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-18T14:37:16 Scheduler=Main Partition=main AllocNode:Sid=localhost:1879905 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=64G,node=1,billing=8 AllocTRES=cpu=8,mem=64G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryNode=64G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nCUDA_VISIBLE_DEVICES=1\nindex, uuid, name\n1, GPU-d0b9e1b7-2083-6198-da50-c3e55693691c, NVIDIA GeForce RTX 5090\n2026-10-18T18:08:18,843961843+08:00\n"
+    }
+  }
+}

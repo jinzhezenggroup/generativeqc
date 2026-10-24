@@ -26,6 +26,7 @@ def contract_inputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
         "tools/cupti_residency_capture.cpp",
         "tools/cupti_residency_capture.py",
         "tools/capture_prepared_residency.py",
+        "tools/residency_allocation.py",
         "tools/cupti_graph_inventory.cpp",
         "tools/cupti_graph_inventory.py",
         "tools/cupti_source_capture.cpp",
@@ -206,7 +207,7 @@ def test_residency_histories_execute_exact_pinned_internal_displacement(
         "read_text",
         lambda path, *args, **kwargs: (
             f"synthetic-mapping {arguments.cupti_library}\n"
-            if str(path) == "/proc/self/maps"
+            if path.as_posix() == "/proc/self/maps"
             else original_read(path, *args, **kwargs)
         ),
     )

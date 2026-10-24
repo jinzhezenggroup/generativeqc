@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b4-energy-blas.json",
+  "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b4-energy-blas.json.gz",
+  "original_bytes": 99289,
+  "stored_bytes": 7636,
+  "original_sha256": "84dd083b991d8539fa2f8b0ff8dfa6bb89c5cf32e55f9869d594f28a0cbba9ff",
+  "stored_sha256": "4826cfd489abf6edfd276d2b4029c2cb35fdf72060e35006608e57f981faecaf",
+  "original_git_blob": "85eab5969287b529d7526a58fcb4170c31846561",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage change only; every historical numerical value, sample, setting and gate is preserved."
+}

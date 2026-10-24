@@ -242,16 +242,13 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
         first_coefficients, second_coefficients, response, hermite_convolution);
   } else {
     CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
-    if constexpr (!std::is_same_v<Scalar, MixedPrecisionFloat>) {
-      if (range == generativeqc::integrals::CoulombRange::Full)
-        fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-      else if (!fill_range_coulomb<MaximumAngular>(rho, product_p, product_q, range, omega,
-                                                   auxiliary, domain))
-        return scalar<Scalar>(NAN);
-    } else {
-      if (range != generativeqc::integrals::CoulombRange::Full) return scalar<Scalar>(NAN);
+    if (range == generativeqc::integrals::CoulombRange::Full)
       fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-    }
+    // The radial seed remains FP64; the shared recurrence follows Scalar,
+    // including actual FP32 value work and unchanged FP64 geometry jets.
+    else if (!fill_range_coulomb<MaximumAngular>(scalar_value(rho), product_p, product_q,
+                                                 range, omega, auxiliary, domain))
+      return scalar<Scalar>(NAN);
     return contract_prepared_cartesian_coulomb<MaximumAngular, Scalar>(
         p, q, angular_first, angular_second, angular_third, angular_fourth,
         first_coefficients, second_coefficients, auxiliary, hermite_convolution);
@@ -341,13 +338,15 @@ __device__ inline Scalar primitive_eri_psss(int axis, double alpha, const Vec3<S
 // Arithmetic/reduction order is preserved; host plans and queue policy remain native.
 namespace generativeqc::scf::cuda_execution {
 
-template <unsigned MaximumAngular, typename Scalar>
-__device__ inline __noinline__ Scalar contracted_eri_cartesian(
+/** Keep primitive/term order shared when a consumer proves a narrower
+ * primitive recurrence domain. The callable changes only that recurrence. */
+template <unsigned MaximumAngular, typename Scalar, typename Primitive>
+__device__ inline __noinline__ Scalar contracted_eri_cartesian_with(
     const DeviceBatch& batch, std::int64_t ao_i, std::int64_t ao_j, std::int64_t ao_k,
     std::int64_t ao_l, std::int32_t shell_i, std::int32_t shell_j, std::int32_t shell_k,
     std::int32_t shell_l, std::int64_t derivative_coordinate,
-    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
-    double omega = 0.0) {
+    generativeqc::integrals::CoulombRange range,
+    double omega, const Primitive& primitive) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
   const Vec3<Scalar> first =
       atom_position<Scalar>(batch, batch.shell_atoms[shell_i], derivative_coordinate);
@@ -386,7 +385,7 @@ __device__ inline __noinline__ Scalar contracted_eri_cartesian(
                   result = result + weight * first_coefficient * second_coefficient *
                                         third_coefficient *
                                         ao_term_coefficient(batch, ao_l, fourth_term) *
-                                        primitive_eri_cartesian<MaximumAngular>(
+                                        primitive(
                                             batch.primitive_exponents[a], first, first_angular,
                                             batch.primitive_exponents[b], second, second_angular,
                                             batch.primitive_exponents[c], third, third_angular,
@@ -401,6 +400,26 @@ __device__ inline __noinline__ Scalar contracted_eri_cartesian(
     }
   }
   return result;
+}
+
+template <unsigned MaximumAngular, typename Scalar>
+__device__ inline Scalar contracted_eri_cartesian(
+    const DeviceBatch& batch, std::int64_t ao_i, std::int64_t ao_j, std::int64_t ao_k,
+    std::int64_t ao_l, std::int32_t shell_i, std::int32_t shell_j, std::int32_t shell_k,
+    std::int32_t shell_l, std::int64_t derivative_coordinate,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
+  const auto primitive = [](double a, const Vec3<Scalar>& first, const Angular& ai,
+                            double b, const Vec3<Scalar>& second, const Angular& aj,
+                            double c, const Vec3<Scalar>& third, const Angular& ak,
+                            double d, const Vec3<Scalar>& fourth, const Angular& al,
+                            generativeqc::integrals::CoulombRange op, double w) {
+    return primitive_eri_cartesian<MaximumAngular>(a, first, ai, b, second, aj,
+                                                   c, third, ak, d, fourth, al, op, w);
+  };
+  return contracted_eri_cartesian_with<MaximumAngular, Scalar>(
+      batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
+      derivative_coordinate, range, omega, primitive);
 }
 
 template <unsigned MaximumAngular, typename Scalar>
@@ -420,13 +439,9 @@ __device__ inline Scalar contracted_eri_order(
   const std::int32_t shell_k = batch.ao_shells[ao_k];
   const std::int32_t shell_l = batch.ao_shells[ao_l];
   if (range != generativeqc::integrals::CoulombRange::Full) {
-    if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
-      return scalar<Scalar>(NAN);
-    } else {
-      return contracted_eri_cartesian<MaximumAngular, Scalar>(
-          batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
-          derivative_coordinate, range, omega);
-    }
+    return contracted_eri_cartesian<MaximumAngular, Scalar>(
+        batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
+        derivative_coordinate, range, omega);
   }
   if constexpr (MaximumAngular == 0) {
     const Vec3<Scalar> first =

@@ -383,6 +383,12 @@ def test_candidate_native_abi_gates_proof_and_counts_only_submitted_tiles(
             "int stationary_geometry_precision_metrics_v1(",
         )
     )
+    native = (
+        "namespace generativeqc_stationary_cuda {\n"
+        + _block(header, "bool stationary_grid_span(")
+        + "\n}\n"
+        + native
+    )
     native, count = re.subn(
         r"geometry_reduce\s*<<<.*?>>>\(.*?\);", "++reductions;", native, flags=re.DOTALL
     )
@@ -444,7 +450,7 @@ _DRIVER = r"""
 int main() {
   using namespace generativeqc_stationary_cuda;
   double value{}; int error{};
-  for(int mode=0;mode<8;++mode) {
+  for(int mode=0;mode<12;++mode) {
     Owner owner; owner.context.error=&error;
     generativeqc::dft::GridTaskView view;
     view.features=view.ao=view.points=&value;
@@ -453,13 +459,18 @@ int main() {
     const uint64_t flags=mode==3?2:mode==1?0:1;
     if(mode==4) view.features=nullptr;
     if(mode==5) view.npoint=0;
+    size_t offset=0,per_atom=4;
+    if(mode==8) { owner.molecular_points=2; per_atom=0; }
+    if(mode==9) per_atom=0;
+    if(mode==10) offset=48;
+    if(mode==11) per_atom=SIZE_MAX;
     const int status=stationary_geometry_molecular_resident_weights_fp32_enqueue_v1(
-        mode==6?nullptr:&owner,mode==7?nullptr:&view,&value,0,4,&value,&value,
+        mode==6?nullptr:&owner,mode==7?nullptr:&view,&value,offset,per_atom,&value,&value,
         generation,flags,nullptr,0);
-    const bool submitted=mode==0 || mode==1;
-    assert(status==int(mode!=0 && mode!=1 && mode!=5));
+    const bool submitted=mode==0 || mode==1 || mode==8;
+    assert(status==int(mode!=0 && mode!=1 && mode!=5 && mode!=8));
     assert(launches==int(submitted) && reductions==int(submitted));
-    if(submitted) assert(mixed_selected && proof_selected==(mode==0));
+    if(submitted) assert(mixed_selected && proof_selected==(mode==0 || mode==8));
     uint64_t metrics[3]{};
     assert(!stationary_geometry_precision_metrics_v1(&owner,metrics,3));
     assert(metrics[0]==1 && metrics[1]==uint64_t(submitted));

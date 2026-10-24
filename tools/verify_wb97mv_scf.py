@@ -2,6 +2,8 @@
 
 Run the native test with a JSONL destination, then pass that file here.
 PySCF is an optional qualification oracle, never a production dependency.
+Default keeps CPU PySCF's 1e-8; pass --vv10-density-cutoff 1e-10 explicitly
+for the new native molecular domain.
 """
 
 from __future__ import annotations
@@ -94,4 +96,11 @@ def verify(path: Path) -> list[dict]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dump", type=Path)
-    verify(parser.parse_args().dump)
+    parser.add_argument(
+        "--vv10-density-cutoff", type=float, choices=(1e-8, 1e-10), default=1e-8
+    )
+    args = parser.parse_args()
+    from _pyscf_vv10_domain import vv10_density_domain
+
+    with vv10_density_domain(args.vv10_density_cutoff):
+        verify(args.dump)

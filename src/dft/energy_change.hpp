@@ -11,6 +11,25 @@
 
 namespace generativeqc::dft::detail {
 
+/** Hold an already stationary density while rechecking a failed energy gate.
+ *
+ * This requests another complete physical F[D], not convergence or an energy
+ * replay. Updating a sub-tolerance density can otherwise keep perturbing the
+ * large electronic traces after both residual norms are already acceptable.
+ * Missing energy history and nonfinite diagnostics cannot authorize a hold.
+ */
+GENERATIVEQC_DFT_ENERGY_HD inline bool stationary_density_needs_energy_confirmation(
+    bool has_energy_history, double energy_change, double density_change, double residual,
+    double maximum_residual, double energy_tolerance, double density_tolerance,
+    double stationarity_tolerance) {
+  return has_energy_history && energy_tolerance > 0.0 && density_tolerance > 0.0 &&
+         stationarity_tolerance > 0.0 && energy_change >= energy_tolerance &&
+         energy_change < std::numeric_limits<double>::infinity() && density_change >= 0.0 &&
+         density_change < density_tolerance && residual >= 0.0 &&
+         residual < stationarity_tolerance && maximum_residual >= 0.0 &&
+         maximum_residual < stationarity_tolerance;
+}
+
 /** Difference of compensated electronic energies at one fixed geometry.
  *
  * Nuclear repulsion cancels exactly. Retaining the diagnostic reduction's

@@ -1,5 +1,41 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-22 README comparison](readme-final-20261022/README.md)
+remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
+and one GPU4PySCF default SCF profile. Both engines include complete moving-grid
+force response. The report retains common independent accuracy gates, actual
+work, failed populations and the [remaining configuration differences](readme-final-20261022/conditions.md).
+The [previous repaired comparison](readme-repaired-20261021/README.md) and
+[earlier comparison](readme-unified-20261021/README.md) retain their original
+tables and verified published-Git snapshots.
+
+The [initial 2026-10-20 default-grid refresh](readme-defaults-20261020/README.md)
+retains 765 complete cold/warm E+F calls across all eight HF/DFT methods,
+including public Standard/Fast modes. That frozen native source rejected the
+reference's default g-shell auxiliary basis; those failures remain explicit. These are stock
+latencies with different force-response conventions, not qualified speedups.
+
+The [2026-10-20 CCSD(T)/CBS Fast campaign](readme-cbs-fast-20261020/README.md)
+compares complete Standard/Fast QM7 C1–C7 calls with the same binary and GPU
+within each pair. Fast combines relaxed convergence with default FP32 DF-CCSD
+preconvergence and FP64 physical checks/response. Constituent and
+composite energy/full-force differences pass the declared allowances; independent
+C2 directional checks and single-observation timing limits remain explicit.
+
+The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
+separates shared J/K, nonlocal packet and native-force gains from remaining
+small-system slowdowns, with source-bound independent accuracy and work counts.
+
+The [2026-10-15 combined #2531/#2532 HF/DFT refresh](readme-refresh-20261015/README.md)
+reports native Direct/DF E+F timings against unchanged historical GPU4PySCF
+references, with independent accuracy checks, SCF work and cache-priming receipts.
+Its 2026-10-17 native-only ωB97M-V DF/96 supplement adds a complete cold endpoint
+with explicit memory allowances; the five-repeat warm population timed out.
+
+The [2026-10-15 r²SCAN-3c qualification](r2scan3c-final-validation-20261015/README.md)
+records independent Direct/DF numerics and complete 3/12/48/96-atom cold/moved
+endpoints, including work-confounded results and the limits of default enablement.
+
 The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
 retains native direct cold/warm populations through 96 atoms and DF through
 48 atoms. Missing reference accuracy is explicit and does not suppress DF/48;
@@ -22,15 +58,16 @@ The [2026-10-13 HF/DFT comparison](readme-dft-20261013/README.md) measures compl
 cold/warm direct and density-fitted endpoints based on master `e0ad22036` for HF, PBE, PBE0,
 B3LYP, r2SCAN, r2SCAN-3c, M06-2X and ωB97M-V. The report distinguishes original
 master measurements from the force-memory fix reruns. It retains independent numerical
-checks, per-repeat SCF work and unsuccessful outcomes alongside the README
-figure and timing table.
+checks, per-repeat SCF work and unsuccessful outcomes in unchanged live
+summaries. The superseded report, ancillary receipts, figures and tables are
+recoverable through its verified merged-Git snapshot.
 
 The [2026-09-22 endpoint investigation](readme-20260922/README.md) retains
 matched GPU HF, partial DFT and internal CCSD(T) measurements from master
-`572fbd6d`. It is diagnostic evidence, **not qualified for README publication**:
-large-system correctness, completeness and capability blockers remain open under
-[#1117](https://github.com/jinzhezenggroup/vibeqc/issues/1117). Its stopped
-and unsupported paths have no inferred native timings.
+`572fbd6d` through a verified merged-Git snapshot. It is historical diagnostic
+evidence, **not qualified for README publication**: correctness, completeness
+and capability blockers stopped that campaign. Its stopped and unsupported
+paths have no inferred native timings or later scientific qualification.
 
 ## Adding and maintaining evidence
 

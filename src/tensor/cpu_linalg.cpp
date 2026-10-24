@@ -21,12 +21,20 @@
 #ifndef GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
 #define GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS 0
 #endif
+#ifndef GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED
+#define GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED 0
+#endif
 #ifndef GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS
 #define GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS 0
 #endif
 
 #if GENERATIVEQC_HAS_OPENBLAS
 #include <cblas.h>
+#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS && GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED
+// Some prefixed distributions declare only the prefixed spelling while their
+// shared library exports the ordinary extension. CMake verifies this exact ABI.
+extern "C" int openblas_set_num_threads_local(int);
+#endif
 #if GENERATIVEQC_OPENBLAS_HAS_LAPACKE
 #include <lapacke.h>
 #endif
@@ -366,7 +374,7 @@ int scalar_cholesky_lower(double* matrix, std::size_t n) {
 #if GENERATIVEQC_HAS_OPENBLAS
 [[maybe_unused]] void openblas_set_local_threads(int threads) {
 #if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
-#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX && !GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED
   (void)scipy_openblas_set_num_threads_local(threads);
 #else
   (void)openblas_set_num_threads_local(threads);
@@ -378,7 +386,7 @@ int scalar_cholesky_lower(double* matrix, std::size_t n) {
 
 [[maybe_unused]] int openblas_set_local_threads_return_previous(int threads) {
 #if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
-#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX && !GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED
   return scipy_openblas_set_num_threads_local(threads);
 #else
   return openblas_set_num_threads_local(threads);

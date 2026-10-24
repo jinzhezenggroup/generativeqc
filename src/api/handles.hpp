@@ -24,14 +24,39 @@ struct generativeqc_system {
   /** A source-only fit handle is not an orbital or a generic DF-HF export.
    * Full correlated RI-JK admits it through the bounded source/gradient owner. */
   bool correlation_auxiliary{false};
+  /** Values-only KS DF source handle, never an orbital or generic DF-HF export.
+   * Second-order consumers must independently authenticate their model/closure. */
+  bool ks_auxiliary{false};
+  /** Complete CUDA HF/KS fitting values and first nuclear derivatives.
+   * The auxiliary-g sink owns six-term expansions; orbital admission is separate. */
+  bool scf_auxiliary{false};
 };
 
 namespace generativeqc::api {
 
 inline bool valid_system_roles(const generativeqc_system& orbital,
-                               const generativeqc_method_descriptor& descriptor) {
-  if (orbital.correlation_auxiliary) return false;
+                               const generativeqc_method_descriptor& descriptor,
+                               core::Backend backend) {
+  if (orbital.correlation_auxiliary || orbital.ks_auxiliary || orbital.scf_auxiliary) return false;
   const auto* auxiliary = descriptor.density_fitting_auxiliary_basis;
+  // AUTO follows the prepared context, including typed CUDA-only auxiliary
+  // owners. Do not let an AUTO request reuse those owners on the CPU backend.
+  const bool cuda_df = backend == core::kCudaBackend &&
+                       (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
+                        descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO);
+  if (auxiliary && auxiliary->scf_auxiliary) {
+    const auto* capabilities = methods::find_capabilities(descriptor.method);
+    return capabilities &&
+           (capabilities->family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+            (capabilities->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+             descriptor.ks_options)) &&
+           cuda_df;
+  }
+  if (auxiliary && auxiliary->ks_auxiliary) {
+    const auto* capabilities = methods::find_capabilities(descriptor.method);
+    return capabilities && capabilities->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+           descriptor.ks_options && cuda_df;
+  }
   if (!auxiliary || !auxiliary->correlation_auxiliary) return true;
   return descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T ||
          (descriptor.method == GENERATIVEQC_METHOD_MP2 &&

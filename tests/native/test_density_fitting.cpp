@@ -20,6 +20,7 @@
 #include "scf/df_response_weights.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace {
 
@@ -84,6 +85,81 @@ void require_matrix_close(const std::vector<double>& actual, const std::vector<d
       throw std::runtime_error(std::string(message) + " at element " + std::to_string(element) +
                                ": actual=" + std::to_string(actual[element]) +
                                " expected=" + std::to_string(expected[element]));
+    }
+  }
+}
+
+void check_scalar_exchange_layouts(bool symmetric) {
+  using namespace generativeqc::scf;
+  for (const std::size_t dimension : {7U, 16U, 24U, 43U, 86U}) {
+    constexpr std::size_t auxiliary_count = 3;
+    DensityFittingThreeCenter source{dimension, auxiliary_count, auxiliary_count,
+                                     std::vector<double>(dimension * dimension * auxiliary_count)};
+    std::vector<double> alpha(dimension * dimension);
+    std::vector<double> beta(dimension * dimension);
+    for (std::size_t row = 0; row < dimension; ++row)
+      for (std::size_t column = 0; column < dimension; ++column) {
+        const auto pair = row * dimension + column;
+        const auto source_row = symmetric ? std::min(row, column) : row;
+        const auto source_column = symmetric ? std::max(row, column) : column;
+        alpha[pair] = 0.01 * (1 + (row + 2 * column) % 7);
+        beta[pair] = 0.005 * (1 + (3 * row + column) % 5);
+        for (std::size_t auxiliary = 0; auxiliary < auxiliary_count; ++auxiliary)
+          source.values[pair * auxiliary_count + auxiliary] =
+              0.001 * (1 + (source_row + 3 * source_column + auxiliary) % 11);
+      }
+    // Neither density nor B is assumed symmetric by this public contraction.
+    const auto alpha_reference = reference_jk(source, alpha).second;
+    const auto beta_reference = reference_jk(source, beta).second;
+    for (const bool cached : {false, true}) {
+      if (cached) {
+        source.auxiliary_major_values.resize(source.values.size());
+        for (std::size_t pair = 0; pair < dimension * dimension; ++pair)
+          for (std::size_t auxiliary = 0; auxiliary < auxiliary_count; ++auxiliary)
+            source.auxiliary_major_values[auxiliary * dimension * dimension + pair] =
+                source.values[pair * auxiliary_count + auxiliary];
+      }
+      const auto restricted = build_density_fitting_rhf_jk(source, alpha, {false, true});
+      const auto unrestricted = build_density_fitting_uhf_jk(source, alpha, beta, {false, true});
+      require(restricted.coulomb.empty() && unrestricted.coulomb.empty(),
+              "exchange-only layout constructed Coulomb output");
+      require_matrix_close(restricted.exchange, alpha_reference, 2e-12,
+                           "restricted exchange layout differs from four-center oracle");
+      require_matrix_close(unrestricted.alpha_exchange, alpha_reference, 2e-12,
+                           "alpha exchange layout differs from four-center oracle");
+      require_matrix_close(unrestricted.beta_exchange, beta_reference, 2e-12,
+                           "beta exchange layout differs from four-center oracle");
+    }
+  }
+}
+
+void check_scalar_exchange_cache_budget() {
+  using namespace generativeqc::scf;
+  constexpr std::size_t auxiliary_count = 2;
+  constexpr std::size_t maximum_cache_bytes = 16U << 20;
+  DensityFittingMetricFactor factor;
+  factor.dimension = auxiliary_count;
+  factor.effective_rank = auxiliary_count;
+  factor.inverse_square_root = {1.0, 0.0, 0.0, 1.0};
+  // The last two dimensions straddle the scalar cache's 16 MiB bound.
+  for (const std::size_t dimension : {15U, 16U, 1024U, 1025U}) {
+    const std::size_t pairs = dimension * dimension;
+    std::vector<double> raw(pairs * auxiliary_count);
+    for (std::size_t element = 0; element < raw.size(); ++element)
+      raw[element] = 0.001 * (1 + element % 13);
+    const auto transformed = orthonormalize_density_fitting_three_center(raw, dimension, factor);
+    require_matrix_close(transformed.values, raw, 0.0,
+                         "optional cache admission changed the whitened tensor");
+    const auto& cache = transformed.auxiliary_major_values;
+    if (!generativeqc::tensor::cpu_openblas_built())
+      require(cache.size() <= maximum_cache_bytes / sizeof(double),
+              "scalar exchange cache exceeded its per-owner byte bound");
+    if (!cache.empty()) {
+      require(cache.size() == raw.size(), "optional exchange cache has an incomplete layout");
+      for (std::size_t pair = 0; pair < pairs; ++pair)
+        for (std::size_t auxiliary = 0; auxiliary < auxiliary_count; ++auxiliary)
+          require(cache[auxiliary * pairs + pair] == raw[pair * auxiliary_count + auxiliary],
+                  "optional exchange cache changed a tensor element");
     }
   }
 }
@@ -456,6 +532,9 @@ generativeqc::core::System compact_auxiliary_system() {
 int main() {
   try {
     check_provider_cache_identity();
+    check_scalar_exchange_layouts(false);
+    check_scalar_exchange_layouts(true);
+    check_scalar_exchange_cache_budget();
     check_packed_storage_planner();
     const generativeqc::core::System orbital = orbital_system();
     const generativeqc::core::System auxiliary = auxiliary_system();

@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_response.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Nonmovable live prepared-KS physical induced-Fock ownership, explicit storage/work bounds and coupled CPKS callback contract. This component does not advertise nuclear source derivatives or a complete Hessian endpoint.",
+  "regions": []
+}

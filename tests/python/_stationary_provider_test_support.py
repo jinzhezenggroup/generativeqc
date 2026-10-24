@@ -148,6 +148,10 @@ def cuda_provider_selection(
         def __exit__(self, *args: object) -> None:
             closed.append(self.name)
 
+        def configure_grid(self, spec: Any, atoms: Any) -> None:
+            assert spec is bound_source.grid_spec
+            assert tuple(atoms) == basis.atoms
+
         def reset_geometry(self, *args: Any) -> None:
             accepted.append(publication[-1])
             raise _OwnerReady

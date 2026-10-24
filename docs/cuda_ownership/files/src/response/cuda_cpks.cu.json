@@ -1,0 +1,7 @@
+{
+  "path": "src/response/cuda_cpks.cu",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Native RKS/UKS CPKS admission, exact caller-owned workspace, frame layout packing, symmetry/finite guards, borrowed-stream coupled-Fock dispatch and transactional publication. Scientific orbital, metric, D/W tangent and RHS/action algebra is emitted from method/ks_cpks.py through TensorIR AD and the full-range affine CUDA lowering, not handwritten here.",
+  "regions": []
+}

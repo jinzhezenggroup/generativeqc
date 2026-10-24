@@ -5,10 +5,27 @@
 #include "generativeqc/generativeqc.h"
 #include "methods/generated_method_manifest.hpp"
 #include "methods/method.hpp"
+#include "scf/progressive_hf.hpp"
 
 extern "C" {
 
+/** Private additive HF execution controller. The callback is synchronous and
+ * borrowed for this call only; missing-symbol compatibility stays explicit. */
+GENERATIVEQC_API generativeqc_status
+generativeqc_progressive_hf_run_v1(generativeqc::scf::ProgressiveHFCallback callback, void* state,
+                                   uint64_t* receipt, size_t count) {
+  if (count != 2) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return generativeqc::scf::run_progressive_hf(callback, state, receipt);
+}
+
 uint32_t generativeqc_ks_options_version(void) { return 1; }
+
+/** Matched iteration/final-state controls for qualified FP64 SCF endpoints.
+ * Python retains historical defaults when this additive capability is absent. */
+GENERATIVEQC_API uint32_t generativeqc_standard_scf_convergence_version_v1(void) { return 1; }
+
+/** Independent XC/VV10 quadrature with an unchanged public KS descriptor. */
+GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void) { return 1; }
 
 /** Private Python bridge: distinguish support for the optional size-tagged
  * precision extension from the unchanged scientific KS descriptor version. */
@@ -17,10 +34,17 @@ GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { 
 /** Method-family-neutral budget transport, independent of SCF arithmetic. */
 GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v2(void) { return 2; }
 
+/** Independent admission for budget-selected correlated stopping criteria. */
+GENERATIVEQC_API uint32_t generativeqc_correlation_convergence_version_v1(void) { return 1; }
+
 /** Private capability: budget-selected full-range FP32 J/K and physical gates. */
 GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v1(void) { return 1; }
 
 GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v2(void) { return 2; }
+
+/** Strict DF Coulomb with budget-selected local XC proposals and FP64 closure.
+ * Independent of Direct mixed J/K; older libraries retain strict DF execution. */
+GENERATIVEQC_API uint32_t generativeqc_application_df_xc_precision_version_v1(void) { return 1; }
 
 /** Optional Python provenance transport, independent of the stable SCF ABI.
  * A missing/computation-only result must not inherit a previous force record. */

@@ -25,40 +25,40 @@
       "sha256": "8e8932ee8544e3475d0fe2b8dc708e63ef99127597ea7c55b382f2f60e53b5dc"
     },
     {
-      "bytes": 62422,
-      "path": "samples/03-water-tetramer-631g-direct.json",
+      "bytes": 17948,
+      "path": "samples/03-water-tetramer-631g-direct.json.gz",
       "role": "samples",
-      "sha256": "5642de5f9455b68b06c880ca8d2f2af46a655292f7b557fa2c2d774cce875fd2"
+      "sha256": "415696133b5bbf87db04cfc53af7a5576af85b3bdde5dc489ff8b6ea2c92375c"
     },
     {
-      "bytes": 60329,
-      "path": "samples/04-water-tetramer-631g-hf.json",
+      "bytes": 17521,
+      "path": "samples/04-water-tetramer-631g-hf.json.gz",
       "role": "samples",
-      "sha256": "3ae2240aa0a4fe4e50791fbd5089be252059ae848d70444cd5752b0b5a0b8fe4"
+      "sha256": "3f081f0474a80d6f6e3a04b666866eeb265e9d9c173bc8d1a9fc6684c254f13a"
     },
     {
-      "bytes": 60608,
-      "path": "samples/05-water-tetramer-631g-lda.json",
+      "bytes": 17674,
+      "path": "samples/05-water-tetramer-631g-lda.json.gz",
       "role": "samples",
-      "sha256": "609d364a25cdd5695676a4f19c737b362cf71398622de47a877389e3fee17825"
+      "sha256": "14fce5fcf569f6677c8b5722e0617e7107556ae3b9edc828d150981d98669467"
     },
     {
-      "bytes": 60322,
-      "path": "samples/06-water-tetramer-631g-hf.json",
+      "bytes": 17518,
+      "path": "samples/06-water-tetramer-631g-hf.json.gz",
       "role": "samples",
-      "sha256": "981c180be10ed99650d53afb160887e0bd2a05b9539eebf2cbbb0f28e49091d1"
+      "sha256": "1eadab9e533499d039f8cc98c22f2e720854046044e98b4c9e1099b76491c2ab"
     },
     {
-      "bytes": 60607,
-      "path": "samples/07-water-tetramer-631g-lda.json",
+      "bytes": 17670,
+      "path": "samples/07-water-tetramer-631g-lda.json.gz",
       "role": "samples",
-      "sha256": "ecae765c14367d92316ab1002342e85aef245653c619e632ccb0ce3aeef26265"
+      "sha256": "0b7a4230af322de47ad1c54816147d8fca16dc8dc846deaa3cd0fda0751d28ba"
     },
     {
-      "bytes": 62424,
-      "path": "samples/08-water-tetramer-631g-direct.json",
+      "bytes": 17948,
+      "path": "samples/08-water-tetramer-631g-direct.json.gz",
       "role": "samples",
-      "sha256": "e7e0606127701cddd21e10c84dac0bf6f7295dc1ad5924f4be3f3d5b220b4fb7"
+      "sha256": "bc0554bb0fd678c978933daa0e44f43bcfb3724b3cc89652fc23989d5937816a"
     },
     {
       "bytes": 12545,
@@ -97,28 +97,28 @@
       "sha256": "c88583d8b9626a62f0cf8e102a72698271f0f132a0810bbe9ea310f3c50116f2"
     },
     {
-      "bytes": 60604,
-      "path": "samples/15-water-tetramer-631g-lda.json",
+      "bytes": 17672,
+      "path": "samples/15-water-tetramer-631g-lda.json.gz",
       "role": "samples",
-      "sha256": "cbff12b5fcbf8085a1ea182f0a306812e6691c6203dd35950642de1af556bbd1"
+      "sha256": "a33597e068d94c615917703dbf7fc9c3b17777f3b40968f27abf2f12c547a034"
     },
     {
-      "bytes": 62418,
-      "path": "samples/16-water-tetramer-631g-direct.json",
+      "bytes": 17942,
+      "path": "samples/16-water-tetramer-631g-direct.json.gz",
       "role": "samples",
-      "sha256": "1dba1595f92e6f3a8f6c98a65d492df2d9e0673bc950e2c32a64e56279d13f5b"
+      "sha256": "31104d2f321a8a782f1e8baf6fd58a129bfb440d391cae5e36dba0c479a7a55f"
     },
     {
-      "bytes": 60322,
-      "path": "samples/17-water-tetramer-631g-hf.json",
+      "bytes": 17524,
+      "path": "samples/17-water-tetramer-631g-hf.json.gz",
       "role": "samples",
-      "sha256": "a6e6cf68552fccbc203c94b5b55b962021d4bdbd2394f8bf47deff9a43fddafb"
+      "sha256": "ca3ae7b483f115d1a5deb918360508358a0ad95f86391aed8ee774db051bd66e"
     },
     {
-      "bytes": 20920,
-      "path": "solver-history.json",
+      "bytes": 2083,
+      "path": "solver-history.json.gz",
       "role": "samples",
-      "sha256": "028ec85f60b085b6c03e15be3fc603ee303ca3f1ae246c0b1df745e4d3cf2487"
+      "sha256": "5d40d9b2d3a4d31c1f0cd296353b2436680e58a4d5dd39e467f55e27341e3f7d"
     },
     {
       "bytes": 5507,
@@ -157,10 +157,10 @@
       "sha256": "ae9eb010e2bbd7b53ec9ae05633944f012eedfe3dcd20f4382f3dc598b3404a4"
     },
     {
-      "bytes": 23415,
-      "path": "evidence.json",
+      "bytes": 5197,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "59968eb91af09ff9862d08441bb3ce46eb9af14765aab730ca67ac27d4e9d34e"
+      "sha256": "7bb8e290caaaff9c2eef684a71c51b5c3c0b50d1dd3175f0a54ab73772664985"
     },
     {
       "bytes": 4097,

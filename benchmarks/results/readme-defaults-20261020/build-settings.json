@@ -1,0 +1,109 @@
+{
+  "libraries": {
+    "libgenerativeqc.so.0.1.0": {
+      "bytes": 733862704,
+      "sha256": "b08d0089948e5595a08c707e36696df23dada58cfa45f832d947dc8d3811709b"
+    },
+    "libgenerativeqc_stationary_b3lyp_rks.so": {
+      "bytes": 8010752,
+      "sha256": "eafe2a89d6efceac6960e3b5c8d4ea73695962d035f82bc667cd45918727f17f"
+    },
+    "libgenerativeqc_stationary_b3lyp_rks_spd.so": {
+      "bytes": 26142024,
+      "sha256": "f575b68f2cbc4a7efe0f5e4639022ed90772ef27e6d74c335c43ecce4d7bebc2"
+    },
+    "libgenerativeqc_stationary_m06_2x_rks.so": {
+      "bytes": 8662024,
+      "sha256": "325d047f23e465a08be35287f48dcde7355239195efde3dd180e0b72bd0d9b45"
+    },
+    "libgenerativeqc_stationary_m06_2x_rks_spd.so": {
+      "bytes": 26793296,
+      "sha256": "57cd3467cd35d7a6fb1704c6b1ffbf96e0fda7f1e584c77d86d85800fa32144e"
+    },
+    "libgenerativeqc_stationary_pbe0_rks.so": {
+      "bytes": 9120768,
+      "sha256": "aba7d6491a4aed920dc00bfc04b277bce874ba37e3cc953de63a3b754373548a"
+    },
+    "libgenerativeqc_stationary_pbe0_rks_spd.so": {
+      "bytes": 27256136,
+      "sha256": "bdccdf9f9b4f1fa3ed9841dc01de1cad8d86e8131ba71932a76943f71ecab503"
+    },
+    "libgenerativeqc_stationary_pbe_rks.so": {
+      "bytes": 9120760,
+      "sha256": "30c5c5e87b109b0696a6c4ee74ff4a6908bdf4127e0a1c07f869384c0a1e76e1"
+    },
+    "libgenerativeqc_stationary_pbe_rks_spd.so": {
+      "bytes": 27252032,
+      "sha256": "dd3467e971dd9c0b15cfdf2f384523aac0b7ead3118f19254a3389fd9e1edbc2"
+    },
+    "libgenerativeqc_stationary_r2scan_rks.so": {
+      "bytes": 8793096,
+      "sha256": "f165c6b021c97b5c0e885ba34361481a80656b9b85b38cd2e901480f7e67c77d"
+    },
+    "libgenerativeqc_stationary_r2scan_rks_spd.so": {
+      "bytes": 26928464,
+      "sha256": "6f1e3932cb00b4c1cfd12e54c97889b67395c666ce84d774fb7762795978965c"
+    }
+  },
+  "cmake": {
+    "CMAKE_BUILD_TYPE:STRING": "Release",
+    "CMAKE_CUDA_COMPILER:STRING": "/group/software/cuda-12.9.1/bin/nvcc",
+    "CMAKE_CUDA_COMPILER_LAUNCHER:UNINITIALIZED": "/home/jzzeng/.local/bin/sccache",
+    "CMAKE_CXX_COMPILER:FILEPATH": "/usr/bin/c++",
+    "CMAKE_CXX_COMPILER_LAUNCHER:UNINITIALIZED": "/home/jzzeng/.local/bin/sccache",
+    "GENERATIVEQC_AOT_COMPILE_JOBS:STRING": "4",
+    "GENERATIVEQC_AOT_PROFILE:STRING": "sm_120",
+    "GENERATIVEQC_AOT_PROFILES:STRING": "",
+    "GENERATIVEQC_AOT_SHARDS:STRING": "8",
+    "GENERATIVEQC_AOT_SHELL_MANIFEST:FILEPATH": "/data/jzzeng/readme-defaults-20261020/source/python/generativeqc_compiler/integral/production_shell_classes.json",
+    "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING": "1",
+    "GENERATIVEQC_AOT_UNIT_MODE:STRING": "stable-shards",
+    "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS:STRING": "",
+    "GENERATIVEQC_BUILD_CLI:BOOL": "ON",
+    "GENERATIVEQC_BUILD_TESTS:BOOL": "ON",
+    "GENERATIVEQC_BUNDLE_XTB_OPENBLAS:BOOL": "OFF",
+    "GENERATIVEQC_COMPILER_CACHE:STRING": "auto",
+    "GENERATIVEQC_CPU_LINALG_PROVIDER:STRING": "auto",
+    "GENERATIVEQC_CUDA_AO_RADIAL_REUSE:BOOL": "ON",
+    "GENERATIVEQC_CUDA_ARCHITECTURES:STRING": "",
+    "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED:BOOL": "OFF",
+    "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES:STRING": "120-real",
+    "GENERATIVEQC_CUDA_COMPILE_JOBS:STRING": "8",
+    "GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK:BOOL": "ON",
+    "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL": "OFF",
+    "GENERATIVEQC_CUDA_PROVIDER:STRING": "nvidia",
+    "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION:BOOL": "OFF",
+    "GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS:STRING": "1",
+    "GENERATIVEQC_CUDA_XC_MATRIX_TILE:STRING": "16",
+    "GENERATIVEQC_CUTENSOR_ROOT:PATH": "",
+    "GENERATIVEQC_CUTLASS_ROOT:PATH": "",
+    "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER:STRING": "/home/jzzeng/.local/bin/sccache",
+    "GENERATIVEQC_ENABLE_AOT_SHELLS:BOOL": "ON",
+    "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT:BOOL": "OFF",
+    "GENERATIVEQC_ENABLE_CUBLASLT:BOOL": "OFF",
+    "GENERATIVEQC_ENABLE_CUDA:BOOL": "ON",
+    "GENERATIVEQC_ENABLE_CUTENSOR:BOOL": "OFF",
+    "GENERATIVEQC_ENABLE_CUTLASS:BOOL": "OFF",
+    "GENERATIVEQC_ENABLE_CXX_PCH:BOOL": "OFF",
+    "GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES:BOOL": "ON",
+    "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL": "ON",
+    "GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT:BOOL": "ON",
+    "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL": "ON",
+    "GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS:BOOL": "OFF",
+    "GENERATIVEQC_HESSIAN_AOT_INVENTORY:FILEPATH": "/data/jzzeng/readme-defaults-20261020/source/manifests/hessian_aot_development.json",
+    "GENERATIVEQC_MONOLITHIC_CLI:BOOL": "OFF",
+    "GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA:BOOL": "ON",
+    "GENERATIVEQC_PYTHON_WHEEL:BOOL": "OFF",
+    "GENERATIVEQC_RESOLVED_COMPILER_CACHE:FILEPATH": "/home/jzzeng/.local/bin/sccache",
+    "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER:FILEPATH": "",
+    "GENERATIVEQC_STATIONARY_AOT_PROFILES:STRING": "auto",
+    "Python_EXECUTABLE:UNINITIALIZED": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python",
+    "GENERATIVEQC_AOT_UNIT_MODE-STRINGS:INTERNAL": "stable-shards;class",
+    "GENERATIVEQC_CPU_LINALG_PROVIDER-STRINGS:INTERNAL": "auto;scalar;openblas",
+    "GENERATIVEQC_CUDA_PROVIDER-STRINGS:INTERNAL": "nvidia;cumetal",
+    "GENERATIVEQC_CUDA_XC_MATRIX_TILE-STRINGS:INTERNAL": "8;16;32",
+    "GENERATIVEQC_RESOLVED_COMPILER_CACHE-ADVANCED:INTERNAL": "1",
+    "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER-ADVANCED:INTERNAL": "1"
+  },
+  "source_revision": "e5fa4d2f0cd13775327261a0b6ced1eab6006c62"
+}

@@ -7,6 +7,10 @@ function(generativeqc_set_cuda_compile_pool target pool)
 endfunction()
 
 macro(generativeqc_configure_cuda_backend target)
+  if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
+    generativeqc_add_hessian_aot(generativeqc_hessian_aot "${GENERATIVEQC_HESSIAN_AOT_INVENTORY}")
+    target_link_libraries(${target} PRIVATE generativeqc_hessian_aot)
+  endif()
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     if(_arch STREQUAL "native" OR _arch STREQUAL "all" OR _arch STREQUAL "all-major")
       message(FATAL_ERROR
@@ -50,6 +54,7 @@ macro(generativeqc_configure_cuda_backend target)
     "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${GENERATIVEQC_DIRECT_ORDER2_SHELL_HEADER}"
@@ -84,6 +89,7 @@ macro(generativeqc_configure_cuda_backend target)
                 "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
@@ -344,6 +350,7 @@ macro(generativeqc_configure_cuda_backend target)
       "src/tensor/cuda_runtime.cuh"
       "src/runtime/bounded_workspace.hpp"
       "src/runtime/cuda_resources.cuh"
+      "src/runtime/cuda_device_scope.hpp"
       "src/runtime/resource_cuda.cuh"
       "src/runtime/resource_ledger.hpp"
       "src/runtime/residency_boundaries.hpp"

@@ -4,10 +4,47 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <stdexcept>
 
 #include "tensor/ring_gram.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+namespace ordered_gram_admission {
+
+/** Host preflight shared by the ordered CUDA launcher and host contract tests.
+ * Pointers are borrowed device addresses: inspect only nullness/exact aliasing,
+ * never their contents. Allocation extents, partial overlap, live-ring identity
+ * and stream ordering remain caller preconditions of the public launcher.
+ */
+inline void validate_ordered_gram_launch(dim3 grid, dim3 block, std::int32_t batch_size,
+                                         std::int32_t nbf, std::int32_t matrices_per_system,
+                                         std::uint32_t history_capacity, const double* fock,
+                                         const double* residual, const std::uint8_t* active,
+                                         double* fock_history, double* residual_history,
+                                         double* linear_system, double* coefficients,
+                                         std::uint32_t* history_count, std::uint32_t* history_head,
+                                         double* effective_fock, double* gram_cache) {
+  if (batch_size <= 0 || nbf <= 0 || (matrices_per_system != 1 && matrices_per_system != 2) ||
+      history_capacity > 64 || !fock || !active || !effective_fock || block.x != 32 ||
+      block.y != 1 || block.z != 1 || grid.y != 1 || grid.z != 1 ||
+      grid.x < static_cast<unsigned>(batch_size))
+    throw std::invalid_argument("invalid ordered Gram shape or launch geometry");
+  if (history_capacity >= 2 &&
+      (!residual || !fock_history || !residual_history || !linear_system || !coefficients ||
+       !history_count || !history_head || !gram_cache || gram_cache == linear_system))
+    throw std::invalid_argument("cached Gram requires independent history and solve storage");
+  const auto maximum = std::numeric_limits<std::size_t>::max() / sizeof(double);
+  const auto history_slots = history_capacity >= 2 ? history_capacity : 1U;
+  const auto per_system = maximum / static_cast<std::size_t>(batch_size);
+  if (static_cast<std::size_t>(nbf) >
+          per_system / history_slots / static_cast<std::size_t>(nbf) / matrices_per_system ||
+      (history_capacity >= 2 && history_capacity + 1U > per_system / (history_capacity + 1U)))
+    throw std::invalid_argument("ordered Gram history size exceeds addressable storage");
+}
+
+}  // namespace ordered_gram_admission
 
 /** Form deterministic block partials for the history including the current
  * residual, before its circular slot is overwritten. The caller lends
@@ -47,16 +84,22 @@ void launch_update_diis_kernel(
     const double* dot_partials = nullptr, std::size_t parts = 0, const double* raw_gram = nullptr);
 
 /** Explicit ordered Gram alternative using caller-owned physical-slot storage.
- * HF/KS selects this entry only for incremental admission plus an explicit
- * ordered reducer; unset/cooperative keeps the separate pending-row path.
+ * HF/KS selects this entry for the ordered incremental reducer, including
+ * automatically admitted large KS owners. Cooperative selection keeps its
+ * separate pending-row path.
  * It borrows the same charged raw Gram allocation. Do not switch reduction
  * routes on a live cache: reset count=head=0 before using this ordered owner.
  * Residuals in retained live slots must remain immutable; all calls for a ring
  * must use the same dimensions and stream ordering, with disjoint history,
  * solve and cache allocations. Lend batch*history_capacity^2 doubles. Reset
  * count=head=0 together as on the legacy route; the cache needs no clearing.
- * One 32-lane warp owns each system. Optional work records must be initialized
- * by the caller and measure newly computed dots. The first insertion does no
+ * The caller supplies a 32-lane block. For nbf >= 512 and history >= 2, the
+ * wrapper stages the pending Gram row and then updates each system with a
+ * 256-thread CTA. Both launches retain the caller's stream; the update retains
+ * its system grid and dynamic shared storage. A failed staging launch prevents
+ * the update and preserves the CUDA error for the caller. Smaller histories
+ * retain the caller's original single-warp launch. Optional work records must
+ * be initialized by the caller and measure newly computed dots. The first insertion does no
  * dots; the second also establishes the prior diagonal once after a reset.
  * Normalization, chronological retirement, solve and Fock mixing are unchanged.
  * Disabled/single-vector histories retain the original copy-only behavior and

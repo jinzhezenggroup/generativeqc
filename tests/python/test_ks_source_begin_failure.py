@@ -9,7 +9,7 @@ from conftest import NativeCxx
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize("scenario", [1, 2, 3])
+@pytest.mark.parametrize("scenario", [1, 2, 3, 4])
 def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     tmp_path: Path, native_cxx: NativeCxx, scenario: int
 ) -> None:
@@ -68,8 +68,11 @@ struct Owner {
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_exchange = true, pending_mixed_resident = true;
+  bool pending_mixed_range_exchange = true, pending_mixed_range_resident = true;
+  bool pending_mixed_nonlocal = true;
   bool pending_mixed_point = true;
-  bool experimental_mixed_point{};
+  bool pending_mixed_contractions = true;
+  bool experimental_mixed_point{}, budget_fock{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
     std::array<double, 3> application_precision_budget{};
@@ -127,6 +130,9 @@ struct Owner {
     phase_source = std::make_unique<int>(1);
     if (scenario == 2) throw std::bad_alloc();
   }
+  void prepare_cold_fitted_factor() {
+    if (scenario == 4) throw std::runtime_error("cold factor preparation failure");
+  }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
   void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }
   void begin() {
@@ -155,14 +161,23 @@ int main(int argc, char** argv) {
     assert(owner.is_failed && !owner.is_active);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
+    assert(!owner.pending_mixed_contractions);
+    assert(!owner.pending_mixed_range_exchange && !owner.pending_mixed_range_resident &&
+           !owner.pending_mixed_nonlocal);
     assert(!owner.phase_source && owner.retired == 1);
     owner.pending_mixed_point = owner.pending_mixed_exchange = owner.pending_mixed_resident = true;
+    owner.pending_mixed_contractions = true;
+    owner.pending_mixed_range_exchange = owner.pending_mixed_range_resident = true;
+    owner.pending_mixed_nonlocal = true;
     owner.scenario = 0;
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
+    assert(!owner.pending_mixed_contractions);
+    assert(!owner.pending_mixed_range_exchange && !owner.pending_mixed_range_resident &&
+           !owner.pending_mixed_nonlocal);
 }
 """
     )

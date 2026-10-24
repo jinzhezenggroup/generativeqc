@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "cpu_dispatch/features.hpp"
+#include "runtime/cpu_isa.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 
@@ -78,7 +78,7 @@ using MullikenChunkKernel = void (*)(void*, std::size_t) noexcept;
 struct MullikenKernelTable {
   MullikenChunkKernel population = nullptr;
   MullikenChunkKernel hamiltonian = nullptr;
-  CpuIsa isa = CpuIsa::kBaseline;
+  generativeqc::runtime::CpuIsa isa = generativeqc::runtime::CpuIsa::kBaseline;
 };
 
 void mulliken_population_chunk_baseline(void* opaque, std::size_t chunk) noexcept;
@@ -88,7 +88,8 @@ void mulliken_hamiltonian_chunk_avx2_fma(void* opaque, std::size_t chunk) noexce
 
 [[nodiscard]] const MullikenKernelTable& mulliken_baseline_kernels() noexcept;
 [[nodiscard]] const MullikenKernelTable& mulliken_avx2_fma_kernels() noexcept;
-[[nodiscard]] const MullikenKernelTable& mulliken_kernels_for_cpu_isa(CpuIsa isa) noexcept;
+[[nodiscard]] const MullikenKernelTable& mulliken_kernels_for_cpu_isa(
+    generativeqc::runtime::CpuIsa isa) noexcept;
 
 }  // namespace generativeqc::xtb::detail::gfn2
 

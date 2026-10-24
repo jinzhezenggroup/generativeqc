@@ -19,11 +19,11 @@
 #include <vector>
 
 #include "cli/native_basis.hpp"
-#include "cli_method_catalog.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/geometry_optimizer.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
+#include "methods/named_ks_catalog.hpp"
 
 namespace generativeqc::cli {
 namespace {
@@ -183,8 +183,9 @@ generativeqc_method_descriptor descriptor(const RunOptions& o, const System* aux
   d.method = o.method;
   d.max_iterations = o.max_iterations.value_or(100);
   d.diis_history = o.diis_history;
-  d.energy_tolerance = o.energy_tolerance.value_or(is_xtb(o) ? 1e-10 : 1e-12);
-  d.density_tolerance = o.density_tolerance.value_or(is_xtb(o) ? 1e-8 : 1e-10);
+  const auto convergence = resolve_scf_convergence(o, is_correlated(o));
+  d.energy_tolerance = convergence.energy_tolerance;
+  d.density_tolerance = convergence.density_tolerance;
   d.screening_tolerance = o.screening_tolerance.value_or(is_xtb(o) || is_correlated(o) ? 0 : 1e-14);
   d.density_fitting_mode = o.density_fitting;
   d.density_fitting_auxiliary_basis = auxiliary ? auxiliary->get() : nullptr;
@@ -209,14 +210,11 @@ Calculation prepare(Context& context, System& system, const RunOptions& o, const
   if (!row) return {context, system, d};
   KsComposition composed(row->carrier, std::string(row->domain), row->spin);
   composed.set_grid(o.grid);
-  for (std::uint32_t j = 0; j < row->component_count; ++j) {
-    const auto& term = method_generated::kComponents[row->component_offset + j];
-    composed.add_semilocal(std::string(term.name), term.coefficient);
+  for (const auto& term : method_generated::components(*row)) {
+    composed.add_semilocal(term.component_id, term.coefficient);
   }
-  for (std::uint32_t j = 0; j < row->exchange_count; ++j) {
-    const auto& term = method_generated::kExchanges[row->exchange_offset + j];
-    composed.add_exact_exchange(static_cast<generativeqc_ks_exchange_operator>(term.kind),
-                                term.coefficient, term.omega);
+  for (const auto& term : method_generated::exchanges(*row)) {
+    composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
   }
   return composed.prepare(context, system, d);
 }

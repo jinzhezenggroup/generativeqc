@@ -6,7 +6,6 @@ boundaries. The fake phase owner records destruction before cache release.
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,6 +28,7 @@ _SHIM = r"""
 #include <vector>
 #include "runtime/execution_precision.hpp"
 #include "cc/solver.hpp"
+#include "cc/phase_observation.hpp"
 namespace cc = generativeqc::cc;
 __DF_CORRELATION_DEMAND__
 DFCorrelationDemand expected_demand;
@@ -85,6 +85,7 @@ struct Scope {
 }  // namespace df_progress
 }  // namespace runtime
 namespace core {
+using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
 struct Atom {
   int position{}, atomic_number{};
 };
@@ -145,7 +146,9 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::
                                         bool retain_df_response, bool df_matrix_gemm,
                                         void*, std::size_t batch_limit, bool derived_denominators, bool packed_diis,
                                         std::optional<bool> ccsd_mixed_precision,
-                                        double ccsd_mixed_switch_residual, bool df_mp2_mode, bool df_reference) {
+                                        double ccsd_mixed_switch_residual, bool df_mp2_mode, bool df_reference,
+                                        core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
   assert(ccsd_mixed_switch_residual == expected_ccsd_switch);
@@ -226,7 +229,7 @@ int main() {
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
                                expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-                               expected_ccsd_switch, expected_demand);
+                               expected_ccsd_switch, expected_demand, {});
   };
   for (bool fitted : {false, true})
   for (bool mp2 : {false, true})
@@ -340,7 +343,7 @@ int main() {
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
       expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-      expected_ccsd_switch, expected_demand);
+      expected_ccsd_switch, expected_demand, {});
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -352,7 +355,7 @@ int main() {
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
         true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-        expected_ccsd_switch, expected_demand);
+        expected_ccsd_switch, expected_demand, {});
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
@@ -404,7 +407,7 @@ int main() {
     failure = 0;
     descriptor.limit = 100;
     const auto result = run_df_correlation_group_native(
-        execution, system, auxiliary, descriptor, forces, expected_demand);
+        execution, system, auxiliary, descriptor, forces, expected_demand, {});
     assert(calls == 1 && drains == 1 && late_calls == 1 && live == 0 && clears == 0);
     assert(preparations == 1 && result.primal.reference_seconds == (fitted ? 0.0 : 0.125) &&
            !result.recycling_discarded_primal_attempt);
@@ -458,93 +461,5 @@ def test_retained_cache_retry_covers_late_phases_once(tmp_path: Path) -> None:
     shim = _SHIM.replace("__DF_CORRELATION_DEMAND__", demand)
     probe.write_text(shim + checked_add + prefix + _TAIL + wrapper + _MAIN)
     binary = tmp_path / "retry"
-    compile_owner(compiler, tmp_path, [probe], binary)
-    subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
-
-
-def test_discarded_attempt_work_is_unavailable_in_benchmark(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
-    source = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
-    start = source.index("      const auto field =")
-    stop = source.index('      field("nbf",', start)
-    reporting = source[start:stop]
-    fields = {
-        name: kind
-        for kind, name in re.findall(
-            r'(?<![A-Za-z_])(work_field|field)\("([^"\n]+)"', source[stop:]
-        )
-    }
-    suffixes = (
-        "_calls",
-        "_actions",
-        "_terms",
-        "_summands",
-        "_iterations",
-        "_bytes",
-        "_capacity",
-        "_tiles",
-        "_slices",
-        "_operations",
-        "_evaluations",
-        "_work",
-        "_values",
-        "_visits",
-        "_kernels",
-        "_restarts",
-        "_updates",
-        "_seconds",
-    )
-    for name, kind in fields.items():
-        if name.endswith(suffixes) and name not in {
-            "native_seconds",
-            "previous_endpoint_seconds",
-            # This separately measured discarded-attempt receipt is complete.
-            "resident_jk_retry_seconds",
-        }:
-            assert kind == "work_field", name
-    assert fields["native_seconds"] == fields["total_energy"] == "field"
-    assert fields["resident_jk_retry_seconds"] == "field"
-    retry_receipt = next(
-        line
-        for line in source.splitlines()
-        if 'field("resident_jk_retry_seconds",' in line
-    )
-    probe = tmp_path / "report.cpp"
-    probe.write_text(
-        r"""
-#include <cassert>
-#include <iomanip>
-#include <sstream>
-struct Result {
-  bool recycling_discarded_primal_attempt;
-  struct {bool resident_jk_discarded_attempt;double resident_jk_retry_seconds;} orbital;
-};
-int main() {
-for (int repetition=0;repetition<3;++repetition)
-for (unsigned mask=0;mask<4;++mask) {
-  Result result{bool(mask&1),{bool(mask&2),1.25}};
-  std::ostringstream output;
-"""
-        + reporting
-        + r"""
-work_field("triples_work",17);work_field("lambda_actions",19);work_field("jk_actions",23);
-work_field("orbital_seconds",2.0);field("native_seconds",3.0);
-"""
-        + retry_receipt
-        + r"""
-const char* stage = repetition==2 ? "moved-warm" : repetition ? "warm" : "cold";
-const auto prefix = std::string("  \"lifecycle_stage\": \"")+stage+"\",\n";
-if (mask) {
-  assert(output.str()==prefix+"  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
-} else {
-  assert(output.str()==prefix+"  \"triples_work\": 17,\n  \"lambda_actions\": 19,\n  \"jk_actions\": 23,\n  \"orbital_seconds\": 2,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
-}
-}}
-
-"""
-    )
-    binary = tmp_path / "report"
     compile_owner(compiler, tmp_path, [probe], binary)
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)

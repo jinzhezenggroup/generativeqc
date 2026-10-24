@@ -36,6 +36,8 @@ struct generativeqc_ks_snapshot {
   std::size_t atoms{};
   generativeqc::dft::CudaKsFinalStateToken token;
   std::vector<double> values;
+  std::vector<double> nonlocal_grid_values;
+  generativeqc::dft::CudaMolecularGridView nonlocal_resident_grid;
   // Snapshot creation already paid the strict final-state export/validation.
   // Retain only D/W needed by the later stationary integral bridge instead of
   // triggering a second complete final-state device export.
@@ -314,6 +316,26 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
     append(source.points);
     append(source.weights);
     append(source.grid_owners);
+    if (identity.model.nonlocal_grid) {
+      const auto& nonlocal_grid = *identity.model.nonlocal_grid;
+      auto& quadrature = result->nonlocal_grid_values;
+      quadrature = {static_cast<double>(source.nonlocal_weights.size()),
+                    static_cast<double>(nonlocal_grid.version),
+                    static_cast<double>(nonlocal_grid.radial_points),
+                    static_cast<double>(nonlocal_grid.angular_polar),
+                    static_cast<double>(nonlocal_grid.angular_azimuth),
+                    static_cast<double>(nonlocal_grid.partition_iterations),
+                    nonlocal_grid.coincident_tolerance};
+      const auto append_nonlocal = [&](const auto& array) {
+        quadrature.insert(quadrature.end(), array.begin(), array.end());
+      };
+      append_nonlocal(nonlocal_grid.element_radii);
+      append_nonlocal(source.nonlocal_points);
+      append_nonlocal(source.nonlocal_weights);
+      append_nonlocal(source.nonlocal_grid_owners);
+      append_nonlocal(source.nonlocal_atomic_weights);
+      result->nonlocal_resident_grid = source.nonlocal_resident_grid;
+    }
     const bool cpu = identity.determinant.model.backend == generativeqc::scf::FockBackend::Cpu;
     const auto& exchange = identity.determinant.model.spec.exchange;
     const bool composition = identity.model.semilocal_exchange_scale != 1 ||
@@ -402,6 +424,43 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_stationarity_toler
   }
 }
 
+/** Separate transport leaves every existing shared-grid snapshot unchanged.
+ * Both the prescription and materialized arrays come from the token's owner. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t capacity, std::size_t* count) {
+  if (!batch || !snapshot || !count || (!values && capacity != 0))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto status = check_current(*batch, *snapshot);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  *count = snapshot->nonlocal_grid_values.size();
+  if (!values) return GENERATIVEQC_STATUS_SUCCESS;
+  if (capacity != *count) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::copy(snapshot->nonlocal_grid_values.begin(), snapshot->nonlocal_grid_values.end(), values);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Borrow only the immutable independent grid of this live snapshot. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_cuda_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* count) {
+  if (!batch || !snapshot || !device || !points || !weights || !atomic_weights || !count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto status = check_current(*batch, *snapshot);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto& grid = snapshot->nonlocal_resident_grid;
+  if (!grid) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  *device = grid.device;
+  *points = grid.points;
+  *weights = grid.weights;
+  *atomic_weights = grid.atomic_weights;
+  *count = grid.point_count;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count) {
@@ -416,7 +475,7 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     // Both backends retain the full-range short fraction plus the LR
     // correction in this identity. The live owner token, rather than a CPU
     // backend tag, proves the complete model for the stationary consumer.
-    if (!snapshot->all_electron || !model.range_correction || !model.nonlocal_correlation)
+    if (!model.range_correction || !model.nonlocal_correlation)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const double spin_factor = model.spins == 1 ? -0.5 : -1.0;
     const double short_exchange = primary.spec.exchange.coefficient / spin_factor;
@@ -433,6 +492,23 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
         static_cast<double>(model.nonlocal_density_domain),
         primary.screening_tolerance};
     std::copy(proof.begin(), proof.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+generativeqc_status generativeqc_ks_snapshot_range_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* approximation) {
+  if (!batch || !snapshot || !approximation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto& range = snapshot->token.identity.model.range_correction;
+    *approximation = range ? static_cast<std::uint32_t>(range->spec.exchange.approximation)
+                           : std::numeric_limits<std::uint32_t>::max();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);

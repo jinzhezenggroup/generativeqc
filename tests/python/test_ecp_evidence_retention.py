@@ -3,9 +3,56 @@
 import gzip
 import hashlib
 import json
+import lzma
 from pathlib import Path
 
+import pytest
+
 from tools.generativeqc_validation.record import load_record
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ecp-policy-171/baseline-source-identity",
+        "ecp-policy-171/candidate-source-identity",
+        "ecp-policy-171/compatibility/candidate-source-identity",
+        "ecp-real-f-171/source-identity",
+        "ecp-halogen-171/source-identity",
+        "ecp-halogen-171/refresh/source-identity",
+    ],
+)
+def test_compressed_source_inventory_preserves_original_bytes(name: str) -> None:
+    """Preserve pinned historical source inputs without requiring Git history."""
+    root = Path(__file__).resolve().parents[2]
+    prefix = root / "benchmarks/results" / name
+    metadata = json.loads(prefix.with_suffix(".storage.json").read_bytes())
+    stored = (root / metadata["stored_path"]).read_bytes()
+    bundle = json.loads(lzma.decompress(stored))
+    original = bundle["files"][metadata["member"]].encode("utf-8")
+    manifest = json.loads((prefix.parent / "raw-evidence-manifest.json").read_bytes())
+    assert len(original) == metadata["original_bytes"]
+    assert hashlib.sha256(original).hexdigest() == metadata["original_sha256"]
+    assert (
+        hashlib.sha1(f"blob {len(original)}\0".encode() + original).hexdigest()
+        == metadata["original_git_blob"]
+    )
+    if metadata["historical_manifest_entry"] is not None:
+        entry = next(
+            row
+            for row in manifest["files"]
+            if row["path"] == metadata["historical_manifest_entry"]
+        )
+        assert len(original) == entry["bytes"]
+        assert hashlib.sha256(original).hexdigest() == entry["sha256"]
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert (
+        load_record(root / metadata["stored_path"])["files"][metadata["member"]].encode(
+            "utf-8"
+        )
+        == original
+    )
 
 
 def test_heavy_ecp_cpu_record_preserves_original_bytes_and_reader() -> None:

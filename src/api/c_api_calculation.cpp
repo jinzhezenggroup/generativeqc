@@ -135,8 +135,10 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
-  if (!generativeqc::api::valid_system_roles(*system, *descriptor)) {
-    context->last_detail = "correlation auxiliary handles require a correlation-only DF consumer";
+  if (!generativeqc::api::valid_system_roles(*system, *descriptor,
+                                             context->state.executed_backend)) {
+    context->last_detail =
+        "auxiliary handle role requires its matching method and density-fitting backend";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   try {
@@ -412,6 +414,59 @@ generativeqc_status generativeqc_calculation_get_correlation_diagnostic(
   if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   *diagnostic = *value;
   return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+// Private v1 telemetry: six copied counters, independent of the frozen public
+// performance descriptor. Query while the calculation and its owner are alive.
+generativeqc_status generativeqc_calculation_get_cc_precision_v1(
+    const generativeqc_calculation* calculation, uint64_t* values, uint32_t count) {
+  if (!calculation || !values || count != 6) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  try {
+    const auto value = calculation->plan->cc_performance_diagnostic();
+    if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    values[0] = value->ccsd_fp32_requested;
+    values[1] = value->ccsd_fp32_executed;
+    values[2] = value->ccsd_fp32_refused;
+    values[3] = value->ccsd_fp32_evaluations;
+    values[4] = value->ccsd_fp32_gemm_calls;
+    values[5] = value->ccsd_fp32_cast_elements;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&calculation->context->last_detail);
+  }
+}
+
+// Private additive DF response extension. Availability is distinct from a zero
+// measurement, and both output spans are validated before dereferencing a handle.
+generativeqc_status generativeqc_calculation_get_df_response_v1(
+    const generativeqc_calculation* calculation, uint64_t* counts, uint32_t count, double* seconds,
+    uint32_t phases) {
+  if (!calculation || !counts || count != 12 || !seconds || phases != 3)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  try {
+    const auto value = calculation->plan->cc_performance_diagnostic();
+    if (!value || !value->df_response_available) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    counts[0] = value->lambda_fp32_requested;
+    counts[1] = value->lambda_fp32_executed;
+    counts[2] = value->lambda_fp32_refused;
+    counts[3] = value->lambda_fp32_iterations;
+    counts[4] = value->lambda_fp64_iterations;
+    counts[5] = value->lambda_fp32_actions;
+    counts[6] = value->lambda_fp64_actions;
+    counts[7] = value->lambda_fp32_gemm_calls;
+    counts[8] = value->lambda_fp32_cast_elements;
+    counts[9] = value->lambda_auxiliary_batch_size;
+    counts[10] = value->lambda_numeric_capacity_bytes;
+    counts[11] = value->lambda_owned_device_bytes;
+    seconds[0] = value->lambda_seconds;
+    seconds[1] = value->source_response_seconds;
+    seconds[2] = value->orbital_seconds;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&calculation->context->last_detail);
+  }
 }
 
 generativeqc_status generativeqc_calculation_get_cc_performance_diagnostic(

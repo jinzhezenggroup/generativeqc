@@ -1,0 +1,15 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/ecp-halogen-171/refresh/source-identity.json",
+  "original_revision": "39e2ebc05944ffad4e7bd3080d6aa284cdc7694b",
+  "original_bytes": 122514,
+  "original_sha256": "8e1816d89c99423f5ffe9312cdbf67a092b130ed8b9184b5a02cd3a1083c582e",
+  "original_git_blob": "2e78c2079f2d58974467f47498548a68c776df57",
+  "historical_manifest_entry": null,
+  "stored_path": "benchmarks/results/ecp-source-inventories.json.xz",
+  "stored_bytes": 68904,
+  "stored_sha256": "d3ac19abf2ca059cffc284360057a3c13e03ff470364c58e71edb55e863e784c",
+  "compression": "xz / LZMA2 preset 9; JSON text members",
+  "scope": "Storage only. Decompression reproduces every original byte, including whitespace. Historical raw-evidence manifests retain their original identities.",
+  "member": "benchmarks/results/ecp-halogen-171/refresh/source-identity.json"
+}

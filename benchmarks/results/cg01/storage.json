@@ -1,0 +1,15 @@
+{
+  "schema": "lossless-json-storage-v1",
+  "files": [
+    {
+      "path": "capabilities.json.xz",
+      "codec": "xz",
+      "stored_bytes": 2464,
+      "stored_sha256": "eb08a8ca7e32319e237d8af713f03030ace97d1bfdac5b6e40abed55809b77dc",
+      "decoded_bytes": 145857,
+      "decoded_sha256": "1bc9dd514c7396fb9a3dd6a637a654fd6617c6bb00a55858c0c445412d143a2d",
+      "original_path": "capabilities.json",
+      "original_git_blob": "c7eda2c09616e59d1990c7b8d8cc51d0ea2366c7"
+    }
+  ]
+}

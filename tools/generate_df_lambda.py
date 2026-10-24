@@ -404,15 +404,21 @@ def cuda_header() -> str:
                 for p in (matrix_programs()[name],)
             ),
             "  return bytes; }",
-            "inline std::size_t audit_contraction_host_bytes(std::size_t variants){ return "
+            "inline std::size_t audit_contraction_host_bytes(std::size_t variants,std::size_t primal_variants){ return "
             + "+".join(
                 f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None or _packed_batched_matrix_gemm(node) is not None for node in matrix_programs()[name].live_nodes)},"
-                + ("variants" if name in BATCHED_STAGES else "1")
+                + (
+                    "primal_variants"
+                    if name == "primal_virtual"
+                    else "variants"
+                    if name in BATCHED_STAGES
+                    else "1"
+                )
                 + ")"
                 for name in audit_programs()
             )
             + "; }",
-            "void prepare_audit_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,bool primal,std::size_t& calls,std::size_t& summands);",
+            "void prepare_audit_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,std::size_t primal_batch,std::size_t primal_tail,std::size_t& calls,std::size_t& summands);",
             "inline std::size_t core_reuse_contraction_host_bytes(){ return "
             + "+".join(
                 f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None for node in nodes)})"
@@ -586,13 +592,13 @@ def cuda_source() -> str:
             lines.append("  }")
     lines.append("}")
     lines += [
-        "void prepare_audit_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,bool primal,std::size_t& calls,std::size_t& summands){",
+        "void prepare_audit_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t primal_batch,std::size_t primal_tail,std::size_t& calls,std::size_t& summands){",
         "  bind_audit_core_matrix(s,context,1,calls,summands);",
         "  bind_audit_auxiliary_matrix(s,context,batch,calls,summands);",
         "  if(tail && tail!=batch) bind_audit_auxiliary_matrix(s,context,tail,calls,summands);",
-        "  if(primal){",
-        "    bind_primal_virtual_matrix(s,context,batch,calls,summands);",
-        "    if(tail && tail!=batch) bind_primal_virtual_matrix(s,context,tail,calls,summands);",
+        "  if(primal_batch){",
+        "    bind_primal_virtual_matrix(s,context,primal_batch,calls,summands);",
+        "    if(primal_tail && primal_tail!=primal_batch) bind_primal_virtual_matrix(s,context,primal_tail,calls,summands);",
         "  }",
         "}",
     ]

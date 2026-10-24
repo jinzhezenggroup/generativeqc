@@ -6,12 +6,18 @@ ci_prioritize_posthf_files() {
   # corroborated by PR #2387/run 38308786441. Counts alone underweight the
   # 10-case physical-response file and leave several workers idle at the end.
   local -a priority=(
+    # PR #2632/run 39351749228 recorded 527 s before the final fitted
+    # VV10 case began. Start this intact oracle matrix on an initial
+    # worker rather than appending another long serial core tail.
+    tests/python/test_treutler_endpoints.py
     tests/python/test_uccsd_lambda.py
     tests/python/test_uccsd_t_owner.py
     tests/python/test_uccsd_physical_response.py
     tests/python/test_dft_complete_cpu.py
     tests/python/test_hessian_directional.py
     tests/python/test_cc_complete_gradient.py
+    # Complete CBS module measured 309-329 s; retain its shared fixtures.
+    tests/python/test_ccsdt_cbs_native.py
     tests/python/test_ecp_heavy.py
     tests/python/test_ccsd_t_complete_gradient.py
     tests/python/test_ecp_stationary_cpu.py

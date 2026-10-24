@@ -1,0 +1,11 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/fast-anchor-domain-20261019/qualification.json",
+  "original_bytes": 80443,
+  "original_sha256": "faea56a6ececf3f5e674db34c5482dfedb59a7e1817d47238499d42a0953fc15",
+  "stored_path": "benchmarks/results/fast-anchor-domain-20261019/qualification.json.xz",
+  "stored_bytes": 5308,
+  "stored_sha256": "69dbee57af3b594dc38eb4c0d2a3d8daffe32d521c3dbc67760643c40783f8e3",
+  "compression": "xz preset 9",
+  "scope": "Lossless storage; preserves all eight cold arms, independent gates, state comparisons, work inventories, source/library bindings and incomplete oracle attempts."
+}

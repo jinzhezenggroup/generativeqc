@@ -16,6 +16,7 @@ _LAYOUT = r"""#pragma once
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace generativeqc::generated::quadrature {
 inline size_t product(size_t a, size_t b) {
@@ -32,6 +33,32 @@ struct Layout {
   size_t atoms, points, tile, rules, radial, polar, azimuth, geometry, distances, logs, xyz, weights;
   size_t doubles, device_bytes;
 };
+// At most five contiguous radial bands share three angular rules. Keeping
+// this bounded descriptor by value avoids any point-sized host index table.
+struct PrunedShells {
+  size_t bands{}, points_per_atom{};
+  size_t radial_begin[5]{}, point_begin[6]{};
+  size_t polar_count[5]{}, azimuth_count[5]{};
+  size_t polar_offset[5]{}, azimuth_offset[5]{};
+};
+struct PrunedPoint {
+  size_t owner, radial, polar, azimuth;
+};
+#if defined(__CUDACC__)
+__host__ __device__
+#endif
+inline PrunedPoint decode_pruned_point(size_t index, const PrunedShells& shells) {
+  const size_t owner = index / shells.points_per_atom;
+  const size_t local = index % shells.points_per_atom;
+  size_t band = 0;
+  while (band + 1 < shells.bands && local >= shells.point_begin[band + 1]) ++band;
+  const size_t angular = shells.polar_count[band] * shells.azimuth_count[band];
+  const size_t offset = local - shells.point_begin[band];
+  const size_t radial = shells.radial_begin[band] + offset / angular;
+  const size_t direction = offset % angular;
+  return {owner, radial, shells.polar_offset[band] + direction / shells.azimuth_count[band],
+          shells.azimuth_offset[band] + direction % shells.azimuth_count[band]};
+}
 // 4096 points bounds launch overhead and O(tile * atoms) scratch. The small
 // Gauss-Legendre tables use their validated maximum capacity in every plan,
 // so shape-only callers need no grid-version-specific ABI or GPU query.
@@ -60,6 +87,13 @@ inline Layout layout(size_t atoms, size_t points) {
 inline unsigned blocks(size_t count) {
   return static_cast<unsigned>(std::min(size_t{65535}, 1 + (count - 1) / 128));
 }
+// Backend-neutral launch dimensions also support host-only shape validation.
+inline std::pair<unsigned, unsigned> atom_point_blocks(size_t points, size_t atoms) {
+  if (!points || !atoms) throw std::invalid_argument("empty atom-point launch");
+  const unsigned x = blocks(points);
+  const size_t y_cap = std::max(size_t{1}, size_t{65535} / x);
+  return {x, static_cast<unsigned>(std::min(atoms, y_cap))};
+}
 } // namespace generativeqc::generated::quadrature
 
 #if defined(__CUDACC__)
@@ -70,9 +104,8 @@ namespace generativeqc::generated::quadrature {
 // flattened runtime divisor in every lane. Cap the total block count at the
 // historical 65535 while allowing oversized atom sets to grid-stride in y.
 inline dim3 atom_point_grid(size_t points, size_t atoms) {
-  const unsigned x = blocks(points);
-  const size_t y_cap = std::max(size_t{1}, size_t{65535} / x);
-  return dim3(x, static_cast<unsigned>(std::min(atoms, y_cap)));
+  const auto shape = atom_point_blocks(points, atoms);
+  return dim3(shape.first, shape.second);
 }
 """
 
@@ -155,6 +188,45 @@ __global__ void points_kernel(size_t begin, size_t count, size_t nr, size_t nz, 
     weights[i] = wr * pz[2] * pp[2];
   }
 }
+// The same radial and angular arithmetic, with a bounded shell decoder rather
+// than the rectangular v1/v2 index map. Every retained shell is a complete
+// Gauss-Legendre/trapezoidal rule, not a subset with inherited dense weights.
+__global__ void pruned_points_kernel(size_t begin, size_t count, size_t nr, PrunedShells shells,
+                                     const double* centers, const double* radial,
+                                     const double* polar, const double* azimuth,
+                                     double* xyz, double* weights) {
+  for (size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < count;
+       point += size_t(blockDim.x) * gridDim.x) {
+    const auto index = decode_pruned_point(begin + point, shells);
+    const double* pr = radial + 2 * (index.owner * nr + index.radial);
+    const double* pz = polar + 3 * index.polar;
+    const double* pp = azimuth + 3 * index.azimuth;
+    const double r = pr[0], wr = pr[1];
+    xyz[3 * point] = centers[3 * index.owner] + r * pz[0] * pp[0];
+    xyz[3 * point + 1] = centers[3 * index.owner + 1] + r * pz[0] * pp[1];
+    xyz[3 * point + 2] = centers[3 * index.owner + 2] + r * pz[1];
+    weights[point] = wr * pz[2] * pp[2];
+  }
+}
+// Element-local rules are immutable input tables. This kernel owns molecular
+// translation and explicit atom provenance for nonuniform atomic quadratures.
+__global__ void atomic_points_kernel(size_t begin, size_t count, size_t atoms,
+    const uint64_t* offsets, const uint64_t* rule_offsets, const double* rules,
+    const double* centers, double* xyz, double* weights) {
+  for (size_t p = size_t(blockIdx.x) * blockDim.x + threadIdx.x; p < count;
+       p += size_t(blockDim.x) * gridDim.x) {
+    const size_t index = begin + p;
+    size_t low = 0, high = atoms;
+    while (low + 1 < high) {
+      const size_t middle = (low + high) / 2;
+      if (index < offsets[middle]) high = middle; else low = middle;
+    }
+    const size_t rule = rule_offsets[low] + index - offsets[low];
+    for (size_t axis = 0; axis < 3; ++axis)
+      xyz[3 * p + axis] = centers[3 * low + axis] + rules[4 * rule + axis];
+    weights[p] = rules[4 * rule + 3];
+  }
+}
 // Atom-major 2-D launch keeps adjacent point lanes coalesced without runtime
 // quotient/remainder recovery for every point-center visit.
 __global__ void distances_kernel(size_t count, size_t na, const double* xyz,
@@ -166,7 +238,8 @@ __global__ void distances_kernel(size_t count, size_t na, const double* xyz,
 }
 template <unsigned Iterations>
 __global__ void partition_kernel(size_t count, size_t na, const double* distances,
-                                 const double* inverse_separation, double* logs) {
+                                 const double* inverse_separation, double* logs,
+                                 const double* adjustments) {
   for (size_t a = blockIdx.y; a < na; a += gridDim.y) {
     for (size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < count;
          point += size_t(blockDim.x) * gridDim.x) {
@@ -185,7 +258,9 @@ __global__ void partition_kernel(size_t count, size_t na, const double* distance
           // Do not turn 0*infinity into a clipped endpoint for equidistant points.
           coordinate = (distances[hi * count + point] - distances[lo * count + point]) / (-inverse);
         }
-        const double mu = fmin(1.0, fmax(-1.0, coordinate));
+        double mu = fmin(1.0, fmax(-1.0, coordinate));
+        if (adjustments && inverse != 0.0)
+          mu += adjustments[hi * na + lo] * (1.0 - mu * mu);
         const double pair = fmin(1.0, fmax(0.0, becke<Iterations>(mu)));
         value += a > b ? log(pair) : log1p(-pair);
       }
@@ -194,10 +269,18 @@ __global__ void partition_kernel(size_t count, size_t na, const double* distance
   }
 }
 __global__ void normalize_kernel(size_t begin, size_t count, size_t per_atom, size_t na,
-                                 const double* logs, double* weights, int* invalid) {
+                                 const double* logs, double* weights, int* invalid,
+                                 const uint64_t* atom_offsets = nullptr) {
   for (size_t p = size_t(blockIdx.x) * blockDim.x + threadIdx.x; p < count;
        p += size_t(blockDim.x) * gridDim.x) {
-    const size_t owner = (begin + p) / per_atom;
+    size_t owner = 0;
+    if (atom_offsets) {
+      size_t high = na;
+      while (owner + 1 < high) {
+        const size_t middle = (owner + high) / 2;
+        if (begin + p < atom_offsets[middle]) high = middle; else owner = middle;
+      }
+    } else owner = (begin + p) / per_atom;
     double maximum = -INFINITY;
     for (size_t a = 0; a < na; ++a) maximum = fmax(maximum, logs[a * count + p]);
     double total = 0.0, owner_term = 0.0;
@@ -213,7 +296,7 @@ __global__ void normalize_kernel(size_t begin, size_t count, size_t per_atom, si
 }
 inline void launch_partition(unsigned iterations, size_t count, size_t na,
                              const double* distances, const double* inverse_separation,
-                             double* logs, cudaStream_t stream) {
+                             double* logs, cudaStream_t stream, const double* adjustments = nullptr) {
   switch (iterations) {
 @PARTITION_CASES@
     default: throw std::invalid_argument("unsupported Becke iteration count");
@@ -246,7 +329,7 @@ def emit_quadrature_cuda() -> str:
         )
         cases.append(
             f"    case {iterations}: partition_kernel<{iterations}><<<atom_point_grid(count, na), 128, 0, stream>>>"
-            "(count, na, distances, inverse_separation, logs); break;"
+            "(count, na, distances, inverse_separation, logs, adjustments); break;"
         )
     lines.append(_KERNELS.replace("@PARTITION_CASES@", "\n".join(cases)))
     return "\n".join(lines)

@@ -213,7 +213,9 @@ large-case observation ledger do not extend that domain.
 
 The frozen measured source starts at
 `25e8efebb069e6067ba3649f220c37e844ecc8f6` plus
-`reproduction/source.patch`. Its native identity is
+the losslessly compressed [`reproduction/source.patch.xz`](reproduction/source.patch.xz).
+Its decoded bytes and original SHA-256 are unchanged; storage hashes and lengths
+are recorded in `reproduction/manifest.json`. Its native identity is
 `2d59ce1e7d001a6e9d0a28b90f44e6fcbcf8e752a6682b1d80a98738c72b3133`;
 the measured library SHA-256 is
 `c1d4c033b73e3b42da58acab0b67c2891f51e3d8d02e7dd72e3165febaf88547`.
@@ -240,10 +242,22 @@ the runner freezes a fresh post-cold density and records its own branch identity
 Exact historical scripts are retained as `reproduction/measured-*.txt`, preserving
 their bytes through format hooks. The `.hpp.txt` identity snapshot likewise
 preserves its original header bytes. The source patch is applied in a separate
-checkout at the pinned base before rebuilding, never over an existing dirty tree.
+checkout at the pinned base before rebuilding, never over an existing dirty tree:
+
+```bash
+xz -dc /path/to/reproduction/source.patch.xz | git apply
+```
 
 `projection/` retains fixed-input plans, raw samples and candidate summaries;
 `producer/` retains independent raw/J/truncated-metric/unequal-size checks.
 Neither isolated projection wins nor smaller factor arrays qualify complete
 SCF/force latency. The [Agent Note](../../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records the exact representation, fallback boundaries and retirement conditions.
+
+The retained storage-dataflow record is losslessly compressed in
+`storage-dataflow.json.gz`; `storage-dataflow.storage.json` pins its 135,548
+original bytes, original Git blob and stored/decoded SHA-256 identities.
+Read it with the shared `load_record` reader or `gzip -dc`. All eight cells,
+overlapping-counter cautions and four unmeasured limitations are unchanged.
+Historical manifest paths and hashes continue to identify the decoded bytes;
+restore the original snapshot before running its historical collectors.

@@ -1,11 +1,8 @@
 include_guard(GLOBAL)
 
-include(GNUInstallDirs)
-
 function(generativeqc_add_gfn2_runtime target)
   set(_gfn2_root "${CMAKE_CURRENT_SOURCE_DIR}/src/xtb/native")
   target_sources(${target} PRIVATE
-    ${_gfn2_root}/src/cpu_dispatch/features.cpp
     ${_gfn2_root}/src/model/common/integrals_kernels_baseline.cpp
     ${_gfn2_root}/src/model/gfn2/mulliken_kernels_baseline.cpp
     ${_gfn2_root}/src/model/common/sto.cpp
@@ -37,7 +34,6 @@ function(generativeqc_add_gfn2_runtime target)
   if(GENERATIVEQC_ENABLE_CUDA AND NOT GENERATIVEQC_PYTHON_WHEEL AND
      NOT GENERATIVEQC_CUDA_PROVIDER STREQUAL "cumetal")
     set(_gfn2_cuda_sources
-      ${_gfn2_root}/src/backends/cuda/cuda_runtime.cu
       ${_gfn2_root}/src/runtime/cuda_descriptor_validation.cu
       ${_gfn2_root}/src/runtime/gfn2_cuda_topology_staging.cu
       ${_gfn2_root}/src/runtime/gfn2_cuda_execution.cu
@@ -204,61 +200,7 @@ function(generativeqc_add_gfn2_runtime target)
     target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
   endif()
 
-  if(GENERATIVEQC_BUNDLE_XTB_OPENBLAS)
-    if(NOT GENERATIVEQC_PYTHON_WHEEL)
-      message(FATAL_ERROR "GENERATIVEQC_BUNDLE_XTB_OPENBLAS requires GENERATIVEQC_PYTHON_WHEEL=ON")
-    endif()
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-      message(FATAL_ERROR "The scoped GFN2 wheel provider is currently qualified on Linux only")
-    endif()
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _gfn2_processor)
-    if(_gfn2_processor MATCHES "^(x86_64|amd64)$")
-      set(_gfn2_arch x86_64)
-    elseif(_gfn2_processor MATCHES "^(aarch64|arm64)$")
-      set(_gfn2_arch aarch64)
-    else()
-      message(FATAL_ERROR "Unsupported GFN2 wheel architecture: ${CMAKE_SYSTEM_PROCESSOR}")
-    endif()
-    execute_process(
-      COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/xtb/resolve-openblas-wheel.py"
-        --manifest "${CMAKE_CURRENT_SOURCE_DIR}/tools/xtb/scipy_openblas32_manifest.json"
-        --platform linux
-        --architecture "${_gfn2_arch}"
-      RESULT_VARIABLE _gfn2_openblas_status
-      OUTPUT_VARIABLE _gfn2_openblas_json
-      ERROR_VARIABLE _gfn2_openblas_error
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(NOT _gfn2_openblas_status EQUAL 0)
-      message(FATAL_ERROR
-        "Failed to resolve the reviewed GFN2 OpenBLAS provider:\n${_gfn2_openblas_error}")
-    endif()
-    string(JSON _gfn2_openblas_library GET "${_gfn2_openblas_json}" provider_path)
-    string(JSON _gfn2_openblas_prefix GET "${_gfn2_openblas_json}" expected_config_prefix)
-    get_filename_component(_gfn2_openblas_dir "${_gfn2_openblas_library}" DIRECTORY)
 
-    set_source_files_properties(
-      ${_gfn2_root}/src/runtime/openblas_lp64_shim.c PROPERTIES LANGUAGE CXX)
-    add_library(generativeqc_gfn2_openblas_shim SHARED
-      ${_gfn2_root}/src/runtime/openblas_lp64_shim.c)
-    target_link_libraries(generativeqc_gfn2_openblas_shim PRIVATE "${_gfn2_openblas_library}")
-    target_link_options(generativeqc_gfn2_openblas_shim PRIVATE "LINKER:--no-as-needed")
-    set_target_properties(generativeqc_gfn2_openblas_shim PROPERTIES
-      OUTPUT_NAME generativeqc_xtb_openblas_lp64_shim
-      CXX_VISIBILITY_PRESET hidden
-      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-      BUILD_RPATH "${_gfn2_openblas_dir}"
-      INSTALL_RPATH "")
-    install(TARGETS generativeqc_gfn2_openblas_shim
-      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    target_compile_definitions(${target} PRIVATE
-      GENERATIVEQC_XTB_CONFIGURED_WHEEL_OPENBLAS=1
-      "GENERATIVEQC_XTB_CONFIGURED_WHEEL_OPENBLAS_CONFIG_PREFIX=\"${_gfn2_openblas_prefix}\"")
-    add_dependencies(${target} generativeqc_gfn2_openblas_shim)
-  elseif(GENERATIVEQC_XTB_CPU_LINALG_LIBRARY)
-    target_compile_definitions(${target} PRIVATE
-      "GENERATIVEQC_XTB_CONFIGURED_CPU_LINALG_RUNTIME=\"${GENERATIVEQC_XTB_CPU_LINALG_LIBRARY}\"")
-  endif()
 endfunction()
 
 function(generativeqc_link_cli_core target)

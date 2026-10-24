@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.lossless-evidence-compaction.v1",
+  "scope": "Storage only: preserve all historical samples, timings, errors, settings and verdicts byte for byte.",
+  "original": "water24.samples.json",
+  "original_bytes": 98177,
+  "original_sha256": "0475882b7f4c1a13bcb32e0949fa5fbb1fc268ce7634d0488d8007c0e25a1804",
+  "original_git_commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+  "original_git_blob": "403c612f21146ad5895dc0c63fdf302ac310e707",
+  "archive": "water24.samples.json.gz",
+  "archive_bytes": 5592,
+  "archive_sha256": "8e18c50386e9f831d19cbf24b1da33c3c5c9af0a7fc7f6567bf58fc0630e2338",
+  "restore_verified_byte_identical_before_removal": true,
+  "no_release_or_external_publication": true
+}

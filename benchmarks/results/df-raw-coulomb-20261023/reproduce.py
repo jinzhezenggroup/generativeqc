@@ -1,0 +1,167 @@
+"""Recheck immutable raw-J endpoints and their separate source populations.
+
+Stationary samples use the independently qualified dense references. Moved
+samples use fresh same-geometry GPU4 DF controls; this is schedule equivalence,
+not a moved dense-grid convergence claim. No original receipt is rewritten.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import lzma
+import sys
+from pathlib import Path
+from statistics import median
+
+if not __debug__ or sys.flags.optimize:
+    raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
+
+from benchmarks.readme_defaults_qualification import _comparison, qualify
+from benchmarks.readme_defaults_report import load_records
+
+ROOT = Path(__file__).resolve().parent
+REFERENCE = ROOT.parent / "readme-final-20261022"
+
+
+def restored_population(name: str) -> bytes:
+    """Authenticate and recover the exact original UTF-8 receipt bytes."""
+    manifest = json.loads((ROOT / "receipt-populations.json").read_text())
+    packed = (ROOT / manifest["bundle"]).read_bytes()
+    if hashlib.sha256(packed).hexdigest() != manifest["bundle_sha256"]:
+        raise ValueError("Receipt population bundle hash mismatch")
+    decoded = json.loads(lzma.decompress(packed))
+    if set(decoded) != set(manifest["members"]):
+        raise ValueError("Receipt population member set mismatch")
+    key = name + ".json"
+    raw = decoded[key].encode("utf-8")
+    expected = manifest["members"][key]
+    if len(raw) != expected["bytes"] or hashlib.sha256(raw).hexdigest() != expected["sha256"]:
+        raise ValueError("Restored receipt population integrity mismatch")
+    return raw
+
+
+def read(name: str) -> dict:
+    """Read losslessly retained named receipts."""
+    if name in {"stage2-moved", "default-moved", "stage2-pairs", "default-pairs", "stage2-matrix", "default-matrix"}:
+        return json.loads(restored_population(name))
+    return json.loads(lzma.decompress((ROOT / (name + ".json.xz")).read_bytes()))
+
+
+def timing(first: list[float], last: list[float]) -> dict:
+    """Keep every observation and the unchanged median/relative-MAD gate."""
+    before, after = median(first), median(last)
+    floor = max(
+        0.02,
+        2
+        * (
+            median(abs(x - before) for x in first) / before
+            + median(abs(x - after) for x in last) / after
+        ),
+    )
+    gain = 1 - after / before
+    return {
+        "before_seconds": first,
+        "after_seconds": last,
+        "before_median": before,
+        "after_median": after,
+        "gain_fraction": gain,
+        "gain_floor": floor,
+        "passes_gain_gate": gain > floor,
+    }
+
+
+def main() -> None:
+    oracles = load_records(
+        [REFERENCE / "oracles.json.xz"],
+        schema="generativeqc.readme-defaults-oracle.v1",
+    )
+    reuse = json.loads((REFERENCE / "reference-reuse.json").read_text())
+    # Recover the earlier 1,837-input inventory byte-for-byte; only its
+    # redundant hashes share storage with the later complete inventory.
+    subset = read("stage2-final-source-inputs-delta")
+    base_inputs = read(subset["base"])["files"]
+    restored = {
+        **subset["original_fields"],
+        "files": {name: subset["overrides"].get(name, base_inputs.get(name))
+                  for name in subset["paths"]},
+    }
+    restored_bytes = (json.dumps(restored, indent=2) + "\n").encode()
+    assert hashlib.sha256(restored_bytes).hexdigest() == subset["original_uncompressed_sha256"]
+    moved_references = read("stage2-moved-reference")
+    result = {"qualification": {}, "moved_default_reference": {}, "timing": {}}
+    cohorts = [("stage2-pairs", 20), ("stage2-moved", 40), ("stage2-matrix", 12)]
+    # Integrated-default populations, if retained, remain distinct from opt-in.
+    cohorts += [(name, None) for name in ("default-matrix", "default-moved", "default-pairs")]
+    for bridge_path in sorted(ROOT.glob("*merge-bridge.json.xz")):
+        bridge_name = bridge_path.name.removesuffix(".json.xz")
+        bridge = read(bridge_name)
+        inputs = read("stage2-default-source-inputs")["files"].copy()
+        delta = bridge["source_input_delta"]
+        inputs.update(delta["changed"])
+        for name in delta["removed"]:
+            del inputs[name]
+        assert len(inputs) == bridge["source_input_count"]
+        manifest = {"source_revision": bridge["source_revision"], "files": dict(sorted(inputs.items()))}
+        original_bytes = (json.dumps(manifest, indent=2) + "\n").encode()
+        assert hashlib.sha256(original_bytes).hexdigest() == bridge["source_manifest_file_sha256"]
+        assert len(bridge["records"]) == 12
+        for name, record in bridge["records"].items():
+            assert record["source_revision"] == bridge["source_revision"]
+            qualified = qualify([record], oracles, reference_reuse=reuse)[0]
+            assert qualified["status"] == "qualified", (name, qualified)
+            result["qualification"][bridge_name + "/" + name] = qualified
+    for cohort, count in cohorts:
+        records = read(cohort)
+        if count is not None:
+            assert len(records) == count, cohort
+        for name, record in records.items():
+            assert record["status"] == "complete", (name, record.get("error"))
+            view = copy.deepcopy(record)
+            if "moved" in cohort:
+                assert [s["phase"] for s in record["samples"]] == [
+                    "cold", "warm", "moved", "moved-warm"
+                ]
+                view["samples"] = view["samples"][:2]
+                view["warm_repeats"] = 1
+                ref = moved_references[
+                    f"{record['method']}-df-{record['atoms']}-gpu4pyscf.json"
+                ]
+                assert record["moved_geometry_bohr"] == ref["geometry_bohr"]
+                for key in (
+                    "method", "mode", "orbital_basis", "basis_representation",
+                    "charge", "spin", "auxiliary_input_sha256",
+                ):
+                    assert record[key] == ref[key], (name, key)
+                checks = [
+                    _comparison(s, ref["samples"][0], record["atoms"])
+                    for s in record["samples"][2:]
+                ]
+                assert all(c["passed"] for c in checks), (name, checks)
+                result["moved_default_reference"][cohort + "/" + name] = checks
+            qualified = qualify([view], oracles, reference_reuse=reuse)[0]
+            assert qualified["status"] == "qualified", (name, qualified)
+            result["qualification"][cohort + "/" + name] = qualified
+        if "matrix" in cohort:
+            continue
+        variants = ("stage1", "stage2") if cohort.startswith("stage2-") else ("off", "unset")
+        for method in ("pbe", "r2scan"):
+            for atoms in sorted({r["atoms"] for r in records.values()}):
+                phases = ("cold", "warm", "moved", "moved-warm") if "moved" in cohort else ("cold", "warm")
+                for phase in phases:
+                    populations = []
+                    for variant in variants:
+                        population = [
+                            median(s["seconds"] for s in r["samples"] if s["phase"] == phase)
+                            for name, r in sorted(records.items())
+                            if variant in name and r["method"] == method and r["atoms"] == atoms
+                        ]
+                        assert len(population) == 5, (cohort, method, atoms, variant)
+                        populations.append(population)
+                    result["timing"][f"{cohort}/{method}/{atoms}/{phase}"] = timing(*populations)
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

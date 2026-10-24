@@ -1,7 +1,9 @@
 """Keep integration compaction lossless and production evidence available."""
 
+import gzip
 import hashlib
 import json
+import lzma
 import typing
 from pathlib import Path
 
@@ -9,6 +11,24 @@ from tools.restore_retained_evidence import _records
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "benchmarks/results/retention-df-integration/snapshot.manifest.json"
+
+
+def _retained_bytes(name: str) -> bytes:
+    """Resolve historical logical names while preserving the original bytes.
+
+    Storage-only compaction keeps provenance paths and snapshot digests stable.
+    Require one checkout representation; missing or ambiguous evidence fails.
+    """
+    members = [ROOT / (name + suffix) for suffix in ("", ".gz", ".xz")]
+    present = [path for path in members if path.is_file()]
+    assert len(present) == 1, name
+    path = present[0]
+    data = path.read_bytes()
+    if path.suffix == ".gz":
+        return gzip.decompress(data)
+    if path.suffix == ".xz":
+        return lzma.decompress(data)
+    return data
 
 
 def test_df_snapshot_catalog_and_exact_removal_set() -> None:
@@ -26,7 +46,7 @@ def test_retained_scientific_records_keep_original_bytes() -> None:
     for row in _records(MANIFEST):
         if row["checkout"] != "retained" or row["path"].endswith(".md"):
             continue
-        data = (ROOT / row["path"]).read_bytes()
+        data = _retained_bytes(row["path"])
         assert len(data) == row["bytes"]
         assert hashlib.sha256(data).hexdigest() == row["sha256"]
 
@@ -47,6 +67,6 @@ def test_production_df_provenance_keeps_current_files() -> None:
             for item in value:
                 visit(item)
         elif isinstance(value, str) and value.startswith("benchmarks/results/"):
-            assert (ROOT / value).is_file(), value
+            _retained_bytes(value)
 
     visit(policy)

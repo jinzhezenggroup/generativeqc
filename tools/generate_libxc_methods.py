@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,8 +25,11 @@ SOURCE_ROOT = ROOT / "upstream" / "libxc" / REVISION
 REGISTRY = ROOT / "upstream" / "manifest.json"
 SOURCE_ID = "libxc-7.0.0"
 COLLECTIONS = ("rsh", "wb97mv")
+NONLOCAL_SOURCE_ID = "libxc-7.0.0-fulltree"
+NONLOCAL_SOURCE_ROOT = ROOT / "upstream" / "libxc-fulltree" / REVISION
+_NONLOCAL_OWNER = re.compile(r"src/(?:hyb_)?(?:gga|mgga)_xc_[a-z0-9_]+\.c\Z")
 OUTPUT = (
-    ROOT / "python" / "generativeqc_compiler" / "method" / "_generated_libxc_methods.py"
+    ROOT / "python" / "generativeqc_compiler" / "xc" / "_generated_libxc_methods.py"
 )
 
 
@@ -55,8 +59,29 @@ def _sources() -> list[tuple[Path, str]]:
         if actual != expected:
             raise ValueError(f"pinned Libxc hybrid owner SHA-256 mismatch: {name}")
         result.append((path, actual))
+    # Discover complete nonlocal method owners from the separately authenticated
+    # fulltree, without a named-functional or file-name allowlist. An owner may
+    # contain several Libxc registrations; only its VV10-bearing cases enter
+    # the method inventory (ordinary hybrids retain the existing source policy).
+    extended = registry["sources"][NONLOCAL_SOURCE_ID]
+    if extended.get("revision") != REVISION:
+        raise ValueError("unexpected fulltree Libxc source-registry revision")
+    original_names = {path.name for path, _ in result}
+    for name, metadata in sorted(extended["files"].items()):
+        if not _NONLOCAL_OWNER.fullmatch(name):
+            continue
+        path = NONLOCAL_SOURCE_ROOT / name
+        if not path.is_file():
+            raise ValueError(f"missing pinned Libxc nonlocal owner: {name}")
+        raw = path.read_bytes()
+        actual = hashlib.sha256(raw).hexdigest()
+        if actual != metadata["sha256"]:
+            raise ValueError(f"pinned Libxc nonlocal owner SHA-256 mismatch: {name}")
+        if b"XC_FLAGS_VV10" not in raw or path.name in original_names:
+            continue
+        result.append((path, actual))
     if not result:
-        raise ValueError("no pinned Libxc hybrid owners")
+        raise ValueError("no pinned Libxc method owners")
     return result
 
 
@@ -65,9 +90,17 @@ def build_catalog() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     blocked: dict[str, str] = {}
     registrations: set[str] = set()
     for path, sha in _sources():
+        fulltree = path.is_relative_to(NONLOCAL_SOURCE_ROOT)
         for record in extract_method_registrations(
-            path.read_text(encoding="utf-8"), path.name
+            path.read_text(encoding="utf-8"),
+            path.name,
+            direct_combined=fulltree,
         ):
+            if fulltree and (
+                record["status"] != "generated"
+                or record.get("nonlocal_variant") is None
+            ):
+                continue
             registration = record["registration"]
             if registration in registrations:
                 raise ValueError(f"duplicate Libxc hybrid registration: {registration}")
@@ -103,9 +136,9 @@ def register_product() -> None:
     """Register the deterministic method-metadata product with source provenance."""
     registry = source_registry._load()
     registry["products"]["libxc-method-metadata"] = {
-        "inputs": [SOURCE_ID],
+        "inputs": [SOURCE_ID, NONLOCAL_SOURCE_ID],
         "input_identity_sha256": source_registry._product_input_identity(
-            registry["sources"], [SOURCE_ID]
+            registry["sources"], [SOURCE_ID, NONLOCAL_SOURCE_ID]
         ),
         "generator": Path(__file__).relative_to(ROOT).as_posix(),
         "generator_sha256": _digest(Path(__file__)),
@@ -114,6 +147,7 @@ def register_product() -> None:
             for name in (
                 "tools/libxc_bulk_metadata.py",
                 "tools/libxc_method_metadata.py",
+                "python/generativeqc_compiler/xc/libxc_method_metadata.py",
             )
         },
         "outputs": {

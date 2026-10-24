@@ -27,15 +27,16 @@
 #endif
 
 #include "cli/geometry_command.hpp"
+#include "cli/hessian.hpp"
 #include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 #include "cli/profiles.hpp"
 #include "cli/resources.hpp"
-#include "cli_method_catalog.hpp"
 #include "dft/grid.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
+#include "methods/named_ks_catalog.hpp"
 
 #ifndef GENERATIVEQC_CLI_VERSION
 #define GENERATIVEQC_CLI_VERSION "unknown"
@@ -212,6 +213,7 @@ void print_usage(std::ostream& out) {
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc optimize INPUT.xyz [run and geometry options]\n"
+         "  generativeqc hessian|hvp INPUT.xyz --backend cuda [options]\n"
          "  generativeqc profile show|clear\n"
          "  generativeqc resources INPUT.xyz [run and budget options]\n"
          "  generativeqc profile install ARCHIVE.zip\n"
@@ -244,6 +246,7 @@ void print_usage(std::ostream& out) {
          "  --density-tolerance X    Positive finite SCF density tolerance\n"
          "  --screening-tolerance X  Positive finite Gaussian integral screening threshold\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
+         "  --grid-level N          Treutler/Lebedev + NWChem level 0..9 (default 3)\n"
          "  --grid-radial-points N  Radial count for explicit MethodIR reference grid\n"
          "  --grid-polar-points N   Polar count for explicit MethodIR reference grid\n"
          "  --grid-azimuth-points N Azimuth count for explicit MethodIR reference grid\n"
@@ -258,6 +261,12 @@ void print_usage(std::ostream& out) {
          "  --opt-max-step F         Max per-atom displacement (Bohr; default: 0.35)\n"
          "  --plan-only              Print selected stages; do not initialize a device\n"
          "  --output FILE.xyz        Write final Angstrom XYZ, refusing to overwrite\n";
+  out << "Native compiler AD Hessian/HVP options (linked CUDA AOT; no Python/JIT):\n"
+         "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
+         "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
+         "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
+         "  --response-budget-bytes N --max-nonlocal-pairs N\n"
+         "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
 }
 
 int basis_command(int argc, char** argv) {
@@ -320,7 +329,7 @@ void print_methods(bool json, bool libxc = false) {
     first = false;
   }
   if (libxc) {
-    for (const auto& entry : generativeqc::cli::method_generated::kMethods) {
+    for (const auto& entry : generativeqc::cli::method_generated::methods()) {
       if (!entry.name.starts_with("libxc:") && !entry.name.starts_with("libxc-uks:")) continue;
       if (json) {
         if (!first) std::cout << ",\n";
@@ -339,7 +348,7 @@ void print_methods(bool json, bool libxc = false) {
 }
 
 void print_compositions(bool json) {
-  using generativeqc::cli::method_generated::kMethods;
+  const auto kMethods = generativeqc::cli::method_generated::methods();
   if (json)
     std::cout << "[\n";
   else
@@ -403,13 +412,13 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.method = options.method;
   descriptor.max_iterations = 100;
   descriptor.diis_history = options.diis_history;
-  descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
-  descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
+  const auto convergence =
+      generativeqc::cli::resolve_scf_convergence(options, is_correlated(options));
+  descriptor.energy_tolerance = convergence.energy_tolerance;
+  descriptor.density_tolerance = convergence.density_tolerance;
   // Canonical correlated methods require the unscreened reference operator.
   descriptor.screening_tolerance = is_gfn2(options) || is_correlated(options) ? 0.0 : 1.0e-14;
   if (options.max_iterations) descriptor.max_iterations = *options.max_iterations;
-  if (options.energy_tolerance) descriptor.energy_tolerance = *options.energy_tolerance;
-  if (options.density_tolerance) descriptor.density_tolerance = *options.density_tolerance;
   if (options.screening_tolerance) descriptor.screening_tolerance = *options.screening_tolerance;
   descriptor.density_fitting_mode = options.density_fitting;
   descriptor.density_fitting_auxiliary_basis =
@@ -434,6 +443,8 @@ RunOptions parse_run(int argc, char** argv) {
   RunOptions options;
   const bool resources = std::string_view(argv[1]) == "resources";
   const bool optimizing = std::string_view(argv[1]) == "optimize";
+  const bool compiler_second_order =
+      std::string_view(argv[1]) == "hessian" || std::string_view(argv[1]) == "hvp";
   if (resources) {
     options.method_name = "rhf";
     options.method = GENERATIVEQC_METHOD_RHF;
@@ -617,13 +628,31 @@ RunOptions parse_run(int argc, char** argv) {
         options.input_angstrom = false;
       else
         throw UsageError("--units must be angstrom or bohr");
+    } else if (option == "--grid-level") {
+      if (options.grid_explicit && options.grid.version != 4)
+        throw UsageError("--grid-level cannot be combined with legacy tensor-grid counts");
+      const auto text = value();
+      const auto level = text == "0" ? 0u : parse_positive_u32(text, "grid level");
+      if (level > 9) throw UsageError("grid level must be in 0..9");
+      options.grid = generativeqc::KsGrid{};
+      options.grid.radial_points = level;
+      options.grid_explicit = true;
     } else if (option == "--grid-radial-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.radial_points = parse_positive_u32(value(), "grid radial points");
       options.grid_explicit = true;
     } else if (option == "--grid-polar-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.angular_polar = parse_positive_u32(value(), "grid polar points");
       options.grid_explicit = true;
     } else if (option == "--grid-azimuth-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.angular_azimuth = parse_positive_u32(value(), "grid azimuth points");
       options.grid_explicit = true;
     } else if (optimizing && option == "--stages") {
@@ -674,12 +703,15 @@ RunOptions parse_run(int argc, char** argv) {
   if (is_dft(options) && !options.composition) {
     // Registered methods leave ks_options null, so native preparation owns
     // their grid defaults. Keep the metadata-only inventory on that same grid.
-    const generativeqc::dft::GridSpec native_grid;
+    const auto native_grid = generativeqc::dft::default_grid_spec();
+    options.grid.version = native_grid.version;
     options.grid.radial_points = native_grid.radial_points;
     options.grid.angular_polar = native_grid.angular_polar;
     options.grid.angular_azimuth = native_grid.angular_azimuth;
   }
-  if (options.composition) {
+  // The explicit compiler consumer owns complete nonlocal Hessian admission;
+  // the native KsComposition-only catalog must not stand in for that contract.
+  if (options.composition && !compiler_second_order) {
     const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA ? options.composition->cuda
                                                                        : options.composition->cpu;
     if (!admitted) {
@@ -775,14 +807,11 @@ int run(RunOptions options) {
     generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
     composed.set_grid(options.grid);
     using namespace generativeqc::cli::method_generated;
-    for (std::uint32_t i = 0; i < row->component_count; ++i) {
-      const auto& term = kComponents[row->component_offset + i];
-      composed.add_semilocal(std::string(term.name), term.coefficient);
+    for (const auto& term : components(*row)) {
+      composed.add_semilocal(term.component_id, term.coefficient);
     }
-    for (std::uint32_t i = 0; i < row->exchange_count; ++i) {
-      const auto& term = kExchanges[row->exchange_offset + i];
-      composed.add_exact_exchange(static_cast<generativeqc_ks_exchange_operator>(term.kind),
-                                  term.coefficient, term.omega);
+    for (const auto& term : exchanges(*row)) {
+      composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
     }
     return composed.prepare(context, system, method);
   }();
@@ -1124,6 +1153,18 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "basis") return basis_command(argc, argv);
+    if (command == "hessian" || command == "hvp") {
+      if (argc == 3 &&
+          (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
+        print_usage(std::cout);
+        return 0;
+      }
+      auto invocation = generativeqc::cli::parse_hessian_invocation(argc, argv);
+      std::vector<char*> arguments;
+      for (auto& argument : invocation.run_arguments) arguments.push_back(argument.data());
+      const auto options = parse_run(static_cast<int>(arguments.size()), arguments.data());
+      return generativeqc::cli::hessian_command(options, read_xyz(options), invocation);
+    }
     if (command == "run") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {

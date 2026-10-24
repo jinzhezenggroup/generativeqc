@@ -234,9 +234,9 @@ def _emit_boys_support(maximum_boys_order: int = 6) -> typing.Any:
     if (
         isinstance(maximum_boys_order, bool)
         or not isinstance(maximum_boys_order, int)
-        or not 0 <= maximum_boys_order <= 9
+        or not 0 <= maximum_boys_order <= 18
     ):
-        raise ValueError("generated Boys support requires maximum order in [0,9]")
+        raise ValueError("generated Boys support requires maximum order in [0,18]")
     source = r"""template<unsigned Order>
 __device__ __forceinline__ void boys_values(double argument, double* values) {
   static_assert(Order <= 6);

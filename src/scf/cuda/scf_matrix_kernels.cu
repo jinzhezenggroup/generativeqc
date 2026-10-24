@@ -185,11 +185,13 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
 }
 
 /**
- * Build ΔD against the last accepted exact-linear anchor. A 0xffffffff update
+ * Build ΔD against the retained provider anchor. A 0xffffffff update
  * count denotes the first build. Later full rebuilds happen after the configured
  * number of delta applications or while the previous accepted density RMS is
  * still above the late-SCF gate. A stationary screened HF item can instead
- * latch full-only energy refinement for the rest of this solve. Resetting the Fock anchor to hcore
+ * latch full-only energy refinement for the rest of this solve through the
+ * convergence controller, which also discards the cross-operator energy baseline.
+ * Resetting the Fock anchor to hcore
  * makes the downstream builder usable for both cases: it always computes hcore + G(input).
  */
 __global__ void prepare_incremental_direct_jk_kernel(

@@ -69,16 +69,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     range_body = " ".join(consumer[range_begin:range_end].split())
     assert "detail::BoundedDirectBlockDomain block_domain" in range_body
     assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
-    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
-    bounded_begin = bounded.index(
-        "void launch_bounded_direct_range_exchange_force_kernel("
-    )
-    bounded_end = bounded.index(
-        "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
-    )
-    bounded_body = " ".join(bounded[bounded_begin:bounded_end].split())
-    assert "detail::BoundedDirectBlockDomain block_domain" in bounded_body
-    assert bounded_body.count("false, true, block_domain);") == 2
+    # Compiled range-dispatch tests cover domain/omega/force-purpose forwarding
+    # for every admitted basis bound; the number of template launches is not ABI.
 
 
 def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
@@ -320,7 +312,8 @@ int main() {
 
 def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
-    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    # Preserve the producer/flag audit without depending on call-site wrapping.
+    owner = " ".join(_source("src/scf/cuda/direct_coulomb.cpp").split())
     assert "const bool bounded_through_f = through_f;" in direct
     assert "dispatch.canonical_coulomb || dispatch.canonical_exchange" in direct
     assert "mixed_j, plan->canonical_pairs != nullptr" in direct
@@ -499,18 +492,29 @@ def test_channel_dispatch_is_independent(
     dispatch_start = source.index("const auto dispatch =", device_start)
     dispatch_end = source.index(";", dispatch_start) + 1
     device_dispatch = source[dispatch_start:dispatch_end]
+    availability_start = source.index(
+        "const bool generated_exchange_available =", device_start
+    )
+    availability_end = source.index(";", availability_start) + 1
+    exchange_availability = source[availability_start:availability_end]
     harness = (
         "#include <cassert>\n"
         + header[start:end]
         + r"""
 DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
-    bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
-    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false) {
+    bool generated_exchange_capability, bool want_j, bool want_k, bool mixed_j,
+    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false,
+    bool mixed_exchange = false) {
   struct Channel { bool present; };
   struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
   struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
   auto* plan = &storage;
+  const auto direct_jk_generated_exchange_value_available =
+      [generated_exchange_capability](const auto&, const auto&) {
+        return generated_exchange_capability;
+      };
 """
+        + exchange_availability
         + device_dispatch
         + r"""
   return dispatch;
@@ -546,6 +550,16 @@ int main() {
     assert(ordinary.canonical_exchange == both.canonical_exchange);
     assert(ordinary.generic_coulomb == both.generic_coulomb);
     assert(ordinary.generic_exchange == both.generic_exchange);
+    // A strict generated K source cannot satisfy explicitly mixed K, even
+    // when its radial operator is available. J retains its own precision.
+    const auto lowered_k = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                            canonical, false, false, false, true);
+    assert(!lowered_k.generated_exchange);
+    assert(lowered_k.canonical_exchange == (k && canonical));
+    assert(lowered_k.generic_exchange == (k && !canonical));
+    assert(lowered_k.generated_coulomb == both.generated_coulomb);
+    assert(lowered_k.canonical_coulomb == both.canonical_coulomb);
+    assert(lowered_k.generic_coulomb == both.generic_coulomb);
     // MD owns J separately; normal dispatch must still select exactly the
     // same K provider and must not compute J a second time.
     const auto md = device_dispatch(generated_j, generated_k, j, k, mixed,
@@ -639,11 +653,9 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
         "exchange && exchange->force_capability && exchange->shared && exchange->force"
         in bridge
     )
-    assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr && '
-        "cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U"
-        in " ".join(bridge.split())
-    )
+    # The executable selector probe in test_one_electron_implicit_cooperative
+    # covers default and explicit mappings. Keep this audit about borrowing
+    # prepared Direct metadata, independently of selector expression syntax.
     assert "hcore_schedule, 1.0, output, source->stream" in bridge
     assert "1, 1.0, output, source->stream" in bridge
     assert (

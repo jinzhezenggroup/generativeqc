@@ -308,6 +308,34 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+      - name: Install uv and Python 3.11 for compiler-extension tests
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "cpu-cli-compiler-extension-v1"
+      - name: Prepare CPU CLI compiler-extension interpreter
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        run: |
+          uv venv --python 3.11
+          # The native CLI stays Python-free. Its explicit Hessian extension's
+          # mandatory CTest oracle needs the declared CPU Python dependencies,
+          # not a wheel rebuild, reference extras or NVIDIA runtime providers.
+          mapfile -t requirements < <(
+            .venv/bin/python - <<'PY_INNER'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              config = tomllib.load(handle)
+          for requirement in config["project"]["dependencies"]:
+              if not requirement.lstrip().startswith("nvidia-"):
+                  print(requirement)
+          PY_INNER
+          )
+          uv pip install --python .venv/bin/python "${requirements[@]}"
+          PYTHONPATH="$PWD/python" .venv/bin/python -m generativeqc.hessian_cli --help
       - name: Test native CLI archive/metadata contracts
         if: matrix.compiler == 'gcc'
         run: |
@@ -328,6 +356,7 @@ jobs:
           -DGENERATIVEQC_ENABLE_CUDA=OFF
           -DCMAKE_BUILD_TYPE=Release
           -DGENERATIVEQC_COMPILER_CACHE=ccache
+          -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
           -DCMAKE_CXX_FLAGS="${COVERAGE_COMPILE_FLAGS}"
           -DCMAKE_EXE_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
           -DCMAKE_SHARED_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
@@ -384,9 +413,9 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # A valid source-changing queue rebuild exceeded 23m before the former
-    # 25m job ceiling killed it. Bound the build separately and leave 5m for
-    # setup, the mandatory probes, compiler diagnostics and runner cleanup.
+    # Preserve the complete qualification ceiling while separately bounding
+    # an existing prerequisite and the final library/runtime integration gate.
+    # The phase limits never extend this outer setup/build/probe/cleanup budget.
     timeout-minutes: 35
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
@@ -625,6 +654,18 @@ jobs:
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
+      - name: Compile production CUDA prerequisite archive
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 10
+        # Build an existing dependency in the same tree before the final gate.
+        # Its objects/device link are reused, never compiled in a second context.
+        # The unchanged 35m job limit still bounds the complete qualification.
+        run: >-
+          cmake --build --preset cuda-release-sm120
+          --target generativeqc_direct_native --parallel 3
+        env:
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_NORESHARE: "true"
       - name: Compile production CUDA and runtime CTest
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 30
@@ -671,9 +712,9 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ""
         run: |
-          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests --parallel 2
+          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests generativeqc_ordered_gram_host_admission_tests --parallel 2
           ctest --test-dir build/cuda-release-sm120 \
-            -R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure
+            -R '^generativeqc_(fock_build|scf_proposal|ordered_gram_host_admission)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats
@@ -1438,7 +1479,9 @@ jobs:
             )
           fi
           .venv/bin/python -m pytest "${collection_targets[@]}" -v \
-            -o faulthandler_timeout=900 \
+            -o faulthandler_timeout=0 \
+            -p tools.pytest_safe_diagnostics --diagnostic-timeout=900 \
+            --diagnostics-dir="$PWD/.artifacts/python-diagnostics" \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${collection_args[@]}" \

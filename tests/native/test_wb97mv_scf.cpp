@@ -556,7 +556,8 @@ void nonlocal_density_domain() {
       r += phi[mu] * weighted;
       for (unsigned k = 0; k < 3; ++k) g[k] += 2.0 * ao[((k + 1) * points + p) * n + mu] * weighted;
     }
-    if (r >= 1e-8) {
+    // Independently select the versioned molecular rho >= 1e-10 domain.
+    if (r >= 1e-10) {
       active.push_back(p);
       xyz.insert(xyz.end(), grid.points().begin() + 3 * p, grid.points().begin() + 3 * p + 3);
       weights.push_back(grid.weights()[p]);
@@ -644,10 +645,12 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
               *result.physical_residual_rms < 1e-9,
           "WB97M-V native endpoint did not converge");
   // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on the exact
-  // basis/grid above; reproduce with tools/verify_wb97mv_scf.py and this test's dump.
-  const double oracle = kind == 0   ? -1.1419425514308112
-                        : kind == 1 ? -1.5764935673604195
-                                    : -2.3282082665978300;
+  // basis/grid above, explicitly selecting rho >= 1e-10. Reproduce with
+  // tools/verify_wb97mv_scf.py --vv10-density-cutoff 1e-10 and this test's dump.
+  // The independent CPU PySCF default remains 1e-8.
+  const double oracle = kind == 0   ? -1.1419425513004193
+                        : kind == 1 ? -1.5764935671589775
+                                    : -2.3282082621492230;
   require(std::abs(result.energy - oracle) < 2e-10,
           "complete WB97M-V SCF energy differs from its independent matched-grid oracle");
   require(result.ks_diagnostic->scf_domain_version == 3 && result.ks_diagnostic->ao_order == 1,

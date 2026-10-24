@@ -46,6 +46,10 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         def __exit__(self, *a: object) -> None:
             h.events.append("release")
 
+        def configure_grid(self, spec: Any, atoms: Any) -> None:
+            assert spec in (source.grid_spec, source.nonlocal_grid_spec)
+            assert tuple(atoms) == tuple(basis.atoms)
+
         def reset_geometry(self, *a: Any) -> None:
             h.events.append("reset")
 
@@ -157,6 +161,9 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         density=np.eye(2),
         grid=NS(points=np.ones((2, 3)), weights=np.ones(2)),
     )
+    source.nonlocal_grid = state.grid
+    source.nonlocal_grid_spec = source.grid_spec
+    source.nonlocal_atomic_weights = source.atomic_weights
     basis = NS(
         identity="basis",
         geometry="geometry",

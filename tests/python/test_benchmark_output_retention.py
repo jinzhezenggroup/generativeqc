@@ -522,6 +522,108 @@ def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None
     ) in seen
 
 
+@pytest.mark.parametrize("existing_output", [False, True])
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_resource_composition_rejects_retained_output_before_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    existing_output: bool,
+) -> None:
+    from benchmarks import _retention, native_resource_composition
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence", encoding="utf-8")
+    target = original if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid output reached scientific endpoint work")
+
+    monkeypatch.setattr(native_resource_composition, "endpoint", forbidden)
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(tmp_path / "missing-library.so"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "native_resource_composition",
+            "--source-sha",
+            "test-source",
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        native_resource_composition.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert original.read_text(encoding="utf-8") == "original evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_resource_composition_accepts_scratch_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+    import json
+
+    from benchmarks import _retention, native_resource_composition
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    library = tmp_path / "test-library.so"
+    library.write_bytes(b"test library identity")
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(library))
+    monkeypatch.setattr(
+        native_resource_composition,
+        "endpoint",
+        lambda *args: (0.125, {"phases": [[{"iterations": 1}]]}),
+    )
+    output = tmp_path / ".artifacts/benchmarks/result.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "native_resource_composition",
+            "--source-sha",
+            "test-source",
+            "--samples",
+            "2",
+            "--warmup",
+            "0",
+            "--output",
+            str(output),
+        ],
+    )
+    native_resource_composition.main()
+    record = json.loads(output.read_text())
+    assert record["python_source_sha"] == "test-source"
+    assert (
+        record["native_library_sha256"]
+        == hashlib.sha256(library.read_bytes()).hexdigest()
+    )
+    assert record["samples"] == 2
+    assert len(record["cases"]) == 4
+    assert all(case["seconds"] == [0.125, 0.125] for case in record["cases"])
+
+
 @pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
 @pytest.mark.parametrize("worker", [False, True])
 def test_rccsd_cpu_rejects_retained_output_before_work(
@@ -645,3 +747,123 @@ def test_cbs_rejects_retained_output_before_native_work(
     assert error.value.code == 2
     assert existing.read_text(encoding="utf-8") == "original evidence"
     assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_range_df_rejects_retained_output_before_journal_or_science(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    existing_output: bool,
+) -> None:
+    """Exclusive creation alone must not publish new raw data into retained evidence."""
+    from benchmarks import _retention, range_separated_df
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    previous = retained / "existing.json"
+    previous.write_text("preserved reviewed evidence", encoding="utf-8")
+    target = previous if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("retained output reached scientific preparation")
+
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"generativeqc", "cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("retained output reached native/GPU/oracle import")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(range_separated_df, "_measure", forbidden)
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    with pytest.raises(SystemExit) as error:
+        range_separated_df.main(
+            [
+                "--device",
+                "cpu",
+                "--selector",
+                "df",
+                "--endpoint",
+                "energy",
+                "--build-boundary",
+                "no scientific work allowed",
+                "--output",
+                str(destination),
+            ]
+        )
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert previous.read_text(encoding="utf-8") == "preserved reviewed evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("alias", [False, True])
+def test_incremental_default_rejects_retained_output_before_gpu_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    alias: bool,
+) -> None:
+    from benchmarks import _retention, ks_incremental_default
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    target = retained
+    if alias:
+        target = tmp_path / "alias"
+        target.symlink_to(retained, target_is_directory=True)
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("invalid output reached GPU/oracle imports")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "ks_incremental_default",
+            "--arm",
+            "standard",
+            "--inputs",
+            str(tmp_path),
+            "--source-revision",
+            "test",
+            "--output",
+            str(target / "existing.json"),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        ks_incremental_default.main()
+    assert error.value.code == 2
+    assert original.read_text() == "original evidence"

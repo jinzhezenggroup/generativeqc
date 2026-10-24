@@ -46,12 +46,12 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
       tile_points_(std::min(tile_points, grid.point_count())) {
   if (!binding_ || !quadrature_ || quadrature_.device != device || !tile_points_ || !basis.natom ||
       basis.natom != system.atoms.size() || grid.spec().partition_iterations != 3 ||
-      !system.ecp_terms.empty() || grid.point_count() % basis.natom ||
+      !system.ecp_terms.empty() ||
       std::any_of(system.atoms.begin(), system.atoms.end(),
                   [](const auto& atom) { return atom.ecp_core != 0; }))
     throw std::invalid_argument(
         "native CUDA stationary owner has no qualified profile/grid domain");
-  points_per_atom_ = grid.point_count() / basis.natom;
+  points_per_atom_ = grid.spec().version == 4 ? 0 : grid_points_per_atom(grid.spec());
   coincident_tolerance_ = grid.spec().coincident_tolerance;
   const auto capacity = cuda_stationary_capacity(*binding_, basis.natom, aos_, basis.nprimitive,
                                                  grid.point_count(), tile_points_);
@@ -91,6 +91,21 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
                          stationary_budget, capacity.geometry_lanes, capacity.geometry_threads,
                          &stationary_, error.data(), error.size()),
         error);
+    if (grid.spec().version == 4) {
+      if (!binding_->grid_topology)
+        throw std::invalid_argument("stationary binding lacks variable atom grid support");
+      std::vector<std::size_t> offsets{0};
+      std::vector<double> radii;
+      for (const auto& atom : system.atoms) {
+        offsets.push_back(offsets.back() + grid_atom_point_count(grid.spec(), atom.atomic_number));
+        radii.push_back(grid.spec().element_radii[atom.atomic_number]);
+      }
+      if (offsets.back() != grid.point_count())
+        throw std::invalid_argument("stationary molecular grid topology mismatch");
+      require_stationary_call(binding_->grid_topology(stationary_, offsets.data(), radii.data(),
+                                                      basis.natom, error.data(), error.size()),
+                              error);
+    }
     std::vector<std::int64_t> ranges(2 * aos_), atoms(aos_);
     // This owner never submits AO integral tasks: native providers supply those
     // already-contracted sources. Only atom labels enter geometry AD;

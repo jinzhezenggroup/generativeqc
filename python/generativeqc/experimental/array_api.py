@@ -1039,6 +1039,13 @@ class CompiledFunction:
             if symbolic is not None and function is globals().get(function.__name__)
             else function
         )
+        if builtins.any(
+            function is candidate
+            for candidate in (prod, _symbolic_backend.prod, var, _symbolic_backend.var)
+        ):
+            # Direct compilation uses static defaults. Nondefault reduction
+            # options belong in a closure, not runtime array feeds.
+            signature = signature.replace(parameters=(signature.parameters["x"],))
         unsupported = {
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
@@ -1122,9 +1129,12 @@ class CompiledFunction:
         if program is None:
             from ._array_api_molecular import _MolecularCapture
 
-            with _MolecularCapture(
-                self._backend, self._options["device"], set(specs)
-            ) as capture:
+            with (
+                _MolecularCapture(
+                    self._backend, self._options["device"], set(specs)
+                ) as capture,
+                _symbolic_backend._capture_backend(self._backend),
+            ):
                 program = trace(
                     self._function,
                     specs,
@@ -1267,6 +1277,8 @@ def grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile a scalar function's reverse derivative for the selected arguments.
@@ -1274,10 +1286,25 @@ def grad(
     An integer argnums returns one Array; a tuple returns a tuple in that order.
     Existing compiled functions retain their backend, budgets and scientific
     specs. Plain functions use native CPU unless a backend is explicitly chosen.
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits first-order fixed-mask selection
+    on generic finite FP64 arrays for reference/CPU only. Select real arguments
+    with argnums; the Boolean mask must remain non-differentiable.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=False)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=False,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def value_and_grad(
@@ -1285,17 +1312,30 @@ def value_and_grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile scalar energy and selected gradients as one shared TensorIR program.
 
     Primal and derivative nodes share the same native endpoint, specialization
     cache and resource gates. This is not numerical differentiation or a call to
-    the reference autodiff evaluator.
+    the reference autodiff evaluator. ``allow_comparison_where=True`` selects
+    real branch derivatives with primal comparison selectors.
+    ``allow_external_mask_where=True`` has
+    the same fixed-mask, generic finite FP64 reference/CPU contract as grad.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=True)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=True,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def jvp(
@@ -1304,33 +1344,73 @@ def jvp(
     tangents: tuple[object, ...],
     *,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> tuple[typing.Any, typing.Any]:
     """Compile a function and forward directional derivative on one backend.
 
     Primals/tangents are matching tuples of positional array arguments. Returned
     primal and tangent outputs preserve the function's array/dictionary structure.
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits first-order generic finite FP64
+    fixed-mask selection on reference/CPU. In that opt-in only, None marks a
+    non-differentiated primal (including a Boolean mask). Every supplied real
+    direction must match its primal; at least one real direction is required.
     """
     from ._array_api_autodiff import _jvp
 
-    return _jvp(function, primals, tangents, backend, options)
+    return _jvp(
+        function,
+        primals,
+        tangents,
+        backend,
+        options,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def vjp(
     function: typing.Callable[..., object],
     *primals: object,
     backend: str | None = None,
+    argnums: int | tuple[int, ...] | None = None,
+    allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Return native primal outputs and a reusable compiled cotangent pullback.
 
     The pullback snapshots its primal inputs, validates cotangent shapes/dtypes,
-    and returns gradients in positional argument order. Close it to release its
-    execution owner, especially for CUDA.
+    and always returns a tuple of gradients. With argnums=None, differentiate all
+    supplied positional primals; otherwise return the selected gradients in
+    argnums order. Negative positions index the supplied primals, including when
+    the function has omitted defaults. Close the pullback to release its owner.
+
+    ``allow_comparison_where=True`` additionally admits primal comparison
+    selectors, propagating only real branch derivatives. At switches this is
+    the selected-branch convention, not a differentiability claim.
+
+    ``allow_external_mask_where=True`` admits fixed external Boolean selectors on
+    generic finite FP64 arrays for reference/CPU execution. Use argnums to select
+    only real primals. Selector values and non-selected real inputs are snapshotted
+    too; no Boolean cotangent or higher-order selection transform is admitted.
     """
     from ._array_api_autodiff import _vjp
 
-    return _vjp(function, primals, backend, options)
+    return _vjp(
+        function,
+        primals,
+        backend,
+        options,
+        argnums=argnums,
+        allow_external_mask_where=allow_external_mask_where,
+        allow_comparison_where=allow_comparison_where,
+    )
 
 
 def capabilities() -> dict[str, object]:
@@ -1378,7 +1458,40 @@ def capabilities() -> dict[str, object]:
             "molecular_derivatives": "native-analytic-nuclear-first-order",
             "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
+            "comparison_where_ad": {
+                "option": "allow_comparison_where",
+                "default": False,
+                "transforms": ("jvp", "vjp", "grad", "value_and_grad"),
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "scope": "first-order-primal-selector; no-Boolean-derivatives; generic-finite-arrays",
+                "switching_points": "selected-branch-convention; no-differentiability-claim",
+            },
+            "external_mask_jvp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "non_differentiated_primal": "explicit-None-tangent-in-matching-tuple",
+                "scope": "first-order-generic-fixed-external-mask; at-least-one-real-direction; eager-all-live-domains",
+            },
+            "external_mask_vjp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "argnums": "explicit-real-primals; supplied-positional-order; tuple-result",
+                "scope": "first-order-generic-fixed-external-mask; snapshot-all-primals; eager-all-live-domains",
+            },
             "compiled_differentiability": "explicit-parameter-names",
+            "external_mask_gradients": {
+                "transforms": ("grad", "value_and_grad"),
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "scope": "first-order-generic-fixed-external-mask; real-argnums-only; eager-all-live-domains",
+            },
             "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
             "runtime_array": "numpy-backed-array-api-cpu",
             "eager_dtypes": _eager.DTYPE_NAMES,

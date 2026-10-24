@@ -128,7 +128,11 @@ class CorrelationResult:
 
 @dataclass(frozen=True)
 class CcPerformanceResult:
-    """Observational native coupled-cluster phase and semantic-work telemetry."""
+    """Native CC phase/work and executed FP32 auxiliary-warmup telemetry.
+
+    Optional FP32 fields are unavailable on older libraries and batch owners;
+    a requested policy alone never supplies executed counters.
+    """
 
     reference_seconds: float
     problem_seconds: float
@@ -155,6 +159,29 @@ class CcPerformanceResult:
     diis_gram_calls: int
     diis_coefficient_calls: int
     diis_combine_calls: int
+    ccsd_fp32_requested: bool | None = None
+    ccsd_fp32_executed: bool | None = None
+    ccsd_fp32_refused: bool | None = None
+    ccsd_fp32_evaluations: int | None = None
+    ccsd_fp32_gemm_calls: int | None = None
+    ccsd_fp32_cast_elements: int | None = None
+    # DF force endpoints only. None means unavailable, including energy-only
+    # calls; zero means measured zero. Phase times include their nested work.
+    lambda_seconds: float | None = None
+    source_response_seconds: float | None = None
+    orbital_seconds: float | None = None
+    lambda_fp32_requested: bool | None = None
+    lambda_fp32_executed: bool | None = None
+    lambda_fp32_refused: bool | None = None
+    lambda_fp32_iterations: int | None = None
+    lambda_fp64_iterations: int | None = None
+    lambda_fp32_actions: int | None = None
+    lambda_fp64_actions: int | None = None
+    lambda_fp32_gemm_calls: int | None = None
+    lambda_fp32_cast_elements: int | None = None
+    lambda_auxiliary_batch_size: int | None = None
+    lambda_numeric_capacity_bytes: int | None = None
+    lambda_owned_device_bytes: int | None = None
 
 
 @dataclass(frozen=True)

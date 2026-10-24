@@ -22,7 +22,7 @@ from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.xc.quadrature_cuda import _LAYOUT
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -55,6 +55,7 @@ constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
 inline std::size_t allocation_limit=~std::size_t{0};
 inline cudaError_t cudaGetDevice(int* d) { *d=0; return 0; }
 inline cudaError_t cudaSetDevice(int) { return 0; }
+inline cudaError_t cudaGetLastError() { return cudaSuccess; }
 inline const char* cudaGetErrorString(cudaError_t) { return "CUDA allocation double"; }
 inline cudaError_t cudaMalloc(void** p,std::size_t bytes) {
   if(bytes>allocation_limit) return cudaErrorMemoryAllocation;
@@ -76,6 +77,7 @@ def native_probe(
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
+    (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -96,11 +98,13 @@ def native_probe(
 #include <utility>
 #include <vector>
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"
 #define __host__
 #define __device__
@@ -138,7 +142,7 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         + _definition(diis, "bool incremental_diis_gram_requested(")
         + "\n}\n"
     )
-    source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
+    source += '\n#include "generated_quadrature.cuh"\n'
     source += r"""
 namespace generativeqc::dft {
 using scf::cuda_execution::MatrixLibraryOwner;
@@ -270,8 +274,6 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
     # Compile the allocation owner and quadrature retention block unchanged.
     owned = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
     source += "namespace generativeqc::runtime {\n"
-    for signature in ("inline void cuda_resource_check(", "class CudaDeviceScope"):
-        source += _definition(owned, signature) + ";\n"
     for signature in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
         source += "template<class T>\n" + _definition(owned, signature) + ";\n"
     source += "}\n"
@@ -287,7 +289,9 @@ extern "C" void grid_lifetime(void* handle,std::size_t points,std::uint64_t* out
   auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
   active_device_resource_ledger=ledger;
   namespace q=generated::quadrature;
-  struct {std::size_t points;} l{points};
+  struct {std::size_t points, atoms;} l{points, 0};
+  using dft::cuda_resident_grid_bytes;
+  const bool treutler=false;
   const bool retain_device=true;
   const int device=0;
 """
@@ -621,6 +625,60 @@ def test_incremental_gram_charges_only_optional_physical_cache(
             2, 2, 2, 6, 49152, 8, spins, 0, 256, output, 3
         )
         != 0
+    )
+
+
+@pytest.mark.parametrize("aos", [16, 511, 512, 768])
+@pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_large_ks_automatic_gram_capacity_and_rollback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    aos: int,
+    history: int,
+    spins: int,
+) -> None:
+    """Public reservations include the admitted cache exactly once for either spin."""
+    selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
+    reducer = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+    monkeypatch.delenv(reducer, raising=False)
+    inventories = []
+    for mode in (None, "0", "1"):
+        if mode is None:
+            monkeypatch.delenv(selection, raising=False)
+        else:
+            monkeypatch.setenv(selection, mode)
+        output = (ctypes.c_uint64 * 3)()
+        assert (
+            native_probe.generativeqc_resource_ks_cuda_v1(
+                aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+            )
+            == 0
+        )
+        inventories.append(tuple(output))
+    automatic, serial, incremental = inventories
+    assert automatic == (incremental if aos >= 512 else serial)
+    expected = 8 * history * history if history >= 2 else 0
+    assert incremental[0] - serial[0] == expected
+    assert incremental[1:] == serial[1:]
+
+    # Automatic admission activates reducer validation at the public boundary;
+    # explicit serial rollback and one-vector histories still ignore it.
+    monkeypatch.delenv(selection, raising=False)
+    monkeypatch.setenv(reducer, "invalid")
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    status = native_probe.generativeqc_resource_ks_cuda_v1(
+        aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+    )
+    assert (status != 0) == (aos >= 512 and history >= 2)
+    if status:
+        assert tuple(output) == (17, 19, 23)
+    monkeypatch.setenv(selection, "0")
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+        )
+        == 0
     )
 
 

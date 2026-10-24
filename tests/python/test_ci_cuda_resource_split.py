@@ -6,6 +6,7 @@ import glob
 import hashlib
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,80 @@ def _job(name: str) -> str:
 def _step(job: str, name: str) -> str:
     section = _job(job).split(f"      - name: {name}\n", 1)[1]
     return section.split("      - name: ", 1)[0]
+
+
+def _host_commands(step: str) -> list[list[str]]:
+    script = step.split("        run: |\n", 1)[1].replace("\\\n", " ")
+    commands = []
+    for line in script.splitlines():
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        commands.append(list(lexer))
+    return commands
+
+
+def _option_values(argv: list[str], names: tuple[str, ...]) -> list[str]:
+    values = []
+    for index, arg in enumerate(argv):
+        for name in names:
+            if arg == name:
+                assert index + 1 < len(argv)
+                values.append(argv[index + 1])
+            elif arg.startswith(name + "="):
+                values.append(arg[len(name) + 1 :])
+            elif len(name) == 2 and arg.startswith(name):
+                values.append(arg[2:])
+    return values
+
+
+def _assert_host_preflight_commands(step: str) -> None:
+    required = {
+        "generativeqc_fock_build_tests",
+        "generativeqc_scf_proposal_tests",
+        "generativeqc_ordered_gram_host_admission_tests",
+    }
+    commands = _host_commands(step)
+    builds = [argv for argv in commands if argv[:2] == ["cmake", "--build"]]
+    runs = [argv for argv in commands if argv[:1] == ["ctest"]]
+    assert len(builds) == len(runs) == 1
+    assert not {";", "&", "&&", "|", "||"}.intersection(builds[0] + runs[0])
+    targets = builds[0][builds[0].index("--target") + 1 :]
+    end = next(
+        (i for i, arg in enumerate(targets) if arg.startswith("-")), len(targets)
+    )
+    assert required <= set(targets[:end])
+    run = runs[0]
+    assert _option_values(run, ("--test-dir",)) == ["build/cuda-release-sm120"]
+    assert "--output-on-failure" in run
+    selection = _option_values(run, ("-R", "--tests-regex"))
+    assert len(selection) == 1
+    assert all(re.search(selection[0], test) for test in required)
+    exclusions = _option_values(run, ("-E", "--exclude-regex"))
+    assert not any(
+        re.search(pattern, test) for pattern in exclusions for test in required
+    )
+    # Other narrowing modes need actual label/index/file state, and dry runs do
+    # not execute the mandatory host checks. Neither belongs to this gate.
+    forbidden = (
+        "-I",
+        "--tests-information",
+        "-L",
+        "--label-regex",
+        "-LE",
+        "--label-exclude",
+        "--tests-from-file",
+        "--exclude-from-file",
+        "--rerun-failed",
+        "-N",
+        "--show-only",
+    )
+    assert not any(
+        arg == flag
+        or arg.startswith(flag + "=")
+        or (len(flag) == 2 and arg.startswith(flag))
+        for arg in run
+        for flag in forbidden
+    )
 
 
 def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets() -> (
@@ -77,7 +152,7 @@ def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets()
         (
             "cuda-compile",
             "Check Fock and proposal preflight without a GPU",
-            "-R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure",
+            None,
         ),
         (
             "cuda-resources",
@@ -112,13 +187,81 @@ def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets()
     ],
 )
 def test_existing_gates_are_mandatory_for_full_scope_and_owned_once(
-    job: str, name: str, command: str
+    job: str, name: str, command: str | None
 ) -> None:
     step = _step(job, name)
-    assert command in step
+    if command is None:
+        _assert_host_preflight_commands(step)
+    else:
+        assert command in step
     assert_full_coverage_step(step)
     assert "continue-on-error:" not in step
     assert WORKFLOW.count(f"      - name: {name}\n") == 1
+
+
+def _host_step_with_commands(step: str, commands: list[list[str]]) -> str:
+    prefix = step.split("        run: |\n", 1)[0]
+    return (
+        prefix
+        + "        run: |\n"
+        + "".join("          " + shlex.join(argv) + "\n" for argv in commands if argv)
+    )
+
+
+@pytest.mark.parametrize("surface", ("build", "selection"))
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "generativeqc_fock_build_tests",
+        "generativeqc_scf_proposal_tests",
+        "generativeqc_ordered_gram_host_admission_tests",
+    ),
+)
+def test_host_preflight_rejects_missing_builds_or_selections(
+    surface: str, missing: str
+) -> None:
+    step = _step("cuda-compile", "Check Fock and proposal preflight without a GPU")
+    commands = _host_commands(step)
+    if surface == "build":
+        build = next(argv for argv in commands if argv[:2] == ["cmake", "--build"])
+        build.remove(missing)
+    else:
+        remaining = {
+            "generativeqc_fock_build_tests",
+            "generativeqc_scf_proposal_tests",
+            "generativeqc_ordered_gram_host_admission_tests",
+        } - {missing}
+        run = next(argv for argv in commands if argv[:1] == ["ctest"])
+        run[run.index("-R") + 1] = "^(" + "|".join(sorted(remaining)) + ")$"
+    with pytest.raises(AssertionError):
+        _assert_host_preflight_commands(_host_step_with_commands(step, commands))
+
+
+def test_host_preflight_accepts_equivalent_regex_order() -> None:
+    step = _step("cuda-compile", "Check Fock and proposal preflight without a GPU")
+    commands = _host_commands(step)
+    run = next(argv for argv in commands if argv[:1] == ["ctest"])
+    run[run.index("-R") + 1] = (
+        "^(generativeqc_ordered_gram_host_admission_tests|"
+        "generativeqc_scf_proposal_tests|generativeqc_fock_build_tests)$"
+    )
+    _assert_host_preflight_commands(_host_step_with_commands(step, commands))
+
+
+@pytest.mark.parametrize(
+    "extra", (("-E", "ordered_gram_host_admission"), ("-N",), ("||", "true"))
+)
+def test_host_preflight_rejects_exclusion_dry_run_or_softening(
+    extra: tuple[str, ...],
+) -> None:
+    step = _step("cuda-compile", "Check Fock and proposal preflight without a GPU")
+    commands = _host_commands(step)
+    run = next(argv for argv in commands if argv[:1] == ["ctest"])
+    run.extend(extra)
+    # Preserve shell operators as operators, rather than quoting them as data.
+    broken = _host_step_with_commands(step, commands).replace("'||'", "||")
+    with pytest.raises(AssertionError):
+        _assert_host_preflight_commands(broken)
 
 
 def test_resources_generate_the_native_cmake_source_without_rebuilding_library() -> (

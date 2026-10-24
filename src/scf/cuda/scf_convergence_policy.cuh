@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_incremental_policy.cuh"
 
@@ -29,12 +30,15 @@ __device__ inline double hf_energy_roundoff_guard(bool enabled, double energy,
 __device__ inline bool hf_iteration_converged(double energy, double previous_energy,
                                               double energy_tolerance, double density_tolerance,
                                               double density_rms, double physical_maximum,
-                                              bool guard_roundoff = true) {
+                                              bool guard_roundoff = true,
+                                              bool qualified_owner = false) {
   return isfinite(energy) && isfinite(previous_energy) && isfinite(density_rms) &&
          isfinite(physical_maximum) &&
          fabs(energy - previous_energy) <
              energy_tolerance + hf_energy_roundoff_guard(guard_roundoff, energy, previous_energy) &&
-         density_rms < density_tolerance && physical_maximum <= fmin(1e-8, density_tolerance);
+         density_rms < density_tolerance &&
+         physical_maximum <=
+             hf_stationarity_tolerance(energy_tolerance, density_tolerance, qualified_owner);
 }
 
 /** Lane zero may retire screened deltas once the physical gates pass. Screening

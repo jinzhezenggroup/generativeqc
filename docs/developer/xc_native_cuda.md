@@ -45,6 +45,41 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+Strict-FP64 integration retains three published totals and three private
+rounding-correction words for XC energy and the two spin populations. One full
+32-thread warp reduces each channel with lane-local compensated sums and a
+fixed tree that merges both words. Corrections survive point-batch boundaries;
+only the final fold publishes the existing three-double result. All three low
+words are cleared with the totals at each enqueue and charged by the exact
+arena request (24 extra bytes), with no new full-grid storage or device
+allocation. Dense, compact, indexed and retained fallback consumers share this
+reduction. Existing FP32 contraction schedules keep their original accumulation.
+The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
+this is an accuracy improvement, not a bitwise-reproducible SCF contract.
+
+### Budget-Fock matrix products
+
+The shared physical density/potential consumer can select FP32 inner products
+independently of point algebra and total summation. Application Fast-Fock
+admission prepares this capability before evaluation; ordinary strict and
+response consumers retain their strict defaults. Selection uses executable
+layout/ingredient capabilities, not functional names. Existing indexed,
+compact and ragged schedules are retained.
+
+Density AO columns use a per-column binary scale before their FP32 dot
+products, restoring that scale into FP64 physical storage afterward. This
+preserves representable tiny tails without a density floor or a hidden strict
+recomputation. Potential panels also retain FP64 storage; their tile-local
+products and sums narrow, while inter-tile scatter and compensated point totals
+remain FP64. The precision census therefore reports separate matrix-product
+reduction signatures rather than inheriting the point evaluator's dtype.
+
+The existing one-sided diagonal schedule is available to both scalar types.
+Its FP32-only operand guard prevents half-panel doubling overflow and otherwise
+retains the original two-legged FP32 contraction; the strict schedule and its
+guard are unchanged. Invalid arithmetic remains an explicit numerical failure,
+not a clipped density or a successful Fast result after strict recovery.
+
 ### Experimental automatic AOT plumbing
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
@@ -361,23 +396,28 @@ select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
 
-Strict-FP64 direct restricted VV10 initialization automatically admits full
+Strict-FP64 restricted VV10 initialization automatically admits bounded
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
-the existing reuse threshold, a 4 GiB value ceiling and complete host/device
+the existing reuse threshold, a 16 GiB value ceiling and complete host/device
 admission. Cold and transported-density initialization can prepare a lease;
 a retained warm call only reuses its audited immutable-geometry lease. It never
 builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
 selects ordinary Direct evaluation; explicit `1` retains the separately selected
 experimental capacity domain. The existing bucket mask and byte ceiling remain
-explicit controls. Capacity refusal, unsupported angular classes, fitted,
+explicit controls. The primary full-range J/K may be Direct or fitted; an
+independent strict Direct correction owns the range values. Both providers'
+host storage is charged, and omitted buckets retain ordinary exact execution.
+Capacity refusal, unsupported angular classes,
 lower-precision, incremental and externally budgeted device-ledger paths retain
 their existing providers.
 
 The lease binds geometry, radial operator and omega. It supplies only matching
 raw range K; primary full J/K and derivative owners remain independent.
 Successful solves rebase warm energy metadata with both incumbent exchange
-terms before optional values are retired. This preserves the physical replay
-gates and records the additional complete Fock and both exchange applications.
+terms before optional values are retired. An authenticated unchanged fitted
+primary retains its current J/K and final occupied projection during a range-only
+rebase. This preserves the physical replay gates and counts the operators
+actually executed.
 
 ## Prepared ragged execution
 

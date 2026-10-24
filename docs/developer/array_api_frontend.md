@@ -79,8 +79,10 @@ The following contracts describe capture, not the standard eager surface.
 | `moveaxis/flip` | Signed-axis reorder through transpose; generic flip through static gather up to 65,536 indices per reversed axis |
 | `broadcast_shapes/broadcast_arrays` | Static integer-shape calculus / individual explicit generic broadcasts; each input retains its dtype |
 | `broadcast_to` | Shape-only for generic arrays; scientific arrays require explicit indices/axis map |
+| `tile` | Generic bool/float32/float64 arrays; static tuple of nonnegative Python integers, padding shape or repetitions with leading ones; scalar, empty and rank-64 inputs use reshape/broadcast without enumerating positions; native dtype/byte/work limits remain in force |
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
-| `take` | Static integer gather along one axis |
+| `take` | Static integer-tuple gather along one axis; negative positions count from that axis end; `axis=None` selects the sole axis of a one-dimensional input |
+| `tensordot/vecdot` | Static generic real contractions through TensorIR einsum; equal contracted extents; at most 52 labels; vecdot broadcasts remaining axes; annotated scientific domains require explicit einsum |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
 | `asarray` | CPU bool/float32/float64 compiler inputs; no silent external-device transfer |
 | `astype` | Explicit float32/float64 conversion through an existing TensorIR `cast` (or NumPy eager); native physical copy/alias guarantees are not independently claimed |
@@ -89,7 +91,7 @@ The following contracts describe capture, not the standard eager surface.
 | `zeros_like/ones_like/full_like` | Generic arrays only, preserve shape/dtype by default; scientifically annotated axes require an explicit typed TensorIR construction |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
-| dtype promotion | Generic float32/float64 operands promote to float64, using explicit TensorIR casts before ordinary binary arithmetic, matmul and einsum; scientific typed arrays remain strict |
+| dtype promotion | Generic float32/float64 operands promote to float64, using explicit TensorIR casts before ordinary binary arithmetic, matmul, tensordot, vecdot and einsum; scientific typed arrays remain strict |
 | dynamic Python control flow | Not supported |
 
 Scientifically annotated arrays keep the exact scalar spelling contract:
@@ -179,13 +181,29 @@ metric normalization, the augmented pivoted solve, dependent-history retirement,
 and fallback semantics remain native solver policy. The specialization preserves
 the historical FP64 reduction order.
 
-Ordinary CUDA HF/KS keeps its serial DIIS default. Setting
-`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=1` opts into a separate physical-slot
-cache. With `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
-`cooperative`, it retains the cooperative pending-row reducer. Setting that
+Normalized KS DIIS uses partial-pivot forward elimination and back substitution,
+then validates the affine coefficient constraint `sum(c) = 1` with the shared
+CPU/CUDA policy in `solver/diis_affine.hpp`. Nonfinite or
+inaccurate affine solves retire the oldest history and retry; at two histories,
+failure retains the current Fock. This acceptance check applies to every
+normalized reduction route and leaves SCF convergence tolerances unchanged.
+
+Ordinary CUDA HF keeps its serial DIIS default. CUDA KS automatically admits
+the separately charged physical-slot Gram cache for at least 512 AOs and a
+history capacity of at least two, using the ordered reducer. Smaller KS owners
+keep the serial schedule.
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=0` restores serial DIIS; `1` explicitly
+admits the cache for either HF or KS with a usable history. With
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
+`cooperative`, an explicit `1` retains the cooperative pending-row reducer. Setting that
 subordinate selector to `ordered` instead uses a generated scalar-order FP64 dot
-from the canonical `diis_gram_program` and refreshes the new ring row inside the
-update kernel. The ordered route performs no dot on insertion one and establishes
+from the canonical `diis_gram_program`. At 512 AOs or more, a separate pending-row
+grid loads contiguous operand tiles into shared memory while one lane continues
+the same scalar accumulator across tiles. The following update uses a full CTA
+for history copies and elementwise extrapolation, retaining each output's
+generated coefficient order and the lane-zero solve. CTA-wide broadcasts and
+barriers preserve history and solve ownership. Smaller ordered owners refresh the row
+inside the update kernel. The ordered route performs no dot on insertion one and establishes
 that prior diagonal on insertion two. It borrows the same charged cache as the
 cooperative route; neither selection adds a second cache. The reduction selector
 is ignored when incremental DIIS is disabled or history capacity is below two.

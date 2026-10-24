@@ -1,0 +1,6 @@
+{
+  "name": "explicit_integral_hf",
+  "outputs": ["generated/generated_integral_ad.cuh"],
+  "owner": "python/generativeqc_compiler/method/rhf_integral_ad.py",
+  "scope": "Ordered dense J/K scalar TensorIR terms, exchange index mapping and CUDA contraction schedule for caller-generated differentiable integrals. Native code owns allocations, streams, shared tensor/eigen provider calls and launches. The endpoint retains explicit dense ERI and work budgets."
+}

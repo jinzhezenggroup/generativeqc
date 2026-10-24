@@ -14,6 +14,7 @@ import pytest
 
 from benchmarks import readme_cbs
 from tools.render_readme_cbs import (
+    attach_fast,
     collect,
     completed_times,
     outcome,
@@ -76,10 +77,12 @@ def test_receipt_digest_matches_standard_sha256(tmp_path: Path, payload: bytes) 
     assert readme_cbs.digest(path) == hashlib.sha256(payload).hexdigest()
 
 
+@pytest.mark.parametrize("policy", ("standard", "fast"))
 @pytest.mark.parametrize("hf_reference", ("exact", "df"))
 def test_cold_timer_includes_construction_and_returned_forces(
     monkeypatch: pytest.MonkeyPatch,
     hf_reference: str,
+    policy: str,
 ) -> None:
     import generativeqc
 
@@ -107,7 +110,7 @@ def test_cold_timer_includes_construction_and_returned_forces(
     )
     monkeypatch.setattr(readme_cbs.time, "perf_counter", timer)
     result = readme_cbs.native_call(
-        [[1, [0, 0, 0]]], ("dz", "tz"), ("dz-ri", "tz-ri"), 4096, hf_reference
+        [[1, [0, 0, 0]]], ("dz", "tz"), ("dz-ri", "tz-ri"), 4096, hf_reference, policy
     )
     assert [event[0] for event in events] == [
         "timer",
@@ -117,6 +120,7 @@ def test_cold_timer_includes_construction_and_returned_forces(
     ]
     assert events[1][1]["auxiliary_bases"] == ("dz-ri", "tz-ri")
     assert events[1][1].get("hf_reference", "exact") == hf_reference
+    assert events[1][1]["policy"] == policy
     assert events[2][1] == ("energy", "forces")
     assert result["complete_seconds"] == 21
     assert result["forces"].shape == (1, 3)
@@ -423,3 +427,231 @@ def test_runner_continues_after_failed_point_without_reference(tmp_path: Path) -
             == expected
         )
         assert not (directory / "reference.json").exists()
+
+
+def paired_records() -> tuple[dict, dict]:
+    """Matched measurements with explicit Fast composite/constituent budgets."""
+    protocol, sample, _ = records()
+    point = {
+        "carbon": 1,
+        "native": {
+            "protocol": protocol,
+            "samples": [sample],
+            "requested_samples": 1,
+            "policy": "standard",
+            "source_revision": "same",
+            "driver_sha256": "same",
+            "library_sha256": "same",
+            "gpu": "same",
+        },
+        "checks": [qualification(sample, protocol, None)],
+    }
+    control = {"points": [point]}
+    fast = copy.deepcopy(control)
+    native = fast["points"][0]["native"]
+    native["policy"] = "fast"
+    native["samples"][0]["complete_seconds"] = 9.0
+    native["samples"][0]["convergence"] = {
+        "requested_policy": "fast",
+        "budget": {"energy_abs": 1e-5, "force_max_abs": 1e-4, "force_rms": 3e-5},
+        "component_budget": {
+            "energy_abs": 2e-6,
+            "force_max_abs": 2e-5,
+            "force_rms": 6e-6,
+        },
+    }
+    return control, fast
+
+
+def test_fast_plot_uses_measured_values_and_matched_vector_gates(
+    tmp_path: Path,
+) -> None:
+    control, fast = paired_records()
+    attach_fast(control, fast)
+    assert completed_times(fast["points"][0]) == [9.0]
+    assert fast["points"][0]["checks"][0]["accuracy_gate"] is None
+    assert fast["points"][0]["standard_comparison"][0]["passed"]
+    pytest.importorskip("matplotlib")
+    path = tmp_path / "paired.svg"
+    render(control, path, readme_style=True)
+    svg = path.read_text()
+    assert all(value in svg for value in ("Standard", "Fast", "12.0 s", "9.0 s"))
+
+
+@pytest.mark.parametrize(
+    "field", ("protocol", "source_revision", "driver_sha256", "library_sha256", "gpu")
+)
+def test_fast_comparison_rejects_unmatched_measurements(field: str) -> None:
+    control, fast = paired_records()
+    fast["points"][0]["native"][field] = "different"
+    with pytest.raises(ValueError, match="differs"):
+        attach_fast(control, fast)
+
+
+@pytest.mark.parametrize(
+    "field", ("source_revision", "driver_sha256", "library_sha256", "gpu")
+)
+def test_fast_comparison_rejects_missing_provenance(field: str) -> None:
+    """Two missing identities cannot count as a matched measurement pair."""
+    control, fast = paired_records()
+    for series in (control, fast):
+        del series["points"][0]["native"][field]
+    with pytest.raises(ValueError, match="provenance is missing"):
+        attach_fast(control, fast)
+
+
+@pytest.mark.parametrize("observable", ("energy", "maximum", "rms"))
+def test_fast_constituent_error_cannot_hide_in_composite(observable: str) -> None:
+    control, fast = paired_records()
+    row = fast["points"][0]["native"]["samples"][0]["components"][0]["result"]
+    if observable == "energy":
+        row["energy"] += 3e-6
+    elif observable == "maximum":
+        row["forces"] = [[3e-5, 0.0, 0.0]]
+    else:
+        row["forces"] = [[1e-5, 1e-5, 1e-5]]
+    attach_fast(control, fast)
+    assert completed_times(fast["points"][0]) == []
+    assert outcome(fast["points"][0]) == "Fast control missing/failed"
+
+
+def test_fast_missing_control_cannot_supply_plot_time() -> None:
+    control, fast = paired_records()
+    control["points"][0]["native"]["samples"] = []
+    attach_fast(control, fast)
+    assert completed_times(fast["points"][0]) == []
+
+
+def test_fast_independent_oracle_uses_explicit_component_allowances() -> None:
+    _, fast = paired_records()
+    protocol, _, reference = records()
+    sample = fast["points"][0]["native"]["samples"][0]
+    sample["energy"] += 5e-6
+    assert qualification(sample, protocol, reference)["accuracy_gate"]
+    sample["components"][0]["result"]["energy"] += 5e-6
+    assert not qualification(sample, protocol, reference)["accuracy_gate"]
+
+
+@pytest.mark.parametrize("executed", (True, False))
+def test_fast_plot_precision_provenance_includes_bounded_fp64_fallback(
+    executed: bool,
+) -> None:
+    control, fast = paired_records()
+    sample = fast["points"][0]["native"]["samples"][0]
+    sample["convergence"].update(
+        arithmetic_request="df_ccsd_fp32_preconvergence",
+        arithmetic="mixed" if executed else "fp64",
+    )
+    cc = next(c["result"] for c in sample["components"] if c["method"] == "df-ccsd(t)")
+    cc["cc_performance"] = {
+        "ccsd_fp32_requested": True,
+        "ccsd_fp32_executed": executed,
+        "ccsd_fp32_refused": not executed,
+        "ccsd_fp32_evaluations": 2 if executed else 0,
+        "ccsd_fp32_gemm_calls": 10 if executed else 0,
+        "ccsd_fp32_cast_elements": 100 if executed else 0,
+    }
+    attach_fast(control, fast)
+    assert completed_times(fast["points"][0]) == [9.0]
+    check = fast["points"][0]["standard_comparison"][0]["arithmetic"]
+    assert check["arithmetic"] == ("mixed" if executed else "fp64")
+    sample["convergence"]["arithmetic"] = "fp64" if executed else "mixed"
+    with pytest.raises(ValueError, match="disagree"):
+        attach_fast(control, fast)
+    cc["cc_performance"].pop("ccsd_fp32_evaluations")
+    with pytest.raises(ValueError, match="lacks native"):
+        attach_fast(control, fast)
+
+
+@pytest.mark.parametrize("cc_executed", (True, False))
+@pytest.mark.parametrize("lambda_executed", (True, False))
+def test_lambda_provenance_requires_measured_work(
+    cc_executed: bool, lambda_executed: bool
+) -> None:
+    """Either native FP32 owner may make a mixed result; requests alone cannot."""
+    control, fast = paired_records()
+    sample = fast["points"][0]["native"]["samples"][0]
+    sample["convergence"].update(
+        arithmetic_request="df_ccsd_fp32_preconvergence",
+        arithmetic="mixed" if cc_executed or lambda_executed else "fp64",
+        lambda_arithmetic_request="df_lambda_fp32_preconvergence",
+        lambda_arithmetic="mixed" if lambda_executed else "fp64",
+    )
+    cc = next(c["result"] for c in sample["components"] if c["method"] == "df-ccsd(t)")
+    work = cc["cc_performance"] = {
+        "ccsd_fp32_requested": True,
+        "ccsd_fp32_executed": cc_executed,
+        "ccsd_fp32_refused": not cc_executed,
+        "ccsd_fp32_evaluations": int(cc_executed),
+        "ccsd_fp32_gemm_calls": 10 * cc_executed,
+        "ccsd_fp32_cast_elements": 100 * cc_executed,
+        "lambda_fp32_requested": True,
+        "lambda_fp32_executed": lambda_executed,
+        "lambda_fp32_refused": not lambda_executed,
+        "lambda_fp32_iterations": 2 * lambda_executed,
+        "lambda_fp64_iterations": 3,
+        "lambda_fp32_actions": 4 * lambda_executed,
+        "lambda_fp64_actions": 5,
+        "lambda_fp32_gemm_calls": 20 * lambda_executed,
+        "lambda_fp32_cast_elements": 100 * lambda_executed,
+        "lambda_auxiliary_batch_size": 32,
+        "lambda_numeric_capacity_bytes": 4096,
+        "lambda_owned_device_bytes": 2048,
+    }
+    attach_fast(control, fast)
+    provenance = fast["points"][0]["standard_comparison"][0]["arithmetic"]
+    assert provenance["lambda"]["executed"] is lambda_executed
+    assert completed_times(fast["points"][0]) == [9.0]
+    work["lambda_fp32_executed"] = not lambda_executed
+    with pytest.raises(ValueError, match="Lambda FP32 counters disagree"):
+        attach_fast(control, fast)
+    work["lambda_fp32_executed"] = lambda_executed
+    work.pop("lambda_fp64_actions")
+    with pytest.raises(ValueError, match="Lambda FP32 request lacks native"):
+        attach_fast(control, fast)
+
+
+@pytest.mark.parametrize(
+    "campaign", ("readme-cbs-fast-20261020", "cbs-fast-diagnosis-20261021")
+)
+def test_frozen_verifier_allows_only_reduction_roundoff(campaign: str) -> None:
+    """Portable derived diagnostics must retain exact gates and raw integrity."""
+    import runpy
+
+    module = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results"
+            / campaign
+            / "verify.py"
+        )
+    )
+    same = module["same_diagnostics"]
+    expected = {"accuracy_gate": True, "errors": [5e-9], "count": 1}
+    assert same({**expected, "errors": [5e-9 + 1e-18]}, expected)
+    assert not same({**expected, "accuracy_gate": False}, expected)
+    assert not same({**expected, "count": 1.0}, expected)
+    assert not same({**expected, "errors": [5e-9 + 1e-12]}, expected)
+    assert not same({**expected, "errors": [float("nan")]}, expected)
+    assert not same({**expected, "extra": None}, expected)
+
+
+def test_lambda_receipt_composite_reduction_roundoff_is_bounded() -> None:
+    """A portable derived energy diagnostic cannot excuse changed forces or gates."""
+    import runpy
+
+    verifier = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results/cbs-fast-lambda-20261021/verify.py"
+        )
+    )
+    compare = verifier["same_composite_errors"]
+    terms = np.array([-76.0, 25.0, -25.0, -0.3, 0.2])
+    expected = {"energy_abs": 1e-9, "force_max_abs": 1e-8, "force_rms": 1e-9}
+    actual = dict(expected, energy_abs=float(1e-9 + np.spacing(76.1)))
+    assert compare(actual, expected, terms)
+    assert not compare(dict(expected, energy_abs=1e-8), expected, terms)
+    assert not compare(dict(expected, force_max_abs=2e-8), expected, terms)
+    assert not compare(dict(expected, energy_abs=float("nan")), expected, terms)
+    assert not compare({"energy_abs": 1e-9}, expected, terms)

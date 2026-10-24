@@ -1,0 +1,7 @@
+{
+  "path": "src/response/cuda_ks_cpks_reference.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Nonmovable native adapter binding the CPKS authenticator to the exact prepared KS batch/item/token and live canonical resident pointers. Performs scalar-only preparation, current-device and full live-binding identity checks, without numerical export, derivative algebra, or an induced-Fock fallback.",
+  "regions": []
+}

@@ -133,11 +133,52 @@ legitimate scientific or backend-specific owners.
 | --- | --- | --- |
 | HF CPU/CUDA | `src/methods/hf_method.cpp` | `PreparedFockPlan`, CPU Fock/overlap owners, native CUDA RHF/DF buckets and original solve generations |
 | XC/KS CPU/CUDA | `src/methods/dft_method_preparation.cpp` (descriptor/grid/spin admission), `src/methods/dft_method.cpp` (prepared owners), `src/methods/dft_method_{final_state,derivative}_adapter.cpp` (token-checked forwarding) | Native semilocal/grid/XC, `CudaKsPlan`, source/grid leases, physical final-state validation and stationary force artifact lease |
-| MP2/UMP2 | `src/methods/mp2_method.cpp`, `src/methods/ump2_method.cpp` | Reference/correlation source admission, phase-local providers, precision policy and last-good reference seed; unsupported targets still reject |
-| CC | `src/methods/rccsd_method.cpp`, `src/methods/rccsdt_method.cpp`, `src/methods/df_rccsdt_method.cpp` | CC equations, physical residuals, shared response Krylov, source admission, provider streams and bounded fallbacks |
+| MP2/UMP2 | `src/methods/mp2_method.cpp`, `src/methods/ump2_method.cpp`, shared `src/methods/correlated_batch.cpp` | Reference/correlation source admission, phase-local providers, precision policy and last-good reference seed; unsupported targets still reject |
+| CC | `src/methods/rccsd_method.cpp`, `src/methods/rccsdt_method.cpp`, `src/methods/df_rccsdt_method.cpp`, `src/methods/uccsd_method.cpp`, shared `src/methods/correlated_batch.cpp` for conventional restricted batches | CC equations, physical residuals, shared response Krylov, source admission, provider streams and bounded fallbacks |
 | GFN | `src/methods/xtb_method.cpp` | Context-owned `Gfn2RuntimeBridge`, native CPU/CUDA SCC owners and provider handle preparation/destruction |
 | Tensor capture | `src/runtime/cuda_graph_region.cuh` | Original graph executable, stream/arena/library binding and capture eligibility; graph submission is not an endpoint completion fence |
 | Explicit generated D3 | `python/generativeqc_compiler/geometry/d3_cuda.py` | Existing artifact lease, topology/switch-state guards and native tensor owner; rebuild after failure remains explicit |
+
+### Shared reference and correlated batch control
+
+MP2, UMP2, RCCSD and RCCSD(T) use one conventional ragged dispatcher in
+`src/methods/correlated_batch.cpp`, after their registered factories perform the
+existing method/backend/domain admission. It owns input ordering, coordinate
+rebinding, per-item error isolation, frozen/restored reference seeds and
+transactional publication of last-good seed candidates. CC-only performance
+diagnostics remain an optional facet; MP2 does not acquire that facet.
+
+The dispatcher calls the method-owned `ReferenceSeededCalculation` port, not a
+second solver. Concrete owners retain force selection, reference/correlation
+budgets, physical-reference export and all correlation/response work. Compatible
+geometry rebinding can move an existing CUDA reference executable into its
+replacement owner, but never makes the old physical reference valid for the new
+geometry. Warm-start disabling does not disable executable reuse. Seed candidates
+are committed only after the complete requested endpoint converges; failed
+rebinding, response or correlation work cannot replace the last-good seed.
+
+`src/methods/correlated_warm_reference.hpp` supplies one physical-reference
+acceptance and bounded retry policy to MP2/UMP2, restricted CC (including its DF
+reference path) and unrestricted CC. The callback is the existing CPU/CUDA
+reference provider. A restricted consumer requires a converged restricted
+physical export, and an unrestricted consumer requires its unrestricted export.
+An unsuccessful seeded proposal is released before at most one cold replacement.
+Only explicit seed/numerical rejection is retryable. Allocation, capacity,
+capability, driver and untyped runtime exceptions propagate without submitting a
+second reference solve; a cold failure is terminal.
+
+KS keeps its independent CPU solve and CUDA round-robin schedule under its
+existing common method owner. Its item-boundary failure classification and
+geometry admission use `execution_failure.hpp` and `geometry.hpp`, also used by
+the correlated dispatcher. GFN2 already constructs one shared request/result
+through `Gfn2RuntimeBridge` before selecting its CPU/CUDA execution leaf; its
+coordinate packing uses the same geometry helper. None of these metadata helpers
+evaluates scientific operators or transfers device data.
+
+These shared controls do not add unsupported products, backends or batch domains.
+The public method manifest and prepared capability queries remain authoritative.
+CPU/CUDA scientific providers, resident storage, captures, streams and finite
+resource fallbacks are not replaced with a generic per-operator host loop.
 
 The KS adapters cross-cast to private `KsSingleOwnerPort` and
 `KsBatchOwnerPort` interfaces. These interfaces only forward requests to the

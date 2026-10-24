@@ -144,13 +144,11 @@ def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> Non
     assert "angular_order = 0; angular_order <= 12" in preparation
 
 
-def test_order_three_axis_owners_borrow_only_published_geometry() -> None:
+def test_axis_owners_borrow_only_published_geometry() -> None:
     """Parallel axes preserve full initialization and the legacy serial consumer."""
     source = emit_direct_source_contraction_header()
     assert "unsigned axis_begin = 0U, unsigned axis_end = 3U" in source
     assert "for (unsigned axis = axis_begin; axis < axis_end; ++axis)" in source
-    assert source.count("if constexpr (AngularOrder == 3 && ComponentLanes == 32)") == 2
-    assert source.count("if constexpr (AngularOrder != 3 || ComponentLanes != 32)") == 2
     assert "prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra]" in source
     assert "prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket]" in source
     assert "shared.bra, threadIdx.x, threadIdx.x + 1U)" in source

@@ -60,7 +60,11 @@ def basis_capability(
     SCF state converges, or the chemical model has been validated for an element.
     ``consumer="correlation_df"`` selects the native CUDA correlation source
     and nuclear sink's auxiliary-through-g contract for DF-MP2/DF-CCSD(T).
-    It does not widen generic CUDA DF exports, orbital shells or higher derivatives.
+    ``consumer="wb97mv_df_values"`` admits only the CUDA KS source's auxiliary
+    values through g; native Hessian derivatives require their own linked closure.
+    ``consumer="scf_df"`` admits CUDA HF/KS fitting auxiliaries through g for
+    values and first derivatives, using the bounded six-term nuclear sink.
+    Neither widens generic CUDA DF exports, orbital shells or higher derivatives.
     """
     from .calculator import Atom
 
@@ -74,14 +78,15 @@ def basis_capability(
     maximum = LIMITS.get(backend, {}).get(operator, {}).get(derivative_order)
     if consumer is not None:
         if (
-            consumer != "correlation_df"
+            consumer not in ("correlation_df", "wb97mv_df_values", "scf_df")
             or backend != "cuda"
             or role != "auxiliary"
             or operator not in ("df_metric", "df_three_center")
-            or derivative_order not in (0, 1)
+            or derivative_order
+            not in ((0,) if consumer == "wb97mv_df_values" else (0, 1))
         ):
             raise ValueError(
-                "correlation_df consumer requires CUDA auxiliary DF values/first derivatives"
+                "source-only consumer requires CUDA auxiliary DF values or qualified first derivatives"
             )
         maximum = 4
     if maximum is None:

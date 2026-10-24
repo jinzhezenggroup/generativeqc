@@ -24,5 +24,6 @@ Integral generation, shell work, Fock assembly, SCF state, exchange strategies, 
 ../range_separated_integrals
 ../weighted_eri
 ../direct_pair_recurrence
+../md_j_engine
 ../hf_force_finalization
 ```

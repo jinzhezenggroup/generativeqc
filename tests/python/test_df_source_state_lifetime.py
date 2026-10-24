@@ -34,10 +34,12 @@ STUBS = r"""
 #include <type_traits>
 #include <utility>
 using cudaStream_t = void*;
-enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
+enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
 int current_device = 1, owner_device = 0, allocations = 0, queries = 0, selections = 0;
 int synchronizations = 0, source_destroys = 0, stream_destroys = 0;
 int binding_destroys = 0, expected_binding_destroys = 0, binding_layout = 0;
+int md_destroys = 0;
+bool md_alive = false;
 bool stream_alive = false, blas_alive = false, eigen_alive = false, query_fails = false;
 struct PreparedBinding {
   ~PreparedBinding() {
@@ -57,6 +59,7 @@ cudaError_t cudaSetDevice(int value) {
   return cudaSuccess;
 }
 const char* cudaGetErrorString(cudaError_t) { return "mock CUDA failure"; }
+cudaError_t cudaGetLastError() { return cudaSuccess; }
 cudaError_t cudaStreamSynchronize(cudaStream_t stream) {
   assert(stream && stream_alive && current_device == owner_device);
   ++synchronizations;
@@ -65,7 +68,7 @@ cudaError_t cudaStreamSynchronize(cudaStream_t stream) {
 cudaError_t cudaStreamDestroy(cudaStream_t stream) {
   assert(stream && stream_alive && current_device == owner_device && !allocations);
   assert(source_destroys == 1);
-  assert(binding_destroys == expected_binding_destroys && !blas_alive);
+  assert(binding_destroys == expected_binding_destroys && !blas_alive && !md_alive);
   stream_alive = false;
   ++stream_destroys;
   return cudaSuccess;
@@ -75,6 +78,7 @@ void cublasDestroy(void*) {
   assert(binding_destroys == expected_binding_destroys && !eigen_alive);
   blas_alive = false;
 }
+#include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
 template <class T> struct TensorView { T* data; std::size_t size; };
 std::size_t size_mul(std::size_t a, std::size_t b, const char*) { return a * b; }
@@ -128,12 +132,23 @@ cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int) { std::abort(); }
 
 
 DESTROY_STUBS = r"""
+namespace cuda_execution {
+void destroy_cuda_df_md_owner(void* owner) noexcept {
+  if (!owner) return;
+  // The optional Hermite owner must release while its device, stream, and
+  // borrowed integral source remain valid, just like the prepared bindings.
+  assert(current_device == owner_device && stream_alive && blas_alive);
+  assert(md_alive && source_destroys == 0);
+  md_alive = false;
+  ++md_destroys;
+}
+}
 void destroy_persistent_scf_state(void*) {}
 void destroy_ordinary_eigensystem(void*) {}
 void destroy_final_validation(void*) {}
 void destroy_cuda_density_fitting_integral_source(void* source) {
   if (!source) return;
-  assert(current_device == owner_device && stream_alive && !allocations);
+  assert(current_device == owner_device && stream_alive && !allocations && !md_alive);
   ++source_destroys;
 }
 """
@@ -150,6 +165,10 @@ std::shared_ptr<cc::DFSourceState> create_state(bool coefficients = true) {
   state->plan->blas = reinterpret_cast<void*>(3);
   stream_alive = blas_alive = true;
   assert(state->plan->eigen_handles.create() == 0);
+  if (binding_layout == 4) {
+    state->plan->md_coulomb = reinterpret_cast<void*>(5);
+    md_alive = true;
+  }
   if (binding_layout == 0) {
     state->plan->charge_contraction = std::make_unique<PreparedBinding>();
     state->plan->coulomb_contraction = std::make_unique<PreparedBinding>();
@@ -183,7 +202,7 @@ int main(int argc, char** argv) {
   assert(argc == 3);
   const int mode = std::atoi(argv[1]);
   binding_layout = std::atoi(argv[2]);
-  assert(binding_layout >= 0 && binding_layout <= 3);
+  assert(binding_layout >= 0 && binding_layout <= 4);
   static_assert(noexcept(cc::PlanDelete{}(nullptr)));
   static_assert(std::is_nothrow_destructible_v<cc::DFSourceState>);
   for (int caller_device : {0, 1}) {
@@ -191,6 +210,8 @@ int main(int argc, char** argv) {
     current_device = caller_device;
     allocations = queries = selections = synchronizations = source_destroys = stream_destroys = 0;
     binding_destroys = expected_binding_destroys = 0;
+    md_destroys = 0;
+    md_alive = false;
     stream_alive = blas_alive = eigen_alive = query_fails = false;
     if (mode == 6) {
       cc::PlanDelete{}(nullptr);
@@ -230,6 +251,7 @@ int main(int argc, char** argv) {
     }
     assert(!allocations && !stream_alive && source_destroys == 1 && stream_destroys == 1);
     assert(binding_destroys == expected_binding_destroys && !blas_alive);
+    assert(!md_alive && md_destroys == (binding_layout == 4 ? 1 : 0));
     assert(synchronizations == (mode == 7 || mode == 8 ? 0 : 1));
     if (mode != 8 && current_device != caller_device) {
       std::cerr << "retained DF source teardown changed caller device " << caller_device
@@ -269,9 +291,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     }
     array_fields = {"metric_charge", "metric_potential"}
     assert (owned_fields | array_fields).issubset(fields)
-    unit = STUBS + _definition(resources, "inline void cuda_resource_check(")
+    unit = STUBS
     for marker in (
-        "class CudaDeviceScope",
         "template <class T>\nstruct BorrowedCudaBuffer",
         "template <class T>\nclass OwnedCudaBuffer",
     ):
@@ -357,7 +378,9 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ),
 )
 @pytest.mark.parametrize(
-    "bindings", range(4), ids=("resident", "streamed-full", "streamed-tail", "partial")
+    "bindings",
+    range(5),
+    ids=("resident", "streamed-full", "streamed-tail", "partial", "streamed-hermite"),
 )
 def test_retained_source_restores_caller_device(
     state_probe: Path, mode: int, bindings: int

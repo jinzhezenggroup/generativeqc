@@ -1,7 +1,6 @@
 #include "cli/native_basis.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -14,29 +13,9 @@
 
 #include "cli/json.hpp"
 #include "cli/options.hpp"
-#include "cli_basis_pack.hpp"
+#include "molecule/basis_template.hpp"
 
 namespace generativeqc::cli {
-namespace {
-
-std::string canonical_basis_name(std::string_view name) {
-  std::string result(name);
-  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char value) {
-    if (value == '_') return '-';
-    return static_cast<char>(std::tolower(value));
-  });
-  return result;
-}
-
-const basis_generated::BasisRow* find_basis(std::string_view name) {
-  const std::string canonical = canonical_basis_name(name);
-  for (const auto& basis : basis_generated::kBases)
-    if (basis.name == canonical) return &basis;
-  return nullptr;
-}
-
-}  // namespace
-
 namespace {
 void basis_require(bool valid, std::string_view message) {
   if (!valid) throw UsageError(std::string(message));
@@ -178,107 +157,52 @@ NativeBasisData expand_basis_input(
   if (!is_local_basis(name))
     return expand_bundled_basis(name, atoms, representation.value_or(GENERATIVEQC_BASIS_CARTESIAN));
   const auto record = local_basis(name);
-  NativeBasisData result;
-  result.representation = record.at("representation") == "spherical" ? GENERATIVEQC_BASIS_SPHERICAL
-                                                                     : GENERATIVEQC_BASIS_CARTESIAN;
-  basis_require(!representation || *representation == result.representation,
+  const auto selected_representation = record.at("representation") == "spherical"
+                                           ? GENERATIVEQC_BASIS_SPHERICAL
+                                           : GENERATIVEQC_BASIS_CARTESIAN;
+  basis_require(!representation || *representation == selected_representation,
                 "explicit representation conflicts with canonical basis record");
+  const auto native_count = [](std::size_t size) {
+    basis_require(size <= std::numeric_limits<std::uint32_t>::max(),
+                  "basis template exceeds native uint32 dimensions");
+    return static_cast<std::uint32_t>(size);
+  };
+  molecule::BasisTemplateData source;
+  for (const auto& element : record.at("elements")) {
+    const auto shell_offset = native_count(source.shells.size());
+    for (const auto& shell : element.at("shells")) {
+      const auto exponent_offset = native_count(source.exponents.size());
+      const auto coefficient_offset = native_count(source.coefficients.size());
+      for (const auto& exponent : shell.at("exponents"))
+        source.exponents.push_back(decimal(exponent, true));
+      for (const auto& row : shell.at("coefficients"))
+        for (const auto& coefficient : row)
+          source.coefficients.push_back(decimal(coefficient, false));
+      source.shells.push_back({shell.at("angular_momentum").get<std::uint32_t>(), exponent_offset,
+                               native_count(shell.at("exponents").size()), coefficient_offset,
+                               native_count(shell.at("coefficients").size())});
+    }
+    const auto term_offset = native_count(source.ecp_terms.size());
+    const auto core = element.at("ecp_core_electrons").get<std::int32_t>();
+    if (core) {
+      const auto potentials = ecp_potentials(element);
+      for (const auto& potential : potentials) {
+        const auto& exponents = potential.at("gaussian_exponents");
+        for (std::size_t index = 0; index < exponents.size(); ++index)
+          source.ecp_terms.push_back(
+              {potential.at("angular_momentum")[0].get<std::uint32_t>(),
+               basis_integer(potential.at("r_exponents")[index], 4, "ECP radial power"),
+               decimal(exponents[index], true),
+               decimal(potential.at("coefficients")[0][index], false)});
+      }
+    }
+    source.elements.push_back({element.at("atomic_number").get<std::int32_t>(), core, shell_offset,
+                               native_count(source.shells.size() - shell_offset), term_offset,
+                               native_count(source.ecp_terms.size() - term_offset)});
+  }
+  auto result =
+      molecule::expand_basis_template(source.descriptor(), atoms, selected_representation);
   result.identity = record.at("checksum");
-  for (std::size_t atom_index = 0; atom_index < atoms.size(); ++atom_index) {
-    const Json* element = nullptr;
-    for (const auto& candidate : record.at("elements"))
-      if (candidate.at("atomic_number") == atoms[atom_index].atomic_number) element = &candidate;
-    basis_require(element != nullptr, "local basis is missing an input element");
-    for (const auto& shell : element->at("shells")) {
-      const auto angular = shell.at("angular_momentum").get<std::uint32_t>();
-      for (const auto& row : shell.at("coefficients")) {
-        basis_require(
-            result.primitives.size() <= std::numeric_limits<std::uint32_t>::max() - row.size() &&
-                result.shells.size() < std::numeric_limits<std::uint32_t>::max(),
-            "expanded basis exceeds native uint32 dimensions");
-        const auto offset = static_cast<std::uint32_t>(result.primitives.size());
-        for (std::size_t index = 0; index < row.size(); ++index)
-          result.primitives.push_back(
-              {decimal(shell.at("exponents")[index], true), decimal(row[index], false)});
-        result.shells.push_back({static_cast<std::uint32_t>(atom_index), angular, offset,
-                                 static_cast<std::uint32_t>(row.size())});
-      }
-    }
-    const auto core = element->at("ecp_core_electrons").get<std::int32_t>();
-    result.core_electrons.push_back(core);
-    if (!core) continue;
-    const auto potentials = ecp_potentials(*element);
-    std::set<std::uint32_t> channels;
-    for (const auto& potential : potentials) {
-      channels.insert(potential.at("angular_momentum")[0].get<std::uint32_t>());
-    }
-    const auto local = *channels.rbegin();
-    for (const auto& potential : potentials) {
-      const auto& exponents = potential.at("gaussian_exponents");
-      const auto& powers = potential.at("r_exponents");
-      const auto& rows = potential.at("coefficients");
-      const auto channel = potential.at("angular_momentum")[0].get<std::uint32_t>();
-      for (std::size_t index = 0; index < exponents.size(); ++index)
-        result.ecp_terms.push_back({static_cast<std::uint32_t>(atom_index),
-                                    channel == local ? -1 : static_cast<std::int32_t>(channel),
-                                    basis_integer(powers[index], 4, "ECP radial power"),
-                                    decimal(exponents[index], true),
-                                    decimal(rows[0][index], false)});
-    }
-  }
-  if (!result.ecp_terms.empty())
-    for (const auto& shell : result.shells)
-      basis_require(shell.angular_momentum <= 3, "ECP execution requires s/p/d/f orbital shells");
-  return result;
-}
-
-std::vector<std::string_view> bundled_basis_names() {
-  std::vector<std::string_view> result;
-  result.reserve(basis_generated::kBases.size());
-  for (const auto& basis : basis_generated::kBases) result.push_back(basis.name);
-  return result;
-}
-
-bool bundled_basis_supports(std::string_view name, int atomic_number) {
-  const auto* basis = find_basis(name);
-  if (basis == nullptr) return false;
-  const auto begin = basis_generated::kShells.begin() + basis->shell_offset;
-  const auto end = begin + basis->shell_count;
-  return std::any_of(begin, end, [atomic_number](const auto& shell) {
-    return shell.atomic_number == atomic_number;
-  });
-}
-
-NativeBasisData expand_bundled_basis(std::string_view name,
-                                     std::span<const generativeqc_atom> atoms,
-                                     generativeqc_basis_representation representation) {
-  const auto* basis = find_basis(name);
-  if (basis == nullptr) throw std::invalid_argument("unknown bundled basis: " + std::string(name));
-
-  NativeBasisData result;
-  result.representation = representation;
-  const auto begin = basis_generated::kShells.begin() + basis->shell_offset;
-  const auto end = begin + basis->shell_count;
-
-  for (std::size_t atom_index = 0; atom_index < atoms.size(); ++atom_index) {
-    const int atomic_number = atoms[atom_index].atomic_number;
-    bool found = false;
-    for (auto shell = begin; shell != end; ++shell) {
-      if (shell->atomic_number != atomic_number) continue;
-      found = true;
-      const auto primitive_offset = static_cast<std::uint32_t>(result.primitives.size());
-      for (std::uint32_t index = 0; index < shell->primitive_count; ++index) {
-        const auto& primitive = basis_generated::kPrimitives[shell->primitive_offset + index];
-        result.primitives.push_back({primitive.exponent, primitive.coefficient});
-      }
-      result.shells.push_back({static_cast<std::uint32_t>(atom_index), shell->angular_momentum,
-                               primitive_offset, shell->primitive_count});
-    }
-    if (!found) {
-      throw std::invalid_argument(std::string(basis->name) + " is not bundled for atomic number " +
-                                  std::to_string(atomic_number));
-    }
-  }
   return result;
 }
 

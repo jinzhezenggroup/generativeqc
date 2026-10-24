@@ -14,6 +14,7 @@ import pytest
 from generativeqc import Calculator, _native
 from generativeqc import _generated_methods as method_manifest
 from generativeqc._cpu_force_resources import qualified_direct_semilocal_context
+from generativeqc._df_precision import fitted_scf_budget_admitted
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
@@ -147,6 +148,9 @@ def _promoted(
             else _native.DENSITY_FITTING_NONE
         ),
         "semilocal_force": False,
+        # These force-route probes request no application error budget. Resolve
+        # its admission through the real helper; AUTO alone must not grant it.
+        "fitted_budget": fitted_scf_budget_admitted(owner, None),
         "cpu_composed_all_electron_force": False,
         "cuda_nonlocal_force": False,
         "qualified_basis": lambda basis: blocked == "ecp",

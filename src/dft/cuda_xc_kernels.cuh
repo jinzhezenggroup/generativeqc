@@ -146,6 +146,11 @@ void select_ao_chunk(const CudaXcLayout& l, cudaStream_t stream, const double* b
   if (failure) throw std::runtime_error("invalid native XC device AO discovery output");
 }
 
+bool mixed_matrix_contractions_supported(const CudaXcLayout& layout) {
+  return !layout.response && layout.ao_precision == CudaXcAoPrecision::Fp64 && layout.npoint != 0 &&
+         fp32_tiled_xc_admitted(layout.nao, layout.tile_points, layout.spins, layout.work_jets);
+}
+
 void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStream_t stream,
              const double* basis, const double* points, const double* weights,
              const double* density, double* ao, double* work, double* features,
@@ -157,7 +162,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
              const std::size_t* ao_ids, const tensor::PreparedPanelProduct* density_provider,
              const tensor::PreparedSymmetricProduct* potential_binding,
              const CudaXcPointBatchPlan& point_batch_plan,
-             CudaXcPointBatchLauncher point_batch_launcher, double* point_batch_arena) {
+             CudaXcPointBatchLauncher point_batch_launcher, double* point_batch_arena,
+             CudaXcOccupiedDensity occupied) {
   const I matrices = l.spins * l.nao * l.nao;
   if ((total_density == nullptr) != (total_gradient == nullptr))
     throw std::invalid_argument("CUDA XC total-density capture requires rho and gradient together");
@@ -173,6 +179,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
   const bool compact_candidate =
       point_batch_plan.compact && !density_provider &&
       !(potential_binding && potential_binding->diagnostic().provider_allowance);
+  const bool compensate_totals = !l.fp32_point_totals;
+  if (compensate_totals)
+    cuda_check(cudaMemsetAsync(totals, 0, kCudaXcTotalStorageElements * sizeof(double), stream));
   if (l.local_ao || compact_candidate) {
     // The first selected tile cannot initialize matrix entries absent from its
     // map. Clear once for the complete evaluation; dense initialization stays
@@ -232,7 +241,12 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto density_launcher = l.local_ao
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
-      if (l.fp32_contractions && tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
+      const bool occupied_tile = occupied.coefficients && occupied.rank() < std::size_t(active);
+      if (occupied_tile) {
+        launch_occupied_density(stream, occupied, ao, active, count, work, features,
+                                l.feature_terms, error, ids);
+      } else if (l.fp32_contractions &&
+                 fp32_tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
         launch_density_product<false, true, float>(stream, density, ao, active, count, l.spins,
                                                    l.work_jets, work, error, ids, l.nao);
       } else if (density_provider && active) {
@@ -249,8 +263,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
         density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
                          l.nao);
       cuda_check(cudaGetLastError());
-      scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
-                                 l.feature_terms, l.functional, features, error);
+      if (!occupied_tile)
+        scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
+                                   l.feature_terms, l.functional, features, error);
       cuda_check(cudaGetLastError());
       if (total_density) {
         scheduled_total_density_features(stream, features, count, l.spins, l.feature_terms, begin,
@@ -273,7 +288,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     const auto* descriptors = compact ? batch_descriptors + batch_begin / l.tile_points : nullptr;
     if (compact) {
       launch_batch_density(stream, l, descriptors, tile_count, max_active, density, batch_ao,
-                           batch_work, batch_features, batch_begin, ao_ids, error);
+                           batch_work, batch_features, batch_begin, ao_ids, error, occupied);
       cuda_check(cudaGetLastError());
       if (total_density)
         for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
@@ -296,27 +311,43 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     cuda_check(cudaGetLastError());
     if (compact) {
       launch_batch_potential(stream, l, descriptors, tile_count, max_active, batch_ao,
-                             batch_coefficients, weights, batch_work, batch_potential, batch_totals,
-                             batch_begin, ao_ids, potential, totals, error);
+                             batch_coefficients, weights, batch_work, batch_potential,
+                             compensate_totals ? nullptr : batch_totals, batch_begin, ao_ids,
+                             potential, totals, error);
       cuda_check(cudaGetLastError());
+      if (compensate_totals) {
+        accumulate_compensated_xc_totals<<<1, 32, 0, stream>>>(batch_totals, batch_count,
+                                                               l.tile_points, totals, error);
+        cuda_check(cudaGetLastError());
+      }
       continue;
     }
     ao_offset = 0;
     // Contractions and scatters retain their historical stream/tile order.
-    // In particular overlapping indexed matrix entries never race, and each
-    // point-total reduction sees exactly its original compact tile channels.
+    // Overlapping indexed matrix entries never race. FP64 point totals retain
+    // their low words across batches instead of rounding every tile into E_xc.
     for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
       const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
       const I count = block.npoint, active = block.nactive;
       const auto feature_offset = (begin - batch_begin) * l.spins * l.feature_terms;
       scheduled_potential(stream, batch_ao + ao_offset, batch_coefficients + feature_offset,
                           weights + begin, active, count, l.spins, l.feature_terms, l.work_jets,
-                          work, batch_totals + 3 * (begin - batch_begin), potential, totals,
-                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding,
-                          l.fp32_contractions);
+                          work,
+                          compensate_totals ? nullptr : batch_totals + 3 * (begin - batch_begin),
+                          potential, totals, begin != 0 || l.local_ao, error, block.ao_ids, l.nao,
+                          potential_binding, l.fp32_contractions);
       cuda_check(cudaGetLastError());
       ao_offset += count * active * l.jets;
     }
+    if (compensate_totals) {
+      accumulate_compensated_xc_totals<<<1, 32, 0, stream>>>(batch_totals, batch_count,
+                                                             l.tile_points, totals, error);
+      cuda_check(cudaGetLastError());
+    }
+  }
+  if (compensate_totals) {
+    fold_compensated_xc_totals<<<1, 32, 0, stream>>>(totals, error);
+    cuda_check(cudaGetLastError());
   }
 }
 

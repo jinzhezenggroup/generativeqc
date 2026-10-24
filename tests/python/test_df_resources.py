@@ -208,6 +208,8 @@ def test_exchange_reservation_preserves_full_scratch_and_minimum_boundaries(
     # scale vector and provider allowance expire before that live set; retain
     # the same one-byte admission/fallback gates without adding disjoint peaks.
     solver_reserve -= (1 << 20) + (17 * 8 * 8 + 8) * 8
+    # The execution-owned RHF Fock census is one uint64 per persistent plan.
+    solver_reserve += 8
     full_bytes += solver_reserve
     minimum_bytes = 1084719 + solver_reserve
     monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")

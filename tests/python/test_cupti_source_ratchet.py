@@ -497,8 +497,11 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setattr(
         capture_prepared_residency,
-        "visible_device_uuid",
-        lambda _: "GPU-cpu-metadata-double",
+        "allocation_identity",
+        lambda *_: (
+            "GPU-cpu-metadata-double",
+            {"platform": "slurm", "job_id": "cpu-metadata-double"},
+        ),
         raising=False,
     )
     monkeypatch.setattr(capture_prepared_residency, "verify_source", lambda *args: None)
@@ -507,6 +510,7 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
         "tools/cupti_residency_capture.cpp",
         "tools/cupti_residency_capture.py",
         "tools/capture_prepared_residency.py",
+        "tools/residency_allocation.py",
         "tools/cupti_graph_inventory.cpp",
         "tools/cupti_graph_inventory.py",
         "tools/cupti_source_capture.cpp",

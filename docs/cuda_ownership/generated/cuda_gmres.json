@@ -1,0 +1,8 @@
+{
+  "name": "cuda_gmres",
+  "outputs": [
+    "generated/response/cuda_gmres_kernels.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/tensor/cuda_gmres.py",
+  "scope": "Generic restarted FP64 right-preconditioned GMRES numerical kernels, including scaled norms, MGS, Givens rotations, triangular solution and true unpreconditioned residual gates. Method-owned operators, prepared-state admission, allocation and publication remain native runtime responsibilities; this does not register a molecular Hessian endpoint."
+}

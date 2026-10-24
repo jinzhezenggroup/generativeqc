@@ -22,6 +22,20 @@ struct Order4SourceRoots {
       : ShellClass == kDsppShellClass || ShellClass == kDppsShellClass ? 54U
                                                                        : 36U;
 
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kPpppShellClass)
+      return generated_weighted_eri::pppp_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDsppShellClass)
+      return generated_weighted_eri::dspp_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDsdsShellClass)
+      return generated_weighted_eri::dsds_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDppsShellClass)
+      return generated_weighted_eri::dpps_force_relative(geometry, weights);
+    else
+      return generated_weighted_eri::ddss_force_relative(geometry, weights);
+  }
+
   __device__ static __forceinline__ generated_weighted_eri::IndependentGradientF32 evaluate_mixed(
       const generated_weighted_eri::Geometry& geometry, const double* weights) {
     if constexpr (ShellClass == kPpppShellClass)

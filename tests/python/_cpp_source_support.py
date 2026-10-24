@@ -219,11 +219,16 @@ def cpp_record_definition(source: str, name: str) -> str:
     return source[start:end]
 
 
-def cpp_if_block(source: str, condition_prefix: str) -> str:
+def cpp_if_block(
+    source: str, condition_prefix: str, *, include_else: bool = False
+) -> str:
     """Extract one braced production if-body, matching a stable condition prefix.
 
     This is reserved for host-only execution of CUDA admission/rollback code.
     It skips single-statement guards and ignores comments, literals and spacing.
+    ``include_else`` also retains an adjacent braced else, so a probe can execute
+    both ownership routes without depending on the following unrelated code.
+    Unbraced else/else-if forms are rejected rather than silently omitted.
     """
     code = _code_only(source)
     target = "".join(condition_prefix.split())
@@ -241,4 +246,11 @@ def cpp_if_block(source: str, condition_prefix: str) -> str:
             continue
         matches.append((match.start(), _closing(code, brace, "{", "}") + 1))
     start, end = _unique(matches, f"if({condition_prefix}...)")
+    if include_else:
+        following = re.match(r"\s*else\b\s*", code[end:])
+        if following is not None:
+            opening = end + following.end()
+            if opening >= len(code) or code[opening] != "{":
+                raise ValueError("expected braced C++ else body")
+            end = _closing(code, opening, "{", "}") + 1
     return source[start:end]

@@ -15,9 +15,22 @@ struct NativeOwner {
   uint64_t integral_mask{}, grid_points{};
 };
 
+/** Optional pair panels share the cached tier, never the mandatory force arena.
+ * Partition response is independent of the XC/spin profile. Small systems and
+ * reduced-lane owners retain the existing bounded cooperative executor. */
+size_t native_phased_becke_bytes(size_t atoms, size_t points, size_t lanes) {
+  if (!native_phased_becke_min_atoms || atoms < native_phased_becke_min_atoms ||
+      atoms <= stationary_becke_retained_max_atoms || atoms > stationary_becke_max_atoms ||
+      lanes != points)
+    return 0;
+  return phased_allocation(atoms, points);
+}
+
 size_t native_numeric_bytes(size_t atoms, size_t aos, size_t primitives, size_t points,
                             size_t tasks, size_t spins, size_t lanes, bool center_cache) {
-  return allocation(atoms, aos, primitives, points, tasks, spins, lanes, center_cache);
+  const auto bounded =
+      allocation(atoms, aos, primitives, points, tasks, spins, lanes, center_cache);
+  return bounded + (center_cache ? native_phased_becke_bytes(atoms, points, lanes) : 0);
 }
 
 /** Disjoint source slots may be populated on the existing provider stream.
@@ -70,6 +83,11 @@ int native_create(int device, int major, int minor, size_t atoms, size_t aos, si
         native_require_status(stationary_configure_becke(scientific, stationary_becke_threads,
                                                          shared, error, error_size),
                               error, error_size, "stationary cooperative schedule failed");
+        const auto phased_bytes = native_phased_becke_bytes(atoms, points, lanes);
+        if (phased_bytes && phased_bytes <= budget - owner->scientific->bytes)
+          native_require_status(
+              stationary_configure_phased_becke_v1(scientific, phased_bytes, error, error_size),
+              error, error_size, "stationary phased schedule failed");
       } catch (...) {
         stationary_destroy(scientific);
         throw;
@@ -87,6 +105,13 @@ int native_topology(void* pointer, const double* primitives, const int64_t* rang
                    [] { throw std::invalid_argument("null native stationary owner"); });
   return stationary_topology(owner->scientific, primitives, ranges, norms, ao_atoms, error,
                              error_size);
+}
+
+int native_grid_topology(void* pointer, const size_t* offsets, const double* radii, size_t atoms,
+                         char* error, size_t error_size) {
+  auto* owner = static_cast<NativeOwner*>(pointer);
+  return stationary_grid_topology_v1(owner ? owner->scientific : nullptr, offsets, radii, atoms,
+                                     error, error_size);
 }
 
 int native_reset_geometry(void* pointer, const double* centers, double tolerance, char* error,

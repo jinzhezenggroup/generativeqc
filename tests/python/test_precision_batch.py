@@ -22,6 +22,7 @@ from generativeqc.ks_diagnostics import KsTransportDiagnostic
 from test_precision_policy import (
     ATOMS,
     ENERGY,
+    strict_native_result,
 )
 from test_precision_policy import backend as _scalar_backend
 
@@ -213,8 +214,11 @@ def fleet(backend: Any, monkeypatch: Any) -> Any:
     return state
 
 
-def test_native_fleet_reuse_without_item_timing_or_seed_exports(fleet: Any) -> None:
-    calculator = PrecisionCalculator(policy="fp64")
+@pytest.mark.parametrize("profile", ("standard", "fp64"))
+def test_native_fleet_reuse_without_item_timing_or_seed_exports(
+    fleet: Any, profile: str
+) -> None:
+    calculator = PrecisionCalculator(policy=profile)
     fleet.fleet_outputs = [[item(0), item(1)], [item(0), item(1)]]
     with calculator.prepare_batch([ATOMS, ATOMS]) as prepared:
         first = prepared.execute(strict=True)
@@ -235,6 +239,73 @@ def test_native_fleet_reuse_without_item_timing_or_seed_exports(fleet: Any) -> N
                 assert validation.schema_version == 2
                 assert observed.fock_builds == 7
             json.dumps(report, allow_nan=False)
+    assert fleet.live is None
+
+
+def test_fast_standard_fallback_reuses_owner_and_frozen_density(fleet: Any) -> None:
+    """A strict fallback never suspends the expensive native prepared owner."""
+    fleet.block_auto = True
+    evidence = strict_native_result().precision
+    observed = item(precision=evidence, executed_backend="cuda")
+    fleet.fleet_outputs = [[observed], [observed]]
+    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    with calculator.prepare_batch([ATOMS]) as prepared:
+        first = prepared.execute(strict=True)
+        prepared.set_warm_start_updates(False)
+        second = prepared.execute(strict=True)
+        assert len(fleet.fleets) == 1 and fleet.exports == 0
+        assert fleet.live is fleet.fleets[0]
+        for result in (first, second):
+            assert not result.precision_validation["audit_calls"]
+            assert result.precision_validation["suspension_seconds"] == 0
+            assert (
+                result.items[0].precision_validation.status
+                == "strict_standard_fallback"
+            )
+
+
+@pytest.mark.parametrize(
+    "status",
+    (
+        _native.STATUS_NUMERICAL_FAILURE,
+        _native.STATUS_OUT_OF_MEMORY,
+        _native.STATUS_INVALID_ARGUMENT,
+    ),
+)
+def test_fast_failed_proposal_retries_only_numerics_and_retains_work(
+    fleet: Any,
+    status: int,
+) -> None:
+    """The same bounded strict retry applies to scalar and prepared proposals."""
+    failed = item(
+        status=status,
+        status_message="final-state check failed",
+        converged=False,
+        energy=float("nan"),
+        forces=None,
+        fock_builds=None,
+        executed_backend="cuda",
+    )
+    strict = item(executed_backend="cuda", precision=strict_native_result().precision)
+    fleet.block_auto = True
+    fleet.fleet_outputs = [[failed], [strict]]
+    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    calculator._fast_fock = True
+    with calculator.prepare_batch([ATOMS]) as prepared:
+        output = prepared.execute()
+        observed = output.items[0]
+        if status == _native.STATUS_NUMERICAL_FAILURE:
+            assert observed.succeeded and observed.fock_builds is None
+            validation = observed.precision_validation
+            assert validation.status == "strict_standard_fallback"
+            assert validation.solve_count == 2
+            assert validation.solves[0].error == "final-state check failed"
+            assert validation.solves[0].fock_builds is None
+            assert "budget_fock_failed_fp64_fallback" in validation.fallback_reasons
+            assert len(output.precision_validation["audit_calls"]) == 1
+        else:
+            assert observed.status == status
+            assert output.precision_validation["audit_calls"] == []
     assert fleet.live is None
 
 
@@ -320,10 +391,77 @@ def test_frozen_candidate_seeds_survive_audit_and_rejected_candidate(
             np.testing.assert_array_equal(
                 restored[0][1], np.asarray([atom[1] for atom in ATOMS]).reshape(-1)
             )
-        for owner, _, _, _ in fleet.executions:
+        for owner, _, _, seeds in fleet.executions:
             if owner._calculator._energy_tolerance < 1e-11:
-                assert not owner._warm_state.enabled
+                # Movement invalidates audit history; even the tighter fallback
+                # must start independently, never with the candidate's density.
+                assert seeds == [None]
     assert fleet.live is None
+
+
+def test_auditor_replays_only_its_own_frozen_density(fleet: Any) -> None:
+    """Every call still audits; candidate/auditor proposal histories stay disjoint."""
+    candidate, audit = -1.0, -1.0 + 1e-8
+    fleet.fleet_outputs = [
+        [item(energy=candidate)],
+        [item(energy=audit)],
+        [item(energy=candidate + 2e-8)],
+        [item(energy=audit + 2e-8)],
+        [item(energy=candidate + 3e-8)],
+        [item(energy=audit + 3e-8)],
+    ]
+    with PrecisionCalculator(
+        policy=PrecisionPolicy("fp64", target=ENERGY)
+    ).prepare_batch([ATOMS]) as prepared:
+        for replay in range(3):
+            result = prepared.execute(strict=True)
+            assert result.items[0].precision_validation.solve_count == 2
+            assert result.items[0].fock_builds == 14
+            assert result.precision_validation["audit_calls"][0]["completed"]
+            assert result.precision_validation["audit_seed_bytes_retained"] == 80
+            if replay == 0:
+                prepared.set_warm_start_updates(False)
+        for replay in (1, 2):
+            np.testing.assert_array_equal(
+                fleet.executions[2 * replay][3][0][0], candidate
+            )
+            np.testing.assert_array_equal(
+                fleet.executions[2 * replay + 1][3][0][0], audit
+            )
+
+
+def test_audit_seed_budget_falls_back_to_full_cold_audit(fleet: Any) -> None:
+    """The candidate's required staging wins over optional auditor history."""
+    fleet.fleet_outputs = [[item()] for _ in range(4)]
+    with PrecisionCalculator(policy="balanced").prepare_batch(
+        [ATOMS], maximum_seed_bytes=80
+    ) as prepared:
+        for _ in range(2):
+            result = prepared.execute(strict=True)
+            assert result.items[0].precision_validation.solve_count == 2
+            assert result.precision_validation["seed_bytes_retained"] == 80
+            assert result.precision_validation["audit_seed_bytes_retained"] == 0
+        assert fleet.executions[3][3] == [None]
+
+
+def test_tighter_verification_never_uses_regular_audit_seed(fleet: Any) -> None:
+    """A failed comparison still triggers an independent tighter SCF."""
+    fleet.fleet_outputs = [
+        [item(energy=-1)],
+        [item(energy=-1)],
+        [item(energy=-2)],
+        [item(energy=-1)],
+        [item(energy=-1 + 1e-8)],
+    ]
+    with PrecisionCalculator(
+        policy=PrecisionPolicy("fp64", target=ENERGY)
+    ).prepare_batch([ATOMS]) as prepared:
+        prepared.execute(strict=True)
+        result = prepared.execute(strict=True)
+        assert result.items[0].precision_validation.rejected_errors
+        assert result.items[0].precision_validation.solve_count == 3
+        np.testing.assert_array_equal(fleet.executions[3][3][0][0], -1)
+        assert fleet.executions[4][3] == [None]
 
 
 def test_snapshot_geometry_and_per_item_audit_failure(fleet: Any) -> None:

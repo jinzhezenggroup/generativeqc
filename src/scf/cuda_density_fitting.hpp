@@ -134,6 +134,10 @@ generativeqc_status create_cuda_density_fitting_integral_source(
 void destroy_cuda_density_fitting_integral_source(
     CudaDensityFittingIntegralSource* source) noexcept;
 
+/** Immutable radial identity shared by raw value and nuclear-response replay. */
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept;
+
 /** Device bytes retained by an opaque bounded DF integral source. */
 std::size_t cuda_density_fitting_integral_source_device_bytes(
     const CudaDensityFittingIntegralSource* source) noexcept;
@@ -233,6 +237,27 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream, double* output, std::string& detail);
 
+/** Generate raw zero-order A[mu,nu,P] for unit-weight lower AO pairs.
+ * pair=mu*(mu+1)/2+nu, nu<=mu; output remains [pair][auxiliary]. This
+ * shares the physical source, normalization and strict FP64 value contract.
+ * A budgeted prepared Hermite source can reuse E for this packed consumer;
+ * otherwise the ordinary raw source recurrence is used. The caller folds off-diagonal
+ * density weights and expands the symmetric result. No metric is applied.
+ */
+generativeqc_status generate_cuda_density_fitting_packed_raw_tile(
+    CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
+    std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count, void* stream,
+    double* output, std::string& detail);
+
+/** Raw zero-order [pair,aux] values from one immutable single-system source
+ * into caller storage on a borrowed stream. Unlike the compatibility source
+ * API this never changes the current device. No fitted J/K scratch or occupied
+ * projection lease is touched; all auxiliaries are emitted without compression.
+ */
+generativeqc_status enqueue_cuda_density_fitting_raw_values(
+    CudaDensityFittingIntegralSource* source, std::size_t pair_begin, std::size_t pair_count,
+    void* stream, double* output, std::string& detail);
+
 /** Raw value expansion for cancellation-sensitive orbital contractions.
  * Each disjoint caller-owned buffer has pair_count*auxiliary_count doubles in
  * the ordinary full-pair layout; the value is high+low. One source traversal
@@ -285,6 +310,8 @@ struct CudaDensityFittingDeviceScfItem {
   double energy{};
   double energy_change{};
   double density_rms{};
+  /** Completed physical RHF assembly passes, including inactive-lane work. */
+  std::uint64_t fock_builds{};
 };
 
 /** Metric conditioning, workspace, and device-allocation diagnostics. */
@@ -322,6 +349,10 @@ struct CudaDensityFittingMetricDiagnostic {
   DfPairStorage pair_storage{DfPairStorage::Dense};
   std::size_t stored_factor_bytes{}, raw_factor_bytes{}, contraction_scratch_bytes{};
   std::size_t occupied_rank_capacity{};
+  /** Default-admitted tensor-free pure-J owner (false = fallback/rollback);
+   * its buffers are included in totals above. */
+  bool md_coulomb{};
+  std::size_t md_coulomb_device_bytes{};
 };
 
 /**
@@ -461,6 +492,16 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     unsigned max_iterations, double energy_tolerance, double density_tolerance,
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history);
+
+/** Explicit admission from a restricted all-electron HF owner. */
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
+    const std::vector<double>& orthogonalizer, const std::vector<double>& initial_density,
+    const std::vector<std::int32_t>& occupied, const std::vector<double>& nuclear_repulsion,
+    unsigned max_iterations, double energy_tolerance, double density_tolerance,
+    std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
+    std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
+    bool qualified_standard_owner);
 
 /** UHF counterpart of the device-resident DF SCF loop. */
 generativeqc_status run_cuda_density_fitting_uhf_device_scf(

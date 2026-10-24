@@ -29,8 +29,8 @@ the README endpoint protocol. Existing compiler/JIT caches are reused.
 | 16-atom peroxide holdout, 152 AOs | 40.162046 | 35.969546 | 10.44% |
 
 [`summary.json`](summary.json) retains all timings, semantic work counts,
-paired native density comparison results and the warm replay. [`samples/`](samples/)
-retains all 18 native endpoints and three independent GPU4PySCF reference
+paired native density comparison results and the warm replay. The `samples/`
+members of [`receipts.json.xz`](receipts.json.xz) retain all 18 native endpoints and three independent GPU4PySCF reference
 records with exact geometries, basis identities, settings, final energies/forces,
 work counters, acceptance gates and library identities. All endpoints pass the
 unchanged `1e-8 Hartree / 1e-7 Hartree/Bohr` reference gates. Maximum paired
@@ -44,6 +44,20 @@ hashes remain in the records; the full 37 MiB artifact set is retained on n1 at
 `/home/jzzeng/codes/qc-branch-audit-20260922/evidence-2068/results`.
 
 ## Reproduction
+
+Restore the original JSON text before using the historical scripts:
+
+```bash
+python benchmarks/results/minao-default-20261007/restore.py \
+  --output .artifacts/minao-default-20261007
+```
+
+The lossless bundle consolidates 23 sample and default-smoke records from
+1,016,306 to 58,696 bytes. [`receipts.json`](receipts.json) authenticates every
+original byte string against the pre-compaction tree. All numerical arrays,
+failed checks, trajectories and ordering are preserved; this storage change
+does not rerun or relabel the historical qualification. The summarizer still
+needs the separately retained density arrays described above.
 
 Reconstruct the frozen qualification from the pinned parent and patch, rather
 than assuming current master represents the measured source. Build a CUDA
@@ -77,7 +91,7 @@ the explicit Hcore rollback.
 
 ## Default-path validation
 
-[`default-smoke/`](default-smoke/) records source parent
+The `default-smoke/` bundle members record source parent
 `7c07fa309cf7f9123cde697e460169e481bfca01` plus this repair/default switch,
 including that parent's cross-chunk exact-K default. The new library SHA256 is
 `c4e2cb2d509a045adf928a46ac0765e4a51cf821d2d349ace55126b11b2f4f6c`; historical

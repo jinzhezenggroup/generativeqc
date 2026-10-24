@@ -36,7 +36,7 @@ void launch_update_convergence_kernel(
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual = nullptr,
-    const std::uint32_t* approximate_item_census = nullptr,
+    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
     std::uint32_t* incremental_delta_updates = nullptr,
     const unsigned long long* incremental_delta_build_count = nullptr);
 
@@ -48,19 +48,18 @@ void launch_update_uhf_convergence_kernel(
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual = nullptr,
-    const std::uint32_t* approximate_item_census = nullptr,
+    const std::uint32_t* approximate_item_census = nullptr, bool qualified_owner = false,
     std::uint32_t* incremental_delta_updates = nullptr,
     const unsigned long long* incremental_delta_build_count = nullptr);
 
 /** Validate the rebuilt force determinant, clearing convergence on a failed
  * physical residual. One warp per item; tested_count counts all active items,
  * including rejected ones, and must be zeroed by the caller. No host products. */
-void launch_validate_force_residual_kernel(cudaStream_t stream, std::int32_t batch_size,
-                                           std::int32_t spin_count, std::int32_t nbf,
-                                           double density_tolerance,
-                                           const double* physical_residual, std::uint8_t* active,
-                                           std::uint8_t* converged, std::uint32_t* tested_count,
-                                           std::uint8_t* tested_items);
+void launch_validate_force_residual_kernel(
+    cudaStream_t stream, std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
+    double density_tolerance, const double* physical_residual, std::uint8_t* active,
+    std::uint8_t* converged, std::uint32_t* tested_count, std::uint8_t* tested_items,
+    double energy_tolerance = 1e-10, bool qualified_owner = false);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_tail_rhf_loop_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

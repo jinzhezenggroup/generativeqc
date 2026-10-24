@@ -87,12 +87,12 @@ __device__ __forceinline__ void contract_source_task(
         for (unsigned ket_derivative = 0; ket_derivative < ket_hermites; ++ket_derivative) {
           const auto ket_angular = md_hermite_angular(KetAngular, ket_derivative);
           const double ket_coefficient =
-              md.transforms[ket.transform_offset + ket_component * ket_hermites + ket_derivative];
+              md_j_transform(md, ket, ket_pair, ket_component, ket_derivative);
           if (ket_coefficient == 0.0) continue;
           double projected = 0.0;
           for (unsigned bra_derivative = 0; bra_derivative < bra_hermites; ++bra_derivative) {
             const double coefficient =
-                md.transforms[bra.transform_offset + bra_component * bra_hermites + bra_derivative];
+                md_j_transform(md, bra, bra_pair, bra_component, bra_derivative);
             if (coefficient == 0.0) continue;
             const auto bra_angular = md_hermite_angular(BraAngular, bra_derivative);
             projected += coefficient * local_auxiliary.at(0, bra_angular.x + ket_angular.x,
@@ -134,8 +134,7 @@ __device__ __forceinline__ void contract_source_task(
           const auto ket_angular = md_hermite_angular(KetAngular, ket_derivative);
           double value = 0.0;
           for (unsigned bra_derivative = 0; bra_derivative < bra_hermites; ++bra_derivative) {
-            const double coefficient =
-                md.transforms[bra.transform_offset + component * bra_hermites + bra_derivative];
+            const double coefficient = md_j_transform(md, bra, bra_pair, component, bra_derivative);
             if (coefficient == 0.0) continue;
             const auto bra_angular = md_hermite_angular(BraAngular, bra_derivative);
             value += coefficient * auxiliary.at(0, bra_angular.x + ket_angular.x,
@@ -152,9 +151,8 @@ __device__ __forceinline__ void contract_source_task(
                      ket_component = component % ket_components;
           double value = 0.0;
           for (unsigned derivative = 0; derivative < ket_hermites; ++derivative)
-            value +=
-                intermediate[bra_component * ket_hermites + derivative] *
-                md.transforms[ket.transform_offset + ket_component * ket_hermites + derivative];
+            value += intermediate[bra_component * ket_hermites + derivative] *
+                     md_j_transform(md, ket, ket_pair, ket_component, derivative);
           integrals[component] += value;
         }
         source_sync<group_threads>();
