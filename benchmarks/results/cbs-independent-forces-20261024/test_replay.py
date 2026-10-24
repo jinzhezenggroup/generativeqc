@@ -20,6 +20,82 @@ spec.loader.exec_module(replay)
 
 
 class ReplayTests(unittest.TestCase):
+    def test_terminal_metadata_rejects_source_or_execution_drift(self) -> None:
+        # Synthetic execution metadata only; this fixture contains no oracle energies.
+        initial = replay.execution_records()
+        freeze = json.loads(initial["source-freeze-final.json"])
+        environment = json.loads(initial["environment.json"])
+        inputs = json.loads(
+            lzma.decompress(Path(__file__).with_name("inputs.json.xz").read_bytes())
+        )
+        report = {
+            "status": "PASS",
+            "source_revision": freeze["revision"],
+            "host": environment["host"],
+            "dataset_sha256": inputs["dataset_sha256"],
+            "science_workers": [],
+            "mode_errors": [],
+            "cgroup": {k: environment["cgroup"][k] for k in ("cpu.max", "memory.max")},
+            "task_outcomes": {k: {"exit_code": 0} for k in inputs["tasks"]},
+            "controller_outcomes": {
+                k: {"exit_code": 0}
+                for k in ("suite.outcome.json", "launch/outcome.json")
+            },
+        }
+        for field, original in (
+            ("source", freeze["files"]),
+            ("libraries", environment["libraries"]),
+        ):
+            report[field] = {
+                k: {
+                    "expected_sha256": v["sha256"],
+                    "observed_sha256": v["sha256"],
+                    "bytes": v["bytes"],
+                }
+                for k, v in original.items()
+            }
+
+        def encoded(value: dict) -> dict:
+            return {
+                "terminal-postflight.json": json.dumps(value).encode(),
+                **{
+                    k: json.dumps(v).encode()
+                    for k, v in value["controller_outcomes"].items()
+                },
+            }
+
+        self.assertEqual(
+            replay.check_terminal(initial, encoded(report), inputs)["status"], "PASS"
+        )
+        for mutation in ("library", "size", "task", "worker", "mode", "exit"):
+            bad = copy.deepcopy(report)
+            if mutation == "library":
+                bad["libraries"][next(iter(bad["libraries"]))]["observed_sha256"] = (
+                    "0" * 64
+                )
+            elif mutation == "size":
+                bad["source"]["oracle.py"]["bytes"] += 1
+            elif mutation == "task":
+                del bad["task_outcomes"]["C7-h1-plus"]
+            elif mutation == "worker":
+                bad["science_workers"] = [{"pid": 1}]
+            elif mutation == "mode":
+                bad["mode_errors"] = [{"path": "fixture"}]
+            else:
+                bad["controller_outcomes"]["launch/outcome.json"]["exit_code"] = 124
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                replay.check_terminal(initial, encoded(bad), inputs)
+
+    def test_assembled_force_terms_match_constituents(self) -> None:
+        tools = replay.central_tools()
+        bundle, _ = tools.native_bundle()
+        native = copy.deepcopy(
+            next(p["native"] for p in bundle["points"] if p["carbon"] == 4)
+        )
+        native["samples"][0]["hf_forces"][0][0] += 1e-4
+        with self.assertRaises(AssertionError):
+            replay.vectors(native, native["protocol"], tools)
+
     def test_timeout_retained_and_strict_replay_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

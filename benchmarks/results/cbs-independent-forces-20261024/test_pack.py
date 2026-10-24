@@ -14,6 +14,46 @@ spec.loader.exec_module(pack)
 
 
 class PackTests(unittest.TestCase):
+    def test_collection_task_path_is_not_trusted_from_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = {
+                "schema": "generativeqc.independent-cbs-force-collection.v1",
+                "tasks": {"../escape": {"task": "../escape", "files": []}},
+            }
+            with self.assertRaises(ValueError):
+                pack.restore_collection(bundle, root / "restored", {"../escape"})
+            self.assertFalse((root / "restored").exists())
+            self.assertFalse((root / "escape").exists())
+
+    def test_collection_validates_before_creating_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "outcome.json").write_bytes(b'{"exit_code":124}\n')
+            task = {
+                "task": "C4-h0-minus",
+                "files": pack.inventory(source, pack.TASK_FILES, {}),
+            }
+            bundle = {
+                "schema": "generativeqc.independent-cbs-force-collection.v1",
+                "tasks": {"C4-h0-minus": task},
+            }
+            pack.restore_collection(bundle, root / "valid", {"C4-h0-minus"})
+            self.assertEqual(
+                (root / "valid/C4-h0-minus/outcome.json").read_bytes(),
+                b'{"exit_code":124}\n',
+            )
+            bad = copy.deepcopy(bundle)
+            bad["tasks"]["C4-h0-minus"]["files"][0]["path"] = "../escape"
+            with self.assertRaises(ValueError):
+                pack.restore_collection(bad, root / "invalid", {"C4-h0-minus"})
+            self.assertFalse((root / "invalid").exists())
+            with self.assertRaises(ValueError):
+                pack.restore_collection(bundle, root / "unknown", {"C7-h0-minus"})
+            self.assertFalse((root / "unknown").exists())
+
     def test_roundtrip_and_no_clobber(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

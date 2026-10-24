@@ -36,6 +36,60 @@ def central_tools() -> types.ModuleType:
     return module
 
 
+def execution_records(name: str = "execution-initial.json.xz") -> dict:
+    bundle = json.loads(lzma.decompress((HERE / name).read_bytes()))
+    assert bundle["schema"] == "generativeqc.cbs-force-execution-raw.v1"
+    files = {}
+    for entry in bundle["files"]:
+        raw = entry["utf8"].encode("utf-8")
+        assert entry["path"] not in files
+        assert len(raw) == entry["bytes"] and sha(raw) == entry["sha256"]
+        files[entry["path"]] = raw
+    return files
+
+
+def check_terminal(initial: dict, final: dict, inputs: dict) -> dict:
+    report = json.loads(final["terminal-postflight.json"])
+    freeze = json.loads(initial["source-freeze-final.json"])
+    environment = json.loads(initial["environment.json"])
+    config = json.loads(initial["run-config.json"])
+    assert report["status"] == "PASS"
+    assert report["source_revision"] == freeze["revision"] == config["source_revision"]
+    assert report["host"] == environment["host"]
+    assert report["dataset_sha256"] == inputs["dataset_sha256"]
+    assert not report["science_workers"] and not report["mode_errors"]
+    assert report["cgroup"] == {
+        k: environment["cgroup"][k] for k in ("cpu.max", "memory.max")
+    }
+    for field, expected in (
+        ("source", freeze["files"]),
+        ("libraries", environment["libraries"]),
+    ):
+        assert report[field].keys() == expected.keys()
+        for name, original in expected.items():
+            observed = report[field][name]
+            assert (
+                observed["expected_sha256"]
+                == observed["observed_sha256"]
+                == original["sha256"]
+            )
+            assert observed["bytes"] == original["bytes"]
+    assert report["task_outcomes"].keys() == inputs["tasks"].keys()
+    assert all(v["exit_code"] == 0 for v in report["task_outcomes"].values())
+    controllers = report["controller_outcomes"]
+    assert set(controllers) == {"suite.outcome.json", "launch/outcome.json"}
+    assert all(
+        v["exit_code"] == 0 and v == json.loads(final[k])
+        for k, v in controllers.items()
+    )
+    return {
+        "status": "PASS",
+        "source_revision": report["source_revision"],
+        "postflight_sha256": sha(final["terminal-postflight.json"]),
+        "task_count": len(report["task_outcomes"]),
+    }
+
+
 def validate_inputs(inputs: dict) -> None:
     original_raw = blob(f"{ENERGY}/inputs.json")
     original = json.loads(original_raw)
@@ -90,6 +144,17 @@ def vectors(native: dict, protocol: dict, tools: types.ModuleType) -> dict:
     assert all(v.shape == shape and np.isfinite(v).all() for v in rows.values())
     reconstructed = sum(tools.coefficients()[k] * rows[k] for k in tools.coefficients())
     assert np.max(np.abs(reconstructed - rows["composite"])) < 5e-12
+    h, m = protocol["hf_weights"], protocol["mp2_weights"]
+    terms = {
+        "hf_forces": h[0] * rows["low/rhf"] + h[1] * rows["high/rhf"],
+        "mp2_correlation_forces": m[0] * (rows["low/mp2"] - rows["low/rhf"])
+        + m[1] * (rows["high/mp2"] - rows["high/rhf"]),
+        "delta_ccsdt_forces": rows["low/df-ccsd(t)"] - rows["low/mp2"],
+    }
+    for key, expected in terms.items():
+        actual = np.asarray(sample[key], dtype=float)
+        assert actual.shape == shape and np.isfinite(actual).all()
+        assert np.max(np.abs(actual - expected)) < 5e-12
     return rows
 
 
@@ -106,8 +171,32 @@ def validate_receipt(
     assert record["protocol"] == inputs["protocols"][str(task["carbon"])]
     assert record["inputs_sha256"] == input_sha
     assert record["dataset_sha256"] == inputs["dataset_sha256"]
-    assert record["driver_sha256"] == sha((HERE / "oracle.py").read_bytes())
+    driver = subprocess.check_output(
+        [
+            "git",
+            "show",
+            "HEAD:benchmarks/results/cbs-independent-forces-20261024/oracle.py",
+        ]
+    )
+    assert record["driver_sha256"] == sha(driver)
     assert record["packages"]["pyscf"] == "2.14.0"
+    central_bundle = json.loads(
+        lzma.decompress(blob(f"{ENERGY}/receipts/C{task['carbon']}.json.xz"))
+    )
+    central_receipt = json.loads(central_bundle["receipt_json"])
+    assert record["source_files"] == central_receipt["source_files"]
+    execution = execution_records()
+    environment = json.loads(execution["environment.json"])
+    config = json.loads(execution["run-config.json"])
+    assert record["packages"] == environment["packages"]
+    assert record["host"] == environment["host"] == config["host"]
+    assert record["python"] == environment["python"]
+    assert record["executable"] == environment["executable"]
+    assert record["threads"] == config["threads"] == 4
+    assert record["max_memory_mb"] == config["pyscf_memory_mb"] == 8000
+    assert config["maximum_energy_calls"] == 8 and config["automatic_retries"] == 0
+    assert config["driver_sha256"] == record["driver_sha256"]
+    assert config["inputs_sha256"] == input_sha
     assert json.loads((folder.parent / "outcome.json").read_bytes())["exit_code"] == 0
     low, high = record["stages"]
     assert [low["cardinal"], high["cardinal"]] == [2, 3]
@@ -192,6 +281,8 @@ def main() -> None:
         "force_gate_eh_per_bohr": FORCE_GATE,
         "translation_gate_eh_per_bohr": TRANSLATION_GATE,
         "central_comparison_sha256": sha(blob(f"{ENERGY}/comparison.json")),
+        "expanded_cbs_coefficients": tools.coefficients(),
+        "directional_convention": "native F dot direction = -(E_plus-E_minus)/(2*h)",
         "molecules": [],
     }
     for carbon in (4, 7):
@@ -282,11 +373,30 @@ def main() -> None:
             "FAIL" if failed else "PASS" if len(completed) == 4 else "INCOMPLETE"
         )
     statuses = [r["status"] for r in result["molecules"]]
-    result["status"] = (
+    result["numerical_status"] = (
         "FAIL"
         if "FAIL" in statuses
         else "PASS"
         if statuses == ["PASS", "PASS"]
+        else "INCOMPLETE"
+    )
+    result["terminal_postflight"] = (
+        check_terminal(
+            execution_records(), execution_records("execution-final.json.xz"), inputs
+        )
+        if (HERE / "execution-final.json.xz").is_file()
+        else {
+            "status": "INCOMPLETE",
+            "reason": "Terminal source/environment records unavailable",
+        }
+    )
+    result["status"] = (
+        "FAIL"
+        if result["numerical_status"] == "FAIL"
+        else "PASS"
+        if result["numerical_status"]
+        == result["terminal_postflight"]["status"]
+        == "PASS"
         else "INCOMPLETE"
     )
     args.output.write_bytes(

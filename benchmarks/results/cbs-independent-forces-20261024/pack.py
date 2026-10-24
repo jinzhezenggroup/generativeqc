@@ -25,9 +25,11 @@ def inventory(root: Path, names: tuple, modes: dict) -> list:
     records = []
     for name in names:
         path = root / name
+        if path.is_symlink() or path.parent.is_symlink() or root.is_symlink():
+            raise ValueError(f"Refusing symlinked scientific input: {path}")
         if not path.exists():
             continue
-        if path.is_symlink() or not path.is_file():
+        if not path.is_file():
             raise ValueError(f"Only regular files: {path}")
         raw = path.read_bytes()
         text = raw.decode("utf-8")
@@ -44,8 +46,7 @@ def inventory(root: Path, names: tuple, modes: dict) -> list:
     return records
 
 
-def restore(bundle: dict, target: Path, allowed: tuple) -> None:
-    """Validate the complete record before creating a fresh restore directory."""
+def validate(bundle: dict, allowed: tuple) -> None:
     names = set()
     for record in bundle["files"]:
         name = record["path"]
@@ -60,6 +61,11 @@ def restore(bundle: dict, target: Path, allowed: tuple) -> None:
             and re.fullmatch(r"100[0-7]{3}", record["original_mode"]) is None
         ):
             raise ValueError("Unsupported original mode")
+
+
+def restore(bundle: dict, target: Path, allowed: tuple) -> None:
+    """Validate the complete record before creating a fresh restore directory."""
+    validate(bundle, allowed)
     target.mkdir(parents=True, exist_ok=False)
     for record in bundle["files"]:
         path = target / record["path"]
@@ -70,6 +76,26 @@ def restore(bundle: dict, target: Path, allowed: tuple) -> None:
             path.chmod(int(record["original_mode"][-3:], 8))
 
 
+def restore_collection(bundle: dict, target: Path, expected_tasks: set) -> None:
+    if bundle["schema"] != "generativeqc.independent-cbs-force-collection.v1":
+        raise ValueError("Unsupported scientific record collection")
+    # Input-provided task names cannot define the restoration trust boundary.
+    if any(
+        re.fullmatch(r"C[47]-h[01]-(minus|plus)", key) is None
+        for key in bundle["tasks"]
+    ):
+        raise ValueError("Unsafe scientific task name")
+    if not set(bundle["tasks"]) <= expected_tasks:
+        raise ValueError("Unexpected scientific task")
+    for key, task in bundle["tasks"].items():
+        if task["task"] != key:
+            raise ValueError("Scientific task identity mismatch")
+        validate(task, TASK_FILES)
+    target.mkdir(parents=True, exist_ok=False)
+    for key, task in bundle["tasks"].items():
+        restore(task, target / key, TASK_FILES)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path)
@@ -77,21 +103,15 @@ def main() -> None:
     args = parser.parse_args()
     tasks = json.loads(lzma.decompress((HERE / "inputs.json.xz").read_bytes()))["tasks"]
     if args.restore is not None:
-        if args.restore.exists():
-            raise FileExistsError(args.restore)
-        for key in tasks:
-            path = HERE / "receipts" / f"{key}.json.xz"
-            if path.is_file():
-                restore(
-                    json.loads(lzma.decompress(path.read_bytes())),
-                    args.restore / key,
-                    TASK_FILES,
-                )
+        bundle = json.loads(lzma.decompress((HERE / "receipts.json.xz").read_bytes()))
+        restore_collection(bundle, args.restore, set(tasks))
         return
     if args.raw is None:
         parser.error("Specify --raw or --restore")
-    target = HERE / "receipts"
-    target.mkdir(exist_ok=True)
+    collection = {
+        "schema": "generativeqc.independent-cbs-force-collection.v1",
+        "tasks": {},
+    }
     for key in tasks:
         root = args.raw / key
         mode_path = root / "modes.json"
@@ -104,11 +124,12 @@ def main() -> None:
             "task": key,
             "files": records,
         }
-        raw = (
-            json.dumps(bundle, ensure_ascii=False, separators=(",", ":")) + "\n"
-        ).encode()
-        with (target / f"{key}.json.xz").open("xb") as stream:
-            stream.write(lzma.compress(raw, preset=9))
+        collection["tasks"][key] = bundle
+    raw = (
+        json.dumps(collection, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode()
+    with (HERE / "receipts.json.xz").open("xb") as stream:
+        stream.write(lzma.compress(raw, preset=9))
 
 
 if __name__ == "__main__":
