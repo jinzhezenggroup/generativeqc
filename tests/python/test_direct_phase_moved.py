@@ -18,6 +18,38 @@ from benchmarks import direct_phase_moved as campaign
 
 
 class RetainedReplayTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX shallow temporary output regression")
+    def test_public_replay_accepts_shallow_output_with_original_audit(self) -> None:
+        repo = Path(campaign.__file__).resolve().parents[1]
+        replay = repo / "benchmarks/results/direct-phase-moved-20261023/reproduce.py"
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            output = Path(directory)
+            if len(output.resolve().parents) > 2:
+                self.skipTest("temporary directory resolves below the shallow boundary")
+            output.rmdir()  # restore requires a new destination; context owns cleanup.
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(replay),
+                    "--output",
+                    str(output),
+                    "--repo",
+                    str(repo),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "Restored and byte-verified 238 retained files", result.stdout
+            )
+            report = json.loads(result.stdout[result.stdout.index("{") :])
+            self.assertEqual(report["public_observable_cohort_status"], "PASS")
+            self.assertEqual(report["selected_timed_samples"], 28)
+            self.assertEqual(report["additional_cold_setup_count"], 4)
+
     def test_replay_child_keeps_assertions_with_ignored_parent_environment(
         self,
     ) -> None:

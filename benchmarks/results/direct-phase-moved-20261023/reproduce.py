@@ -9,6 +9,7 @@ import json
 import lzma
 import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
 
 # The immutable audit script uses assertions for its acceptance gates. Refuse
@@ -127,18 +128,28 @@ def main() -> None:
     )
     args = parser.parse_args()
     restore(Path(__file__).resolve().parent, args.output)
-    subprocess.run(
-        [
-            sys.executable,
-            "-E",  # Keep assertions enabled even if the parent ignored PYTHONOPTIMIZE.
-            str(args.output / "audit-selected.py"),
-            "--records",
-            str(args.output),
-            "--repo",
-            str(args.repo),
-        ],
-        check=True,
-    )
+    # The immutable audit eagerly evaluates a parents[3] CLI default even when
+    # --repo is supplied. Execute identical bytes at a sufficiently deep temporary
+    # path so any accepted output depth works; restored evidence stays untouched.
+    with tempfile.TemporaryDirectory(prefix="direct-phase-moved-") as directory:
+        audit = Path(directory) / "retained" / "audit" / "audit-selected.py"
+        audit.parent.mkdir(parents=True)
+        raw = (args.output / "audit-selected.py").read_bytes()
+        audit.write_bytes(raw)
+        if audit.read_bytes() != raw:
+            raise ValueError("temporary audit bytes differ")
+        subprocess.run(
+            [
+                sys.executable,
+                "-E",  # Keep assertions enabled if the parent ignored PYTHONOPTIMIZE.
+                str(audit),
+                "--records",
+                str(args.output.resolve()),
+                "--repo",
+                str(args.repo.resolve()),
+            ],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

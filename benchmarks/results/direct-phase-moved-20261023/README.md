@@ -171,6 +171,11 @@ receipts, inputs, scripts, trace, logs and failure evidence; their member SHA
 and sizes are independently checked. Old incomplete summaries keep their
 original status and dates and do not supersede the selected audit.
 
+Shallow output directories are supported. The wrapper runs a byte-identical
+temporary copy of the retained audit at sufficient path depth for its eager
+legacy CLI default, passing the actual records and repository paths explicitly.
+The temporary copy is removed after execution; restored evidence is unchanged.
+
 Collection-member Linux file modes were not observed and remain **UNAVAILABLE**.
 The replay restores bytes only; it does not infer modes from Windows or umask,
 and performs no `chmod`. This differs from the recorded Git/source modes and
