@@ -396,23 +396,28 @@ select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
 
-Strict-FP64 direct restricted VV10 initialization automatically admits full
+Strict-FP64 restricted VV10 initialization automatically admits bounded
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
-the existing reuse threshold, a 4 GiB value ceiling and complete host/device
+the existing reuse threshold, a 16 GiB value ceiling and complete host/device
 admission. Cold and transported-density initialization can prepare a lease;
 a retained warm call only reuses its audited immutable-geometry lease. It never
 builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
 selects ordinary Direct evaluation; explicit `1` retains the separately selected
 experimental capacity domain. The existing bucket mask and byte ceiling remain
-explicit controls. Capacity refusal, unsupported angular classes, fitted,
+explicit controls. The primary full-range J/K may be Direct or fitted; an
+independent strict Direct correction owns the range values. Both providers'
+host storage is charged, and omitted buckets retain ordinary exact execution.
+Capacity refusal, unsupported angular classes,
 lower-precision, incremental and externally budgeted device-ledger paths retain
 their existing providers.
 
 The lease binds geometry, radial operator and omega. It supplies only matching
 raw range K; primary full J/K and derivative owners remain independent.
 Successful solves rebase warm energy metadata with both incumbent exchange
-terms before optional values are retired. This preserves the physical replay
-gates and records the additional complete Fock and both exchange applications.
+terms before optional values are retired. An authenticated unchanged fitted
+primary retains its current J/K and final occupied projection during a range-only
+rebase. This preserves the physical replay gates and counts the operators
+actually executed.
 
 ## Prepared ragged execution
 

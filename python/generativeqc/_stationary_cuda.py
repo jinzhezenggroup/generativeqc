@@ -25,7 +25,6 @@ from types import MappingProxyType
 import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from generativeqc_compiler.common.cuda_runtime import CudaArtifact
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.common.execution import CompiledExecutionIdentity
 from generativeqc_compiler.common.native_call import checked_native_call
@@ -44,6 +43,7 @@ from generativeqc_compiler.dft.ao_map_plan import ExactAoMapResources
 from generativeqc_compiler.dft.cuda import (
     CudaGrid,
     GridTaskView,
+    NativeGridLibrary,
 )
 from generativeqc_compiler.dft.cuda import (
     compile_cuda as compile_grid,
@@ -2239,25 +2239,15 @@ def _stationary_source_cache_enabled() -> bool:
     return value == "1"
 
 
-def _native_grid_artifact(library: typing.Any, architecture: str) -> CudaArtifact:
-    """Bind the already built native CUDA grid code without recompilation."""
-    path = Path(library).resolve()
-    if not path.is_file():
-        raise FileNotFoundError(f"native CUDA library not found: {path}")
-    digest = file_hash(path)
-    identity = {
-        "schema": "generativeqc.native-grid-aot.v1",
-        "target": {"architecture": architecture},
-    }
-    return CudaArtifact(
-        path,
-        {
-            "identity": identity,
-            "binary_sha256": digest,
-            "key": canonical_hash({"identity": identity, "binary_sha256": digest}),
-            "artifact_kind": "native-build-aot",
-        },
-    )
+def _native_grid_artifact(library: typing.Any, architecture: str) -> NativeGridLibrary:
+    """Defer native-build identity to the admitted grid owner that consumes it.
+
+    No expected digest is supplied by this route. The owner hashes the complete
+    current binary before loading; ordinary compiled artifacts remain verified
+    against their externally supplied digest. Prepared owners retain the bound
+    artifact and rehash it on geometry refresh exactly as before.
+    """
+    return NativeGridLibrary(Path(library).resolve(), architecture)
 
 
 def _unique_prepared_artifacts(
@@ -2613,6 +2603,8 @@ class PreparedStationaryCudaExecution:
                     ),
                 )
             )
+            if isinstance(grid_artifact, NativeGridLibrary):
+                grid_artifact = grid.artifact
             sources = stack.enter_context(
                 _CudaSources(
                     basis,
@@ -3667,6 +3659,9 @@ def _complete_rks_cuda_gradient_diagnostic(
                         else ("rho",),
                     )
                 )
+                if isinstance(grid_artifact, NativeGridLibrary):
+                    grid_artifact = ao.artifact
+                    artifacts[1] = grid_artifact
                 sources = stack.enter_context(
                     _CudaSources(
                         basis,

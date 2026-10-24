@@ -101,7 +101,8 @@ __host__ __device__ bool bounded_direct_angular_owner(const DeviceBatch& batch,
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
           int FixedRadialOperator = -1, bool PairDerivatives = false,
-          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
+          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false,
+          unsigned MaximumAngularOrder = 12>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -115,6 +116,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only,
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
+  // A reduced call graph is admitted only by a proved host basis bound and a
+  // fixed LR operator. It changes neither the queue nor its angular ownership.
+  static_assert(MaximumAngularOrder == 12 ||
+                (MaximumAngularOrder == 8 && Force &&
+                 FixedRadialOperator == static_cast<int>(DirectRangeOperator::Long)));
   static_assert(!PairDerivatives || (Force && (FixedAngularOrder < 0 || FixedAngularOrder == 8)));
   static_assert(!CooperativeDerivatives ||
                 (Force && !PairDerivatives && (FixedAngularOrder == 6 || FixedAngularOrder == 7)));
@@ -521,21 +527,22 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     // Exact shell-class package consumed this SR/LR subtile.
                   } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Long) {
                     contract_bounded_direct_force_subtile_range_aot_scaled<
-                        Unrestricted, generativeqc::integrals::CoulombRange::Long, 300>(
-                        batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                        schwarz_bounds, density, active, output, exchange_coefficient, subtile,
-                        lane);
+                        Unrestricted, generativeqc::integrals::CoulombRange::Long, 300,
+                        MaximumAngularOrder>(batch, angular_order, &queue_count, queue + slot,
+                                             screening_tolerance, schwarz_bounds, density, active,
+                                             output, exchange_coefficient, subtile, lane);
                   } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Short) {
                     contract_bounded_direct_force_subtile_range_aot_scaled<
-                        Unrestricted, generativeqc::integrals::CoulombRange::Short, 300>(
-                        batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                        schwarz_bounds, density, active, output, exchange_coefficient, subtile,
-                        lane);
+                        Unrestricted, generativeqc::integrals::CoulombRange::Short, 300,
+                        MaximumAngularOrder>(batch, angular_order, &queue_count, queue + slot,
+                                             screening_tolerance, schwarz_bounds, density, active,
+                                             output, exchange_coefficient, subtile, lane);
                   } else {
                     const auto range = radial_operator == DirectRangeOperator::Long
                                            ? generativeqc::integrals::CoulombRange::Long
                                            : generativeqc::integrals::CoulombRange::Short;
-                    contract_bounded_direct_force_subtile_range_scaled<Unrestricted>(
+                    contract_bounded_direct_force_subtile_range_scaled<Unrestricted,
+                                                                       MaximumAngularOrder>(
                         batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                         schwarz_bounds, density, active, output, exchange_coefficient, range, omega,
                         subtile, lane);
@@ -890,6 +897,29 @@ void launch_bounded_direct_range_exchange_force_kernel(
   // This consumer publishes only range-separated K derivatives. Select its
   // raw-K linear bound and same-spin force-product bounds; the mixed J/K
   // defaults would retain distant Coulomb-only shell quartets unnecessarily.
+  if (radial_operator == DirectRangeOperator::Long && batch.direct_maximum_shell_angular <= 2U) {
+    // CUDA backs the largest reachable device-call frame, even when high-order
+    // branches never run. A through-d basis proves total order <= 8, allowing
+    // this one-pass queue to omit unreachable f-order callees. Retain exact
+    // omega, generated-shell selection, screening, and every admitted subtile.
+    // Unknown/f bases keep the complete dispatcher below; no context-wide
+    // stack limit is lowered while another owner may still require it.
+    const auto launch = [&]<bool Unrestricted>() {
+      bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, -1,
+                                          static_cast<int>(DirectRangeOperator::Long), false, false,
+                                          false, 8><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+          bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+          nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true,
+          block_domain);
+    };
+    if (unrestricted)
+      launch.template operator()<true>();
+    else
+      launch.template operator()<false>();
+    return;
+  }
   if (unrestricted) {
     bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(

@@ -213,3 +213,10 @@ fallback is explicit rather than silently dropping an actual JKFIT shell.
 
 Agent: ChatGPT
 Model: GPT-6 Astra Pro
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

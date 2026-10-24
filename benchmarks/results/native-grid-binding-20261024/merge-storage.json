@@ -1,0 +1,54 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5257b5bc7ef0d87cc3e1bf948043bbd28b85a8b6",
+  "file_count": 5,
+  "total_bytes": 379818,
+  "retention": "Lossless XZ preserves complete original bytes, numerical verdicts, samples, resource exclusions and provenance. Restore historical filenames for original publication readers; no new measurements or release assets.",
+  "files": [
+    {
+      "path": "benchmarks/results/fock-strategies/cpu/layout-diagnosis.json",
+      "bytes": 85335,
+      "sha256": "7dbbf9e2e53f81a0211ab2bbc1583e92e115c18acc565c6b2806e9c92d27a4c9",
+      "stored_path": "benchmarks/results/fock-strategies/cpu/layout-diagnosis.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 5728,
+      "stored_sha256": "65288aecf9813c19978f796333086d361fa722ead7f75331697f12709b137422"
+    },
+    {
+      "path": "benchmarks/results/fock-strategies/cpu/provenance.json",
+      "bytes": 36294,
+      "sha256": "33bd815e7eabdcbb137ce8465a387dc5f6cc81998c4704ea19775ebaa58a5b72",
+      "stored_path": "benchmarks/results/fock-strategies/cpu/provenance.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 1620,
+      "stored_sha256": "2ca40cb421367f511b7bed49c1b1c4c89c9fb434148c7c1453504ffabfe0b129"
+    },
+    {
+      "path": "benchmarks/results/fock-strategies/cuda/provenance.json",
+      "bytes": 81254,
+      "sha256": "b9a1ba03095f036b472fc5627b52d36def3623aca17a5223e171af413f2e6aa9",
+      "stored_path": "benchmarks/results/fock-strategies/cuda/provenance.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 2384,
+      "stored_sha256": "d426006fcf5fb8dc99701f886762cfe6196bdf3030844b58e848dbc55fd32896"
+    },
+    {
+      "path": "benchmarks/results/range-eri/cpu/samples.json",
+      "bytes": 84246,
+      "sha256": "fe6d540a39e40c42918ad15d3e2c209f20924503707a00d5f418fdba80d034e9",
+      "stored_path": "benchmarks/results/range-eri/cpu/samples.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 12676,
+      "stored_sha256": "0af5e5f2fe9886789dddc7f91a6c95d07cc909eff9625bfc10f7193a1c40c85e"
+    },
+    {
+      "path": "benchmarks/results/range-eri/cuda/resources.json",
+      "bytes": 92689,
+      "sha256": "eda0698ac5df595d629b675f2e7469c7997429bd4d55db2983adc1fa58e8c614",
+      "stored_path": "benchmarks/results/range-eri/cuda/resources.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 2460,
+      "stored_sha256": "1fba8f7580ff6630d7212c75d0b4981baa091648f5e5a358cae5fdc59cdb0d5f"
+    }
+  ]
+}

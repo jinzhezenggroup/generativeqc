@@ -66,5 +66,21 @@ struct RunOptions {
   bool optimization_plan_only{false};
 };
 
+// One policy for run/optimize and resource planning; independent of numerical
+// screening, which retains its existing CLI defaults. Correlated methods
+// deliberately keep their tighter reference-orbital stopping conditions.
+struct ScfConvergenceControls {
+  double energy_tolerance;
+  double density_tolerance;
+};
+
+[[nodiscard]] inline ScfConvergenceControls resolve_scf_convergence(const RunOptions& options,
+                                                                    bool correlated) noexcept {
+  const double default_energy = correlated ? 1.0e-12 : 1.0e-10;
+  const double default_density = correlated ? 1.0e-10 : 1.0e-8;
+  return {options.energy_tolerance.value_or(default_energy),
+          options.density_tolerance.value_or(default_density)};
+}
+
 }  // namespace generativeqc::cli
 #endif

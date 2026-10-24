@@ -73,6 +73,14 @@ rather than a claim that every file passes that target.
 
 ## Direct CUDA execution and density-fitting scope
 
+Prepared Direct and ordinary HF request a 16 KiB CUDA call stack when source
+metadata proves that every shell is at most d. F-containing and unknown domains
+retain the schedule's larger request. The shared runtime serializes the limit
+query and increase; it never lowers a larger limit belonging to another live
+consumer. Driver stack backing is outside explicit tensor allocations, so
+optional value caches and response panels also check actual free device memory.
+See the [resource-policy rationale](../../.agents/notes/implemented/performance/2026-10-23-through-d-stack-headroom.md).
+
 ### Optional phase-local exact RHF values
 
 Unset or `GENERATIVEQC_RHF_RESIDENT_VALUES=auto` selects a bounded automatic

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.occupied-xc-default-evidence.v1",
+  "base_revision": "72e0a7e5a011592428b5625acdfa6f19168645ac",
+  "receipts_sha256": "485742900892278eee58d927c699711ba336d1fb5d14da352648fda98482546d",
+  "receipts_bytes": 730016,
+  "native_builds": {
+    "master_library_sha256": "cd831a0c57ce8468bfc1326ce9c44639e8079076bc747e9f96feac3d676ea348",
+    "candidate_library_sha256": "498e00b0784020f4bffe6dee6d697315390b69ff2055f4c799d03639a52b90ae"
+  },
+  "raw_archive": {
+    "location": "node1:/data/jzzeng/direct-dft-occupied-default-20261024/qualified-evidence.tar.xz",
+    "bytes": 187341568,
+    "files": 249,
+    "sha256": "0c0f473425ac0a670ace10c52ac2d15986ae7a16484ac8e0468573f9a5c55436",
+    "contains": "Frozen sources, raw samples, all cohorts and failures, original replay script, build/cache logs and full Nsight traces. The tracked replay script adds fail-closed population-inventory checks after archive sealing; measured production and numerical records are unchanged."
+  }
+}

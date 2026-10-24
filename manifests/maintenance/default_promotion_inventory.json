@@ -165,15 +165,16 @@
         "src/scf/cuda/direct_jk_source_lease.cpp",
         "src/scf/cuda/direct_jk.cpp"
       ],
-      "rationale": "Automatic only for screened SPD strict-FP64 restricted VV10 native initialization with at least 65536 points, the existing reuse threshold and a 4 GiB optional value ceiling. Cold and moved initialization amortize one immutable geometry/radial source; warm calls never construct a new quartic source. Complete host/device admission, original screening, matching operator/omega and explicit off/capacity fallback remain mandatory. Larger and partial-source policies remain explicit experiments; #2426 remains open.",
-      "revisit_condition": "Require complete source-matched endpoints, independent energy/force gates and capacity/lifetime evidence before expanding the 4 GiB automatic domain; retain all failed 96-atom populations.",
+      "rationale": "Automatic screened SPD strict range sources serve restricted VV10 cold initialization with at least 65536 points, the existing reuse threshold and a 16 GiB optional ceiling. The independent Direct range correction may accompany a Direct or fitted full-range primary. Both providers host inventory and actual device headroom remain charged; omitted buckets stream exactly. Warm calls never construct a quartic source. Explicit zero, unsupported precision and public-ledger fallbacks remain. Fitted-default candidate endpoint qualification is tracked separately from earlier explicit-cache pilots.",
+      "revisit_condition": "Require source-matched complete cold/warm/moved endpoints, independent energy/force gates and capacity/lifetime evidence for any broader automatic domain; retain failed populations and do not relabel explicit-cache pilots as default evidence.",
       "evidence": [
         "docs/developer/xc_native_cuda.md",
         ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
         "tests/python/test_range_resident_values_cuda.py",
         "tests/python/test_range_resident_ks_cuda.py",
         "issue:#2426",
-        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md"
+        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
+        ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md"
       ]
     },
     {
@@ -2037,6 +2038,34 @@
         "tests/python/test_ks_mixed_source_cuda.py",
         "tests/python/test_ks_fast_strict_tail_cuda.py",
         "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
+      ]
+    },
+    {
+      "id": "ks.occupied-xc-density-features",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+      ],
+      "owner_issues": [
+        2577,
+        2703
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+      ],
+      "rationale": "Unset or 1 requests the existing token-bound canonical frame that formed the accepted density for strict-FP64 meta-GGA density features. Each tile chooses occupied projection only below its active AO rank. Completion retires the lease; held confirmations, rejected probes, imported densities, mixed/nonlocal/response and unsupported domains retain matrix contraction. Explicit 0 disables the request. No additional storage, screening or convergence relaxation is introduced. Current-source rotating Direct96 endpoints qualify a 3.89% r2SCAN-3c cold gain; all static and displaced observables pass. No broad small-system or warm speedup is claimed; separate noisy small-system cohorts remain visible.",
+      "revisit_condition": "Broaden frame lifetimes or eligible precision/method domains only with independent feature and complete cold/warm/moved force checks, actual frame/work counts and endpoint gain/nonregression gates. Preserve the explicit rollback and bounded matrix fallback.",
+      "evidence": [
+        "tests/python/test_xc_occupied_features.py",
+        "tests/python/test_xc_occupied_features_cuda.py",
+        "tests/python/test_xc_occupied_plan_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        "docs:docs/developer/xc_contractions.md",
+        "tests/python/test_xc_occupied_default_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-24-automatic-occupied-xc.md",
+        "benchmarks:benchmarks/results/occupied-xc-default-20261024/README.md"
       ]
     }
   ]

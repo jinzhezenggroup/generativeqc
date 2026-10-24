@@ -30,6 +30,8 @@ struct Invocation {
 };
 
 const Invocation* pending{};
+unsigned pending_count{}, pending_index{}, fail_submission{};
+cudaError_t last_launch_error{cudaSuccess};
 unsigned submissions{};
 const char* submission_error{};
 constexpr std::size_t shared_bytes = 37;
@@ -45,16 +47,17 @@ bool same(dim3 left, dim3 right) {
 void record(const void* kernel, dim3 grid, dim3 block, std::size_t shared,
             cudaStream_t actual_stream) {
   ++submissions;
-  if (!pending || !kernel) {
+  if (!pending || !kernel || pending_index >= pending_count) {
     submission_error = "unexpected CUDA submission";
     return;
   }
-  const auto& expected = *pending;
+  const auto& expected = pending[pending_index++];
   // The private kernel argument packet is intentionally opaque. Consistent
   // producer parameter reordering must not change this public admission gate.
   if (!same(grid, expected.grid) || !same(block, expected.block) || shared != expected.shared ||
       actual_stream != expected.source_stream)
     submission_error = "public CUDA launch configuration changed";
+  if (pending_index == fail_submission) last_launch_error = cudaErrorInvalidConfiguration;
 }
 
 void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::int32_t spins,
@@ -63,10 +66,21 @@ void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::in
             double* solve, double* coefficients, std::uint32_t* count, std::uint32_t* head,
             double* effective, double* cache, bool normalize = false,
             generativeqc::tensor::RingGramWork* work_record = nullptr, std::size_t shared = 0,
-            cudaStream_t source_stream = nullptr) {
-  const Invocation request{grid, block, shared, source_stream};
+            cudaStream_t source_stream = nullptr, unsigned fail_at = 0) {
+  // Large ordered histories stage the pending row before the owner update.
+  // Both submissions must preserve the caller's stream; only the update
+  // receives its dynamic shared storage and system-grid padding.
+  const bool staged = nbf >= 512 && history >= 2;
+  const Invocation requests[] = {staged
+                                     ? Invocation{dim3(batch, history + 1), 256, 0, source_stream}
+                                     : Invocation{grid, block, shared, source_stream},
+                                 {grid, 256, shared, source_stream}};
   const auto before = submissions;
-  pending = &request;
+  pending = requests;
+  pending_count = staged ? 2 : 1;
+  pending_index = 0;
+  fail_submission = fail_at;
+  last_launch_error = cudaSuccess;
   submission_error = nullptr;
   try {
     if (!normalize && !work_record)
@@ -84,9 +98,14 @@ void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::in
     throw;
   }
   pending = nullptr;
-  if (submissions != before + 1)
+  // A failed pending-row launch must prevent the update and remain visible
+  // to the caller. Inject failures at either stage without invoking CUDA.
+  const auto expected_count = fail_at ? fail_at : pending_count;
+  if (submissions != before + expected_count)
     throw std::runtime_error("admitted public launcher missed CUDA API interception");
   if (submission_error) throw std::runtime_error(submission_error);
+  if (last_launch_error != (fail_at ? cudaErrorInvalidConfiguration : cudaSuccess))
+    throw std::runtime_error("public launcher lost its CUDA submission error");
 }
 
 int probe() {
@@ -183,6 +202,19 @@ int probe() {
     submit(1, 32, 1, 3, 1, 2, &fock, &residual, &active, &fock_history, &residual_history, &solve,
            &rhs, &count, &head, &effective, &cache, normalize, work(), shared_bytes, stream());
 
+  // Exercise both sides of admission, singleton fallback and multi-system
+  // padded grids with nondefault stream/storage and either spin layout.
+  for (int nbf : {511, 512, 513})
+    for (int spins : {1, 2})
+      for (unsigned capacity : {1U, 2U, 8U})
+        for (bool normalize : {false, true}) {
+          const unsigned stages = nbf >= 512 && capacity >= 2 ? 2 : 1;
+          for (unsigned fail_at = 0; fail_at <= stages; ++fail_at)
+            submit(3, 32, 2, nbf, spins, capacity, &fock, &residual, &active, &fock_history,
+                   &residual_history, &solve, &rhs, &count, &head, &effective, &cache, normalize,
+                   work(), shared_bytes, stream(), fail_at);
+        }
+
   unsigned checked = 0, history;
   int batch, n, spins, expected;
   while (std::cin >> batch >> n >> spins >> history >> expected) {
@@ -209,7 +241,13 @@ extern "C" __attribute__((visibility("default"))) cudaError_t CUDARTAPI
 cudaLaunchKernel(const void* kernel, dim3 grid, dim3 block, void**, std::size_t shared,
                  cudaStream_t actual_stream) {
   record(kernel, grid, block, shared, actual_stream);
-  return cudaSuccess;
+  return last_launch_error;
+}
+
+// The staged wrapper peeks without clearing the launch error. Intercept this
+// host API too, so the recorder cannot probe a real GPU or initialize CUDA.
+extern "C" __attribute__((visibility("default"))) cudaError_t CUDARTAPI cudaPeekAtLastError() {
+  return last_launch_error;
 }
 
 int main() {

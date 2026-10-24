@@ -5,8 +5,8 @@
       "sha256": "dde4f87fe4b775c6090662e062cfe127ef51e272b9d4e9a5711dafca19b43cde"
     },
     {
-      "path": "provenance.json",
-      "sha256": "33bd815e7eabdcbb137ce8465a387dc5f6cc81998c4704ea19775ebaa58a5b72"
+      "path": "provenance.json.xz",
+      "sha256": "2ca40cb421367f511b7bed49c1b1c4c89c9fb434148c7c1453504ffabfe0b129"
     },
     {
       "path": "summary.json",
