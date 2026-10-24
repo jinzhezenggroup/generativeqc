@@ -163,9 +163,13 @@ The output must not already exist. This performs no SCI or GPU operation. It
 requires Python assertions: `-O`, `-OO` and active `PYTHONOPTIMIZE` are rejected
 before restoration or module import, since the immutable retained audit uses
 assertions for acceptance gates. Run the public replay entry point above. It
-checks publication hashes, restores every logical-record member with its
-original bytes/SHA-256, restores the full environment manifest, and recomputes
-all selected admission/numerical gates. `selected`, `diagnostics`, `cpu`, `sdk`,
+checks publication hashes, restores the numerical/protocol logical records with
+their original bytes/SHA-256, and recomputes all selected admission/numerical
+gates. `provenance.json` retains the measured commit, SDK/library identities,
+package versions, inventory counts and original manifest hashes. Full source,
+SDK and environment file lists and compiler commands are recovered separately
+from the [verified history snapshot](../retention-granularity-20261024/README.md);
+they are not inputs to the numerical audit. `selected`, `diagnostics`, `cpu`,
 `execution` and `protocols` are logical JSON.xz collections of exact original
 receipts, inputs, scripts, trace, logs and failure evidence; their member SHA
 and sizes are independently checked. Old incomplete summaries keep their
@@ -181,16 +185,17 @@ The replay restores bytes only; it does not infer modes from Windows or umask,
 and performs no `chmod`. This differs from the recorded Git/source modes and
 environment executable-bit observations authenticated by the original Linux
 preflights and retained inside the provenance manifests. Outer and member paths
-must be canonical and contained; duplicate entries (including the environment
-destination) and existing output are rejected. XZ decoding is bounded to 96 MiB
+must be canonical and contained; duplicate entries and existing output are rejected. XZ decoding is bounded to 96 MiB
 decoder memory and 16 MiB expanded bytes per record, with truncated or extra
 streams rejected. All selected bytes are validated before output creation.
 
-The environment manifest identifies dependencies, not redistributable package
-binaries. SDK/compiler identities, full source-file Git OIDs/modes/SHA and build
-commands are retained; SDK DSOs themselves are not stored in Git. The CPU
+The compact environment record identifies dependency versions, not redistributable
+package binaries. Full source-file Git OIDs/modes/SHA and build commands are
+retained in the pinned historical snapshot; SDK DSOs themselves were never
+stored in Git. The CPU
 dependency-closure source can be reconstructed from the measured Git revision
-and its explicit 928-file manifest, verifying each blob/mode. This restores
+and its explicit 928-file manifest in the retained protocol records, verifying
+each blob/mode. This restores
 source files, not the bytes of an old tar container. `driver.patch` reconstructs
 the then-untracked measured driver on the production revision. On Windows,
 apply that patch with `git -c core.autocrlf=false apply` to preserve the measured

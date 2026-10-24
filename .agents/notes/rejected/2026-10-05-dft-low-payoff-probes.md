@@ -63,3 +63,10 @@ domain while retaining the original ordered atom reductions.
 - Reproduce the Becke inputs using `benchmarks.becke_phased_probe --atoms 48 96
   --tiles 64 --tile-points 256`; compile with ccache, CUDA 12.9, `--fmad=false`,
   `--expt-relaxed-constexpr`, and `sm_120`, and execute through finite Slurm.
+
+## Historical driver recovery (2026-10-24)
+
+The issue-specific benchmark commands above refer to source-era drivers now in
+the [verified recovery snapshot](../../../benchmarks/results/retention-granularity-20261024/README.md). Restore their original bytes and
+source environment before following those commands. The historical rationale
+and numerical qualification in this note are unchanged.
