@@ -1,0 +1,95 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "PBE0/48 selected complete E+F samples and original independent quarter gates pass; public observable observer/cache conjunction only. Primitive/D0 unknown; WB97M-V/96 parent scope incomplete; no performance promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 13040,
+      "path": "cpu.json.xz",
+      "role": "samples",
+      "sha256": "cc014cf10d988c041bff4783b1dfb0205f1ce43c5a5513c24a99fe533c491ed5"
+    },
+    {
+      "bytes": 73364,
+      "path": "diagnostics.json.xz",
+      "role": "samples",
+      "sha256": "f052bc9efeeefd5f250f09f6174c5ce10476f44665d867e6123a8e8cc3588e0f"
+    },
+    {
+      "bytes": 86687,
+      "path": "driver.patch",
+      "role": "source-patch",
+      "sha256": "7103a0dac6e91f2824b737832f3ab619dcfccc8ec94a6a6d315cdd594d761fc3"
+    },
+    {
+      "bytes": 15200,
+      "path": "execution.json.xz",
+      "role": "input",
+      "sha256": "ad152f638dae789db0ed410ee41d102a234da3953cac4cf6312f4cabaf45d929"
+    },
+    {
+      "bytes": 111924,
+      "path": "protocols.json.xz",
+      "role": "input",
+      "sha256": "551aa119e00a3f33a7b3bf1e6220ad1fc3d174f3b6a8cb0da2de8de916a912b3"
+    },
+    {
+      "bytes": 12088,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "38a2d807fd2ca80d746c20c99119716dd2eeadd214681bec3ea04a22f8433e16"
+    },
+    {
+      "bytes": 5013,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "45e6244f181b4302d27113c9e4d0d46351dbfaa2d13d97479b5297f970e33fcb"
+    },
+    {
+      "bytes": 610368,
+      "path": "scientific-environment.json.xz",
+      "role": "input",
+      "sha256": "243fc173c6cfa04e214abf08cb7ac407216a9df931ab3251cfecdd47bd4d6b77"
+    },
+    {
+      "bytes": 863856,
+      "path": "sdk.json.xz",
+      "role": "input",
+      "sha256": "09b6d6277fa2a5d60f5a8775ef425dd81cf8670a5573ce3a11954f713fca39eb"
+    },
+    {
+      "bytes": 80872,
+      "path": "selected.json.xz",
+      "role": "samples",
+      "sha256": "9135363250895f9474aadb6f002a88c247611cc5e2586ee4afc5e2a006c67cfe"
+    },
+    {
+      "bytes": 5612,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "d6a015f2ba362815e02aba21e6d5b20d943c856d5abeefc05ffb8d3f0c7890a3"
+    },
+    {
+      "bytes": 3300,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "1f5d84478dc8f8c2fa17f4c1736ee809895d19b20c04618559af154f968fa0c8"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/direct-phase-moved-20261023/reproduce.py",
+      "--output",
+      ".artifacts/direct-phase-moved-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "ececb48cd56a00a56fbb6223dc53bc61dfe6e11d"
+  }
+}
