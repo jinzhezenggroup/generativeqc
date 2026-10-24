@@ -1147,7 +1147,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // trusted only when its complete values, geometry and plan identity match a
   // previously published resident/frozen state. Arbitrary external dm0,
   // changed geometry and partial warm batches take the bounded fallback.
-  bool force_ready_seed_provenance = !any_system_warm || device_resident_density_hit;
+  const bool force_ready_seed_provenance = !any_system_warm || device_resident_density_hit;
   // Final determinant orbitals are tracked inside the already allocated
   // weighted-density scratch. The Graph shape depends only on this plan-stable
   // force/reuse capability, not on whether a particular warm seed has valid
@@ -3279,20 +3279,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         plan, host, systems, options,
         {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active},
         *seed_diagnostics);
-    // Hückel publishes a density, not the matching core coefficient frame.
-    // Retain ordinary force canonicalization until a separately qualified
-    // seed-orbital contract can prove that first-iteration retained state.
-    if (std::any_of(seed_diagnostics->begin(), seed_diagnostics->end(), [](const auto& diagnostic) {
-          return diagnostic.outcome == initial_guess::PreliminaryOutcome::Used;
-        }))
-      force_ready_seed_provenance = false;
+    // A native cold guess has no previous-energy baseline, so it cannot pass
+    // the first convergence check. That iteration accepts its new density and
+    // copies the matching orbitals into weighted_density below. Consequently
+    // every later force-ready exit has a complete SCF-owned determinant even
+    // though Hückel itself publishes no orbitals. Keep unproven external/moved
+    // and partial warm batches on their existing canonical fallback.
   }
 
   if (track_force_final_orbitals && force_ready_seed_provenance) {
-    // Cold/core densities were projected from the coefficient buffer above. A
-    // resident warm hit keeps the previously published final coefficients in
-    // the same persistent arena. Seed the SCF-owned orbital frame before the
-    // iteration eigensolver overwrites the candidate coefficient buffer.
+    // Core and resident warm densities already match this coefficient frame.
+    // For Hückel this is only provisional: the mandatory first accepted SCF
+    // update replaces it before any force-ready exit. Seed the scratch before
+    // the iteration eigensolver overwrites the candidate coefficient buffer.
     launch_copy_matrix_kernel(blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
                               spin_matrix_elements, coefficients, weighted_density);
     cuda_error = cudaPeekAtLastError();
