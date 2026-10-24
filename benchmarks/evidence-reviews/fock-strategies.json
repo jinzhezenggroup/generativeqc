@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "fock-strategies",
+  "owner": "fock-strategies",
+  "reason": "Reviewed retained large evidence for Independent Fock provider production comparison. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/fock-strategies/README.md",
+  "files": []
+}

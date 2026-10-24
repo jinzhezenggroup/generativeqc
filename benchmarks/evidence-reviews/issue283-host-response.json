@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue283-host-response",
+  "owner": "issue283-host-response",
+  "reason": "Reviewed retained large evidence for Host DF response traversal (#283). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue283-host-response/README.md",
+  "files": [
+    {
+      "bytes": 143684,
+      "classification": "required-compact-accepted-evidence",
+      "family": "issue283-host-response",
+      "path": "benchmarks/results/issue283-host-response/raw-evidence.zip",
+      "role": "legacy-evidence-archive",
+      "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9"
+    }
+  ]
+}

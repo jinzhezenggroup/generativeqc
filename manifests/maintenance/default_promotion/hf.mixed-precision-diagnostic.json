@@ -1,0 +1,19 @@
+{
+  "id": "hf.mixed-precision-diagnostic",
+  "classification": "diagnostic-test-only",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD"
+  ],
+  "owner_issues": [
+    375
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "The environment threshold is a legacy diagnostic/qualification override. Product policy is the explicit public precision request, not an environment-variable default.",
+  "revisit_condition": "Retire the override after all retained qualification and audit workflows use the public precision policy and no historical reproduction depends on it.",
+  "evidence": [
+    "issue:#375",
+    "issue:#1598"
+  ]
+}

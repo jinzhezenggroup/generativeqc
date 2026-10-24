@@ -1,0 +1,22 @@
+{
+  "id": "tensor.cuda-graph-replay",
+  "classification": "retained-opt-in",
+  "controls": [
+    "tensor-execution:cuda-graph"
+  ],
+  "owner_issues": [
+    507
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/cuda_execute.py"
+  ],
+  "rationale": "Final policy: PreparedCuda keeps ordinary execution as the default; execution_mode=cuda-graph remains explicit. Historical TensorIR replay gains qualify those workloads but do not establish automatic capture admission for arbitrary prepared consumers. In particular, a global ResourcePlan has no qualified graph retained-storage candidate and therefore uses ordinary fallback. Explicit graph invalidation, identity checks, failure fallback and existing method-owned HF graphs remain unchanged; this decision concerns TensorIR automatic promotion only.",
+  "revisit_condition": "Reopen automatic capture only with a bounded graph-storage candidate in the complete resource owner, identity-safe invalidation, repeated complete-endpoint benefit including capture, and ordinary fallback on resource/capture/identity failure.",
+  "evidence": [
+    "issue:#507",
+    "issue:#1598",
+    "docs/developer/tensor_cuda.md",
+    "tests/python/test_cuda_graph_region.py",
+    ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+  ]
+}

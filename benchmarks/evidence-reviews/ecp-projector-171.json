@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ecp-projector-171",
+  "owner": "ecp-projector-171",
+  "reason": "Reviewed retained large evidence for Generated scalar ECP radial/projector migration. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/ecp-projector-171/README.md",
+  "files": [
+    {
+      "bytes": 142575,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ecp-projector-171",
+      "path": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip",
+      "role": "legacy-evidence-archive",
+      "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
+    }
+  ]
+}

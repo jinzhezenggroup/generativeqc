@@ -1,0 +1,19 @@
+{
+  "id": "hf.bounded-direct-streaming",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_STREAMING"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "Normal direct-HF execution already selects bounded streaming when the fixed descriptor grid or its memory budget requires it; the environment variable is an explicit schedule override.",
+  "revisit_condition": "Retire the override after forced-path endpoint qualification no longer needs it; changes to automatic admission still require matched endpoint evidence.",
+  "evidence": [
+    "docs:docs/developer/weighted_eri.md",
+    "issue:#1598"
+  ]
+}

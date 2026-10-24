@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "scf-direct-native-rtx5090",
+  "owner": "scf-direct-native-rtx5090",
+  "reason": "Reviewed retained large evidence for Direct-native extraction validation. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/scf-direct-native-rtx5090/README.md",
+  "files": []
+}

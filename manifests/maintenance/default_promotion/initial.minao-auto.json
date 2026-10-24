@@ -1,0 +1,22 @@
+{
+  "id": "initial.minao-auto",
+  "classification": "already-default",
+  "controls": [
+    "initial-guess:minao-auto"
+  ],
+  "owner_issues": [
+    2052
+  ],
+  "sources": [
+    "python/generativeqc/calculator.py",
+    "python/generativeqc/initial_guess.py",
+    ".agents/notes/implemented/performance/2026-10-07-minao-default.md"
+  ],
+  "rationale": "Automatic MINAO remains the compatibility default for older libraries without native Huckel support, guarded to its original FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS domains. Existing densities take precedence, unsupported batches retain Hcore and explicit None rolls back. Current libraries prefer the separately registered native Huckel default.",
+  "revisit_condition": "Revisit for root/state regressions, complete-endpoint regressions, or broader provider/domain qualification. Do not turn on HF/LDA preliminary solves, DF, UKS, ECP, mixed precision, or unsupported elements through this default.",
+  "evidence": [
+    "pr:#2068",
+    "note:.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md",
+    "note:.agents/notes/implemented/performance/2026-10-07-minao-default.md"
+  ]
+}

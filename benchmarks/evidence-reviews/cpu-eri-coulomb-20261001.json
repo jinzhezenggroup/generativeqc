@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cpu-eri-coulomb-20261001",
+  "owner": "cpu-eri-coulomb-20261001",
+  "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
+  "review_document": "benchmarks/results/cpu-eri-coulomb-20261001/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 260076,
+      "sha256": "db62aeb3120ef84b8986101e83063104cf1b5e95d0c792929833379c215745d1",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete primary normalized 960-endpoint numerical/timing observations, individual process outputs and logs, all-repeat errors, provenance and frozen inputs; only the byte-exact reconstructible duplicate observations aggregate is omitted."
+    },
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.xz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 141068,
+      "sha256": "45f32b74c895322b951bb3c58ed1056247745273739f50f2009dcd3ff288892e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
+    },
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.xz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 195548,
+      "sha256": "f46dfb1eb56a74c14c32641924ff49f88b6da87894a44992bbe0d7e8b49b2a35",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
+    }
+  ]
+}

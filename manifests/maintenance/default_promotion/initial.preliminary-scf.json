@@ -1,0 +1,23 @@
+{
+  "id": "initial.preliminary-scf",
+  "classification": "needs-qualification",
+  "controls": [
+    "initial-guess:preliminary-scf"
+  ],
+  "owner_issues": [
+    1702,
+    192
+  ],
+  "sources": [
+    "python/generativeqc/calculator.py",
+    "python/generativeqc/initial_guess.py",
+    ".agents/notes/implemented/performance/2026-10-02-preliminary-scf.md"
+  ],
+  "rationale": "HF/LDA preliminary SCF can reduce target iterations and has profitable measured domains, but it adds a second solve and can change the SCF trajectory/root. Existing evidence is intentionally domain-specific, so normal target execution must not silently insert it.",
+  "revisit_condition": "Promote only through an explicit source/model/workload guard with complete source+target endpoint benefit, unchanged final target-state gates, root/state comparison and deterministic cold fallback. Otherwise retain the explicit initial-guess request.",
+  "evidence": [
+    "pr:#1702",
+    "issue:#192",
+    "note:.agents/notes/implemented/performance/2026-10-02-preliminary-scf.md"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "density-candidates",
+  "owner": "density-candidates",
+  "reason": "Reviewed retained large evidence for Registered D/C candidates and larger workloads (#235 / #303). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/density-candidates/README.md",
+  "files": [
+    {
+      "bytes": 396572,
+      "classification": "test-reference-input",
+      "family": "density-candidates",
+      "path": "benchmarks/results/density-candidates/inputs/co2_tzvp.npz",
+      "role": "reference-input",
+      "sha256": "8ea913c0e662945a1229972783c0ab1423cd441bf01429d61343435b41665c6f"
+    },
+    {
+      "bytes": 475350,
+      "classification": "test-reference-input",
+      "family": "density-candidates",
+      "path": "benchmarks/results/density-candidates/inputs/water4_svp.npz",
+      "role": "reference-input",
+      "sha256": "72a9be35a2b0edca1d772a797b0ca2ee86e1e329c2c3adeae4ce1865b6977d1d"
+    },
+    {
+      "bytes": 796419,
+      "classification": "test-reference-input",
+      "family": "density-candidates",
+      "path": "benchmarks/results/density-candidates/inputs/water8_svp.npz",
+      "role": "reference-input",
+      "sha256": "ea31c1b46cfb03c8101e169d8cb756dd30f4296661a5bbbdda47a95d75477d76"
+    },
+    {
+      "bytes": 135945,
+      "classification": "test-reference-input",
+      "family": "density-candidates",
+      "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
+      "role": "reference-input",
+      "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
+    }
+  ]
+}

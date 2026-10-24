@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue206-stable-response",
+  "owner": "issue206-stable-response",
+  "reason": "Reviewed retained large evidence for Full-rank response and physical force-state evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue206-stable-response/README.md",
+  "files": []
+}

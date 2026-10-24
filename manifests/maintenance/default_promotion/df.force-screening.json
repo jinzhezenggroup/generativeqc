@@ -1,0 +1,21 @@
+{
+  "id": "df.force-screening",
+  "classification": "negative-evidence",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_FORCE_SCREEN_ABS"
+  ],
+  "owner_issues": [
+    406,
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "The earlier SSS primitive force screen is explicitly off by default; its small measured complete-endpoint gain does not establish automatic promotion. Whole-shell Coulomb-norm screening is registered separately.",
+  "revisit_condition": "Require changed-geometry force endpoints, resource accounting, and existing numerical gates before any nonzero automatic screening budget is admitted.",
+  "evidence": [
+    "issue:#406",
+    "docs:docs/developer/df_tuning.md",
+    "issue:#1598"
+  ]
+}

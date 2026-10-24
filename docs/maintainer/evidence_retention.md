@@ -306,6 +306,16 @@ one of the issue's retention classes (`required-compact-accepted-evidence` or
 document and the reason the large records remain in Git. This is a storage
 classification, not a new numerical acceptance decision.
 
+The root review file is now a **stable v2 index**, not a mutable ledger.
+Each experiment owns `benchmarks/evidence-reviews/<family>.json`, which
+contains its original owner, rationale, review document and hash-bound file
+rows. The retention checker assembles these files deterministically and
+enforces the same complete coverage, size, digest and review-document gates;
+a missing or corrupt shard fails closed. New experiments create only their
+own shard, so unrelated pull requests need not edit one global JSON.
+The publication compactor updates only the owning family's shard. No generated
+aggregate is checked into Git.
+
 `tools/evidence.py check` requires complete coverage at the threshold configured
 in `benchmarks/evidence-policy.json`. Missing review data, a changed hash, a
 missing review document or a newly tracked large result fails closed. The 128 KiB
