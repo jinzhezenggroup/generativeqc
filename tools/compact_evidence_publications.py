@@ -631,6 +631,28 @@ def _check_index(originals: dict[str, bytes], index: dict[str, bytes]) -> None:
             )
 
 
+def _check_publications(targets: tuple[str, ...]) -> None:
+    """Check every publication without retaining the repository's raw payloads.
+
+    Each plan keeps the existing member and batch limits. Only path identities
+    survive between plans so overlapping inventories still fail closed. This
+    read-only path does not change the atomic mutation/pre-commit batch policy.
+    """
+    seen: set[str] = set()
+    for target in targets:
+        plan = plan_publication(target, strict=False, budget=Budget())
+        if seen & plan.originals.keys():
+            raise ValueError("overlapping publication inventories")
+        seen.update(plan.originals)
+        if plan.changes:
+            raise SystemExit("retained evidence JSON is not compacted")
+        # Release original bytes before constructing the next bounded plan.
+        del plan
+    print(
+        f"compressed evidence publications: {len(targets)} eligible manifests, up to date"
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -662,6 +684,9 @@ def main(argv: list[str] | None = None) -> None:
         if args.pre_commit
         else tuple(args.publication or publication_paths())
     )
+    if args.check:
+        _check_publications(targets)
+        return
     # Plan every selected publication before any mutation, including a later
     # invalid bundle, stale review row or unknown cross-publication binding.
     budget = Budget()
