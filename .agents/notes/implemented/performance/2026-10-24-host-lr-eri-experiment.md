@@ -126,3 +126,8 @@ Same-source independent E+F gates and repeated complete endpoints establish a
 benefit at water96/108, with actual transfer/recurrence time and semantic counts.
 Only then consider measured bucket selection or a default policy. Host-only
 admission would require its own capacity, lifetime and endpoint qualification.
+
+## Superseding default policy
+
+The [automatic host policy](2026-10-25-default-host-eri-capacity.md) supersedes
+the opt-in default. The original measured cohort and limitations remain unchanged.

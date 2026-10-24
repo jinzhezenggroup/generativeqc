@@ -25,7 +25,16 @@ def _auxiliary_basis(fitted: bool) -> Any:
 
 @pytest.mark.parametrize(
     "policy",
-    ["full", "partial", "refused", "auto", "auto-refused", "host", "host-refused"],
+    [
+        "full",
+        "partial",
+        "refused",
+        "auto",
+        "auto-refused",
+        "host",
+        "host-auto",
+        "host-refused",
+    ],
 )
 @pytest.mark.parametrize("fitted", (False, True))
 def test_range_source_preserves_complete_geometry_and_warm_results(
@@ -64,7 +73,9 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", str(int(enabled)))
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
-            "0x1555" if policy in {"partial", "host", "host-refused"} else "0xfffffff",
+            "0x1555"
+            if policy in {"partial", "host", "host-auto", "host-refused"}
+            else "0xfffffff",
         )
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
@@ -87,6 +98,8 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             if policy == "host-refused"
             else "0",
         )
+        if policy == "host-auto":
+            monkeypatch.delenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES")
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES", "4096")
         calculator = Calculator(
             method="wb97m-v",
@@ -127,7 +140,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         host_bytes = [
             r["value"] for r in rows if r.get("key") == "host_source_value_bytes"
         ]
-        assert any(host_bytes) == (enabled and policy == "host")
+        assert any(host_bytes) == (enabled and policy in {"host", "host-auto"})
         admitted = enabled and policy not in {"refused", "auto-refused"}
         # Fitted primary plus exact LR is an explicit composition candidate;
         # automatic selection must retain its existing fallback.

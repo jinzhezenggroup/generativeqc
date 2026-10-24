@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tier", choices=("direct", "gpu", "host"))
+    parser.add_argument("tier", choices=("direct", "gpu", "host", "auto"))
     parser.add_argument("--gpu-bytes", type=int, default=16 << 30)
     parser.add_argument("--host-bytes", type=int, default=32 << 30)
     parser.add_argument("--tile-bytes", type=int, default=256 << 20)
@@ -52,6 +52,13 @@ def main() -> None:
     # Freeze automatic GPU bucket fitting identically in B and C. An inherited
     # explicit mask would silently turn the experiment into a different policy.
     os.environ.pop("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK", None)
+    if args.tier == "auto":
+        for name in (
+            "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
+            "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
+        ):
+            controls.pop(name)
+            os.environ.pop(name, None)
     os.environ.update(controls)
     from benchmarks import readme_defaults as driver
     from benchmarks import readme_hf_scaling

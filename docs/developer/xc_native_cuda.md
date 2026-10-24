@@ -516,9 +516,12 @@ actually executed.
 
 ### Experimental pageable LR ERI backing
 
-`GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES` opts strict long-range value leases into
-an additional pageable FP64 cache. It defaults to zero. The ceiling includes
-pageable values, two pinned staging tiles and host descriptors;
+`GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES` bounds the additional pageable FP64
+cache for admitted cold strict long-range sources. Unset selects the smaller of
+32 GiB and one quarter of available host memory, respecting Linux cgroup/job
+limits and usage at every ancestor. Unknown capacity disables automatic host
+storage. Set `0` to disable it or a byte count for an explicit ceiling. The
+ceiling includes pageable values, two pinned staging tiles and host descriptors;
 `GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES` caps each tile (default 256 MiB, maximum
 512 MiB, divisible by eight). Tiles shrink to fit remaining device capacity
 without evicting GPU buckets; diagnostic traces report the actual staging bytes.

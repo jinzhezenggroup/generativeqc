@@ -34,6 +34,7 @@
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -567,11 +568,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
-    // Host caching is opt-in and scoped to strict LR exchange. The RAM ceiling
-    // includes pinned staging; the complete numeric budget also charges VRAM.
-    const auto host =
-        direct_jk_resident_bucket_policy(std::getenv("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"),
-                                         std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"), 0);
+    // Default host backing is restricted to the admitted cold strict LR
+    // source. Preserve GPU priority and leave most available job RAM unused.
+    // Explicit zero disables it; the complete numeric budget also charges VRAM.
+    const auto automatic_host = has_range_correction && source_cold_phase && !mixed_source &&
+                                        !std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES")
+                                    ? runtime::automatic_host_cache_bytes()
+                                    : 0;
+    const auto host = direct_jk_resident_bucket_policy(
+        std::getenv("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"),
+        std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"), automatic_host);
     const auto host_tile = direct_jk_resident_bucket_policy(
         nullptr, std::getenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES"), 256ULL << 20);
     if (has_range_correction &&
