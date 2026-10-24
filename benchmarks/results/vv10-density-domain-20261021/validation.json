@@ -1,0 +1,276 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Default molecular VV10 rho>=1e-10 domain",
+  "inputs_hash": "bc9b6f8d0722a525d824c07d26f19cc8d041244ed8dec5ff228f247f15f71be7",
+  "revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "c9f67ec4739c3c90839bc6a0002f4e5e869dcbf728ec2e3dfb4a692607af52dc",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Existing VV10 mathematics and schedules with versioned molecular density domain rho>=1e-10; exact producer revision and default-policy payload retained.",
+    "ir": "Existing VV10 mathematics and schedules with versioned molecular density domain rho>=1e-10; exact producer revision and default-policy payload retained.",
+    "schedule": "Existing VV10 mathematics and schedules with versioned molecular density domain rho>=1e-10; exact producer revision and default-policy payload retained."
+  },
+  "device": {
+    "backend": "cuda",
+    "device_id": 0,
+    "name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "total_global_memory_bytes": 33668988928,
+    "multiprocessor_count": 170,
+    "clock_rate_khz": 2550000,
+    "driver_version": 13000,
+    "runtime_version": 12090,
+    "nvidia_smi": {
+      "performance_state": "P8",
+      "power_draw_watts": 16.08,
+      "power_limit_watts": 600.0,
+      "sm_clock_mhz": 195.0,
+      "memory_clock_mhz": 405.0,
+      "temperature_celsius": 26.0,
+      "sampling_point": "after benchmark measurements"
+    }
+  },
+  "toolchain": {
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/usr/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "packages": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.8.1",
+      "cupy": "13.6.0",
+      "numpy": "2.4.6"
+    }
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "density_threshold": 1e-10,
+    "active_comparison": ">=",
+    "weight_cutoff_native": 0,
+    "weight_cutoff_reference": 1e-14,
+    "common_gates": {
+      "energy_abs_per_atom": 1e-05,
+      "force_max_abs": 0.0001,
+      "force_rms": 3e-05
+    }
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "node": "n1",
+    "scheduler": "Slurm",
+    "seed_test_job": "11407"
+  },
+  "stages": {
+    "representation": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "library_sha256": "858797f08a431952b65b235650ae311de7c4d0315579ceeefe8555ef53609a50"
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "39 real-device six-channel force-seed tests; all16 complete E/F samples pass stable independent denser-reference gates and same-grid CPU/GPU spots."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Standard3/12/48 and Fast12, cold plus three frozen-density warm calls."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {},
+  "block_errors": {
+    "fast-wb97m-v-direct-12.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 2.3817309132330897e-07,
+      "max_scaled_error": 0.023817309132330895,
+      "rms_error": 2.3801959033087508e-07,
+      "shape": [
+        4
+      ]
+    },
+    "fast-wb97m-v-direct-12.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 4.257201814983347e-05,
+      "max_scaled_error": 0.4257201814983347,
+      "rms_error": 2.2103816048362126e-05,
+      "shape": [
+        4
+      ]
+    },
+    "fast-wb97m-v-direct-12.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.4262259803598462e-05,
+      "max_scaled_error": 0.4754086601199487,
+      "rms_error": 7.629012986085474e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-12.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 2.3793448159873756e-07,
+      "max_scaled_error": 0.023793448159873755,
+      "rms_error": 2.3793448159873756e-07,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-12.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 6.13417978190256e-06,
+      "max_scaled_error": 0.0613417978190256,
+      "rms_error": 6.134179777739224e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-12.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.917302477713555e-06,
+      "max_scaled_error": 0.06391008259045183,
+      "rms_error": 1.9173024762697575e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-3.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.009791551117208e-07,
+      "max_scaled_error": 0.01009791551117208,
+      "rms_error": 1.009791551117208e-07,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-3.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 2.1747339307154334e-06,
+      "max_scaled_error": 0.021747339307154334,
+      "rms_error": 2.1747339282729428e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-3.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.2093162387419048e-06,
+      "max_scaled_error": 0.04031054129139682,
+      "rms_error": 1.2093162377572794e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-48.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 4.856204517030468e-07,
+      "max_scaled_error": 0.04856204517030468,
+      "rms_error": 4.856204517030468e-07,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-48.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 2.215478657588421e-05,
+      "max_scaled_error": 0.2215478657588421,
+      "rms_error": 2.215478654445796e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-wb97m-v-direct-48.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.0469244618001208e-05,
+      "max_scaled_error": 0.34897482060004026,
+      "rms_error": 1.0469244613052052e-05,
+      "shape": [
+        4
+      ]
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "SCF and Fast solve census retained for every endpoint.",
+  "attachments": [
+    {
+      "path": "receipts.json.xz",
+      "sha256": "747f2b0dbca96e853e740535071d951b3c6a9a4334d4791d5f5665c0d298459e"
+    },
+    {
+      "path": "endpoint-checks.json",
+      "sha256": "fdc8a4ad89e3d423f0f0ded00f4a9abb151a4d112081cfd54ce4c1cef09119c6"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "This is a numerical-domain correction; no universal or interleaved performance promotion."
+  }
+}

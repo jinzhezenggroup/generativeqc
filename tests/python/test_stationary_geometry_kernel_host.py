@@ -71,7 +71,7 @@ namespace generativeqc_grid_adjoint {
 struct CenterPair {};
 bool contract_point_prepared(const double*,const double*,size_t,int64_t owner,double scale,
                     double* grad,double*,double*,double*,double*,size_t*,
-                    std::array<double,4>*,int,int,int,int,const CenterPair*,int) {
+                    std::array<double,4>*,int,int,int,int,const CenterPair*,int,const double*) {
   for(size_t k=0;k<3;++k) grad[3*owner+k]+=scale*(k+1);
   return true;
 }
@@ -88,7 +88,7 @@ int main(int argc,char**) {
   double sentinel=123, zero_output[9]{};
   int zero_error=0;
   kernel(empty,nullptr,nullptr,nullptr,0,0,nullptr,1,nullptr,nullptr,nullptr,0,0,
-         0,&sentinel,&sentinel,nullptr,&zero_error,false);
+         0,&sentinel,&sentinel,nullptr,&zero_error,false,nullptr);
   for(size_t j=0;j<9;++j) {
     blockIdx.x=0; blockDim.x=128; threadIdx.x=j;
     geometry_reduce(&sentinel,1,0,zero_output,&zero_error);
@@ -135,7 +135,7 @@ int main(int argc,char**) {
           kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
                  implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
                  external?seeds.data():nullptr,total+7,begin+3,
-                 lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false);
+                 lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false,nullptr);
         }
         if(error) return 1;
         if(partial.front()!=987654 || partial.back()!=987654 ||
@@ -150,7 +150,7 @@ int main(int argc,char**) {
         blockIdx.x=threadIdx.x=0;
         const auto prior=result;
         kernel(view,work.data(),ao_atoms,owners.data(),0,0,centers,na,weights.data(),raw.data(),
-               nullptr,0,0,lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false);
+               nullptr,0,0,lanes,partial.data()+1,scratch.data()+1,nullptr,&error,false,nullptr);
         for(size_t j=0;j<9*na;++j) {
           blockIdx.x=j/threads; threadIdx.x=j%threads;
           geometry_reduce(partial.data()+1,na,lanes,result.data(),&error);
@@ -283,7 +283,7 @@ int main() {
                 geometry_kernel<double>(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
                                 implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
                                 nullptr,0,0,active,partial.data(),scratch.data(),
-                                cached?pairs.data():nullptr,&error,false);
+                                cached?pairs.data():nullptr,&error,false,nullptr);
               }
               for(size_t j=0;j<9*na;++j) {
                 blockIdx.x=j/32; threadIdx.x=j%32;

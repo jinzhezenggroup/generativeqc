@@ -60,6 +60,7 @@ struct Model {unsigned version=1,functional=1,scf_domain_version=1,tile_points=2
  int device=0,grid=1;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;
  std::optional<scf::Fock> range_correction;
  std::optional<int> nonlocal_correlation;
+ std::optional<int> nonlocal_grid;
  nlc::Vv10DensityDomain nonlocal_density_domain=nlc::Vv10DensityDomain::MolecularV1;};
 struct KsFinalStateIdentity {
  Model model;

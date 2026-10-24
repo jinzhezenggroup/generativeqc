@@ -162,3 +162,10 @@ samples, numerical evidence, source reconstruction and current production
 inventories are unchanged. For full-layout reproduction, restore the snapshot
 using the instructions in [retention-checkout](../retention-checkout/README.md).
 No Release, tag, upload or implicit history fetch is used.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/xc-bounded-cross-20261024/history-storage.json --output
+.artifacts/xc-bounded-cross-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

@@ -1,4 +1,8 @@
-"""Host arithmetic checks for the real ordered adapter; not CUDA qualification."""
+"""Host arithmetic checks for the real ordered adapter; not CUDA qualification.
+
+Public launch admission is exercised by the required no-GPU native driver in
+tests/native/test_ordered_gram_host_admission.cpp and its integer-oracle runner.
+"""
 
 from __future__ import annotations
 
@@ -106,7 +110,33 @@ void one_case(unsigned capacity, std::size_t elements, bool normalized) {
   }
 }
 
+void continuation_cases() {
+  using generativeqc::tensor::generated::ordered_history_dot;
+  for (std::size_t elements : {0U, 1U, 255U, 256U, 257U, 1025U}) {
+    std::vector<double> left(elements), right(elements);
+    for (std::size_t i = 0; i < elements; ++i) {
+      left[i] = std::sin(0.13 * (i + 1));
+      right[i] = std::cos(0.07 * (i + 2));
+    }
+    for (double seed : {0.0, -0.03125}) {
+      double expected = seed;
+      for (std::size_t i = 0; i < elements; ++i) expected += left[i] * right[i];
+      for (std::size_t width : {1U, 7U, 256U}) {
+        double actual = seed;
+        for (std::size_t begin = 0; begin < elements; begin += width)
+          actual = ordered_history_dot(left.data() + begin, right.data() + begin,
+                                       std::min(width, elements - begin), actual);
+        if (!same(actual, expected))
+          throw std::runtime_error("transport tiles reassociated the ordered dot");
+      }
+      if (!same(ordered_history_dot(left.data(), right.data(), elements, seed), expected))
+        throw std::runtime_error("ordered continuation changed the scalar recurrence");
+    }
+  }
+}
+
 int main() {
+  continuation_cases();
   unsigned cases = 0;
   for (unsigned capacity = 2; capacity <= 64; ++capacity)
     for (std::size_t elements : {1U, 9U, 37U})
@@ -134,89 +164,3 @@ int main() {
         [str(executable)], check=True, capture_output=True, text=True, timeout=60
     )
     assert result.stdout == "378 ordered adapter cases passed\n"
-
-
-def test_ordered_launch_admission(
-    tmp_path: Path, required_native_cxx: NativeCxx
-) -> None:
-    import re
-
-    # Compile the production host admission body with the CUDA launch replaced
-    # by a recorder. This proves rejection occurs before launch; it is not a
-    # compilation or execution test of the CUDA kernel.
-    source_text = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
-    wrapper = source_text.split("void launch_update_diis_cached_gram(", 1)[1]
-    wrapper = (
-        "void launch_update_diis_cached_gram("
-        + wrapper.split("}  // namespace generativeqc::scf::cuda_execution", 1)[0]
-    )
-    wrapper, replacements = re.subn(
-        r"update_diis_kernel<false, false, true><<<.*?>>>\(.*?\);",
-        "++launches;",
-        wrapper,
-        flags=re.DOTALL,
-    )
-    assert replacements == 1
-    (tmp_path / "cuda_runtime.h").write_text(
-        "#pragma once\nusing cudaStream_t = void*; using cudaError_t = int;\n"
-        "struct dim3 { unsigned x, y, z; "
-        "dim3(unsigned a=1,unsigned b=1,unsigned c=1):x(a),y(b),z(c){} };\n"
-    )
-    source = tmp_path / "ordered_admission.cpp"
-    source.write_text(
-        "#include <limits>\n#include <stdexcept>\n#include <climits>\n"
-        '#include "scf/cuda/scf_diis_kernels.hpp"\n'
-        "unsigned launches = 0;\n"
-        "namespace generativeqc::scf::cuda_execution {\n"
-        + wrapper
-        + r"""
-}
-int main() {
-  using namespace generativeqc::scf::cuda_execution;
-  double fock{}, residual{}, fock_history{}, residual_history{}, solve{}, rhs{}, effective{}, cache{};
-  std::uint8_t active = 1;
-  std::uint32_t count{}, head{};
-  auto call = [&](dim3 grid, dim3 block, int batch, int n, int spins, unsigned history,
-                  bool alias, bool missing_cache, bool missing_history) {
-    launch_update_diis_cached_gram(
-        grid, block, 0, nullptr, batch, n, spins, history, &fock, &residual, &active,
-        missing_history ? nullptr : &fock_history, &residual_history, &solve, &rhs,
-        &count, &head, &effective, missing_cache ? nullptr : alias ? &solve : &cache);
-  };
-  unsigned refused = 0;
-  auto reject = [&](auto action) {
-    const auto before = launches;
-    try { action(); } catch (const std::invalid_argument&) { ++refused; }
-    if (launches != before) throw std::runtime_error("invalid binding launched");
-  };
-  reject([&] { call(1, 32, 1, 3, 1, 4, true, false, false); });
-  reject([&] { call(1, 32, 1, 3, 1, 4, false, true, false); });
-  reject([&] { call(1, 32, 1, 3, 1, 4, false, false, true); });
-  reject([&] { call(dim3(1, 2), 32, 1, 3, 1, 4, false, false, false); });
-  reject([&] { call(dim3(1, 1, 2), 32, 1, 3, 1, 4, false, false, false); });
-  reject([&] { call(0, 32, 1, 3, 1, 4, false, false, false); });
-  reject([&] { call(1, 16, 1, 3, 1, 4, false, false, false); });
-  reject([&] { call(1, dim3(32, 2), 1, 3, 1, 4, false, false, false); });
-  reject([&] { call(1, 32, 0, 3, 1, 4, false, false, false); });
-  reject([&] { call(1, 32, 1, 0, 1, 4, false, false, false); });
-  reject([&] { call(1, 32, 1, 3, 3, 4, false, false, false); });
-  reject([&] { call(1, 32, 1, 3, 1, 65, false, false, false); });
-  reject([&] { call(INT_MAX, 32, INT_MAX, INT_MAX, 2, 64, false, false, false); });
-  if (refused != 13 || launches) throw std::runtime_error("missing admission rejection");
-  for (unsigned history : {0U, 1U})
-    launch_update_diis_cached_gram(1, 32, 0, nullptr, 1, 3, 1, history, &fock, nullptr,
-        &active, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &effective, nullptr);
-  call(1, 32, 1, 3, 1, 64, false, false, false);
-  if (launches != 3) throw std::runtime_error("valid or disabled binding was rejected");
-}
-"""
-    )
-    executable = tmp_path / "ordered_admission"
-    required_native_cxx.build_executable(
-        [source],
-        executable,
-        compile_args=("-std=c++20", "-I" + str(tmp_path), "-I" + str(ROOT / "src")),
-    )
-    subprocess.run(
-        [str(executable)], check=True, capture_output=True, text=True, timeout=30
-    )

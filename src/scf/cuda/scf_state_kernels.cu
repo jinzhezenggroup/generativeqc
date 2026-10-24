@@ -7,6 +7,18 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+__global__ void count_fock_application_kernel(std::int32_t batch_size, const std::uint8_t* active,
+                                              std::uint64_t* builds) {
+  const auto item = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (item < static_cast<std::size_t>(batch_size) && active[item]) ++builds[item];
+}
+
+void launch_count_fock_application_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+                                          cudaStream_t stream, std::int32_t batch_size,
+                                          const std::uint8_t* active, std::uint64_t* builds) {
+  count_fock_application_kernel<<<grid, block, shared_bytes, stream>>>(batch_size, active, builds);
+}
+
 __global__ void initialize_state_kernel(std::int32_t batch_size, bool reuse_previous_energy,
                                         const double* energy, std::uint8_t* active,
                                         std::uint8_t* converged, std::uint8_t* failed,

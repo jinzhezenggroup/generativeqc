@@ -67,6 +67,18 @@ void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
 /** Read the physical allowance already authenticated at snapshot creation. */
 generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value);
+/** Query/copy the independent VV10 quadrature of the current token.
+ * A null output with zero capacity queries the count; shared grids return zero.
+ * The private wire contains 126 prescription entries followed by 6*N doubles
+ * for coordinates, weights, atom owners and unpartitioned atomic measures. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t capacity, std::size_t* count);
+/** Borrow the exact secondary resident grid only while its token is current. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_cuda_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* count);
 generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
@@ -96,8 +108,9 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
-/** Private mixed bridge. CPU supplies the compact weighted LR correction;
- * CUDA passes an empty correction and executes its resident LR provider. */
+/** Private RSH-DF bridge. Full RI-K owns its LR response on either backend.
+ * Legacy mixed CPU supplies a compact Direct correction; legacy mixed CUDA
+ * passes an empty correction and executes its resident Direct LR provider. */
 generativeqc_status generativeqc_ks_snapshot_mixed_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
     const double* lr_correction, std::size_t correction_count, double* values, std::size_t count,
@@ -131,6 +144,10 @@ generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch*
 generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
+/** Token-checked LR approximation; UINT32_MAX denotes no LR correction. */
+generativeqc_status generativeqc_ks_snapshot_range_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* approximation);
 /** Compatibility alias for the original WB97M-V-specific symbol. */
 generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,

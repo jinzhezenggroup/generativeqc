@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from _cpp_source_support import cpp_function_definition
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -43,7 +43,13 @@ def retry_probe(
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
-        PREFIX
+        PREFIX.replace(
+            "@OCCUPIED_DENSITY@",
+            cpp_record_definition(
+                (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
+            )
+            + ";",
+        )
         + "bool retry() {\n"
         + retry
         + "\nreturn false;\n}\n"
@@ -56,16 +62,23 @@ def retry_probe(
     return binary
 
 
+@pytest.mark.parametrize("independent", (False, True))
 @pytest.mark.parametrize(
     "component", range(7), ids=["j", "density", "xc", "range", "nlc", "all", "matrix"]
 )
 @pytest.mark.parametrize("stage", range(3), ids=["seed", "frozen", "target"])
 @pytest.mark.parametrize("source", range(3), ids=["absent", "mixed", "strict"])
 def test_failed_mixed_operator_retries_fresh_strict_target(
-    retry_probe: Path, component: int, stage: int, source: int
+    retry_probe: Path, component: int, stage: int, source: int, independent: bool
 ) -> None:
     result = subprocess.run(
-        [str(retry_probe), str(component), str(stage), str(source)],
+        [
+            str(retry_probe),
+            str(component),
+            str(stage),
+            str(source),
+            str(int(independent)),
+        ],
         capture_output=True,
         text=True,
         timeout=10,
@@ -76,6 +89,7 @@ def test_failed_mixed_operator_retries_fresh_strict_target(
 
 PREFIX = r"""
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -83,6 +97,7 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 #include <string>
+@OCCUPIED_DENSITY@
 void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 int cudaMemsetAsync(void* p, int value, std::size_t n, void*) {
   std::memset(p, value, n); return 0;
@@ -92,6 +107,7 @@ namespace generativeqc::runtime { enum class PrecisionPhase { Admitted, StrictAu
 using Phase = generativeqc::runtime::PrecisionPhase;
 namespace runtime::cuda_trace {
 struct TraceRegion { TraceRegion(const char*, void*) {} void finish() {} };
+void trace_counter(const char*, std::uint64_t) {}
 template<class F> void trace_call(const char*, void*, F work) { work(); }
 }
 namespace scf { struct ScfOptions { enum class XcExecutionSchedule { DeviceFused }; }; }
@@ -101,10 +117,17 @@ namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T...) { ++domains; }
 }
 struct CudaXcView {};
+const double* expected_density = nullptr;
 struct Xc {
   int semilocal = 0, features = 0, potentials = 0;
-  template<class... T> void enqueue(T...) { ++semilocal; }
-  template<class... T> void enqueue_density_features(T...) { ++features; }
+  struct PointBatch { std::size_t tiles = 1, device_bytes = 0; };
+  PointBatch point_batch_plan() const { return {}; }
+  template<class... T> void enqueue(const double* density, T...) {
+    require(density == expected_density, "XC received a delta density"); ++semilocal;
+  }
+  template<class... T> void enqueue_density_features(const double* density, T...) {
+    require(density == expected_density, "NLC received a delta density"); ++features;
+  }
   template<class... T> void enqueue_nonlocal_potential(T...) { ++potentials; }
   CudaXcView view(std::uint64_t) { return {}; }
   struct Grid { const double *weights{}, *points{}; };
@@ -121,6 +144,10 @@ struct Owner {
   bool pending_fitted_occupied = true, final_fitted_projection_ready = true;
   bool nonlocal_seed_stage{}, nonlocal_frozen_stage{}, nonlocal_outer_active = true;
   bool device_nonlocal = true;
+  bool occupied_xc_requested{}, occupied_xc_frame_ready{}, device_chunk_mode{};
+  struct { bool any_lower_precision() const { return false; } } precision_schedule;
+  double* tmp1{};
+  std::size_t n{1}, spins{1}, occupations[2]{1, 0};
   unsigned final_corrections = 2, nonlocal_exact_epoch_iterations = 7;
   int history_count_data = 4, history_head_data = 2;
   int *history_count = &history_count_data, *history_head = &history_head_data;
@@ -155,15 +182,24 @@ struct Owner {
   int *nonlocal_domain_error{};
   std::size_t elements = 1;
   struct { std::size_t npoint = 24; } xc_layout;
+  struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24; } prepared_ao_work;
+  struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
+  std::unique_ptr<Xc> nonlocal_xc;
+  unsigned merges = 0;
+  void merge_nonlocal_grid(std::uint64_t) { if (nonlocal_xc) ++merges; }
+  double delta_value = -2; double* incremental_delta_density = &delta_value;
   std::unique_ptr<Xc> xc = std::make_unique<Xc>();
 """
 
 MAIN = r"""
 int main(int argc, char** argv) {
  try {
-  require(argc == 4, "expected component, provisional stage and lease selection");
+  require(argc == 5, "expected component, provisional stage, lease and grid selections");
   const int component = std::stoi(argv[1]), stage = std::stoi(argv[2]), source = std::stoi(argv[3]);
   Owner p;
+  const bool independent = std::stoi(argv[4]) != 0;
+  if (independent) p.nonlocal_xc = std::make_unique<Xc>();
+  expected_density = p.density;
   p.pending_mixed_coulomb = component == 0 || component == 5;
   p.pending_mixed_density = component == 1 || component == 5;
   p.pending_mixed_point = component == 2 || component == 5;
@@ -184,8 +220,10 @@ int main(int argc, char** argv) {
           "retry changed density or invented completed work");
   p.stage_xc(2, Phase::StrictAudit);
   require(domains == 1 && p.pairs == 1 && !p.last_pair_mixed, "retry did not evaluate fresh strict NLC");
-  require(!p.xc->semilocal && p.xc->features == 1 && p.xc->potentials == 1,
-          "retry selected a seed-only or frozen-potential target");
+  auto& target = independent ? *p.nonlocal_xc : *p.xc;
+  require(p.xc->semilocal == int(independent) && target.features == 1 && target.potentials == 1 &&
+              p.merges == unsigned(independent),
+          "retry selected a seed-only, frozen or unmerged target");
   // A failure with no admitted mixed component remains terminal.
   Owner strict;
   require(!strict.retry() && strict.is_failed && !strict.is_active && !strict.retries,

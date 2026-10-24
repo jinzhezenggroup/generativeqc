@@ -68,9 +68,12 @@ def _cases() -> list[dict]:
 
 
 @pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
-def test_native_seed_matches_independent_atomic_oracle(probe: Path, case: dict) -> None:
+@pytest.mark.parametrize("native_eigen", (False, True))
+def test_native_seed_matches_independent_atomic_oracle(
+    probe: Path, case: dict, native_eigen: bool
+) -> None:
     result = subprocess.run(
-        [str(probe)],
+        [str(probe), *(["--native-eigen"] if native_eigen else [])],
         input=_fixture_input(case),
         text=True,
         capture_output=True,
@@ -78,9 +81,10 @@ def test_native_seed_matches_independent_atomic_oracle(probe: Path, case: dict) 
         timeout=120,
     )
     inventory, values = result.stdout.strip().splitlines()
-    dimension, solves, minimal, iterations, builds, capacity = map(
+    dimension, solves, minimal, iterations, builds, capacity, peak = map(
         int, inventory.split()
     )
+    assert 0 < peak <= capacity
     density = np.fromstring(values, sep=" ").reshape(dimension, dimension)
     assert solves == case["atomic_solves"]
     assert minimal == case["minimal_orbitals"]
@@ -106,6 +110,52 @@ def test_native_seed_matches_independent_atomic_oracle(probe: Path, case: dict) 
         sum(len(shell[2]) for shell in case["shells"]),
         8,
     )
+
+
+@pytest.mark.parametrize("native_eigen", (False, True))
+def test_large_huckel_preparation_fits_its_live_allocation_bound(
+    probe: Path, native_eigen: bool
+) -> None:
+    """Exercise large target admission without constructing target integrals.
+
+    The identity target metric is only a resource stress case. Atomic problems
+    remain real native solves; the independent molecular oracle cases above
+    protect numerical behavior on physical overlaps. Both the legacy validator
+    and the validated native eigen provider must fit the same public allowance.
+    """
+    from benchmarks.readme_defaults import reference_r2scan3c_basis
+    from benchmarks.readme_hf_scaling import scaling_cases
+
+    basis = reference_r2scan3c_basis()
+    atoms = scaling_cases()["water-96"].atoms
+    case = {
+        "atoms": [[8 if symbol == "O" else 1, *position] for symbol, position in atoms],
+        "shells": [],
+        "charge": 0,
+        "spherical": True,
+    }
+    for index, (symbol, _) in enumerate(atoms):
+        for angular, *primitives in basis[symbol]:
+            for contraction in range(1, len(primitives[0])):
+                case["shells"].append(
+                    [index, angular, [[row[0], row[contraction]] for row in primitives]]
+                )
+    result = subprocess.run(
+        [
+            str(probe),
+            "--identity-overlap",
+            "--summary-only",
+            *(["--native-eigen"] if native_eigen else []),
+        ],
+        input=_fixture_input(case),
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=120,
+    )
+    dimension, _, _, _, _, capacity, peak = map(int, result.stdout.split())
+    assert dimension == 1088
+    assert 0 < peak <= capacity <= InitialGuessSpec("huckel").maximum_numeric_bytes
 
 
 def test_huckel_descriptor_is_additive() -> None:

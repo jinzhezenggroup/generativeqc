@@ -26,6 +26,10 @@ INCREMENTAL_SELECTORS = (
     "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
 )
 KS_INVENTORY_METHODS = ("lda-rks", "lda-uks", "pbe-rks", "pbe-uks")
+# Independent PySCF 2.14 level-3 Treutler-Ahlrichs/NWChem grid, no density
+# pruning: 9808 points per H. v4 stores a level and zero angular placeholders,
+# so multiplying the descriptor fields does not count its pruned grid points.
+DEFAULT_H2_GRID_POINTS = 2 * 9808
 
 
 def canonical(value: object) -> str:
@@ -51,6 +55,7 @@ class RuntimeTests(unittest.TestCase):
             "GENERATIVEQC_PROFILE_CACHE": str(self.root / "cache"),
             "GENERATIVEQC_PROFILE": "off",
         }
+        self.env.pop("GQC_TEST_CAPTURE_SCF", None)
 
     def cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -165,6 +170,136 @@ class RuntimeTests(unittest.TestCase):
             for name in ("libgenerativeqc.so", "manifest.json", "evidence.json")
         }
         (directory / "profile.json").write_text(json.dumps(profile))
+
+    def test_run_and_optimize_scf_controls_reach_native_preparation(self) -> None:
+        """Capture public descriptors, then exit before any scientific execution."""
+        if (
+            sys.platform != "linux"
+            or os.environ.get("GENERATIVEQC_TEST_MONOLITHIC") == "1"
+        ):
+            self.skipTest("SCF capture requires the Linux shared-core CLI")
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        self.env["GQC_TEST_CAPTURE_SCF"] = "1"
+        for command in ("run", "optimize"):
+            for method in (
+                "rhf",
+                "uhf",
+                "pbe-rks",
+                "pbe-uks",
+                "mp2",
+                "ump2",
+                "rccsd",
+                "gfn2-xtb",
+            ):
+                correlated = method in ("mp2", "ump2", "rccsd")
+                energy, density = (1e-12, 1e-10) if correlated else (1e-10, 1e-8)
+                screening = 0.0 if correlated or method == "gfn2-xtb" else 1e-14
+                cases = (
+                    ((), energy, density, screening, 100),
+                    (("--energy-tolerance", "3e-11"), 3e-11, density, screening, 100),
+                    (("--density-tolerance", "7e-9"), energy, 7e-9, screening, 100),
+                    (
+                        (
+                            "--energy-tolerance",
+                            "3e-11",
+                            "--density-tolerance",
+                            "7e-9",
+                            "--max-iterations",
+                            "17",
+                        ),
+                        3e-11,
+                        7e-9,
+                        screening,
+                        17,
+                    ),
+                )
+                for (
+                    arguments,
+                    expected_energy,
+                    expected_density,
+                    expected_screening,
+                    iterations,
+                ) in cases:
+                    with self.subTest(
+                        command=command, method=method, arguments=arguments
+                    ):
+                        run = self.cli(
+                            command,
+                            str(SOURCE / "tests/data/h2_bohr.xyz"),
+                            "--units",
+                            "bohr",
+                            "--method",
+                            method,
+                            "--backend",
+                            "cpu",
+                            *(("--stages", method) if command == "optimize" else ()),
+                            *arguments,
+                        )
+                        self.assertEqual(run.returncode, 86, run.stdout + run.stderr)
+                        self.assertEqual(
+                            json.loads(run.stderr),
+                            {
+                                "energy_tolerance": expected_energy,
+                                "density_tolerance": expected_density,
+                                "screening_tolerance": expected_screening,
+                                "max_iterations": iterations,
+                            },
+                        )
+
+    def test_resources_scf_controls_and_cuda_admission(self) -> None:
+        """Check dry-run controls and inputs to both CUDA HF admission paths."""
+        if (
+            sys.platform != "linux"
+            or os.environ.get("GENERATIVEQC_TEST_MONOLITHIC") == "1"
+        ):
+            self.skipTest("SCF capture requires the Linux shared-core CLI")
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        self.env["GQC_TEST_CAPTURE_SCF"] = "1"
+        cases = (
+            ((), 1e-10, 1e-8),
+            (("--energy-tolerance", "3e-11"), 3e-11, 1e-8),
+            (("--density-tolerance", "7e-9"), 1e-10, 7e-9),
+            (
+                ("--energy-tolerance", "3e-11", "--density-tolerance", "7e-9"),
+                3e-11,
+                7e-9,
+            ),
+        )
+        for method in ("rhf", "uhf", *KS_INVENTORY_METHODS):
+            backends = (
+                ("cpu", "cuda", "cuda-df") if method in ("rhf", "uhf") else ("cpu",)
+            )
+            for backend in backends:
+                for arguments, energy, density in cases:
+                    with self.subTest(
+                        method=method, backend=backend, arguments=arguments
+                    ):
+                        run = self.resources(
+                            "--method",
+                            method,
+                            "--backend",
+                            "cpu" if backend == "cpu" else "cuda",
+                            *(
+                                ("--density-fitting", "cuda")
+                                if backend == "cuda-df"
+                                else ()
+                            ),
+                            *arguments,
+                        )
+                        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                        controls = json.loads(run.stdout)["controls"]
+                        self.assertEqual(controls["energy_tolerance"], energy)
+                        self.assertEqual(controls["density_tolerance"], density)
+                        self.assertEqual(controls["screening_tolerance"], 1e-14)
+                        self.assertEqual(controls["max_iterations"], 100)
+                        if backend != "cpu":
+                            self.assertEqual(
+                                json.loads(run.stderr),
+                                {
+                                    "energy_tolerance": energy,
+                                    "screening_tolerance": 1e-14,
+                                },
+                            )
 
     def test_canonical_json_matches_python(self) -> None:
         generator = random.Random(20261011)
@@ -377,6 +512,98 @@ class RuntimeTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(run.stdout)["limits"]["host"], expected)
 
+    def test_cuda_hf_fleet_matches_compiled_abi_and_exact_budgets(self) -> None:
+        """Interpose only synthetic GPU leaves; execute the real CLI/ABI owner."""
+        if sys.platform != "linux":
+            self.skipTest("host-only interposition fixture requires Linux")
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_hf_cuda_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        for method in ("rhf", "uhf"):
+            for history in (0, 8, 64):
+                for batch in (1, 3):
+                    with self.subTest(method=method, history=history, batch=batch):
+                        arguments = (
+                            "--backend",
+                            "cuda",
+                            "--method",
+                            method,
+                            "--diis-history",
+                            str(history),
+                            "--batch",
+                            str(batch),
+                        )
+                        run = self.resources(*arguments)
+                        self.assertEqual(run.returncode, 0, run.stderr)
+                        plan = json.loads(run.stdout)
+                        orbital = plan["orbital"]
+                        spins = 1 if method == "rhf" else 2
+                        effective_history = plan["controls"]["diis_history"]
+                        arena = (
+                            4096
+                            + 128 * orbital["nbf"]
+                            + 16 * effective_history
+                            + 32 * spins
+                        )
+                        staging = 256 + 64 * orbital["nbf"]
+                        shape = (
+                            2,
+                            orbital["nbf"],
+                            orbital["cartesian_nbf"],
+                            orbital["shells"],
+                            orbital["primitives"],
+                            spins,
+                            arena,
+                            staging,
+                            0,
+                        )
+                        shapes = (ctypes.c_uint64 * (9 * batch))(*(shape * batch))
+                        values = (ctypes.c_uint64 * (4 + 3 * batch))()
+                        self.assertEqual(
+                            query(shapes, len(shapes), values, len(values)), 0
+                        )
+                        self.assertEqual(
+                            plan["cuda_hf_fleet_composition"],
+                            "native-declared-capacity",
+                        )
+                        self.assertEqual(plan["resident_bytes"]["device:0"], values[0])
+                        self.assertEqual(plan["peak_bytes"]["device:0"], values[2])
+                        self.assertEqual(plan["peak_bytes"]["host"], values[3])
+                        self.assertEqual(
+                            plan["item_inventory"],
+                            {
+                                "arena": values[4],
+                                "host": values[5],
+                                "ecp_workspace": values[6],
+                            },
+                        )
+                        for space in ("host", "device"):
+                            peak = plan["peak_bytes"][
+                                "host" if space == "host" else "device:0"
+                            ]
+                            for difference in (0, -1):
+                                checked = self.resources(
+                                    *arguments,
+                                    f"--{space}-bytes",
+                                    str(peak + difference),
+                                )
+                                self.assertEqual(
+                                    checked.returncode,
+                                    0 if difference == 0 else 2,
+                                    checked.stderr,
+                                )
+                                self.assertEqual(
+                                    json.loads(checked.stdout)["peak_bytes"],
+                                    plan["peak_bytes"],
+                                )
+
     def test_cuda_df_native_capacities_match_python_inventory_without_gpu(self) -> None:
         if sys.platform != "linux":
             self.skipTest("host-only interposition fixture requires Linux")
@@ -581,7 +808,7 @@ class RuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(run.returncode, 0, run.stderr)
                 plan = json.loads(run.stdout)
-                radial, polar, azimuth = plan["controls"]["grid"]
+                radial, polar, _ = plan["controls"]["grid"]
                 item = (
                     2,
                     2,
@@ -591,7 +818,7 @@ class RuntimeTests(unittest.TestCase):
                     2 if method.endswith("uks") else 1,
                     0,
                     0,
-                    2 * radial * polar * azimuth,
+                    DEFAULT_H2_GRID_POINTS,
                     radial,
                     polar,
                     256,
@@ -660,7 +887,7 @@ class RuntimeTests(unittest.TestCase):
                     run = self.resources(*arguments)
                     self.assertEqual(run.returncode, 0, run.stderr)
                     plan = json.loads(run.stdout)
-                    radial, polar, azimuth = plan["controls"]["grid"]
+                    radial, polar, _ = plan["controls"]["grid"]
                     item = (
                         2,
                         2,
@@ -670,7 +897,7 @@ class RuntimeTests(unittest.TestCase):
                         2 if method.endswith("uks") else 1,
                         0,
                         0,
-                        2 * radial * polar * azimuth,
+                        DEFAULT_H2_GRID_POINTS,
                         radial,
                         polar,
                         256,
@@ -765,7 +992,7 @@ class RuntimeTests(unittest.TestCase):
                 run = self.resources("--method", method)
                 self.assertEqual(run.returncode, 0, run.stderr)
                 plan = json.loads(run.stdout)
-                radial, polar, azimuth = plan["controls"]["grid"]
+                radial, polar, _ = plan["controls"]["grid"]
                 shape = (ctypes.c_uint64 * 17)(
                     2,
                     2,
@@ -775,7 +1002,7 @@ class RuntimeTests(unittest.TestCase):
                     2 if method.endswith("uks") else 1,
                     0,
                     0,
-                    2 * radial * polar * azimuth,
+                    DEFAULT_H2_GRID_POINTS,
                     radial,
                     polar,
                     256,
@@ -952,14 +1179,6 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(result.stderr, baseline.stderr)
 
     def test_registered_ks_inventory_uses_native_execution_grid(self) -> None:
-        probe = subprocess.run(
-            [str(PROBE), "--native-grid"],
-            text=True,
-            capture_output=True,
-            check=True,
-            timeout=30,
-        )
-        native_grid = json.loads(probe.stdout)
         for method in ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"):
             for backend in ("cpu", "cuda"):
                 with self.subTest(method=method, backend=backend):
@@ -968,10 +1187,11 @@ class RuntimeTests(unittest.TestCase):
                     if backend == "cpu":
                         self.assertEqual(result.returncode, 0, result.stderr)
                     plan = json.loads(result.stdout)
-                    self.assertEqual(plan["controls"]["grid"], native_grid)
+                    self.assertEqual(plan["controls"]["grid_version"], 4)
+                    self.assertEqual(plan["controls"]["grid"], [3, 0, 0])
                     if method == "pbe-rks" and backend == "cpu":
                         # Eligible restricted GGA retains 32 bytes per point/AO.
-                        grid_cache = 32 * 2 * math.prod(native_grid) * 2
+                        grid_cache = 32 * DEFAULT_H2_GRID_POINTS * 2
                         self.assertGreaterEqual(
                             plan["item_inventory"]["scf_workspace"], grid_cache
                         )

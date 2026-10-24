@@ -107,12 +107,21 @@ GmresPlan prepare_gmres(std::size_t dimension, const GmresOptions& options) {
   const auto restart = std::min({dimension, options.restart, options.max_iterations});
   const auto restart_plus_one = checked_add(restart, 1);
   const auto iterations_plus_two = checked_add(options.max_iterations, 2);
-  std::size_t elements = checked_multiply(restart_plus_one, dimension);
-  elements = checked_add(elements, checked_multiply(4, checked_multiply(dimension, restart)));
-  elements = checked_add(elements, checked_multiply(20, dimension));
-  elements = checked_add(elements,
-                         checked_multiply(8, checked_multiply(restart_plus_one, restart_plus_one)));
-  elements = checked_add(elements, checked_multiply(4, iterations_plus_two));
+  // Bound simultaneously live payload, including the returned solution. The
+  // Arnoldi basis owns (restart+1) vectors, the right-preconditioned basis owns
+  // restart, and x/image/residual, work/candidate/image/residual, best x/residual
+  // and the cycle's base x own ten more. One spare vector keeps publication
+  // headroom without reserving several unused Krylov bases in every caller.
+  const auto vector_slots = checked_add(checked_multiply(2, restart), 12);
+  std::size_t elements = checked_multiply(vector_slots, dimension);
+  // Hessenberg, cosine, sine, transformed RHS and backsolve coefficients.
+  elements = checked_add(elements, checked_multiply(restart_plus_one, restart));
+  elements = checked_add(elements, checked_add(checked_multiply(4, restart), 1));
+  // These vectors reserve their full capacity once, before any append/assign;
+  // disabled diagnostics retain no numeric payload. Input spans, callbacks and
+  // allocator metadata remain outside this controller's numeric workspace.
+  if (options.collect_basis) elements = checked_add(elements, checked_multiply(dimension, restart));
+  if (options.collect_history) elements = checked_add(elements, iterations_plus_two);
   return {dimension, restart, checked_multiply(elements, sizeof(double)), options};
 }
 

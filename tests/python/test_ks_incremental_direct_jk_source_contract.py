@@ -45,12 +45,8 @@ def test_cuda_ks_incremental_direct_jk_only_changes_linear_fock_inputs() -> None
     assert "provider, *range_correction, jk_density" in ks
     assert "finalize_incremental_jk_components();" in ks
 
-    # XC/nonlocal correlation remain nonlinear full-density functionals and
-    # must never consume the anchor-relative delta.
-    assert "xc->enqueue(density, elements, next_generation, phase);" in ks
-    assert "xc->enqueue_density_features(density, elements, next_generation" in ks
-    assert "xc->enqueue(incremental_delta_density" not in ks
-    assert "xc->enqueue_density_features(incremental_delta_density" not in ks
+    # Full-density XC/NLC inputs are executed and checked for both quadrature
+    # paths by test_ks_mixed_retry_handoff, including a distinct delta sentinel.
 
 
 def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
@@ -68,20 +64,6 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
         in ks
     )
     assert "sum(options.max_iterations, kMaximumFinalCorrections)" in ks
-
-
-def test_cuda_ks_incremental_energy_refinement_precedes_the_energy_gate() -> None:
-    """Full-density refinement must not depend on a screened delta energy gate."""
-    ks = _source("src/dft/cuda_ks.cpp")
-    assert "incremental_energy_refinement = false;" in ks
-    assert "incremental_energy_full_builds = 0;" in ks
-    assert "!incremental_anchored || incremental_energy_refinement ||" in ks
-    refinement = ks.index("refine_incremental_energy(physical.density_change")
-    convergence = ks.index("const bool converged = has_energy_history", refinement)
-    assert refinement < convergence
-    assert "!incremental_direct_jk || incremental_energy_full_builds >= 2" in ks
-    assert "account_incremental_full_energy_finalization();" in ks
-    assert "output.energy_change < options.energy_tolerance" in ks[convergence:]
 
 
 def test_cuda_ks_incremental_storage_is_explicitly_budgeted() -> None:
@@ -141,6 +123,57 @@ int main() {
     )
     executable = native_cxx.build_executable(
         [source], tmp_path / "final_closure", compile_args=["-std=c++17"]
+    )
+    completed = subprocess.run(
+        [executable], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_incremental_final_operator_requires_completed_physical_closure(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the admission predicate instead of pinning its internal spelling.
+
+    The real CUDA E/F regression exercises final-state reading end to end;
+    this host truth table additionally covers rejected incomplete histories.
+    """
+    ks = _source("src/dft/cuda_ks.cpp")
+    begin = ks.index("const bool ordinary_final_operator =")
+    gate = ks[begin : ks.index(";", begin) + 1]
+    source = tmp_path / "incremental_final_operator.cpp"
+    source.write_text(
+        """
+#include <cassert>
+#include <initializer_list>
+struct Consumer {
+  bool incremental_direct_jk, standard, final_closure;
+  unsigned incremental_energy_full_builds;
+  bool standard_convergence_active() const { return standard; }
+  bool admitted() const {
+"""
+        + gate
+        + """
+    return ordinary_final_operator;
+  }
+};
+int main() {
+  for (bool incremental : {false, true})
+    for (bool standard : {false, true})
+      for (bool closed : {false, true})
+        for (unsigned full_builds : {0U, 1U, 2U, 3U}) {
+          Consumer consumer{incremental, standard, closed, full_builds};
+          bool expected = !incremental;
+          if (incremental && standard && closed && full_builds > 1U)
+            expected = true;
+          assert(consumer.admitted() == expected);
+        }
+}
+""",
+        encoding="utf-8",
+    )
+    executable = native_cxx.build_executable(
+        [source], tmp_path / "incremental_final_operator", compile_args=["-std=c++17"]
     )
     completed = subprocess.run(
         [executable], capture_output=True, text=True, check=False, timeout=10

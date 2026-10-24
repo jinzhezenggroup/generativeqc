@@ -1,0 +1,33 @@
+{
+  "scope": "Lossless whitespace-only compaction; ordered values and all measured data are unchanged. No raw-byte checksum references existed for these four files.",
+  "files": [
+    {
+      "path": "benchmarks/results/rtx5090-2335e71-issue-41-completion-evidence.json",
+      "original_revision": "afa276414b22c813f6d007c62abdf58158de5a35",
+      "original_sha256": "6f25bb7f9298a8f6654a2597e05367874a6a3f7dee0b57e0ac87021c646d12a5",
+      "compacted_sha256": "73e64a4ea9cc628321d16ff8ab1e96481f12fdcc71c2f9836fef134005c76a3a",
+      "bytes_saved": 52019
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/summary.json",
+      "original_revision": "afa276414b22c813f6d007c62abdf58158de5a35",
+      "original_sha256": "72fee0a6be5c87861c28f7512c0965125bea8da52b9bd355eece074455d8443a",
+      "compacted_sha256": "30d6d281dfe5b7e4e430ed0fd32f60db8c038f32b5ef03105688c15ec23088eb",
+      "bytes_saved": 48960
+    },
+    {
+      "path": "benchmarks/results/issue471-cpu-autotune.json",
+      "original_revision": "afa276414b22c813f6d007c62abdf58158de5a35",
+      "original_sha256": "ac138e2ee3ff9826a8362a6435465cb64ef4eea39c9f363737e28cf1c36bea6c",
+      "compacted_sha256": "506f281d149ab3d00eb81183f6ffb29b235e459cdb56974eb808d5222601fc9f",
+      "bytes_saved": 38512
+    },
+    {
+      "path": "benchmarks/results/ecp-f-171/summary.json",
+      "original_revision": "afa276414b22c813f6d007c62abdf58158de5a35",
+      "original_sha256": "175b62a7d28936ab7fca70e20c333bc93effb15f5a6ff660fe5acb587ac99df5",
+      "compacted_sha256": "eaf4c3e818547efe57570bb281255118c0914362e7e0a1de4b11de22ca28c4d4",
+      "bytes_saved": 37111
+    }
+  ]
+}

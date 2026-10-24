@@ -47,6 +47,10 @@ void CudaFockProviderView::validate(const ResolvedFockBuild& strategy) const {
                                                  strategy.metric_relative_threshold) &&
                 data_->metric_relative_threshold == strategy.metric_relative_threshold,
             "CUDA DF Fock item/dimensions/cutoff mismatch");
+    const auto& exchange = strategy.spec.exchange;
+    require(data_->range_omega ==
+                (exchange.present && exchange.op == FockOperator::LongRange ? exchange.omega : 0.0),
+            "CUDA DF value/response radial operator mismatch");
     if (strategy.spec.derivative_order)
       require(data_->df_gradient_orbital && data_->df_gradient_auxiliary &&
                   data_->df_gradient_budget > 0 &&

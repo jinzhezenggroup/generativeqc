@@ -10,11 +10,13 @@
 #include "generated_direct_source_contraction.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
+#include "scf/cuda/direct_schwarz_order.cuh"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
+template <unsigned Order>
 __global__ void build_schwarz_bounds_packed_kernel(DeviceBatch batch, std::size_t pair_count,
                                                    double* schwarz_bounds) {
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -28,9 +30,8 @@ __global__ void build_schwarz_bounds_packed_kernel(DeviceBatch batch, std::size_
   decode_lower_triangle(pair, i, j);
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
   const std::size_t matrix_offset = static_cast<std::size_t>(system) * n * n;
-  const double diagonal = contracted_eri_cartesian_source<double>(
-      batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-      static_cast<std::int32_t>(i), static_cast<std::int32_t>(j), -1);
+  if (!schwarz_order_matches<Order, true>(batch, system, i, j)) return;
+  const double diagonal = schwarz_diagonal<Order, true>(batch, system, i, j);
   // fabs is conservative when roundoff makes a non-negative diagonal
   // slightly negative; it never converts that noise into a false zero.
   const double bound = sqrt(fabs(diagonal));
@@ -61,6 +62,7 @@ __device__ void atomic_max_double(double* address, double value) {
  * low-contention atomic maximum for the shell-pair reduction while each
  * contracted diagonal ERI is still in registers.
  */
+template <unsigned Order>
 __global__ void build_schwarz_and_shell_pair_bounds_packed_kernel(DeviceBatch batch,
                                                                   std::size_t pair_count,
                                                                   double* schwarz_bounds,
@@ -76,9 +78,8 @@ __global__ void build_schwarz_and_shell_pair_bounds_packed_kernel(DeviceBatch ba
   decode_lower_triangle(pair, i, j);
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
   const std::size_t matrix_offset = static_cast<std::size_t>(system) * n * n;
-  const double diagonal = contracted_eri_cartesian_source<double>(
-      batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-      static_cast<std::int32_t>(i), static_cast<std::int32_t>(j), -1);
+  if (!schwarz_order_matches<Order, true>(batch, system, i, j)) return;
+  const double diagonal = schwarz_diagonal<Order, true>(batch, system, i, j);
   // fabs is conservative when roundoff makes a non-negative diagonal
   // slightly negative; it never converts that noise into a false zero.
   const double bound = sqrt(fabs(diagonal));
@@ -114,15 +115,19 @@ __global__ void build_schwarz_and_shell_pair_bounds_packed_kernel(DeviceBatch ba
 void launch_build_schwarz_bounds_packed_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                                cudaStream_t stream, DeviceBatch batch,
                                                std::size_t pair_count, double* schwarz_bounds) {
-  build_schwarz_bounds_packed_kernel<<<grid, block, shared_bytes, stream>>>(batch, pair_count,
-                                                                            schwarz_bounds);
+  for_each_schwarz_order(batch, [&]<unsigned Order>() {
+    build_schwarz_bounds_packed_kernel<Order>
+        <<<grid, block, shared_bytes, stream>>>(batch, pair_count, schwarz_bounds);
+  });
 }
 
 void launch_build_schwarz_and_shell_pair_bounds_packed_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
     std::size_t pair_count, double* schwarz_bounds, double* shell_pair_bounds) {
-  build_schwarz_and_shell_pair_bounds_packed_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch, pair_count, schwarz_bounds, shell_pair_bounds);
+  for_each_schwarz_order(batch, [&]<unsigned Order>() {
+    build_schwarz_and_shell_pair_bounds_packed_kernel<Order><<<grid, block, shared_bytes, stream>>>(
+        batch, pair_count, schwarz_bounds, shell_pair_bounds);
+  });
 }
 
 }  // namespace generativeqc::scf::cuda_execution

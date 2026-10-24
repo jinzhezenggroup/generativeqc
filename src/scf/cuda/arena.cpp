@@ -22,7 +22,7 @@ bool make_layout(
     bool transformed_direct, bool shell_class_profiling, bool inactive_eigensolver_profiling,
     bool bounded_fock_class_timing, bool bounded_direct_streaming, bool mixed_precision_fock,
     bool incremental_direct_jk, ArenaLayout& layout, bool incremental_diis_gram,
-    bool matrix_library_workspace, bool structured_matrix_workspace) {
+    bool matrix_library_workspace, bool structured_matrix_workspace, bool fp32_block_screening) {
   std::size_t matrix_size = 0;
   std::size_t eri_size = 0;
   std::size_t matrices = 0;
@@ -153,6 +153,11 @@ bool make_layout(
                                 made.bounded_direct_shell_pair_block_bounds) ||
       !workspace.append<double>(bounded_direct_streaming ? batch_size : 0,
                                 made.bounded_direct_system_density_bounds) ||
+      !workspace.append<float>(
+          bounded_direct_streaming && fp32_block_screening ? shell_pair_block_count : 0,
+          made.bounded_direct_fp32_block_bounds) ||
+      !workspace.append<float>(bounded_direct_streaming && fp32_block_screening ? batch_size : 0,
+                               made.bounded_direct_fp32_density_bounds) ||
       !workspace.append<double>(
           bounded_direct_streaming ? batch_size * detail::kDirectShellPairClassCount : 0,
           made.bounded_direct_system_pair_density_bounds) ||
@@ -344,6 +349,7 @@ bool make_layout(
       !workspace.append<std::uint8_t>(batch_size, made.failed) ||
       !workspace.append<std::uint8_t>(batch_size, made.final_fock_reuse_mask) ||
       !workspace.append<std::uint32_t>(1, made.final_fock_rebuild_count) ||
+      !workspace.append<std::uint64_t>(batch_size, made.executed_fock_builds) ||
       !workspace.append<std::uint8_t>(batch_size * spin_count, made.spin_active) ||
       !workspace.append<std::uint32_t>(batch_size, made.iterations) ||
       !workspace.append<int>(batch_size * spin_count, made.solver_info) ||

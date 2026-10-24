@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/md_j_engine.cuh",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Opt-in reference-aligned J-value consumer with exact public-AO admission, conservative FP64 hierarchy and shared reciprocal tile contraction; generated R/dot mathematics remains compiler-owned. Native pair packing, stream launches and bounded scratch are integrated into the retained provider. CUDA execution/performance qualification is separate from host tests.",
+  "regions": []
+}

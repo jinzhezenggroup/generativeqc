@@ -1,0 +1,445 @@
+{
+  "schema": "generativeqc.readme-oracle-reuse.v1",
+  "entries": {
+    "adf58fb549fd7f83bc175c722b59d9b856a35fb7833b5a9464a49505bcacd8a6": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "hf",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "d22db067ff676c4d26e1722c0eb5115766c6df301fdbe49613c97c4e6e553c54": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "58dcd69c84fdcd3bd299f10cb1e4736fc1ec70fc6b6b00f71c59037d42dc25da": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "b3lyp",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "563c3f803d6e0bb658067ffe985fe8eb47ce21e5370bbe859d2f33e52e7db271": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "208d7b3c461a6ef081152399b615a2db3b9ed9844eb27befcd87e71b04d4d211": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "65d09f2362ddff696c18b19628a9ccf67005189e0c8a614f32fa8fc11aa6e259": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe0",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "81d8495dab6fc76cc58640dd06aafba12d4defb7d37a575a0278dc7a57c57cd1": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "hf",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "817ceb49307b6af983e05b78c6603a6145d79814bac64a84760782ba1c95222e": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "b3lyp",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "bddb95df9773f04317a390361d2ea316f3d69a6b6b86b352b7f5accc801ca636": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "93b8fd65857a1922d296e4a6018dc5b17ca6119576c8c5372a7ba26c636d3cd5": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe0",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "45b8f038cb9dcd0e8684cae4e30d0c51fe978e9fababcd092d0dbc8ba3c9d3ee": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe0",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "b75c86e9f68abc498969e47bc5d91c399b25b0f63e486b262d5ce77ee12faadb": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "7c2ed20a44fb700a18e4b21680eb73c809b9bee1b089a45503220ea37a3f6284": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "b3lyp",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "6d95cf7d894b199f9823b2927be08e8b780f01cdc696c7fe49686a13b8a98c0f": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "2a85141c71368e0b73f6240b4add66f5a276115cbad7a3d2718a3b531813bd64": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "54abaec9cb5e79cdefe2df1b4a2c175f87b12e0a1314342161fcb25ab430b7b1": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "66fb30c2853fc5e0e368791cafe96d0129bb6dc495b9f170a9d320ed5f886d9f": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "b3lyp",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "cc0202b50ba3f5fc133ad03f965b553cd10bad6de89f407e85d5e695c003cf9b": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe0",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "49123167678d5c3ded6dc56a8aa7f8d806851380608731c6c7ecd9fc76dba478": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "e8faff707594f54360bf9f98179bb234165205f79c804ba8e0f5959a2dba40f5": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "hf",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "cb53f520a47038961219844eb00e49e55f0eab59095d4fea358f7bf8c835786e": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "hf",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "cd97cba80b4b060c8f0b0193d2c2b5361208c06d68912af9ba16ab1dd4e98af6": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan-3c",
+        "orbital_basis": "def2-mTZVPP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "1150b1c2b2d86ab46e104cb8e0f5a84af7b4182f141a02310810f091823f3207": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "hf",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "342bedc2a5bf88764f61afa54128f2c111e23f5907113ea2ac7a1818a5f1b347": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "r2scan",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "61e20cbc98f0b0b08d734688f1dc209d8797cbad704cde3aeb61221c9f290827": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "pbe0",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "6a953e3f6cead8db63d39561901efa5f00d0620a9d2b2d748f7c2b20c9088296": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "3559d86aaa55e5c07231a1268bfb4f20a9945f4720daf0e160368472548dabdf",
+      "scientific_inputs": {
+        "method": "b3lyp",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "83f5522ec3f498eef76ff9a9d67a79e241da8563e4715de4e3dc3eea6e52fec2": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "m06-2x",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "f0467cc18cbe0da7774e7d789449c5559d0a203bd9cf1056211b7ceb2b20351a": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "wb97m-v",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "c2e5d41eee91ee805b5d5174d3f84687fa483d383533c4807d9c92c039815ccb": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "m06-2x",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "433a6da569c119d0c4fe8a0bf3705e5300d06cde04720f41801b852bfb358eb8": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "wb97m-v",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "75e42338263f8ec4f8109bd66b31345fedd848b0e0ec1cf4459fe6e37c4be9b1": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "m06-2x",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "bf9ed63e58ff84890010b28a16efead12defac1d2c1e0cbac515962c4ec1d13d": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "m06-2x",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "d79ccddbe4fff25ad03bd93a0494a02410dfb5394e5fc7899a3d605def0d4f0f": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "m06-2x",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "7684edf08c4534587ccb24a945adc21c99ae2c76d0fadf4b8bfe2bfca2845287": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "wb97m-v",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "bc756c9afa2596c02f7bcdd627649dbe4f901576615bd56590045a6b8de8c418": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "wb97m-v",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "0043657c8726395a7240495f65f450fa9eac3ea0e1dac3855fc6548df052428e": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "89c69772d4e13b9ce845f76bcaf3a8f92455d4866f6a92c7d763dff285c37d67",
+      "scientific_inputs": {
+        "method": "r2scan-3c",
+        "orbital_basis": "def2-mTZVPP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "b7053f79628021770d5e7d8a8dfd2d3ce4310315340c267ff2f08581fbc83b2d": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "89c69772d4e13b9ce845f76bcaf3a8f92455d4866f6a92c7d763dff285c37d67",
+      "scientific_inputs": {
+        "method": "r2scan-3c",
+        "orbital_basis": "def2-mTZVPP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "233d622d5ca877819370371ae9a02c9091a1436151d0878c846694996ae627b7": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "89c69772d4e13b9ce845f76bcaf3a8f92455d4866f6a92c7d763dff285c37d67",
+      "scientific_inputs": {
+        "method": "r2scan-3c",
+        "orbital_basis": "def2-mTZVPP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "3b515158206ea78483f7a982c43b5f8e8650a9ba2e19f85ca13872b49bf1270a": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "89c69772d4e13b9ce845f76bcaf3a8f92455d4866f6a92c7d763dff285c37d67",
+      "scientific_inputs": {
+        "method": "r2scan-3c",
+        "orbital_basis": "def2-mTZVPP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    },
+    "a1febc3c218bc351c66dfdcb23edbe5980494eb48e709eb382e9595a660101fb": {
+      "source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+      "driver_sha256": "de54b21353d057159a9e3c7afaf4b2cb1c6f79f451c244dbb2f0997e68d7df95",
+      "scientific_inputs": {
+        "method": "wb97m-v",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0
+      }
+    }
+  }
+}

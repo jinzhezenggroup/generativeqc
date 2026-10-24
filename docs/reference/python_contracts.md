@@ -243,6 +243,31 @@ bounded tile schedule. Initial-guess options govern cold-start preparation and
 its budgets without changing the target method, basis, grid, precision or final
 tolerances. Existing explicit/imported/retained densities take precedence.
 
+`KsOptions(grid=xc_grid, nonlocal_grid=vv10_grid)` independently prescribes the
+semilocal and VV10/rVV10 quadratures. For Treutler v4 XC prescriptions, an
+omitted VV10/rVV10 grid defaults to level 3 even when XC uses another level
+(e.g. `grid_accuracy="tight"` selects XC level 4). Equal level-3 grids share
+the existing path. Explicitly supplying the same complete `GridSpec` for
+both also opts into sharing. Omitted nonlocal grids retain the previous shared
+path for explicitly selected legacy v1--v3 XC grids. This policy is resolved
+by Python `KsOptions`; native C/C++ descriptor callers retain their existing
+explicit-grid semantics. Equal total point counts do not establish equality:
+radial/angular rules, radii, partition and pruning also belong to the numerical
+model. Both prescriptions and their actual
+collocation sources are bound to the native stationary-state token.
+
+Independent grids support SCF energy and the existing supported first-derivative
+consumers; each grid carries its own moving-point and partition-weight response.
+Their current composite CUDA force consumer retains the existing uniform
+atom-major grid and per-grid point bounds. Hessians/HVPs, coupled response and
+explicit resource-ledger planning reject independent grids rather than using
+the XC grid for VV10. Existing equal-grid capabilities remain unchanged. A
+custom grid is not a convergence or FP64/Fast accuracy certification.
+
+The README endpoint driver accepts `--grid R P A --nonlocal-grid R P A` for
+WB97M-V and records both prescriptions for the native and GPU4PySCF populations.
+Omit `--nonlocal-grid` to retain the original benchmark protocol and path.
+
 (python-options-errors)=
 ## Option validation and fallback
 

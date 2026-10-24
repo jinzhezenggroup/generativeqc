@@ -207,9 +207,12 @@ Unsupported functional/response pairs fail during preparation. See the
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:
 it requests up to 32 original tiles within an **additional** per-owner device
-allowance of 32 MiB per density-product jet: 32 MiB for a one-jet contraction
-and 128 MiB for a four-jet contraction. This is a resource-shape policy, not a
-functional-name selector. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+allowance of 32 MiB times the larger of the AO and density-product jet counts:
+32 MiB when both have one jet, and 128 MiB when either has four jets. GGA keeps
+four AO jets even though its density product needs only one, so its retained
+AO panels receive the same capacity as other four-jet consumers. Selection
+uses these panel dimensions independently of the functional name. The admitted
+count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
 overrides the request; zero or one explicitly retains the one-tile executor.
 `GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
 also retains the incumbent; an explicit byte cap is never scaled by the jet count.
@@ -396,23 +399,28 @@ select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
 
-Strict-FP64 direct restricted VV10 initialization automatically admits full
+Strict-FP64 restricted VV10 initialization automatically admits bounded
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
-the existing reuse threshold, a 4 GiB value ceiling and complete host/device
+the existing reuse threshold, a 16 GiB value ceiling and complete host/device
 admission. Cold and transported-density initialization can prepare a lease;
 a retained warm call only reuses its audited immutable-geometry lease. It never
 builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
 selects ordinary Direct evaluation; explicit `1` retains the separately selected
 experimental capacity domain. The existing bucket mask and byte ceiling remain
-explicit controls. Capacity refusal, unsupported angular classes, fitted,
+explicit controls. The primary full-range J/K may be Direct or fitted; an
+independent strict Direct correction owns the range values. Both providers'
+host storage is charged, and omitted buckets retain ordinary exact execution.
+Capacity refusal, unsupported angular classes,
 lower-precision, incremental and externally budgeted device-ledger paths retain
 their existing providers.
 
 The lease binds geometry, radial operator and omega. It supplies only matching
 raw range K; primary full J/K and derivative owners remain independent.
 Successful solves rebase warm energy metadata with both incumbent exchange
-terms before optional values are retired. This preserves the physical replay
-gates and records the additional complete Fock and both exchange applications.
+terms before optional values are retired. An authenticated unchanged fitted
+primary retains its current J/K and final occupied projection during a range-only
+rebase. This preserves the physical replay gates and counts the operators
+actually executed.
 
 ## Prepared ragged execution
 

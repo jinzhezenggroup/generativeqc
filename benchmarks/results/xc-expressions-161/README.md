@@ -79,3 +79,24 @@ than duplicated here. `manifest.json` hashes every raw archived file.
 Routine log/XML files named in this historical account are now represented in
 [the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
+
+## Lossless checkout compaction (2026-10-23)
+
+The 84 original reports and contracts are stored together in `records.json.xz`
+(29,508 bytes instead of 1,185,686 bytes). Shared compression removes redundant
+JSON structure, not measurements. Every original UTF-8 byte, including all raw
+Libxc discrepancies, boundary fixtures, rejected alternatives and timings, is
+recoverable offline. `manifest.json` and `summary.json` are unchanged. This is
+storage cleanup only, not new numerical or performance qualification. The
+64 MiB aggregate budget and every scientific gate remain unchanged.
+
+Verify all 85 original manifest entries, or restore the original layout into
+a **new** directory (no existing files are overwritten):
+
+```bash
+python benchmarks/results/xc-expressions-161/restore.py
+python benchmarks/results/xc-expressions-161/restore.py --output .artifacts/xc161-restored
+```
+
+The original source revision for this storage migration is
+`7b9ad576222502ee11b4212af8ea1631eb25e083`; Git history is unchanged.

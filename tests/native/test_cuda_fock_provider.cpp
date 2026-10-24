@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -913,6 +914,28 @@ void spd_optional_allocation_fallback() {
  * density orientation. Count actual source work separately from endpoint time.
  */
 void spd_canonical_range_values() {
+  // This census observes the generated J/K channels, not the separately
+  // qualified MD-J producer. Select that contract explicitly so an automatic
+  // MD-J choice cannot look like lost J work; restore the default for all
+  // other provider tests, including their MD-J numerical coverage.
+  struct GeneratedJScope {
+    bool present{};
+    std::string previous;
+    GeneratedJScope() {
+      if (const auto* value = std::getenv("GENERATIVEQC_DISABLE_MD_J")) {
+        present = true;
+        previous = value;
+      }
+      require(setenv("GENERATIVEQC_DISABLE_MD_J", "1", 1) == 0,
+              "could not select generated J for its channel census");
+    }
+    ~GeneratedJScope() {
+      if (present)
+        setenv("GENERATIVEQC_DISABLE_MD_J", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DISABLE_MD_J");
+    }
+  } generated_j_scope;
   for (unsigned angular : {0U, 1U, 2U}) {
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       generativeqc::core::System first;
@@ -2615,22 +2638,37 @@ void generated_coulomb_budget() {
       std::size_t primitives = 0;
       for (const auto* system : {&first, &second})
         for (const auto& shell : system->shells) primitives += shell.primitives.size();
-      for (unsigned derivative_order : {0U, 1U}) {
-        const auto capacity =
-            cuda_direct_coulomb_device_bytes(2, dimension, 4, shells, primitives, derivative_order);
-        CudaDirectJkPlan* raw{};
-        CudaDirectJkDiagnostic diagnostic;
-        require(create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity,
-                                           &raw, diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
-                detail.c_str());
-        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
-            raw, destroy_cuda_direct_jk_plan);
-        require(diagnostic.device_bytes <= capacity,
-                "generated J density metadata exceeded the shape-only budget");
-        require((std::string(diagnostic.schedule).find("generated-shell") != std::string::npos) ==
-                    (angular <= 2),
-                "shape-only J budget lost generated admission or changed through-f fallback");
-      }
+      for (unsigned derivative_order : {0U, 1U})
+        for (const auto cartesian_nao :
+             {std::size_t{0}, generativeqc::molecule::cartesian_ao_count(first)}) {
+          const auto capacity = cuda_direct_coulomb_device_bytes(
+              2, dimension, 4, shells, primitives, derivative_order, false, cartesian_nao);
+          CudaDirectJkPlan* raw{};
+          CudaDirectJkDiagnostic diagnostic;
+          require(
+              create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity, &raw,
+                                         diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+          std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+              raw, destroy_cuda_direct_jk_plan);
+          require(diagnostic.device_bytes <= capacity,
+                  "generated J density metadata exceeded the shape-only budget");
+          FockBuildSpec value_spec;
+          value_spec.derivative_order = 0;
+          value_spec.exchange.present = false;
+          // The composite schedule label may describe canonical K while J
+          // still has its generated owner. Query the actual J capability.
+          require(
+              cuda_direct_jk_generated_coulomb_available(plan.get(), value_spec) == (angular <= 2),
+              ("J budget changed generated admission: l=" + std::to_string(angular) +
+               " representation=" + std::to_string(representation) + " derivative=" +
+               std::to_string(derivative_order) + " Cartesian=" + std::to_string(cartesian_nao) +
+               " capacity=" + std::to_string(capacity) + " schedule=" + diagnostic.schedule)
+                  .c_str());
+          if (derivative_order && angular <= 2)
+            require(plan->generated_exchange && plan->generated_exchange->force_capability,
+                    "metadata-aware derivative capacity lost its shell force lease");
+        }
     }
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }
@@ -2762,6 +2800,8 @@ void compensated_generated_coulomb() {
       << "CUDA compensated generated/native/bounded J, spins, projections and plane-reset gates "
          "PASS\n";
 }
+
+#include "direct_public_schwarz_cases.hpp"
 
 void direct_providers(bool through_f_response, bool eri_tiles_only = false,
                       bool mixed_force_domains = false, unsigned force_domain_angular = 3U,
@@ -3032,6 +3072,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--public-schwarz-only") {
+      public_schwarz_preparation();
+      return 0;
+    }
     if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
                       std::string(argv[1]) == "--canonical-materialized-screened-only")) {
       canonical_screened_values(true);

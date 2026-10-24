@@ -54,8 +54,6 @@ def protocol(
         else basis_snapshot
     )
     ks = resolve_ks_options("wb97m-v-rks", KsOptions(grid=grid))
-    if float(MOLECULAR_VV10_DENSITY_THRESHOLD) != 1e-8:
-        raise ValueError("native and reference VV10 density domains differ")
     return json.loads(
         json.dumps(
             {
@@ -92,7 +90,7 @@ def protocol(
                 "grid_response": True,
                 "vv10_density_threshold": {
                     "native_scf_and_forces": float(MOLECULAR_VV10_DENSITY_THRESHOLD),
-                    "reference_scf_and_forces": 1e-8,
+                    "reference_scf_and_forces": float(MOLECULAR_VV10_DENSITY_THRESHOLD),
                 },
                 "scf_domain": ks.scf_domain,
                 "xc_schedule": ks.xc_schedule,
@@ -264,6 +262,7 @@ def _run(args: argparse.Namespace, output: TextIO) -> None:
                 atoms=case.atoms,
                 basis=basis,
                 case_snapshot=case,
+                vv10_density_threshold=float(MOLECULAR_VV10_DENSITY_THRESHOLD),
             )
             save()
             validate_reference(report["reference"], science)

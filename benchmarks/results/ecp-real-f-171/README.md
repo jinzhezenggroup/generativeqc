@@ -108,3 +108,10 @@ Native scientific LOC delta is zero. Single-call timings are reproducibility
 context, not a performance claim. Spin-orbit methods, other ECP families,
 DF/DFT forces, g orbitals/projectors and larger CUDA budget inventories remain
 outside this qualification.
+
+Source inventories are stored losslessly in
+`benchmarks/results/ecp-source-inventories.json.xz`. Adjacent `.storage.json`
+files bind the original bytes and the JSON bundle member. Decode with
+`json.loads(lzma.decompress(bundle.read_bytes()))["files"][original_path]`
+and encode that string as UTF-8 to recover the exact original JSON. Historical
+raw manifest checksums continue to describe their original run files.

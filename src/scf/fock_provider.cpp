@@ -77,6 +77,10 @@ void CpuFockProviderView::validate(const ResolvedFockBuild& strategy) const {
             "DF Fock provider tensor shape/rank mismatch");
     require(fitted_->metric_relative_threshold == strategy.metric_relative_threshold,
             "DF value/response metric cutoff differs from the resolved provider");
+    const auto& exchange = strategy.spec.exchange;
+    require(fitted_->range_omega ==
+                (exchange.present && exchange.op == FockOperator::LongRange ? exchange.omega : 0.0),
+            "DF value/response radial operator differs from the resolved provider");
     finite(raw.metric);
     finite(raw.three_center);
     finite(b.values);
@@ -157,7 +161,7 @@ std::vector<double> CpuFockProviderView::derivative(FockBuildSpec spec,
     if (weighted)
       return build_density_fitting_rhf_weighted_gradient(
                  *fitted_->df_gradient_orbital, *fitted_->df_gradient_auxiliary, fitted_->raw,
-                 density, fitted_->metric_relative_threshold, coefficients)
+                 density, fitted_->metric_relative_threshold, coefficients, fitted_->range_omega)
           .derivative;
     return build_density_fitting_rhf_gradient(fitted_->raw, density,
                                               fitted_->metric_relative_threshold, coefficients)
@@ -166,7 +170,8 @@ std::vector<double> CpuFockProviderView::derivative(FockBuildSpec spec,
   if (weighted)
     return build_density_fitting_uhf_weighted_gradient(
                *fitted_->df_gradient_orbital, *fitted_->df_gradient_auxiliary, fitted_->raw,
-               density, beta, fitted_->metric_relative_threshold, coefficients)
+               density, beta, fitted_->metric_relative_threshold, coefficients,
+               fitted_->range_omega)
         .derivative;
   return build_density_fitting_uhf_gradient(fitted_->raw, density, beta,
                                             fitted_->metric_relative_threshold, coefficients)

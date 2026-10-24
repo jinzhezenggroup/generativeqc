@@ -11,7 +11,7 @@ import math
 import threading
 import time
 import typing
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
 
 import numpy as np
@@ -25,6 +25,8 @@ from .elements import checked_integer, electron_state
 if typing.TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
     from pathlib import Path
+
+    from .precision_policy import PrecisionPolicy
 
 
 def _basis_snapshot(basis: BasisSet | str | Path) -> BasisSet:
@@ -88,7 +90,8 @@ class CBSResult:
     forces use the identical, geometry-independent weights. Components retain
     native convergence/resource/response diagnostics after their owners close.
     This is an explicitly approximate CCSD(T)/CBS model, not direct CCSD(T)
-    extrapolation or a certified basis-set error estimate.
+    extrapolation or a certified basis-set error estimate. ``convergence``
+    records selected stopping limits; it does not estimate observable errors.
     """
 
     energy: float
@@ -107,6 +110,7 @@ class CBSResult:
     basis_metadata: dict[str, typing.Any]
     endpoint_seconds: float
     execution_groups: tuple[dict[str, typing.Any], ...]
+    convergence: dict[str, typing.Any] = field(default_factory=dict)
 
 
 def _limit_weights(log_ratio: float) -> tuple[float, float]:
@@ -144,6 +148,11 @@ class CCSDTCBSCalculator:
     Thus the workflow does not retain several basis-dependent CUDA owners at
     once. ``calculator_options`` supplies common SCF/CC/resource controls;
     budgets remain native endpoint budgets, not a total process-RSS bound.
+    ``policy="fast"`` selects budget-scaled convergence, including force
+    response, and requests bounded FP32 auxiliary preconvergence for CUDA
+    DF-CCSD. Final residual checks and response remain FP64. It preserves
+    explicit tighter SCF/CC controls. The returned
+    convergence metadata describes stopping limits, not measured error bounds.
     Calls on one workflow are serialized. Use separate workflows for concurrency.
     """
 
@@ -161,6 +170,7 @@ class CCSDTCBSCalculator:
         hf_extrapolation: str = "exponential",
         hf_exponent: float = 1.63,
         calculator_options: Mapping[str, typing.Any] | None = None,
+        policy: PrecisionPolicy | str = "standard",
     ) -> None:
         """Bind basis/cardinal snapshots and the shared correlation Hamiltonian.
 
@@ -171,6 +181,20 @@ class CCSDTCBSCalculator:
         ``hf_reference="df"`` selects full DF rather than a DF initial guess;
         the supplied auxiliary snapshots then serve both JK and correlation.
         """
+        from .precision_policy import PrecisionPolicy
+
+        if isinstance(policy, str):
+            policy = PrecisionPolicy(policy)
+        if not isinstance(policy, PrecisionPolicy):
+            raise TypeError("CBS policy must be a PrecisionPolicy or preset name")
+        if (
+            policy.profile not in ("standard", "fp64", "fast")
+            or policy.target is not None
+        ):
+            raise NotImplementedError(
+                "CBS supports standard/fp64/fast without target audits"
+            )
+        self.policy = policy
         bases = tuple(mp2_bases)
         if len(bases) != 2 or not all(isinstance(item, CBSBasis) for item in bases):
             raise ValueError("mp2_bases must contain two CBSBasis records")
@@ -264,6 +288,7 @@ class CCSDTCBSCalculator:
             raise ValueError(
                 f"unsupported CBS calculator options: {', '.join(sorted(unknown))}"
             )
+        requested_options = options
         options = {
             "max_iterations": 200,
             "energy_tolerance": 1e-12,
@@ -289,6 +314,93 @@ class CCSDTCBSCalculator:
             _limit_weights(-self.hf_exponent * (high.cardinal - low.cardinal))
             if hf_extrapolation == "exponential"
             else (0.0, 1.0)
+        )
+
+        from ._correlation_convergence import convergence_limits, convergence_scale
+        from .force_aware_numerics import TargetErrorBudget
+
+        coefficients: dict[tuple[str, str], float] = {}
+        for _, method, basis, coefficient in self._terms():
+            key = (method, basis.identity)
+            coefficients[key] = coefficients.get(key, 0.0) + coefficient
+        amplification = math.fsum(abs(value) for value in coefficients.values())
+        budget = policy.budget
+        component_budget = (
+            TargetErrorBudget(
+                budget.energy_abs / amplification,
+                budget.force_max_abs / amplification,
+                budget.force_rms / amplification
+                if budget.force_rms is not None
+                else None,
+            )
+            if budget is not None
+            else None
+        )
+        scale = convergence_scale(component_budget)
+        limits = convergence_limits(component_budget)
+        if scale:
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "ccsd_energy_tolerance",
+                "ccsd_residual_tolerance",
+            ):
+                options[name] = min(
+                    requested_options.get(name, limits[name]), limits[name]
+                )
+            options["_correlation_convergence_budget"] = component_budget
+        # Publish configured limits, not an invented observable error estimate.
+        self._convergence = {
+            "requested_policy": policy.profile,
+            "selected": "relaxed" if scale else "strict_fp64",
+            "arithmetic_request": "df_ccsd_fp32_preconvergence"
+            if scale and self._auxiliary_bases
+            else "fp64",
+            "reason": "budget_scaled_convergence"
+            if scale
+            else (
+                "component_budget_requires_strict" if budget else "standard_convergence"
+            ),
+            "budget": asdict(budget) if budget is not None else None,
+            "component_budget": asdict(component_budget)
+            if component_budget is not None
+            else None,
+            "coefficient_l1": amplification,
+            "scale": scale,
+            "limits": {
+                **limits,
+                **{
+                    name: min(options[name], limits[name])
+                    for name in (
+                        "energy_tolerance",
+                        "density_tolerance",
+                        "ccsd_energy_tolerance",
+                        "ccsd_residual_tolerance",
+                    )
+                },
+            },
+        }
+
+    def _terms(self) -> tuple:
+        """Use one set of component weights for composition and error allocation."""
+        low, high = self.mp2_bases
+        return (
+            ("hf_low", "rhf", low.basis, self.hf_weights[0] - self.mp2_weights[0]),
+            (
+                "hf_high",
+                "rhf",
+                high.basis,
+                self.hf_weights[1] - self.mp2_weights[1],
+            ),
+            ("mp2_low", "mp2", low.basis, self.mp2_weights[0]),
+            ("mp2_high", "mp2", high.basis, self.mp2_weights[1]),
+            (
+                "correction_ccsdt",
+                "df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)",
+                self.correction_basis,
+                1.0,
+            ),
+            ("correction_mp2", "mp2", self.correction_basis, -1.0),
         )
 
     def singlepoint(
@@ -336,24 +448,7 @@ class CCSDTCBSCalculator:
                 )
                 record.shells_for(geometry)
 
-            terms = (
-                ("hf_low", "rhf", low.basis, self.hf_weights[0] - self.mp2_weights[0]),
-                (
-                    "hf_high",
-                    "rhf",
-                    high.basis,
-                    self.hf_weights[1] - self.mp2_weights[1],
-                ),
-                ("mp2_low", "mp2", low.basis, self.mp2_weights[0]),
-                ("mp2_high", "mp2", high.basis, self.mp2_weights[1]),
-                (
-                    "correction_ccsdt",
-                    "df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)",
-                    self.correction_basis,
-                    1.0,
-                ),
-                ("correction_mp2", "mp2", self.correction_basis, -1.0),
-            )
+            terms = self._terms()
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
             by_role: dict[str, Result] = {}
             groups = {basis.identity: basis for _, _, basis, _ in terms}
@@ -504,6 +599,32 @@ class CCSDTCBSCalculator:
                 raise RuntimeError(
                     "CBS composition produced nonfinite energy or forces"
                 )
+            # Report actual arithmetic from the copied native counters. A
+            # resource-refused FP32 request must not be relabelled as mixed.
+            arithmetic = "fp64"
+            lambda_request = "fp64" if forces is not None else "not_requested"
+            lambda_arithmetic = lambda_request
+            if self._convergence["arithmetic_request"] != "fp64":
+                performance = next(
+                    component.result.cc_performance
+                    for component in components
+                    if component.method == "df-ccsd(t)"
+                )
+                if performance is None or performance.ccsd_fp32_requested is not True:
+                    raise RuntimeError("CBS Fast lacks native FP32 admission telemetry")
+                if performance.ccsd_fp32_executed and performance.ccsd_fp32_gemm_calls:
+                    arithmetic = "mixed"
+                if forces is not None:
+                    lambda_request = "df_lambda_fp32_preconvergence"
+                    if performance.lambda_fp32_requested is not True:
+                        raise RuntimeError(
+                            "CBS Fast lacks native Lambda FP32 admission telemetry"
+                        )
+                    if (
+                        performance.lambda_fp32_executed
+                        and performance.lambda_fp32_gemm_calls
+                    ):
+                        lambda_arithmetic = arithmetic = "mixed"
             return CBSResult(
                 energy,
                 forces,
@@ -545,6 +666,19 @@ class CCSDTCBSCalculator:
                 },
                 time.perf_counter() - started,
                 tuple(execution_groups),
+                {
+                    **self._convergence,
+                    "arithmetic": arithmetic,
+                    "lambda_arithmetic_request": lambda_request,
+                    "lambda_arithmetic": lambda_arithmetic,
+                    "limits": dict(self._convergence["limits"]),
+                    "budget": dict(self._convergence["budget"])
+                    if self._convergence["budget"]
+                    else None,
+                    "component_budget": dict(self._convergence["component_budget"])
+                    if self._convergence["component_budget"]
+                    else None,
+                },
             )
 
 

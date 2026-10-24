@@ -79,6 +79,34 @@ def test_capabilities_are_backend_operator_and_derivative_specific() -> None:
         build_one_electron_derivative_ir("kinetic", (5, 0))
 
 
+@pytest.mark.parametrize("operator", ("df_metric", "df_three_center"))
+@pytest.mark.parametrize("order", (0, 1))
+def test_scf_auxiliary_g_admission_keeps_orbital_and_h_boundaries(
+    operator: str, order: int
+) -> None:
+    """A qualified fitting role cannot widen the orbital or derivative domain."""
+    atoms = [("He", (0, 0, 0))]
+    request = {
+        "backend": "cuda",
+        "operator": operator,
+        "derivative_order": order,
+        "role": "auxiliary",
+        "consumer": "scf_df",
+    }
+    for angular, eligible in ((3, True), (4, True), (5, False)):
+        shells = [Shell(0, angular, (Primitive(0.7, 1),))]
+        assert basis_capability(shells, atoms, **request)["eligible"] is eligible
+    shells = [Shell(0, 4, (Primitive(0.7, 1),))]
+    for changed in (
+        {"role": "orbital"},
+        {"derivative_order": 2},
+        {"backend": "cpu"},
+        {"operator": "eri"},
+    ):
+        with pytest.raises(ValueError):
+            basis_capability(shells, atoms, **(request | changed))
+
+
 @pytest.mark.parametrize("angular", [(4, 0), (0, 4), (4, 2), (4, 4)])
 @pytest.mark.parametrize("family", ["overlap", "kinetic", "nuclear_attraction"])
 def test_g_one_electron_all_components_libcint(

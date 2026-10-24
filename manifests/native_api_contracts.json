@@ -650,10 +650,10 @@
         "tile_points"
       ],
       "field_declarations": [
-        "std :: uint32_t version { 1 } ;",
-        "std :: uint32_t radial_points { 64 } ;",
-        "std :: uint32_t angular_polar { 12 } ;",
-        "std :: uint32_t angular_azimuth { 24 } ;",
+        "std :: uint32_t version { 4 } ;",
+        "std :: uint32_t radial_points { 3 } ;",
+        "std :: uint32_t angular_polar { 0 } ;",
+        "std :: uint32_t angular_azimuth { 0 } ;",
         "std :: uint32_t partition_iterations { 3 } ;",
         "double coincident_tolerance { 1.0 e - 12 } ;",
         "std :: uint64_t tile_points { 256 } ;"
@@ -2368,6 +2368,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_response_publish_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "cabd6df4e02dbd1d70683d91b42c0b60fe8e9f85e0a31e3c33bb9d9ada2fbe9c",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_response_recycle_capacity_v1_get": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -2502,6 +2517,36 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_response_sequence_solve_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "dc2b5c39f4be0d44f66d756178e8ff4b5759bfe2ab57918bfc9dbfd2dd5c9372",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_sequence_workspace_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "d11eeb810acd5cb560d13734ac82db345f64ba8a8caeb739abd97b1fda8f418a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_response_solve_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -2514,6 +2559,21 @@
         "lifetime",
         "outputs",
         "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_validate_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "7b26836e313eb45fb403c728508e051728b4f45e4a7b7eaafa0196197186d867",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
       ],
       "fields": [],
       "field_declarations": []

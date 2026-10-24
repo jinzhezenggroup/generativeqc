@@ -9,6 +9,8 @@ from __future__ import annotations
 import builtins
 import inspect
 import typing
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fractions import Fraction
 
 import numpy as np
@@ -33,6 +35,19 @@ float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 _HOST_CONTAINER_MAX_DEPTH = 64
 _HOST_CONTAINER_MAX_ITEMS = 1_000_000
+_CAPTURE_BACKEND: ContextVar[str | None] = ContextVar(
+    "prod_capture_backend", default=None
+)
+
+
+@contextmanager
+def _capture_backend(backend: str) -> typing.Iterator[None]:
+    """Scope frontend-specific qualification without changing TensorIR identity."""
+    token = _CAPTURE_BACKEND.set(backend)
+    try:
+        yield
+    finally:
+        _CAPTURE_BACKEND.reset(token)
 
 
 def _symbolic(*values: object) -> builtins.bool:
@@ -225,6 +240,21 @@ def where(condition: object, x1: object, x2: object) -> typing.Any:
     if predicate.dtype != np.dtype("bool"):
         raise TypeError("where condition must be bool data")
     return _eager_compute(np.where, predicate, *_eager_operands(x1, x2, scalars=True))
+
+
+def minimum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real minimum, including named compiler inputs."""
+    return _namespace.minimum(x1, x2)
+
+
+def maximum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real maximum, including named compiler inputs."""
+    return _namespace.maximum(x1, x2)
+
+
+def clip(x: object, min: object = None, max: object = None) -> VibeArray:
+    """Capture bounded finite generic real clamping without changing eager clip."""
+    return _namespace.clip(x, min, max)
 
 
 def not_equal(x1: object, x2: object) -> typing.Any:
@@ -497,12 +527,14 @@ def sum(
     dtype: object = None,
     keepdims: builtins.bool = False,
 ) -> typing.Any:
-    """Reduce over selected axes without retaining reduced dimensions.
-
-    Dtype conversion and keepdims=True are not supported in this preview.
-    """
+    """Capture finite reductions with an optional explicit real input cast."""
     if isinstance(x, VibeArray):
-        return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+        if dtype is not None and _CAPTURE_BACKEND.get() == "cuda":
+            raise ValueError(
+                "sum explicit dtype capture is not qualified for backend='cuda'"
+            )
+        target = None if dtype is None else _dtype_name(dtype)
+        return _namespace.sum(x, axis=axis, dtype=target, keepdims=keepdims)
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
@@ -510,6 +542,53 @@ def sum(
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "sum")
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
+
+
+def prod(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    dtype: object = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite generic products with an optional explicit input cast."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("prod capture is not qualified for backend='cuda'")
+    target = None if dtype is None else _dtype_name(dtype)
+    return _namespace.prod(x, axis=axis, dtype=target, keepdims=keepdims)
+
+
+def var(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    correction: float = 0.0,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite centered variance without broadening backend admission."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("var capture is not qualified for backend='cuda'")
+    return _namespace.var(x, axis=axis, correction=correction, keepdims=keepdims)
+
+
+def max(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic maximum reductions."""
+    return _namespace.max(x, axis=axis, keepdims=keepdims)
+
+
+def min(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic minimum reductions."""
+    return _namespace.min(x, axis=axis, keepdims=keepdims)
 
 
 def mean(

@@ -37,6 +37,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc_response_solve_v1](#native-c-generativeqc-response-solve-v1)
 - [generativeqc_response_result_view_v1_get](#native-c-generativeqc-response-result-view-v1-get)
 - [generativeqc_response_result_destroy](#native-c-generativeqc-response-result-destroy)
+- [generativeqc_response_validate_v1](#native-c-generativeqc-response-validate-v1)
+- [generativeqc_response_publish_v1](#native-c-generativeqc-response-publish-v1)
+- [generativeqc_response_sequence_workspace_v1](#native-c-generativeqc-response-sequence-workspace-v1)
+- [generativeqc_response_sequence_solve_v1](#native-c-generativeqc-response-sequence-solve-v1)
 - [generativeqc_method_available](#native-c-generativeqc-method-available)
 - [generativeqc_method_from_name](#native-c-generativeqc-method-from-name)
 - [generativeqc_method_get_name](#native-c-generativeqc-method-get-name)
@@ -838,6 +842,101 @@ GENERATIVEQC_API void generativeqc_response_result_destroy ( generativeqc_respon
 **Lifetime.** Invalidates all borrowed views; double destruction or later use is invalid.
 
 **Execution.** Synchronous context-free cleanup; no scientific callback or device operation.
+
+(native-c-generativeqc-response-validate-v1)=
+## generativeqc_response_validate_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+typedef generativeqc_status ( * generativeqc_response_validate_v1 ) ( void * user_data ) ;
+```
+
+**Behavior.** Validate a method/provider lease at sequential response boundaries.
+
+**Inputs.** user_data is caller-owned scientific state; this callback performs no linear action.
+
+**Outputs.** SUCCESS certifies that the current lease still permits the request.
+
+**Errors.** A failing status aborts the sequence; do not unwind foreign exceptions through C.
+
+**Lifetime.** Borrowed synchronously, including zero-RHS and resource-refused requests.
+
+**Execution.** Optional synchronous CPU callback, not a convergence certificate.
+
+(native-c-generativeqc-response-publish-v1)=
+## generativeqc_response_publish_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+typedef generativeqc_status ( * generativeqc_response_publish_v1 ) ( void * user_data , size_t index , const generativeqc_response_result_view_v1 * view ) ;
+```
+
+**Behavior.** Consume one borrowed sequential response publication, in RHS order.
+
+**Inputs.** index is zero-based; view has the same layout as an owned result view. A workspace
+refusal has no solution allocation. SUCCESS does not imply the individual solve converged.
+
+**Outputs.** Copy or consume arrays synchronously; callback side effects are not rolled back.
+
+**Lifetime.** The view and every native array expire when this callback returns; retaining them
+is invalid. Caller-owned copied solution/basis arrays are charged by the sequence.
+
+**Errors.** Failing status aborts without publishing the summary; no foreign exception may unwind.
+
+**Execution.** Synchronous CPU callback. History copies, publisher object bookkeeping and
+physical provider allocations have separate budgets, not complete endpoint accounting.
+
+(native-c-generativeqc-response-sequence-workspace-v1)=
+## generativeqc_response_sequence_workspace_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_sequence_workspace_v1 ( const generativeqc_response_sequence_descriptor_v1 * descriptor , uint64_t * first_workspace_bytes , uint64_t * complete_workspace_bytes ) ;
+```
+
+**Behavior.** Query first-request working storage and a conservative complete-sequence bound.
+
+**Inputs.** Full-size current-ABI sequence/nested GMRES descriptors and two nonnull outputs.
+Only shape/control metadata is read; vector/callback pointers are ignored.
+
+**Outputs.** Writes both byte bounds on success only; empty sequences require zero numeric bytes.
+
+**Errors.** ABI_MISMATCH for headers; INVALID_ARGUMENT for invalid/overflowing controls,
+strides or storage extents. No dimension-sized allocation or callback occurs.
+
+**Execution.** Synchronous context-free CPU metadata query; no Python/compiler/device required.
+
+(native-c-generativeqc-response-sequence-solve-v1)=
+## generativeqc_response_sequence_solve_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_sequence_solve_v1 ( const generativeqc_response_sequence_descriptor_v1 * descriptor , generativeqc_response_sequence_summary_v1 * summary ) ;
+```
+
+**Behavior.** Execute independent RHS requests through the existing bound native response owner.
+
+**Inputs.** Valid sequence and initialized summary header. Nonempty requests require readable
+gmres.rhs, gmres.apply and publish; initial guesses are unsupported. validate is optional.
+
+**Outputs.** Publishes each result in order, then writes summary on API success only. Budget
+exhaustion preserves an admitted prefix and publishes allocation-free WORKSPACE_LIMIT
+diagnostics for the tail. Scientific nonconvergence remains a per-request result reason.
+
+**Lifetime.** Borrows inputs/callbacks for this call; each published view expires at callback
+return. No native owner survives the call. Earlier callback side effects are not rolled back.
+
+**Errors.** Header/control errors precede callbacks; callback status propagates; allocation
+failure returns OUT_OF_MEMORY. Never retries another solver on error.
+
+**Execution.** Synchronous CPU-only streaming; no method equations/symmetry are inferred.
+
+**Units.** FP64 vector units belong to the method; storage bounds are numeric bytes, not a
+complete callback/provider/publisher physical allocation receipt.
 
 (native-c-generativeqc-method-available)=
 ## generativeqc_method_available
@@ -4703,13 +4802,15 @@ Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 struct KsGrid
 ```
 
-Caller-selected molecular quadrature; no implicit production grid is promised.
+Versioned molecular quadrature, defaulting to Treutler/Lebedev + NWChem level 3.
 
-**Behavior.** Value descriptor for caller-selected molecular quadrature; defaults form a small
-reference grid and do not promise production convergence.
+**Behavior.** Value descriptor for molecular quadrature; defaults select level-3
+Treutler/Ahlrichs radial, Lebedev angular, NWChem pruning and Treutler-adjusted Becke.
 
-**Outputs.** version selects reference (1) or resolved production (2) grid semantics;
-radial_points, angular_polar, and angular_azimuth set quadrature counts;
+**Outputs.** version selects reference (1), explicit-radius unpruned (2), or
+explicit-radius radial-v1 pruned (3), or Treutler/Lebedev/NWChem (4) semantics;
+v4 encodes level 0..9 in radial_points and requires zero angular fields;
+earlier versions use radial_points, angular_polar and angular_azimuth as counts;
 partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
 coincident-center threshold; tile_points bounds the grid tile size.
 

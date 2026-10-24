@@ -22,7 +22,7 @@ from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.xc.quadrature_cuda import _LAYOUT
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -77,6 +77,7 @@ def native_probe(
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
+    (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -97,6 +98,7 @@ def native_probe(
 #include <utility>
 #include <vector>
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
@@ -140,7 +142,7 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         + _definition(diis, "bool incremental_diis_gram_requested(")
         + "\n}\n"
     )
-    source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
+    source += '\n#include "generated_quadrature.cuh"\n'
     source += r"""
 namespace generativeqc::dft {
 using scf::cuda_execution::MatrixLibraryOwner;
@@ -227,11 +229,12 @@ std::size_t prepare_optional(std::vector<void*>& allocations,
   if(selected_tiles) *selected_tiles=owner.batch.tiles;
   return resource.xc_device_bytes;
 }
-extern "C" void capacity(std::size_t work_jets,std::size_t spins,std::size_t limit,
+extern "C" void capacity(std::size_t jets,std::size_t work_jets,std::size_t spins,std::size_t limit,
                           std::uint64_t* result) {
   auto layout=dft::cuda_xc_layout_shape(2,6,512,49152,1,spins==2,256);
+  layout.jets=jets;
   layout.work_jets=work_jets;
-  layout.feature_terms=work_jets==4?5:4;
+  layout.feature_terms=work_jets==4?5:(jets==4?4:1);
   std::vector<void*> allocations;
   std::size_t selected=1;
   allocation_limit=limit;
@@ -287,7 +290,9 @@ extern "C" void grid_lifetime(void* handle,std::size_t points,std::uint64_t* out
   auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
   active_device_resource_ledger=ledger;
   namespace q=generated::quadrature;
-  struct {std::size_t points;} l{points};
+  struct {std::size_t points, atoms;} l{points, 0};
+  using dft::cuda_resident_grid_bytes;
+  const bool treutler=false;
   const bool retain_device=true;
   const int device=0;
 """
@@ -428,7 +433,7 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.fleet.restype = None
-    probe.capacity.argtypes = [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
+    probe.capacity.argtypes = [ctypes.c_size_t] * 4 + [ctypes.POINTER(ctypes.c_uint64)]
     probe.capacity.restype = None
     probe.grid_lifetime.argtypes = [
         ctypes.c_void_p,
@@ -624,6 +629,60 @@ def test_incremental_gram_charges_only_optional_physical_cache(
     )
 
 
+@pytest.mark.parametrize("aos", [16, 511, 512, 768])
+@pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_large_ks_automatic_gram_capacity_and_rollback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    aos: int,
+    history: int,
+    spins: int,
+) -> None:
+    """Public reservations include the admitted cache exactly once for either spin."""
+    selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
+    reducer = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+    monkeypatch.delenv(reducer, raising=False)
+    inventories = []
+    for mode in (None, "0", "1"):
+        if mode is None:
+            monkeypatch.delenv(selection, raising=False)
+        else:
+            monkeypatch.setenv(selection, mode)
+        output = (ctypes.c_uint64 * 3)()
+        assert (
+            native_probe.generativeqc_resource_ks_cuda_v1(
+                aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+            )
+            == 0
+        )
+        inventories.append(tuple(output))
+    automatic, serial, incremental = inventories
+    assert automatic == (incremental if aos >= 512 else serial)
+    expected = 8 * history * history if history >= 2 else 0
+    assert incremental[0] - serial[0] == expected
+    assert incremental[1:] == serial[1:]
+
+    # Automatic admission activates reducer validation at the public boundary;
+    # explicit serial rollback and one-vector histories still ignore it.
+    monkeypatch.delenv(selection, raising=False)
+    monkeypatch.setenv(reducer, "invalid")
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    status = native_probe.generativeqc_resource_ks_cuda_v1(
+        aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+    )
+    assert (status != 0) == (aos >= 512 and history >= 2)
+    if status:
+        assert tuple(output) == (17, 19, 23)
+    monkeypatch.setenv(selection, "0")
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+        )
+        == 0
+    )
+
+
 @pytest.mark.parametrize(
     "tiles,bytes_,expected",
     [(None, None, 1245184), ("0", None, 0), ("1", None, 0), (None, "0", 0)],
@@ -646,31 +705,39 @@ def test_unbudgeted_default_and_explicit_opt_out(
 
 
 @pytest.mark.parametrize("spins", (1, 2))
-def test_point_capacity_scales_with_work_jets_and_preserves_bounded_fallback(
-    native_probe: Any, monkeypatch: pytest.MonkeyPatch, spins: int
+@pytest.mark.parametrize("jets,work_jets", ((1, 1), (4, 1), (4, 4)))
+def test_point_capacity_scales_with_live_panels_and_preserves_bounded_fallback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    spins: int,
+    jets: int,
+    work_jets: int,
 ) -> None:
-    """Four-jet panels retain batching without bypassing explicit or OOM bounds."""
+    """AO and density panels retain batching within explicit and OOM bounds."""
     for name in CONTROLS:
         monkeypatch.delenv(name, raising=False)
     unlimited = ctypes.c_size_t(-1).value
 
-    def capacity(work_jets: int, limit: int = unlimited) -> tuple[int, int]:
+    def capacity(limit: int = unlimited) -> tuple[int, int]:
         result = (ctypes.c_uint64 * 2)()
-        native_probe.capacity(work_jets, spins, limit, result)
+        native_probe.capacity(jets, work_jets, spins, limit, result)
         return result[0], result[1]
 
-    automatic = capacity(4)
-    assert 32 << 20 < automatic[0] <= 128 << 20
-    monkeypatch.setenv(CONTROLS[1], str(128 << 20))
-    assert capacity(4) == automatic
+    automatic = capacity()
+    allowance = (32 if jets == 1 else 128) << 20
+    assert 0 < automatic[0] <= allowance
+    if jets == 4:
+        assert automatic[0] > 32 << 20
+    monkeypatch.setenv(CONTROLS[1], str(allowance))
+    assert capacity() == automatic
     monkeypatch.setenv(CONTROLS[1], str(32 << 20))
-    incumbent = capacity(4)
+    incumbent = capacity()
     assert 0 < incumbent[0] <= 32 << 20
     assert 1 < incumbent[1] <= automatic[1]
-    one_jet_explicit = capacity(1)
     monkeypatch.delenv(CONTROLS[1])
-    assert capacity(1) == one_jet_explicit
-    assert capacity(4, 32 << 20) == incumbent
-    assert capacity(4, 1) == (0, 1)
+    if jets == 1:
+        assert automatic == incumbent
+    assert capacity(32 << 20) == incumbent
+    assert capacity(1) == (0, 1)
     monkeypatch.setenv(CONTROLS[1], "0")
-    assert capacity(4) == (0, 1)
+    assert capacity() == (0, 1)

@@ -76,3 +76,9 @@ and error/identity/resource contracts.
 
 - Refs #2137 and #2111; both parent scopes remain open.
 - [Current derivative contract](../../../../docs/developer/tensor_ir.md#derivative-programs-151)
+
+## Follow-up: explicit primal comparison selectors
+
+The [2026-10-19 decision](2026-10-19-primal-comparison-where-ad.md) separately
+qualifies comparison selectors through an explicit option, preserving the
+external-only default and Boolean non-differentiability recorded here.

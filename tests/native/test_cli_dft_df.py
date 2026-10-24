@@ -71,8 +71,10 @@ class NativeDftDfCliTests(unittest.TestCase):
         data = json.loads(pbe0.stdout)
         self.assertEqual(data["method"], "pbe0-rks")
         self.assertEqual(data["backend"], "cpu_reference")
-        # Independent C++ native SDK H2/STO-3G reference at +/-0.7 Bohr.
-        self.assertAlmostEqual(data["energy_hartree"], -1.1543107969377155, delta=1e-6)
+        # Independent PySCF 2.14 / Libxc 7, H2/STO-3G at +/-0.7 Bohr:
+        # level 3 Treutler-Ahlrichs/NWChem, Treutler radii adjustment,
+        # original Becke, no density pruning, conv_tol=1e-14.
+        self.assertAlmostEqual(data["energy_hartree"], -1.15431095433684, delta=1e-6)
         self.assertEqual(len(data["method_ir_identity"]), 64)
         self.assertNotIn("forces_hartree_per_bohr", data)
 
@@ -88,8 +90,18 @@ class NativeDftDfCliTests(unittest.TestCase):
             "24",
         )
         self.assertEqual(explicit_grid.returncode, 0, explicit_grid.stderr)
+        # Preserve the original SDK oracle for the explicit legacy v1 grid.
         self.assertAlmostEqual(
             json.loads(explicit_grid.stdout)["energy_hartree"],
+            -1.1543107969377155,
+            delta=1e-9,
+        )
+        explicit_level = self.call_named(
+            "pbe0-rks", "--backend", "cpu", "--grid-level", "3"
+        )
+        self.assertEqual(explicit_level.returncode, 0, explicit_level.stderr)
+        self.assertAlmostEqual(
+            json.loads(explicit_level.stdout)["energy_hartree"],
             data["energy_hartree"],
             delta=1e-9,
         )

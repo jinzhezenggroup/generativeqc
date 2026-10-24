@@ -39,6 +39,7 @@ def make_df_derivative_fixture(
     primitive_lengths: typing.Any = None,
     exponent_scale: float = 1.0,
     separation_scale: float = 1.0,
+    omega: float = 0.0,
 ) -> typing.Any:
     """Differentiate all real libcint Gaussian centers with independent signs."""
     value = make_df_value_fixture(
@@ -47,8 +48,10 @@ def make_df_derivative_fixture(
         primitive_lengths=primitive_lengths,
         exponent_scale=exponent_scale,
         separation_scale=separation_scale,
+        omega=omega,
     )
     mol, scales, _ = pyscf_molecule(value.inputs)
+    mol.set_range_coulomb(omega)
     count = len(angular)
     references = []
     for representation in ("cart", "sph"):

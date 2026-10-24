@@ -224,6 +224,16 @@ struct GradientSpatialCoulombValues {
       const unsigned maximum_z = first.z + second.z + third.z + fourth.z;
       extent_y = maximum_y + 2U;
       extent_z = maximum_z + 2U;
+      // A primitive's scaled Boys roots are common to every Cartesian state.
+      // Keep orders four/five and the nonspatial fallback byte-for-byte in their
+      // original arithmetic; only the admitted order-six box borrows these roots.
+      double preweighted_boys[AngularOrder == 6U ? AngularOrder + 2U : 1U];
+      const double* recurrence_boys = boys;
+      if constexpr (AngularOrder == 6U) {
+        for (unsigned order = 0; order <= AngularOrder + 1U; ++order)
+          preweighted_boys[order] = workspace.negative_two_rho_powers[order] * boys[order];
+        recurrence_boys = preweighted_boys;
+      }
       for (unsigned axis_x = 0; axis_x <= maximum_x + 1U; ++axis_x) {
         for (unsigned axis_y = 0; axis_y < extent_y; ++axis_y) {
           for (unsigned axis_z = 0; axis_z < extent_z; ++axis_z) {
@@ -232,7 +242,8 @@ struct GradientSpatialCoulombValues {
             if (faces > 1U) continue;
             const unsigned state = axis_x + (axis_y << 3U) + (axis_z << 6U);
             values[(axis_x * extent_y + axis_y) * extent_z + axis_z] =
-                high_order_coulomb<AngularOrder + 1U>(state, rho, workspace, boys);
+                high_order_coulomb<AngularOrder + 1U, AngularOrder == 6U>(
+                    state, rho, workspace, recurrence_boys);
           }
         }
       }
@@ -266,6 +277,7 @@ __device__ inline void primitive_eri_order456_gradient(
     double omega = 0.0) {
   constexpr unsigned AngularOrder = FirstPairOrder + SecondPairOrder;
   constexpr unsigned CoulombOrder = AngularOrder + 1;
+  constexpr bool FactorResponse = SpatialReuse && AngularOrder == 6U;
   static_assert(AngularOrder == 4 || AngularOrder == 5 || AngularOrder == 6);
   static_assert(FirstPairOrder >= SecondPairOrder);
   const double p = alpha + beta;
@@ -340,12 +352,21 @@ __device__ inline void primitive_eri_order456_gradient(
             coefficient * spatial_values.value(
                               derivative_state + fourth_order_derivative_state(coordinate), rho,
                               coulomb_workspace, boys);
-        value_gradient[0][coordinate] +=
-            first_coefficient_gradient * coulomb + first_product_scale * scaled_coulomb_derivative;
-        value_gradient[1][coordinate] += -first_coefficient_gradient * coulomb +
-                                         second_product_scale * scaled_coulomb_derivative;
-        value_gradient[2][coordinate] +=
-            second_coefficient_gradient * coulomb + third_product_scale * scaled_coulomb_derivative;
+        if constexpr (FactorResponse) {
+          // The two pair-coefficient responses and the product-center response
+          // share constant nuclear Jacobians across every contraction term.
+          // Accumulate in that basis before applying the Jacobians once, below.
+          value_gradient[0][coordinate] += first_coefficient_gradient * coulomb;
+          value_gradient[1][coordinate] += second_coefficient_gradient * coulomb;
+          value_gradient[2][coordinate] += scaled_coulomb_derivative;
+        } else {
+          value_gradient[0][coordinate] +=
+              first_coefficient_gradient * coulomb + first_product_scale * scaled_coulomb_derivative;
+          value_gradient[1][coordinate] += -first_coefficient_gradient * coulomb +
+                                           second_product_scale * scaled_coulomb_derivative;
+          value_gradient[2][coordinate] +=
+              second_coefficient_gradient * coulomb + third_product_scale * scaled_coulomb_derivative;
+        }
       }
     }
   }
@@ -363,8 +384,15 @@ __device__ inline void primitive_eri_order456_gradient(
         const double difference = vec_axis(third, coordinate) - vec_axis(fourth, coordinate);
         decay_derivative = -2.0 * nu * difference;
       }
-      gradient[center][coordinate] =
-          prefactor * (value_gradient[center][coordinate] + value * decay_derivative);
+      double response = value_gradient[center][coordinate];
+      if constexpr (FactorResponse) {
+        const double coefficient_response = center == 0U ? value_gradient[0][coordinate] :
+            center == 1U ? -value_gradient[0][coordinate] : value_gradient[1][coordinate];
+        const double product_scale = center == 0U ? first_product_scale :
+            center == 1U ? second_product_scale : third_product_scale;
+        response = coefficient_response + product_scale * value_gradient[2][coordinate];
+      }
+      gradient[center][coordinate] = prefactor * (response + value * decay_derivative);
     }
   }
   for (unsigned coordinate = 0; coordinate < 3; ++coordinate) {

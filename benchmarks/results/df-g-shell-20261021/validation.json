@@ -1,0 +1,310 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Partition default auxiliary-g DF force response without losing lower-shell reuse",
+  "inputs_hash": "4711ba9637551f526c59bff59f891aa70c55f914f919d7aa5ae2de8940cfe00e",
+  "revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "59a53625902f874e8c2630ed49b9086555fb81c3deb98109cdf464fea14b1aa1",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Existing generated derivative algebra and schedules; this consumer only partitions auxiliary angular classes. Exact source33461 and original scalar-g fallback remain retained.",
+    "ir": "Existing generated derivative algebra and schedules; this consumer only partitions auxiliary angular classes. Exact source33461 and original scalar-g fallback remain retained.",
+    "schedule": "Existing generated derivative algebra and schedules; this consumer only partitions auxiliary angular classes. Exact source33461 and original scalar-g fallback remain retained."
+  },
+  "device": {
+    "backend": "cuda",
+    "device_id": 0,
+    "name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "total_global_memory_bytes": 33668988928,
+    "multiprocessor_count": 170,
+    "clock_rate_khz": 2550000,
+    "driver_version": 13000,
+    "runtime_version": 12090,
+    "nvidia_smi": {
+      "performance_state": "P8",
+      "power_draw_watts": 17.83,
+      "power_limit_watts": 600.0,
+      "sm_clock_mhz": 187.0,
+      "memory_clock_mhz": 405.0,
+      "temperature_celsius": 28.0,
+      "sampling_point": "after benchmark measurements"
+    }
+  },
+  "toolchain": {
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/usr/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "packages": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.8.1",
+      "cupy": "13.6.0",
+      "numpy": "2.4.6"
+    }
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "default_auxiliary_unchanged": true,
+    "orbital_maximum_l": 3,
+    "auxiliary_maximum_l": 4,
+    "completed_methods_sizes": [
+      "pbe48",
+      "pbe96",
+      "pbe048",
+      "pbe096",
+      "r2scan3c48"
+    ]
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "node": "n1",
+    "scheduler": "Slurm",
+    "test_job": "11404"
+  },
+  "stages": {
+    "representation": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "revision": "33461b49e19914dca95dc3529ecc7a86d156d00d"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "library_sha256": "a85e3399f7a77002a9e629f0d4c0158244638a499a8892854444f78a181f4c3e"
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "34 independent complete E/F/translation GPU tests; all20 larger endpoint samples pass fixed observable gates and independent reference-stability/CPU-spot gates."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Five complete cold+three-warm populations; excluded96-atom3c and WB work/resource cliffs remain explicit."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {},
+  "block_errors": {
+    "standard-pbe-df-48.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 7.315463795028639e-06,
+      "max_scaled_error": 0.7315463795028638,
+      "rms_error": 7.315463795028639e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe-df-48.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 3.683414262573015e-05,
+      "max_scaled_error": 0.3683414262573015,
+      "rms_error": 3.683414260352569e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe-df-48.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.5769558049602084e-05,
+      "max_scaled_error": 0.5256519349867361,
+      "rms_error": 1.5769558047657683e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe-df-96.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 7.312549215043873e-06,
+      "max_scaled_error": 0.7312549215043872,
+      "rms_error": 7.312549215043873e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe-df-96.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 3.70191054704927e-05,
+      "max_scaled_error": 0.37019105470492697,
+      "rms_error": 3.7019105459834556e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe-df-96.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.5815952133931546e-05,
+      "max_scaled_error": 0.5271984044643848,
+      "rms_error": 1.58159521334812e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-48.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 8.972093705021204e-08,
+      "max_scaled_error": 0.008972093705021203,
+      "rms_error": 8.972093705021204e-08,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-48.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 2.293817394166675e-05,
+      "max_scaled_error": 0.2293817394166675,
+      "rms_error": 2.293817391720715e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-48.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.0038367399266864e-05,
+      "max_scaled_error": 0.33461224664222877,
+      "rms_error": 1.0038367394925175e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-96.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 9.082205565391632e-08,
+      "max_scaled_error": 0.009082205565391632,
+      "rms_error": 9.082205565391632e-08,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-96.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 2.3093994176145993e-05,
+      "max_scaled_error": 0.23093994176145993,
+      "rms_error": 2.3093994167357884e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-pbe0-df-96.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 1.0072864542323456e-05,
+      "max_scaled_error": 0.33576215141078186,
+      "rms_error": 1.007286454093666e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-r2scan-3c-df-48.json:energy_abs_per_atom": {
+      "passed": true,
+      "atol": 1e-05,
+      "rtol": 0,
+      "max_absolute_error": 2.0352097891418452e-06,
+      "max_scaled_error": 0.2035209789141845,
+      "rms_error": 2.0352097891418452e-06,
+      "shape": [
+        4
+      ]
+    },
+    "standard-r2scan-3c-df-48.json:force_max_abs": {
+      "passed": true,
+      "atol": 0.0001,
+      "rtol": 0,
+      "max_absolute_error": 5.596744741298565e-05,
+      "max_scaled_error": 0.5596744741298565,
+      "rms_error": 5.596744738800563e-05,
+      "shape": [
+        4
+      ]
+    },
+    "standard-r2scan-3c-df-48.json:force_rms": {
+      "passed": true,
+      "atol": 3e-05,
+      "rtol": 0,
+      "max_absolute_error": 2.4703056076060425e-05,
+      "max_scaled_error": 0.8234352025353475,
+      "rms_error": 2.4703056074080594e-05,
+      "shape": [
+        4
+      ]
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "All source-bound SCF counts and strict response work counters are retained in receipts.json.xz.",
+  "attachments": [
+    {
+      "path": "receipts.json.xz",
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a"
+    },
+    {
+      "path": "endpoint-checks.json",
+      "sha256": "e7daab024d6e115737ef7395b5b3527decebdae9760f68c420572ff27497d6cd"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Complete endpoints and work traces show less response work; noninterleaved populations do not establish a general or statistically interleaved performance promotion."
+  }
+}

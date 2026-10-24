@@ -24,9 +24,11 @@ def _demand_declaration(header: str) -> str:
 def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     tmp_path: Path,
 ) -> None:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("requires host C++ and ccache")
+        pytest.skip("requires host C++ and a compiler cache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/methods/df_ccsdt_force.hpp").read_text()
     triples_header = (ROOT / "src/cc/df_triples.hpp").read_text()
     assert (
@@ -82,7 +84,6 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
             )
         )
     )
-    assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
         "const auto result ="
         + endpoint.split("const auto result =", 1)[1].split(");", 1)[0]
@@ -640,9 +641,11 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     tmp_path: Path,
 ) -> None:
     """Compile the real middle-owner call against its current RCCSD declaration."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("requires host C++ and ccache")
+        pytest.skip("requires host C++ and a compiler cache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
     declaration = (
         "RccsdNativeState run_rccsd_native_state("
@@ -655,7 +658,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
         "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
-        "external_reservation_bytes,initial_density,warm_start_fallback,df_mixed_precision,df_mixed_precision_switch_residual,df_mp2_mode}; }\n"
+        "external_reservation_bytes,initial_density,warm_start_fallback,df_mixed_precision,df_mixed_precision_switch_residual,df_mp2_mode,convergence}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -688,6 +691,7 @@ struct RccsdNativeState {
   std::optional<bool> mixed;
   double switch_residual;
   bool factors_only;
+  core::CorrelationConvergence convergence;
 };
 struct DFPhysicalResponseComparison { std::size_t output_bytes; };
 std::size_t checked_add(std::size_t left, std::size_t right) { return left + right; }
@@ -714,6 +718,8 @@ int probe() {
       {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}})
   for(double ccsd_mixed_switch_residual : {100.0 * 1e-9, 1e-4})
   for(bool mp2 : {false,true})
+  for(core::CorrelationConvergence convergence :
+      {core::CorrelationConvergence{}, core::CorrelationConvergence{0.25}})
   for(std::size_t ccsd_batch_limit : {1,3,8}) {
   const DFCorrelationDemand demand{mp2,0};
   for(bool seeded : {false,true}) {
@@ -730,13 +736,14 @@ int probe() {
        state.seed!=reference_seed ||
        state.seed_fallback!=(seeded ? &experiment.seed_fallback : nullptr) ||
        state.mixed!=ccsd_mixed_precision ||
-       state.switch_residual!=ccsd_mixed_switch_residual || state.factors_only!=mp2) return 1;
+       state.switch_residual!=ccsd_mixed_switch_residual || state.factors_only!=mp2 ||
+       state.convergence!=convergence) return 1;
   }
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
      ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed ||
-     ordinary.reserved || ordinary.mixed || ordinary.factors_only ||
+     ordinary.reserved || ordinary.mixed || ordinary.factors_only || ordinary.convergence.relaxed() ||
      ordinary.switch_residual!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;

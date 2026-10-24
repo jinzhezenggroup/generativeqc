@@ -610,6 +610,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
   if (!cc_result.converged())
     throw std::invalid_argument("RCCSD(T) force requires converged RCCSD amplitudes");
+  const auto convergence = cc_result.convergence;
+  convergence.validate();
   if (!max_bytes || reference.nbf != checked_add(problem.nocc, problem.nvir) ||
       reference.nocc != problem.nocc || eps_o.size() != problem.nocc ||
       eps_v.size() != problem.nvir || !std::isfinite(denominator_threshold) ||
@@ -675,9 +677,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   LambdaOptions lambda_options;
   const auto lambda_started = Clock::now();
   lambda_options.max_bytes = max_bytes;
-  lambda_options.cc_tolerance = 1e-9;
-  lambda_options.lambda_tolerance = 1e-9;
-  lambda_options.gmres.absolute_tolerance = 1e-12;
+  lambda_options.convergence = convergence;
+  lambda_options.cc_tolerance = convergence.cc_residual();
+  lambda_options.lambda_tolerance = convergence.lambda_residual();
+  lambda_options.gmres.absolute_tolerance = convergence.response_solve();
   lambda_options.gmres.relative_tolerance = 0.0;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
   lambda_options.cuda_resident_krylov = cuda_derivative && resident_lambda_krylov;
@@ -801,7 +804,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       for (std::size_t q = bounds.first; q < bounds.second; ++q)
         same_space_stationarity =
             std::max(same_space_stationarity, std::abs(correlation.stationarity[p * n + q]));
-  if (same_space_stationarity > kStationarityTolerance)
+  if (same_space_stationarity > convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("RCCSD(T) same-space canonicalization response failed");
 
   const auto orbital_arena_elements = generated::orbital_jvp_arena_elements(o, v);
@@ -864,7 +867,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 
   response::GmresOptions z_options;
   z_options.relative_tolerance = 0.0;
-  z_options.absolute_tolerance = 1e-12;
+  z_options.absolute_tolerance = convergence.response_solve();
   z_options.restart = 30;
   z_options.max_iterations = 200;
   z_options.max_workspace_bytes = max_bytes;
@@ -881,7 +884,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     independent[row] -= correlation.orbital_rhs[row];
   }
   const double independent_residual = response::stable_norm(independent);
-  if (std::max(z.residual_norm, independent_residual) > kOrbitalResidualTolerance)
+  if (std::max(z.residual_norm, independent_residual) >
+      convergence.limit(kOrbitalResidualTolerance, 1e-7))
     throw std::runtime_error("independent RCCSD(T) physical Z-vector residual failed");
 
   // The control response and dense curvature oracle are dead after the checked
@@ -899,7 +903,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   auto total = hamiltonian_dispatch(parameters, 1.0);
   auto total_eri = eri_dispatch(parameters, 1.0);
   const double stationarity = max_abs(total.stationarity);
-  if (stationarity > kStationarityTolerance)
+  if (stationarity > convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("complete HF+RCCSD(T)+Z orbital stationarity failed");
 
   mp2::LagrangianWeights weights;

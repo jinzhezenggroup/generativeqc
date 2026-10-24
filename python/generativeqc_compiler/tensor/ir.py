@@ -708,8 +708,9 @@ def where(condition: Node, left: Node, right: Node) -> Node:
     """Select generic real values using bool data, with explicit casts/broadcasts.
 
     All operands remain live and finite-checked, including the unselected branch.
-    Runtime reference AD requires an external Boolean mask; generated AD and
-    native lowering remain unqualified.
+    Runtime reference AD and explicit first-order generated AD require a fixed
+    external Boolean mask. Native qualification is the materializing FP64 CPU
+    owner; default/public generated AD and higher orders remain unsupported.
     """
     inputs = (condition, left, right)
     spec = _infer("where", inputs, {}, left.spec)

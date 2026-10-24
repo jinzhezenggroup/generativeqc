@@ -77,7 +77,7 @@ struct Result {
 inline constexpr unsigned kHfComponent = 1;
 inline constexpr unsigned kMp2Component = 2;
 
-/** Method-neutral copy of the cumulative native CUDA KS movement ledger. */
+/** Copied CC endpoint phase/work diagnostics; the public C prefix stays frozen. */
 struct CcPerformanceDiagnostic {
   double reference_seconds{};
   double problem_seconds{};
@@ -104,6 +104,20 @@ struct CcPerformanceDiagnostic {
   std::uint64_t diis_gram_calls{};
   std::uint64_t diis_coefficient_calls{};
   std::uint64_t diis_combine_calls{};
+  // Private versioned precision telemetry; do not extend the frozen public
+  // performance descriptor or infer execution from a requested Fast policy.
+  std::uint64_t ccsd_fp32_requested{}, ccsd_fp32_executed{}, ccsd_fp32_refused{};
+  std::uint64_t ccsd_fp32_evaluations{}, ccsd_fp32_gemm_calls{}, ccsd_fp32_cast_elements{};
+  // DF response exists only for force endpoints. Older libraries, conventional
+  // methods and energy-only calls must report this extension as unavailable.
+  bool df_response_available{};
+  double lambda_seconds{}, source_response_seconds{}, orbital_seconds{};
+  std::uint64_t lambda_fp32_requested{}, lambda_fp32_executed{}, lambda_fp32_refused{};
+  std::uint64_t lambda_fp32_iterations{}, lambda_fp64_iterations{};
+  std::uint64_t lambda_fp32_actions{}, lambda_fp64_actions{};
+  std::uint64_t lambda_fp32_gemm_calls{}, lambda_fp32_cast_elements{};
+  std::uint64_t lambda_auxiliary_batch_size{}, lambda_numeric_capacity_bytes{},
+      lambda_owned_device_bytes{};
 };
 
 struct KsTransportDiagnostic {

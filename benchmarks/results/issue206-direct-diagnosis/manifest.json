@@ -10,9 +10,9 @@
       "original_sha256": "39f4b6746961c8fced83cc57bbac6af8fb0461b5e98b3f6cbfa2861f50883288"
     },
     {
-      "path": "accuracy/native-controls-partial-stock.json",
-      "sha256": "301013284eaf854a2a70f5d7370495bc2df9fe039c1910d128f0e73f042bca68",
-      "bytes": 91256,
+      "path": "accuracy/native-controls-partial-stock.json.gz",
+      "sha256": "5ba12cfa9d484a94d721393aac31a9bf0a3d0a2e5d10b3f3a0c3e03a8024e2ca",
+      "bytes": 12381,
       "original_path": ".artifacts/issue206/convergence-controls/report.json",
       "original_sha256": "301013284eaf854a2a70f5d7370495bc2df9fe039c1910d128f0e73f042bca68"
     },

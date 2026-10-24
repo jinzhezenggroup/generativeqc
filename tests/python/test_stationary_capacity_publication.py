@@ -215,6 +215,10 @@ def endpoint(
         def reset(self, *args: Any) -> None:
             pass
 
+        def configure_grid(self, spec: Any, atoms: Any) -> None:
+            assert spec is state._source.grid_spec
+            assert tuple(atoms) == basis.atoms
+
         def reset_geometry(self, *args: Any) -> None:
             pass
 

@@ -197,17 +197,18 @@ grid, density cutoff and FP64 response equations unchanged.
 These bounds exclude existing SCF state, compiler processes, CUDA modules and
 driver-managed recurrence stacks. Host work includes snapshot validation and
 exports, tiling, and total-density/VV10-active-domain packing. The VV10 cutoff
-is `rho >= 1e-8` on both pair legs, using the same active-branch convention as
+is `rho >= 1e-10` on both pair legs, using the same active-branch convention as
 SCF.
 
 Matched GPU4PySCF comparisons must configure the same VV10 density mask in both
-SCF and analytic forces. GPU4PySCF 1.8.1 defaults to `rho >= 1e-10`, while the
-native MolecularV1 and PySCF CPU contracts use `rho >= 1e-8`. The OMol25 runner
-scopes both imported comparator constants together, records this policy and
-GPU4PySCF's separate `|weight| > 1e-14` screening, and restores defaults after
-each reference call. Sharing grid coordinates alone does not match VV10 work.
-Neither native mathematics nor the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates
-are changed. See the
+SCF and analytic forces. Native MolecularV1 and GPU4PySCF 1.8.1 both use
+`rho >= 1e-10`; PySCF CPU uses `rho >= 1e-8`. GPU4PySCF additionally screens
+`|weight| <= 1e-14`, while native consumers retain nonzero signed weights and
+their derivatives. Matching the density cutoff and grid coordinates therefore
+does not match every screening operation. The live OMol25 runner binds the
+native density policy in its protocol and records the comparator's separate
+weight screening. Historical receipts retain their original density policy;
+the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates are unchanged. See the
 [OMol25 protocol](../../benchmarks/results/omol25-wb97mv-20261001/README.md).
 
 Finite memory bounds do not imply scalable endpoint work: the retained

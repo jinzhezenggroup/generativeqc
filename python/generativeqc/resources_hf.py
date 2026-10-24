@@ -39,6 +39,8 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
     "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
+    "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES",
+    "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
     "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
     "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
     "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
@@ -61,6 +63,7 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     "GENERATIVEQC_DF_RESPONSE_STORAGE",
     "GENERATIVEQC_DF_RESPONSE_SPACE",
     "GENERATIVEQC_DF_OCCUPIED_METRIC",
+    "GENERATIVEQC_DF_COULOMB_RESPONSE",
 )
 
 # These runtime switches are read by CUDA HF/DF policy code. Preserve even
@@ -432,7 +435,8 @@ def _small_cuda_item_inventory(
     v2 receives shell angular momenta and contraction lengths so the native
     query can reproduce the quartet-direct force layout without constructing a
     CUDA plan or selecting a device profile. The aggregate v1 query is not a
-    safe fallback because it cannot represent the force-route topology.
+    safe fallback because it cannot represent the force-route topology. Return
+    raw allocator/ECP leaves; the fleet owner supplies the retained host bound.
     """
     query = getattr(library, "generativeqc_resource_small_hf_cuda_v2", None)
     if query is None:
@@ -498,6 +502,18 @@ def _small_cuda_item_inventory(
             "CUDA HF inventory v2 requires an ordinary <=16-AO s/p/d/f topology "
             "with the small native eigensolver"
         )
+    return {
+        "arena": checked_bytes(int(output[0])),
+        "host_staging": checked_bytes(int(output[1])),
+        "ecp_workspace": _ecp_workspace(item, cuda=True, library=library),
+    }
+
+
+def _portable_small_cuda_item_inventory(
+    item: typing.Any, capacities: typing.Any
+) -> dict[str, int]:
+    """Compatibility-only host bound for an absent native fleet symbol."""
+    orbital = item["orbital"]
     pairs = orbital["shells"] * (orbital["shells"] + 1) // 2
     # Four copies allow vector growth, HostBatch staging, the cached topology
     # and the temporary cold retry retained alongside a warm bucket. At most
@@ -513,17 +529,85 @@ def _small_cuda_item_inventory(
         + pairs * pairs
     )
     host = (
-        4 * int(output[1])
+        4 * capacities["host_staging"]
         + metadata
         + 8 * item["spins"] * orbital["nbf"] ** 2 * 64
         + 8 * 3 * item["atoms"] * 16
     )
-    ecp_workspace = _ecp_workspace(item, cuda=True, library=library)
+    ecp_workspace = capacities["ecp_workspace"]
     return {
-        "arena": checked_bytes(int(output[0])),
+        "arena": capacities["arena"],
         "host": checked_bytes(host + ecp_workspace),
         "ecp_workspace": ecp_workspace,
     }
+
+
+def _native_cuda_fleet_inventory(
+    library: typing.Any,
+    items: typing.Sequence[typing.Any],
+    capacities: typing.Sequence[typing.Any],
+) -> tuple[tuple[dict[str, int], ...], int, int, int] | None:
+    """Marshal allocator/ECP leaves to the shared native direct-HF fleet owner.
+
+    Missing-symbol compatibility is distinct from native refusal. The owner
+    retains the independent arena/ECP retry maxima without creating a CUDA
+    context; Python only validates publication and presents named capacities.
+    """
+    query = getattr(library, "generativeqc_resource_hf_cuda_fleet_v1", None)
+    if query is None:
+        return None
+    dimensions = []
+    for item, capacity in zip(items, capacities, strict=True):
+        orbital = item["orbital"]
+        dimensions.extend(
+            (
+                item["atoms"],
+                orbital["nbf"],
+                orbital["cartesian_nbf"],
+                orbital["shells"],
+                orbital["primitives"],
+                item["spins"],
+                capacity["arena"],
+                capacity["host_staging"],
+                capacity["ecp_workspace"],
+            )
+        )
+    shapes = (ctypes.c_uint64 * len(dimensions))(
+        *(checked_bytes(value, "CUDA HF fleet shape") for value in dimensions)
+    )
+    values = (ctypes.c_uint64 * (4 + 3 * len(items)))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shapes, len(shapes), values, len(values)):
+        raise ValueError("native CUDA HF fleet inventory rejected shape or capacity")
+    resident, retry, peak, host = (
+        checked_bytes(values[index], "CUDA HF fleet capacity") for index in range(4)
+    )
+    if peak != resident + retry:
+        raise ValueError("native CUDA HF fleet inventory returned inconsistent peak")
+    keys = ("arena", "host", "ecp_workspace")
+    inventories = tuple(
+        {
+            key: checked_bytes(values[4 + 3 * index + slot], f"CUDA HF {key} capacity")
+            for slot, key in enumerate(keys)
+        }
+        for index in range(len(items))
+    )
+    for inventory, capacity in zip(inventories, capacities, strict=True):
+        if (
+            inventory["arena"] != capacity["arena"]
+            or inventory["ecp_workspace"] != capacity["ecp_workspace"]
+            or inventory["host"] <= inventory["ecp_workspace"]
+        ):
+            raise ValueError(
+                "native CUDA HF fleet inventory returned inconsistent item"
+            )
+    return inventories, resident, retry, host
 
 
 def hf_resource_request(
@@ -746,6 +830,12 @@ def hf_resource_request(
                 library = _native.load_library(device="cpu")
             if has_ecp:
                 controls["ecp_inventory"] = _ecp_inventory_owner(library)
+            if (
+                not fitted
+                and getattr(library, "generativeqc_resource_hf_cuda_fleet_v1", None)
+                is not None
+            ):
+                controls["cuda_hf_fleet_composition"] = "native-declared-capacity"
             identity = replace(
                 identity,
                 schedule=json.dumps(
@@ -784,6 +874,7 @@ def hf_resource_request(
                         "opaque CUDA library retention above the reported allowance is untracked",
                     ),
                 )
+            native_inventory = _native_cuda_fleet_inventory(library, items, inventories)
         except ValueError as error:
             if "budget" not in str(error):
                 raise
@@ -794,11 +885,19 @@ def hf_resource_request(
             return ResourceRequest(
                 name, identity, (), cuda_exclusions, unsupported_reason=str(error)
             )
-        resident = checked_bytes(sum(row["arena"] for row in inventories))
-        retry = max(row["arena"] for row in inventories) + max(
-            row["ecp_workspace"] for row in inventories
-        )
-        host = checked_bytes(sum(row["host"] for row in inventories))
+        if native_inventory is None:
+            inventories = tuple(
+                _portable_small_cuda_item_inventory(item, capacity)
+                for item, capacity in zip(items, inventories, strict=True)
+            )
+            resident = checked_bytes(sum(row["arena"] for row in inventories))
+            retry = checked_bytes(
+                max(row["arena"] for row in inventories)
+                + max(row["ecp_workspace"] for row in inventories)
+            )
+            host = checked_bytes(sum(row["host"] for row in inventories))
+        else:
+            inventories, resident, retry, host = native_inventory
         candidate = ResourceCandidate(
             "cuda-small-resident",
             "resident",

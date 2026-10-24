@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 #include "generativeqc/generativeqc.hpp"
 
@@ -152,6 +153,39 @@ void run() {
           "native result borrowed destroyed input/callback state or lost move ownership");
 }
 
+struct SequenceState {
+  Operator action;
+  bool lease_valid{true}, fail_publication{}, invalidate_after_publication{};
+  std::vector<std::vector<double>> solutions;
+  std::vector<std::int32_t> reasons;
+  std::uint64_t offered_actions{};
+};
+
+generativeqc_status validate_sequence(void* data) {
+  return static_cast<SequenceState*>(data)->lease_valid ? GENERATIVEQC_STATUS_SUCCESS
+                                                        : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+}
+
+generativeqc_status publish_sequence(void* data, std::size_t index,
+                                     const generativeqc_response_result_view_v1* view) {
+  auto& state = *static_cast<SequenceState*>(data);
+  try {
+    if (index != state.reasons.size() || view->dimension != 3)
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    state.offered_actions += view->operator_actions;
+    if (state.fail_publication && index == 1) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    state.reasons.push_back(view->reason);
+    if (view->solution_count)
+      state.solutions.emplace_back(view->solution, view->solution + view->solution_count);
+    else
+      state.solutions.emplace_back();
+    if (state.invalidate_after_publication) state.lease_valid = false;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+  }
+}
+
 void small_pivot_contracts() {
   for (double scale : {1e-170, -1e-170, 1e-15, 1.0, -1e170, 1e170}) {
     for (bool identity : {false, true}) {
@@ -238,11 +272,126 @@ void small_pivot_contracts() {
   }
 }
 
+void sequence_contract() {
+  SequenceState state;
+  std::array<double, 9> storage{1.5, 3, 0, -5, -10, 0, 2, 4, 0};
+  generativeqc_response_sequence_descriptor_v1 descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.gmres = request();
+  descriptor.gmres.rhs = storage.data();
+  descriptor.gmres.apply = apply;
+  descriptor.gmres.apply_data = &state.action;
+  descriptor.rhs_count = descriptor.row_stride = 3;
+  descriptor.column_stride = 1;
+  descriptor.rhs_element_count = storage.size();
+  descriptor.max_numeric_bytes = 1 << 20;
+  descriptor.validate = validate_sequence;
+  descriptor.validate_data = &state;
+  descriptor.publish = publish_sequence;
+  descriptor.publish_data = &state;
+  auto metadata = descriptor;
+  metadata.gmres.rhs = nullptr;
+  metadata.gmres.apply = nullptr;
+  metadata.publish = nullptr;
+  metadata.validate = nullptr;
+  std::uint64_t first = 0, complete = 0;
+  generativeqc::check(generativeqc_response_sequence_workspace_v1(&metadata, &first, &complete));
+  require(first > 0 && complete > first,
+          "sequence metadata query requires pointers or lost retention");
+  generativeqc_response_sequence_summary_v1 summary{};
+  summary.struct_size = sizeof(summary);
+  summary.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.max_numeric_bytes = first - 1;
+  generativeqc::check(generativeqc_response_sequence_solve_v1(&descriptor, &summary));
+  require(summary.workspace_limited && summary.published_count == 3 &&
+              summary.staging_peak_bytes == 0 && state.action.actions == 0 &&
+              state.solutions[0].empty() && state.solutions[1].empty() &&
+              state.solutions[2].empty(),
+          "public sequence budget refusal allocated native staging/results or executed physics");
+  state.solutions.clear();
+  state.reasons.clear();
+  descriptor.max_numeric_bytes = first;
+  generativeqc::check(generativeqc_response_sequence_solve_v1(&descriptor, &summary));
+  require(summary.workspace_limited && summary.converged_count == 1 &&
+              state.reasons[0] == GENERATIVEQC_RESPONSE_CONVERGED &&
+              state.reasons[1] == GENERATIVEQC_RESPONSE_WORKSPACE_LIMIT &&
+              state.reasons[2] == GENERATIVEQC_RESPONSE_WORKSPACE_LIMIT &&
+              summary.operator_actions == state.action.actions,
+          "public sequence failed to preserve its budget-admitted prefix");
+  require(std::abs(state.solutions[0][0] - 1) < 1e-12 &&
+              std::abs(state.solutions[0][1] + 2) < 1e-12 &&
+              std::abs(state.solutions[0][2] - 0.5) < 1e-12,
+          "public sequence differs from independent nonsymmetric solution");
+  state.solutions.clear();
+  state.reasons.clear();
+  state.action.actions = state.offered_actions = 0;
+  descriptor.max_numeric_bytes = complete;
+  generativeqc::check(generativeqc_response_sequence_solve_v1(&descriptor, &summary));
+  require(!summary.workspace_limited && summary.converged_count == 3 &&
+              summary.staging_peak_bytes == 3 * sizeof(double) &&
+              summary.operator_actions == state.action.actions &&
+              std::abs(state.solutions[1][1] + 4) < 1e-12 && state.solutions[2][0] == 0,
+          "public complete sequence lost its numeric/work/staging publication");
+  const auto reset = [&] {
+    state.solutions.clear();
+    state.reasons.clear();
+    state.action.actions = state.offered_actions = 0;
+    summary.published_count = 777;
+  };
+  reset();
+  descriptor.rhs_element_count -= 1;
+  require(generativeqc_response_sequence_solve_v1(&descriptor, &summary) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              summary.published_count == 777 && state.action.actions == 0 && state.reasons.empty(),
+          "invalid RHS extent published a summary or executed a callback");
+  descriptor.rhs_element_count += 1;
+  metadata.rhs_element_count = std::numeric_limits<std::uint64_t>::max();
+  const auto saved_first = first, saved_complete = complete;
+  require(generativeqc_response_sequence_workspace_v1(&metadata, &first, &complete) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              first == saved_first && complete == saved_complete,
+          "overflowing sequence extent changed query outputs");
+  state.fail_publication = true;
+  require(generativeqc_response_sequence_solve_v1(&descriptor, &summary) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              summary.published_count == 777 && state.reasons.size() == 1 &&
+              state.action.actions == state.offered_actions,
+          "publication failure continued physics or published a success summary");
+  reset();
+  state.fail_publication = false;
+  state.invalidate_after_publication = true;
+  require(generativeqc_response_sequence_solve_v1(&descriptor, &summary) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              summary.published_count == 777 && state.reasons.size() == 1 &&
+              state.action.actions == state.offered_actions,
+          "stale lease after publication reached later requests");
+  reset();
+  state.invalidate_after_publication = false;
+  state.lease_valid = true;
+  descriptor.rhs_count = descriptor.row_stride = descriptor.column_stride = 0;
+  descriptor.rhs_element_count = descriptor.max_numeric_bytes = 0;
+  descriptor.gmres.rhs = nullptr;
+  descriptor.gmres.apply = nullptr;
+  descriptor.publish = nullptr;
+  generativeqc::check(generativeqc_response_sequence_solve_v1(&descriptor, &summary));
+  require(summary.published_count == 0 && summary.peak_workspace_bytes == 0 &&
+              summary.staging_peak_bytes == 0 && state.action.actions == 0,
+          "empty sequence required callbacks/storage or performed physics");
+  state.lease_valid = false;
+  summary.published_count = 777;
+  require(generativeqc_response_sequence_solve_v1(&descriptor, &summary) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              summary.published_count == 777,
+          "empty sequence skipped the live reference lease");
+}
+
 }  // namespace
 
 int main() {
   try {
     run();
+    sequence_contract();
     small_pivot_contracts();
     return 0;
   } catch (const std::exception& error) {

@@ -147,13 +147,12 @@ def test_cuda_energy_only_output_selection_omits_forces(
     assert energy_and_forces.forces is not None
 
 
-def test_wb97m_v_is_reserved_not_implemented() -> None:
-    try:
-        Calculator(method="wb97m-v")
-    except NotImplementedError:
-        pass
-    else:
-        raise AssertionError("wB97M-V must report that it is not implemented")
+def test_wb97mv_default_grid_resolves_registered_composition() -> None:
+    """The compatibility spelling shares the qualified default prescription."""
+    alias = Calculator(method="wb97m-v")
+    canonical = Calculator(method="wb97m-v-rks")
+    assert alias.ks_options.method_ir == canonical.ks_options.method_ir
+    assert alias.ks_options.grid == canonical.ks_options.grid == GridSpec.treutler(3)
 
 
 @pytest.mark.parametrize("method", ("wb97m-v-rks", "wb97m-v-uks"))

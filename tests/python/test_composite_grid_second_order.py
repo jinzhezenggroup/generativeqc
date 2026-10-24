@@ -136,7 +136,8 @@ def test_nested_tensor_jvp_contains_density_and_both_ao_legs() -> None:
 
 def test_vv10_both_leg_mask_and_resource_work_caps() -> None:
     values = _fields()
-    values[0, 1] = 0.5e-8
+    # Below the explicit molecular rho >= 1e-10 domain on both pair legs.
+    values[0, 1] = 0.5e-10
     result = _model().evaluate(values, np.zeros_like(values))
     assert result.pair_evaluations == 16
     assert np.all(result.nonlocal_correlation[0][:, 1] == 0)
@@ -146,6 +147,17 @@ def test_vv10_both_leg_mask_and_resource_work_caps() -> None:
         _model(budget_bytes=1).evaluate(values, np.zeros_like(values))
     with pytest.raises(MemoryError, match="grid_budget_bytes"):
         _model(budget_bytes=24 * values.nbytes).evaluate(values, np.zeros_like(values))
+
+
+@pytest.mark.parametrize("density", (1e-10, 0.5e-8))
+def test_vv10_retains_boundary_and_formerly_screened_tail(density: float) -> None:
+    values = _fields()
+    values[0, 1] = density
+    result = _model().evaluate(values, np.zeros_like(values))
+    assert result.pair_evaluations == 25
+    assert np.any(result.nonlocal_correlation[0][:, 1] != 0)
+    with pytest.raises(ValueError, match="max_nonlocal_pairs"):
+        _model(max_pair_evaluations=24).evaluate(values, np.zeros_like(values))
 
 
 @pytest.mark.parametrize("order", (0, 1, 2))

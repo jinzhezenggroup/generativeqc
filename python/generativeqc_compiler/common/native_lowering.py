@@ -14,6 +14,7 @@ import typing
 from dataclasses import asdict
 
 from .lowering_contract import LoweringConstraints
+from .lowering_provider import candidate_layout_rejection
 from .provenance import canonical_hash
 from .resources import checked_bytes
 
@@ -57,6 +58,7 @@ def native_lowering_portfolio(
     compilation: CompilationIdentity,
     *,
     name: str,
+    layout_transfer_executor: str | None = None,
 ) -> str:
     """Emit immutable C++ metadata consumed by select_native_lowering.
 
@@ -66,6 +68,8 @@ def native_lowering_portfolio(
     Returned declarations live in the caller's namespace and require the native
     runtime/lowering_binding.hpp header. All referenced strings have static life.
     """
+    if layout_transfer_executor not in (None, "tensor.cuda.affine-copy.v1"):
+        raise ValueError("unknown native layout-transfer executor")
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
         raise ValueError("native portfolio needs a C++ identifier")
     if request.scientific_identity != compilation.scientific_hash:
@@ -165,6 +169,15 @@ def native_lowering_portfolio(
         reason = candidate.reason or (
             "candidate has no typed execution binding" if execution is None else ""
         )
+        reason = reason or candidate_layout_rejection(candidate) or ""
+        if not reason and execution is not None and execution.layout_transfers:
+            if layout_transfer_executor is None:
+                reason = "native portfolio has no layout-transfer executor"
+            elif any(
+                t.implementation != layout_transfer_executor
+                for t in execution.layout_transfers
+            ):
+                reason = "native layout-transfer implementation is unavailable"
         fields = [
             json.dumps(candidate.identity),
             json.dumps(request.semantic_identity),

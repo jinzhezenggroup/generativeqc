@@ -1,5 +1,7 @@
 #include "scf/cuda/df_source_domain.hpp"
 
+#include <cmath>
+
 #include "scf/cuda/rhf_policy.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -27,12 +29,20 @@ bool cuda_df_shell_domain(const core::System& system, const char* role, std::str
 
 bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
                           const CudaDfSourcePolicy& policy, std::string& detail) {
+  if (!std::isfinite(policy.range_omega) || policy.range_omega < 0.0) {
+    detail = "CUDA DF range omega must be finite and nonnegative";
+    return false;
+  }
   if (policy.value_math > 3U) {
     detail = "invalid CUDA DF source value math policy";
     return false;
   }
   if (!cuda_df_shell_domain(orbital, "orbital", detail)) return false;
   for (const auto& shell : auxiliary.shells) {
+    if (policy.range_omega > 0.0 && shell.angular_momentum > 3U) {
+      detail = "long-range CUDA DF requires auxiliary s/p/d/f coverage";
+      return false;
+    }
     if (shell.angular_momentum == 4U && policy.value_math != 0U) {
       detail = "g auxiliary DF values require the generic generated math policy";
       return false;

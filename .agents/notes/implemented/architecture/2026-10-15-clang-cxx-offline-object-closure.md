@@ -1,0 +1,416 @@
+# Decision: explicit native Clang C++20 offline object closure
+
+Status: implemented
+Date: 2026-10-15
+
+## Problem and decision
+
+The existing offline collector supports Clang C and G++ C++20 but rejects
+Clang C++20. Extend the existing collector, manifest, CacheClosure and immutable
+store contract through explicit compiler family and language selection. No new
+cache, compiler-process, algebra or runtime admission owner is introduced.
+
+Canonical clang++ often resolves to the same ELF file as clang. Preserve C++
+driver mode explicitly after canonicalization; do not infer language/recipe
+identity from physical executable equality or GCC-compatible predefined macros.
+Require a single integrated C++20 cc1 object job, matching native target and
+resource directory, disabled default configuration, full ABI macro output and
+actual GCC installation/include-search selection. Repeat these observations
+under the existing finite deadline and immutable caller snapshot contract.
+
+## Rejected alternatives and invariants
+
+- Removing only the language guard leaves the cc1 job fixed to C.
+- Blindly reusing GCC diagnostic decoding assumes a printer protocol. The
+  observed Clang C++ printer is LLVM `sys::printArg`: all job arguments are
+  quoted and quote/backslash/dollar are escaped once. A narrow separate decoder
+  follows that protocol; Clang C's existing decoder/recipe remains unchanged.
+  Independently compare actual compiler depfiles and reject ambiguous
+  backslash/control paths instead of normalizing identities.
+- Neither the selected GCC directory nor ldd/header discovery proves snapshot
+  completeness. The producer must assert unchanged executable, loaded library,
+  resource, C++ standard-library/ABI/search namespace and opaque inputs.
+- C/GCC/G++/NVCC recipes and default rejection remain unchanged. The new explicit
+  Clang C++ identity does not establish link closure, production packaging,
+  installed/runtime admission, scientific/CUDA or endpoint performance gates.
+
+## Verification contract
+
+`tests/python/test_bulk_aot_clangxx_closure.py` covers explicit language/standard,
+ABI/search/selection drift, incomplete manifests, unsupported flags/PCH, native
+standard-library/template C++20 object compilation, matching pre/post closures,
+immutable publication, deletion and retrieval of the original object, independent
+Decimal execution, compiler depfile/path controls and opaque-input/cache controls.
+Measured Linux results are recorded only after execution on a fixed LF snapshot.
+The current API contract is in `docs/developer/libxc_cpu_aot_closure.md`.
+
+Refs #1123. This bounded object slice leaves the parent acceptance scope open.
+
+## Investigation evidence
+
+The private Ubuntu 22.04 image initially lacked canonical Clang. Ubuntu Clang
+14 and 15 reject `--no-default-config` on actual preprocessing even though
+`--version` prints a version successfully. Keep this negative evidence; version
+output alone does not verify option compatibility. LLVM 18.1.8 packages were
+retrieved from the official apt repository, verified against SHA-256 fields in
+the signed apt index, and installed only in the task-owned CPU Notebook.
+
+At LF tree `05b2f8c010fd9e17cbbb1e40a9239145aa0517dc`, real Linux tests recorded
+171 passed / 2 failed / zero skips. Object-store/Decimal execution passed; the
+failures were a test socket pathname exceeding the Unix socket limit and POSIX
+shlex preserving Clang's dollar escape. A short test-owned socket isolates the
+ordinary cache counters while retaining the persistent disk cache. Raw plans
+confirm dollar and real backslash-dollar spellings; malformed grammar and
+backslash identity controls supplement the actual depfile comparisons.
+
+The decoder is grounded in LLVM 18
+[`Command::Print`](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.8/clang/lib/Driver/Job.cpp)
+and [`sys::printArg`](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.8/llvm/lib/Support/Program.cpp).
+These investigation results are not acceptance of the later repaired snapshot.
+
+## Source-matched Linux qualification
+
+The task-owned CPU Notebook `i1123-clangxx-1015` runs Ubuntu 22.04/x86_64,
+Python 3.11.16, canonical Clang 18.1.8 and verified sccache 0.16.0. Clang selects
+the GCC 12 standard-library installation; the separate canonical G++ control is
+Ubuntu GCC 11.4. These are distinct observed identities, not the image's advertised
+additional compiler version. Requested priority 10 was capped to 6/HIGH for
+4 CPU / 16 GiB in CPU资源空间 / chemicalreaction. The Notebook remains retained
+under the user's current resource authorization; platform reclamation still applies.
+
+All 11,054 regular source files were checked before and after execution against
+the complete size/SHA-256 manifest. The snapshot uses a raw Git LF starting
+archive of tree `eed7a9cd389714e8fde2d7f5370c9b7d08339110`, built on base commit
+`540ec82011232606374747727cd30fd7e1f93970`, with a raw Git tree delta, not
+Windows working-copy bytes. Qualified tree:
+`2e670e2269917e02479b74fa4dfdd0960d2233a5`; base archive SHA-256:
+`251632abf15e2b0c68c620105b828671f643821c93eedf6c2a8ab4efeb5e1f18`;
+delta archive SHA-256:
+`bb24ad5552ab920128b5a6c73b8fa37f2c6316f2ecc682ac83cc38bd2170c223`.
+Qualified collector/test Git blobs are respectively
+`7d17ba3788e8e93f15f7e6d019a547e57eabe771` and
+`3d566bb2b60f42d6f9de5ab9b078a9b3773a2951`; their raw SHA-256 values are
+`b22028e7590905fb23668e30bb5f757e52b39160189cbe6b6ff371828604b823` and
+`a76fab752f91d5c9c6438e0b92c2c77cc70c7f73eed7ec715935903bdb978e66`.
+Later edits to this note record results; they do not alter qualified executable
+inputs. No source identity is inferred from a working-copy checksum.
+
+- Related closure/cache/store suite: **186 passed, zero skips**, at the repaired
+  collector snapshot. Same-path/persistent-cache repeat: **44 passed, zero skips**.
+  A subsequent test-only correction explicitly preserves C++ driver mode and
+  disabled default configuration during the separate execution link; its final
+  qualified test blob above reran **44 passed, zero skips** at the same path/cache.
+- One-off baseline comparison against the base commit: **3 passed**, identical
+  complete recipe, closure payload and key for GCC C, Clang C and GCC C++.
+  This is migration evidence, not a permanent source-fingerprint test.
+- Windows related suite: **142 passed / 44 skipped**; separate unchanged NVCC
+  host-contract controls: **62 passed / 7 skipped**. Skips remain unavailable
+  evidence for their native domains. Compiler structure: 540 modules, zero errors;
+  changed Python files pass Ruff and formatting checks.
+- Standard-library/concept/template C++20 source is collected, compiled through
+  the verified cache launcher with independent `-MD` dependency equality,
+  recollected with the same key, published, deleted at its original object path,
+  retrieved, linked and loaded. Seven Decimal rows pass, including negative and
+  fractional inputs. Actual source, compiler, stored-object and loaded-library
+  identities are independently retained in `qualification.json`.
+- Stored object SHA-256:
+  `ba1423b2ad1bb3364cdd2cf2e8e422618a4b173416d1152426a8d5ec58e03918`.
+  Actual final loaded library SHA-256:
+  `3b3c2512c9134436eeab2cf67d46d479273a1cb7836bf1464317277ef6d422c4`.
+- The ordinary compiler commands have test-owned sccache counter attribution:
+  misses/hits progress **1/0 -> 1/1 -> 2/1** for first compile, identical replay
+  and refreshed salt after a real manifest-covered opaque-input change. Changed
+  assembler-only `.incbin` inputs also change the actual object bytes. No cache
+  clearing, sloppiness or shared-server stop is used.
+- Two actual negative compiler controls, omitting the salt or reusing its old
+  value, return stale object bytes after the opaque input changes. Both independent
+  payload oracles fail, as required; these invalid invocations are not qualified.
+  The separate negative harness reports **2 passed** because it requires those
+  failures. Its initial missing-fixture error is preserved separately.
+
+Raw snapshots/manifests, commands, JUnit, first failures, cache statistics,
+Decimal rows, actual objects/libraries and negative controls remain under
+`/inspire/qb-ilm/project/chemicalreaction/czxs25220150/issue1123-clangxx-20261015`.
+The ignored local archive `.cache/clangxx-evidence-final.tar.gz` has SHA-256
+`bb9c3e96d6e7deeb13808fae5881f601be78bac44e1d9efeb6e69bdb66b3adc2`.
+Remote and client execution exits are both zero for accepted runs. Earlier
+transport CR errors, Clang 14/15 incompatibility, and the 150-pass/1-fail/19-error
+and 171-pass/2-fail runs are not relabeled as acceptance. The evidence establishes
+only this offline toolchain object slice, not link closure, installed bundles,
+runtime/scientific/CUDA endpoints or completion of parent #1123.
+
+## Review correction: transient ABI state and independent C++ entry
+
+At `fe801e870c5e6fc463a5658bba013f68a640ca0f`, four real Clang controls define
+`_GLIBCXX_USE_CXX11_ABI=0`, include `<string>` directly or through a wrapper,
+then undefine or restore the macro. Actual `nm -C` object symbols have the old
+ABI while the final `-dM` table hides the zero. All four rejection assertions
+fail on that head; the old collector incorrectly admits the translation unit.
+The preceding accepted-domain measurements do not cover this counterexample.
+
+Clang C++ collection now observes active `-E -dD` macro-definition history,
+rejects unsupported definitions even when later restored, and binds/rechecks
+its digest alongside the final macro table. An inactive-branch control retains
+the default ABI and independently checks the new-ABI symbol. This remains a
+conservative native object domain, not alternate-ABI support.
+
+The C++ test producer now resolves `/usr/bin/clang++` and its resource/loader
+manifest independently. Physical equality with the C entry is not required by
+the production contract and must not be a fixture prerequisite. The explicit
+C/C++ comparison uses each canonical entry and a shared union snapshot.
+These changes require fresh source-matched Linux qualification, required CI and
+independent approval at the new exact head; earlier results/approval cannot
+substitute for this delta.
+
+The history check admits only the native object-like ABI definition `1`.
+An additional four real controls use a function-like ABI macro: its bare use in
+libstdc++ `#if` expressions selects zero, even with a body of `1`. These also
+produce old-ABI symbols and bypass a history regex that assumes whitespace after
+the macro name. The final guard checks the macro-name boundary, rejecting both
+object-like zero and function-like definitions. The failed intermediate four
+controls and an earlier harness parameter-substitution mistake remain separate
+from the final acceptance records.
+
+### Source-matched review-delta qualification
+
+LF tree `64983cd9f20c785dbedc37317bf48fe08b778a38`, delta archive SHA-256
+`36560f66eda0111926cf4a6ad25efacc6cd80dae720c968e5e2726e936c145cf`,
+uses the same starting archive above. All 11,054 source files again match the
+complete manifest before/after the full suite and subsequent controls.
+Qualified collector/test blobs are
+`13f9a0bf9ab3a79cb147ff9b32504207badbd1ac` and
+`f280aaf72609a03371248cce9ca853f3989d341f` (raw SHA-256 respectively
+`b0be6480be500e7c87f826a0df47ce202adc563b913f68ede1e6d1ff31be01ef` and
+`e8248136404a78b2ba3141a620b61d8443e9bccfd14d0f6c5ae7342b46f9d167`).
+Only later result-recording edits to this note differ from that snapshot.
+
+- Full related closure/cache/store/boundary/publication suite: **224 passed,
+  zero skips**. Same-path/persistent-cache C++ repeat: **54 passed, zero skips**.
+  Eight real transient ABI negatives reject; the inactive-branch native-ABI
+  control compiles with the independently observed new-ABI symbol.
+- With canonical C entry at Clang 15 and C++ at Clang 18: **53 passed, zero
+  skips, one explicitly deselected C/C++ cross-comparison**. This proves the
+  C++ fixture no longer depends on physical equality or C driver capability.
+  The C entry is restored to Clang 18 and independently checked afterward.
+- One-off preserved GCC C/Clang C/G++ recipe/payload/key comparison: **3 passed**.
+  Actual stale-byte omitted/old-salt negative controls: **2 passed** (each requires
+  the independent payload oracle failure). Test-owned cache counts retain
+  misses/hits **1/0 -> 1/1 -> 2/1**. Stored object, actual C++-linked library and
+  all seven Decimal rows retain the identities above under the new recipe key.
+- Windows related checks: **171 passed / 53 skipped**; fresh NVCC host-contract
+  controls: **62 passed / 7 skipped**. Native skips are not promoted into evidence.
+  Compiler structure and changed-file Ruff/format/diff checks pass.
+
+The source-matched review journal is the task directory's `review-final/`.
+Downloaded ignored `.cache/pr2525-review-evidence.tar.gz` SHA-256:
+`9586ed60463902d47b944a3cdf3cfdf656e8c5a5ea7b7d12bbc4a9f65e3464a4`.
+It includes the old evidence, red controls and intermediate snapshots; current
+raw stored-object/library bytes are rehashed after download without extracting
+or following links. Accepted remote and client execution exits are zero.
+This toolchain qualification remains separate from latest-head CI, independent
+formal approval, normal protected merge and parent-issue completion.
+
+## Module-boundary correction
+
+Real Clang 18 at `42a6be4a030f2176888bc50069881238b59027ee` compiles
+`export module` in a `.cpp` translation unit, and that collector returns a
+reusable key. Neither `-fno-modules` nor `-fno-cxx-modules` prevents this C++20
+standard-module behavior (the latter is an unused argument). Preserve this
+counterexample; the preceding accepted-domain tests do not qualify modules.
+
+The existing driver/process owner now obtains Clang-produced preprocessed token
+records. Validate the whole diagnostic protocol and exactly one final EOF before
+checking token spellings; do not grep arbitrary source/diagnostic text or build
+a second C++ lexer/parser. Macro-expanded module/import spellings are visible;
+comments and representable ordinary/raw literals are not identifier tokens.
+The conservative domain also excludes ordinary identifiers named `module` or
+`import`, and non-whitespace spellings containing literal tabs. Multiline raw
+literals remain compiler-classified string tokens. Current docs name
+these unsupported reasons rather than claiming full C++20 acceptance.
+
+The observer execs the same verified Clang in place under CPU_ENVIRONMENT and
+the existing finite compiler-process group. Both outputs go to one anonymous fd
+with a hard 64 MiB RLIMIT_FSIZE budget; core dumps are disabled for that observer.
+Limit, truncation, malformed framing and missing/early/duplicate EOF fail closed.
+The complete token digest is bound and rechecked with the other context under
+the immutable caller snapshot. This is bounded observation plumbing, not a new
+object producer, compiler cache, process-tree owner or scientific algebra.
+
+## Definition-record correction and parallel mode
+
+The published `42a6be4a` history guard incorrectly treats raw literal text in
+`-dD` normal output as a directive. The correction raw-lexes that compiler
+projection with the same verified Clang, mode/base flags/environment and finite
+owner. Its complete bounded record protocol and a history-derived terminal
+token are verified before interpreting hash/define/name/value records. Both
+used and unused multiline raw literals remain string tokens; their fake
+`#define` lines are not ABI events. This is compiler-produced metadata framing,
+not a C++ expression parser or execution of diagnostic text.
+
+Active `_GLIBCXX_PARALLEL` and `_GLIBCXX_PROFILE` join the unsupported mode
+definitions. GCC 12's OpenMP header first failed actual Clang compilation due
+to incompatible malloc attributes; that failure remains recorded. Matching
+official LLVM 18 libomp packages were then SHA-256 checked against the signed
+apt index and installed only in this task-owned Notebook. Actual active and
+transient parallel-mode `<algorithm>` objects contain unresolved `omp_*` symbols
+and parallel namespace symbols while `42a6be4a` returns reusable closures for
+both. These actual counterexamples justify the additional mode rejection;
+no OpenMP runtime/scientific endpoint is qualified.
+
+### Final observation-record qualification
+
+LF tree `123d32b84269d467b7ebb4291aca23392ca7bd1e` and delta archive SHA-256
+`4632b6822296fa7a440b61c3f802fc50fbb53a88b3db16016354a45f367c98ea`
+qualify collector/test blobs
+`e72c9981371c892f9e05c613e35ec3db4f036c3d` /
+`356f975f27a1a0e96157e1645592c204c5a535cc` (raw SHA-256
+`327ed068fc29c0e5df0166f2c823efd9fec0bf9073d289110003142636c56059` /
+`557880c2e21a85cc83f98d483a2a25077b31577c5547de687a761d46a5a4d97e`).
+All 11,054 source files match the full manifest before/after execution and controls.
+Subsequent result-only edits to this note leave those qualified blobs unchanged.
+
+- Full Linux closure/cache/store/boundary/publication suite: **249 passed,
+  zero skips**. Same-path/cache repeat: **79 passed, zero skips**. Mixed C15/C++18
+  entries: **78 passed, zero skips, one explicit C cross-comparison deselected**;
+  C18 is restored and checked afterward.
+- Macro-expanded modules, import/header-unit forms, malformed/truncated token
+  protocols, output-budget exhaustion and legal same-name contextual identifiers
+  fail closed. Comments and ordinary/multiline raw literals pass as data. Used
+  and unused raw-macro literals cannot forge ABI definition records.
+- Actual active/transient parallel-mode objects have independent unresolved
+  `omp_*` observations and are rejected. The matching LLVM OpenMP header is part
+  of this task's frozen toolchain; a host without it reports that proof unavailable.
+- Default GCC C/Clang C/G++ complete recipe/payload/key compatibility: **3 passed**.
+  Real omitted/old-salt stale-byte controls: **2 passed**. Test-owned ordinary cache
+  misses/hits remain **1/0 -> 1/1 -> 2/1**. Actual stored object, C++-linked library
+  and seven Decimal rows retain the independent identities recorded above.
+- Windows related checks: **180 passed / 69 native skips**. Compiler structure
+  remains 540 modules / zero errors; changed-file Ruff/format/diff checks pass.
+
+Accepted client and remote exits are zero. The final journal is `abi-final/`
+under the task-owned experiment root. Downloaded ignored archive
+`.cache/pr2525-abi-evidence.tar.gz` SHA-256:
+`1b081c1ecdee4ae1e5fcf15ce56ddc210304c42690aabae4b0ba7b3219dd5574`.
+It retains the previous evidence, module/raw-string/parallel counterexamples,
+GCC-header incompatibility, package hashes, and all raw source/object/library
+receipts. These checks qualify this finite offline object domain; latest-head CI,
+genuinely independent formal approval and actual protected delivery remain separate.
+
+## Independent observer-startup correction in preparation
+
+The `sys.executable -c` observer must use `-I -S`: its standard-library imports
+must not resolve project modules or execute site/`.pth` hooks before execing
+Clang under CPU_ENVIRONMENT. This is startup isolation, not a changed Clang
+recipe, a new compiler owner, or a pragma-admission strategy.
+
+The task's standalone Python 3.11 has built-in `resource`, so a bare cwd
+`resource.py` does not reproduce shadowing on that distribution. Preserve that
+negative result rather than presenting it as a failure. A private Python 3.11
+venv with a controlled `.pth` hook does reproduce the unsafe startup: at `a1de`
+the hook runs, replaces `resource`, and collection fails. The new isolated
+startup is tested independently with both project-shadow and private-site
+fixtures; no shared environment's site packages are modified.
+
+Pragma admission/publication remains paused for the explicit scope decision:
+`-dD` consumes macro-stack pragmas, while preserving streams do not by themselves
+prove that arbitrary generated `_Pragma` operations are absent. No extra-`-D`
+marker experiment is treated as original-flags positive admission evidence.
+
+The independent startup smoke uses LF tree
+`2b1fde9cbcac136ef84bd4a630fc3aaf88ed1363` (delta SHA-256
+`cb0588d7b2500531af4b95d69fbb8751db2102a77d1b0414fa10ebfa1207ea45`).
+Collector/test blobs are `5257c7f4f878031d155a59135f13c667768ee92a` /
+`771a5c90dd4a6718d2d12c2f1b5970acfc825ff9`, raw SHA-256
+`98460074346210dc59e044139c3413a9a0575c968580c19a81dba9e8dab43392` /
+`22d17d6e19305a719cba4377936004bece7a82b4b20b0aa6e60c15fedc454513`.
+Three real Linux startup/budget checks pass with zero skips; client/remote exits
+are zero and all 11,054 source files match before/after. The private interpreter
+and ordinary interpreter produce the same key while the `.pth` hook stays inert.
+Downloaded `.cache/pr2525-startup-evidence.tar.gz` SHA-256 is
+`ad2a94a83abbf2e1698b1a5a5fa7bde41ee60bd1cc518e75dfb46ccb43f7a420`;
+its hash, code/test bytes and JUnit are checked without following/extracting links.
+This independently validates startup isolation, not whole-PR pragma admission.
+
+
+## Macro-stack observation correction (2026-10-16)
+
+The earlier publication pause above is superseded by the bounded poison observer
+proposed by njzjz-bot in PR #2525 comment 6196175032 and independently exercised
+on this task's retained Linux Notebook. The proposer implemented the adopted
+delta and is therefore not an independent approver for it.
+
+Clang consumes direct and computed macro-stack pragmas before `-dD` output.
+The old collector returns reusable keys for ten real source/header counterexamples.
+A forced-first anonymous header containing only
+`#pragma GCC poison push_macro pop_macro` makes the same verified compiler reject
+the active names, including stringified, pasted and native library `_Pragma`
+factories. It also rejects ordinary identifiers and conditional identifier checks
+with those two spellings. This is a deliberately conservative finite boundary.
+Inactive text, raw literals, unrelated pragmas and ordinary user macros remain
+supported. No macro is defined, `_Pragma` is not overridden, object flags are
+unchanged, and the existing finite process owner and 64 MiB bound are retained.
+
+Clang exempts expansions of macros defined before poisoning. A real control
+reproduces that exception, then proves the forced-first observer rejects the
+same source. The fixed driver's predefined macro table contains neither name;
+the admitted original flags cannot inject user predefinitions or forced headers.
+A post-poison definition control fails. These controls explain why moving the
+guard after user input or adding user macro admission would need a fresh audit.
+
+Own source-matched qualification of the proposed collector: ten baseline failures,
+sixteen candidate passes, the full eight-file Linux suite **267 passed / zero
+skips**, plus eleven extra controls and five further accepted-input controls.
+The latter five originally compared whitespace-normalized preprocessing output;
+that comparison does not establish literal-byte preservation. The integrated
+regressions instead retain raw preprocessing output and compare compiler token
+kinds and full spellings, with an additional stored-object execution oracle for
+multiline/double-space/tab bytes. Their final execution receipt is recorded below. The original 267-test result is not being counted again for new tests.
+
+The downloaded diagnostic archive `.cache/poison-eval/evidence.tar.gz` has SHA-256
+`94386d1c80b9bd1e3e4ee8e0e4d872a4311cf0261f0bd89290146a090b6cb258`.
+All 11,054 source files matched the corresponding full manifest before/after.
+The collector SHA-256 is
+`a8f1ce942084c35162e3cc123b55c342c68ea269588c8903aaba95b0bc4f3119`.
+The actual retrieved object and separately linked library retain SHA-256
+`ba1423b2ad1bb3364cdd2cf2e8e422618a4b173416d1152426a8d5ec58e03918` and
+`3b3c2512c9134436eeab2cf67d46d479273a1cb7836bf1464317277ef6d422c4`;
+seven Decimal rows match. Test-owned sccache misses/hits are 1/0, 1/1, 2/1,
+and real omitted/old-salt controls reject stale object bytes. This remains finite
+native offline-object evidence, with no installed/runtime/CUDA qualification.
+
+
+### Final integrated LF qualification
+
+The initial integrated run produced **105 passed / 6 failed / zero skips**.
+All six failures were new fixtures: the token comparator retained the terminal
+record newline that the production observer removes, and the literal fixture
+placed a literal tab directly in the unsupported dump-spelling domain. The
+comparator now removes only terminal record CR/LF, preserving every token's
+spelling; the C++ fixture uses an escaped tab and still requires the executed
+result to contain the actual tab byte. The corrected six tests pass with zero
+skips (105 explicitly deselected). The other 105 test bodies are unchanged.
+This is a composed 111-case qualification, not a falsely claimed clean rerun.
+
+Both runs verified all 11,054 source files before and after. Final LF collector
+SHA-256 is `af8c27df8c76e4035e70b4031368644e77a5730e9a0fd980e1dfb030bdcfb911`;
+final test SHA-256 is
+`ba672085654852e70597e8643859ae2a9dba221f04121888e1129a4351204004`.
+The prior diagnostic collector hash above is its CRLF file: replacing CRLF with
+LF yields exactly this final collector, with no implementation delta. The final
+qualification uses actual LF bytes rather than relabeling the CRLF diagnostic.
+
+Raw `.pp`, token and macro observations remain archived without global whitespace
+normalization. The independently executed literal bytes are hex
+`6d756c7469706c6520207370616365730a6e657720206c696e6509656e64`.
+Its retrieved object SHA-256 is
+`4a98a3d50943426a5c4f1eaab148ad41a3c222ab23ff79ba09638dd049ceb378`;
+the separately linked library SHA-256 is
+`9936b412e868f8bb9b8af23abbebbbac0df89dfc537bbefef0e0978078a2b0cd`.
+Downloaded `.cache/poison-final/evidence.tar.gz` SHA-256 is
+`3940e9d9ae852a83d7ebbcfa7e63bfba7b47cd481ca6a7931a3f35d7f2653512`.
+A read-only archive audit confirms regular entries, final source/test LF hashes,
+JUnit populations and the actual executed library bytes. The earlier 267-case
+suite is retained at its original CRLF source provenance, not counted as a new
+LF run. Windows protocol checks are 45 passed / 66 native skips; Ruff, formatting,
+diff whitespace and the 540-module compiler dependency audit pass. This final
+note-only result addition does not change the qualified source or test bytes.

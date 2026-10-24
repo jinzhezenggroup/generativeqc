@@ -82,6 +82,7 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
 PREFIX = r"""
 #include "cc/solver.hpp"
 #include "cc/df_plan.hpp"
+#include "cc/phase_observation.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "generated_df_ccsd_spectator_pairs_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"

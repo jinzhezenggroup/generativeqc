@@ -202,7 +202,7 @@ namespace generativeqc::scf::generated_df_shell {{
 {storage} constexpr std::uint64_t rys_available_mask={mask}ULL;
 {storage} constexpr std::uint64_t rys_qualified_mask=0;
 template<unsigned A,unsigned B,unsigned C>
-{storage} constexpr bool rys_available=(rys_available_mask & (1ULL<<(16*A+4*B+C)))!=0;
+{storage} constexpr bool rys_available=C<4 && (rys_available_mask & (1ULL<<((16*A+4*B+C)%64)))!=0;
 }} // namespace generativeqc::scf::generated_df_shell
 """
 
@@ -347,6 +347,13 @@ def emit_df_rys_shell_cuda(
         )
         for index, include in enumerate(includes):
             source = source.replace(f"__RYS_INCLUDE_{index}__", include)
+    if any(c == 4 for _, _, c in selected):
+        # G units select the larger scalar Geometry even though they have no
+        # admitted Rys specialization. Keep parsed helper signatures consistent
+        # with the polynomial consumer's geometry and Boys storage.
+        source = source.replace(
+            "generated_df_derivatives", "generated_df_auxiliary_g_derivatives"
+        )
     return source
 
 

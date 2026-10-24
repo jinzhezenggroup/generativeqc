@@ -60,8 +60,9 @@ jobs:
     outputs:
       test_scope: ${{ steps.prose_scope.outcome == 'success' && steps.prose_scope.outputs.scope == 'prose' && 'prose' || 'full' }}
     runs-on: macos-26
-    # Keep the 40-minute qualification budget inside a separate finite job budget.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
+    # Cold merge-queue compilation can exceed the routine 30-minute budget.
+    # Retain a finite job cap and all existing scientific step/suite limits.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 75 || 30 }}
     env:
       CUMETAL_COMMIT: e87f368060cf09a45b148b4f8892470c74093ebd
       CUMETAL_SOURCE: /tmp/cuda-metal
@@ -196,6 +197,20 @@ jobs:
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: brew install llvm z3 ninja ccache nlohmann-json openssl@3 libarchive
 
+      - name: Fingerprint installed CuMetal dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        id: cumetal_dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Installed toolchains link Homebrew dylibs (including transitive
+          # dependencies). Never restore a build from another package inventory.
+          inventory="$(brew list --formula --versions | LC_ALL=C sort)"
+          test -n "$inventory"
+          printf '%s\n' "$inventory"
+          fingerprint="$(printf '%s\n' "$inventory" | shasum -a 256 | cut -d' ' -f1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
       - name: Restore CuMetal toolchain
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cache-cumetal
@@ -204,7 +219,7 @@ jobs:
           path: |
             /tmp/cuda-metal
             /tmp/cumetal-install
-          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
+          key: cumetal-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ steps.cumetal_dependencies.outputs.fingerprint }}
 
       - name: Restore CuMetal ccache
         id: cumetal_ccache

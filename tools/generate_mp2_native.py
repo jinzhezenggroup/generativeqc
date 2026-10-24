@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import sys
 import typing
+from fractions import Fraction
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -22,6 +23,14 @@ from generativeqc_compiler.mp2.equations import (
     pair_energy_program,
     unrestricted_energy_program,
 )
+from generativeqc_compiler.tensor import (
+    Program,
+    add,
+    execute,
+    linearize,
+    transpose_program,
+)
+from generativeqc_compiler.tensor.cpu import emit_cpu as emit_bounded_cpu
 from generativeqc_compiler.tensor.cpu_emit import emit_cpu
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
@@ -67,6 +76,63 @@ def cpu_header() -> typing.Any:
     return "\n".join(lines) + "\n"
 
 
+def ump2_density_program(channel: str) -> tuple[Program, Fraction]:
+    """Polarize epsilon bars from the existing spin energy's common VJP/JVP.
+
+    The retained physical integral bar includes both same-spin exchange
+    scatters. At unit g, x=-g and denominator -1, its slope is bar_g-bar_x
+    (bar_g for opposite spin). Deriving that normalization from the VJP keeps
+    the energy owner authoritative; no spin prefactor is restated here.
+    """
+    import numpy as np
+
+    primal = unrestricted_energy_program(
+        (1, 1, 1, 1), channel=channel, differentiable=True
+    )
+    reverse = transpose_program(primal, ("energy",)).program
+    unit = {
+        "g": 1.0,
+        "x": -1.0,
+        "ei": -1.0,
+        "ej": 0.0,
+        "ea": 0.0,
+        "eb": 0.0,
+        "bar_energy": 1.0,
+    }
+    values = execute(
+        reverse,
+        {
+            node.attrs["name"]: np.full(node.spec.shape, unit[node.attrs["name"]])
+            for node in reverse.live_nodes
+            if node.op == "input"
+        },
+    ).outputs
+    slope = float(values["bar_g"].item())
+    if "bar_x" in values:
+        slope -= float(values["bar_x"].item())
+    if not np.isfinite(slope) or slope == 0:
+        raise ValueError("invalid UMP2 physical integral-bar normalization")
+    normalization = Fraction(slope)
+    tangent = ("g", "x") if channel != "alpha_beta" else ("g",)
+    forward = linearize(
+        reverse, tangent, outputs=("bar_ei", "bar_ej", "bar_ea", "bar_eb")
+    ).program
+    # For the quadratic epsilon cotangent Q, B(u,v)=DQ(u)[v]/2.
+    bilinear = Program(
+        {
+            name: add(node, coefficients=(Fraction(1, 2),))
+            for name, node in forward.outputs.items()
+        },
+        provenance={
+            "source_energy": primal.logical_hash,
+            "source_reverse": reverse.logical_hash,
+            "source_jvp": forward.logical_hash,
+            "physical_bar_normalization": str(normalization),
+        },
+    )
+    return prepare_for_backend(bilinear, "cpu"), normalization
+
+
 def ump2_cpu_header() -> str:
     """Lower the established spin-labelled UMP2 TensorIR to scalar CPU tiles."""
     lines = [
@@ -77,6 +143,7 @@ def ump2_cpu_header() -> str:
         "#include <cstddef>",
         "#include <stdexcept>",
         "#include <vector>",
+        '#include "tensor/cpu_runtime.hpp"',
         "namespace generativeqc::mp2::generated {",
         "using Ump2Run = void(*)(double,double,double,double,double,double,double*);",
         "struct Ump2CpuPlan { Ump2Run run; std::size_t numeric_bytes; const char* equation_hash; };",
@@ -108,6 +175,101 @@ def ump2_cpu_header() -> str:
         "inline Ump2CpuPlan ump2_cpu_plan(unsigned channel) { switch(channel) {"
         + "".join(plans)
         + 'default: throw std::invalid_argument("unknown UMP2 spin channel"); }}'
+    )
+    # The reverse is emitted by the same TensorIR owner as the energy.
+    adjoint_plans = []
+    order = ("g", "x", "ei", "ej", "ea", "eb")
+    for channel in ("alpha_alpha", "beta_beta", "alpha_beta"):
+        primal = unrestricted_energy_program(
+            (1, 1, 1, 1), channel=channel, differentiable=True
+        )
+        reverse = prepare_for_backend(
+            transpose_program(primal, ("energy",)).program, "cpu"
+        )
+        source, resources = emit_bounded_cpu(reverse, symbol=f"ump2_reverse_{channel}")
+        source = source.replace('#include "cpu_runtime.hpp"', "").replace(
+            'extern "C" int', "inline int"
+        )
+        lines.extend((f"namespace reverse_{channel} {{", source, "}"))
+        feeds = {name: name for name in order}
+        feeds["bar_energy"] = "seed"
+        inputs = ",".join(
+            feeds[node.attrs["name"]]
+            for node in reverse.live_nodes
+            if node.op == "input"
+        )
+        copies = " ".join(
+            f"out[{order.index(name.removeprefix('bar_'))}]=bars[{k}];"
+            for k, name in enumerate(reverse.outputs)
+        )
+        lines.append(
+            f"inline void ump2_adjoint_{channel}(double g,double x,double ei,double ej,double ea,double eb,double* out) "
+            f"{{ const double seed=1.0; std::fill_n(out,6,0.0); const double inputs[]={{{inputs}}}; "
+            f"double bars[{resources['output_count']}]; "
+            f"if(reverse_{channel}::ump2_reverse_{channel}(inputs,{resources['input_count']},bars,{resources['output_count']},{resources['required_bytes']}ULL)) "
+            f'throw std::runtime_error("nonfinite UMP2 adjoint"); {copies} }}'
+        )
+        adjoint_plans.append(
+            f"case {len(adjoint_plans)}: return {{ump2_adjoint_{channel},{resources['required_bytes']}ULL,"
+            f'"{reverse.logical_hash}"}};'
+        )
+    lines.append(
+        "inline Ump2CpuPlan ump2_adjoint_cpu_plan(unsigned channel) { switch(channel) {"
+        + "".join(adjoint_plans)
+        + 'default: throw std::invalid_argument("unknown UMP2 adjoint channel"); }}'
+    )
+    # Finite same-space Fock weights use the existing physical ijab bars.
+    lines.extend(
+        (
+            "using Ump2DensityRun = void(*)(double,double,double*);",
+            "struct Ump2DensityCpuPlan { Ump2DensityRun run; std::size_t numeric_bytes; const char* equation_hash; };",
+        )
+    )
+    density_plans = []
+    for channel in ("alpha_alpha", "beta_beta", "alpha_beta"):
+        bilinear, normalization = ump2_density_program(channel)
+        source, resources = emit_bounded_cpu(
+            bilinear, symbol=f"ump2_density_tile_{channel}"
+        )
+        source = source.replace('#include "cpu_runtime.hpp"', "").replace(
+            'extern "C" int', "inline int"
+        )
+        lines.extend((f"namespace density_{channel} {{", source, "}"))
+        scale = float(normalization).hex()
+        feeds = {
+            "g": f"left/({scale})",
+            "x": f"-left/({scale})",
+            "d_g": f"right/({scale})",
+            "d_x": f"-right/({scale})",
+            "ei": "-1.0",
+            "ej": "0.0",
+            "ea": "0.0",
+            "eb": "0.0",
+            "bar_energy": "1.0",
+        }
+        inputs = ",".join(
+            feeds[node.attrs["name"]]
+            for node in bilinear.live_nodes
+            if node.op == "input"
+        )
+        copies = " ".join(
+            f"out[{('ei', 'ej', 'ea', 'eb').index(name.removeprefix('d_bar_'))}]=bars[{k}];"
+            for k, name in enumerate(bilinear.outputs)
+        )
+        lines.append(
+            f"inline void ump2_density_{channel}(double left,double right,double* out) "
+            f"{{ const double inputs[]={{{inputs}}}; double bars[4]; "
+            f"if(density_{channel}::ump2_density_tile_{channel}(inputs,{resources['input_count']},bars,4,{resources['required_bytes']}ULL)) "
+            f'throw std::runtime_error("nonfinite UMP2 density adjoint"); {copies} }}'
+        )
+        density_plans.append(
+            f"case {len(density_plans)}: return {{ump2_density_{channel},{resources['required_bytes']}ULL,"
+            f'"{bilinear.logical_hash}"}};'
+        )
+    lines.append(
+        "inline Ump2DensityCpuPlan ump2_density_cpu_plan(unsigned channel) { switch(channel) {"
+        + "".join(density_plans)
+        + 'default: throw std::invalid_argument("unknown UMP2 density channel"); }}'
     )
     inventory = hashlib.sha256("\n".join(hashes).encode("ascii")).hexdigest()
     lines.append(f'inline constexpr char kUmp2InventoryHash[] = "{inventory}";')

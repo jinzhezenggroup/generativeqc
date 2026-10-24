@@ -55,7 +55,14 @@ def _configure(
         executable = f'"{ROOT / "tests/native/test_cpu_linalg.cpp"}"'
     else:
         (source / "provider.cpp").write_text(
-            '#include <cblas.h>\nextern "C" int provider_value() {\n'
+            "#include <cblas.h>\n"
+            "#if GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
+            'extern "C" int openblas_set_num_threads_local(int);\n#endif\n'
+            'extern "C" int provider_value() {\n'
+            "#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS\n"
+            "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX && !GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
+            "scipy_openblas_set_num_threads_local(1);\n#else\n"
+            "openblas_set_num_threads_local(1);\n#endif\n#endif\n"
             "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX\n"
             "return scipy_openblas_get_num_threads();\n#else\n"
             "return openblas_get_num_threads();\n#endif\n}\n"
@@ -120,8 +127,9 @@ def _synthetic_provider(
     scipy: bool,
     missing: str = "",
     extra_flags: str = "",
+    unprefixed_local: bool = False,
 ) -> Path:
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     prefix = "scipy_" if scipy else ""
     (root / "cblas.h").write_text(
         "#ifndef PROVIDER_COMPILE_FLAG\n#error missing provider compile option\n#endif\n"
@@ -139,7 +147,8 @@ def _synthetic_provider(
     value = "dependency()" if dependent else "1"
     code = 'extern "C" {\n' + ("int dependency();\n" if dependent else "")
     if missing != "local":
-        code += f"int {prefix}openblas_set_num_threads_local(int) {{return {value};}}\n"
+        local_prefix = "" if unprefixed_local else prefix
+        code += f"int {local_prefix}openblas_set_num_threads_local(int) {{return {value};}}\n"
     code += (
         f"int {prefix}openblas_get_num_threads() {{return {value};}}\n"
         f"void {prefix}openblas_set_num_threads(int) {{}}\n"
@@ -254,7 +263,9 @@ import scipy_openblas32 as scipy
 
 library = scipy.dll
 capabilities = (
-    hasattr(library, "scipy_openblas_set_num_threads_local"),
+    any(hasattr(library, name) for name in (
+        "scipy_openblas_set_num_threads_local", "openblas_set_num_threads_local"
+    )),
     all(
         hasattr(library, name)
         for name in (
@@ -394,3 +405,26 @@ def test_pkgconfig_absolute_libraries_survive_reconfigure(
     assert _capabilities(build) == (True, True, True)
     _run(["cmake", "--build", str(build)], env=env)
     _run([str(build / "consumer")], env=env)
+
+
+def test_prefixed_provider_rechecks_local_thread_symbol(
+    tmp_path: Path, native_cxx: object
+) -> None:
+    """A stable header/metadata cannot hide changes to the actual linked ABI."""
+    provider = _synthetic_provider(
+        tmp_path / "metadata", native_cxx, spelling="shared", scipy=True
+    )
+    build, env = _configure(tmp_path, provider, native_cxx)
+    for unprefixed, missing in ((False, ""), (True, ""), (False, "local"), (False, "")):
+        _synthetic_provider(
+            provider,
+            native_cxx,
+            spelling="shared",
+            scipy=True,
+            unprefixed_local=unprefixed,
+            missing=missing,
+        )
+        _run(["cmake", "-S", str(tmp_path / "consumer"), "-B", str(build)], env=env)
+        assert _capabilities(build) == (missing != "local", True, True)
+        _run(["cmake", "--build", str(build)], env=env)
+        _run([str(build / "consumer")], env=env)

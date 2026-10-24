@@ -178,11 +178,13 @@ void cross_overlap(const core::System& target, const core::System& source,
  * Orbital and auxiliary systems must describe the same atoms and geometry but
  * may use independent Cartesian or real-spherical shell sets. This host-only
  * implementation remains the independent correctness oracle for CUDA DF
- * integral-generation kernels.
+ * integral-generation kernels. omega=0 selects 1/r; positive finite omega
+ * selects erf(omega*r)/r for BOTH the metric and the three-center tensor.
  */
 DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
                                                            const core::System& auxiliary_system,
-                                                           bool include_derivatives = true);
+                                                           bool include_derivatives = true,
+                                                           double omega = 0.0);
 
 /** Contract public-basis DF derivative weights directly into nuclear coordinates.
  *
@@ -195,6 +197,12 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> metric_weights, std::span<const double> three_center_weights);
+
+/** Operator-matched weighted response; omega=0 retains the Coulomb contract. */
+std::vector<double> contract_weighted_range_density_fitting_derivative(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    std::span<const double> metric_weights, std::span<const double> three_center_weights,
+    double omega);
 
 /** Directly contract raw density-fitting A/M weights with nuclear derivatives.
  *
@@ -209,7 +217,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> three_center_weights, std::span<const double> metric_weights,
-    std::size_t maximum_bytes);
+    std::size_t maximum_bytes, double omega = 0.0);
 
 /**
  * Transform Cartesian density-fitting tensors into the public AO

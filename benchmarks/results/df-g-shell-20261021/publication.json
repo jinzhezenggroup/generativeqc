@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Recorded CPU-reference and all-repeat large endpoint gates pass; performance scope and unresolved large cliffs remain explicit.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 824,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "0d3405fcf268033a3756ef57225c906af59034a2fe013f9929d5c4b174daa493"
+    },
+    {
+      "bytes": 16381,
+      "path": "endpoint-checks.json",
+      "role": "summary",
+      "sha256": "e7daab024d6e115737ef7395b5b3527decebdae9760f68c420572ff27497d6cd"
+    },
+    {
+      "bytes": 169040,
+      "path": "receipts.json.xz",
+      "role": "samples",
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a"
+    },
+    {
+      "bytes": 9743,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "9e401a0a32894e4e72db48841ad872d9409f1fd67bf8f55c3de4fd9172b51ad2"
+    },
+    {
+      "bytes": 29880,
+      "path": "large-case-diagnostic.json",
+      "role": "summary",
+      "sha256": "33fdfe7eca2ff27a84be73dc354bd3e4aa2523f259bcaef4cd4f74990f228c93"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--time=00:45:00",
+      "bash",
+      "test-n1.sh",
+      "tests",
+      "0"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "33461b49e19914dca95dc3529ecc7a86d156d00d"
+  }
+}

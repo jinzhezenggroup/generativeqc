@@ -1,0 +1,1223 @@
+{
+  "schema": "generativeqc.paper-evidence-sources.v1",
+  "families": {
+    "energy": {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023"
+    },
+    "forces": {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024"
+    },
+    "cpu": {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023"
+    },
+    "native": {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021"
+    },
+    "archive_cbs": {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021"
+    },
+    "archive_hfdft": {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021"
+    },
+    "archive_lambda": {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021"
+    }
+  },
+  "blobs": [
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/.gitignore",
+      "mode": "100644",
+      "blob": "fd54c108b3f034106f6f959a21c60c62e8d42e77",
+      "bytes": 45,
+      "sha256": "e8ea6ec2d2b952902d291db41b59e9a712a6c0ed6a1b89e2dde0ff5f87aeefbb"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/README.md",
+      "mode": "100644",
+      "blob": "932d912739e2765d719af4d97e584f5e0898b98a",
+      "bytes": 8385,
+      "sha256": "009dcecb34407ca261bffa92a4ea7bd0b3282aef48049d0fd500f335ba5f251a"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/comparison.json",
+      "mode": "100644",
+      "blob": "a774b81a4b84ce46f2d7ae58bf9c491097b41d36",
+      "bytes": 12618,
+      "sha256": "29ae23f00db0693d20173290e7d4ecf4576f30014ffb8b491303c18f86b138df"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/environment.json",
+      "mode": "100644",
+      "blob": "e09cb92b5734ff9ff313ce0f4695ecc65fc8054a",
+      "bytes": 8767,
+      "sha256": "dd5cfa16e43b99329f160fcecc01a3263dba42387d63f15011d1605a77d618f3"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/environment.py",
+      "mode": "100644",
+      "blob": "62ce17bcb7584e055b8e980815961eb54d1d268a",
+      "bytes": 1564,
+      "sha256": "f23cf035b8f7be7ffef4de890a8e862a71992a69a3d4a2db2e2ab81d3b9263c1"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/evidence.json",
+      "mode": "100644",
+      "blob": "f68a2092643ed8392c9224a632b028ba9022fc14",
+      "bytes": 17312,
+      "sha256": "ec0ab3dd0eb5696cf21f64f70b8a27b523f796e37627d25b891aaaa19a060ef0"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/failures/C1-2-log.txt.xz",
+      "mode": "100644",
+      "blob": "232a461dfa8922d1e72f75ff01dcc671c4f467ce",
+      "bytes": 4900,
+      "sha256": "8ac9199737d126dbdb57ee1cf49d683eec4fed6d7bc4a0b118b81bb4ddc3fc8b"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/failures/C1.json.xz",
+      "mode": "100644",
+      "blob": "0eccf69a144c2f163de545ecc4ba922be24f00ea",
+      "bytes": 2836,
+      "sha256": "f7b0aeee9ca0ec9bbf61e3f7159599670603358b67e46a1b2e349cf5012f075a"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/failures/C1.outcome.json.xz",
+      "mode": "100644",
+      "blob": "8421a788def2f390241451f53faddb2d26cb268e",
+      "bytes": 100,
+      "sha256": "be0ddd92f0944c88bdbfd2bda3171c0cc4ef3b06e632fd4f8982bb7617d6b3d3"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/failures/C1.stdout-log.txt.xz",
+      "mode": "100644",
+      "blob": "21788888631fbb678dfea5a5bf8ab8f5786da635",
+      "bytes": 376,
+      "sha256": "e79c31d59ed645b4531ef621c7aad410281effb4333078d3af231c4ea19228d2"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/inputs-measured.json.xz",
+      "mode": "100644",
+      "blob": "7a2dac2c582b8eef7a3f2d2cb6e38106e097df0e",
+      "bytes": 4492,
+      "sha256": "73c55b4050f98e7659841e984222b8265a1ce343e530406e84956138706e96c0"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/inputs.json",
+      "mode": "100644",
+      "blob": "1bf09a24dd9ebf800f351a66efa1a3dc6b30fe88",
+      "bytes": 25487,
+      "sha256": "1428293b6f07dfe5399c293bf7c6b8ec208e8fd885f7b2500a738b2b24f693cb"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/oracle-attempt1.py.xz",
+      "mode": "100644",
+      "blob": "41bbb4c854cce765a77ea0d6a7c8473b186c6978",
+      "bytes": 3128,
+      "sha256": "b894c8615da1848dd95d41bbbb1599b038fa1ee418c3f91027ffaf59a32dcac3"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/oracle-source.patch.xz",
+      "mode": "100644",
+      "blob": "e33f9cd0dc69d85d085c44fff0ba8e153df56729",
+      "bytes": 8600,
+      "sha256": "c6c7b3c692af1654929349d1f5e95f147800238929db7152b9562da078f666b4"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/oracle.py",
+      "mode": "100644",
+      "blob": "4c8a19d418337e1254b52dc7c61551b97b449b58",
+      "bytes": 10182,
+      "sha256": "640e26e07c8c9271b12cb50eb159c829e987bd75b349b021cf9b0d70335a17d0"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/package.py",
+      "mode": "100644",
+      "blob": "2313c5b0c5e76b3dc9a2aa2b0f9f29c68ea832fe",
+      "bytes": 9390,
+      "sha256": "fe0fb4e355b2654aa2b6e0392976ddb36f826d9bc97903facacad04dda0c1fd5"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/publication.json",
+      "mode": "100644",
+      "blob": "d3e34bd0d8eeb9eacd1067600389ce26e893691f",
+      "bytes": 5518,
+      "sha256": "4ed75b0efef6633f9d8ee12bc359f6a925dcb6a9c7a4e384b32d3d90cb6c1336"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C1.json.xz",
+      "mode": "100644",
+      "blob": "925a3693b23e1804acb9676766e96fb7a816c9c8",
+      "bytes": 9728,
+      "sha256": "1777837e90e05ca8c14a7ae11207cfe4dea43b01ad89003668f1840a2575314e"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C3.json.xz",
+      "mode": "100644",
+      "blob": "1b9061090b1b247ed9aa6ebf3e4fb7754c0de402",
+      "bytes": 10672,
+      "sha256": "59d9d7f829e23261252e2f3faa873f07b15c36eb6f5b3134aba465db03159840"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C4.json.xz",
+      "mode": "100644",
+      "blob": "c0e90dfaa6896db6ab0f13a39c7eb1dd8b042488",
+      "bytes": 10840,
+      "sha256": "0b227bd0db008499ed68cbc3dbd93b7fc717e69c95946ced38d3a290bd5bb089"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C5.json.xz",
+      "mode": "100644",
+      "blob": "f84614e35a9198776152f97af7eb27bf1605110a",
+      "bytes": 11228,
+      "sha256": "dc6dbf6c72bdc64ae6c7862f0b0888ef2b3f7952cac137da8290126b6cfe4c62"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C6.json.xz",
+      "mode": "100644",
+      "blob": "1b784ef4d7a4c5b98f7f57642bbbd2f3df8bebb0",
+      "bytes": 11768,
+      "sha256": "91fcc1845b4e2524f918300cf13eb06a5902e26fac761a70667b0bb3cfdcc993"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/receipts/C7.json.xz",
+      "mode": "100644",
+      "blob": "7cb4c039626c6b6794cbd33b8b8436b770b53fd4",
+      "bytes": 11704,
+      "sha256": "281dce25dbabc8f623383f16d2e72c69ea57ff3eac6e0e439fbfb56b39924617"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/replay.py",
+      "mode": "100644",
+      "blob": "cfbf0c082ef3347b7a95aa58f90d9783f527ed23",
+      "bytes": 11340,
+      "sha256": "23752a7ae244e43df34391aa210ed121a22b41455246cc3a5e82c23365d1cfed"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/run-oracle-measured.sh.xz",
+      "mode": "100644",
+      "blob": "38e3157d2a772cab0155e842ce656fc569067d10",
+      "bytes": 708,
+      "sha256": "e4c3fbcfbac78fe9b86df82f4d31a89ac9c222a75c04ebb63ea1f7e9cb2b2d56"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/run-oracle.sh",
+      "mode": "100644",
+      "blob": "f52046256efddd64ff15e4d9c03d3da18287257b",
+      "bytes": 1489,
+      "sha256": "464f184b71452f82b1497452512b878342377531085380555dda61194c060fdf"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/run-suite.sh",
+      "mode": "100644",
+      "blob": "4faa474e2dc0d341c28c0cdd3e57b9da1570c774",
+      "bytes": 519,
+      "sha256": "10494286a1f94f63920803291a0f19b47178f319d07e2adb751d205d67e10cfa"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/runner-retry-check.json.xz",
+      "mode": "100644",
+      "blob": "92affafcacd6c815ead56a7a233df575e7ae6eca",
+      "bytes": 1600,
+      "sha256": "7a44a65dd660a876c6d165b5843c70f6cd002dd473966fcd50041fadc43ca5fa"
+    },
+    {
+      "commit": "334e7f489870dccc22ae8864c01f2353aa9689a4",
+      "path": "benchmarks/results/cbs-independent-energy-20261023/test_run_oracle.py",
+      "mode": "100644",
+      "blob": "0dc7050b44585fc94157dbae27026e3a9d3a84ea",
+      "bytes": 6310,
+      "sha256": "ea2056bd215401e0bd3c18dfe2eafb117a60aedb1e300c828d7b422ffa2822ba"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/.gitignore",
+      "mode": "100644",
+      "blob": "14a14aaad97c366f3ed3bdba39504c1147138a40",
+      "bytes": 28,
+      "sha256": "87ab933d45a2fba6619ceaa70259ed7806c08d46dafd1320f7282c747b031f56"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/README.md",
+      "mode": "100644",
+      "blob": "55440fec3b24b4d030161173edbc8687d13ccbc1",
+      "bytes": 6985,
+      "sha256": "157239d70ba41018a36be9eadcf793740079ae1602d199915e7a9e0b248c148c"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/comparison.json.xz",
+      "mode": "100644",
+      "blob": "813f30e50eb2c6be6d8fff23123ab7d3c579ab57",
+      "bytes": 3328,
+      "sha256": "4a3526a7f1582c851ad6881ac9746a740ab460f2d576fbd20a62e9dfccc529e4"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/controller-check-command.sh.xz",
+      "mode": "100644",
+      "blob": "ba53549e72ed139be2dcbac5766c8b7e36e12f29",
+      "bytes": 1212,
+      "sha256": "f74222789a59297b59abd0319bc03a7a6ba7aa102df2ed0f9abea74191d2ea49"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/controller-stage-command.sh.xz",
+      "mode": "100644",
+      "blob": "98d3e18e72143066f4015ce452898fac9aa57b79",
+      "bytes": 1204,
+      "sha256": "d2566172e08b35d29411361b04bac0af349bcf0f5c0eebb8f75711f15dbbc944"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/environment.py",
+      "mode": "100644",
+      "blob": "5f7d514c47e90fc59ce29d83db05591451c63e09",
+      "bytes": 1682,
+      "sha256": "52f5ff7c274b06f0df9a5a8ad6059f4ae7a7bc2f40251a128eee26708645e73e"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/evidence.json.xz",
+      "mode": "100644",
+      "blob": "84ffdf8a6f6f41f179cbaa5740e5c635caa47a49",
+      "bytes": 5040,
+      "sha256": "6924f0cc81480ae4f2e0bb6bb30b18df11d5f25801139dec2410d98f3440236c"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/execution-final.json.xz",
+      "mode": "100644",
+      "blob": "39450c8ec42b0ef6ca5eac339d52ce7a368f7511",
+      "bytes": 3348,
+      "sha256": "d01c8513a27f4e97aaaad6422679dda012809b540b3286cb711f6a902847e1f5"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/execution-initial.json.xz",
+      "mode": "100644",
+      "blob": "64b84919769518c657c74b1b55ed55a6020c2a0e",
+      "bytes": 8568,
+      "sha256": "10d3bc48298be4be754e731148d6225f496b9260f9fe10aee6e9b152769565ab"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/initial-comparison.json.xz",
+      "mode": "100644",
+      "blob": "d5b506e5718d739e2532cc83078c52fbd1c7b8dd",
+      "bytes": 1540,
+      "sha256": "5c01d535cee89bca77d6cda66265e070282e4968d642d0ca7076550354d74972"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/inputs.json.xz",
+      "mode": "100644",
+      "blob": "67fc5452c9051f23544154feeeb4a4c7f544877f",
+      "bytes": 6980,
+      "sha256": "ada2dbc8db426967683f14e15fe107cc5cfad08d9628549d3b3b1b36d3f1de0a"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/launch.sh",
+      "mode": "100644",
+      "blob": "23d0f148b3501e47b2bc7983c23be31e8513c4b9",
+      "bytes": 685,
+      "sha256": "9a2fe0db4fa9a4236263072d6fb42924e73deb07bbdc1b406528c646dbb3084f"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/oracle.py",
+      "mode": "100644",
+      "blob": "705eeded7076b480b27f9a7444a912502761e383",
+      "bytes": 10538,
+      "sha256": "8d2529768e388fdec512bc55e4e57981e3ffc2cedce05bedfafdca8e5eb922ba"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/pack.py",
+      "mode": "100644",
+      "blob": "05f832d7a98cc9d842efe62a400a305d056bae69",
+      "bytes": 4770,
+      "sha256": "82eae53f55ead86a268a247501c593c292d4308406b005c1c1899c250d1c2d33"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/postflight-command.sh.xz",
+      "mode": "100644",
+      "blob": "b830cbd83018ee573918b46d3d271c34c78894a4",
+      "bytes": 2040,
+      "sha256": "b806b224c7d0feb00528733db7776e19b760ba79b806468a7d8c3fbf85c3cf7a"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/preflight-command.sh.xz",
+      "mode": "100644",
+      "blob": "05cc73498cdeefd5d5487b34dc799ba5710beef9",
+      "bytes": 1304,
+      "sha256": "07d462a1f9b21b9c0b347bdfb8dc26134c7e84515bede7cba14bc79c79c10614"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/prepare.py",
+      "mode": "100644",
+      "blob": "17523637e062eccf9df92c1613a55582417bff6c",
+      "bytes": 2084,
+      "sha256": "699191ebb699bd655e721b5ee53dd22d5243382f4714f9e146ba0a210852c7ee"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/publication.json",
+      "mode": "100644",
+      "blob": "cccf9044c5fba1670f241be54bd215d6f784cb26",
+      "bytes": 7671,
+      "sha256": "0b343dbb14f3e09b86401523c2991f3c0b15b2529a34676dcab132cb741052b7"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/publish.py",
+      "mode": "100644",
+      "blob": "5b6347c85a3c519a2e643ab8dc076a8da77cc5be",
+      "bytes": 9166,
+      "sha256": "e13568a449c67211f086f66bb259e7e2c7e970abd1d3ad29bb7ce17cd2707435"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/reader-integrity-check.json",
+      "mode": "100644",
+      "blob": "e26fc42f4a8e66f529e6f1de4d449d1413a6e0d6",
+      "bytes": 1601,
+      "sha256": "a521fd2f9becff548484d56c3fb793e98fd6bd7b4626b42141fce73b01731957"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/receipts.json.xz",
+      "mode": "100644",
+      "blob": "46fe101b253b26b6ca7eaed72ca068557e55f82e",
+      "bytes": 39616,
+      "sha256": "73865a61cb972912f1f83db01770e3c0bb1d6558bd0d6285cc592194bc09812b"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/receive-create-command.sh.xz",
+      "mode": "100644",
+      "blob": "8468f35ce60be566470bf56521ffebadec9e0faf",
+      "bytes": 1276,
+      "sha256": "d52157eca0eaa0d3ece84b9af43afe7913dd9dc3d572ded1284ad7141c8f5713"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/receive-probe-command.sh.xz",
+      "mode": "100644",
+      "blob": "39f58b05aaee240530858e3477298a3435e29e16",
+      "bytes": 736,
+      "sha256": "aeba7aac8fa3bd797dc6d027211a665a9f652018d8c800fc052a4549f2811782"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/replay.py",
+      "mode": "100644",
+      "blob": "aeb75c833735fd8525647d799a6da844e0238777",
+      "bytes": 17447,
+      "sha256": "1ca4ef436a0866e909681ff9d07063537ab4058cb3a84620ac7727cdd45c9a0e"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/run-suite.sh",
+      "mode": "100644",
+      "blob": "ec3ca41e3399c8a81fb65c8410deafc9642f5ead",
+      "bytes": 1020,
+      "sha256": "79da2de2e474bb0db112cb8bb428e013b33a23bb14bf93897355318e3805c11b"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/run-task.sh",
+      "mode": "100644",
+      "blob": "62ca8eca5325d2c1eda75fcd0b96d68e891f138e",
+      "bytes": 1617,
+      "sha256": "7d6349843a105c14891fb515763387b43aab09c22968cca95c068b5ee3fc12fb"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/runner-check-command.sh.xz",
+      "mode": "100644",
+      "blob": "9efb9ca9ca23cd82abc1c869966be3cc27fd5d54",
+      "bytes": 1996,
+      "sha256": "4bb35592218391bd96f6405a4f4d5081c9f8f645f7999ca3c2820b65d9e3aa44"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/start-command.sh.xz",
+      "mode": "100644",
+      "blob": "317050c5554ca4e4344330f47e42b08459c93945",
+      "bytes": 1296,
+      "sha256": "2e9ac691c91e76f79ae0cb23cd2627a42b726596851dfb887aea12fa556ec297"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/test_pack.py",
+      "mode": "100644",
+      "blob": "548a285c2f85cf241abb0b78a10be574bce0902b",
+      "bytes": 3815,
+      "sha256": "bc8957a6d618e03e9887fdbf15a9d888c32af109df20abb57096d1f7009444e4"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/test_replay.py",
+      "mode": "100644",
+      "blob": "4d4921d702e7430d6e61e3942c168d88ab284a1c",
+      "bytes": 11225,
+      "sha256": "0378a5a3c05ac4df93f76198590b289a62a36aabc47aced9c64f3ecb0055e3b6"
+    },
+    {
+      "commit": "594343670cfdea574e5b1c6821b51165ce004f97",
+      "path": "benchmarks/results/cbs-independent-forces-20261024/verify.py",
+      "mode": "100644",
+      "blob": "ed69d2f0289640cee45321e9e28ef2a79b3e012d",
+      "bytes": 4305,
+      "sha256": "b956eed1f3afa7cec3c5516581270c87e4d46f4076e68f0448a15abc6a10c3ac"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/README.md",
+      "mode": "100644",
+      "blob": "4e386abc884dc301b8c0b2982bc43d4639bf5066",
+      "bytes": 4714,
+      "sha256": "38ee8af473523abcd8bdf5429d6ec18c8c2b88a195085493048f9705c5bb1a3f"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/errors.csv",
+      "mode": "100644",
+      "blob": "8fe1ced383cb1e565bb9fe710b720af24e7d4b43",
+      "bytes": 1419,
+      "sha256": "f1660e1dd93d60ba32079f999190bfb324870d6cdaa6e5c6dbd4c57b4d900e45"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/evidence.json.xz",
+      "mode": "100644",
+      "blob": "00d48a4ae62cdf09bf44c5ed24c711e4630a32dd",
+      "bytes": 3732,
+      "sha256": "651736b06e80619e9eadcaf9ea667c05ac144d36d3de88c3cafcb12293dc0b9d"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/observe.py",
+      "mode": "100644",
+      "blob": "02b7b7c3e279f3e88e24c877fd28401820e42122",
+      "bytes": 5317,
+      "sha256": "586796631821c9060721989896b9d0e20c4a4c4ef29148aed44d63d3b4b6060d"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/publication.json",
+      "mode": "100644",
+      "blob": "4a7b47b455685da273fbc7ca7aea308a9a109efd",
+      "bytes": 2903,
+      "sha256": "e38d1972219deb7258831121c81f759c4433a80caff759ffcdbaf22e7745ac31"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-audits.json.xz",
+      "mode": "100644",
+      "blob": "415a2ff2565198fcf87f698eaf9ef3d3ed256d9b",
+      "bytes": 19976,
+      "sha256": "445f87047daff47374e0b776c4b67c82cd0a6d0f5cf67beb8c444fe2741b8974"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-build.json.xz",
+      "mode": "100644",
+      "blob": "395b2b60fc6ce4bd30583264b28deb40512bb4a9",
+      "bytes": 33220,
+      "sha256": "2216cc2b3a3efa74e5c1c968bb84c5597039b0dfb219a7d25d0064869e9dcb38"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz",
+      "mode": "100644",
+      "blob": "3df653309d1234127298de2837efa36594b9445e",
+      "bytes": 263412,
+      "sha256": "8cd40f90369a130b13e229f1a6ec444ee6164e015dd586875ced9f202999339e"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-support.json.xz",
+      "mode": "100644",
+      "blob": "80e7fb5be15ac53e569e2500f641562535f38f56",
+      "bytes": 12456,
+      "sha256": "e54ec054c72eb15a374f0b9828bf4d30088a8f6028c2d5065c0e831c5989a8c9"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz",
+      "mode": "100644",
+      "blob": "7ea70ce192b9532a25e7cc154a0606b192d4deb7",
+      "bytes": 168804,
+      "sha256": "8ddf5dcbb642f7a298dfc92457b4b1db4a3c18b975c69e73c79dfd4a69f85d15"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/replay.py",
+      "mode": "100644",
+      "blob": "85f7bcd79ecce39aed5cb10b15a566fb58266a45",
+      "bytes": 13162,
+      "sha256": "2b4ea6f4d62b4b58c5ccacf95ad4c445864f9884650611b7c99c94bead03d7a2"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/summary.json",
+      "mode": "100644",
+      "blob": "f07f9a4aed28a053cc3288227fb013398159a71f",
+      "bytes": 14009,
+      "sha256": "af3b1963b5cb1b93815849b3dc14e8a949e24322b82d4890ced9fc119f122146"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/test_replay.py",
+      "mode": "100644",
+      "blob": "dec7e540cc571f2773120d115322b8418f8afd56",
+      "bytes": 3865,
+      "sha256": "6329bb152d2cb6c182484eba28c974914ce3b2e875f49efcee7dc44ccf9ba1e6"
+    },
+    {
+      "commit": "1c7a3e969e357042b91f6452fb8b6b227bb70e8d",
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/unpack.py",
+      "mode": "100644",
+      "blob": "6c06d19bf8f948723ebea798a60641155cb76cc6",
+      "bytes": 3437,
+      "sha256": "93218e9ac69185a9fe23167772445ada03ca31415d696131a73571e80a3281f7"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/README.md",
+      "mode": "100644",
+      "blob": "a8c14de1987cc15656b51f043b7956c3b2ee05be",
+      "bytes": 9322,
+      "sha256": "643fba294238ba0c94ecef59acd0377c2cbeae211f4eef8f500003012d237210"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/ablation-job.sh",
+      "mode": "100644",
+      "blob": "f7aa58692455438bb8cc5f4869910eca977b4dcc",
+      "bytes": 387,
+      "sha256": "d348b4c229c9d9b8744a2467b541ec5799b7f4a55ff8e29a3c596ddeb66f2429"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/baseline-environment.sh",
+      "mode": "100644",
+      "blob": "4ec8c6e47e4f3bad66b29c2751aeb1fc8df3393e",
+      "bytes": 907,
+      "sha256": "3294a49158330051c757dd7ea0e39319c3cb5a2bc1da3ce0d95d515c796905b3"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/c7-job.sh",
+      "mode": "100644",
+      "blob": "552bdb2ec04d9c6a62234a325aaf841ab181620f",
+      "bytes": 216,
+      "sha256": "c7c08fa5655d4ca7ec08d9684a2eb10c139a6c11074a3c68d106e7b6a2fa5eee"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/c7-repeat-job.sh",
+      "mode": "100644",
+      "blob": "5f34130212d37ff2d02d230538e8f23cd5368b4a",
+      "bytes": 170,
+      "sha256": "94d5374d6e118ef1170fc6afd91b8cdf4434af83396c7acc8306d3ca8666db94"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/candidate-environment.sh",
+      "mode": "100644",
+      "blob": "81c1a85a28eba29761e5f56041b03dcdf2899e9a",
+      "bytes": 908,
+      "sha256": "3760202f5037a7ed2f8bf4626b5855d70b02815d8566b02d877b69c748608b3f"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/curve-job.sh",
+      "mode": "100644",
+      "blob": "6c82db668e5a0831c8c936d2ddd15d04191b688d",
+      "bytes": 307,
+      "sha256": "f7c6971e69006f4288789200e8dd56433a7fc13b66510dbc8b28012ccaf3b1d3"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/evidence.json.xz",
+      "mode": "100644",
+      "blob": "b623d9e363bd7779269a9753209f65dde77ca51b",
+      "bytes": 11952,
+      "sha256": "d5b28e6e9eeb4d94579cd03fcc350862d7f1239b044c5ffff05d5aec4c451161"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/lambda-job.sh",
+      "mode": "100644",
+      "blob": "bbbd5f82528245ed8698a2841bd66865f7c4f4ac",
+      "bytes": 622,
+      "sha256": "5078dba178cda68618a53dff1b135ff5384e239da3f79df6e660056000e3b002"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/memcheck-job.sh",
+      "mode": "100644",
+      "blob": "5096b9543844a0fccd5251ba4c262ea24797e679",
+      "bytes": 397,
+      "sha256": "71881e6850b08ebfb1958935bb2dc2e54f6b262a0ec97d57e1265e2ccfe73f63"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/publication.json",
+      "mode": "100644",
+      "blob": "88e1081564da3be6c28470750a236fe2a5fe8a52",
+      "bytes": 3929,
+      "sha256": "beb7a877612cee29cf4b8afb8edfffd9265e28088ced52287b4e564ce2a89856"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/python-preload.sh",
+      "mode": "100644",
+      "blob": "603642bdccae740734eca468705f93f90d67b754",
+      "bytes": 627,
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/qualification-job.sh",
+      "mode": "100644",
+      "blob": "3052e4a35586396f029d6090bd71aed389132b23",
+      "bytes": 956,
+      "sha256": "73a07431a7de934a7e898481fdbb90477a02f21847a03932d45b8849caab3754"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/qualified-source.patch.xz",
+      "mode": "100644",
+      "blob": "8efda73502bb598885743a8895281e104f5b6420",
+      "bytes": 2336,
+      "sha256": "08e59f8ea36c87ac49a3356f9fb8dd5501401161c0b757e0c2d8cc5407db0ea9"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/run-one.sh",
+      "mode": "100644",
+      "blob": "456d356edd3f40824520fe67251126975698fbd8",
+      "bytes": 782,
+      "sha256": "470a42d33d92149a76e7a67ac9b0606c0ea8a3e16571e5bcc798fa4fbc0595a1"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz",
+      "mode": "100644",
+      "blob": "c3f45442b64d6e91255f41937b04a80d02c1b336",
+      "bytes": 140240,
+      "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/timings.md",
+      "mode": "100644",
+      "blob": "edf134a4734d3a014accc5b5cc1db6cc68c814f1",
+      "bytes": 6593,
+      "sha256": "88c2f61a8f9409d1a9e060f048d524622f6adb263bf31dc5cdb9fe1209847bf5"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/verify.py",
+      "mode": "100644",
+      "blob": "14c43574227123373b71b3f92b726087ddb4b34f",
+      "bytes": 10030,
+      "sha256": "074bd17ac20345399feaec0ae1d780a17029984aadd30d24948f656482d1b5aa"
+    },
+    {
+      "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/work-job.sh",
+      "mode": "100644",
+      "blob": "bd8e69158c15b90154b2e221f76f5df6e878f9e9",
+      "bytes": 375,
+      "sha256": "4103cd80148e86105e522d33ec825811dd0008ae5ecc854489427f4708dd96a0"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/README.md",
+      "mode": "100644",
+      "blob": "a8c14de1987cc15656b51f043b7956c3b2ee05be",
+      "bytes": 9322,
+      "sha256": "643fba294238ba0c94ecef59acd0377c2cbeae211f4eef8f500003012d237210"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/ablation-job.sh",
+      "mode": "100644",
+      "blob": "f7aa58692455438bb8cc5f4869910eca977b4dcc",
+      "bytes": 387,
+      "sha256": "d348b4c229c9d9b8744a2467b541ec5799b7f4a55ff8e29a3c596ddeb66f2429"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/baseline-environment.sh",
+      "mode": "100644",
+      "blob": "4ec8c6e47e4f3bad66b29c2751aeb1fc8df3393e",
+      "bytes": 907,
+      "sha256": "3294a49158330051c757dd7ea0e39319c3cb5a2bc1da3ce0d95d515c796905b3"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/c7-job.sh",
+      "mode": "100644",
+      "blob": "552bdb2ec04d9c6a62234a325aaf841ab181620f",
+      "bytes": 216,
+      "sha256": "c7c08fa5655d4ca7ec08d9684a2eb10c139a6c11074a3c68d106e7b6a2fa5eee"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/c7-repeat-job.sh",
+      "mode": "100644",
+      "blob": "5f34130212d37ff2d02d230538e8f23cd5368b4a",
+      "bytes": 170,
+      "sha256": "94d5374d6e118ef1170fc6afd91b8cdf4434af83396c7acc8306d3ca8666db94"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/candidate-environment.sh",
+      "mode": "100644",
+      "blob": "81c1a85a28eba29761e5f56041b03dcdf2899e9a",
+      "bytes": 908,
+      "sha256": "3760202f5037a7ed2f8bf4626b5855d70b02815d8566b02d877b69c748608b3f"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/curve-job.sh",
+      "mode": "100644",
+      "blob": "6c82db668e5a0831c8c936d2ddd15d04191b688d",
+      "bytes": 307,
+      "sha256": "f7c6971e69006f4288789200e8dd56433a7fc13b66510dbc8b28012ccaf3b1d3"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/evidence.json.xz",
+      "mode": "100644",
+      "blob": "b623d9e363bd7779269a9753209f65dde77ca51b",
+      "bytes": 11952,
+      "sha256": "d5b28e6e9eeb4d94579cd03fcc350862d7f1239b044c5ffff05d5aec4c451161"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/lambda-job.sh",
+      "mode": "100644",
+      "blob": "bbbd5f82528245ed8698a2841bd66865f7c4f4ac",
+      "bytes": 622,
+      "sha256": "5078dba178cda68618a53dff1b135ff5384e239da3f79df6e660056000e3b002"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/memcheck-job.sh",
+      "mode": "100644",
+      "blob": "5096b9543844a0fccd5251ba4c262ea24797e679",
+      "bytes": 397,
+      "sha256": "71881e6850b08ebfb1958935bb2dc2e54f6b262a0ec97d57e1265e2ccfe73f63"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/publication.json",
+      "mode": "100644",
+      "blob": "88e1081564da3be6c28470750a236fe2a5fe8a52",
+      "bytes": 3929,
+      "sha256": "beb7a877612cee29cf4b8afb8edfffd9265e28088ced52287b4e564ce2a89856"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/python-preload.sh",
+      "mode": "100644",
+      "blob": "603642bdccae740734eca468705f93f90d67b754",
+      "bytes": 627,
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/qualification-job.sh",
+      "mode": "100644",
+      "blob": "3052e4a35586396f029d6090bd71aed389132b23",
+      "bytes": 956,
+      "sha256": "73a07431a7de934a7e898481fdbb90477a02f21847a03932d45b8849caab3754"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/qualified-source.patch.xz",
+      "mode": "100644",
+      "blob": "8efda73502bb598885743a8895281e104f5b6420",
+      "bytes": 2336,
+      "sha256": "08e59f8ea36c87ac49a3356f9fb8dd5501401161c0b757e0c2d8cc5407db0ea9"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/run-one.sh",
+      "mode": "100644",
+      "blob": "456d356edd3f40824520fe67251126975698fbd8",
+      "bytes": 782,
+      "sha256": "470a42d33d92149a76e7a67ac9b0606c0ea8a3e16571e5bcc798fa4fbc0595a1"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz",
+      "mode": "100644",
+      "blob": "c3f45442b64d6e91255f41937b04a80d02c1b336",
+      "bytes": 140240,
+      "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/timings.md",
+      "mode": "100644",
+      "blob": "edf134a4734d3a014accc5b5cc1db6cc68c814f1",
+      "bytes": 6593,
+      "sha256": "88c2f61a8f9409d1a9e060f048d524622f6adb263bf31dc5cdb9fe1209847bf5"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/verify.py",
+      "mode": "100644",
+      "blob": "14c43574227123373b71b3f92b726087ddb4b34f",
+      "bytes": 10030,
+      "sha256": "074bd17ac20345399feaec0ae1d780a17029984aadd30d24948f656482d1b5aa"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-memory-20261021/work-job.sh",
+      "mode": "100644",
+      "blob": "bd8e69158c15b90154b2e221f76f5df6e878f9e9",
+      "bytes": 375,
+      "sha256": "4103cd80148e86105e522d33ec825811dd0008ae5ecc854489427f4708dd96a0"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/README.md",
+      "mode": "100644",
+      "blob": "f36705fe0c07322d177394521e0877bc0a2138a4",
+      "bytes": 4316,
+      "sha256": "e2c182b2cd229d3bae144f6ea15f9ea43bca47022886260b0996fbdcae5475e1"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/auxiliary-inputs.json.xz",
+      "mode": "100644",
+      "blob": "078830e406c554600156c236c05ba6d31a5df587",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/comparisons.json.xz",
+      "mode": "100644",
+      "blob": "c69bb1a2205f729bd93391da119a9afc98b315fb",
+      "bytes": 6864,
+      "sha256": "053f02e7da956f752b2258b9d86a799067cf4e52b6e052e9f731e5c53c961b68"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/conditions.md",
+      "mode": "100644",
+      "blob": "51a73cf3fe7166b7c2765b62c487a3652deb2660",
+      "bytes": 7643,
+      "sha256": "7b169b9080ac0e4ef7f139ed1ef9686955fb8cf8ce1c4541c2df440584121ec0"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/diagnostics.json.xz",
+      "mode": "100644",
+      "blob": "d237812d3fcaabc75b8e918ec8d04811b817d2fc",
+      "bytes": 24500,
+      "sha256": "7fd3403ff6198a932c8accf2287e85a1e8d3fde3a8c52408be7c2d5f59e891d6"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/fast.json.xz",
+      "mode": "100644",
+      "blob": "4724beb2c52c9e8aa48fbd4e1a6ba6fe50e32375",
+      "bytes": 232188,
+      "sha256": "0ea30dc82cd711e6e9efaf48fdc97ab2dcf64b9fabd36689769c5b6d01553753"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/gpu4pyscf.json.xz",
+      "mode": "100644",
+      "blob": "d23d36208a0d64c610a6d0af7559ede109bc4112",
+      "bytes": 182216,
+      "sha256": "744e1f5b2fbf89d16d02a49691b3b84d6d423d7d5535322b0e66c621b00fc763"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/jobs.json.xz",
+      "mode": "100644",
+      "blob": "8f0ceae5967f94f21295ab482234782466368910",
+      "bytes": 10792,
+      "sha256": "9a0dc3721d2db5b9af52af4baff224edef32eaf5b86b571613c4ab4b5fe713a4"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
+      "mode": "100644",
+      "blob": "8389d09d6007316ae899835ab93fba8e1412f0b7",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/provenance.json.xz",
+      "mode": "100644",
+      "blob": "3b729c4db297f6194eee7c7ee44dbe1bdd6362a9",
+      "bytes": 22064,
+      "sha256": "b447e2ca30965206e175410cfbf26a98ce99049a1af7181479adcd2133f1d6fa"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/publication.json",
+      "mode": "100644",
+      "blob": "5f21d8052b1b6c68fe75205142cc05309f804c81",
+      "bytes": 3579,
+      "sha256": "bcee3b0baaa574f57f072dbea988090c45b97ef6aba448cdff66f998754f6c27"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/qualification.json.xz",
+      "mode": "100644",
+      "blob": "8ad0529f6a659a1e844990084e1dc41b6f584766",
+      "bytes": 26672,
+      "sha256": "c6cef559c0eb5c8eb1e5ecb8ad95b87f4dc262de6a2035b7197dfd5242e95821"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/reference-reuse.json",
+      "mode": "100644",
+      "blob": "cde234eeef8d12f7fe10e11ae28bbf6ec997d68c",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/reproduce.py",
+      "mode": "100644",
+      "blob": "552c55e9b15bb05e4771e50d8987a779c4d8487f",
+      "bytes": 3788,
+      "sha256": "0c5a75df8df2cc1290122d5280748962eaed343870565e2cd475bddc83f5d900"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/standard.json.xz",
+      "mode": "100644",
+      "blob": "7d37a1a4ae9cec3d7c1af16989ab1fe4b251b169",
+      "bytes": 214064,
+      "sha256": "b91f068cc67c4f886a16adfeb12644b21752f14fe08cd739d5698f5db63a122d"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/timings.md",
+      "mode": "100644",
+      "blob": "f480c57411e5e50cc2b676a162c48d029b2ba87d",
+      "bytes": 20930,
+      "sha256": "88f9fcb416ca3ee84745ce47c85f29eb088766a862a4f2ce30ce606db661ba3c"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/validation.json.xz",
+      "mode": "100644",
+      "blob": "233b431366750d4854a6da45ffcf4accc5fdc6a7",
+      "bytes": 2744,
+      "sha256": "3f756d22354526e8c8920772787deabf6b928655449e9bb40f01a5dcd6b2de61"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/readme-repaired-20261021/work.md",
+      "mode": "100644",
+      "blob": "9177f913e37da268dc6f29fd2944ba40cda65921",
+      "bytes": 16009,
+      "sha256": "81b1e5bf4828e19494d938faf391a8fc85f78e88858f40a78f5d799763312651"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/README.md",
+      "mode": "100644",
+      "blob": "42469400438de54f1f29fa2c560e985ba0ec40d7",
+      "bytes": 9433,
+      "sha256": "26380f9f4663d5103ba555d3857ee81ae382c15d40170abaa516e0fd319320eb"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/baseline-environment.sh",
+      "mode": "100644",
+      "blob": "7d984984d98956350de980bc6d9428486271f7a4",
+      "bytes": 907,
+      "sha256": "eed0d5512915d60f46dcf7131cc243a331056581c34da987d024c353757d4577"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/c6-ablation.sh",
+      "mode": "100644",
+      "blob": "71838ae14d039432be0b0d954ea677106d06798c",
+      "bytes": 580,
+      "sha256": "0a2e8d61fc7ef9f51308ea0eba2a8ab4170d1a5f845a3b1cf6452ebc3194c2d8"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/candidate-environment.sh",
+      "mode": "100644",
+      "blob": "f348a7eed6c0665d64eb52e12567b01183f9cdb9",
+      "bytes": 908,
+      "sha256": "22440147927cd7c8a4ca74f43a70b99bf8cedb9e202475f3bcaf31793a85d680"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/cohort.sh",
+      "mode": "100644",
+      "blob": "936ffe0d93f1f73245f8e7be12c7c8fb8b43ac5d",
+      "bytes": 811,
+      "sha256": "0ef03be8195be9c39ed2d04f21b3b56e8496d9a64308453e7460282f5a3c7600"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/evidence.json.xz",
+      "mode": "100644",
+      "blob": "50adb170ce8d5ab2b9ab19311e377dfb600a79e0",
+      "bytes": 12252,
+      "sha256": "6d33b3e2c3ac0f251cba0e01cc9303a27f4956ec890a339d12852503cd74fa28"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/publication.json",
+      "mode": "100644",
+      "blob": "4e2a5acd872f2df86b57e96618b03282678d1f6a",
+      "bytes": 3036,
+      "sha256": "9bc1aeb629c510d78890be74d008deb245ea4745adbeef06b5c12e556c2d0fa0"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/python-preload.sh",
+      "mode": "100644",
+      "blob": "603642bdccae740734eca468705f93f90d67b754",
+      "bytes": 627,
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/qualification.json.xz",
+      "mode": "100644",
+      "blob": "711fd95e7c05d8a6b234742fa247622eedd721e8",
+      "bytes": 97144,
+      "sha256": "562065f5b276f5f661e42574c404c96b4be45e2135fc5ce7054c6f43333145ae"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/qualified-source.patch.xz",
+      "mode": "100644",
+      "blob": "2a6416c6fe7e064b3de7fc9f0a6138997191d5e4",
+      "bytes": 5128,
+      "sha256": "1041f0d068ff98273ecb783d463b796a12ccbb67444d696504dbca436e27919b"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/readme-pair.sh",
+      "mode": "100644",
+      "blob": "5cd0d95a8ed2466c65369a714b435a6fae172e2e",
+      "bytes": 892,
+      "sha256": "c0f527836773cdb0f9f4bd16c93835961612aa651f7caf7b6e4e0efac159b357"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/summary.json.xz",
+      "mode": "100644",
+      "blob": "352f7c72ee8936717a7bf2051ea8a37b4458928a",
+      "bytes": 60380,
+      "sha256": "169ca92b27832a1ad95df9d2a064a0686cd488290c22c7bd81aed3f7272613c2"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/timings.md",
+      "mode": "100644",
+      "blob": "6287b1ea728b11ef1691a13ed2f3ce574dc9d24f",
+      "bytes": 6599,
+      "sha256": "3b18b9e5a3b0202ffbadf70bae51decfa0c640e5f5ea3164fbde42d6dd54089e"
+    },
+    {
+      "commit": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "path": "benchmarks/results/cbs-fast-lambda-20261021/verify.py",
+      "mode": "100644",
+      "blob": "9c06caac248ed4f1ec070ac96dc66765531abcd3",
+      "bytes": 11079,
+      "sha256": "fbd1aa232f6e6addf7ae290c9baed4199bb1c920aba79ceaeeb490018b254317"
+    },
+    {
+      "commit": "bbd41a42764e8d22d15c1348f70a633961d4dcf5",
+      "path": "tests/reference_data/cbs/h2-dz-tz.json",
+      "mode": "100644",
+      "blob": "515c38df68f5fdc5b42cb7a89a2e38efa916b20e",
+      "bytes": 4579,
+      "sha256": "1f798d76078cdfdbb34bb52e0fd600cb4135c13b0776281ac5e02a1320bcdf36"
+    },
+    {
+      "commit": "bbd41a42764e8d22d15c1348f70a633961d4dcf5",
+      "path": "tests/reference_data/cbs/water-algebra.json",
+      "mode": "100644",
+      "blob": "99e373334cbab420473980c86eb96f5d7ac3349d",
+      "bytes": 5463,
+      "sha256": "54385bd42bd59ab336c5eb1210a2d0832924a8e3cbb66396734f8393be1dd874"
+    },
+    {
+      "commit": "df5c44a81c5d73210a8d2f7f09ba4930d7f67210",
+      "path": "benchmarks/results/h100-paper-protocol-20261024/manifest.json",
+      "mode": "100644",
+      "blob": "4d84f6174cc3fa5447672a454e79a20e4dbcdb77",
+      "bytes": 69646,
+      "sha256": "dd96c17e702101d21352deb4f867ab0fbb7bce66700222d49fc67bbdef23185e",
+      "snapshot": {
+        "path": "prepared-protocol-manifest.json.xz",
+        "bytes": 7132,
+        "sha256": "227c8e8a69b566884095abdc23e400d32d75e95c1b0b5d38cc73cf76ecf04d41",
+        "role": "read-only prepared owner contract; no delivery/execution authority"
+      }
+    }
+  ],
+  "prepared_protocol_contract": {
+    "commit": "df5c44a81c5d73210a8d2f7f09ba4930d7f67210",
+    "path": "benchmarks/results/h100-paper-protocol-20261024/manifest.json",
+    "delivery_status": "PREPARED_UNMERGED",
+    "execution_authority": false
+  }
+}

@@ -12,9 +12,13 @@ namespace generativeqc::scf {
  */
 struct DfShellBasisView {
   DfDerivativeBasisView basis;
+  // Both orbital and auxiliary metadata may use six-term packing when the
+  // complete auxiliary basis includes g. Orbital lists leave g empty; auxiliary
+  // lists include it with the original public AO offsets and clipped panels.
+  std::size_t expansion_terms{3};
   const std::int32_t* shell_ids{};
   const std::int64_t* ao_offsets{};
-  std::size_t begin[4]{}, count[4]{};
+  std::size_t begin[5]{}, count[5]{};
   // Zero keeps heterogeneous per-shell bounds. A positive count is a caller
   // invariant for a homogeneous signature slice, passed uniformly at launch.
   std::size_t primitives{};
@@ -46,7 +50,7 @@ enum class DfDerivativePairs { full, symmetric, packed };
  * public weights, executed primitive products, Cartesian component work, and
  * public weight loads (including zeros), in that order.
  * They are diagnostic atomics and must be disabled in promotion timings.
- * full_domain selects all 64 s/p/d/f classes; false retains the original seven
+ * full_domain selects orbital s/p/d/f and auxiliary through g; false retains the original seven
  * non-SSS s/p classes for comparison. Variants 0/1/2 select the compiler's warp,
  * packed-warp and compact-subgroup schedules, with identical mathematics.
  * mixed is a private consumer-authorized candidate, never schedule admission.

@@ -556,6 +556,7 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   require(std::isfinite(options.orbital_screening_tolerance) &&
               options.orbital_screening_tolerance >= 0,
           "invalid orbital Schwarz screening tolerance");
+  options.convergence.validate();
   const auto n = ref.nbf, o = ref.nocc;
   require(ref.density_fitted == bool(options.df_reference),
           "RHF response must preserve the reference integral model");
@@ -586,8 +587,9 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       require(ref.orbital_energies[a] - ref.orbital_energies[i] > 1e-8,
               "RHF occupied-virtual gap is unresolved");
   auto gmres_options = options.gmres;
-  gmres_options.absolute_tolerance = std::min(
-      gmres_options.absolute_tolerance > 0 ? gmres_options.absolute_tolerance : 1e-12, 1e-12);
+  gmres_options.absolute_tolerance =
+      std::min(gmres_options.absolute_tolerance > 0 ? gmres_options.absolute_tolerance : 1e-12,
+               options.convergence.response_solve());
   gmres_options.relative_tolerance = 0.0;
   const auto zplan = response::prepare_gmres(o * v, gmres_options);
   const auto arena =
@@ -763,7 +765,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       for (std::size_t q = 0; q < n; ++q)
         if ((p < o) == (q < o))
           same_space = std::max(same_space, std::abs(result.stationarity[p * n + q]));
-    require(same_space <= kStationarityTolerance, "RHF same-space source stationarity failed");
+    require(same_space <= options.convergence.stationarity(kStationarityTolerance),
+            "RHF same-space source stationarity failed");
     std::vector<double> diagonal(o * v);
     for (std::size_t i = 0; i < o; ++i)
       for (std::size_t a = 0; a < v; ++a)
@@ -813,7 +816,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
         audit_solution();
         result.screened_residual = result.orbital_residual;
       }
-      exact_retry = !z.converged() || result.orbital_residual > kResidualTolerance;
+      exact_retry = !z.converged() ||
+                    result.orbital_residual > options.convergence.limit(kResidualTolerance, 1e-7);
     } else {
       exact_retry = !z.converged() && (inverse || !initial.empty());
     }
@@ -842,7 +846,7 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     }
     if (!z.converged()) throw std::runtime_error("RHF matrix-free Z response did not converge");
     if (result.applied_screening == 0 || exact_retry) audit_solution();
-    if (result.orbital_residual > kResidualTolerance)
+    if (result.orbital_residual > options.convergence.limit(kResidualTolerance, 1e-7))
       throw std::runtime_error("RHF independent Z residual failed");
     for (std::size_t i = 0; i < o; ++i)
       for (std::size_t a = 0; a < v; ++a) seed[i * n + o + a] -= z.solution[i * v + a];
@@ -852,7 +856,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     result.weights_seconds += seconds(phase);
   }
   result.maximum_stationarity = maximum(result.stationarity);
-  if (options.relax_orbitals && result.maximum_stationarity > kStationarityTolerance)
+  if (options.relax_orbitals &&
+      result.maximum_stationarity > options.convergence.stationarity(kStationarityTolerance))
     throw std::runtime_error("RHF complete frame stationarity failed");
   std::string detail;
   scf::OneElectronGradientResources onee;

@@ -60,11 +60,12 @@ def evaluate(
     ],
 )
 @pytest.mark.parametrize("coincident", [False, True])
+@pytest.mark.parametrize("derivative_basis", ["nuclear", "relative"])
 def test_fused_external_weights_match_raw_component_derivatives(
-    angular: typing.Any, coincident: typing.Any
+    angular: typing.Any, coincident: typing.Any, derivative_basis: typing.Any
 ) -> None:
     integral = build_weighted_eri_ir(angular)
-    kernel = build_weighted_eri_kernel(integral)
+    kernel = build_weighted_eri_kernel(integral, derivative_basis=derivative_basis)
     assert not integral.consumers  # No hidden direct-HF category or density.
     centers = CENTERS.copy()
     if coincident:
@@ -86,7 +87,10 @@ def test_fused_external_weights_match_raw_component_derivatives(
     np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=3e-14)
 
 
-def test_partial_component_subsets_and_explicit_output_scale() -> None:
+@pytest.mark.parametrize("derivative_basis", ["nuclear", "relative"])
+def test_partial_component_subsets_and_explicit_output_scale(
+    derivative_basis: typing.Any,
+) -> None:
     integral = build_weighted_eri_ir((1, 0, 1, 0))
     consumer = integral.contractions[0]
     integral = replace(
@@ -99,12 +103,18 @@ def test_partial_component_subsets_and_explicit_output_scale() -> None:
             ),
         ),
     )
-    full = build_weighted_eri_kernel(integral)
+    full = build_weighted_eri_kernel(integral, derivative_basis=derivative_basis)
     variables = primitive_variables(EXPONENTS, CENTERS, integral.maximum_coulomb_order)
     weights = np.arange(9) - 3.2
     value, gradient = evaluate(full, variables, weights)
     parts = [
-        evaluate(build_weighted_eri_kernel(integral, subset), variables, weights)
+        evaluate(
+            build_weighted_eri_kernel(
+                integral, subset, derivative_basis=derivative_basis
+            ),
+            variables,
+            weights,
+        )
         for subset in ((0, 4, 8), (1, 2, 3, 5, 6, 7))
     ]
     np.testing.assert_allclose(sum(v for v, g in parts), value, atol=2e-13)
@@ -115,7 +125,10 @@ def test_partial_component_subsets_and_explicit_output_scale() -> None:
     )
 
 
-def test_nonfinal_translation_recovery_keeps_physical_shell_slots() -> None:
+@pytest.mark.parametrize("derivative_basis", ["nuclear", "relative"])
+def test_nonfinal_translation_recovery_keeps_physical_shell_slots(
+    derivative_basis: typing.Any,
+) -> None:
     integral = build_weighted_eri_ir((1, 0, 1, 0))
     invariant = TranslationInvariant(dependent_center=1)
     changed = replace(
@@ -125,7 +138,7 @@ def test_nonfinal_translation_recovery_keeps_physical_shell_slots() -> None:
     )
     first, second = (
         build_weighted_eri_kernel(integral),
-        build_weighted_eri_kernel(changed),
+        build_weighted_eri_kernel(changed, derivative_basis=derivative_basis),
     )
     weights = np.random.default_rng(3).normal(size=9)
     variables = primitive_variables(EXPONENTS, CENTERS, integral.maximum_coulomb_order)
@@ -137,11 +150,12 @@ def test_nonfinal_translation_recovery_keeps_physical_shell_slots() -> None:
     )
 
 
-def test_arbitrary_weight_atomic_gradient_matches_multistep_raw_scalar_differences() -> (
-    None
-):
+@pytest.mark.parametrize("derivative_basis", ["nuclear", "relative"])
+def test_arbitrary_weight_atomic_gradient_matches_multistep_raw_scalar_differences(
+    derivative_basis: typing.Any,
+) -> None:
     integral = build_weighted_eri_ir((1, 0, 1, 0))
-    fused = build_weighted_eri_kernel(integral)
+    fused = build_weighted_eri_kernel(integral, derivative_basis=derivative_basis)
     weights = np.random.default_rng(77).normal(size=9)
     centers = CENTERS.copy()
     centers[1] = centers[0]
@@ -187,3 +201,11 @@ def test_large_classes_require_explicit_bounded_lowering_without_truncation() ->
         build_weighted_eri_kernel(build_weighted_eri_ir((3, 3, 3, 3)))
     with pytest.raises(ValueError, match="unique"):
         build_weighted_eri_kernel(build_weighted_eri_ir((1, 0, 0, 0)), (0, 0))
+
+
+@pytest.mark.parametrize("basis", ["unknown", "", None, False])
+def test_weighted_derivative_basis_rejects_unknown_requests(basis: typing.Any) -> None:
+    with pytest.raises(ValueError, match="derivative basis"):
+        build_weighted_eri_kernel(
+            build_weighted_eri_ir((1, 0, 0, 0)), derivative_basis=basis
+        )

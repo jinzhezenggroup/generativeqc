@@ -95,11 +95,11 @@
         "path": "src/posthf/mp2_derivative_common.cpp",
         "symbol": "transform_remaining_shells: third -> local"
       },
-      "reason": "The callback consumes a shell-local dense span in current source. That ABI observation does not prove a view or fused consumer is unsafe or slower. Revalidated after the CPU Direct stationary consumer generalized ERI derivatives to shared weight channels: the legacy contract_weighted_eri_shell_derivative wrapper forwards one borrowed span to contract_weighted_eri_shell_derivatives with the default Reference execution, preserves ordered scalar accumulation, and returns its coordinate-sized result synchronously. MP2 producer storage, shell-local weight lifetime, CPU/CUDA consumer selection and retained-pending-evidence disposition remain unchanged; the new Direct PBE/PBE0 owner explicitly selects PackagedCpu separately.",
+      "reason": "The callback consumes a shell-local dense span in current source. That ABI observation does not prove a view or fused consumer is unsafe or slower. Revalidated after the CPU Direct stationary consumer generalized ERI derivatives to shared weight channels: the legacy contract_weighted_eri_shell_derivative wrapper forwards one borrowed span to contract_weighted_eri_shell_derivatives with the default Reference execution, preserves ordered scalar accumulation, and returns its coordinate-sized result synchronously. MP2 producer storage, shell-local weight lifetime, CPU/CUDA consumer selection and retained-pending-evidence disposition remain unchanged; the new Direct PBE/PBE0 owner explicitly selects PackagedCpu separately. Revalidated for range-separated DF at 78e96707d98145b7f80696aec7851570d2a4431a against landed master 4e28477e96d257528a60bcb68c00529f22585bc1: the s_integrals.cpp changes are confined to separate density-fitting routines. The conventional ERI wrapper, shared channel consumer, primitive helper and default Reference declaration are byte-identical; all other bound MP2 producer and CPU/CUDA consumer files are unchanged. The producer still owns one di*dj*dk*dl local vector per shell quartet and passes it by borrowed span. CPU consumption returns synchronously; CUDA append consumes the weights into owned primitive records or the bounded one-shell fallback, with finish draining pending records. Keep the same materialization classification, retained-pending-evidence disposition and open ownership, parity and endpoint-profitability gaps; this binding review is not new numerical or performance evidence.",
       "residency": "Host std::vector<double>, di*dj*dk*dl elements; selected consumer may stage device records",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/integrals/s_integrals.cpp": "a555368e4473fa0e9c56b6cf7a737d99d52d2d24bfbbb168c7d9b95e54a5afb8",
+        "src/integrals/s_integrals.cpp": "e1384c6f65f33739392e1e2bb30e6ac7d423b5520ee4ce52391af35871a86a69",
         "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
         "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
         "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
@@ -129,11 +129,11 @@
         "path": "src/posthf/mp2_derivative_common.cpp",
         "symbol": "conventional_derivative_accumulate: symmetric_eri_weight -> first"
       },
-      "reason": "Retained dense-input pullback with a source-known production RCCSD(T) caller: src/cc/rccsdt_force.cpp assigns weights.two_electron = total_eri and dispatches conventional_derivative_cpu/cuda. The helper-aware classifier keeps this stage visible; no pass was removed when its source read moved behind symmetric_eri_weight. Production reachability does not establish fusion legality or profitability. Revalidated after the RCCSD(T) orbital Z solve adopted the bound shared response problem: the total_eri producer, weights.two_electron assignment, and conventional_derivative_cpu/cuda dispatch remain unchanged from 4a8715f357dad436f9fe60f435309d1e14ff5f2c, so the dense derivative staging ownership, lifetime, and unresolved evidence gaps are unchanged. Revalidated for resource-based force admission at eedfe675a232ea69e764272febdd59d5cd4cfdba: removing the 12/56-AO admission ceilings and checking orbital-count addition changes the admitted dimensions, not the dense total_eri producer, move into weights.two_electron, CPU/CUDA dispatch, exact eightfold ERI projection or shell-local staging lifetime. The complete-force planner still charges retained dense weights and derivative staging before execution. Retention remains pending evidence; larger admitted dimensions do not supply new fusion, numerical or endpoint-performance qualification. Revalidated when composing the compact-factorized MP2 first stage from 90556d8d2: compact selection requires factorized two-electron weights with an empty dense vector and a smaller compact footprint. The RCCSD(T) dense weights therefore keep the di*N^3 first stage, dense second transform, and canonical eightfold shell projection; the separate factorized route keeps its automatic compact layout and explicit staged fallback. This dense retention record does not supersede the factorized route's own disposition or evidence limits.",
+      "reason": "Retained dense-input pullback with a source-known production RCCSD(T) caller: src/cc/rccsdt_force.cpp assigns weights.two_electron = total_eri and dispatches conventional_derivative_cpu/cuda. The helper-aware classifier keeps this stage visible; no pass was removed when its source read moved behind symmetric_eri_weight. Production reachability does not establish fusion legality or profitability. Revalidated after the RCCSD(T) orbital Z solve adopted the bound shared response problem: the total_eri producer, weights.two_electron assignment, and conventional_derivative_cpu/cuda dispatch remain unchanged from 4a8715f357dad436f9fe60f435309d1e14ff5f2c, so the dense derivative staging ownership, lifetime, and unresolved evidence gaps are unchanged. Revalidated for resource-based force admission at eedfe675a232ea69e764272febdd59d5cd4cfdba: removing the 12/56-AO admission ceilings and checking orbital-count addition changes the admitted dimensions, not the dense total_eri producer, move into weights.two_electron, CPU/CUDA dispatch, exact eightfold ERI projection or shell-local staging lifetime. The complete-force planner still charges retained dense weights and derivative staging before execution. Retention remains pending evidence; larger admitted dimensions do not supply new fusion, numerical or endpoint-performance qualification. Revalidated when composing the compact-factorized MP2 first stage from 90556d8d2: compact selection requires factorized two-electron weights with an empty dense vector and a smaller compact footprint. The RCCSD(T) dense weights therefore keep the di*N^3 first stage, dense second transform, and canonical eightfold shell projection; the separate factorized route keeps its automatic compact layout and explicit staged fallback. This dense retention record does not supersede the factorized route's own disposition or evidence limits. Revalidated for CBS convergence allowances at 6339327f: the changed Lambda, orbital and stationarity stopping limits do not alter the total_eri producer, dense weights ownership, derivative dispatch or staging lifetime. This source binding is not new numerical or performance qualification.",
       "residency": "Host std::vector<double>, di*N^3 elements from dense two-electron weights",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/cc/rccsdt_force.cpp": "64e32e0651e4ede2cad6dcd89b2d4e1b810b096ffa4855d467bd98ea4467eff8",
+        "src/cc/rccsdt_force.cpp": "48e8fd876d2232dd4b93e745509ddd1bc061c356476b66e094e55ec0e20e0f96",
         "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
         "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
@@ -201,9 +201,98 @@
         "src/posthf/mp2_gradient.cpp": "1a775cc0eb06a4c6c6a13b6150a33c82d9fed952016e9f8a299d1610189bb92a",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
+    },
+    {
+      "candidate_id": "a724c388c7c2f994e3c2b5921ecc64a3f94735e04beead9147462e1a92f3bd40",
+      "consumers": [
+        {
+          "path": "src/posthf/ump2_force.cpp",
+          "symbol": "derivative: second -> third"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+      ],
+      "label": "UMP2 spin-frame second shell transform",
+      "lifetime": "One (channel,si,sj) scope; reused across sk/sl until sj scope ends",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
+      "producer": {
+        "path": "src/posthf/ump2_force.cpp",
+        "symbol": "derivative: first -> second"
+      },
+      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md.",
+      "residency": "Host std::vector<double>, di*dj*N^2 elements; only one spin channel is staged at a time",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "source_bindings": {
+        "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
+        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+      }
+    },
+    {
+      "candidate_id": "010e58c5742cff07847a0030a3ebaa550eb6726aaec4f3abc61e760180244939",
+      "consumers": [
+        {
+          "path": "src/posthf/ump2_force.cpp",
+          "symbol": "derivative: third -> local"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+      ],
+      "label": "UMP2 spin-frame third shell transform",
+      "lifetime": "One (channel,si,sj,sk) scope; reused across sl until sk scope ends",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
+      "producer": {
+        "path": "src/posthf/ump2_force.cpp",
+        "symbol": "derivative: second -> third"
+      },
+      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md.",
+      "residency": "Host std::vector<double>, di*dj*dk*N elements; only one spin channel is staged at a time",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "source_bindings": {
+        "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
+        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+      }
+    },
+    {
+      "candidate_id": "86d89608b2201da9e33d9896b655533a99b053b154cadfa12ac028b4921ac476",
+      "consumers": [
+        {
+          "path": "src/integrals/s_integrals.cpp",
+          "symbol": "contract_weighted_eri_shell_derivative / contract_weighted_eri_shell_derivatives"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Compare compact-support and producer/consumer-fused schedules with full alpha-alpha, beta-beta and alpha-beta force parity before replacing this representation.",
+        "Retirement/profitability needs source-matched complete-endpoint time, semantic work counts and simultaneous peak storage; current plans and numerical gates do not establish a performance win."
+      ],
+      "label": "UMP2 spin-frame local shell transform",
+      "lifetime": "One (channel,si,sj,sk,sl) scope; consumed synchronously by the borrowed-span CPU derivative sink",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (UMP2 staging introduced by #1823)",
+      "producer": {
+        "path": "src/posthf/ump2_force.cpp",
+        "symbol": "derivative: third -> local"
+      },
+      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md. Range-DF integration review (2026-10-23): these file digests also cover separate operator-matched DF entry points; the two ERI shell derivative consumers, UMP2 producer and capacity owner are unchanged from bbd41a427. The same retained-pending-evidence disposition and endpoint/work/storage gaps remain.",
+      "residency": "Host std::vector<double>, di*dj*dk*dl elements; only one spin channel is staged at a time",
+      "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
+      "source_bindings": {
+        "src/integrals/s_integrals.cpp": "e1384c6f65f33739392e1e2bb30e6ac7d423b5520ee4ce52391af35871a86a69",
+        "src/integrals/s_integrals.hpp": "d4b79e899491ad83f12637a415ae3026ff7c439212c93ca6af161fbcf89836f0",
+        "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
+        "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
+      }
     }
   ],
   "issue": "https://github.com/jinzhezenggroup/generativeqc/issues/1626",
   "schema": "generativeqc.materialization-dispositions.v1",
-  "scope": "Review inventory only. All six retained MP2 findings have open evidence gaps; the native dense orbital-oracle size/owned-byte gate does not establish required-materialization, complete endpoint admission or profitability."
+  "scope": "Review inventory only. Retained MP2/UMP2 candidates have open fusion/profitability evidence gaps. Source-bound ownership and checked numeric admission do not establish required materialization, measured RSS, retirement or a performance win."
 }

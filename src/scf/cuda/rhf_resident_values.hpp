@@ -15,10 +15,11 @@ class RhfResidentValues {
   RhfResidentValues(const RhfResidentValues&) = delete;
   RhfResidentValues& operator=(const RhfResidentValues&) = delete;
 
-  generativeqc_status prepare(int device, const std::vector<core::System>& systems,
-                              unsigned maximum_iterations, std::size_t direct_nbf,
-                              std::size_t required, std::size_t budget, bool cold_reference = false,
-                              bool generic_fock = false);
+  generativeqc_status prepare(
+      int device, const std::vector<core::System>& systems, unsigned maximum_iterations,
+      std::size_t direct_nbf, std::size_t required, std::size_t budget, bool cold_reference = false,
+      bool generic_fock = false, double screening = 0.0,
+      DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f);
   bool active() const noexcept { return source_.active(); }
   std::size_t capacity_bytes() const noexcept { return source_.capacity_bytes(); }
   std::size_t value_bytes() const noexcept { return source_.value_bytes(); }
@@ -34,6 +35,7 @@ class RhfResidentValues {
  private:
   cudaStream_t stream_{};
   DirectJkSourceLease source_;
+  double screening_{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

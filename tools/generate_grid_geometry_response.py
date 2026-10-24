@@ -34,6 +34,7 @@ def generate() -> str:
         "add",
         "subtract",
         "complement",
+        "treutler_adjust",
         *(f"becke_{count}" for count in range(1, 6)),
     ):
         graph, roots, names = local_program(kind)

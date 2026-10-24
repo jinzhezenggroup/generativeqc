@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 67108864,
+  "benchmark_results_max_bytes": 83886080,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/pbe0-fast-20261013/complete-gradient-test-prehybrid-guard.log.xz": {
@@ -396,6 +396,12 @@
       "owner": "rccsd-149-bc-review",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/rccsd-149-bc-review/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
       "sha256": "04a091ebadea2fbc318a6953eb6567c5334a951327e9760124e616497e2ec38e"
+    },
+    "benchmarks/results/readme-defaults-20261020/receipts.json.xz": {
+      "owner": "README default-grid baseline and replacement comparison",
+      "reason": "Exact original 256-population baseline, retained alongside the unified replacement so prior numerical values, slower Fast results and failures remain independently auditable. This source-frozen historical receipt is unchanged by the replacement campaign; waive only its duplicate change-review charge, retaining the hard per-file and aggregate checkout caps.",
+      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb",
+      "review_change": true
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

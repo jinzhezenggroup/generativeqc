@@ -1,0 +1,100 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "bbd41a42764e8d22d15c1348f70a633961d4dcf5",
+    "dirty": false
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-reference-errors-cpu-20261023/replay.py",
+      "--verify-publication"
+    ]
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Full frozen-source conventional exact native CPU reference matrix and unchanged independent error gates pass. No DF/CUDA/current-master/performance or parent completion claim."
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 4714,
+      "sha256": "38ee8af473523abcd8bdf5429d6ec18c8c2b88a195085493048f9705c5bb1a3f"
+    },
+    {
+      "path": "observe.py",
+      "role": "reproduction",
+      "bytes": 5317,
+      "sha256": "586796631821c9060721989896b9d0e20c4a4c4ef29148aed44d63d3b4b6060d"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 13162,
+      "sha256": "2b4ea6f4d62b4b58c5ccacf95ad4c445864f9884650611b7c99c94bead03d7a2"
+    },
+    {
+      "path": "unpack.py",
+      "role": "reproduction",
+      "bytes": 3437,
+      "sha256": "93218e9ac69185a9fe23167772445ada03ca31415d696131a73571e80a3281f7"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 14009,
+      "sha256": "af3b1963b5cb1b93815849b3dc14e8a949e24322b82d4890ced9fc119f122146"
+    },
+    {
+      "path": "errors.csv",
+      "role": "summary",
+      "bytes": 1419,
+      "sha256": "f1660e1dd93d60ba32079f999190bfb324870d6cdaa6e5c6dbd4c57b4d900e45"
+    },
+    {
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "bytes": 3732,
+      "sha256": "651736b06e80619e9eadcaf9ea667c05ac144d36d3de88c3cafcb12293dc0b9d"
+    },
+    {
+      "path": "raw-build.json.xz",
+      "role": "samples",
+      "bytes": 33220,
+      "sha256": "2216cc2b3a3efa74e5c1c968bb84c5597039b0dfb219a7d25d0064869e9dcb38"
+    },
+    {
+      "path": "raw-water.json.xz",
+      "role": "samples",
+      "bytes": 168804,
+      "sha256": "8ddf5dcbb642f7a298dfc92457b4b1db4a3c18b975c69e73c79dfd4a69f85d15"
+    },
+    {
+      "path": "raw-h2.json.xz",
+      "role": "samples",
+      "bytes": 263412,
+      "sha256": "8cd40f90369a130b13e229f1a6ec444ee6164e015dd586875ced9f202999339e"
+    },
+    {
+      "path": "raw-support.json.xz",
+      "role": "samples",
+      "bytes": 12456,
+      "sha256": "e54ec054c72eb15a374f0b9828bf4d30088a8f6028c2d5065c0e831c5989a8c9"
+    },
+    {
+      "path": "raw-audits.json.xz",
+      "role": "samples",
+      "bytes": 19976,
+      "sha256": "445f87047daff47374e0b776c4b67c82cd0a6d0f5cf67beb8c444fe2741b8974"
+    },
+    {
+      "path": "test_replay.py",
+      "role": "reproduction",
+      "bytes": 3865,
+      "sha256": "6329bb152d2cb6c182484eba28c974914ce3b2e875f49efcee7dc44ccf9ba1e6"
+    }
+  ]
+}

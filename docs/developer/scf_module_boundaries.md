@@ -73,6 +73,14 @@ rather than a claim that every file passes that target.
 
 ## Direct CUDA execution and density-fitting scope
 
+Prepared Direct and ordinary HF request a 16 KiB CUDA call stack when source
+metadata proves that every shell is at most d. F-containing and unknown domains
+retain the schedule's larger request. The shared runtime serializes the limit
+query and increase; it never lowers a larger limit belonging to another live
+consumer. Driver stack backing is outside explicit tensor allocations, so
+optional value caches and response panels also check actual free device memory.
+See the [resource-policy rationale](../../.agents/notes/implemented/performance/2026-10-23-through-d-stack-headroom.md).
+
 ### Optional phase-local exact RHF values
 
 Unset or `GENERATIVEQC_RHF_RESIDENT_VALUES=auto` selects a bounded automatic
@@ -84,12 +92,27 @@ f-containing domain with uncovered generic Fock work, at least 128 Cartesian
 AOs and an iteration limit of at least eight. Known warm/reused buckets,
 smaller sources and fully generated/lower-angular routes retain their existing
 schedule without rebuilding a phase source or recapturing ordinary graphs.
-Ordinary HF/UHF, mixed/incremental Fock schedules and shell-work diagnostics do
-not silently acquire this lease. Small references (fewer than 64 public AOs),
+Ordinary unrestricted HF, mixed/incremental Fock schedules and shell-work
+diagnostics do not acquire this lease. Small references (fewer than 64 public AOs),
 iteration limits below four and incompatible canonical domains retain fallback.
 The automatic policy is a conservative cold/domain heuristic, not a universal
 profitability model or a promise of eight actual iterations. A supplied seed
 in a fresh bucket is not assumed to be an already converged reference.
+
+Ordinary restricted FP64 cold solves also use this owner automatically in a
+separate bounded domain: at least 64 public AOs, at most 128 Cartesian AOs,
+through-d shells, positive screening and at least eight permitted iterations.
+Only a fresh single-system bucket with an internally owned initial guess is
+eligible. External/warm seeds, reused buckets and active public resource ledgers
+retain the streamed schedule. Larger domains are rejected before source cloning
+or sorting, since their setup cost does not amortize in the qualified cold
+workloads. Optional values default to a 512-MiB ceiling in this ordinary domain;
+`0` restores the streamed schedule and `1` remains a bounded diagnostic override.
+The final derivative consumer explicitly rebuilds its Cartesian density, pair
+bounds and queue metadata when its Fock used resident values. This preserves the
+same final density for energy, Pulay and integral-derivative terms.
+The [domain decision](../../.agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md)
+records the qualification and larger-domain crossover rationale.
 
 The common Direct provider builds immutable full-range canonical values once
 and applies its existing compensated FP64 J/K consumer for each physical Fock
@@ -99,7 +122,7 @@ No fitted reference, CPU integral oracle or molecule-specific dispatch is added.
 
 Admission first charges the complete mandatory reference peak, conservative
 provider device/host preparation, Cartesian compensation, two public raw
-matrices and diagnostics. Optional values have an 8-GiB ceiling and must also
+matrices and diagnostics. Reference values have an 8-GiB ceiling and must also
 fit available device memory with a 256-MiB runtime reserve. Resource/capability
 refusals retain the already admitted exact evaluator; driver/numerical failures
 propagate instead of masquerading as pressure. Preparation finite-audits values
@@ -117,7 +140,7 @@ changing the automatic eligibility or default full-cache behavior:
   angular-sum buckets. For `0 <= second <= first < 7`, the bit index is
   `first * (first + 1) / 2 + second`. Unset means all 28 bits; zero retains Direct.
 - `GENERATIVEQC_RHF_RESIDENT_MAX_BYTES` caps the optional FP64 value storage
-  after complete mandatory admission. Unset retains the 8-GiB ceiling; zero
+  after complete mandatory admission. Unset retains the owner’s ceiling; zero
   disables optional storage. It cannot enlarge the complete reference budget.
 
 Both accept unsigned decimal or lowercase `0x` hexadecimal, with no whitespace,
@@ -315,10 +338,15 @@ and orbital-energy weighted-density expression. The optional
 from authenticated resident D/F/C/energies with borrowed matrix-library resources
 and the shared tensor primitive. It reuses four phase-local iteration matrices
 and an arena-charged bounded reduction packet array; it does not upload detached
-host matrices or allocate another dense arena/handle. The default is `0`; other
-values are errors. Small or unavailable-library owners, and repeated exports
-with a published stationary-weight lease, retain reference validation without
-recycling leased storage. An admitted provider failure is explicit, not a silent
+host matrices or allocate another dense arena/handle. An unset selector admits
+strict final RKS matrices for all-electron, full-range exact/fitted global
+hybrids at 384 AOs or more and pure-J exact/fitted models at 544 AOs or more.
+Range corrections, nonlocal correlation, incremental J/K and ECP models retain
+their existing default. Explicit `0` restores host validation; `1` requests
+device proof subject to resource and identity guards; other values are errors.
+Small or unavailable-library owners, and repeated exports with a published
+stationary-weight lease, retain reference validation without recycling leased
+storage. An admitted provider failure is explicit, not a silent
 reference retry. See the
 [resident final-validation decision](../../.agents/notes/implemented/performance/2026-10-10-ks-resident-final-validation.md)
 for layout, lifetime and qualification rationale.

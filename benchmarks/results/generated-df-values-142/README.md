@@ -9,7 +9,7 @@ component controls remain available for comparisons.
 
 ## Lossless storage
 
-`endpoints.json.gz` and `isolated.json.gz` retain the exact original JSON bytes
+`endpoints.json.gz`, `isolated.json.gz` and `promotion.json.gz` retain the exact original JSON bytes
 with deterministic gzip transport. `storage.json` records both stored and
 decoded lengths/SHA-256 identities against existing master history. Decode with
 `gzip.decompress(path.read_bytes())` before parsing, or use `gzip -dc` into an
@@ -34,7 +34,7 @@ with both DF overrides absent. It selected `generated_rys` / `primitive`,
 passed the native DF suite, and reproduced complete spherical M/A and RI-J/K
 references across raw pair/auxiliary tiles of 7/3. Individual validation reports
 retain `production_promoted: false` because running a validator does not itself
-change production policy; `promotion.json` records the selection decision.
+change production policy; `promotion.json.gz` records the selection decision.
 
 ## Numerical and integration gates
 
@@ -147,3 +147,10 @@ python tools/summarize_df_promotion.py \
 The full Python suite passed 659 tests (74 skipped), all nine native CPU suites
 passed, and the native CUDA DF suite passed under Slurm. Full GPU matrix jobs
 were 8965 (isolated), 8971 (source), and 8974 (corrected endpoints).
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

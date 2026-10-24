@@ -134,7 +134,7 @@ DFCCSDTResult run_df_ccsdt_native(
     std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
     bool lambda_resident_krylov = false,
     double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
-    DFCorrelationDemand demand = {});
+    DFCorrelationDemand demand = {}, core::CorrelationConvergence convergence = {});
 
 /** Native DF-MP2 or DF-CCSD(T) group, never a DF-HF reference or an oracle replay.
  * The CC parent inherits the complete owner's guarded fusion/scratch defaults;
@@ -142,7 +142,8 @@ DFCCSDTResult run_df_ccsdt_native(
 DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext&, const core::System&,
                                               const core::System&,
                                               const generativeqc_method_descriptor&, bool forces,
-                                              DFCorrelationDemand);
+                                              DFCorrelationDemand,
+                                              core::CorrelationConvergence convergence = {});
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

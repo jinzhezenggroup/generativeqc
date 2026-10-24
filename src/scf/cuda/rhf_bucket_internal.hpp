@@ -91,6 +91,8 @@ struct CudaRhfBucketPlan {
   bool quartet_direct{};
   bool transformed_direct{};
   bool bounded_direct_streaming{};
+  /** Frozen with the optional arena regions and captured block predicates. */
+  bool fp32_block_screening{};
   bool unrestricted{};
   bool shell_class_profiling{};
   bool inactive_eigensolver_profiling{};

@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.lossless-evidence-compaction.v1",
+  "scope": "Storage only: preserve all historical samples, timings, errors, settings and failed verdicts byte for byte.",
+  "original": "retained-samples.json",
+  "original_bytes": 111467,
+  "original_sha256": "84d366e8ea2f1908881b051e4dc4a0d5d83f098e9b0940c5bcf8f52b7f5b793f",
+  "original_git_commit": "5e0257826b65fcab52c02df4f364a643d20304c1",
+  "original_git_blob": "c222159f572fff0e11b6574762dd8d1c01107a99",
+  "archive": "retained-samples.json.gz",
+  "archive_bytes": 12641,
+  "archive_sha256": "17f55973c9371d0cc4885f6634594c9df7522c600c743d07b40d14b26ca87339",
+  "restore_verified_byte_identical_before_removal": true,
+  "no_release_or_external_publication": true
+}

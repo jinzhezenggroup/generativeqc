@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_schwarz_order.cuh",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Bounded angular-order dispatch for Schwarz diagonal consumers; reuses compiler-owned integral evaluators and normalized basis metadata without a second recurrence.",
+  "regions": []
+}

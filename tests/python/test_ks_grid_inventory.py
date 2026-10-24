@@ -62,7 +62,10 @@ def test_native_ks_slot_counts_shared_grid_once(
     direct, borrowed, grid = _shapes(native_probe, points, spins, functional, tile)
     assert grid == 5 * points * 8
     assert direct == borrowed + 4 * points * 8
-    assert output[1] == borrowed + grid == direct + points * 8
+    # Shape-only public admission includes atom-prefix and partition-radius metadata.
+    atoms = len(point_budget.H2)
+    topology = 8 * ((atoms + 1) + atoms)  # Prefix offsets, then partition radii.
+    assert output[1] == borrowed + grid + topology == direct + points * 8 + topology
 
 
 @pytest.mark.parametrize("spins", [1, 2])
@@ -146,9 +149,11 @@ def test_public_inventory_propagates_one_combined_slot(
         int(method.startswith("pbe")),
         256,
     )
-    assert [row["xc"] for row in rows] == [borrowed + grid] * 3
+    atoms = len(point_budget.H2)
+    topology = 8 * ((atoms + 1) + atoms)  # Prefix offsets, then partition radii.
+    assert [row["xc"] for row in rows] == [borrowed + grid + topology] * 3
     estimates = {item.name: item for item in candidate.estimates}
-    assert estimates["all KS device xc"].bytes == 3 * (borrowed + grid)
+    assert estimates["all KS device xc"].bytes == 3 * (borrowed + grid + topology)
     assert estimates["all KS device xc"].kind == "persistent"
     assert estimates["serialized KS transient device phase peak"].bytes == max(
         max(0, row["setup"] - sum(row[key] for key in ("state", "xc", "coulomb")))
@@ -185,7 +190,10 @@ def test_dense_fleet_preserves_full_force_reservation_and_explicit_caps(
     row = json.loads(dict(request.candidates[0].decisions)["item_device_inventory"])[0]
     _, borrowed, grid = _shapes(native_probe, points, spins, 1, 256)
     # Derive actual retention independently of the public XC slot under test.
-    mandatory = row["state"] + borrowed + grid + row["coulomb"]
+    atoms = len(point_budget.H2)
+    topology = 8 * ((atoms + 1) + atoms)  # Prefix offsets, then partition radii.
+    assert row["xc"] == borrowed + grid + topology
+    mandatory = row["state"] + borrowed + grid + topology + row["coulomb"]
     unlimited = plan_resources([request], ResourceBudget()).require_feasible()
     peak = unlimited.peak_bytes["device"]
     for budget in (

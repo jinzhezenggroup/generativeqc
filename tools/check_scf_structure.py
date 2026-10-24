@@ -38,6 +38,10 @@ ALLOWED = {
 # Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
+    # Share scalar convergence limits without importing host solver ownership.
+    "scf/cuda/scf_convergence_policy.cuh": ("scf/convergence_limits.hpp",),
+    "scf/cuda/direct_md_j.hpp": ("scf/cuda/md_j_engine_contract.hpp",),
+    "scf/cuda/direct_md_j.cu": ("scf/cuda/md_j_engine.cuh",),
     # The immutable DF basis lease is exported only by its actual source owner;
     # it does not authorize dependencies on KS consumers or mutable plan state.
     "scf/cuda/df_source.cpp": ("scf/cuda_density_fitting_basis.hpp",),
@@ -120,6 +124,8 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     ),
 }
 CUDA_ALLOWED["cuda_df_source"] = (
+    "scf/cuda/df_md_raw.hpp",
+    "scf/cuda_density_fitting_md.hpp",
     "runtime/cuda_component_trace.hpp",
     # The CUDA-free construction planner shares checked metadata sizes only.
     "scf/df_source_capacity.hpp",
@@ -146,6 +152,7 @@ CUDA_ALLOWED["cuda_df_source"] = (
 CUDA_MODULES["cuda_df_runtime"] = (
     "df_plan",
     "df_plan_setup",
+    "df_md_plan",
     "df_plan_internal",
     "df_setup_internal",
     "df_plan_lifetime",
@@ -178,6 +185,9 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "solver/cuda/symmetric_eigen_handles.hpp",
     "runtime/cuda_component_trace.hpp",
     "tensor/cuda_vector_contraction.hpp",
+    "scf/cuda/df_md_owner.hpp",
+    "scf/cuda/df_md_layout.hpp",
+    "scf/cuda_density_fitting_md.hpp",
     "scf/cuda/df_metric_kernels.",
     "scf/cuda/df_jk_kernels.",
     "scf/cuda/df_packed_values.",
@@ -193,6 +203,8 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda_density_fitting_integrals.hpp",
     "scf/density_fitting.hpp",
     "scf/df_exchange_policy.hpp",
+    # Shared scalar proof limits carry no backend or method-driver ownership.
+    "scf/df_density_seed_policy.hpp",
     "scf/df_streamed_k_policy.hpp",
     "scf/df_projected_exchange_schedule.hpp",
     "molecule/basis.hpp",
@@ -244,7 +256,13 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/matrix_index.",
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
+    # Operand transport uses the same generated ordered dot algebra; it does
+    # not import a method driver or change the shared DIIS solve owner.
+    "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
+    # Allocation-free small solve/acceptance policy shared with host Pulay;
+    # the CUDA kernel still owns normalization, history and Fock transport.
+    "solver/diis_affine.hpp",
     "scf/cuda/matrix_library.hpp",
     "scf/cuda/runtime_support.hpp",
 )
@@ -275,6 +293,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
 CUDA_MODULES["cuda_direct_queues"] = (
     "direct_queue_index",
     "direct_screening",
+    "direct_coarse_screening",
     "direct_task_encoding",
     "direct_page_screening",
     "direct_queue_profile",
@@ -357,6 +376,16 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda_direct_jk_device.hpp",
     "runtime/",
 )
+# Reference MD mathematics stays generated; the native consumer owns only
+# exact-mask admission, cooperative scheduling and stream-owned scratch.
+CUDA_MODULES["cuda_md_j_engine"] = ("md_j_engine.cuh",)
+CUDA_ALLOWED["cuda_md_j_engine"] = (
+    "scf/cuda/direct_md_j.hpp",
+    "runtime/cuda_resources.cuh",
+    "generated_md_j_engine.cuh",
+)
+CUDA_MODULES["md_j_engine_contract"] = ("md_j_engine_contract.hpp",)
+CUDA_ALLOWED["md_j_engine_contract"] = ("integrals/execution_qualifiers.hpp",)
 CUDA_MODULES["md_transform_metadata"] = ("scf/md_transform_layout.hpp",)
 CUDA_ALLOWED["md_transform_metadata"] = ()
 CUDA_MODULES["cuda_one_electron_export"] = (
@@ -495,6 +524,7 @@ CUDA_ALLOWED["cuda_direct_bounded_queue_page"] = (
     "scf/direct_task_layout.hpp",
 )
 CUDA_MODULES["cuda_direct_contractions"] = (
+    "direct_schwarz_order",
     "eri_tensor_index",
     "direct_eri_symmetry",
     "direct_fock_accumulation",
@@ -678,6 +708,9 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/direct_bounded_pages.hpp",
     "scf/cuda/direct_bounded_tasks.hpp",
     "scf/cuda/direct_constants.hpp",
+    # The host driver captures shared weighted-force arithmetic at preparation;
+    # this declaration surface does not expose recurrence implementations.
+    "scf/cuda/direct_coulomb.hpp",
     "scf/cuda/direct_angular_fock.hpp",
     "scf/cuda/direct_angular_force.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",

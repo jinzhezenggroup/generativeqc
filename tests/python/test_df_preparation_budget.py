@@ -392,10 +392,17 @@ int main() {
   const auto resident_values = plan_requested_density_fitting_tiles(
       DfPairStorageRequest::Automatic,1,768,3712,768,160,
       resident_split.value_bytes,100ULL<<20,true,0,true);
-  if (resident_split.total_bytes != split.total_bytes ||
-      resident_split.value_bytes + resident_split.response_bytes != split.total_bytes ||
-      resident_split.response_bytes < split.total_bytes/5 ||
+  // Complete-U admission may borrow fractional slack, but never the absolute
+  // live headroom or the shape-derived complete response reservation.
+  const auto response_floor = 64ULL*1024*1024 + 2ULL*(100ULL<<20) +
+      sizeof(double)*(4ULL*3712*3712 + 69ULL*768*768 + 2ULL*3712 +
+                      2ULL*3712*160*160);
+  if (resident_split.value_bytes + resident_split.response_bytes != resident_split.total_bytes ||
+      resident_split.total_bytes > split.observed_free_bytes-split.reserved_headroom_bytes ||
+      resident_split.reserved_headroom_bytes != split.reserved_headroom_bytes ||
+      resident_split.response_bytes < response_floor ||
       !resident_values.stores_full_three_center ||
+      resident_values.value_storage.rank_capacity != 160 ||
       resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 15;
   for (const auto unchanged : {
       resolve_df_budget({768,3712,96,1,0,true}, {}, 0),
@@ -515,6 +522,43 @@ int main() {
     (void)plan_packed_density_fitting_tiles(
         1,1088,3712,0,rebuilt.value_bytes-1,100ULL<<20,0,false);
     return 33;
+  } catch (const DensityFittingBudgetError&) {}
+  // A moved restricted owner needs both B and complete U. The optional-U
+  // planner may otherwise return a successful rank-zero plan, which is safe
+  // in memory but causes repeated AO projections throughout force response.
+  const auto occupied_rebuild_budget = resolve_df_budget(
+      {768,3712,96,1,0,true},{25ULL<<30,32ULL<<30,true},0);
+  const auto occupied_rebuild = resolve_method_owned_df_resident_budget(
+      occupied_rebuild_budget,768,3712,160,100ULL<<20);
+  const auto occupied_values = plan_packed_density_fitting_tiles(
+      1,768,3712,160,occupied_rebuild.value_bytes,100ULL<<20,0,false);
+  if (occupied_values.value_storage.rank_capacity != 160 ||
+      occupied_values.peak_workspace_bytes > occupied_rebuild.value_bytes ||
+      occupied_rebuild.total_bytes != occupied_rebuild.value_bytes+occupied_rebuild.response_bytes ||
+      occupied_rebuild.reserved_headroom_bytes != occupied_rebuild_budget.reserved_headroom_bytes ||
+      occupied_rebuild.total_bytes > occupied_rebuild.observed_free_bytes-
+          occupied_rebuild.reserved_headroom_bytes) return 34;
+  const auto smaller = plan_packed_density_fitting_tiles(
+      1,768,3712,160,occupied_rebuild.value_bytes-1,100ULL<<20,0,false);
+  if (smaller.value_storage.rank_capacity == 160) return 35;
+  auto capped = occupied_rebuild_budget;
+  capped.requested_bytes = capped.total_bytes;
+  if (resolve_method_owned_df_resident_budget(capped,768,3712,160,100ULL<<20)
+      != capped) return 36;
+  capped = occupied_rebuild_budget;
+  capped.response_override_bytes = capped.response_bytes;
+  if (resolve_method_owned_df_resident_budget(capped,768,3712,160,100ULL<<20)
+      != capped) return 37;
+  const auto constrained_budget = resolve_df_budget(
+      {768,3712,96,1,0,true},{16ULL<<30,32ULL<<30,true},0);
+  const auto constrained = resolve_method_owned_df_resident_budget(
+      constrained_budget,768,3712,160,100ULL<<20);
+  if (constrained.total_bytes > constrained.observed_free_bytes-
+      constrained.reserved_headroom_bytes) return 38;
+  try {
+    const auto constrained_values = plan_packed_density_fitting_tiles(
+        1,768,3712,160,constrained.value_bytes,100ULL<<20,0,false);
+    if (constrained_values.value_storage.rank_capacity == 160) return 39;
   } catch (const DensityFittingBudgetError&) {}
   return 0;
 }

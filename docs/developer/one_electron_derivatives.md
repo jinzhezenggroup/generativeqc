@@ -46,15 +46,13 @@ remains valid. Production shell-pair inventories are complete per-system
 triangles, so the implicit enumeration preserves their AO domain.
 
 The prepared stationary KS bridge borrows its Direct owner's shell metadata,
-resident D/W and stream. An explicit `nucleus_cooperative` selection enables
-implicit cooperative Hcore, while overlap-only Pulay retains component lanes.
-Without an explicit mapping it preserves the previous prepared Hcore schedule:
-the implicit Hcore path alone has not passed complete-endpoint promotion, and
-the qualified composed path also requires cooperative two-electron forces.
-Explicit `shell_warp` and other noncooperative
-selectors also retain that bounded schedule because this prepared bridge does
-not own the AO-pair lists or serial diagnostic contract. The standalone public
-bridge still implements every documented mapping.
+resident D/W and stream. Its default Hcore mapping uses implicit cooperative AO
+pairs; overlap-only Pulay retains component lanes. Explicit `shell_warp` and
+other noncooperative selectors retain the bounded component-lane schedule because
+this prepared bridge does not own AO-pair lists or a serial diagnostic contract.
+The standalone public bridge still implements every documented mapping. The
+[96-atom cold endpoint decision](../../.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md)
+records the complete 48/96-atom warm and moved-warm qualification for this default.
 
 ## Mathematical and weight contract
 

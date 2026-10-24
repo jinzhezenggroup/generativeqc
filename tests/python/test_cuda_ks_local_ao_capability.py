@@ -154,7 +154,7 @@ std::size_t sum(std::size_t left, std::size_t right) {
 std::size_t product(std::size_t left, std::size_t right) {
   return runtime::size_mul(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; std::size_t work_jets = 1; };
+struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 namespace cuda_xc_detail {
 bool mixed_matrix_contractions_supported(const Layout&) {
@@ -169,6 +169,21 @@ int cudaMemsetAsync(void*, int, std::size_t, int) {
   throw std::logic_error("ordinary precision must not initialize mixed nonlocal counters");
 }
 void check(int status) { assert(status == 0); }
+// Provider facts are stubbed; the extracted production block owns the choice
+// between strict generated J and admitted mixed arithmetic.
+struct Provider {
+  bool generated;
+  bool cuda_direct_source() const { return generated; }
+  struct Strategy { int spec{}; };
+  Strategy strategy() const { return {}; }
+};
+struct PhaseSource {
+  bool enabled;
+  bool active() const { return enabled; }
+};
+namespace generativeqc::scf {
+bool cuda_direct_jk_generated_coulomb_available(bool generated, int) { return generated; }
+}
 struct Xc {
   struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
   Binding admitted{}, strict{{runtime::strict_fp64_precision()}};
@@ -269,13 +284,22 @@ int main() {
     assert(owner.batch_compact == (requested && compact != 1));
     assert(owner.batch_ragged == (requested && ragged != 1));
     assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
-    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? 32 * 1024 * 1024 : batching == 3 ? 4096 : 0));
+    // Ineligible mixed panels decline both requests, ending on the bounded
+    // 32-MiB retry; strict four-AO-jet panels accept the larger first request.
+    const auto automatic_budget = (mixed_density ? 32 : 128) * 1024 * 1024;
+    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? automatic_budget : batching == 3 ? 4096 : 0));
     assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
     assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
-    for (bool strict_refinement : {false, true}) {
-      const bool has_exchange = false, has_range_correction = true;
+    for (bool strict_refinement : {false, true})
+      for (bool has_range_correction : {false, true})
+      for (bool generated : {false, true})
+      for (int phase = 0; phase < 3; ++phase) {
+      const bool has_exchange = false;
+      Provider provider{generated};
+      PhaseSource phase_owner{phase == 2};
+      auto* phase_source = phase ? &phase_owner : nullptr;
       const bool device_nonlocal = nonlocal;
       const int stream = 7;
       bool pending_mixed_range_exchange = true, pending_mixed_nonlocal = true;
@@ -286,7 +310,9 @@ int main() {
 """
         + block
         + r"""
-      assert(pending_mixed_coulomb == (automatic && !strict_refinement));
+      const bool strict_generated_j = !has_range_correction && generated && phase != 2;
+      assert(pending_mixed_coulomb ==
+             (automatic && !strict_refinement && !strict_generated_j));
       assert(!pending_mixed_exchange);
       assert(!pending_mixed_range_exchange && !pending_mixed_nonlocal);
       assert(pending_mixed_density == (mixed_density && !strict_refinement));

@@ -194,12 +194,10 @@ def test_jk_scratch_retains_discarded_metric_response(
     responses = [r for r in read_trace(trace) if r["operation"] == "force_response"]
     assert len(responses) == 1
     assert responses[0]["counters"].get("response_final_projection_reused", 0) == 0
-    assert (responses[0]["counters"].get("response_occupied_rank", 0) > 0) == (
-        space == "occupied"
-    )
-    assert bool(responses[0]["counters"].get("response_packed_pairs", 0)) == (
-        space == "occupied" and pairs == "packed"
-    )
+    # Truncation requires the original raw discarded directions. The stable
+    # whitened-factor reverse uses dense bounded panels even when an occupied
+    # or packed specialization was requested; it must charge its retained Z.
+    assert responses[0]["counters"]["response_owned_whitened_bytes"] == 2 * 2 * 3 * 8
     for step in (2e-4, 5e-5):
         energies = []
         for sign in (1, -1):

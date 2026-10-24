@@ -123,6 +123,9 @@ struct DFLambdaActions::Impl {
   generated_response::StagedCudaState staged;
   generated_response::MixedAuxiliaryCudaState mixed;
   std::size_t q{}, n1{}, n2{}, vv{};
+  // Fresh primal replay may use a smaller matrix tile than the transpose/audit.
+  // Its descriptors and tail are prepared once; execution never reallocates.
+  std::size_t primal_batch_size{1};
   const double *bov{}, *bvv{};
   double *sum1{}, *sum2{};
   double *tau{}, *tau_seed{};
@@ -265,6 +268,7 @@ struct DFLambdaActions::Impl {
                scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
     std::size_t binding_host_bytes = 0, core_reuse_offset = 0, audit_offset = 0;
+    std::size_t primal_batch = 1, primal_descriptor_extra = 0;
     std::size_t matrix_scratch_elements = 0;
     auto capacity = [&] {
       allocation_bytes = cursor;
@@ -275,8 +279,9 @@ struct DFLambdaActions::Impl {
       }
       metrics.owned_device_bytes =
           checked_add(allocation_bytes, metrics.df_provider_allowance_bytes);
-      metrics.numeric_capacity_bytes =
-          checked_add(checked_add(host_bytes, binding_host_bytes), metrics.owned_device_bytes);
+      metrics.numeric_capacity_bytes = checked_add(
+          checked_add(host_bytes, checked_add(binding_host_bytes, primal_descriptor_extra)),
+          metrics.owned_device_bytes);
     };
     auto scalar_plan = [&] {
       binding_host_bytes = 0;
@@ -288,6 +293,8 @@ struct DFLambdaActions::Impl {
       metrics.df_audit_arena_bytes = 0;
       metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
+      primal_batch = 1;
+      primal_descriptor_extra = 0;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
       metrics.df_auxiliary_reduction = scalar_reduction;
@@ -348,6 +355,8 @@ struct DFLambdaActions::Impl {
       metrics.df_audit_arena_bytes = 0;
       metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
+      primal_batch = 1;
+      primal_descriptor_extra = 0;
       cursor = operator_cursor;
       scratch_elements = operator_scratch;
       binding_host_bytes = operator_binding_host_bytes;
@@ -359,7 +368,7 @@ struct DFLambdaActions::Impl {
         const auto audit_bytes = bytes(
             std::max(audit_core.matrix_arena(o, v, 1), audit_auxiliary.matrix_arena(o, v, batch)));
         const auto descriptors =
-            generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1);
+            generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1, q % batch ? 2 : 1);
         const bool replay_fit = options.df_primal_matrix_gemm && primal_virtual.fit(o, v, batch);
         // Solver, parameter, fresh-replay and independent-audit outputs are
         // consumed before the next stage on this owner's stream. Share their
@@ -386,6 +395,7 @@ struct DFLambdaActions::Impl {
             metrics.df_scratch_avoided_bytes =
                 std::min(bytes(matrix_scratch_elements), arena_bytes);
             metrics.df_primal_matrix_gemm = replay;
+            primal_batch = replay ? batch : 1;
             cursor = candidate;
             scratch_elements = candidate_scratch;
             audit_offset = offset;
@@ -428,6 +438,33 @@ struct DFLambdaActions::Impl {
       }
     }
     capacity();
+    // Preserve all incumbent operator/audit/cache choices before admitting
+    // smaller fresh-replay tiles. The original same-batch attempt above may
+    // enlarge shared scratch; this fallback is restricted to its existing
+    // lease and cannot displace an optional invariant frontier. Keep the old
+    // conservative descriptor allowance and charge any additional tail shape.
+    if (metrics.df_audit_matrix_gemm && options.df_primal_matrix_gemm &&
+        !metrics.df_primal_matrix_gemm) {
+      const auto variants = q % metrics.df_auxiliary_batch_size ? 2 : 1;
+      const auto original_descriptors =
+          generated_response::audit_contraction_host_bytes(variants, variants);
+      for (auto batch = metrics.df_auxiliary_batch_size / 2; batch; batch /= 2) {
+        if (!primal_virtual.fit(o, v, batch) ||
+            bytes(primal_virtual.matrix_arena(o, v, batch)) > metrics.df_shared_scratch_bytes)
+          continue;
+        const auto descriptors = generated_response::audit_contraction_host_bytes(
+            variants, std::max(variants, q % batch ? 2 : 1));
+        const auto extra = descriptors - original_descriptors;
+        if (checked_add(metrics.numeric_capacity_bytes, extra) > options.max_bytes) continue;
+        // Keep this separate from the core-cache rollback snapshot: dropping
+        // that cache must not erase the still-live replay descriptor charge.
+        primal_descriptor_extra = extra;
+        metrics.df_primal_matrix_gemm = true;
+        primal_batch = batch;
+        capacity();
+        break;
+      }
+    }
     if (metrics.numeric_capacity_bytes > options.max_bytes)
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
     if (metrics.owned_device_bytes > device_limit)
@@ -523,11 +560,13 @@ struct DFLambdaActions::Impl {
             metrics.df_gemm_summands);
       }
       prepare_cuts();
+      primal_batch_size = primal_batch;
       if (metrics.df_audit_matrix_gemm) {
         staged.audit_arena = at(audit_offset);
         generated_response::prepare_audit_contractions(
             staged, storage.contractions, metrics.df_auxiliary_batch_size,
-            q % metrics.df_auxiliary_batch_size, metrics.df_primal_matrix_gemm,
+            q % metrics.df_auxiliary_batch_size,
+            metrics.df_primal_matrix_gemm ? primal_batch_size : 0, q % primal_batch_size,
             metrics.df_gemm_calls, metrics.df_gemm_summands);
         metrics.audit_schedule_hash = generated_response::audit_matrix_operator_hash;
       }
@@ -835,12 +874,15 @@ void DFLambdaActions::replay(double& energy, std::vector<double>& r1, std::vecto
   auto& s = *impl_;
   if (s.mixed_active)
     throw std::logic_error("DF Lambda strict replay cannot invalidate an active warmup epoch");
+  runtime::df_progress::number("df_lambda_primal_batch_size",
+                               s.metrics.df_primal_matrix_gemm ? s.primal_batch_size : 1);
+  runtime::df_progress::number("df_lambda_primal_matrix", s.metrics.df_primal_matrix_gemm);
   s.clear_error();
   cuda_check(cudaMemsetAsync(s.sum1, 0, bytes(s.n1), s.storage.stream));
   cuda_check(cudaMemsetAsync(s.sum2, 0, bytes(s.n2), s.storage.stream));
   for (std::size_t Q = 0; Q < s.q;) {
     if (s.metrics.df_primal_matrix_gemm) {
-      const auto batch = std::min(s.metrics.df_auxiliary_batch_size, s.q - Q);
+      const auto batch = std::min(s.primal_batch_size, s.q - Q);
       s.select(Q, batch);
       const auto out = generated_response::run_primal_virtual_cuda(s.staged);
       generated_response::accumulate_primal_virtual_cuda(s.staged, out, s.sum2, s.sum1);

@@ -56,15 +56,11 @@ def test_bridges_do_not_pack_unused_cooperative_pair_lists() -> None:
     assert "if (schedule == 0)" in bridge
     assert "if (schedule == 0 || schedule == 3)" not in bridge
     assert "host.pair_first.size()" in bridge
-    assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr'
-        in bridge
-    )
     assert "one_electron_derivative_mapping_requested() == 3" in bridge
     assert "1, 1.0, output, source->stream" in bridge
 
 
-def test_prepared_mapping_keeps_unqualified_hcore_default(
+def test_prepared_mapping_uses_cooperative_default_and_preserves_rollback(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Compile the real selector and bridge admission, including an unset knob."""
@@ -89,7 +85,7 @@ int main() {
   const char* variable="GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING";
   assert(unsetenv(variable)==0);
   assert(cuda_policy::one_electron_derivative_mapping_requested()==3);
-  assert(prepared_mapping()==1);
+  assert(prepared_mapping()==3);
   for (const char* selection : {"nucleus_cooperative", "cooperative", "3"}) {
     assert(setenv(variable,selection,1)==0);
     assert(prepared_mapping()==3);

@@ -26,7 +26,7 @@ void test_storage_domains() {
   using namespace generativeqc::scf;
   const auto fused = ks_host_resources(small_shape, KsHostExecution::cuda_fused);
   const std::array<std::uint64_t, 16> expected{31744, 221184, 400, 448, 25600, 64,     0,     16384,
-                                               16384, 32768,  0,   0,   0,     344976, 69344, 5968};
+                                               16384, 32768,  0,   0,   0,     344976, 69984, 5968};
   require(fused == expected, "CUDA host components differ from independent LP64 inventory");
   const auto unfused = ks_host_resources(small_shape, KsHostExecution::cuda_host_unfused);
   require(unfused[0] == 15360 && unfused[10] == 64 && unfused[13] == 328656 && unfused[15] == 22384,
@@ -60,7 +60,7 @@ void test_consumer_lifetimes_and_rollback() {
   KsHostFleetResources fleet(0, allowance);
   const auto item = fleet.append(small_shape, 3, KsHostExecution::cuda_fused);
   auto before = fleet.inventory();
-  require(before[12] == allowance + 3 * item[13] && before[13] == 69344 &&
+  require(before[12] == allowance + 3 * item[13] && before[13] == 69984 &&
               before[14] == before[12] + before[13],
           "retained public consumers must coexist once with every replay, not per item");
   KsHostFleetResources repeated(0, allowance);
@@ -106,7 +106,7 @@ void test_transactional_bridge() {
   require(generativeqc_resource_ks_cuda_host_fleet_v1(shapes.data(), shapes.size(), allowance, 0,
                                                       values.data(), 47) == 0,
           "CPU SDK must expose CUDA host shape composition without a CUDA context");
-  require(values[12] == allowance + 344976 + 328656 && values[13] == 69344 &&
+  require(values[12] == allowance + 344976 + 328656 && values[13] == 69984 &&
               values[14] == values[12] + values[13] && values[47] == sentinel,
           "ragged schedule totals or output tail are incorrect");
   const auto succeeds = values;

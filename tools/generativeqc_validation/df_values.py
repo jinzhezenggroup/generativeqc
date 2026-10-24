@@ -82,6 +82,7 @@ def make_df_value_fixture(
     primitive_lengths: typing.Any = None,
     exponent_scale: float = 1.0,
     separation_scale: float = 1.0,
+    omega: float = 0.0,
 ) -> DFValueFixture:
     """Generate a full Cartesian/spherical M or A shell block with signed contractions."""
     count = len(angular)
@@ -93,6 +94,8 @@ def make_df_value_fixture(
         raise ValueError("unknown DF geometry variant")
     if any(not math.isfinite(s) or s <= 0 for s in (exponent_scale, separation_scale)):
         raise ValueError("DF fixture scales must be finite and positive")
+    if not math.isfinite(omega) or omega < 0:
+        raise ValueError("DF fixture omega must be finite and nonnegative")
     coordinates = [[0.13, -0.31, 0.24], [-0.43, 0.27, 0.51], [0.68, -0.14, -0.22]][
         :count
     ]
@@ -119,6 +122,8 @@ def make_df_value_fixture(
         )
     family = "metric" if count == 2 else "three_center"
     name = f"{family}/{'spdfg'[angular[0]]}{''.join('spdfg'[l] for l in angular[1:])}/{variant}"
+    if omega:
+        name += f"/lr-omega-{float(omega).hex()}"
     inputs = {
         "name": name,
         "atomic_numbers": [1] * count,
@@ -131,6 +136,9 @@ def make_df_value_fixture(
         "units": {"coordinates": "bohr", "integrals": "atomic_units"},
     }
     mol, scales, _ = pyscf_molecule(inputs)
+    if omega:
+        inputs["range_omega"] = omega
+    mol.set_range_coulomb(omega)
     operator = "int2c2e" if count == 2 else "int3c2e"
     reference = mol.intor_by_shell(operator, tuple(range(count)))
     locations = mol.ao_loc_nr()
