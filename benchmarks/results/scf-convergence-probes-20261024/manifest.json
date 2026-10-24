@@ -1,0 +1,7 @@
+{
+  "schema": "generativeqc.scf-convergence-probes.v1",
+  "base": "48918670f59a8e10c254c822565a17796aa42f54",
+  "archive_sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb",
+  "archive_bytes": 472836,
+  "retained_files": 123
+}
