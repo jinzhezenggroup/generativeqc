@@ -50,3 +50,14 @@ Complete cold/warm/moved E+F and complete endpoint timings are recorded with
 the built source before any performance claim. A small/full-GPU cache never
 opens a file. A bucket's angular degree remains a cost proxy; timing evidence
 must determine where disk transfer actually beats recurrence regeneration.
+
+## Measured boundary for automatic spill
+
+Automatic spill is restricted to LR exchange. The source-matched 96-atom PBE0
+nonincremental cohort on n5 takes 94.784 s with GPU plus Direct versus 143.826 s
+with GPU plus local NVMe: 51.74% slower, even with real physical I/O and identical
+nine iterations/ten cold Focks. Explicit full-range disk ceilings remain for
+controlled experiments; unset full-range disk retains Direct. The faster RAM
+tier and the natural incremental/generated schedule are unaffected. This is an
+empirical method boundary, not a universal disk-bandwidth or per-bucket cost
+model. Broadening the automatic disk tier needs new complete endpoint evidence.

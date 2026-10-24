@@ -147,7 +147,9 @@ def test_full_host_cache_complete_endpoints(
                 for row in rows
                 if row.get("key") == "disk_source_value_bytes"
             ]
-            assert any(disk_bytes) == (tier in {"disk", "disk-auto"})
+            # Qualified full-range NVMe replay loses to recurrence. Keep its
+            # automatic fallback while testing explicit disk consumption.
+            assert any(disk_bytes) == (tier == "disk")
             receipts[tier] = {
                 "host_bytes": host,
                 "energies": [r.energy for r in observations[tier]],

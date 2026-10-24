@@ -516,10 +516,12 @@ actually executed.
 
 ### Temporary ERI disk spill
 
-Eligible cold strict full/LR KS sources can back buckets omitted from both GPU
-and RAM with a temporary local file. `GENERATIVEQC_KS_DISK_MAX_BYTES` and
-`GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES` default to at most 64 GiB and one quarter
-of local available disk space. Explicit `0` disables that tier; the matching
+Eligible cold strict LR KS sources automatically back buckets omitted from both
+GPU and RAM with a temporary local file. `GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES`
+defaults to at most 64 GiB and one quarter of local available disk space.
+Full-range sources retain Direct by default because qualified local-NVMe replay
+is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
+enables controlled full-range experiments. Explicit `0` disables that tier; the matching
 `DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
 or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
 filesystems are refused. Complete GPU residency creates no temporary file.

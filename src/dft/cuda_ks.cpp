@@ -602,9 +602,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto* disk_limit =
         std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES"
                                          : "GENERATIVEQC_KS_DISK_MAX_BYTES");
-    const auto automatic_disk = has_exchange && source_cold_phase && !mixed_source && !disk_limit
-                                    ? runtime::TemporaryCacheFile::allowance(disk_directory)
-                                    : 0;
+    // Complete endpoints show that full-range recurrence can be cheaper than
+    // local NVMe replay. Keep its automatic Direct fallback; explicit full-range
+    // disk ceilings remain available for controlled qualification. LR exchange
+    // has a separately measured reuse benefit when RAM cannot hold the source.
+    const auto automatic_disk =
+        has_range_correction && has_exchange && source_cold_phase && !mixed_source && !disk_limit
+            ? runtime::TemporaryCacheFile::allowance(disk_directory)
+            : 0;
     const auto disk = direct_jk_resident_bucket_policy(
         std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_DISK_BUCKET_MASK"
                                          : "GENERATIVEQC_KS_DISK_BUCKET_MASK"),
