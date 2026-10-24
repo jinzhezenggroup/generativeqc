@@ -683,7 +683,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
               (automatic_range || fitted_range_source ||
                (has_exchange && (host.ceiling || disk.ceiling) && !mixed_source)) &&
                   !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
-              has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling),
+              has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling,
+              has_exchange && !mixed_source ? disk.ceiling : 0, disk.mask, disk_directory),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));

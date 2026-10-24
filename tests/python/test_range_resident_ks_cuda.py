@@ -35,6 +35,7 @@ def _auxiliary_basis(fitted: bool) -> Any:
         "host-auto",
         "host-refused",
         "disk",
+        "disk-auto",
         "tiered",
         "disk-refused",
     ],
@@ -84,6 +85,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
                 "host-auto",
                 "host-refused",
                 "disk",
+                "disk-auto",
                 "tiered",
                 "disk-refused",
             }
@@ -125,6 +127,9 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             if policy == "disk-refused"
             else "0",
         )
+        if policy == "disk-auto":
+            # RAM is explicitly exhausted; disk spill itself needs no opt-in.
+            monkeypatch.delenv("GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES")
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
@@ -170,7 +175,9 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         disk_bytes = [
             r["value"] for r in rows if r.get("key") == "disk_source_value_bytes"
         ]
-        assert any(disk_bytes) == (enabled and policy in {"disk", "tiered"})
+        assert any(disk_bytes) == (
+            enabled and policy in {"disk", "disk-auto", "tiered"}
+        )
         admitted = enabled and policy not in {"refused", "auto-refused"}
         # Fitted primary plus exact LR is an explicit composition candidate;
         # automatic selection must retain its existing fallback.
