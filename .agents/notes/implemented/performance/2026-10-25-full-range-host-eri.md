@@ -40,3 +40,17 @@ without a separate scheduler/lifetime qualification. WB97M-V physical response
 has independent device/work caps and source ownership. Those are future
 consumers, not implicitly enabled by this provider extension. Temporary disk
 spill is a separate resource tier with its own I/O and cleanup contract.
+
+## Complete endpoint evidence and retained admission
+
+The [source-bound cohort](../../../../benchmarks/results/host-full-eri-20261025/README.md)
+measures 96-atom PBE0 cold medians of 94.868 s GPU-only and 39.103 s GPU+RAM
+when incremental Fock is disabled and the existing source is forced. Both have
+nine iterations and ten Fock builds, and every cached action avoids omitted
+recurrences. Independent E+F gates pass. Natural incremental cold is already
+21.816 s and does not consume this source; forcing storage on a warm two-Fock
+call rebuilds a quartic cache and is also slower than the natural warm path.
+Keep these admission gates. RAM capacity alone is not a reason to override the
+incumbent incremental/generated consumer. The benchmark runner records this
+control explicitly so an unconsumed cold source cannot masquerade as a cache
+performance experiment.

@@ -36,3 +36,14 @@ Do not infer available job RAM from machine totals or an iteration limit.
 Pinning the entire host cache would remove reclaimable headroom. SSD temporary
 spill is a separate follow-up and must retain local space bounds, cleanup and
 complete-endpoint evidence. Full-range KS consumers are qualified separately.
+
+## Integrated automatic-default evidence
+
+The separate [default cohort](../../../../benchmarks/results/host-lr-eri-20261025/DEFAULT.md)
+qualifies the integrated policy against independent complete E+F references.
+On n4, 108-atom paired cold medians are 681.595 s GPU-only and 361.287 s
+automatic RAM, with identical 28-iteration/29-Fock work. The 96-atom pair is
+321.857/254.009 s; the 12-atom control is unchanged within noise. The packet
+retains the earlier script's abbreviated-revision error and an explicit verified
+source binding, rather than rewriting raw measurements. Dynamic progress labels
+needed owned storage; the corrupt journal is excluded and its failure retained.

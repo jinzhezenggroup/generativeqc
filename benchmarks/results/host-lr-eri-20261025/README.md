@@ -1,5 +1,8 @@
 # Opt-in host LR ERI cache screen
 
+This records the original opt-in implementation. The subsequent automatic
+default policy has a separate [source-bound qualification](DEFAULT.md).
+
 This experiment retains omitted exact long-range FP64 ERIs in pageable RAM for
 WB97M-V/def2-SVP spherical density-fitted E+F. All three arms retain the same fitted
 primary provider. **Direct** below disables only LR value residency; it does not
