@@ -73,6 +73,116 @@ def contraction_probe(native_cxx: Any, tmp_path_factory: Any, request: Any) -> A
     return run_probe
 
 
+@pytest.mark.parametrize("second", [1, 33])
+@pytest.mark.parametrize(
+    "sign,swapped", [(-1, False), (-1, True), (1, False), (1, True)]
+)
+def test_fp64_cross_cancellation_preserves_large_incoming_sum(
+    contraction_probe: Any, second: int, sign: int, swapped: bool
+) -> None:
+    """Opposite cross legs must cancel before an otherwise overflowing addition."""
+    active, count = 16, 48
+    large, leg = sign * float.fromhex("0x1.8p1023"), sign * 2.0**1022
+    ao = np.zeros((1, count, active))
+    work = np.zeros_like(ao)
+    ao[0, 0, 0] = 1.0
+    work[0, 0, 1] = large
+    ao[0, second, :2] = 1.0
+    work[0, second, :2] = [leg, -leg] if swapped else [-leg, leg]
+    expected = np.zeros((active, active))
+    expected[0, 1] = expected[1, 0] = large
+    expected[0, 0] = 2 * leg if swapped else -2 * leg
+    expected[1, 1] = -expected[0, 0]
+    density = np.zeros_like(expected)
+    ids = np.arange(active, dtype=np.uintp)
+    for mode in (0, 2, 3):
+        potential = np.zeros_like(density)
+        assert (
+            contraction_probe(
+                density,
+                ao,
+                work,
+                np.empty_like(ao),
+                potential,
+                count,
+                active,
+                active,
+                1,
+                ids,
+                mode,
+            )
+            == 0
+        )
+        np.testing.assert_array_equal(potential, expected)
+
+
+@pytest.mark.parametrize("exponent", [-500, 128, 129])
+def test_fp64_cross_exact_dyadic_operands_at_range_boundary(
+    contraction_probe: Any, exponent: int
+) -> None:
+    """Tiny, boundary and unbounded operands share the exact bilinear contract."""
+    active, count = 19, 33
+    value = 2.0**exponent
+    ao = np.zeros((1, count, active))
+    work = np.zeros_like(ao)
+    ao[0, 0, :2] = value
+    work[0, 0, :2] = [value, -value]
+    # A ragged final tile contributes an independent exactly representable term.
+    ao[0, -1, -1] = work[0, -1, -1] = value
+    expected = np.zeros((active, active))
+    expected[0, 0] = expected[-1, -1] = 2.0 ** (2 * exponent + 1)
+    expected[1, 1] = -expected[0, 0]
+    density = np.zeros_like(expected)
+    ids = np.arange(active, dtype=np.uintp)
+    for mode in (0, 2, 3):
+        potential = np.zeros_like(density)
+        assert (
+            contraction_probe(
+                density,
+                ao,
+                work,
+                np.empty_like(ao),
+                potential,
+                count,
+                active,
+                active,
+                1,
+                ids,
+                mode,
+            )
+            == 0
+        )
+        np.testing.assert_array_equal(potential, expected)
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("nan")])
+def test_fp64_cross_nonfinite_operands_are_rejected(
+    contraction_probe: Any, bad: float
+) -> None:
+    """A failed finite-range proof must not suppress arithmetic rejection."""
+    active, count = 16, 16
+    ao = np.ones((1, count, active))
+    work = np.zeros_like(ao)
+    work[0, 0, 0] = bad
+    density = np.zeros((active, active))
+    assert (
+        contraction_probe(
+            density,
+            ao,
+            work,
+            np.empty_like(ao),
+            np.zeros_like(density),
+            count,
+            active,
+            active,
+            1,
+            np.arange(active, dtype=np.uintp),
+            0,
+        )
+        > 0
+    )
+
+
 @pytest.mark.parametrize(
     "active,count,jets",
     [
