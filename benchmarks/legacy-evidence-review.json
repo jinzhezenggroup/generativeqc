@@ -381,6 +381,11 @@
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
+    },
+    "vv10-reuse-ablation-20261023": {
+      "owner": "VV10 same-binary reuse ablation (#2677)",
+      "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
+      "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
     }
   },
   "files": [
@@ -871,6 +876,38 @@
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
       "bytes": 865196,
       "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
+    },
+    {
+      "path": "benchmarks/results/vv10-reuse-ablation-20261023/control-activated-code-provenance.json.xz",
+      "family": "vv10-reuse-ablation-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete activated generated CUDA source and artifact metadata; no compiled ELF/object payloads.",
+      "bytes": 140076,
+      "sha256": "09d056c11cb29c7a5c2c3a9a47ec451751dcb6d2a67908dfaf2631a79e3c3a15"
+    },
+    {
+      "path": "benchmarks/results/vv10-reuse-ablation-20261023/diagnostic-intrusive-failed-diagnostic-journal.json.xz",
+      "family": "vv10-reuse-ablation-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete intrusive diagnostic operator journal retained as failed history; excluded from selected endpoints and performance timing.",
+      "bytes": 180668,
+      "sha256": "bb61860e5a7a1de3286a1791057ae8231c04efffb221f2b2d3948327708fba59"
+    },
+    {
+      "path": "benchmarks/results/vv10-reuse-ablation-20261023/sdk-runtime-identities.json.xz",
+      "family": "vv10-reuse-ablation-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Qualified recorded Python, distribution and runtime-file identity manifest for source-bound audit.",
+      "bytes": 132904,
+      "sha256": "f27a781ffc34d9b6c7c018f213bfc705504a336d7d74c8c1b79a94c9654f9288"
+    },
+    {
+      "path": "benchmarks/results/vv10-reuse-ablation-20261023/sdk-source-identities.json.xz",
+      "family": "vv10-reuse-ablation-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
+      "bytes": 768632,
+      "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
