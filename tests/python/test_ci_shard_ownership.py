@@ -403,6 +403,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
+        "tests/python/test_bulk_aot_clangxx_closure.py": "core-a",
         "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
@@ -418,6 +419,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         f"tests/python/{name}"
         for name in (
             "test_aaa.py",
+            "test_bulk_aot_clangxx_closure_next.py",
             "test_cc_triples_tiles_next.py",
             "test_ccsdt_cbs_aaa.py",
             "test_ccsdt_cbs_zzz.py",
