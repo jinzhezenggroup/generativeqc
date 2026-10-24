@@ -226,3 +226,21 @@ def test_migrated_unpack_recipes_name_the_recovered_archive() -> None:
         ]
         assert unpack
         assert all("--archive .artifacts/" in line for line in unpack)
+
+
+def test_20261024_trimmed_archives_are_hash_bound() -> None:
+    """Archived ZIPs are optional Git history, with local metadata intact."""
+    root = Path(__file__).resolve().parents[2]
+    index = root / "benchmarks/results/retention-archives-20261024/snapshot.manifest.json"
+    records = history._records(index)
+    assert records
+    for record in records:
+        path = root / record["path"]
+        assert not path.exists()
+        member = json.loads((path.parent / "raw-evidence.manifest.json").read_bytes())
+        assert member["archive_sha256"] == record["sha256"]
+        if "archive_bytes" in member:
+            assert member["archive_bytes"] == record["bytes"]
+        assert "--archive .artifacts/retention-archives-20261024/" in (
+            path.parent / "README.md"
+        ).read_text()
