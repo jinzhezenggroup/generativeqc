@@ -71,6 +71,7 @@ runtime::ExecutionPrecisionSchedule test_precision_schedule(bool coulomb, bool d
 }
 struct Owner {
   scf::ScfOptions options;
+  scf::ScfResult output;
   runtime::ExecutionPrecisionSchedule precision_schedule;
   struct { CudaXcFastPathCapabilities fast_paths; } xc_layout;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
