@@ -154,7 +154,7 @@ std::size_t sum(std::size_t left, std::size_t right) {
 std::size_t product(std::size_t left, std::size_t right) {
   return runtime::size_mul(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; std::size_t work_jets = 1; };
+struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 namespace cuda_xc_detail {
 bool mixed_matrix_contractions_supported(const Layout&) {
@@ -284,7 +284,10 @@ int main() {
     assert(owner.batch_compact == (requested && compact != 1));
     assert(owner.batch_ragged == (requested && ragged != 1));
     assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
-    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? 32 * 1024 * 1024 : batching == 3 ? 4096 : 0));
+    // Ineligible mixed panels decline both requests, ending on the bounded
+    // 32-MiB retry; strict four-AO-jet panels accept the larger first request.
+    const auto automatic_budget = (mixed_density ? 32 : 128) * 1024 * 1024;
+    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? automatic_budget : batching == 3 ? 4096 : 0));
     assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
     assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
     assert(resource.retained_host_numeric_bytes ==
