@@ -2501,6 +2501,37 @@ int main() {
               "method-authorized J-only DF should retain a rank-zero packed value");
     }
 
+    // Large resident physical sources also benefit from generating/whitening
+    // each symmetric AO pair once. Admission must preserve the complete
+    // method-owned occupied projection and the same memory allowance.
+    {
+      using generativeqc::scf::DfPairStorage;
+      using generativeqc::scf::DfPairStorageRequest;
+      constexpr std::size_t n = 384, a = 1808, rank = 80, budget = 16ULL << 30;
+      const auto resident = [&](DfPairStorageRequest policy, std::size_t batch, bool source,
+                                std::size_t method_rank) {
+        return generativeqc::scf::plan_requested_density_fitting_tiles(
+            policy, batch, n, a, rank, rank, budget, 0, source, method_rank);
+      };
+      const auto automatic = resident(DfPairStorageRequest::Automatic, 1, true, rank);
+      require(automatic.stores_full_three_center &&
+                  automatic.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+                  automatic.value_storage.rank_capacity >= rank &&
+                  automatic.peak_workspace_bytes <= budget,
+              "large physical source lost its resident packed values/occupied projection");
+      for (const auto& dense : {resident(DfPairStorageRequest::Dense, 1, true, rank),
+                                resident(DfPairStorageRequest::Automatic, 2, true, rank),
+                                resident(DfPairStorageRequest::Automatic, 1, false, rank),
+                                resident(DfPairStorageRequest::Automatic, 1, true, 0)})
+        require(dense.value_storage.pairs == DfPairStorage::Dense &&
+                    dense.peak_workspace_bytes <= budget,
+                "resident packing escaped its source, method, singleton or explicit boundary");
+      const auto small = generativeqc::scf::plan_requested_density_fitting_tiles(
+          DfPairStorageRequest::Automatic, 1, 96, 452, 20, 20, budget, 0, true, 20);
+      require(small.stores_full_three_center && small.value_storage.pairs == DfPairStorage::Dense,
+              "small resident source changed its dense execution schedule");
+    }
+
     bool rejected_tiny_budget = false;
     try {
       (void)generativeqc::scf::plan_density_fitting_tiles(1, 8, 8, 2, 512);

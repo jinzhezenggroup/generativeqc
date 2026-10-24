@@ -107,6 +107,54 @@ void analytic_spin_states() {
   }
 }
 
+void projector_checked_rhf_determinant_reuse() {
+  // An occupied rotation preserves D but not canonical columns. Retain the
+  // original determinant only after a fresh, independently supplied physical
+  // eigenframe proves its projector; W must use F[D], never lagged eigenvalues.
+  const Matrix identity{1, 0, 0, 0, 1, 0, 0, 0, 1};
+  const Matrix fock{-3, 0, 0, 0, -2, 0, 0, 0, 1};
+  const std::vector<Matrix> density{{2, 0, 0, 0, 2, 0, 0, 0, 0}};
+  const double t = std::sqrt(.5);
+  const Matrix rotated{t, -t, 0, t, t, 0, 0, 0, 1};
+  const FinalStateIdentity id{
+      {41, 43, 5, 7},
+      11,
+      resolve_fock_build(make_hf_fock_spec(FockSpin::Restricted), FockBackend::Cpu),
+      {2}};
+  const FinalFrameCandidate candidate{id, 6, true, {{{-3, -2, 1}, rotated}}};
+  const PhysicalFockOperation evaluate = [&](const auto& current, const auto& d) {
+    require(d == density, "physical projector changed the stationary determinant");
+    return PhysicalFockFrame{current, true, {fock}};
+  };
+  const initial_guess::EigenOperation canonical = [&](const auto& input, const auto* overlap,
+                                                      const auto* x, auto n) {
+    require(input == fock && overlap && *overlap == identity && x && *x == identity && n == 3,
+            "projector probe lost its physical F/S/X inputs");
+    return reference::EigenResult{{-3, -2, 1}, identity};
+  };
+  FinalStateLimits limits;
+  limits.allow_projector_checked_reuse = true;
+  const auto selected = select_final_state(id, identity, fock, identity, 0, density, &candidate,
+                                           evaluate, canonical, limits, true, false, nullptr);
+  require(selected.state && selected.reused && selected.state->identity == id &&
+              selected.state->density == density && selected.fixed_point_checks == 1 &&
+              selected.density_updates == 0,
+          "physical-projector proof failed to retain a valid RHF determinant");
+  near(selected.state->weighted_density[0][0], -6, "wrong first occupied Pulay weight");
+  near(selected.state->weighted_density[0][4], -4, "wrong second occupied Pulay weight");
+  for (const int route : {0, 1, 2, 3}) {
+    limits.require_canonicality = route == 1;
+    const auto corrected = select_final_state(id, identity, fock, identity, 0, density,
+                                              route == 2 ? nullptr : &candidate, evaluate,
+                                              canonical, limits, route != 3, route == 0, nullptr);
+    require(corrected.state && !corrected.reused && corrected.density_updates > 0,
+            "projector reuse bypassed forced, reference, missing-frame or energy-only correction");
+    require(corrected.state->density == density, "canonical correction changed the determinant");
+    near(corrected.state->diagnostic.energy, selected.state->diagnostic.energy,
+         "canonical correction changed the physical energy");
+  }
+}
+
 void stationary_uhf_determinant_reuse() {
   // A physical HF determinant is defined by its occupied subspace, not by a
   // unique canonical gauge inside that subspace. Rotating two occupied alpha
@@ -276,6 +324,10 @@ void identity_and_physical_origin() {
     Fixture a;
     change(a.c.identity);
     require(!a.valid(), "stale candidate identity accepted numerically identical data");
+    a.limits.allow_projector_checked_reuse = true;
+    a.limits.maximum_corrections = 0;
+    require(!a.select(true).state,
+            "physical-projector reuse accepted a stale candidate without correction");
     a = Fixture{};
     change(a.f.identity);
     require(!a.valid(), "stale Fock identity accepted numerically identical data");
@@ -283,6 +335,7 @@ void identity_and_physical_origin() {
   Fixture a;
   a.c.physical_origin = false;
   require(!a.valid(), "effective/DIIS-origin frame passed");
+  a.limits.allow_projector_checked_reuse = true;
   auto corrected = a.select();
   require(corrected.state && corrected.eigen_solves == 1 && corrected.candidate_rejections == 1,
           "effective-origin frame did not require a physical correction");
@@ -454,13 +507,14 @@ void corrections_and_factor_invalidation() {
   require(Fixture{}.select().state.has_value(), "failed correction poisoned independent reuse");
 }
 
-void physical_fixed_point_and_consistent_weight() {
+void physical_fixed_point_and_consistent_weight(bool projector_reuse) {
   // A small physical gap makes the old commutator/eigenframe gates pass even
   // though the occupied projector changes by more than the requested tolerance.
   // All matrices and the physical eigenvectors are analytic, including UHF's
   // empty beta channel. The probe must be reused when it triggers correction.
   for (const int beta : {-1, 0, 1}) {
     Fixture a;
+    a.limits.allow_projector_checked_reuse = projector_reuse;
     const double weight = beta < 0 ? 2 : 1;
     const double theta = 1.2e-10 / weight, c = std::cos(theta), s = std::sin(theta);
     a.s = a.x = {1, 0, 0, 1};
@@ -628,6 +682,7 @@ int main() {
 #endif
     analytic_spin_states();
     stationary_uhf_determinant_reuse();
+    projector_checked_rhf_determinant_reuse();
     identity_and_physical_origin();
     explicit_stationarity_budget();
     malformed_states_and_strict_gates();
@@ -635,7 +690,8 @@ int main() {
     malformed_candidates_and_provider_dimensions();
     physical_reference_caps();
     corrections_and_factor_invalidation();
-    physical_fixed_point_and_consistent_weight();
+    physical_fixed_point_and_consistent_weight(false);
+    physical_fixed_point_and_consistent_weight(true);
     provider_failure_and_nonlinear_exhaustion();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
