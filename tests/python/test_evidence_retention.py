@@ -2,6 +2,7 @@
 
 import gzip
 import json
+import runpy
 import subprocess
 import typing
 from pathlib import Path
@@ -327,8 +328,9 @@ def test_migration_keeps_exported_profiler_evidence_and_xc_manifest() -> None:
             for path in record.get("retained_exports", []):
                 assert (ROOT / path).is_file()
     directory = ROOT / "benchmarks/results/xc-expressions-161"
+    records = runpy.run_path(str(directory / "restore.py"))["read_records"]()
     for path, expected in json.loads((directory / "manifest.json").read_text()).items():
-        assert digest((directory / path).read_bytes()) == expected
+        assert digest(records[path]) == expected
 
 
 @pytest.mark.parametrize(
