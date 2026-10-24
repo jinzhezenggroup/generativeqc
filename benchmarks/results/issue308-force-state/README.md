@@ -1,5 +1,14 @@
 # Complete 768-AO native force and actual W comparison (#308)
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue308-force-state`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 The native RHF endpoint completes energy and all 288 analytic-force components
 for the 96-atom / 768-spherical-AO case with the complete DF, Pulay, metric and
 auxiliary-basis response. It starts from the independently qualified PySCF

@@ -1,5 +1,14 @@
 # Generated raw response panel reuse (#283)
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issue283-response-panels`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 On one Slurm-allocated RTX 5090, retaining the response's current raw panel
 reduces full-panel generation from three passes to one with the same scratch.
 Five fresh energy/energy-plus-force pairs per binary and case, interleaved in

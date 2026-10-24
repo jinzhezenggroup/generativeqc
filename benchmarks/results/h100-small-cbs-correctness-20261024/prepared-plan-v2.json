@@ -1,0 +1,905 @@
+{
+  "schema": "generativeqc.h100-small-cbs-plan.v1",
+  "execution_authority": "SCI_NOT_AUTHORIZED",
+  "root_coordinator_chat": "01a10e8f-7b0a-7b52-a330-b2de34309210",
+  "owner_chat": "01a16e37-da2b-7532-9668-d90dcadd7411",
+  "delivery_base": "f5d8df5a0d2c5ba4602e8aaaa5eefe94147a28fc",
+  "expected_job_name": "h100-small-cbs-20261024-e7f7-v1",
+  "task_root": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1",
+  "output_root": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/output",
+  "expected_environment_from_pr2750_head": "2e73e5249f411710e3d0e248e7a60adc7c742bc7",
+  "science_source": {
+    "revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+    "root": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/source/cbs-qualified",
+    "driver": "benchmarks/readme_cbs.py",
+    "driver_sha256": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+    "library": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/cbs-sm90-portable-attempt2/libgenerativeqc.so",
+    "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+    "inventory": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/output/cbs-source-inventory.json",
+    "inventory_sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924",
+    "build_preflight": {
+      "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+      "status": "PASS",
+      "source_sha256": "5fbd9791c6c645fffc02d07af7c5335899a9a30a3e31526c903da5b6b0227b6a",
+      "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+      "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+      "target": "sm90",
+      "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+      "generated_artifacts_sha256": "c10a415add1edf31495d078807a3b00f3cefe9f195d6db632784bb07c1e45852",
+      "profile_resolution_receipt_sha256": "39204957f2fc5e50e2526684eba1b8df521bcdd05a9cfa23b43d75a0bf7995a5",
+      "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+      "native_profile": "portable_cuda",
+      "profile_match": "portable",
+      "tuned": false,
+      "auto_sm90_outcome": "ValueError"
+    },
+    "build_preflight_sha256": "ab8bf4143e581563132a99ffbfd817112ea604c1abe3974e7ead9dd55d10a3c7",
+    "cohort": "cbs-frozen-science-portable-cuda-sm90.v1",
+    "native_profile": "portable_cuda",
+    "target": "sm90",
+    "tuned": false,
+    "hardware_only": false,
+    "qualified_patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad"
+  },
+  "public_readonly_runtime": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1",
+  "protocol_manifest_sha256": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761",
+  "packages": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pyscf": "2.14.0",
+    "gpu4pyscf-cuda12x": "1.8.1",
+    "cupy-cuda12x": "13.6.0",
+    "gpu4pyscf-libxc-cuda12x": "0.8.1",
+    "pyscf-dispersion": "1.5.0",
+    "cutensor-cu12": null,
+    "sccache": "0.16.0"
+  },
+  "original_scientific_inputs": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414",
+  "input_bundle_sha256": "1b8eec18d769ceaed861f6f822bf7e4a0d4a534eaeb3757f98d001b9dc429ed6",
+  "reference_admission_sha256": "4605d493b3138f047e4c7c565f8aa26850ef5228ce48301cfb2493c358ef5188",
+  "old_scientific_functions": [
+    {
+      "path": "benchmarks/ccsdt_cbs_endpoint.py",
+      "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "base_blob_sha256": "5a2df64ecd14b71306dbe024f645fb4e6e2e5a807be164b22fbf1e6c309999e9"
+    },
+    {
+      "path": "benchmarks/readme_cbs.py",
+      "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "base_blob_sha256": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9"
+    },
+    {
+      "path": "tests/python/test_ccsdt_cbs_native.py",
+      "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "base_blob_sha256": "2822137ddcf5fd996e746f8f091f39e36755320ebbee46346f8ffb99c16ba19d"
+    },
+    {
+      "path": "tools/generativeqc_validation/correlation_df_oracle.py",
+      "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "base_blob_sha256": "0d2594137dd10099603268ce7caad93ced48c649ce6d812e468a19757c37e715"
+    }
+  ],
+  "new_transport_adapter_sha256": "e2978f0de96327902dbea3772967435f5fa3a9a37fdd428c0be243d9f06ab992",
+  "new_adapter_status": "HOST_IMPLEMENTED_NOT_EXECUTED; frozen proposal only, root independent review and SCI/resource authorization still required",
+  "processes": [
+    {
+      "id": "conventional-h2-dz-tz",
+      "calls": 6,
+      "EF": 1,
+      "energy_only": 5,
+      "reuse": "one workflow; parity and native-directional calls are dependent validation, not independent repeats"
+    },
+    {
+      "id": "conventional-water-algebra",
+      "calls": 6,
+      "EF": 1,
+      "energy_only": 5,
+      "reuse": "one workflow; parity and native-directional calls are dependent validation, not independent repeats"
+    },
+    {
+      "id": "archive-water-exact",
+      "calls": 10,
+      "EF": 10,
+      "energy_only": 0,
+      "reuse": "owners keyed by policy,budget reused across original and moved geometries, matching old driver; warm calls not independent repeats"
+    },
+    {
+      "id": "archive-water-df",
+      "calls": 10,
+      "EF": 10,
+      "energy_only": 0,
+      "reuse": "owners keyed by policy,budget reused across original and moved geometries, matching old driver; warm calls not independent repeats"
+    }
+  ],
+  "calls": [
+    {
+      "index": 0,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "EF",
+      "step_bohr": null,
+      "sign": null,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 1,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "energy-parity",
+      "step_bohr": null,
+      "sign": null,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 2,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0003,
+      "sign": -1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 3,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0003,
+      "sign": 1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 4,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0001,
+      "sign": -1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 5,
+      "process": "conventional-h2-dz-tz",
+      "fixture": "h2-dz-tz",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0001,
+      "sign": 1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 6,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "EF",
+      "step_bohr": null,
+      "sign": null,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 7,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "energy-parity",
+      "step_bohr": null,
+      "sign": null,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 8,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0003,
+      "sign": -1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 9,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0003,
+      "sign": 1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 10,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0001,
+      "sign": -1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 11,
+      "process": "conventional-water-algebra",
+      "fixture": "water-algebra",
+      "model": "conventional-exact",
+      "kind": "energy-direction",
+      "step_bohr": 0.0001,
+      "sign": 1,
+      "policy": "standard",
+      "numeric_budget_bytes": 34359738368,
+      "energy_gate_Eh": 1e-09,
+      "force_gate_Eh_Bohr": 2e-06
+    },
+    {
+      "index": 12,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 13,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 14,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 15,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 16,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 268435456,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 17,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 18,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 19,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 20,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 21,
+      "process": "archive-water-exact",
+      "fixture": "archive-water",
+      "model": "correlation-only-DF",
+      "hf_reference": "exact",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 268435456,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 22,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 23,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 24,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 25,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 26,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 0,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 268435456,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 27,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 28,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "standard",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "constituent_gates": {
+        "energy_abs": 1e-08,
+        "force_max_abs": 3e-06,
+        "force_rms": 3e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 29,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 30,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 2147483648,
+      "repeat": 1,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    },
+    {
+      "index": 31,
+      "process": "archive-water-df",
+      "fixture": "archive-water",
+      "model": "full-RI-JK",
+      "hf_reference": "df",
+      "geometry_id": 1,
+      "kind": "EF",
+      "policy": "fast",
+      "numeric_budget_bytes": 268435456,
+      "repeat": 0,
+      "composite_gates": {
+        "energy_abs": 1e-05,
+        "force_max_abs": 0.0001,
+        "force_rms": 3e-05
+      },
+      "constituent_gates": {
+        "energy_abs": 2.3827302298009145e-06,
+        "force_max_abs": 2.3827302298009146e-05,
+        "force_rms": 7.148190689402743e-06
+      },
+      "comparison": "strict < original driver"
+    }
+  ],
+  "caps": {
+    "calls": 32,
+    "EF": 22,
+    "energy_only": 10,
+    "fresh_science_processes": 4,
+    "concurrent_science_processes": 1,
+    "per_process_seconds": 3000,
+    "job_seconds": 14400,
+    "root_preflight_wait_seconds": 300,
+    "termination_grace_seconds": 30,
+    "automatic_retries": 0,
+    "numeric_budget_max_bytes": 34359738368,
+    "process_log_max_bytes": 67108864,
+    "all_output_max_bytes": 536870912,
+    "new_input_max_bytes": 67108864,
+    "new_JIT_slots_max_bytes": 8589934592,
+    "required_free_storage_bytes": 12884901888,
+    "native_threads_per_pool": 1,
+    "metadata_phase_seconds": 600,
+    "device_probe_seconds": 60,
+    "all_task_stop_bytes": 11811160064,
+    "new_tmp_cache_stop_bytes": 2147483648,
+    "python_invocations_on_H100": 8,
+    "control_python_invocations": 4,
+    "science_python_invocations": 4,
+    "directly_invoked_sccache_version_processes": 2,
+    "nvidia_smi_queries": 10,
+    "runtime_internal_compiler_child_count": "UNAVAILABLE; owned finite process group, not assumed zero"
+  },
+  "qz_scheduling": {
+    "authority": "ROOT_ONLY; no authorization in this packet",
+    "supported_project": "\u516c\u5171\u79d1\u7814\u9879\u76ee",
+    "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+    "group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+    "required_resource": {
+      "gpu": 1,
+      "nodes": 1,
+      "cpu": 20,
+      "memory_gib": 200,
+      "shared_memory_gib": 32
+    },
+    "required_GPU": "H100 80GB SM90, exactly one CUDA-visible device; fixed pinned helper supports this resource schema",
+    "priority_and_image": "root must verify live policy/quota/image/budget; no default priority or availability assertion"
+  },
+  "runtime_controls": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "GENERATIVEQC_LIBRARY": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/cbs-sm90-portable-attempt2/libgenerativeqc.so",
+    "GENERATIVEQC_JIT_SCCACHE_ROOT": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/jit-slots",
+    "cache": "reuse selected shared sccache store unchanged; verify sccache >=0.16 and foreground/local-workers before any cache-miss JIT; no SDK/build",
+    "CUDA_VISIBLE_DEVICES": "preserve scheduler assignment unchanged",
+    "TMPDIR": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/tmp",
+    "PIP_CACHE_DIR": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/pip-cache",
+    "CUPY_CACHE_DIR": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/cupy-cache",
+    "XDG_CACHE_HOME": "/inspire/ssd/project/project-public/czxs25220150/h100-small-cbs-correctness-20261024-e7f7/v1/cache"
+  },
+  "required_admission_before_root_allocation": [
+    "root independently reviews frozen scripts and runs applicable host failure tests; Windows skips are not POSIX cleanup PASS",
+    "root audit source-dependent actual deltas, exact call inventory and resource/time/storage caps",
+    "root provides only one actual new allocation; unique fixed job name and creation identity, rank/node/hostname/CUDA0 PCI/UUID mapped to its actual H100; no old smoke proof",
+    "root-bound release and exclusive consumed lease before any native imports; wrong job/source/library/input/plan/adapter/device refuses",
+    "per-process group owns only its children; timeout TERM30 then KILL and wait; never shared cache server or unrelated task",
+    "pre/post source inventory SHA/mode/bytes/symlinks, package closure and DSO hashes unchanged; no remote mutable setup in Rpub",
+    "raw E/F/timer/precision/work/exception numerical bytes and index O_EXCL+flush+fsync before result gates; final outcome separately persisted",
+    "disk monitor kills only owned process on cap breach and records STORAGE_LIMIT; does not discard raw or logs"
+  ],
+  "scientific_functions": "Call frozen public CCSDTCBSCalculator/CBSBasis/singlepoint and result serializer; read PySCF basis decimals only (no solver). Historical Slurm CLI and guard remain unchanged, never invoked or faked.",
+  "unsupported": [
+    {
+      "fixture": "physical-H2-DZ-TZ",
+      "model": "correlation-only-DF",
+      "status": "UNAVAILABLE",
+      "reason": "no matched independent DF model oracle; do not relabel conventional reference"
+    },
+    {
+      "fixture": "physical-H2-DZ-TZ",
+      "model": "full-RI-JK",
+      "status": "UNAVAILABLE",
+      "reason": "no matched independent DF model oracle; do not relabel conventional reference"
+    }
+  ],
+  "reuse_no_new_calls": [
+    "CPU 13 native/65 unit/6 budget and original H2/water solvers",
+    "all archived independent reference energies",
+    "public nativeHF/GPyHF/CBS-C2 three setup calls",
+    "old runtime-cache 30 samples; no timing claim"
+  ],
+  "remaining": {
+    "C2_displaced_24E": "UNAVAILABLE #2705; retained directions are not a full vector",
+    "all_operator_precision": "INCOMPLETE on frozen ABI; requested/selected policy is insufficient",
+    "semantic_work_and_measured_peak": "INCOMPLETE; zeros/null remain unavailable unless validated",
+    "execution": "NOT_RUN",
+    "PR_CI_review_merge": "NOT_STARTED",
+    "runtime_metadata_copy": "RESOLVED exact original schema and SHA; no new scan was used to recover it",
+    "activation_pin": "NEW CPU-observed byte pin; verify before source on future actual GPU image, never relabel old smoke activation provenance"
+  },
+  "input_bundle_file": "inputs-v2.json",
+  "archive_auxiliary_basis_identities": [
+    "d8a39cc61488847fad5380c1a5e1160ecda5d0d7202ec6f7a66f52ff0b66f191",
+    "d8a39cc61488847fad5380c1a5e1160ecda5d0d7202ec6f7a66f52ff0b66f191"
+  ],
+  "expected_python_executable": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/env/bin/python",
+  "expected_python_version": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+  "environment_inventory": {
+    "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/incoming-v1/target-independent-readback-after-device-v1.json",
+    "bytes": 9564261,
+    "sha256": "07b07209ea8fb999b2258d000cf10ce388e0d9b28c15a1ccdf0ee1db712bdf41",
+    "regular_files": 40661,
+    "regular_bytes": 5717381795,
+    "symlinks": 8
+  },
+  "allocation_helper": {
+    "path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/scripts/public-route-runtime-v2/qz_smoke.py",
+    "sha256": "36a14e43c1a0dd01f34b4ef076e2c9abe9250c7f49a6722616bdeca346f3bdb4"
+  },
+  "activation": {
+    "path": "/opt/generativeqc-reuse/activate.sh",
+    "bytes": 398,
+    "mode": "0o644",
+    "sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+    "provenance": "CPU observation in this preparation; historical smoke GPU activation bytes UNAVAILABLE",
+    "base_venv_activate": "not sourced by this entrypoint; optional CPU capture is not a transitive-closure proof"
+  },
+  "process_accounting": {
+    "bootstrap": 1,
+    "supervisor": 1,
+    "zero_science_device_probes": 2,
+    "science_workers": 4,
+    "root_CPU_finalizer": "one separate host invocation only after root authorizes the real allocation",
+    "concurrency": "one worker/probe at a time under the supervisor; no simultaneous scientific workers",
+    "note": "8 Python invocations includes 4 non-scientific control invocations; 32 attempt slots are 22 EF +10 E-only, not 32 EF"
+  },
+  "storage_accounting": "512MiB output/8GiB JIT/11GiB all-task are monitored stop thresholds, not filesystem quota; 64MiB RLIMIT_FSIZE applies per science file. Polling can overshoot a threshold; 12GiB free-space admission retains margin.",
+  "task_files": {
+    "admission.py": "07471cfaf99c9073cf9f3b86c2c620e21ce08869430144d3d62fec62eccb4398",
+    "device_probe.py": "fb178f935f6593af7a72773927548e8a1c450a216542ab15c82d7792e1131709",
+    "finalize.py": "2aeb7841ad7aea6e2a7899e815f94e03a2cf65c99845d496da12a04308ce6be0",
+    "freeze.py": "2d49840d83c846203a37e1f77068fe44acc3b4d6a6869ce3a6a6447baa099191",
+    "identity.py": "8b143be4d31cfe5eab999ba16c5e48ae5ab8c804cb3cf0be54e10c5e5d0255fd",
+    "job-entry.sh": "3d915ffb41b027ecbedf3bcaf8d270d2fb97a69e7788013117df8502d50547f9",
+    "native_worker.py": "e2978f0de96327902dbea3772967435f5fa3a9a37fdd428c0be243d9f06ab992",
+    "replay.py": "dd332b793291ff1c2bb4c0be4e8fc0c913725b36f97fa484f037bd1222bb5b7c",
+    "supervisor.py": "460429e6133682577f5f7ad317e2cee6b2bbaea8ca4ff4efcc05b45eae0268d5",
+    "test_admission.py": "2d9f3ab4635c56f2fb980595d78d14bb556b27b1c5e7ef0930f48277f3a98c6e",
+    "test_binding.py": "5923e76869a70b31f871a07bfe3052c46e6f7e9d3a15892c45da083bff6ffdf4",
+    "test_identity.py": "3c3a9950c35f44e1bf0225be85182b258cc13d4ca99d5ae562f595e9d1d66f53",
+    "test_replay.py": "877e5960c1f3b952062353f46d5e6350f0b13c0bcb1e56d81f9923b4655bd351",
+    "test_transport.py": "8790e943ae62469e49e5d7fca7f37eaec1118a6bb72a972b815fb7178b8d96d8",
+    "transport.py": "07cd1a8a95133ace80c7559790ffaf74900788704361240ea7029e2380973c3d",
+    "inputs-v2.json": "1b8eec18d769ceaed861f6f822bf7e4a0d4a534eaeb3757f98d001b9dc429ed6",
+    "reference-admission-v1.json": "4605d493b3138f047e4c7c565f8aa26850ef5228ce48301cfb2493c358ef5188"
+  },
+  "new_adapter_components": {
+    "admission.py": "07471cfaf99c9073cf9f3b86c2c620e21ce08869430144d3d62fec62eccb4398",
+    "device_probe.py": "fb178f935f6593af7a72773927548e8a1c450a216542ab15c82d7792e1131709",
+    "finalize.py": "2aeb7841ad7aea6e2a7899e815f94e03a2cf65c99845d496da12a04308ce6be0",
+    "freeze.py": "2d49840d83c846203a37e1f77068fe44acc3b4d6a6869ce3a6a6447baa099191",
+    "identity.py": "8b143be4d31cfe5eab999ba16c5e48ae5ab8c804cb3cf0be54e10c5e5d0255fd",
+    "job-entry.sh": "3d915ffb41b027ecbedf3bcaf8d270d2fb97a69e7788013117df8502d50547f9",
+    "native_worker.py": "e2978f0de96327902dbea3772967435f5fa3a9a37fdd428c0be243d9f06ab992",
+    "replay.py": "dd332b793291ff1c2bb4c0be4e8fc0c913725b36f97fa484f037bd1222bb5b7c",
+    "supervisor.py": "460429e6133682577f5f7ad317e2cee6b2bbaea8ca4ff4efcc05b45eae0268d5",
+    "test_admission.py": "2d9f3ab4635c56f2fb980595d78d14bb556b27b1c5e7ef0930f48277f3a98c6e",
+    "test_binding.py": "5923e76869a70b31f871a07bfe3052c46e6f7e9d3a15892c45da083bff6ffdf4",
+    "test_identity.py": "3c3a9950c35f44e1bf0225be85182b258cc13d4ca99d5ae562f595e9d1d66f53",
+    "test_replay.py": "877e5960c1f3b952062353f46d5e6350f0b13c0bcb1e56d81f9923b4655bd351",
+    "test_transport.py": "8790e943ae62469e49e5d7fca7f37eaec1118a6bb72a972b815fb7178b8d96d8",
+    "transport.py": "07cd1a8a95133ace80c7559790ffaf74900788704361240ea7029e2380973c3d"
+  },
+  "failure_policy": "Every requested/failed/refused attempt consumes its one fixed slot; no replacement or call33. A scientific failure stops its dependent workflow but independent model workers may continue. Identity, storage, timeout or missing cleanup stops later workers; all NOT_RUN remain explicit.",
+  "offline_replay": "replay.py reconstructs IEEE/index, each constituent/composite error and native parity/directions from originals; source authentication and complete precision/work remain separate axes"
+}
