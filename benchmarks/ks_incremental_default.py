@@ -65,6 +65,15 @@ def main() -> None:
         "mode": args.mode,
         "arm": args.arm,
         "selector": args.selector,
+        "runtime_controls": {
+            name: os.environ.get(name)
+            for name in (
+                "GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING",
+                "GENERATIVEQC_KS_RESIDENT_VALUES",
+                "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
+                "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+            )
+        },
         "atoms": atoms,
         "gates": GATES,
         "samples": [],
@@ -187,7 +196,9 @@ def main() -> None:
                         "settings": native_settings(candidate, item),
                     }
                 )
-                if phase == "cold":
+                # Each replay uses the accepted density of its own geometry;
+                # moving an owner does not leave warm updates enabled.
+                if phase in ("cold", "moved"):
                     owner.set_warm_start_updates(False)
         finally:
             owner.close()

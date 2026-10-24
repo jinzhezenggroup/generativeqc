@@ -6,16 +6,21 @@ import ctypes as ct
 import threading
 import typing
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
 import numpy as np
 
 from generativeqc_compiler.common.arrays import immutable
-from generativeqc_compiler.common.cuda_runtime import _PREPARATION_LOCK, _Metrics
+from generativeqc_compiler.common.cuda_runtime import (
+    _PREPARATION_LOCK,
+    CudaArtifact,
+    _Metrics,
+)
 from generativeqc_compiler.common.native_call import checked_native_call
 from generativeqc_compiler.common.native_runtime import compile_runtime
-from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.common.resources import (
     MAX_BYTES,
     ResourceBudget,
@@ -31,6 +36,40 @@ from .grid import checked_int
 from .indexed_layout import AoGridBlockLayout
 from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
+
+
+@dataclass(frozen=True)
+class NativeGridLibrary:
+    """Unbound native-build input; the consuming grid establishes its identity.
+
+    This is not a verified artifact or a digest cache. Each new grid owner reads
+    the current complete binary after resource admission, then creates its own
+    immutable artifact record. Externally supplied CudaArtifact digests retain
+    their independent verification path.
+    """
+
+    library: Path
+    architecture: str
+
+    def bind(self) -> CudaArtifact:
+        """Read current binary bytes and establish the existing native-grid key."""
+        path = Path(self.library).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"native CUDA library not found: {path}")
+        digest = file_hash(path)
+        identity = {
+            "schema": "generativeqc.native-grid-aot.v1",
+            "target": {"architecture": self.architecture},
+        }
+        return CudaArtifact(
+            path,
+            {
+                "identity": identity,
+                "binary_sha256": digest,
+                "key": canonical_hash({"identity": identity, "binary_sha256": digest}),
+                "artifact_kind": "native-build-aot",
+            },
+        )
 
 
 class CudaAoMapAllocationError(MemoryError):
@@ -403,7 +442,12 @@ class CudaGrid:
             (self.plan.resource_request(self.ingredients, device_id),),
             resource_budget or ResourceBudget(),
         ).require_feasible()
-        if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
+        if isinstance(artifact, NativeGridLibrary):
+            # Native-build requests carry no earlier digest to validate. Bind
+            # once here, immediately before loading, instead of hashing once in
+            # the caller to create an artifact and again here to consume it.
+            artifact = artifact.bind()
+        elif file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
             raise ValueError("CUDA grid binary hash mismatch")
         self.basis_identity = basis.identity
         self.artifact = artifact

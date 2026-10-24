@@ -1,0 +1,5 @@
+*.local.*
+*.local/
+qm7.mat
+__pycache__/
+raw/

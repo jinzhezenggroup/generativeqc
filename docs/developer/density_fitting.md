@@ -245,6 +245,18 @@ convergence and strict final-state checks are unchanged.
 
 ### Device force-response weights
 
+Restricted pure-J prepared CUDA owners request raw-value storage by default.
+`GENERATIVEQC_DF_RAW_COULOMB=0` retains whitening; `1` selects the same bounded
+admission as the unset default. The control is captured at preparation. A resident
+single-packed owner without exchange/rank capacity may retain raw `A` in its
+existing tensor slot after the unchanged metric cutoff proves full rank.
+It computes `J = A M^-1 A^T D` through the existing spectral vector solve,
+avoiding tensor whitening. Unsupported storage, rank or scratch capacity keeps
+the fitted representation. Raw owners reject exchange requests. No second
+tensor, host reference preparation or larger memory allowance is introduced.
+The force bridge borrows the authenticated packed `A` and contracts the current
+density directly, retaining the ordinary metric and integral derivatives.
+
 CUDA value plans retain their original device metric eigenvectors, eigenvalues,
 and inverse square root for analytic force response. Both generated-source and
 retained-host-value plans use the existing device response contraction, including
@@ -252,6 +264,14 @@ the retained/discarded-subspace metric response. A retained-value plan uploads
 bounded raw auxiliary slices directly into response scratch. It does not allocate
 a full raw device tensor or host response matrices; final forces are downloaded
 after the owning stream completes. Metric rank crossings still fail explicitly.
+
+Response planning limits auxiliary panels by both the prepared allowance and
+current device headroom after fixed metadata. The allowance does not reserve
+physical memory against other retained consumers. If CUDA still refuses a
+panel allocation, the bridge halves its auxiliary width before submitting any
+response work. Retries stop when the request cannot shrink; fixed storage and
+non-allocation errors remain explicit failures. Source identities, FP64
+arithmetic, stream cleanup and immutable value storage are unchanged.
 
 `GENERATIVEQC_DF_HOST_RESPONSE_WEIGHTS=1` selects the former host weight adapter for
 retained-host-value plans as a diagnostic ablation. Generated-source plans always

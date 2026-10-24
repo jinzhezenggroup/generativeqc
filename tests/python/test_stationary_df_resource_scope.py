@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from _cpp_source_support import cpp_if_block
 from generativeqc._ks_snapshot import NativeKsSnapshot
 
 if TYPE_CHECKING:
@@ -308,9 +309,11 @@ def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
     ]
     bridge = (ROOT / "src/scf/cuda/df_gradient_bridge.cu").read_text()
     start = bridge.index("      const double* densities = nullptr;")
-    uploads = bridge[
-        start : bridge.index("      const auto workspace_elements =", start)
-    ]
+    # Execute both density ownership routes without coupling this probe to the
+    # unrelated workspace planner that follows them.
+    uploads = "const double* densities = nullptr;\n" + cpp_if_block(
+        bridge[start:], "borrowed_density", include_else=True
+    )
     unit = (
         r"""
 #include <cassert>

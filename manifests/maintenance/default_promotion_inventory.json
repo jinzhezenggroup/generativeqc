@@ -165,15 +165,16 @@
         "src/scf/cuda/direct_jk_source_lease.cpp",
         "src/scf/cuda/direct_jk.cpp"
       ],
-      "rationale": "Automatic only for screened SPD strict-FP64 restricted VV10 native initialization with at least 65536 points, the existing reuse threshold and a 4 GiB optional value ceiling. Cold and moved initialization amortize one immutable geometry/radial source; warm calls never construct a new quartic source. Complete host/device admission, original screening, matching operator/omega and explicit off/capacity fallback remain mandatory. Larger and partial-source policies remain explicit experiments; #2426 remains open.",
-      "revisit_condition": "Require complete source-matched endpoints, independent energy/force gates and capacity/lifetime evidence before expanding the 4 GiB automatic domain; retain all failed 96-atom populations.",
+      "rationale": "Automatic screened SPD strict range sources serve restricted VV10 cold initialization with at least 65536 points, the existing reuse threshold and a 16 GiB optional ceiling. The independent Direct range correction may accompany a Direct or fitted full-range primary. Both providers host inventory and actual device headroom remain charged; omitted buckets stream exactly. Warm calls never construct a quartic source. Explicit zero, unsupported precision and public-ledger fallbacks remain. Fitted-default candidate endpoint qualification is tracked separately from earlier explicit-cache pilots.",
+      "revisit_condition": "Require source-matched complete cold/warm/moved endpoints, independent energy/force gates and capacity/lifetime evidence for any broader automatic domain; retain failed populations and do not relabel explicit-cache pilots as default evidence.",
       "evidence": [
         "docs/developer/xc_native_cuda.md",
         ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
         "tests/python/test_range_resident_values_cuda.py",
         "tests/python/test_range_resident_ks_cuda.py",
         "issue:#2426",
-        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md"
+        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
+        ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md"
       ]
     },
     {
@@ -1843,6 +1844,30 @@
       ]
     },
     {
+      "id": "scf.df-raw-coulomb",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_RAW_COULOMB"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_plan_setup.cpp",
+        "src/scf/cuda/df_coulomb.cpp",
+        "src/scf/cuda/df_gradient_bridge.cu"
+      ],
+      "rationale": "Unset or 1 requests raw A only for restricted pure-J resident single-packed owners with zero occupied rank capacity, unchanged full-rank metric acceptance and sufficient existing vector scratch. J contracts A M^-1 A^T D; the authenticated force bridge borrows the same raw A. Explicit 0 restores whitening. Unsupported representation, rank, capacity and streamed plans retain their existing owners; both exchange routes reject raw storage. No second tensor, enlarged budget or numerical gate relaxation is introduced. Repeated 48/96-atom cold/warm/moved evidence and independent numerical checks qualify the bounded representation; gains are specific to the measured 96-atom cold and moved cases.",
+      "revisit_condition": "Require source-matched endpoint, independent numerical and lifecycle qualification before admitting exchange, truncated metric, other layouts or additional retained storage. Preserve explicit rollback and exact source authentication; warm and 48-atom measurements do not establish a significant speedup.",
+      "evidence": [
+        "tests/native/df_raw_coulomb_cases.hpp",
+        "tests/python/test_df_raw_coulomb_response_cuda.py",
+        "docs/developer/density_fitting.md",
+        ".agents/notes/implemented/performance/2026-10-23-df-raw-coulomb-headroom.md"
+      ]
+    },
+    {
       "id": "scf.df-md-coulomb",
       "classification": "already-default",
       "controls": [
@@ -1989,6 +2014,30 @@
         "tests:tests/native/test_direct_coarse_screening_cuda.cu",
         "tests:tests/python/test_hf_resources.py",
         "docs:docs/developer/fock_build.md"
+      ]
+    },
+    {
+      "id": "ks.mixed-source-coarse-screening",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/application_precision.hpp"
+      ],
+      "rationale": "The qualified automatic policy selects a 1e-8 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64\u2013768 AOs and 2\u201396 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; 180 independent E/F endpoint checks pass.",
+      "revisit_condition": "Extend the automatic model, size or resource domain only with repeated complete cold/warm/moved/reset endpoints, independent energy/force gates, semantic source-work and precision counts, and bounded-resource fallbacks. Preserve fresh strict closure, opt-out and the measured gain/nonregression floors.",
+      "evidence": [
+        "tests/python/test_ks_mixed_source_policy.py",
+        "docs:docs/developer/ks_diagnostics.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-fast-provisional-source-screening.md",
+        "tests/python/test_ks_mixed_source_cuda.py",
+        "tests/python/test_ks_fast_strict_tail_cuda.py",
+        "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
       ]
     }
   ]

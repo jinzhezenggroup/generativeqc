@@ -84,16 +84,22 @@ void launch_update_diis_kernel(
     const double* dot_partials = nullptr, std::size_t parts = 0, const double* raw_gram = nullptr);
 
 /** Explicit ordered Gram alternative using caller-owned physical-slot storage.
- * HF/KS selects this entry only for incremental admission plus an explicit
- * ordered reducer; unset/cooperative keeps the separate pending-row path.
+ * HF/KS selects this entry for the ordered incremental reducer, including
+ * automatically admitted large KS owners. Cooperative selection keeps its
+ * separate pending-row path.
  * It borrows the same charged raw Gram allocation. Do not switch reduction
  * routes on a live cache: reset count=head=0 before using this ordered owner.
  * Residuals in retained live slots must remain immutable; all calls for a ring
  * must use the same dimensions and stream ordering, with disjoint history,
  * solve and cache allocations. Lend batch*history_capacity^2 doubles. Reset
  * count=head=0 together as on the legacy route; the cache needs no clearing.
- * One 32-lane warp owns each system. Optional work records must be initialized
- * by the caller and measure newly computed dots. The first insertion does no
+ * The caller supplies a 32-lane block. For nbf >= 512 and history >= 2, the
+ * wrapper stages the pending Gram row and then updates each system with a
+ * 256-thread CTA. Both launches retain the caller's stream; the update retains
+ * its system grid and dynamic shared storage. A failed staging launch prevents
+ * the update and preserves the CUDA error for the caller. Smaller histories
+ * retain the caller's original single-warp launch. Optional work records must
+ * be initialized by the caller and measure newly computed dots. The first insertion does no
  * dots; the second also establishes the prior diagonal once after a reset.
  * Normalization, chronological retirement, solve and Fock mixing are unchanged.
  * Disabled/single-vector histories retain the original copy-only behavior and

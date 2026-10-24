@@ -147,3 +147,10 @@ python tools/summarize_df_promotion.py \
 The full Python suite passed 659 tests (74 skipped), all nine native CPU suites
 passed, and the native CUDA DF suite passed under Slurm. Full GPU matrix jobs
 were 8965 (isolated), 8971 (source), and 8974 (corrected endpoints).
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

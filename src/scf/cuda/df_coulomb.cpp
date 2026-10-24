@@ -113,6 +113,13 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
         detail = "packed DF charge contraction failed";
         return status;
       }
+      if (plan.resident_raw_coulomb) {
+        // q=A^T D, v=Q lambda^-1 Q^T q, J=A v. The raw tensor is
+        // immutable across solves and forces; only O(naux) work is transformed.
+        status = apply_raw_coulomb_metric(plan, system, charge, plan.exchange_intermediate, detail);
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+        runtime::cuda_trace::trace_counter("resident_raw_coulomb", 1);
+      }
       status = trace_call("ri_j_gemm", plan.stream,
                           [&] { return plan.coulomb_contraction->launch(b, charge, packed); });
       if (status != GENERATIVEQC_STATUS_SUCCESS) {

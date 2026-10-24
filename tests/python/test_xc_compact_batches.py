@@ -15,6 +15,7 @@ from generativeqc_compiler.dft.ao_cuda import _NATIVE_XC_CONTRACTION_KERNELS
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 from generativeqc_compiler.dft.xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
+    _emit_occupied_features,
     _emit_panels,
     _emit_tiled,
 )
@@ -46,7 +47,11 @@ def compact_types() -> str:
     source = (ROOT / "src/dft/cuda_xc.hpp").read_text()
     return "\n".join(
         definition(source, f"struct {name} {{") + ";"
-        for name in ("CudaXcCompactTile", "CudaXcPointBatchPlan")
+        for name in (
+            "CudaXcCompactTile",
+            "CudaXcPointBatchPlan",
+            "CudaXcOccupiedDensity",
+        )
     )
 
 
@@ -101,9 +106,17 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
                 + expression
                 + "}",
             )
-    batch = emit_native_xc_tile_batches().split(
-        "template <class Arithmetic>\ninline void launch_batch_density_typed"
+    batch = emit_native_xc_tile_batches()
+    batch = batch[: batch.index("inline void launch_batch_density_typed")].rsplit(
+        "template ", 1
     )[0]
+    occupied = _emit_occupied_features(DEFAULT_XC_MATRIX_SCHEDULE)
+    occupied_bodies = definition(
+        occupied, "__device__ void tiled_occupied_product_body"
+    ) + definition(
+        occupied,
+        "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+    )
     source = tmp_path / "compact-numerics.cpp"
     source.write_text(
         _SIMULATOR
@@ -116,6 +129,7 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         + _emit_panels()
         + _emit_panels(diagonal_one_sided=True)
         + matrices
+        + occupied_bodies
         + "}}\n"
         + batch
         + "}}\n"
@@ -134,6 +148,7 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
 _PLAN_HEADER = r"""
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -300,34 +315,39 @@ void close(double value,double expected) {
 _NUMERICS = r"""
 using namespace generativeqc::dft::cuda_xc_detail;
 void check_cross_fma_range_fallback() {
-  constexpr I active=16,count=16,panel=active*count;
+  constexpr I active=16,count=33,panel=active*count;
+  // Exercise both sides of a shared-panel boundary and the partial last
+  // panel. Cancellation must recover the finite ordered sum even when an
+  // earlier panel supplied the accumulator that triggers the overflow.
+  for (I point : {0,14,15,16,30,31})
   for (int sign : {-1,1}) for (bool swapped : {false,true}) {
     const double large=sign*0x1.8p1023,leg=sign*0x1p1022;
     std::vector<double> ao(4*panel),coefficients(4*count),weights(count,1.0),
         work(panel),potential(active*active);
-    ao[0]=1.0;
-    ao[panel+1]=1.0;
-    coefficients[count]=large;
-    ao[active]=ao[active+1]=1.0;
-    ao[panel+active]=swapped ? 1.0 : -1.0;
-    ao[panel+active+1]=swapped ? -1.0 : 1.0;
-    coefficients[count+1]=leg;
+    const I first=point*active,second=first+active;
+    ao[first]=1.0;
+    ao[panel+first+1]=1.0;
+    coefficients[count+point]=large;
+    ao[second]=ao[second+1]=1.0;
+    ao[panel+second]=swapped ? 1.0 : -1.0;
+    ao[panel+second+1]=swapped ? -1.0 : 1.0;
+    coefficients[count+point+1]=leg;
     int error=0;
     launch({2,1,1},{128,1,1},[&] {
       compact_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
           active,count,1,4,1,work.data(),&error);
     });
     assert(error==0);
-    assert(work[0]==0.0 && work[1]==large);
-    assert(work[active]==(swapped ? leg : -leg));
-    assert(work[active+1]==(swapped ? -leg : leg));
+    assert(work[first]==0.0 && work[first+1]==large);
+    assert(work[second]==(swapped ? leg : -leg));
+    assert(work[second+1]==(swapped ? -leg : leg));
     launch({1,1,1},{16,16,1},[&] {
       tiled_potential_body<true,double>(ao.data(),work.data(),active,count,1,nullptr,
           potential.data(),nullptr,false,&error,nullptr,active,0);
     });
     assert(error==0);
-    // Independent A W^T + W A^T: point1's two off-diagonal legs
-    // cancel exactly before adding point0's finite large contribution.
+    // Independent A W^T + W A^T: the second point's off-diagonal
+    // legs cancel exactly, preserving the first point's large contribution.
     assert(potential[1]==large && potential[active]==large);
     assert(potential[0]==(swapped ? 2*leg : -2*leg));
     assert(potential[active+1]==(swapped ? -2*leg : 2*leg));
@@ -402,7 +422,7 @@ int main() {
   int error=0;
   launch({3,4,32},{16,16,1},[&] {
     batch_density_products(tiles.data(),density.data(),ao.data(),work.data(),full_n,spins,
-                            work_jets,ids.data(),&error);
+                            work_jets,ids.data(),&error,{});
   });
   // Dense scalar D*AO is an independent reference for every selected row/jet.
   for (const auto& tile : tiles)
@@ -418,7 +438,7 @@ int main() {
           }
   launch({32,4,1},{128,1,1},[&] {
     batch_density_features(tiles.data(),ao.data(),work.data(),features.data(),0,spins,jets,
-                            work_jets,terms,2,&error);
+                            work_jets,terms,2,&error,{});
   });
   for (const auto& tile : tiles)
     for (I spin=0;spin<spins;++spin)

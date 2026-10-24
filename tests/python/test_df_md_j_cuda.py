@@ -69,6 +69,7 @@ def _evaluate(
     variant: str = "asymmetric",
     exponent_scale: float = 1.0,
     translation: float = 0.0,
+    primitive_lengths: tuple[int, int, int] = (2, 3, 2),
 ) -> dict[str, Any]:
     from pyscf import lib
 
@@ -79,7 +80,7 @@ def _evaluate(
     fixture = make_df_value_fixture(
         angular,
         variant=variant,
-        primitive_lengths=(2, 3, 2),
+        primitive_lengths=primitive_lengths,
         exponent_scale=exponent_scale,
     )
     for r in fixture.inputs["coordinates"]:
@@ -203,6 +204,28 @@ def _evaluate(
         "replay_max_abs_error": float(np.max(abs(result[2] - refreshed))),
         "native_inventory": run.stdout.strip(),
     }
+
+
+@pytest.mark.parametrize("splits", (1, 3, 8, 64))
+@pytest.mark.parametrize("angular", ((0, 0, 0), (2, 1, 4)))
+def test_partitioned_charge_with_multiple_source_groups(
+    df_md_probe: Path,
+    tmp_path: Path,
+    splits: int,
+    angular: tuple[int, int, int],
+    monkeypatch: Any,
+    record_property: Any,
+) -> None:
+    """Long contractions exercise nonzero splits, tails and capacity fallback.
+
+    The same independent oracle checks normal, zero and changed-density graph
+    replay. The existing derivative opt-in also checks the raised charge pass.
+    """
+    monkeypatch.setenv("GENERATIVEQC_DF_MD_CHARGE_SPLITS", str(splits))
+    record_property(
+        "qualification",
+        _evaluate(df_md_probe, tmp_path, angular, True, primitive_lengths=(8, 9, 5)),
+    )
 
 
 @pytest.mark.parametrize("angular", tuple(product(range(4), range(4), range(5))))

@@ -58,3 +58,14 @@ python tools/restore_retained_evidence.py --all \
 The restored file is under
 `.artifacts/range-eri-history/benchmarks/results/range-eri/cpu/resources.json`.
 This is storage-only retention, not a new endpoint or performance qualification.
+
+Additional historical JSON receipts are losslessly stored as `.json.xz`.
+Their original and stored identities are in
+[`merge-storage.json`](../native-grid-binding-20261024/merge-storage.json).
+Restore the exact original filenames for historical publication readers with:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/native-grid-binding-20261024/merge-storage.json \
+  --output .artifacts/native-grid-binding-history
+```

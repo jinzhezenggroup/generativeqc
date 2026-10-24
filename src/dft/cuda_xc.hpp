@@ -110,6 +110,31 @@ struct CudaXcLayout {
   CudaXcFastPathCapabilities fast_paths{};
 };
 
+/** Same-stream canonical frame that produced this exact density generation.
+ * Only the SCF owner supplies this witness, after accepting its structured
+ * density proposal. Imported, held, mixed and response densities remain dense.
+ * Coefficients are column-major nao-by-nao frames, one per spin. */
+struct CudaXcOccupiedDensity {
+  const double* density{};
+  const double* coefficients{};
+  std::size_t nao{}, spins{}, occupations[2]{};
+  std::uint64_t generation{};
+
+#if defined(__CUDACC__)
+  __host__ __device__
+#endif
+      std::size_t rank() const noexcept {
+    return occupations[0] > occupations[1] ? occupations[0] : occupations[1];
+  }
+  bool matches(const double* current_density, std::size_t current_nao, std::size_t current_spins,
+               std::uint64_t current_generation) const noexcept {
+    return density && density == current_density && coefficients && nao == current_nao &&
+           spins == current_spins && (spins == 1 || spins == 2) && generation &&
+           generation == current_generation && rank() && rank() <= nao &&
+           (spins == 2 || occupations[1] == 0);
+  }
+};
+
 /** Layout-owned execution facts consumed by higher-level schedulers. These
  * facts deliberately exclude method names and unrelated Fock-provider policy:
  * local-AO legality belongs to the physical XC layout, while density precision
@@ -309,7 +334,8 @@ class CudaXcPlan {
   const double* packed_basis() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                generativeqc::runtime::PrecisionPhase phase =
-                   generativeqc::runtime::PrecisionPhase::StrictAudit);
+                   generativeqc::runtime::PrecisionPhase::StrictAudit,
+               CudaXcOccupiedDensity occupied = {});
   /** Enqueue only the stable device body for a shared replay region. The caller
    * must publish exactly one logical generation per physically submitted body
    * after the runtime chooses warmup/capture/replay/fallback. */
@@ -363,7 +389,7 @@ class CudaXcPlan {
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
                     std::uint64_t generation, generativeqc::runtime::PrecisionPhase phase,
                     double* total_density = nullptr, double* total_gradient = nullptr,
-                    bool publish_generation = true);
+                    bool publish_generation = true, CudaXcOccupiedDensity occupied = {});
   void enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
                                        const double* effective_weights,
                                        const double* total_gradient, const double* vrho,
@@ -469,7 +495,7 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              const tensor::PreparedSymmetricProduct* potential_binding = nullptr,
              const CudaXcPointBatchPlan& point_batch_plan = {},
              CudaXcPointBatchLauncher point_batch_launcher = nullptr,
-             double* point_batch_arena = nullptr);
+             double* point_batch_arena = nullptr, CudaXcOccupiedDensity occupied = {});
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

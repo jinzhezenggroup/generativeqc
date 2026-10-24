@@ -20,7 +20,8 @@ void checked_frames() {
   const Matrix c{1 / std::sqrt(2.0), 0, 0, .5};
   EigenFrameDiagnostic diagnostic;
   std::string detail;
-  require(validate_eigen_frame(f, &s, values, c, 2, diagnostic, detail), detail.c_str());
+  const bool accepted = validate_eigen_frame(f, &s, values, c, 2, diagnostic, detail);
+  require(accepted, detail.c_str());
   for (const int info : {-1, 1}) {
     diagnostic.solver_info = info;
     require(!validate_eigen_frame(f, &s, values, c, 2, diagnostic, detail),
@@ -138,11 +139,55 @@ void ordered_pairs() {
     }
   } while (std::next_permutation(permutation.begin(), permutation.end()));
 }
+
+void dense_analytic_frame() {
+  using namespace generativeqc::scf::solver;
+  // A sine basis gives an independent dense orthogonal frame, including an odd
+  // dimension. Construct S and F in extended precision from known spectra;
+  // neither the tested product implementation nor an eigensolver is the oracle.
+  constexpr std::size_t n = 65;
+  const auto pi = std::acos(-1.0L);
+  std::vector<long double> q(n * n);
+  Matrix s(n * n), f(n * n), c(n * n), values(n);
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t k = 0; k < n; ++k)
+      q[i * n + k] = std::sqrt(2.0L / (n + 1)) * std::sin(pi * (i + 1) * (k + 1) / (n + 1));
+  for (std::size_t k = 0; k < n; ++k) values[k] = .5 + double(k) / n;
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t j = 0; j < n; ++j) {
+      long double metric = 0, hamiltonian = 0;
+      for (std::size_t k = 0; k < n; ++k) {
+        const long double sk = 1 + static_cast<long double>(k) / n;
+        metric += q[i * n + k] * sk * q[j * n + k];
+        hamiltonian += q[i * n + k] * sk * values[k] * q[j * n + k];
+      }
+      s[i * n + j] = metric;
+      f[i * n + j] = hamiltonian;
+      c[i * n + j] = q[i * n + j] / std::sqrt(1 + static_cast<long double>(j) / n);
+    }
+  const auto original_f = f, original_s = s, original_c = c;
+  EigenFrameDiagnostic diagnostic;
+  std::string detail;
+  const bool accepted = validate_eigen_frame(f, &s, values, c, n, diagnostic, detail);
+  require(accepted, detail.c_str());
+  require(f == original_f && s == original_s && c == original_c, "validation mutated its inputs");
+  auto bad = c;
+  for (std::size_t i = 0; i < n; ++i) bad[i * n] *= 1.001;
+  require(!validate_eigen_frame(f, &s, values, bad, n, diagnostic, detail),
+          "dense nonorthogonal frame passed");
+  auto shifted = values;
+  shifted[0] += 1e-6;
+  require(!validate_eigen_frame(f, &s, shifted, c, n, diagnostic, detail),
+          "dense wrong eigenvalue passed");
+  require(validate_eigen_frame(f, &s, shifted, c, n, diagnostic, detail, false),
+          "metric-only admission unexpectedly required canonical eigenvalues");
+}
 }  // namespace
 int main() {
   try {
     checked_frames();
     ordered_pairs();
+    dense_analytic_frame();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

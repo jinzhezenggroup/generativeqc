@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "dft/cuda_ks.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_ledger.hpp"
@@ -20,6 +21,14 @@ using namespace generativeqc;
 
 void require(bool accepted, const std::string& message) {
   if (!accepted) throw std::runtime_error(message);
+}
+
+/** Require the optional KS capability before checking resident transport ownership. */
+std::optional<methods::KsTransportDiagnostic> transport_diagnostic(
+    const methods::PreparedBatch& batch) {
+  const auto* capability = dynamic_cast<const methods::BatchKsTransportDiagnostics*>(&batch);
+  require(capability != nullptr, "prepared KS fixture omitted transport diagnostics");
+  return capability->ks_transport_diagnostic(0);
 }
 
 core::System hydrogens(unsigned count, bool restricted) {
@@ -367,13 +376,13 @@ void prepared_integral_case(bool restricted, bool hybrid, std::size_t atoms = 0,
   require(methods::detail::dft_final_state_token(*batch, 0, token, detail) ==
               GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto before = batch->ks_transport_diagnostic(0);
+  const auto before = transport_diagnostic(*batch);
   std::vector<double> resident_sources;
   std::array<std::uint64_t, 9> work{};
   require(methods::detail::dft_cuda_integral_gradient(*batch, 0, token, resident_sources, 64U << 20,
                                                       work, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto after = batch->ks_transport_diagnostic(0);
+  const auto after = transport_diagnostic(*batch);
   require(
       before && after && after->matrix_d2h_bytes == before->matrix_d2h_bytes &&
           after->final_state_reads == before->final_state_reads && work[7] == 0 &&
@@ -403,7 +412,7 @@ void prepared_integral_case(bool restricted, bool hybrid, std::size_t atoms = 0,
                 *batch, 0, token, 128U << 20, native_gradient, native_resources, detail) ==
                 GENERATIVEQC_STATUS_SUCCESS,
             detail);
-    const auto native_transport = batch->ks_transport_diagnostic(0);
+    const auto native_transport = transport_diagnostic(*batch);
     require(
         native_transport && native_transport->matrix_d2h_bytes == after->matrix_d2h_bytes &&
             native_transport->final_state_reads == after->final_state_reads &&
@@ -470,12 +479,12 @@ void prepared_integral_case(bool restricted, bool hybrid, std::size_t atoms = 0,
       minimum_ledger->device = 0;
       minimum_ledger->limit = minimum_bytes;
       runtime::active_device_resource_ledger = minimum_ledger;
-      const auto before_minimum = minimum_batch->ks_transport_diagnostic(0);
+      const auto before_minimum = transport_diagnostic(*minimum_batch);
       require(methods::detail::dft_cuda_native_stationary_gradient(
                   *minimum_batch, 0, minimum_token, minimum_bytes, minimum_gradient,
                   minimum_resources, detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail);
-      const auto after_minimum = minimum_batch->ks_transport_diagnostic(0);
+      const auto after_minimum = transport_diagnostic(*minimum_batch);
       require(minimum_gradient.size() == native_gradient.size() &&
                   minimum_resources.device_upper_bytes == minimum_bytes &&
                   minimum_ledger->live + minimum_ledger->provider_reserved == minimum_bytes &&
@@ -626,7 +635,7 @@ void prepared_integral_case(bool restricted, bool hybrid, std::size_t atoms = 0,
     require(public_results.size() == 1 && public_results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
                 public_results[0].calculation.forces.size() == retained_gradient.size(),
             "public native CUDA energy/force endpoint failed");
-    const auto movement = public_batch->ks_transport_diagnostic(0);
+    const auto movement = transport_diagnostic(*public_batch);
     require(movement && !movement->matrix_d2h_bytes && !movement->final_state_reads,
             "public native CUDA force endpoint exported a dense scientific frame");
     for (std::size_t coordinate = 0; coordinate < retained_gradient.size(); ++coordinate)

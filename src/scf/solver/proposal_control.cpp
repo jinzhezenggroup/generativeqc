@@ -4,12 +4,11 @@
 #include <stdexcept>
 
 #include "scf/reference/observation.hpp"
+#include "scf/solver/validation_products.hpp"
 
 namespace generativeqc::scf::solver {
 using reference::index;
-using reference::multiply;
 using reference::symmetric_eigen;
-using reference::transpose;
 double seconds_since(ScfClock::time_point started) {
   return std::chrono::duration<double>(ScfClock::now() - started).count();
 }
@@ -35,6 +34,7 @@ std::string invalid_proposal(const ScfSnapshot& state, const ScfProposal& propos
   if (!std::all_of(candidate.begin(), candidate.end(), [](double x) { return std::isfinite(x); }))
     return "nonfinite";
   const auto n = state.nbf;
+  const ValidationProducts multiply;
   const auto diagonalize = [&](const Matrix& matrix) {
     // The legacy seed contract permits 1e-7 asymmetry; the ordinary device
     // frame requires 1e-12 relative symmetry. Keep that acceptance boundary
@@ -57,7 +57,7 @@ std::string invalid_proposal(const ScfSnapshot& state, const ScfProposal& propos
     if (se.values[j] < 1e-10) return "singular_metric";
     for (std::size_t i = 0; i < n; ++i) scaled[index(i, j, n)] *= std::sqrt(se.values[j]);
   }
-  const Matrix root = multiply(scaled, transpose(se.vectors, n), n);
+  const Matrix root = multiply(scaled, se.vectors, n, false, true);
   constexpr double tolerance = 1e-7;
   for (std::size_t spin = 0; spin < state.electrons.size(); ++spin) {
     Matrix p(candidate.begin() + spin * n * n, candidate.begin() + (spin + 1) * n * n);
