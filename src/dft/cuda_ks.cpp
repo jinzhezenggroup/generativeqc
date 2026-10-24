@@ -1631,7 +1631,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The promoted automatic KS owner was qualified with rolling, bounded
     // proposals and its own full-density closure. Keep that policy separate
     // from the explicit fixed-anchor controller (including its zero cadence).
-    if (options.incremental_direct_jk_auto &&
+    if (auto_incremental && !options.incremental_direct_jk &&
         incremental_direct_jk_policy.fixed_full_density_anchor) {
       incremental_direct_jk_policy.fixed_full_density_anchor = false;
       incremental_direct_jk_policy.effective_rebuild_interval = 1;

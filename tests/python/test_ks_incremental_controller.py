@@ -95,11 +95,12 @@ struct Consumer {
       *incremental_max_abs_delta_density=&maximum,*j=&jv,*incremental_anchor_j=&ja,
       *exchange=&kv,*incremental_anchor_exchange=&ka,*range_exchange=&rv,
       *incremental_anchor_range_exchange=&ra;
-  Consumer(bool automatic=false, bool eligible=true) {
-    options.incremental_direct_jk=!automatic;
+  Consumer(bool automatic=false, bool eligible=true, bool explicit_request=false,
+           unsigned interval=3) {
+    options.incremental_direct_jk=!automatic || explicit_request;
     options.incremental_direct_jk_auto=automatic;
     options.screening_tolerance=0.0;
-    options.incremental_direct_jk_rebuild_interval=3;
+    options.incremental_direct_jk_rebuild_interval=interval;
     scf::ResolvedFockBuild strategy;
     strategy.backend=scf::FockBackend::Cuda;
     strategy.screening_tolerance=1e-12;
@@ -196,6 +197,26 @@ int main(int argc,char** argv) {
       runtime::active_device_resource_ledger=nullptr;
       require(!budgeted.incremental_direct_jk_policy.requested && !budgeted.incremental_direct_jk,
               "ledger-bound automatic constructor activated uncharged storage");
+      return 0;
+    }
+    if(std::string(argv[1])=="explicit-precedence") {
+      for(bool eligible:{false,true}) {
+        for(unsigned interval:{0U,3U}) {
+          Consumer explicit_owner(true,eligible,true,interval);
+          require(explicit_owner.incremental_direct_jk &&
+                      explicit_owner.incremental_direct_jk_policy.fixed_full_density_anchor &&
+                      explicit_owner.incremental_direct_jk_policy.effective_rebuild_interval==interval,
+                  "automatic selector overrode explicit screened anchor/cadence");
+          explicit_owner.build(false);
+          const double first_anchor=explicit_owner.a;
+          explicit_owner.build(false);
+          require(explicit_owner.pending_incremental_delta && explicit_owner.a==first_anchor,
+                  "explicit screened delta replaced the full-density anchor");
+          explicit_owner.build(false);
+          require(explicit_owner.pending_incremental_delta && explicit_owner.a==first_anchor,
+                  "automatic refresh cadence replaced the explicit interval");
+        }
+      }
       return 0;
     }
     if(std::string(argv[1])=="bounded-proposals") {
@@ -464,3 +485,17 @@ def test_constructor_auto_admission_preserves_domain_and_ledger_fallback(
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_explicit_request_takes_precedence_over_auto_selector(
+    controller_probe: Path,
+) -> None:
+    """Both selectors retain explicit anchors/cadence inside and outside auto admission."""
+    result = subprocess.run(
+        [controller_probe, "explicit-precedence"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
