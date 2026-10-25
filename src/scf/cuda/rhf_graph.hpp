@@ -41,6 +41,9 @@ class RhfIterationGraphs {
   bool has_iteration() const noexcept { return iteration_graph_exec_ != nullptr; }
   /** Read-only lifetime identity for verifying replay without exposing handles. */
   std::uint64_t iteration_generation() const noexcept { return iteration_generation_; }
+  /** Successful submissions, not inferred iteration counts or capture counts. */
+  std::uint64_t iteration_launches() const noexcept { return iteration_launches_; }
+  std::uint64_t post_eigensolver_launches() const noexcept { return post_eigensolver_launches_; }
 
   RhfGraphCaptureResult capture_iteration(int device_id, cudaStream_t stream, bool device_launch,
                                           const std::function<generativeqc_status()>& body);
@@ -65,6 +68,8 @@ class RhfIterationGraphs {
   cudaGraph_t iteration_graph_{};
   cudaGraphExec_t iteration_graph_exec_{};
   std::uint64_t iteration_generation_{};
+  mutable std::uint64_t iteration_launches_{};
+  mutable std::uint64_t post_eigensolver_launches_{};
   unsigned long long iteration_flags_{};
   cudaGraph_t post_eigensolver_graph_{};
   cudaGraphExec_t post_eigensolver_graph_exec_{};
