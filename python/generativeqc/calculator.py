@@ -1331,7 +1331,11 @@ class Calculator:
         requested = frozenset(properties)
         if "energy" not in requested:
             raise ValueError("properties must include 'energy'")
-        if requested - self._capabilities.supported_properties:
+        unsupported = requested - self._capabilities.supported_properties
+        if unsupported and not (
+            unsupported == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             raise ValueError(
                 "method does not support properties: "
                 + ", ".join(sorted(requested - self._capabilities.supported_properties))
@@ -3002,7 +3006,12 @@ class Calculator:
                 f"method {self._method_name!r} does not support properties: {names}"
             )
         unsupported_properties = requested_properties - supported_properties
-        if unsupported_properties:
+        # DFT forces are admitted by the prepared context after the actual
+        # basis, operators and linked derivative providers are known.
+        if unsupported_properties and not (
+            unsupported_properties == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             names = ", ".join(sorted(unsupported_properties))
             raise ValueError(
                 f"method {self._method_name!r} does not support properties: {names}"

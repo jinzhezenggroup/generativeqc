@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "dft/mixed_rsh_exchange.hpp"
 #include "generativeqc/generativeqc.h"
 
 namespace generativeqc::dft {
@@ -77,8 +78,9 @@ inline generativeqc_status compose_mixed_rsh_df_integral_sources(
   }
   for (std::size_t i = 0; i < coordinates; ++i) {
     const double lr = lr_correction[i];
-    const double short_range = fitted_four[3 * coordinates + i] - fraction * lr;
-    const double long_range = long_fraction * lr;
+    double short_range{}, long_range{};
+    mixed_rsh_exchange_sources(fitted_four[3 * coordinates + i], lr, fraction, short_range,
+                               long_range);
     if (!std::isfinite(lr) || !std::isfinite(short_range) || !std::isfinite(long_range)) {
       detail = "mixed RSH-DF recomposed exchange derivative is nonfinite";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;

@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def native_force_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """All admitted imported programs must use the prepared native force owner."""
+    from test_r1_native_forces import forbid_python_force
+
+    forbid_python_force(monkeypatch)
+
+
 @pytest.mark.parametrize(
     "name",
     (

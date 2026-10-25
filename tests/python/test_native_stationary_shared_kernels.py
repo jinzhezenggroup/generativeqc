@@ -164,6 +164,8 @@ def test_shared_kernel_scalar_order_and_transport(
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include "dft/mixed_rsh_exchange.hpp"
+using generativeqc::dft::mixed_rsh_exchange_sources;
 #define __global__
 #define __device__
 using std::isfinite;
@@ -230,6 +232,6 @@ int main() {
     executable = native_cxx.build_executable(
         [source],
         tmp_path / "shared_scalar",
-        compile_args=("-std=c++20", "-ffp-contract=off"),
+        compile_args=("-std=c++20", "-ffp-contract=off", f"-I{ROOT / 'src'}"),
     )
     subprocess.run([str(executable)], check=True, timeout=10)

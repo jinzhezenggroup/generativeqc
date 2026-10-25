@@ -11,6 +11,7 @@
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
 #include "scf/cuda/df_source_domain.hpp"
+#include "scf/cuda_derivative_sources.hpp"
 #include "scf/density_factor.hpp"
 #include "scf/df_value_storage.hpp"
 #include "scf/fock_build.hpp"
@@ -103,6 +104,20 @@ struct CudaDfBorrowedResponseDensity {
   }
 };
 
+/** Token-authenticated device density terms and a callback-scoped output.
+ * The enclosing prepared KS owner supplies one RKS/total-J block or two UKS
+ * exchange blocks, ordered on this provider's stream. No host density or
+ * derivative vector participates. The consumer must enqueue its copy before
+ * returning; the response arena drains before releasing its buffers. */
+struct CudaDfResidentForceRequest {
+  int device_id{-1};
+  void* stream{};
+  std::size_t matrix_elements{};
+  std::array<const double*, 2> densities{};
+  CudaDerivativeSourceKind kind{};
+  CudaDerivativeSourceConsumer consume;
+};
+
 /** Optional immutable application allowance authorizes only qualified shell
  * arithmetic after exact final-density validation. Other consumers and
  * resource-limited attempts retain bounded strict response. */
@@ -115,7 +130,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     const CudaDfFinalStateToken* final_state = nullptr,
     const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr,
     const CudaDfBorrowedResponseDensity* borrowed_response_density = nullptr,
-    const CudaDfGradientPrecisionRequest* application_precision = nullptr);
+    const CudaDfGradientPrecisionRequest* application_precision = nullptr,
+    const CudaDfResidentForceRequest* resident_force = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.

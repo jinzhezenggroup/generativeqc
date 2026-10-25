@@ -91,6 +91,8 @@ def test_cached_phase_reservation_and_bounded_fallback(
 #include <cassert>
 #include <cstddef>
 #include <stdexcept>
+#include <limits>
+#include "runtime/bounded_workspace.hpp"
 using std::size_t;
 struct uint2 { unsigned first, second; };
 constexpr size_t stationary_becke_retained_max_atoms = 32;
@@ -126,16 +128,20 @@ int main() {
         if (phase) assert(cached_budget - 1 < minimum + centers + phase);
       }
   assert(native_phased_becke_bytes(129, 256, 256) == 0);
+  assert(native_numeric_bytes(129, 224, 672, 256, 1,
+                              stationary_spin_blocks, 256, true) > 0);
   bool rejected = false;
-  try { (void)native_numeric_bytes(129, 224, 672, 256, 1,
-                                  stationary_spin_blocks, 256, true); }
-  catch (const std::invalid_argument&) { rejected = true; }
+  try { (void)native_numeric_bytes(std::numeric_limits<size_t>::max(), 224, 672,
+                                  256, 1, stationary_spin_blocks, 256, true); }
+  catch (const std::overflow_error&) { rejected = true; }
   assert(rejected);
 }
 """
     )
     executable = native_cxx.build_executable(
-        [source], tmp_path / "phase_capacity", compile_args=["-std=c++20", "-O0"]
+        [source],
+        tmp_path / "phase_capacity",
+        compile_args=["-std=c++20", "-O0", f"-I{ROOT / 'src'}"],
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
@@ -145,7 +151,7 @@ int main() {
     [
         pytest.param(
             profile.replace("_", "-"),
-            not profile.startswith("m06_2x"),
+            True,
             id=profile,
         )
         for profile in NATIVE_STATIONARY_CUDA_PROFILES
@@ -155,12 +161,7 @@ int main() {
 def test_phase_force_matches_energy_derivatives_and_existing_fallback(
     method: str, native_admitted: bool, atom_count: int
 ) -> None:
-    """Check moved forces without promoting compiled-only M06-2X native graphs.
-
-    Large split-hybrid contexts retain their existing packaged Python owner;
-    its already-generic phased geometry is checked rather than bypassing native
-    admission. Admitted native profiles additionally exercise minimum capacity.
-    """
+    """Every emitted program keeps moved forces at cached and minimum capacity."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     assert os.environ.get("SLURM_JOB_ID")

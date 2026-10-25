@@ -147,6 +147,15 @@ class PreparedFockPlan {
       const std::vector<double>& density, const std::vector<double>& beta,
       const CudaDfBorrowedResponseDensity* response_density,
       const CudaDfBorrowedFittedProjection* projection = nullptr) const;
+  /** Consume fitted J/K derivatives from the same token-authenticated resident
+   * densities as SCF. Total density serves J; spin blocks serve K. The caller
+   * owns their stream ordering and retains the provider through publication. */
+  generativeqc_status consume_fitted_energy_derivatives(int device, void* stream,
+                                                        const double* alpha, const double* beta,
+                                                        const double* total,
+                                                        const CudaDerivativeSourceConsumer& consume,
+                                                        std::string& detail,
+                                                        bool range_correction = false) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */

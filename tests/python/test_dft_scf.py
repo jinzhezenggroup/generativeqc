@@ -61,17 +61,9 @@ def test_uks_public_energy_and_spin_contract(
         assert calculator.singlepoint(atoms, multiplicity=2).forces is None
 
 
-def test_uks_unqualified_cpu_basis_still_rejects_force_requests() -> None:
-    calculator = Calculator(method="lda-uks", basis="def2-tzvp", device="cpu")
-    assert calculator.capabilities.supported_properties == frozenset({"energy"})
-    with pytest.raises(ValueError, match="does not support properties.*forces"):
-        calculator.singlepoint(
-            [("H", (0, 0, 0))], multiplicity=2, properties=("energy", "forces")
-        )
-
-
-def test_pbe_uks_s_p_basis_force_request_uses_qualified_native_owner() -> None:
-    calculator = Calculator(method="pbe-uks", basis="def2-tzvp", device="cpu")
+@pytest.mark.parametrize("method", ["lda-uks", "pbe-uks"])
+def test_uks_s_p_basis_force_request_uses_qualified_native_owner(method: str) -> None:
+    calculator = Calculator(method=method, basis="def2-tzvp", device="cpu")
     atoms = [("H", (0, 0, 0))]
     assert calculator.capabilities.supported_properties == frozenset(
         {"energy", "forces"}

@@ -15,6 +15,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_density_fitting_md.hpp"
+#include "scf/df_response_weights.hpp"
 #include "scf/explicit_integral_backend.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
@@ -699,6 +700,52 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components_wi
   }
   return result;
 }
+generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
+    int device, void* stream, const double* alpha, const double* beta, const double* total,
+    const CudaDerivativeSourceConsumer& consume, std::string& detail, bool range_correction) const {
+  if (!impl_->cuda_df || !impl_->fitted || !impl_->retained_fitted_derivative_order) {
+    detail = "prepared provider has no retained CUDA DF derivative source";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto& data = *impl_->fitted;
+  const auto& spec = strategy().spec;
+  const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+  if (!alpha || !total || (unrestricted && !beta) || !consume || !data.df_gradient_orbital ||
+      !data.df_gradient_auxiliary) {
+    detail = "incomplete native DF stationary density/source lease";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto derivative = strategy();
+  derivative.spec.derivative_order = 1;
+  CudaFockProviderView(impl_->cuda_df.get(), data).validate(derivative);
+  std::vector<double> unused;
+  const auto submit = [&](std::span<const DensityFittingDensityResponse> terms,
+                          std::array<const double*, 2> densities, CudaDerivativeSourceKind kind) {
+    const CudaDfResidentForceRequest request{device,    stream, data.raw.nbf * data.raw.nbf,
+                                             densities, kind,   consume};
+    return execute_cuda_density_fitting_generated_force_response(
+        impl_->cuda_df.get(), 0, *data.df_gradient_orbital, *data.df_gradient_auxiliary,
+        data.raw.three_center, data.raw.metric, terms, data.df_gradient_mapping,
+        data.df_gradient_budget, 0, unused, detail, nullptr, nullptr, nullptr, nullptr, nullptr,
+        &request);
+  };
+  if (spec.coulomb.present) {
+    const DensityFittingDensityResponse term{{}, spec.coulomb.coefficient, 0};
+    const auto status = submit({&term, 1}, {total, nullptr}, CudaDerivativeSourceKind::Coulomb);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  }
+  if (spec.exchange.present) {
+    // Same energy/Fock coefficient conversion as CudaFockProviderView::derivative.
+    const double coefficient = -0.5 * spec.exchange.coefficient;
+    const std::array<DensityFittingDensityResponse, 2> terms{
+        {{{}, 0, coefficient}, {{}, 0, coefficient}}};
+    return submit({terms.data(), unrestricted ? 2U : 1U}, {alpha, beta},
+                  range_correction ? CudaDerivativeSourceKind::RangeCorrection
+                                   : CudaDerivativeSourceKind::Exchange);
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 std::vector<double> PreparedFockPlan::retained_energy_derivative(
     const std::vector<double>& density, const std::vector<double>& beta) const {
   return impl_->cpu_view ? impl_->cpu_view->retained_energy_derivative(density, beta)

@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-10-25
 
+The later [complete R1 force owner](2026-10-25-r1-complete-native-forces.md)
+supersedes the force exclusions and fixture-sized envelopes recorded below.
+
 ## Problem
 
 The complete named KS owner could assemble common energies, but r²SCAN CPU

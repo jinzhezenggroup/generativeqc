@@ -128,12 +128,32 @@ void check_checked_and_failures() {
   empty.ecp_terms.clear();
   compare(generativeqc::integrals::ecp_integrals(empty),
           generativeqc::testing::ecp_integrals(empty));
-  auto too_large = system;
-  too_large.atoms.resize(129);
-  rejects([&] { generativeqc::integrals::ecp_integrals(too_large); });
-  too_large = system;
-  too_large.shells.resize(257, system.shells[0]);
-  rejects([&] { generativeqc::integrals::ecp_integrals(too_large); });
+  // Basis-free all-electron centers have zero ECP response. Crossing the old
+  // 128-atom ceiling must preserve the same nonzero ECP matrix and derivatives.
+  auto expanded = system;
+  expanded.atoms.resize(129, {2, {50.0, 0.0, 0.0}, 0});
+  const auto small = generativeqc::integrals::ecp_integrals(system, 16, 8, true);
+  const auto large = generativeqc::integrals::ecp_integrals(expanded, 16, 8, true);
+  require(large.ncoord == 387 && large.nbf == small.nbf, "ECP dynamic coordinate capacity");
+  for (std::size_t i = 0; i < small.local.size(); ++i) {
+    near(large.local[i], small.local[i]);
+    near(large.nonlocal[i], small.nonlocal[i]);
+  }
+  for (std::size_t i = 0; i < large.local_derivative.size(); ++i) {
+    near(large.local_derivative[i],
+         i < small.local_derivative.size() ? small.local_derivative[i] : 0.0);
+    near(large.nonlocal_derivative[i],
+         i < small.nonlocal_derivative.size() ? small.nonlocal_derivative[i] : 0.0);
+  }
+  // A zero residual still has to allocate the full >256-AO operator shape.
+  expanded = system;
+  expanded.shells.resize(257, system.shells[0]);
+  for (auto& term : expanded.ecp_terms) term.coefficient = 0;
+  const auto wide = generativeqc::integrals::ecp_integrals(expanded, 16, 8, true);
+  require(wide.nbf > 256 && wide.local.size() == wide.nbf * wide.nbf &&
+              std::all_of(wide.local_derivative.begin(), wide.local_derivative.end(),
+                          [](double x) { return x == 0; }),
+          "ECP dynamic AO capacity");
   auto unsupported = system;
   unsupported.shells[0].angular_momentum = 4;
   for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {

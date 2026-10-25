@@ -28,16 +28,15 @@ void work_admission() {
     system.shells[1].primitives.assign(second, {0.6, 1.0});
     return generativeqc::scf::cpu_stationary_direct_force_work_admitted(system, pbe0, points, tile);
   };
-  require(admitted(19, 18, false) && !admitted(19, 19, false),
-          "PBE primitive work admission lost its two-million-record ceiling");
-  require(admitted(16, 15, true) && !admitted(16, 16, true),
-          "PBE0 primitive work admission lost its independent exchange charge");
-  require(admitted(1, 1, false, 1000000) && !admitted(1, 1, false, 1000001),
-          "Direct grid point admission lost its ceiling");
+  require(admitted(19, 19, false) && admitted(16, 16, true),
+          "streamed primitive work was rejected by a historical fixture-size cap");
+  require(admitted(1, 1, false, 1000001),
+          "streamed quadrature was rejected by a historical point cap");
   require(!admitted(1, 1, false, 10, 0), "Direct force accepted a zero-sized XC tile");
-  system.atoms.resize(11);
-  require(admitted(1, 1, false, 900000) && !admitted(1, 1, false, 910000),
-          "Direct Becke pair work admission lost its ceiling");
+  system.atoms.resize(129);
+  require(admitted(1, 1, false, 910000), "representable Becke work was rejected by size");
+  require(!admitted(1, 1, false, std::numeric_limits<std::size_t>::max()),
+          "Direct force accepted overflowing work counters");
   system.shells[0].angular_momentum = 3;
   require(!admitted(1, 1, false), "Direct force advertised an unqualified f shell");
 }

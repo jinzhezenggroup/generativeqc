@@ -17,6 +17,7 @@ struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingJkPlan;
 struct CudaDfBorrowedResponseDensity;
 struct CudaDfFinalStateToken;
+struct CudaDfResidentForceRequest;
 /** Synchronous method-owner authorization for narrowed response arithmetic.
  * Construct only after strict final-state acceptance, binding that exact host
  * density and token through this call's drain. This is not a lease of cached
@@ -270,6 +271,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr,
     const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false,
-    const CudaDfRawChargeView* raw_charge = nullptr);
+    const CudaDfRawChargeView* raw_charge = nullptr,
+    const CudaDfResidentForceRequest* resident_force = nullptr);
 }  // namespace generativeqc::scf
 #endif

@@ -178,8 +178,8 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
         if item["exchange_policy"] == "canonical" and not item.get("canonical_method"):
             raise ValueError("canonical exchange policy requires canonical_method")
         profiles = item.get("cpu_stationary_force_profiles", [])
-        if not isinstance(profiles, list) or len(profiles) > 2:
-            raise ValueError("CPU stationary force profiles must have at most two rows")
+        if not isinstance(profiles, list):
+            raise TypeError("CPU stationary force profiles must be a list")
         for profile in profiles:
             if not isinstance(profile, dict) or set(profile) != {
                 "spins",
@@ -223,6 +223,11 @@ def cpp_fast_path_capabilities(item: dict[str, Any]) -> str:
 def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
     families = load_manifest() if families is None else families
     enum_rows = "\n".join(f"  {item['symbol']} = {item['code']}," for item in families)
+    # Storage follows the manifest inventory; adding a scientifically qualified
+    # composition must not require a separate handwritten profile-count cap.
+    profile_capacity = max(
+        len(item.get("cpu_stationary_force_profiles", [])) for item in families
+    )
     records = []
     for item in families:
         component_ids = [name for name, _ in item["components"]]
@@ -247,7 +252,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
             + "}"
             for profile in force_profiles
         ]
-        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (2 - len(profile_rows))
+        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (profile_capacity - len(profile_rows))
         force_profiles_cpp = "{{" + ", ".join(profile_rows) + "}}"
         records.append(
             "\n".join(
@@ -336,7 +341,7 @@ struct SemilocalFamilyMetadata {{
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
-  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::array<CpuStationaryForceProfile, {profile_capacity}> cpu_stationary_force_profiles;
   std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;

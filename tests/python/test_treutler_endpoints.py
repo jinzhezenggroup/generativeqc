@@ -26,6 +26,8 @@ def reference(
     forces: bool = True,
     atom_values: list | None = None,
     grid_level: int | None = None,
+    final_states: list[Any] | None = None,
+    fitted_range: bool = False,
 ) -> tuple[float, np.ndarray | None]:
     """Share basis input only; PySCF owns quadrature, SCF and analytic gradients."""
     pyscf = pytest.importorskip("pyscf")
@@ -68,7 +70,7 @@ def reference(
         mf.grids.level = grid_level
     if nonlocal_level is not None:
         mf.nlcgrids.level = nonlocal_level
-    if fitted and functional == "WB97M_V":
+    if fitted and functional == "WB97M_V" and not fitted_range:
         # The existing native DF contract fits full-range J/K and retains
         # exact long-range K. PySCF normally fits both: select its independent
         # direct LR provider for both SCF and gradients, including zero LR
@@ -85,14 +87,21 @@ def reference(
     # Default-grid callers leave both prescriptions untouched. Larger schedule
     # gates may explicitly select levels while retaining the reference family.
     energy = mf.kernel()
+    if not mf.converged:
+        # A moved open-shell hybrid can stall in DIIS at a strict threshold.
+        # Independent Newton refinement keeps the same functional/grid/model.
+        mf = mf.newton()
+        energy = mf.kernel()
     assert mf.converged
+    if final_states is not None:
+        final_states.append(mf)
     if not forces:
         return float(energy), None
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
     if fitted:
         gradient.auxbasis_response = True
-        if functional == "WB97M_V":
+        if functional == "WB97M_V" and not fitted_range:
             fitted_gradient_k = gradient.get_k
             direct_gradient = direct.nuc_grad_method()
 

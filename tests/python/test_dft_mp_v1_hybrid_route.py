@@ -305,8 +305,7 @@ def test_density_fitted_force_uses_own_strict_precision_admission(
         device=device,
     ) is (
         precision == _native.PRECISION_FP64
-        and method != "MN15"
-        and (method != "M06-2X" or device == "cuda")
+        and (method not in {"M06-2X", "MN15"} or device == "cuda")
     )
 
 
@@ -433,7 +432,7 @@ def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
     assert not split_hybrid_df_force_admitted(
         wrong_fraction, backend="cuda", xc_schedule="device_fused"
     )
-    assert not split_hybrid_df_force_admitted(
+    assert split_hybrid_df_force_admitted(
         resolve_method("MN15", spin=spin),
         backend="cuda",
         xc_schedule="device_fused",
