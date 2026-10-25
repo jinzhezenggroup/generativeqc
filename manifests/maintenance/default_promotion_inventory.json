@@ -2168,7 +2168,9 @@
       "evidence": [
         "docs/developer/response.md",
         "tests/python/test_rhf_host_response_cuda.py",
-        "tests/python/test_rhf_resident_retry.py"
+        "tests/python/test_rhf_resident_retry.py",
+        ".agents/notes/implemented/performance/2026-10-25-rhf-response-host-eri.md",
+        "benchmarks/results/rhf-host-response-20261025/README.md"
       ]
     }
   ]

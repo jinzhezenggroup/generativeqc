@@ -68,3 +68,16 @@ size gate, memory reserve, bucket cost order or tile sizing. Test full GPU, part
 GPU, host refusal and changed geometry controls. A public CPKS or graph integration
 requires its own source-lifetime and scheduling validation. Disk requires measured
 reuse and I/O profitability on that consumer, not just insufficient RAM.
+
+## Complete endpoint evidence
+
+The [source-bound cohort](../../../../benchmarks/results/rhf-host-response-20261025/README.md)
+records 230-AO complete E+F at 323.397 s Direct versus 291.670 s automatic RAM
+under a 256 MiB common GPU ceiling. Matching the explicit partial mask gives
+409.851 s GPU-only versus 384.632 s RAM, with identical 17 J/K actions and 12
+Z iterations. That explicit mask independently slows RHF-SCF to 120.4 s, versus
+27.5 s for the automatic unmasked comparison; these are separate cohorts.
+Full GPU residency remains fastest (276.979 s) and allocates no RAM tier.
+RAM stores 4.34 GB and uploads 69.45 GB across 16 replays. The final independent
+physical action regenerates 575,639,415 ERIs. These complete measurements include
+cache construction and do not claim universal crossovers or warm timing gains.
