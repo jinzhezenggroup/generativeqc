@@ -692,8 +692,8 @@ def test_actual_repository_source_contracts() -> None:
 )
 @pytest.mark.parametrize("fitted", [False, True])
 def test_policy_caps_preserve_unrequested_reservation_and_composite(
-    sources, device, host, fitted
-):
+    sources: dict[str, str], device: int | None, host: int | None, fitted: bool
+) -> None:
     from types import SimpleNamespace
 
     call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
@@ -737,7 +737,9 @@ def test_policy_caps_preserve_unrequested_reservation_and_composite(
         ("ordinary_cuda_force_limits", "unknown_force_limits"),
     ],
 )
-def test_policy_budget_call_drift_is_rejected(sources, old, new):
+def test_policy_budget_call_drift_is_rejected(
+    sources: dict[str, str], old: str, new: str
+) -> None:
     call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
     sources[BATCH_PATH] = sources[BATCH_PATH].replace(
         "512 << 20, 256 << 20", call.replace(old, new)
