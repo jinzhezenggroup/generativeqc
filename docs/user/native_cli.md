@@ -541,19 +541,23 @@ A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 
 Strict PBE0/RKS also admits the native d-shell force consumer for 24–384 AOs
-and 2–32 atoms. Strict r²SCAN RKS/UKS also admits s/p/d bases with at most
-8 atoms, 64 AOs and 128 primitives, including the defining r²SCAN-3c water
-basis. This exact executor improvement is shared with ordinary FP64;
+and 2–32 atoms. Strict r²SCAN RKS/UKS also admits s/p/d bases through checked native source,
+work and device-memory admission, including the defining r²SCAN-3c water basis. This exact executor improvement is shared with ordinary FP64;
 the Python [application precision policy](application_precision.md) separately
 selects budget-qualified FP32 arithmetic.
 
 Canonical WB97M-V RKS/UKS forces include the complete short-/long-range
 exchange, meta-GGA, VV10 AO/point/weight response, moving grid and nuclear
-terms. Both backends require all-electron Direct, at most 8 atoms and 64 AOs,
-and at most 8192 nonlocal points. CPU additionally requires at most 128
-primitives, s/p/d orbitals and the existing bounded Direct primitive-work gate.
-CUDA requires s/p orbitals, strict FP64, device-fused XC and three partition
-iterations. Separate XC and VV10 grids are supported, including Treutler grids.
+terms. Both backends require all-electron Direct and complete derivative sources.
+The former method-specific 8-atom, 64-AO and 8192-nonlocal-point admission
+windows have been removed. CPU retains s/p/d orbitals and the bounded Direct
+primitive/quadrature-work gate, and charges its per-atom range accumulator
+to the live numeric budget. CUDA admits s/p/d orbital sources with strict FP64,
+device-fused XC and three partition iterations. Its generated stationary executor
+still enforces implementation shape limits (128 atoms, 2048 AOs, 16384
+primitives and 4096-point tiles), the exact linked source and actual device
+memory budgets. These are executor limits, not evidence of numerical or timing
+qualification at every size. Separate XC and VV10 grids are supported, including Treutler grids.
 The nonlocal sub-budget and complete stationary device allowance both apply.
 For example, an implementation-parity calculation on a small explicit grid is:
 
@@ -563,8 +567,9 @@ generativeqc run h2.xyz --method wb97m-v-rks --basis sto-3g \
   --grid-azimuth-points 8 --forces --json
 ```
 
-These small grids do not establish production quadrature accuracy. A default or
-larger grid outside the admitted domain still fails explicitly on `--forces`.
+These small grids do not establish production quadrature accuracy. Larger native
+contexts still require independent numerical and complete-endpoint qualification;
+missing sources, incompatible models or insufficient resources fail explicitly.
 CUDA DF DFT forces, ECP and remaining d/f-shell force contexts
 are **not** enabled by this native CUDA path. Named D3/D4 compositions retain
 their underlying electronic force gate. CPU B3LYP UKS

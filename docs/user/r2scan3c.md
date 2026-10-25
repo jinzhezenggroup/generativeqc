@@ -31,9 +31,8 @@ The D4 and gCP geometry derivatives are evaluated exactly once and added after
 the electronic response. CPU native execution retains them inside the prepared
 KS owner; CUDA DF compatibility retains its separate correction owner. This composite is
 admitted only where the electronic backend has a prepared analytic force owner;
-other D4/DF compositions are not promoted by this exception. The CPU consumer's
-8-atom, 64-AO and 128-primitive limits still apply, and CUDA's native
-per-item resource and generated derivative domain remain authoritative.
+other D4/DF compositions are not promoted by this exception. CPU electronic derivative and primitive-work limits still apply, and CUDA's
+native per-item resource and generated derivative domain remain authoritative.
 
 Real-device qualification for the canonical DF endpoint (including changed
 geometry, translation and an independent reference) is in
@@ -57,10 +56,13 @@ does not enlarge the electronic force domain. Native CUDA receipts identify gCP
 as `r2scan3c-gcp-cuda-v1` and report the CUDA backend.
 
 CPU Direct forces retain the packaged derivative s/p/d and primitive-work gate;
-CPU DF retains its 8-atom, 64-AO, 128-primitive envelope. Native CUDA Direct
-forces require strict FP64 and three partition iterations. The s/p/d extension
-admits at most 8 atoms, 64 AOs and 128 primitives; it covers the canonical water
-basis and both RKS/UKS. Exact prepared property queries are authoritative.
+CPU DF retains its complete electronic source and resource admission. Native
+CUDA Direct forces require strict FP64 and three partition iterations. The s/p/d
+source extension now relies on the generated stationary executor's checked
+shape and device budget, rather than a separate 8-atom/64-AO/128-primitive
+whitelist. Newly admitted larger contexts still require independent real-device
+numerical and complete-endpoint performance qualification. Exact prepared
+property queries are authoritative.
 
 Custom graphs, older libraries, global ResourcePlan requests and electronic
 force contexts outside native admission retain established explicit Python
