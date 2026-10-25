@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "df-one-step-warm-20260926",
-  "owner": "DF complete-endpoint qualification",
-  "reason": "Consolidated exact measured scalar samples, independent oracle arrays and grouped semantic work counters; replaces per-size companions without dropping observations. Historical intermediate runs remain in Git.",
-  "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md",
-  "files": []
-}

@@ -245,22 +245,14 @@ HuckelDensityResult huckel_density(const core::System& system,
   // Only the minimal occupied-atomic subspace is diagonalized on the native
   // CPU production provider. Sparse atomic supports avoid dense N-by-N-by-M
   // projection and do not assume atoms or shells are contiguous in the target.
-  const auto orthogonalizer = symmetric_overlap(overlap, minimal, solver::cpu_target_eigen);
-  const auto frame = solver::cpu_target_eigen(hamiltonian, &overlap, &orthogonalizer, minimal);
+  const auto orthogonalizer = symmetric_overlap(overlap, minimal, solver::cpu_preliminary_eigen);
+  const auto frame = solver::cpu_preliminary_eigen(hamiltonian, &overlap, &orthogonalizer, minimal);
   Matrix coefficients(dimension * occupied, 0.0);
   for (std::size_t orbital = 0; orbital < minimal; ++orbital)
     for (const auto& [row, value] : orbitals[orbital].coefficients)
       for (std::size_t column = 0; column < occupied; ++column)
         coefficients[row * occupied + column] += value * frame.vectors[orbital * minimal + column];
-  Matrix density(dimension * dimension, 0.0);
-  for (std::size_t row = 0; row < dimension; ++row)
-    for (std::size_t column = 0; column <= row; ++column) {
-      double value = 0.0;
-      for (std::size_t orbital = 0; orbital < occupied; ++orbital)
-        value += 2.0 * coefficients[row * occupied + orbital] *
-                 coefficients[column * occupied + orbital];
-      density[row * dimension + column] = density[column * dimension + row] = value;
-    }
+  auto density = solver::cpu_preliminary_density(coefficients, dimension, occupied);
   return {std::move(density), cache.size(), minimal};
 }
 }  // namespace generativeqc::scf::initial_guess

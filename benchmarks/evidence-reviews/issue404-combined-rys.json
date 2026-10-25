@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "issue404-combined-rys",
-  "owner": "issue404-combined-rys",
-  "reason": "Reviewed retained large evidence for Combined low-angular Rys endpoint qualification (#404). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/issue404-combined-rys/README.md",
-  "files": []
-}

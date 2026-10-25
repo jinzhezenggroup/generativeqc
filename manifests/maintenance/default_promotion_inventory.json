@@ -44,7 +44,8 @@
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
       "python/generativeqc_compiler/tensor/ad_program.py",
-      "src/scf/fock_prepared.cpp"
+      "src/scf/fock_prepared.cpp",
+      "src/hf/rhf_frame_response.cu"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },

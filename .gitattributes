@@ -28,6 +28,13 @@ tools/generate_validation_references.py text eol=lf
 # Generated per-file hashes; review the migration summary and restoration code.
 benchmarks/results/retention-checkout/snapshot.manifest.json linguist-generated=true
 
+# The publication hashes these text files byte-for-byte on every platform.
+benchmarks/results/pbe0-xc-tiles-20261006/*.md text eol=lf
+benchmarks/results/pbe0-xc-tiles-20261006/*.json text eol=lf
+benchmarks/results/pbe0-xc-tiles-20261006/*.sh text eol=lf
+benchmarks/results/pbe0-xc-tiles-20261006/*.patch text eol=lf
+benchmarks/results/pbe0-xc-tiles-20261006/*.sha256 text eol=lf
+
 # Scientific source-of-truth lives in upstream/manifest.json; these are derived
 # compatibility views or deterministic numerical products.
 manifests/libxc/7.0.0/manifest.json linguist-generated=true

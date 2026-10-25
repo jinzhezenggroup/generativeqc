@@ -5,11 +5,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
-from generativeqc_compiler.dft.xc_point_cuda import (
-    emit_device_point_value,
-    emit_point_traversal,
-)
 from generativeqc_compiler.xc.automatic_cuda import (
     emit_automatic_cuda_descriptor,
     emit_automatic_cuda_provider,
@@ -25,36 +20,16 @@ from tools import generate_libxc_semilocal_cuda_registry as cuda_registry
     ("name", "feature_terms"),
     (("LDA_C_VWN_4", 1), ("GGA_X_APBE", 4), ("MGGA_X_LTA", 5)),
 )
-def test_automatic_and_curated_consumers_share_one_physical_traversal(
+def test_automatic_provider_preserves_mathematics_and_physical_feature_contract(
     name: str, feature_terms: int
 ) -> None:
     provider = emit_automatic_cuda_provider(name)
-    curated = emit_native_xc_contraction_kernels()
     assert provider.point == emit_automatic_point(name, backend="cuda")
     assert (
         provider.point.expression_identity
         == emit_automatic_point(name).expression_identity
     )
     assert provider.feature_terms == feature_terms
-    assert provider.source.count(emit_device_point_value()) == 1
-    assert curated.count(emit_device_point_value()) == 1
-    assert provider.source.count(emit_point_traversal()) == 1
-    assert curated.count(emit_point_traversal()) == 1
-    assert (
-        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator>"
-        in curated
-    )
-    assert (
-        "evaluate_point_tiles<feature_terms, false, batched, PointEvaluator>"
-        in provider.source
-    )
-    assert "evaluate_semilocal_point(" not in provider.source
-    assert (
-        "response_point("
-        not in provider.source.split("struct " + provider.provider_name, 1)[1].split(
-            "};", 1
-        )[0]
-    )
     assert emit_automatic_cuda_provider(name) == provider
 
 
@@ -70,13 +45,13 @@ def test_provider_source_identity_covers_layout_and_emitted_contract() -> None:
         replace(provider, feature_terms=1)
 
 
-def test_emission_does_not_grant_public_cuda_admission() -> None:
+def test_semantic_cuda_resolution_does_not_grant_optional_mechanisms() -> None:
     from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
-    from generativeqc_compiler.method.spec import UnsupportedMethod
 
-    emit_automatic_cuda_provider("GGA_X_APBE")
-    with pytest.raises(UnsupportedMethod, match="supports CPU only"):
-        resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    provider = emit_automatic_cuda_provider("GGA_X_APBE")
+    resolved = resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    assert resolved.backend == "cuda"
+    assert "&launch, &launch_batch, {}" in emit_automatic_cuda_descriptor(provider)
 
 
 def test_cpu_and_cuda_share_structural_registry_without_a_positive_whitelist() -> None:

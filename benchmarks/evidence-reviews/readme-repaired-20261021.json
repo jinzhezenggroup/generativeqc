@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "readme-repaired-20261021",
-  "owner": "README common-accuracy complete E/F comparison",
-  "reason": "Superseded complete endpoint data are retained through the byte-verified published Git snapshot. Original numerical references and timing/work tables remain in the checkout; no accuracy failure or historical observation is relabelled.",
-  "review_document": "benchmarks/results/readme-repaired-20261021/README.md",
-  "files": []
-}

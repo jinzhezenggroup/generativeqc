@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <string_view>
 
 #include "dft/global_hybrid_fock.hpp"
 #include "dft/semilocal_family.hpp"
@@ -11,6 +12,7 @@
 #include "scf/reference/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #endif
 
@@ -32,6 +34,30 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
+  // Detached evidence cannot reopen a product rejected by live preparation.
+  // This checks the determinant's occupations, not a display name or a zeroed
+  // potential: empty-spin raw-work coefficients remain available to XC users.
+  if (automatic_libxc && fock.backend == scf::FockBackend::Cuda && model.spins == 2 &&
+      std::any_of(identity.determinant.occupied.begin(), identity.determinant.occupied.end(),
+                  [](auto occupied) { return occupied == 0; }))
+    return false;
+  bool automatic_backend_valid = fock.backend == scf::FockBackend::Cpu;
+#if GENERATIVEQC_HAS_CUDA
+  if (automatic_libxc && fock.backend == scf::FockBackend::Cuda) {
+    const auto* program = generated::automatic_cuda_point_entry(model.functional);
+    const auto& cpu = *automatic_entry.program;
+    const auto* restricted = generated::automatic_restricted_libxc_program(cpu.identifier);
+    // A CUDA ordinal alone cannot authorize a detached automatic state. Bind
+    // the installed provider to the same canonical science as CPU execution.
+    automatic_backend_valid =
+        program && program->functional_code == model.functional &&
+        program->matches_cpu_science(cpu.expression_identity,
+                                     restricted ? restricted->expression_identity : "",
+                                     cpu.ingredient_mask, cpu.domain_version) &&
+        (!restricted || (restricted->ingredient_mask == cpu.ingredient_mask &&
+                         restricted->domain_version == cpu.domain_version));
+  }
+#endif
   const auto* family_metadata = split_hybrid || automatic_libxc
                                     ? nullptr
                                     : semilocal_family_metadata_from_code(model.functional);
@@ -67,9 +93,15 @@ bool valid_model(const KsFinalStateIdentity& identity) {
         model.semilocal_correlation_scale != 1.0)
       return false;
     const auto& correction = *model.range_correction;
-    return fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+    // The ordinary RSH owner can lend a matched DF J/K primary plus a
+    // separately prepared exact LR correction. Authenticate that same pair
+    // here; requiring Direct J incorrectly rejects its converged snapshot.
+    // This does not admit mixed primary J/K approximations or fitted LR.
+    const auto primary = fock.spec.coulomb.approximation;
+    return (primary == scf::FockApproximation::Exact ||
+            primary == scf::FockApproximation::DensityFitted) &&
            (!fock.spec.exchange.present ||
-            (fock.spec.exchange.approximation == scf::FockApproximation::Exact &&
+            (fock.spec.exchange.approximation == primary &&
              fock.spec.exchange.op == scf::FockOperator::FullRange)) &&
            correction.backend == scf::FockBackend::Cuda && correction.spec.spin == fock.spec.spin &&
            correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
@@ -97,9 +129,9 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       !std::isfinite(model.semilocal_exchange_scale) || model.semilocal_exchange_scale < 0 ||
       !std::isfinite(model.semilocal_correlation_scale) || model.semilocal_correlation_scale < 0 ||
       (automatic_libxc &&
-       (fock.backend != scf::FockBackend::Cpu || fock.spec.exchange.present ||
-        model.range_correction || model.nonlocal_correlation ||
-        model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)) ||
+       (!automatic_backend_valid || fock.spec.exchange.present || model.range_correction ||
+        model.nonlocal_correlation || model.semilocal_exchange_scale != 1.0 ||
+        model.semilocal_correlation_scale != 1.0)) ||
       (fock.spec.exchange.present &&
        (fock.spec.exchange.op != scf::FockOperator::FullRange ||
         (fock.spec.exchange.approximation != scf::FockApproximation::Exact &&
@@ -247,12 +279,32 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::solver::FinalStateOperations* operations) {
   output = {};
   detail.clear();
-  if (physical.identity != current || candidate.identity != current || !physical.physical ||
-      physical.density.size() != current.model.spins ||
-      physical.fock.size() != current.model.spins ||
-      candidate.spins.size() != current.model.spins ||
-      candidate.fock_density_generation != current.determinant.factor.density_generation) {
-    detail = "invalid KS final-state identity, model, physical state or spin shape";
+  if (physical.identity != current) {
+    detail = "invalid KS final state: physical identity mismatch";
+    return false;
+  }
+  if (candidate.identity != current) {
+    detail = "invalid KS final state: orbital identity mismatch";
+    return false;
+  }
+  if (!physical.physical) {
+    detail = "invalid KS final state: physical state not established";
+    return false;
+  }
+  if (physical.density.size() != current.model.spins) {
+    detail = "invalid KS final state: density spin shape mismatch";
+    return false;
+  }
+  if (physical.fock.size() != current.model.spins) {
+    detail = "invalid KS final state: Fock spin shape mismatch";
+    return false;
+  }
+  if (candidate.spins.size() != current.model.spins) {
+    detail = "invalid KS final state: orbital spin shape mismatch";
+    return false;
+  }
+  if (candidate.fock_density_generation != current.determinant.factor.density_generation) {
+    detail = "invalid KS final state: Fock-density generation mismatch";
     return false;
   }
 

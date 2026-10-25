@@ -84,9 +84,19 @@ not a clipped density or a successful Fast result after strict recovery.
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
 entries from the common structural automatic registry. It is off by default;
-the disabled registry returns no automatic entries. Enabling this internal
-build option **does not admit public automatic CUDA KS or force methods**.
-Unsupported products continue to fail explicitly rather than stage CPU science.
+the disabled registry returns no automatic entries. An enabled library can
+prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
+ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
+execution with J only. Missing static providers fail with a build-option
+diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
+Analytic automatic CUDA forces and other unqualified products remain rejected.
+Automatic CUDA UKS additionally requires nonzero occupations in both spin
+channels. Empty-spin requests fail at preparation with an explicit physical-birth
+derivative diagnostic; native construction and detached final-state validation
+enforce the same boundary. Libxc raw work-domain coefficients at an empty spin
+are not the derivative of its original-density-weighted, clipped energy under a
+spin birth. Fixed-density point/XC execution retains that raw-work contract.
+This admission restriction does not change the CPU or curated CUDA KS domains.
 
 For bounded packages, set `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` to a
 semicolon-separated list of exact structural registration names, for example
@@ -112,6 +122,16 @@ turning it into an installed artifact/cache key or a resource admission claim.
 Automatic entries reuse the existing AO, density-feature and potential kernels
 with strict FP64 and the bounded one-tile fallback. They do not inherit curated
 mixed precision, response, local-AO selection, batching or graph qualification.
+The KS owner also keeps automatic programs on ordinary single-iteration streams
+rather than admitting curated device chunks, graph replay or incremental J.
+CPU/CUDA resolve the same MethodIR and bind the same canonical expression and
+work-domain identity. The code-scoped KS resource inventory v2 obtains the
+actual static ingredient/feature widths, including tau; it never substitutes a
+same-family LDA/PBE shape or claims automatic force storage/capability.
+Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
+with four additional history slots accounted by both native and public resource
+owners. Detached snapshots retain the shared physical/canonical validation
+gates rather than treating an SCF convergence flag as sufficient authorization.
 
 The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
 structurally registered automatic provider (`0` restores the old path).
@@ -129,6 +149,17 @@ binary and run `tests/python/test_libxc_automatic_cuda_xc.py`. The independent
 PySCF 2.14.0 / Libxc 7.0.0 gate checks both physical spin layouts, partial tiles,
 fixed-density XC energy/potential, replay, density directions and changed
 geometry. This is not an SCF, analytic-force or installed-bundle qualification.
+
+For the public ordinary-stream SCF gate, build the native library with the
+option enabled, set `GENERATIVEQC_LIBRARY` to that library and
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_TEST=1` inside a finite Slurm allocation, and run
+`tests/python/test_libxc_automatic_cuda_ks.py`. It compares cold, warm
+recomputation and changed-geometry RKS/UKS with pinned PySCF/Libxc on exported
+exact grids using explicit Hcore seeds and an asymmetric H4/STO-3G fixture,
+checks physical density/Fock and energy directions, and records
+complete endpoint timings and J-only semantic work. Optional
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR` retains source/binary-bound receipts.
+These are qualification data, not an installed bundle or a positive user list.
 
 ### Curated execution
 
@@ -202,6 +233,98 @@ retain 128 threads. The point tile and arena remain unchanged. Native code binds
 its buffers to the retained launcher; graph replay retains that entry.
 Unsupported functional/response pairs fail during preparation. See the
 [consumer specialization decision](../../.agents/notes/implemented/performance/2026-09-23-xc-point-consumers.md).
+
+The PBE physical and admitted signed-response point entries also have an
+experimental family-specialized lowering of the same canonical point algebra.
+`GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION=1` selects it when an owner is
+prepared; `0` or an unset value keeps the generic entry. Other families keep
+the generic entry. Invalid switch values fail when preparing a PBE owner. Batched PBE
+points inherit the prepared physical entry's identity, including after a
+changed-geometry owner is prepared. This switch does not change point tiles,
+batch admission, AO maps, precision, or the independent exact-exchange J/K
+provider. It is not a performance default pending source-matched device and
+complete-endpoint qualification.
+
+For RKS physical evaluations, the default-on
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN` policy already binds the admitted functional.
+Both PBE family-switch settings then share that method-bound equal-spin
+consumer. Disabling equal-spin exposes the ordinary generic versus specialized
+PBE comparison; UKS and supported response keep their separate family policy.
+No duplicate equal-spin kernel is introduced by the PBE switch.
+
+The compiled host policy contract applies the independent 97-point SCF gate to
+ordinary consumers. The shared subnormal-ratio repair also applies the wider
+87-point independent gate to ordinary and equal-spin physical consumers and the
+bound PBE0 entry at the original strict tolerance. Every emitted RKS/UKS,
+generic/specialized and serial/batched route must satisfy that oracle; policy
+parity alone does not establish independent accuracy. Original failing receipts
+retain their old source identity. Signed-response tail qualification separately
+uses derivatives of the original energy at 450/550 decimal digits.
+The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
+
+The point-family campaign uses schema v3 and fixes `--equal-spin` identically
+for both RKS arms. Its default `0` is an explicit opt-out diagnostic, while `1`
+records that the physical family difference is superseded. Both retain the same
+tile/map/reduction/workspace/precision contracts and full E+F evidence gates.
+The v1/v2 readers preserve historical evidence. Requested policy fields do not
+substitute for actual GPU consumer identity or production endpoint qualification.
+Current promotion requires explicit v3 producer/policy provenance; relabeling
+or stripping fields cannot turn a shared equal-spin or unknown legacy consumer
+into promotion evidence.
+
+The producer requests a fixed 256-point force tile through the selected Python
+force composition entry before active-AO policy resolution and execution. It
+requires an integer `grid_tile_points_requested=256` and an `explicit` schedule
+in each actual force receipt. A prepared native-force route that bypasses that
+entry is unsupported by this campaign unless it supplies the requested receipt;
+the producer cannot reuse a previous call's work. Normal public force calls
+retain their budget-selected policy. A fixed request does not establish phased
+route support: the independent consumer still requires the original absolute
+phase/work counts and complete endpoint qualification.
+
+The producer retains constructor, owner preparation and initial E+F timestamp
+segments, their own-work sum, observed span and excluded interleaving/provenance
+gaps. Preparation/setup durations retain their earlier meanings. Moved setup
+measures coordinate rebuilding inside execute without charging the initial
+constructor again. These segments do not provide continuous cold wallclock
+qualification; the consumer independently checks their types and totals.
+
+`benchmarks/pbe0_xc_cold_pairs.py` separately measures fresh-process cold E+F.
+Each observation starts a new interpreter, CUDA context, Calculator, owner and
+density. Primary wallclock runs from process launch through successful process
+completion, including provenance collection and cleanup. Synchronized E/F
+delivery is retained as a separate interval and cannot replace full cold time.
+The explicit `--sdk-source`, loaded library, complete native identity, worker,
+consumer, basis and independent reference are frozen for the campaign. The
+collector may be newer than the SDK; its independent consumer is loaded from
+the collector tree, while production modules come from the frozen SDK.
+Output must be a new file; existing files and input aliases are rejected before
+collection. Collector and consumer refuse Python's `-O`/`-OO` modes so required
+validation cannot be optimized away. Journal errors preserve the primary failure.
+CLI admission protects the historical results trees of both collector and SDK
+before allocation checks, provenance or scientific imports.
+Deploy the collector with its sibling `_retention.py`; its hash is frozen with
+the independent tools, without editing the SDK checkout.
+
+The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
+`1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
+full FP64 single-stage PBE0 histories, observed J/K work and equal semantic work
+between arms. Actual precision, operator timeline and cold restart provenance
+are checked. A newly generated native MINAO/Hückel density is a supported cold
+guess; `initial_density_used` alone does not identify warm replay. Retained,
+retried or provisional solves are rejected. Unknown J/K work is incomplete
+evidence. Five complete pairs per
+geometry are required; `--feasibility --repeats 1` only audits readiness and
+cannot establish cold profitability. Both geometries start fresh owners; a
+fresh solve at moved coordinates is distinct from the retained-owner moved
+campaign. Failed children retain negative receipts and are reaped. Profiling
+runs separately from clean timing; this tool does not collect dynamic traffic.
+
+`verify_point_family_pairs` audits independent E/F vectors and fixed work even
+when the measured specialization has no significant endpoint improvement. Its
+successful evidence audit does not qualify a performance default. Promotion
+requires the additional `require_improvement=True` gate for both warm and moved
+replays, along with the remaining source-matched device and cold endpoint gates.
 
 ### Bounded independent point submissions
 
@@ -421,6 +544,80 @@ terms before optional values are retired. An authenticated unchanged fitted
 primary retains its current J/K and final occupied projection during a range-only
 rebase. This preserves the physical replay gates and counts the operators
 actually executed.
+
+### Full-range host ERI backing
+
+Admitted cold strict global-hybrid KS sources (including PBE0/B3LYP) use the
+same bounded pageable tier for full-range ERIs. `GENERATIVEQC_KS_HOST_MAX_BYTES`,
+`GENERATIVEQC_KS_HOST_TILE_BYTES`, and `GENERATIVEQC_KS_HOST_BUCKET_MASK` are the
+full-range counterparts of the LR controls below. Unset capacity selects at most
+32 GiB and one quarter of available machine/cgroup headroom; explicit zero
+retains the previous GPU/Direct policy. These controls do not enable RHF graphs,
+mixed-storage sources or DF primary integrals.
+
+Full GPU residency keeps priority. With host backing enabled, unmasked GPU
+selection fits whole buckets to the existing device ceiling before admitting
+omitted buckets in RAM. Explicit `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` stays
+authoritative. Both spin channels share immutable ERIs while J consumes total
+density and K keeps separate spin densities. Geometry/precision changes retire
+the phase source; force kernels still evaluate derivative integrals.
+
+Full-range diagnostics use `cuda_full_eri_action` and `full_direct_recompute/`,
+`full_gpu_replay/`, `full_host_replay/` bucket regions with the same work and
+transfer counters as LR. Profiled wall times remain separate from complete
+endpoint timing. The [consumer decision](../../.agents/notes/implemented/performance/2026-10-25-full-range-host-eri.md)
+records candidates that need separate ownership/scheduling qualification.
+
+### Experimental pageable LR ERI backing
+
+`GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES` bounds the additional pageable FP64
+cache for admitted cold strict long-range sources. Unset selects the smaller of
+32 GiB and one quarter of available host memory, respecting Linux cgroup/job
+limits and usage at every ancestor. Unknown capacity disables automatic host
+storage. Set `0` to disable it or a byte count for an explicit ceiling. The
+ceiling includes pageable values, two pinned staging tiles and host descriptors;
+`GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES` caps each tile (default 256 MiB, maximum
+512 MiB, divisible by eight). Tiles shrink to fit remaining device capacity
+without evicting GPU buckets; diagnostic traces report the actual staging bytes.
+Two equally sized device tiles are also charged to the complete consumer budget.
+The host tier requires an admitted GPU source; a refused source retains Direct.
+
+`GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK` optionally restricts eligible omitted
+buckets (default all 28). Whole buckets fit in descending angular order. This
+is a cost proxy, not a measured transfer-versus-recompute model. Unselected or
+unaffordable buckets retain exact Direct. Allocation refusal discards only the
+host tier; driver and numerical failures propagate. Values retain the owner's
+geometry, basis, radial operator, omega, screening and precision identity.
+Changing any host control retires the lease before warm reuse. Mixed sources,
+CUDA graph capture, persistent storage and CPU integral production are excluded.
+
+Eager replay copies sequential pageable tiles to pinned storage, then uses a
+separate stream for H2D. Events protect both pinned and device buffer reuse;
+contraction and FP64 compensation remain on the consumer stream. Destruction
+drains both streams before releasing metadata. Setup builds and finite-audits
+only the selected missing values through the same canonical CUDA recurrence.
+
+With `GENERATIVEQC_DF_PROGRESS_TRACE`, preparation reports host value/capacity
+and D2H bytes. Each `cuda_eri_source_action` reports GPU/host coverage, H2D
+bytes and Direct values at the preparation threshold. These are submitted work
+observations; a successful final census audit establishes completion. A tighter
+consumer threshold can reduce Direct evaluations. Enqueue journal durations
+include host scheduling and are **not** GPU integral timings. Use a separate
+Nsight Systems run to measure recurrence kernels, transfers and overlap; keep
+profiled wall times separate from unprofiled complete E+F observations.
+`GENERATIVEQC_DF_TRACE` also records each `cuda_lr_eri_action` with CUDA-event
+regions `lr_direct_recompute/<bucket>`, `lr_gpu_replay/<bucket>` and
+`lr_host_replay/<bucket>`, plus actual
+canonical visits and recurrence evaluations. The host region includes tile
+staging/waits and contraction; Nsight separates DMA from compute. Both trace
+environment variables must be unset for unprofiled endpoint timing.
+
+`benchmarks/host_eri_cache.py` wraps the ordinary endpoint driver for fresh-process
+Direct/GPU/GPU+RAM comparisons, including the 96/108-atom fixtures. Run all tiers
+from one binary on the same Slurm GPU, interleave repeats, retain source/patch
+and binary hashes, compiler-cache receipts, input identity, raw forces, SCF/Fock
+counts and journals. Independent observable gates and unchanged-work endpoint
+measurements are required before claiming a benefit or changing defaults.
 
 ## Prepared ragged execution
 

@@ -15,7 +15,7 @@
     "python/generativeqc/_stationary_composite_cuda.py"
   ],
   "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
-  "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
+  "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Ordinary DF already uses the independently qualified native AO-jet bitmask producer at its own 2**35 dense-work crossover. Broaden to composite execution or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
   "evidence": [
     "issue:#1853",
     "issue:#1598",
@@ -23,6 +23,7 @@
     "pr:#1934",
     "benchmarks:benchmarks/results/pbe0-public-force-policy-20261005/README.md",
     "benchmarks:benchmarks/results/pbe0-force-followups-20261005/README.md",
-    "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
+    "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md",
+    "note:.agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md"
   ]
 }

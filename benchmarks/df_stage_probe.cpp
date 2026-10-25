@@ -154,6 +154,12 @@ int main(int argc, char** argv) {
     check(status, detail);
     std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
         raw, destroy_cuda_density_fitting_jk_plan);
+    // Explicit resource allowance for this standalone probe; production HF
+    // passes its resolved value-side host budget before any consuming solve.
+    if (const auto* host_budget = std::getenv("GENERATIVEQC_TEST_DF_HOST_BUDGET"))
+      check(prepare_cuda_density_fitting_host_panels(plan.get(), std::stoull(host_budget),
+                                                     diagnostics, detail),
+            detail);
     const double setup_seconds = elapsed(start);
     const auto identity = cuda_density_fitting_factor_identity(plan.get(), 0, 1, 1);
     const OccupiedDensityFactor factor(identity, DensityFactorSpin::Restricted, nbf, coefficients,
@@ -185,6 +191,7 @@ int main(int argc, char** argv) {
               << ",\"auxiliary_tile\":" << (aux_tile ? aux_tile : naux)
               << ",\"value_plan_resident_bytes\":" << diagnostics[0].device_resident_bytes
               << ",\"value_plan_peak_bytes\":" << diagnostics[0].peak_device_bytes
+              << ",\"host_raw_factor_bytes\":" << diagnostics[0].host_raw_factor_bytes
               << ",\"streamed\":" << (diagnostics[0].streamed ? "true" : "false") << "}\n";
     const std::string mode = argv[6];
     std::vector<std::string> operations;

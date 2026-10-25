@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "issue409-packed-values",
-  "owner": "issue409-packed-values",
-  "reason": "Reviewed retained large evidence for Exact packed DF values: scoped Phase-A qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/issue409-packed-values/README.md",
-  "files": []
-}

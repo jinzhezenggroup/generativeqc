@@ -50,6 +50,52 @@ fixtures and normal offline tests must not depend on that history fetch.
 This reduces checkout and routine CI payload, not the size of an existing full
 historical Git clone. It does not authorize history rewriting or external uploads.
 
+### Provenance granularity and JSON representation
+
+Retain a measured full commit SHA, dirty-state reconstruction patch when needed,
+runner identity, compiler/library identities, package versions and relevant build
+options once per source/environment. Timing rows refer to that shared identity.
+Do not copy a whole Git tree census, installed SDK file list, package-file census
+or compiler command stream into every run. Keep observed verification counts,
+failures and original stream hashes in the compact record. Already-published full
+censuses can use verified Git recovery; new raw streams stay in ignored artifacts.
+Hashes alone do not recover dirty source or independent numerical reference data.
+
+Choose storage after choosing the information to retain:
+
+| Content | Representation |
+| --- | --- |
+| Small decisions, protocols, versions and identities | Readable JSON or Markdown |
+| Paired timing samples and bounded structured records | Shared JSON records; compress when material |
+| Dense homogeneous numerical arrays | Typed NPY/NPZ with shape/dtype, provenance and numeric checks; never object arrays/pickle |
+| Source/environment censuses, compiler/profiler/scheduler streams | Compact counts/diagnostics/hash in Git; full stream in ignored artifacts or verified published history |
+
+JSON whitespace and repeated field names compress well. High-entropy per-file
+hashes do not. Changing every `.json.xz` file to another format does not address
+unnecessary provenance retention. Avoid JSON embedded as strings inside JSON
+when a structured value or shared record is sufficient. Never round values, turn
+integers into floats, discard negative runs, or change sample ordering to reduce
+storage. A format change needs consumer updates and new storage hashes; it is not
+a new scientific qualification.
+
+Audit the actual indexed corpus before deciding on a format change:
+
+```bash
+python tools/evidence.py audit-json --revision HEAD \
+  --output .artifacts/json-storage-audit.json
+```
+
+The read-only audit reports stored/expanded/minified bytes and equal-level gzip/XZ
+estimates separately. Minification preserves number and string tokens. Failed
+decodes are reported, not silently counted as savings. Estimates exclude new
+metadata and do not authorize automatic migration of checksum-bound consumers.
+
+For completed campaigns without live file-path consumers, consolidated historical
+measurements use the [benchmark inspection tool](../../benchmarks/README.md).
+Keep all original numerical records and a verified recovery inventory for the
+old paths/scripts. Active numerical consumers must retain offline inputs and
+acceptance checks; do not make normal CI fetch history just to pass a storage test.
+
 ## Shared storage for necessary publication records
 
 Retained datasets that still have numerical consumers use the shared plain/gzip

@@ -23,7 +23,8 @@
 
 namespace generativeqc::tensor {
 struct PanelProductDiagnostic;
-}
+class CudaStructuredProductBinding;
+}  // namespace generativeqc::tensor
 
 namespace generativeqc::dft {
 
@@ -221,7 +222,9 @@ enum class CudaKsSeedOrigin { External, NativeColdGuess };
 class CudaKsPlan {
  public:
   /** Curated and generated codes share the same owner; keep range-exchange and
-   * nonlocal bindings when adapting an existing curated functional to its code. */
+   * nonlocal bindings when adapting an existing curated functional to its code.
+   * Automatic AOT programs require strict-FP64 device-fused all-electron pure
+   * semilocal execution. They do not inherit curated chunk/graph qualifications. */
   CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis, const MolecularGrid& grid,
              const scf::ScfOptions& options, std::uint32_t functional_code,
              std::size_t tile_points = 256,
@@ -368,6 +371,9 @@ class CudaKsPlan {
   /** Optional prepared-operation provenance; null means that the owner did
    * not admit a separate preparation budget. No selection happens here. */
   const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept;
+  /** Complete prepared reconstruction/basis offers, including negative/resource
+   * evidence. This view never performs discovery or changes the selected route. */
+  const tensor::CudaStructuredProductBinding* structured_provider_diagnostic() const noexcept;
   CudaKsTransfers transfers() const noexcept;
 
  private:

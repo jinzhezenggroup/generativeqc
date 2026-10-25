@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdlib>
+#include <stdexcept>
 #include <string_view>
 
+#include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/reference/linalg.hpp"
 #include "tensor/cpu_linalg.hpp"
 
@@ -14,7 +16,8 @@ namespace generativeqc::scf::solver {
  * the selector once per validation; unavailable providers keep the incumbent. */
 class ValidationProducts {
  public:
-  ValidationProducts() {
+  explicit ValidationProducts(const initial_guess::MatrixProductOperation& operation = {})
+      : operation_(operation) {
 #if defined(GENERATIVEQC_HAS_OPENBLAS) && GENERATIVEQC_HAS_OPENBLAS
     const auto* selection = std::getenv("GENERATIVEQC_SCF_VALIDATION_GEMM");
     provider_ = selection && std::string_view(selection) == "1" &&
@@ -28,6 +31,12 @@ class ValidationProducts {
   reference::Matrix operator()(const reference::Matrix& a, const reference::Matrix& b,
                                std::size_t n, bool transpose_a = false,
                                bool transpose_b = false) const {
+    if (operation_) {
+      auto result = operation_(a, b, n, transpose_a, transpose_b);
+      if (result.size() != n * n)
+        throw std::runtime_error("borrowed validation product returned an invalid shape");
+      return result;
+    }
 #if defined(GENERATIVEQC_HAS_OPENBLAS) && GENERATIVEQC_HAS_OPENBLAS
     if (provider_) {
       reference::Matrix result(n * n);
@@ -46,6 +55,7 @@ class ValidationProducts {
   }
 
  private:
+  initial_guess::MatrixProductOperation operation_;
 #if defined(GENERATIVEQC_HAS_OPENBLAS) && GENERATIVEQC_HAS_OPENBLAS
   bool provider_{};
 #endif

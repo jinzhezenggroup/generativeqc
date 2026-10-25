@@ -1,0 +1,107 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The scoped capacity regression is repaired with independent numerical and semantic-work gates. All observations and failed attempts remain retained; no universal timing ranking is asserted.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7362,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "7490a68bd217f248e0a1091b835e1a82e2875ae198dcb73dcc109dde88a360c2"
+    },
+    {
+      "bytes": 61948,
+      "path": "candidate.json.xz",
+      "role": "samples",
+      "sha256": "b5001cc304c80027bc15bd73866c13efcc6fb1b768cdcbd9b115614347ad8b54"
+    },
+    {
+      "bytes": 3628,
+      "path": "comparisons.json.xz",
+      "role": "summary",
+      "sha256": "21fb50926fb170b82b4cf43eb4e47b1c64b1a78c8eb3469ea9d1d517d233895d"
+    },
+    {
+      "bytes": 62164,
+      "path": "control.json.xz",
+      "role": "samples",
+      "sha256": "fe8808e9f3e9998cd8717295dd3e42f20a88acaf690434dbec956f18a607184c"
+    },
+    {
+      "bytes": 23152,
+      "path": "hf-trials.json.xz",
+      "role": "samples",
+      "sha256": "ede0a4c7a8f6e35e0cfbf8e9972dd197c6c9fc0c2c5453225b8927beca332dcd"
+    },
+    {
+      "bytes": 16332,
+      "path": "jobs.json.xz",
+      "role": "reproduction",
+      "sha256": "8c308ae3be6ff5dc3f18c1b54ef4f90c43ad02d17bb77ab6728e913862718d29"
+    },
+    {
+      "bytes": 10036,
+      "path": "moved.json.xz",
+      "role": "samples",
+      "sha256": "8c3739ac2288751f1c48275fb3296141d68b06c524e3f866bc277de1c338742a"
+    },
+    {
+      "bytes": 3156,
+      "path": "profiles.json.xz",
+      "role": "summary",
+      "sha256": "921d06185d114e1070333ace60a49a006e58c312ad5f29d9b654e883dcf1967a"
+    },
+    {
+      "bytes": 5200,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "c6bc142eb653e145868384940923eb678c6876e6e7dca71dd56cbf7d4ca814ef"
+    },
+    {
+      "bytes": 6800,
+      "path": "regressions.json.xz",
+      "role": "summary",
+      "sha256": "efb047c49a7533d4e827f9d7fb0767c3ed49f986125698361f1d80cff7e1878c"
+    },
+    {
+      "bytes": 6082,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "13bd75ffb44a64cc82b1380ef9612926cd653da820ac166f1a103a6bd2e7b403"
+    },
+    {
+      "bytes": 15716,
+      "path": "same-binary.json.xz",
+      "role": "samples",
+      "sha256": "e647a97bf6cb153571c1c65384a8df272bc2bc9c13a91ebfb47076d9baf577ca"
+    },
+    {
+      "bytes": 2305,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "7cad2c29e2c77d2c5cd92c4db1dfc8a9cc5d3ef48b6880b442f83a7b2bed9118"
+    },
+    {
+      "bytes": 7284,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "fd3d26e6b85877cfe324ac8a7b6316d993c1958b4c96cf86b5148dbaa32114f6"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/df-response-capacity-20261025/reproduce.py",
+      "--output",
+      ".artifacts/df-response-capacity-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "0c26bbf11af084dabceb7b825bbfdd0f624ec03a"
+  }
+}

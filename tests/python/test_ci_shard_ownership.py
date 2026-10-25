@@ -1,5 +1,6 @@
 """Exercise the real CI shell selection without building or running workloads."""
 
+import ast
 import json
 import os
 import shlex
@@ -25,7 +26,11 @@ SHARDS = (
 
 
 def _selection(
-    event: str, shard: str, *, root: Path = ROOT
+    event: str,
+    shard: str,
+    *,
+    root: Path = ROOT,
+    environment: dict[str, str] | None = None,
 ) -> tuple[str, list[str], list[str]]:
     bash = shutil.which("bash")
     if bash is None:
@@ -43,11 +48,69 @@ def _selection(
             **os.environ,
             "GITHUB_EVENT_NAME": event,
             "GENERATIVEQC_CI_SHARD": shard,
+            **(environment or {}),
         },
     )
     values = result.stdout.decode().split("\0")[:-1]
     boundary = values.index("--extra--")
     return values[0], values[1:boundary], values[boundary + 1 :]
+
+
+def test_core_shard_selection_ignores_host_locale(tmp_path: Path) -> None:
+    """Exercise non-C collation even on CI hosts lacking installed locales."""
+    system_sort = shutil.which("sort")
+    if system_sort is None:
+        pytest.skip("CI selection uses sort")
+    probe = tmp_path / "sort"
+    probe.write_text(
+        "#!/bin/sh\n"
+        'if [ "$LC_ALL" != C ]; then\n'
+        f'  exec {shlex.quote(system_sort)} -r "$@"\n'
+        "fi\n"
+        f'exec {shlex.quote(system_sort)} "$@"\n',
+        encoding="utf-8",
+    )
+    probe.chmod(0o755)
+    shards = ("core-a", "core-b", "core-c")
+    reference = {
+        shard: _selection(
+            "pull_request", shard, environment={"LC_ALL": "C", "LANG": "C"}
+        )
+        for shard in shards
+    }
+    non_c = {
+        shard: _selection(
+            "pull_request",
+            shard,
+            environment={
+                "LC_ALL": "en_US.UTF-8",
+                "LANG": "en_US.UTF-8",
+                "PATH": f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        for shard in shards
+    }
+    assert non_c == reference
+
+
+def test_tests_never_replace_process_environ_mapping() -> None:
+    for name in ("test_issue206_df_matrix.py", "test_bulk_aot_cuda_closure.py"):
+        path = ROOT / "tests/python" / name
+        module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        offenders = [
+            node.lineno
+            for node in ast.walk(module)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, (ast.Name, ast.Attribute))
+            and (
+                getattr(node.func, "id", None) == "setattr"
+                or getattr(node.func, "attr", None) == "setattr"
+            )
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "environ"
+        ]
+        assert not offenders, f"{name} replaces os.environ at lines {offenders}"
 
 
 @pytest.mark.parametrize(
@@ -346,13 +409,20 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
+            "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
-        "core-a": ("test_cc_triples_tiles.py", "test_uccsd_t_lambda.py"),
+        "core-a": (
+            "test_cc_triples_tiles.py",
+            "test_uccsd_t_lambda.py",
+            "test_df_lambda_core_reuse.py",
+        ),
         "core-b": (
+            "test_correlation_convergence.py",
+            "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
             "test_df_triples_distinct_moments.py",
@@ -361,7 +431,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_occupied_triples.py",
         ),
         "core-c": (
-            "test_df_lambda_core_reuse.py",
             "test_direct_exchange_queue.py",
             "test_cc_canonical_denominators.py",
             "test_direct_order5_sources.py",
@@ -403,7 +472,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
-        "tests/python/test_bulk_aot_clangxx_closure.py": "core-a",
+        "tests/python/test_bulk_aot_clangxx_closure.py": "runtime-heavy",
         "tests/python/test_range_separated_df.py": "core-c",
         "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
@@ -412,7 +481,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
-        "tests/python/test_df_lambda_core_reuse.py": "core-c",
+        "tests/python/test_df_lambda_core_reuse.py": "core-a",
+        "tests/python/test_correlation_convergence.py": "core-b",
+        "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
     }
@@ -427,6 +498,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_ccsdt_cbs_zzz.py",
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
+            "test_correlation_convergence_next.py",
+            "test_cpu_semilocal_force_contract_next.py",
+            "test_df_lambda_core_reuse_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
             "test_direct_exchange_queue_next.py",

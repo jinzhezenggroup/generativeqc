@@ -242,6 +242,7 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
         "unbatched",
         "batch-budgeted",
         "projection-budgeted",
+        "tiled",
     ):
         outputs[mode], receipts[mode] = _native(
             fixture, tmp_path, tile=tile, cache_mode=mode
@@ -271,6 +272,10 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
     )
     for field in ("projection_launches", "reduction_launches"):
         assert receipts["resident"][field] < receipts["unbatched"][field]
+    assert receipts["tiled"]["streaming_tiles"] > 1
+    assert receipts["tiled"]["source_groups"] == 12
+    for actual, expected in zip(outputs["tiled"], outputs["resident"], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
 
 
 @pytest.mark.parametrize("spins", (1, 2))

@@ -20,10 +20,13 @@
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -679,6 +682,8 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
             detail);
   }
 
+  require(plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "successful CUDA KS replay did not publish its observed value work");
   ks_cuda_fail_next_runtime_for_test_v1();
   bool failed_begin = false;
   try {
@@ -689,11 +694,17 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
   require(failed_begin && plan.failed() && plan.has_warm_start() &&
               plan.warm_density() == frozen_density,
           "failed begin damaged the independent last-good warm representation");
+  require(!plan.result(false).dft_diagnostic.coulomb_exchange_work.complete,
+          "failed CUDA KS begin retained a previous solve's value census");
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "failed begin kept a final-state token eligible");
   const auto recovered = plan.run();
   require(recovered.converged && std::abs(recovered.energy - reference.energy) < 1e-10,
           "failed begin prevented exact warm-seed recovery");
+  require(recovered.dft_diagnostic.coulomb_exchange_work.complete &&
+              recovered.dft_diagnostic.coulomb_exchange_work.coulomb_applications > 0 &&
+              recovered.dft_diagnostic.coulomb_exchange_work.exchange_applications > 0,
+          "explicit recovery did not own a fresh CUDA value-provider census");
 
   // An explicit non-idempotent density is not identified by the old frame,
   // even on this same owner. Frozen cache updates must leave the old seed live.
@@ -1482,7 +1493,47 @@ void compare_rsh_chunk_history() {
           "could not restore CUDA RSH chunk qualification");
 }
 
+void automatic_empty_spin_admission() {
+  // Bypassing the public method facade must not bypass its scientific domain.
+  const auto entry = dft::generated::automatic_libxc_entry("MGGA_C_TPSS");
+  require(entry && dft::generated::automatic_cuda_point_entry(entry.functional_code),
+          "automatic empty-spin control requires the static TPSS CUDA provider");
+  const auto system = hydrogens(2U, false);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, {1, 12, 4, 8, 3, 1e-12});
+  const scf::PreparedFockPlan gpu(system, nullptr, strategy(false, scf::FockBackend::Cuda), 0);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  bool rejected = false;
+  try {
+    dft::CudaKsPlan plan(gpu, basis, grid, options, entry.functional_code, 64);
+  } catch (const std::invalid_argument& error) {
+    rejected = std::string(error.what()).find("empty-spin") != std::string::npos;
+  }
+  require(rejected, "direct CUDA KS owner admitted an unqualified empty-spin Fock");
+}
+
 void compare_wb97mv_nonlocal_chunk_history() {
+  // Chunk width normally also selects the VV10 initialization policy. Compare
+  // the same full-target algorithm, then qualify the default proposal policy
+  // separately against the independent CPU endpoint below.
+  struct SavedEnvironment {
+    const char* name;
+    bool present;
+    std::string value;
+    explicit SavedEnvironment(const char* key)
+        : name(key), present(std::getenv(key) != nullptr), value(present ? std::getenv(key) : "") {}
+    ~SavedEnvironment() {
+      if (present)
+        ::setenv(name, value.c_str(), 1);
+      else
+        ::unsetenv(name);
+    }
+  } saved_chunk("GENERATIVEQC_CUDA_KS_CHUNK"), saved_seed("GENERATIVEQC_VV10_NATIVE_SEED"),
+      saved_outer("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
+  require(::setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0", 1) == 0 &&
+              ::setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "0", 1) == 0,
+          "could not select identical full-target WB97M-V history policies");
   const auto system = hydrogens(2U, true);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 12, 4, 8, 3, 1e-12};
@@ -1535,7 +1586,8 @@ void compare_wb97mv_nonlocal_chunk_history() {
     const bool energy_change_equal =
         (std::isinf(left[i].energy_change) && std::isinf(right[i].energy_change)) ||
         std::abs(left[i].energy_change - right[i].energy_change) < 2e-11;
-    require(left[i].iteration == right[i].iteration && energy_change_equal &&
+    require(left[i].nonlocal_operator_scope == 0 && right[i].nonlocal_operator_scope == 0 &&
+                left[i].iteration == right[i].iteration && energy_change_equal &&
                 std::abs(left[i].components.total() - right[i].components.total()) < 2e-11 &&
                 std::abs(left[i].components.xc - right[i].components.xc) < 2e-11 &&
                 std::abs(left[i].components.exact_exchange - right[i].components.exact_exchange) <
@@ -1554,8 +1606,29 @@ void compare_wb97mv_nonlocal_chunk_history() {
               chunked.second.xc_host_d2h_bytes == 0 && chunked.second.xc_host_h2d_bytes == 0 &&
               chunked.second.xc_host_synchronizations == 0,
           "WB97M-V nonlocal chunk entered graph replay or host XC staging");
-  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
-          "could not restore CUDA WB97M-V nonlocal chunk qualification");
+  require(::unsetenv("GENERATIVEQC_VV10_NATIVE_SEED") == 0 &&
+              ::unsetenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED") == 0,
+          "could not select default WB97M-V initialization policy");
+  const auto initialized = solve("1");
+  const auto& initialized_history = initialized.first.dft_diagnostic.history;
+  require(std::any_of(initialized_history.begin(), initialized_history.end(),
+                      [](const auto& row) { return row.nonlocal_operator_scope == 1; }) &&
+              initialized_history.back().nonlocal_operator_scope == 0,
+          "default WB97M-V initialization did not finish with the full target");
+  const auto cpu_model = wb97mv_rsh_strategies(true, scf::FockBackend::Cpu);
+  const scf::PreparedFockPlan cpu(system, nullptr, cpu_model.primary);
+  const scf::PreparedFockPlan cpu_range(system, nullptr, cpu_model.correction);
+  auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
+                                              grid.point_count(), tile_points);
+  const auto reference = scf::run_wb97mv_rks(cpu, cpu_range, basis, grid, options, *cpu_nonlocal);
+  require(reference.converged, "WB97M-V chunk independent CPU reference did not converge");
+  for (const auto* result : {&ordinary.first, &chunked.first, &initialized.first})
+    require(std::abs(result->energy - reference.energy) < 2e-11 &&
+                std::abs(result->dft_diagnostic.components.xc -
+                         reference.dft_diagnostic.components.xc) < 2e-11 &&
+                std::abs(result->dft_diagnostic.components.exact_exchange -
+                         reference.dft_diagnostic.components.exact_exchange) < 1e-12,
+            "WB97M-V full-target or initialized endpoint differs from independent CPU");
 }
 
 /** OH exercises the stationary integer-occupation cycle from #305 on CUDA.
@@ -2060,9 +2133,28 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   options.precision_mode = precision_mode;
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const bool mixed = precision_mode == GENERATIVEQC_PRECISION_AUTO;
-  const auto result = plan.run(nullptr, false, restricted && mixed);
+  // AUTO may choose the faster strict generated J provider. Dense AO still
+  // executes mixed density products; local AO keeps those products strict.
+  // Verify the arithmetic actually supported by this prepared provider, while
+  // the PBE0 control below continues to require mixed J and strict refinement.
+  const bool automatic = precision_mode == GENERATIVEQC_PRECISION_AUTO;
+  const bool mixed_j = automatic && !scf::cuda_direct_jk_generated_coulomb_available(
+                                        gpu.cuda_direct_source(), gpu.strategy().spec);
+  const bool mixed_density = automatic && !expect_local;
+  const bool mixed = mixed_j || mixed_density;
+  const auto result = plan.run(nullptr, false, true);
   require(result.converged && !plan.failed(), "CUDA PBE precision-work solve did not converge");
+  const scf::PreparedFockPlan cpu(system, nullptr, strategy(restricted, scf::FockBackend::Cpu));
+  auto reference_options = options;
+  reference_options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  const auto reference = restricted ? scf::run_pbe_rks(cpu, basis, grid, reference_options)
+                                    : scf::run_pbe_uks(cpu, basis, grid, reference_options);
+  require(reference.converged && std::abs(reference.energy - result.energy) < 1e-8 &&
+              reference.density.size() == result.density.size(),
+          "CUDA precision census changed the independent CPU endpoint");
+  for (std::size_t i = 0; i < result.density.size(); ++i)
+    require(std::abs(reference.density[i] - result.density[i]) < 1e-7,
+            "CUDA precision census changed the independent CPU density");
   require(
       (mixed || result.precision.mixed_stage_fock_builds == 0) &&
           result.precision.strict_stage_fock_builds > 0 &&
@@ -2131,11 +2223,11 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
   require(result.dft_diagnostic.cuda_ao_selection.selected == expect_local,
           "precision-census solve did not execute the requested AO layout");
-  const auto expected_mixed_density = expect_local ? 0U : result.precision.mixed_stage_fock_builds;
-  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) ==
-                  result.precision.mixed_stage_fock_builds &&
+  const auto expected_mixed_density = mixed_density ? result.precision.mixed_stage_fock_builds : 0U;
+  const auto expected_mixed_j = mixed_j ? result.precision.mixed_stage_fock_builds : 0U;
+  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) == expected_mixed_j &&
               operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
-                  result.precision.strict_stage_fock_builds &&
+                  result.fock_builds - expected_mixed_j &&
               operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
               operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
@@ -2158,7 +2250,7 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   const auto recurrence = std::find_if(
       work.operators.begin(), work.operators.end(),
       [](const auto& item) { return item.kind == scf::PrecisionOperatorKind::CoulombRecurrence; });
-  if (mixed) {
+  if (mixed_j) {
     require(recurrence != work.operators.end() && recurrence->count > 0 &&
                 recurrence->storage == scf::PrecisionDtype::Fp64 &&
                 recurrence->compute == scf::PrecisionDtype::Fp32 &&
@@ -2195,7 +2287,7 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
           audit.state_generation == work.returned_state_generation,
       "CUDA-KS precision work/final audit does not identify the returned final state");
 
-  if (restricted && mixed) {
+  if (restricted && automatic) {
     const auto previous_epoch = work.returned_solve_epoch;
     ks_cuda_fail_next_runtime_for_test_v1();
     bool injected_failure = false;
@@ -2658,111 +2750,197 @@ void minao_gpu_case() {
 int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+  std::string active_control = "device preflight";
+  const auto run_control = [&](const std::string& name, const auto& run) {
+    active_control = name;
+    run();
+  };
   try {
+    if (argc == 2 && std::string(argv[1]) == "--precision-census") {
+      for (const auto* selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
+        run_control(
+            std::string("precision census [AO=") + (selection ? selection : "default") + "]", [&] {
+              precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, selection);
+              precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, selection);
+              precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, selection);
+            });
+      }
+      run_control("pbe0_auto_local_ao_composition_case()",
+                  [&] { pbe0_auto_local_ao_composition_case(); });
+      std::cout << "Native CUDA precision census and independent CPU gates passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--wb97mv-chunk") {
+      run_control("compare_wb97mv_nonlocal_chunk_history()",
+                  [&] { compare_wb97mv_nonlocal_chunk_history(); });
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--automatic-empty-spin") {
+      run_control("automatic_empty_spin_admission()", [&] { automatic_empty_spin_admission(); });
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--minao") {
-      minao_gpu_case();
+      run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--incremental") {
-      run_exact_exchange_case(true);
-      run_exact_exchange_case(false);
+      run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
+      run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
       std::cout << "Native CUDA incremental KS physical-state and fresh-solve gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
-      ks_density_provider_cases();
+      run_control("ks_density_provider_cases()", [&] { ks_density_provider_cases(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
-      ks_cold_factor_cases();
+      run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });
       std::cout << "Native CUDA DF cold-factor proof, fallback and physical-state gates passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--df-range-exchange") {
+      // Isolate the matched DF primary/exact LR contract and its CPU oracle.
+      for (const bool restricted : {true, false}) {
+        run_control(
+            "run_density_fitted_range_exchange_case(restricted=" + std::to_string(restricted) + ")",
+            [&] { run_density_fitted_range_exchange_case(restricted); });
+      }
+      std::cout << "Native CUDA DF range-exchange final-state and CPU gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
       for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
-        run_density_fitted_exchange_case(true, true, selection);
-        run_density_fitted_exchange_case(false, true, selection);
+        run_control(std::string("run_density_fitted_exchange_case(true, true, selection)") +
+                        " [selection=" + std::string(selection ? selection : "<default>") + "]",
+                    [&] { run_density_fitted_exchange_case(true, true, selection); });
+        run_control(std::string("run_density_fitted_exchange_case(false, true, selection)") +
+                        " [selection=" + std::string(selection ? selection : "<default>") + "]",
+                    [&] { run_density_fitted_exchange_case(false, true, selection); });
       }
       std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-wb-composition") {
       for (const bool restricted : {true, false}) {
-        run_wb97mv_nonlocal_composition_case(restricted, true);
+        run_control(std::string("run_wb97mv_nonlocal_composition_case(restricted, true)") +
+                        " [restricted=" + std::to_string(restricted) + "]",
+                    [&] { run_wb97mv_nonlocal_composition_case(restricted, true); });
       }
       std::cout << "Native CUDA fitted WB97M-V composition independent CPU gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--fast-anchor-delta") {
-      run_fast_anchor_delta_case();
+      run_control("run_fast_anchor_delta_case()", [&] { run_fast_anchor_delta_case(); });
       std::cout
           << "Native CUDA Fast anchor default, independent oracle and lifetime gates passed\n";
       return 0;
     }
-    minao_gpu_case();
-    ks_density_provider_cases();
-    prepared_cuda_fock_seam();
-    registered_functional_code_seam();
+    run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
+    run_control("ks_density_provider_cases()", [&] { ks_density_provider_cases(); });
+    run_control("prepared_cuda_fock_seam()", [&] { prepared_cuda_fock_seam(); });
+    run_control("registered_functional_code_seam()", [&] { registered_functional_code_seam(); });
     for (const auto* ao_selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
-      precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection);
-      precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      run_control(
+          std::string(
+              "precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection); });
+      run_control(
+          std::string(
+              "precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection); });
       // UKS avoids optional strict-RKS chunks, retaining a complete FP64 census.
-      precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection);
+      run_control(
+          std::string(
+              "precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection)") +
+              " [ao_selection=" + std::string(ao_selection ? ao_selection : "<default>") + "]",
+          [&] { precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection); });
     }
-    pbe0_auto_local_ao_composition_case();
+    run_control("pbe0_auto_local_ao_composition_case()",
+                [&] { pbe0_auto_local_ao_composition_case(); });
     if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
+      active_control = "enable KS chunk environment";
       require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
+      active_control = "enable KS replay environment";
       require(::setenv("GENERATIVEQC_CUDA_KS_REPLAY", "1", 1) == 0,
               "could not enable CUDA RKS replay qualification");
       for (bool pbe : {false, true}) {
-        compare_rks_chunk_history(pbe);
-        run_case(2, true, pbe);
+        run_control(
+            std::string("compare_rks_chunk_history(pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+            [&] { compare_rks_chunk_history(pbe); });
+        run_control(std::string("run_case(2, true, pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                    [&] { run_case(2, true, pbe); });
       }
-      compare_pbe0_chunk_history();
-      compare_rsh_chunk_history();
-      compare_wb97mv_nonlocal_chunk_history();
+      run_control("compare_pbe0_chunk_history()", [&] { compare_pbe0_chunk_history(); });
+      run_control("compare_rsh_chunk_history()", [&] { compare_rsh_chunk_history(); });
+      run_control("compare_wb97mv_nonlocal_chunk_history()",
+                  [&] { compare_wb97mv_nonlocal_chunk_history(); });
+      active_control = "restore KS replay environment";
       require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
+      active_control = "restore KS chunk environment";
       require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
               "could not restore CUDA KS synchronization baseline");
     }
-    public_wb97mv_cuda_case(false);
-    public_wb97mv_cuda_case(true);
-    rejected_api_requests_revoke_tokens();
-    run_exact_exchange_case(true);
-    run_exact_exchange_case(false);
-    ks_cold_factor_cases();
-    run_density_fitted_exchange_case(true);
-    run_density_fitted_exchange_case(true, false);
-    run_density_fitted_exchange_case(false);
-    run_density_fitted_exchange_case(true, true, "1");
-    run_density_fitted_exchange_case(false, true, "1");
-    run_density_fitted_exchange_case(true, true, nullptr);
-    run_density_fitted_exchange_case(false, true, nullptr);
-    run_range_exchange_case(true);
-    run_range_exchange_case(false);
-    run_density_fitted_range_exchange_case(true);
-    run_density_fitted_range_exchange_case(false);
-    run_wb97mv_semilocal_rsh_case(true);
-    run_wb97mv_semilocal_rsh_case(false);
-    run_wb97mv_nonlocal_composition_case(true);
-    run_wb97mv_nonlocal_composition_case(false);
-    run_wb97mv_nonlocal_composition_case(true, true);
-    run_wb97mv_nonlocal_composition_case(false, true);
-    run_fast_anchor_delta_case();
+    run_control("public_wb97mv_cuda_case(false)", [&] { public_wb97mv_cuda_case(false); });
+    run_control("public_wb97mv_cuda_case(true)", [&] { public_wb97mv_cuda_case(true); });
+    run_control("rejected_api_requests_revoke_tokens()",
+                [&] { rejected_api_requests_revoke_tokens(); });
+    run_control("run_exact_exchange_case(true)", [&] { run_exact_exchange_case(true); });
+    run_control("run_exact_exchange_case(false)", [&] { run_exact_exchange_case(false); });
+    run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });
+    run_control("run_density_fitted_exchange_case(true)",
+                [&] { run_density_fitted_exchange_case(true); });
+    run_control("run_density_fitted_exchange_case(true, false)",
+                [&] { run_density_fitted_exchange_case(true, false); });
+    run_control("run_density_fitted_exchange_case(false)",
+                [&] { run_density_fitted_exchange_case(false); });
+    run_control("run_density_fitted_exchange_case(true, true, \"1\")",
+                [&] { run_density_fitted_exchange_case(true, true, "1"); });
+    run_control("run_density_fitted_exchange_case(false, true, \"1\")",
+                [&] { run_density_fitted_exchange_case(false, true, "1"); });
+    run_control("run_density_fitted_exchange_case(true, true, nullptr)",
+                [&] { run_density_fitted_exchange_case(true, true, nullptr); });
+    run_control("run_density_fitted_exchange_case(false, true, nullptr)",
+                [&] { run_density_fitted_exchange_case(false, true, nullptr); });
+    run_control("run_range_exchange_case(true)", [&] { run_range_exchange_case(true); });
+    run_control("run_range_exchange_case(false)", [&] { run_range_exchange_case(false); });
+    run_control("run_density_fitted_range_exchange_case(true)",
+                [&] { run_density_fitted_range_exchange_case(true); });
+    run_control("run_density_fitted_range_exchange_case(false)",
+                [&] { run_density_fitted_range_exchange_case(false); });
+    run_control("run_wb97mv_semilocal_rsh_case(true)",
+                [&] { run_wb97mv_semilocal_rsh_case(true); });
+    run_control("run_wb97mv_semilocal_rsh_case(false)",
+                [&] { run_wb97mv_semilocal_rsh_case(false); });
+    run_control("run_wb97mv_nonlocal_composition_case(true)",
+                [&] { run_wb97mv_nonlocal_composition_case(true); });
+    run_control("run_wb97mv_nonlocal_composition_case(false)",
+                [&] { run_wb97mv_nonlocal_composition_case(false); });
+    run_control("run_wb97mv_nonlocal_composition_case(true, true)",
+                [&] { run_wb97mv_nonlocal_composition_case(true, true); });
+    run_control("run_wb97mv_nonlocal_composition_case(false, true)",
+                [&] { run_wb97mv_nonlocal_composition_case(false, true); });
+    run_control("run_fast_anchor_delta_case()", [&] { run_fast_anchor_delta_case(); });
     for (bool pbe : {false, true}) {
-      run_case(2, true, pbe);
-      run_hydroxyl(pbe);
-      for (unsigned atoms : {1U, 2U, 3U}) run_case(atoms, false, pbe);
+      run_control(std::string("run_case(2, true, pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                  [&] { run_case(2, true, pbe); });
+      run_control(std::string("run_hydroxyl(pbe)") + " [pbe=" + std::to_string(pbe) + "]",
+                  [&] { run_hydroxyl(pbe); });
+      for (unsigned atoms : {1U, 2U, 3U})
+        run_control(std::string("run_case(atoms, false, pbe)") + " [pbe=" + std::to_string(pbe) +
+                        "]" + " [atoms=" + std::to_string(atoms) + "]",
+                    [&] { run_case(atoms, false, pbe); });
     }
-    run_case(2, true, 2U);
-    run_case(2, false, 2U);
+    run_control("run_case(2, true, 2U)", [&] { run_case(2, true, 2U); });
+    run_control("run_case(2, false, 2U)", [&] { run_case(2, false, 2U); });
     std::cout << "Native CUDA LDA/PBE/r2SCAN KS SCF, physical-state, warm/failure/resource gates "
                  "passed\n";
     return 0;
   } catch (const std::exception& error) {
-    std::cerr << error.what() << '\n';
+    std::cerr << "KS control " << active_control << ": " << error.what() << '\n';
     return 1;
   }
 }

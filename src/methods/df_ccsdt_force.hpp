@@ -8,6 +8,7 @@
 #include "cc/df_source_response.hpp"
 #include "cc/df_triples.hpp"
 #include "cc/lambda_response.hpp"
+#include "core/correlation_execution.hpp"
 #include "hf/rhf_frame_response.hpp"
 #include "methods/df_hf_guess.hpp"
 #include "methods/rccsd_method.hpp"
@@ -136,14 +137,16 @@ DFCCSDTResult run_df_ccsdt_native(
     double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
     DFCorrelationDemand demand = {}, core::CorrelationConvergence convergence = {});
 
-/** Native DF-MP2 or DF-CCSD(T) group, never a DF-HF reference or an oracle replay.
+/** Native DF-MP2 or DF-CCSD(T) group with the explicitly selected HF reference.
  * The CC parent inherits the complete owner's guarded fusion/scratch defaults;
- * the MP2 demand omits both triples and Lambda regardless of those policies. */
-DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext&, const core::System&,
-                                              const core::System&,
-                                              const generativeqc_method_descriptor&, bool forces,
-                                              DFCorrelationDemand,
-                                              core::CorrelationConvergence convergence = {});
+ * the MP2 demand omits both triples and Lambda regardless of those policies.
+ * Preconvergence is an execution choice, independent of final stopping limits;
+ * Legacy preserves the previous relaxed-only warmup selection. */
+DFCCSDTResult run_df_correlation_group_native(
+    runtime::ExecutionContext&, const core::System&, const core::System&,
+    const generativeqc_method_descriptor&, bool forces, DFCorrelationDemand,
+    core::CorrelationConvergence convergence = {},
+    core::DfPreconvergence preconvergence = core::DfPreconvergence::Legacy);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "tensor-resource-scheduler-508",
-  "owner": "tensor-resource-scheduler-508",
-  "reason": "Reviewed retained large evidence for TensorIR resource-aware scheduler qualification (#508). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/tensor-resource-scheduler-508/README.md",
-  "files": []
-}

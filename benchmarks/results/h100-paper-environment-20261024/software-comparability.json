@@ -1,0 +1,139 @@
+{
+  "historical_per_engine": {
+    "native-hf": {
+      "archival_revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "reported_python": {
+        "version": "3.13.9",
+        "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+      },
+      "reported_packages": {
+        "pyscf": "2.14.0",
+        "gpu4pyscf": "1.8.1",
+        "cupy": "13.6.0",
+        "numpy": "2.4.6"
+      },
+      "reported_toolchain": {
+        "nvcc": {
+          "path": "/group/software/cuda-12.9.1/bin/nvcc",
+          "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "ptxas": {
+          "path": "/group/software/cuda-12.9.1/bin/ptxas",
+          "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "cuobjdump": {
+          "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+          "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+        },
+        "host_cxx": {
+          "path": "/usr/bin/c++",
+          "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+        }
+      },
+      "reported_host": {
+        "node": "node1",
+        "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+        "machine": "x86_64",
+        "processor": "x86_64"
+      },
+      "source_revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+      "library_sha256": "d3f883dc0ae0de87ea7759cbb2dfbfc977d77f5a55f8c88ea8ff60d32b5c4e85",
+      "old_contraction_backend": "UNAVAILABLE; not inferred from missing package metadata",
+      "interpretation": "reported fields only; unrecorded versions are unavailable",
+      "reported_native_source_identity": "a2d27f9ecfd07025b0b7fc27212fab8cf1a447ef155168006c2e0bb66efd5c69",
+      "original_5852_package_archive_provenance": "UNAVAILABLE; reported identity is not reconstructed original package bytes"
+    },
+    "gpu4pyscf-hf": {
+      "archival_revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "reported_python": {
+        "version": "3.13.9",
+        "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+      },
+      "reported_packages": {
+        "pyscf": "2.14.0",
+        "gpu4pyscf": "1.8.1",
+        "cupy": "13.6.0",
+        "numpy": "2.4.6"
+      },
+      "reported_toolchain": {
+        "nvcc": {
+          "path": "/group/software/cuda-12.9.1/bin/nvcc",
+          "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "ptxas": {
+          "path": "/group/software/cuda-12.9.1/bin/ptxas",
+          "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "cuobjdump": {
+          "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+          "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+        },
+        "host_cxx": {
+          "path": "/usr/bin/c++",
+          "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+        }
+      },
+      "reported_host": {
+        "node": "node1",
+        "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+        "machine": "x86_64",
+        "processor": "x86_64"
+      },
+      "source_revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+      "library_sha256": null,
+      "old_contraction_backend": "UNAVAILABLE; not inferred from missing package metadata",
+      "interpretation": "reported fields only; unrecorded versions are unavailable"
+    },
+    "native-cbs-c2": {
+      "archival_revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+      "reported_python": {
+        "version": "3.13.9",
+        "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+      },
+      "reported_packages": {
+        "numpy": "2.4.6",
+        "pyscf": "2.14.0"
+      },
+      "reported_toolchain": {
+        "nvcc": {
+          "path": "/group/software/cuda-12.9.1/bin/nvcc",
+          "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "ptxas": {
+          "path": "/group/software/cuda-12.9.1/bin/ptxas",
+          "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "cuobjdump": {
+          "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+          "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+        },
+        "host_cxx": {
+          "path": "/usr/bin/c++",
+          "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+        }
+      },
+      "reported_host": {
+        "node": "node1",
+        "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+        "machine": "x86_64",
+        "processor": "x86_64"
+      },
+      "source_revision": "976f756b3-candidate-gmres-capacity",
+      "library_sha256": "65a401ed3db8fb303a5146f134cdb227af78928affe27e1f7571c09f270112de",
+      "old_contraction_backend": "UNAVAILABLE; not inferred from missing package metadata",
+      "interpretation": "reported fields only; unrecorded versions are unavailable"
+    }
+  },
+  "current_private_environment": {
+    "python": "3.11.16",
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pyscf": "2.14.0",
+    "gpu4pyscf": "1.8.1",
+    "cupy": "13.6.0",
+    "gcc": "12.3.0",
+    "nvcc": "12.9.86"
+  },
+  "hardware_only": false,
+  "scope": "archive comparison metadata; no new timings or scientific calls"
+}

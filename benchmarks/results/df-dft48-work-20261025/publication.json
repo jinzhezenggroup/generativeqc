@@ -1,0 +1,155 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The fitted-force cost repair passes numerical regression gates; all complete latency observations and unchanged independent accuracy failures remain visible. No universal superiority claim.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7378,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c4ad6eca9cc385343925c829e2a6bc5c35771f9766923bc15ef55d15831de7e6"
+    },
+    {
+      "bytes": 56500,
+      "path": "ablations.json.xz",
+      "role": "samples",
+      "sha256": "5bc718a1860f2422a0e653b173cef27fad00b9a2251926aefe02eca7302c7c8e"
+    },
+    {
+      "bytes": 6075,
+      "path": "assessment.py",
+      "role": "reproduction",
+      "sha256": "2cf526876f9017da244f02d441a90a2a76d8906be0785cd55a247cc4e787282c"
+    },
+    {
+      "bytes": 3072,
+      "path": "auxiliary-inputs.json.xz",
+      "role": "input",
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "bytes": 3548,
+      "path": "changes.md",
+      "role": "summary",
+      "sha256": "d57af4f6d351b471264cf3dfa02674f7635991df9299ecfcdb9bc617a4599c9f"
+    },
+    {
+      "bytes": 4668,
+      "path": "comparisons.json.xz",
+      "role": "summary",
+      "sha256": "53c68afd428c04584326866547118ad33feaaff30a4c50fac70852c1075049c2"
+    },
+    {
+      "bytes": 7337,
+      "path": "conditions.md",
+      "role": "summary",
+      "sha256": "13f15c72901f00414af16996405595e031bda8da65a68f212b1e31bc4983950a"
+    },
+    {
+      "bytes": 28252,
+      "path": "control.json.xz",
+      "role": "samples",
+      "sha256": "5196db50e9ecda0cb3e40758adc70f2f0856e9e0b878bf169a4eaad36a1e21b8"
+    },
+    {
+      "bytes": 239116,
+      "path": "fast.json.xz",
+      "role": "samples",
+      "sha256": "6cdfa043521e11ec7e51f599e08c4c9b488669fa4399c6811b6ec43f50ab8dbc"
+    },
+    {
+      "bytes": 188260,
+      "path": "gpu4pyscf.json.xz",
+      "role": "samples",
+      "sha256": "97d542336545cb727c1649bf390e715ec644549e184a480a64f497003a034075"
+    },
+    {
+      "bytes": 9516,
+      "path": "jobs.json.xz",
+      "role": "reproduction",
+      "sha256": "f2f1b1e5380ccd5a07230a5902322ca339ce455bba343cebce2e3fdcc3300519"
+    },
+    {
+      "bytes": 56528,
+      "path": "oracles.json.xz",
+      "role": "input",
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "bytes": 78252,
+      "path": "profiles.json.xz",
+      "role": "summary",
+      "sha256": "98ba6f6196f07421db6437fb9738d06e86b94560bee3455cdc14be3ca2935b19"
+    },
+    {
+      "bytes": 4420,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "c90f3e670d2ae04be0c0971a25f4df448be7ac8d51fb8913ac27a9bc77db6626"
+    },
+    {
+      "bytes": 31340,
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "sha256": "6cf824246f8902360ceb8587cbbb7aaebc9239d81c5520f0071117a7f13c5a57"
+    },
+    {
+      "bytes": 17138,
+      "path": "reference-reuse.json",
+      "role": "input",
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "bytes": 17572,
+      "path": "regressions.json.xz",
+      "role": "summary",
+      "sha256": "412ae57ad1a20ebf5fc93471bce77a82aeb5dd0080855461c820c589dc82b224"
+    },
+    {
+      "bytes": 4096,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "4486f5cb32ccbc0c47036695b652299560398ec6a4a4f201f757e53a149f95c6"
+    },
+    {
+      "bytes": 211680,
+      "path": "standard.json.xz",
+      "role": "samples",
+      "sha256": "4f3b17851b64585f6b00d63e5e2b0812e93f99c2159316b6dc3e794b0d21b266"
+    },
+    {
+      "bytes": 20855,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "15f0d7c6976521018e4f61da244e7ff73998ad3c192c956cca9188c4cc767917"
+    },
+    {
+      "bytes": 6624,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "f7147bbd0c8fe40521aed2b230fc6dc1cba57e2c8e5a766225af350f8066b32e"
+    },
+    {
+      "bytes": 15930,
+      "path": "work.md",
+      "role": "summary",
+      "sha256": "f5984a57314aefc56f648e159e2858ff88b1b1c89ef92760bbbf766fdb82bdb9"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/df-dft48-work-20261025/reproduce.py",
+      "--output",
+      ".artifacts/df-dft48-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "2ed9b394a2889b3a373dc91ebbaaed03931056eb"
+  }
+}

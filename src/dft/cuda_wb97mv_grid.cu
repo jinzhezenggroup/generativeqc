@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <tuple>
 #include <utility>
 
 #include "dft/cuda_wb97mv_grid.hpp"
@@ -30,6 +31,9 @@ struct Layout {
   std::size_t full_fields{}, base_partial{}, right_partial{}, left_fields{}, mixed_fields{};
   std::size_t right_ao{}, right_density{}, right_weights{}, right_points{}, zero_density{};
   std::size_t energy{}, energy_scalar{}, scalar{};
+  std::size_t staged_left_ao{}, staged_mixed_ao{}, staged_left_weights{}, staged_mixed_weights{},
+      staged_left_points{};
+  bool replay{};
   std::size_t reference_work{}, direction_work{}, mixed_work{};
   nuclear_maps::Extents nuclear_extents{};
 };
@@ -123,6 +127,17 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
        !reserve(plan.matrices, plan.zero_density) || !reserve(shape.points, plan.energy) ||
        !reserve(1, plan.energy_scalar) || !reserve(1, plan.scalar)))
     return false;
+  const auto mandatory_elements = elements;
+  if (options.nuclear_response && options.replay_nuclear_maps &&
+      reserve(plan.ao_elements, plan.staged_left_ao) &&
+      reserve(plan.ao_elements, plan.staged_mixed_ao) &&
+      reserve(shape.points, plan.staged_left_weights) &&
+      reserve(shape.points, plan.staged_mixed_weights) &&
+      reserve(3 * shape.points, plan.staged_left_points) &&
+      elements <= options.max_workspace_bytes / sizeof(double))
+    plan.replay = true;
+  else
+    elements = mandatory_elements;
   plan.bytes = elements * sizeof(double);
   return plan.bytes <= options.max_workspace_bytes;
 }
@@ -362,12 +377,18 @@ cudaError_t CudaWb97mvGridResponse::authenticate(cudaStream_t stream) noexcept {
   return error;
 }
 
+CudaWb97mvGridResponse::~CudaWb97mvGridResponse() {
+  if (nuclear_graph_) (void)cudaGraphExecDestroy(nuclear_graph_);
+}
+
 cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                             const CudaWb97mvGridOptions& options,
                                             const CudaWb97mvGridReference& reference,
                                             void* workspace, std::size_t workspace_bytes) noexcept {
   ready_ = false;
   nuclear_ready_ = false;
+  if (nuclear_graph_) (void)cudaGraphExecDestroy(nuclear_graph_);
+  nuclear_graph_ = nullptr;
   work_ = {};
   Layout plan;
   if (!layout(shape, options, plan) || workspace_bytes < plan.bytes || !reference.authenticate ||
@@ -419,6 +440,7 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   ready_ = true;
   if (options.nuclear_response) work_.nuclear_affine_terms = plan.reference_work;
   error = options.nuclear_response ? evaluate_nuclear(false) : evaluate(false);
+  if (error == cudaSuccess && plan.replay) error = build_nuclear_graph();
   if (error == cudaSuccess) error = authenticate(reference.stream);
   if (error != cudaSuccess) ready_ = false;
   return error;
@@ -626,6 +648,70 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction(
   return error;
 }
 
+cudaError_t CudaWb97mvGridResponse::enqueue_nuclear_mixed(
+    const double* left_ao, const double* mixed_ao, const double* left_weights,
+    const double* mixed_weights, const double* left_points, cudaStream_t stream) noexcept {
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  auto* arena = static_cast<double*>(workspace_);
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  auto queued = moving_features(shape_, plan, arena, left_ao, reference_.density,
+                                arena + plan.zero_density, arena + plan.left_fields, stream);
+  if (queued != cudaSuccess) return queued;
+  const auto panel = shape_.points * shape_.nao;
+  const auto* right = arena + plan.right_ao;
+  for (unsigned spin = 0; spin < shape_.spins; ++spin) {
+    auto* fields = arena + plan.mixed_fields + 5 * spin * shape_.points;
+    queued = nuclear_maps::launch_feature_mixed(
+        plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
+        arena + plan.ao + 3 * panel, right, right + panel, right + 2 * panel, right + 3 * panel,
+        arena + plan.right_density + spin * plan.matrix, mixed_ao, mixed_ao + panel,
+        mixed_ao + 2 * panel, mixed_ao + 3 * panel, arena + plan.zero_density,
+        reference_.density + spin * plan.matrix, left_ao, left_ao + panel, left_ao + 2 * panel,
+        left_ao + 3 * panel, arena + plan.zero_density, fields + shape_.points,
+        fields + 2 * shape_.points, fields + 3 * shape_.points, fields, fields + 4 * shape_.points,
+        arena + plan.tensor, plan.tensor_bytes, status, stream);
+    if (queued != cudaSuccess) return queued;
+  }
+  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+      left_weights, left_points, shape_.points, shape_.spins, arena + plan.left_fields);
+  if ((queued = cudaGetLastError()) != cudaSuccess) return queued;
+  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+      mixed_weights, nullptr, shape_.points, shape_.spins, arena + plan.mixed_fields);
+  if ((queued = cudaGetLastError()) != cudaSuccess) return queued;
+  return nuclear_maps::launch_mixed_contraction(
+      plan.nuclear_extents, arena + plan.base_partial, arena + plan.left_fields,
+      arena + plan.mixed_fields, arena + plan.right_partial, arena + plan.scalar,
+      arena + plan.tensor, plan.tensor_bytes, status, stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::build_nuclear_graph() noexcept {
+  Layout plan;
+  if (!layout(shape_, options_, plan) || !plan.replay) return cudaErrorInvalidValue;
+  auto* arena = static_cast<double*>(workspace_);
+  cudaGraph_t graph{};
+  const auto stream = reference_.stream;
+  auto error = cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
+  if (error == cudaSuccess) {
+    const auto queued = enqueue_nuclear_mixed(
+        arena + plan.staged_left_ao, arena + plan.staged_mixed_ao, arena + plan.staged_left_weights,
+        arena + plan.staged_mixed_weights, arena + plan.staged_left_points, stream);
+    const auto ended = cudaStreamEndCapture(stream, &graph);
+    error = queued == cudaSuccess ? ended : queued;
+    if (error == cudaSuccess) error = cudaGraphInstantiate(&nuclear_graph_, graph, 0);
+  }
+  if (graph) (void)cudaGraphDestroy(graph);
+  if (error != cudaSuccess && error != cudaErrorMemoryAllocation &&
+      error != cudaErrorNotSupported && error != cudaErrorStreamCaptureUnsupported)
+    return drain(error, stream);
+  if (error != cudaSuccess) {
+    if (nuclear_graph_) (void)cudaGraphExecDestroy(nuclear_graph_);
+    nuclear_graph_ = nullptr;
+    (void)cudaGetLastError();
+  }
+  return cudaSuccess;
+}
+
 cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const double* mixed_ao,
                                                   const double* left_weights,
                                                   const double* mixed_weights,
@@ -636,6 +722,7 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const d
   if (!nuclear_ready_) return cudaErrorInvalidResourceHandle;
   Layout plan;
   if (!layout(shape_, options_, plan) || work_.nuclear_contractions == UINT64_MAX ||
+      work_.nuclear_graph_replays == UINT64_MAX ||
       plan.mixed_work > UINT64_MAX - work_.nuclear_affine_terms)
     return cudaErrorInvalidValue;
   error = nuclear_buffers(shape_, plan, reference_, workspace_,
@@ -660,41 +747,38 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const d
   }
   if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
   work_.nuclear_affine_terms += plan.mixed_work;
-  error = moving_features(shape_, plan, arena, left_ao, reference_.density,
-                          arena + plan.zero_density, arena + plan.left_fields, stream);
-  if (error != cudaSuccess) return drain(error, stream);
-  const auto panel = shape_.points * shape_.nao;
-  const auto* right = arena + plan.right_ao;
-  for (unsigned spin = 0; spin < shape_.spins; ++spin) {
-    auto* fields = arena + plan.mixed_fields + 5 * spin * shape_.points;
-    error = nuclear_maps::launch_feature_mixed(
-        plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
-        arena + plan.ao + 3 * panel, right, right + panel, right + 2 * panel, right + 3 * panel,
-        arena + plan.right_density + spin * plan.matrix, mixed_ao, mixed_ao + panel,
-        mixed_ao + 2 * panel, mixed_ao + 3 * panel, arena + plan.zero_density,
-        reference_.density + spin * plan.matrix, left_ao, left_ao + panel, left_ao + 2 * panel,
-        left_ao + 3 * panel, arena + plan.zero_density, fields + shape_.points,
-        fields + 2 * shape_.points, fields + 3 * shape_.points, fields, fields + 4 * shape_.points,
-        arena + plan.tensor, plan.tensor_bytes, status, stream);
-    if (error != cudaSuccess) return drain(error, stream);
+  if (plan.replay) {
+    for (const auto& [input, offset, count] :
+         {std::tuple{left_ao, plan.staged_left_ao, plan.ao_elements},
+          std::tuple{mixed_ao, plan.staged_mixed_ao, plan.ao_elements},
+          std::tuple{left_weights, plan.staged_left_weights, shape_.points},
+          std::tuple{mixed_weights, plan.staged_mixed_weights, shape_.points},
+          std::tuple{left_points, plan.staged_left_points, 3 * shape_.points}}) {
+      error = cudaMemcpyAsync(arena + offset, input, count * sizeof(double),
+                              cudaMemcpyDeviceToDevice, stream);
+      if (error != cudaSuccess) return drain(error, stream);
+    }
+    left_ao = arena + plan.staged_left_ao;
+    mixed_ao = arena + plan.staged_mixed_ao;
+    left_weights = arena + plan.staged_left_weights;
+    mixed_weights = arena + plan.staged_mixed_weights;
+    left_points = arena + plan.staged_left_points;
   }
-  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
-      left_weights, left_points, shape_.points, shape_.spins, arena + plan.left_fields);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
-      mixed_weights, nullptr, shape_.points, shape_.spins, arena + plan.mixed_fields);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  error = nuclear_maps::launch_mixed_contraction(
-      plan.nuclear_extents, arena + plan.base_partial, arena + plan.left_fields,
-      arena + plan.mixed_fields, arena + plan.right_partial, arena + plan.scalar,
-      arena + plan.tensor, plan.tensor_bytes, status, stream);
+  // Capture only immutable arithmetic/storage bindings. Authentication, input
+  // validation and transactional publication remain outside the replay graph.
+  error = nuclear_graph_ ? cudaGraphLaunch(nuclear_graph_, stream)
+                         : enqueue_nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights,
+                                                 left_points, stream);
   if (error != cudaSuccess) return drain(error, stream);
   if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
   if ((error = authenticate(stream)) != cudaSuccess) return error;
   error = cudaMemcpyAsync(output, arena + plan.scalar, sizeof(double), cudaMemcpyDeviceToDevice,
                           stream);
   error = drain(error, stream);
-  if (error == cudaSuccess) ++work_.nuclear_contractions;
+  if (error == cudaSuccess) {
+    ++work_.nuclear_contractions;
+    if (nuclear_graph_) ++work_.nuclear_graph_replays;
+  }
   return error;
 }
 

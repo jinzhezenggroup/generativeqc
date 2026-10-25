@@ -161,3 +161,9 @@ original-name readers, restore the authenticated Git snapshot with
 benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
 .artifacts/scf-validation-gemm-history` from the repository root; the destination
 must not exist. This storage change does not alter numerical evidence.
+
+The 192/384-AO batch-one BLAS and 192-AO batch-one serial force records use
+the same exact-byte gzip representation and adjacent `.storage.json` receipts.
+This retains every historical observation while making room for the bounded
+Hessian capacity qualification; decoded Git blobs and scientific gates are
+unchanged.

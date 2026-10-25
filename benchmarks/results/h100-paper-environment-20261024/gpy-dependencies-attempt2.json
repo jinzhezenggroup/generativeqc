@@ -1,0 +1,79 @@
+[
+  {
+    "attempts": [
+      {
+        "command": [
+          "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+          "-m",
+          "pip",
+          "download",
+          "--no-deps",
+          "--dest",
+          "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets",
+          "--disable-pip-version-check",
+          "--timeout",
+          "30",
+          "--retries",
+          "1",
+          "--only-binary=:all:",
+          "gpu4pyscf-libxc-cuda12x==0.8.1",
+          "pyscf-dispersion==1.5.0",
+          "fastrlock"
+        ],
+        "returncode": 0,
+        "output": "Collecting gpu4pyscf-libxc-cuda12x==0.8.1\n  Downloading gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (202 bytes)\nCollecting pyscf-dispersion==1.5.0\n  Using cached pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.7 kB)\nCollecting fastrlock\n  Downloading fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (9.8 kB)\nDownloading gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (159.7 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 159.7/159.7 MB 23.0 MB/s  0:00:07\nDownloading pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (12.7 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.7/12.7 MB 19.0 MB/s  0:00:00\nDownloading fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (64 kB)\nSaved ./h100-paper-environment-20261024/assets/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl\nSaved ./h100-paper-environment-20261024/assets/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\nSaved ./h100-paper-environment-20261024/assets/fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl\nSuccessfully downloaded gpu4pyscf-libxc-cuda12x pyscf-dispersion fastrlock\n"
+      },
+      {
+        "command": [
+          "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+          "-m",
+          "pip",
+          "download",
+          "--no-deps",
+          "--dest",
+          "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets",
+          "--disable-pip-version-check",
+          "--timeout",
+          "30",
+          "--retries",
+          "1",
+          "geometric"
+        ],
+        "returncode": 0,
+        "output": "Collecting geometric\n  Downloading geometric-1.1.1.tar.gz (392 kB)\n  Installing build dependencies: started\n  Installing build dependencies: finished with status 'done'\n  Getting requirements to build wheel: started\n  Getting requirements to build wheel: finished with status 'done'\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nSaved ./h100-paper-environment-20261024/assets/geometric-1.1.1.tar.gz\nSuccessfully downloaded geometric\n"
+      }
+    ],
+    "assets": [
+      {
+        "name": "gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "bytes": 159668567,
+        "sha256": "c788f2ca50ef036076754e6167169c957834885430bfc2e23e3b8111942c686a"
+      },
+      {
+        "name": "gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "bytes": 151734684,
+        "sha256": "42dd9c619ff587dd393232d39c8894950956bace29d83765ce630bf7ad5d686c"
+      },
+      {
+        "name": "geometric-1.1.1.tar.gz",
+        "bytes": 392235,
+        "sha256": "c712c4102bb9db4afab4c7a482289a13d04989735cc1430c89ebb73d587d1d8b"
+      },
+      {
+        "name": "cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl",
+        "bytes": 113039337,
+        "sha256": "77ba6745a130d880c962e687e4e146ebbb9014f290b0a80dbc4e4634eb5c3b48"
+      },
+      {
+        "name": "pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "bytes": 12729963,
+        "sha256": "c65aa46f24005794bf8198205a0d83f3431a23333868fbafff43bd82efc2294d"
+      },
+      {
+        "name": "fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+        "bytes": 64386,
+        "sha256": "91afda5f106bbb8a3bfaae1c919061c4158064bb0305866011d5a091d61f034b"
+      }
+    ]
+  }
+]

@@ -174,6 +174,67 @@ def test_existing_tile_binding_is_updated_without_duplicate(
     )
 
 
+@pytest.mark.parametrize("shared_request", (False, True))
+@pytest.mark.parametrize(
+    "duplicate_key",
+    ('"tile_points"', '"tile_" "points"', '"tile_\\x70oints"', '("tile_points")'),
+)
+def test_duplicate_execution_tile_binding_rejected(
+    sources: dict[str, str], shared_request: bool, duplicate_key: str
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace(
+        "kwargs = {", f'kwargs = {{"tile_points": 256, {duplicate_key}: 768,'
+    )
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="duplicate force kwargs"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
+
+
+@pytest.mark.parametrize("shared_request", (False, True))
+@pytest.mark.parametrize(
+    "unknown_key",
+    (
+        '"tile_" + "points"',
+        'f"tile_points"',
+        'str("tile_points")',
+        "768",
+        "None",
+        'b"tile_points"',
+    ),
+)
+def test_unknown_execution_key_rejected(
+    sources: dict[str, str], shared_request: bool, unknown_key: str
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace(
+        "kwargs = {", f'kwargs = {{"tile_points": 256, {unknown_key}: 768,'
+    )
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="literal string keys"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
+
+
+@pytest.mark.parametrize("shared_request", (False, True))
+def test_duplicate_execution_budget_binding_rejected(
+    sources: dict[str, str], shared_request: bool
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace("kwargs = {", 'kwargs = {"max_host_bytes": 1,')
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="duplicate force kwargs"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
+
+
 def test_budget_only_trial_does_not_change_tile_policy(sources: dict[str, str]) -> None:
     text = render_trial(sources, CudaScheduleTrial(device_budget_mib=1024))[BATCH_PATH]
     namespace = {}
@@ -181,6 +242,80 @@ def test_budget_only_trial_does_not_change_tile_policy(sources: dict[str, str]) 
     workload, kwargs = namespace["PreparedBatch"]()._public_dft_cuda_force(0, None)
     assert workload == ("fixed", 256, 1 << 30, 256 << 20)
     assert "tile_points" not in kwargs
+
+
+def shared_request_source(source: str) -> str:
+    """Executable fixture for the current shared explicit-request binding."""
+    source = source.replace(
+        "def _public_dft_cuda_force(self, index, atoms):",
+        "def _public_dft_cuda_force(self, index, atoms, *, tile_points=None):",
+    )
+    source = source.replace(
+        '            tile_policy, policy_tile_points = "budget-auto", None\n', ""
+    )
+    source = source.replace(
+        '            tile_policy, policy_tile_points = "fixed", 256\n', ""
+    )
+    return source.replace(
+        "        workload = ",
+        '        tile_policy = "budget-auto" if tile_points is None else "fixed"\n'
+        "        policy_tile_points = tile_points\n"
+        "        workload = ",
+    )
+
+
+def test_legacy_policy_expression_is_not_silently_replaced(
+    sources: dict[str, str],
+) -> None:
+    sources[BATCH_PATH] = sources[BATCH_PATH].replace(
+        'tile_policy, policy_tile_points = "fixed", 256',
+        "tile_policy, policy_tile_points = choose_policy()",
+    )
+    with pytest.raises(ValueError, match="unknown legacy"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+
+
+@pytest.mark.parametrize("composite", (False, True))
+@pytest.mark.parametrize("explicit_tile", (None, 256, 768))
+def test_shared_request_trial_changes_only_ordinary_unspecified_tile(
+    sources: dict[str, str], composite: bool, explicit_tile: int | None
+) -> None:
+    sources[BATCH_PATH] = shared_request_source(sources[BATCH_PATH])
+    text = render_trial(sources, CudaScheduleTrial(grid_tile_points=512))[BATCH_PATH]
+    namespace = {}
+    exec(text, namespace)  # noqa: S102 - controlled executable policy fixture
+    workload, execution = namespace["PreparedBatch"]()._public_dft_cuda_force(
+        int(composite), None, tile_points=explicit_tile
+    )
+    expected = explicit_tile if explicit_tile is not None or composite else 512
+    assert workload[:2] == ("budget-auto" if expected is None else "fixed", expected)
+    if composite:
+        assert execution == "composite" and workload[2:] == (1 << 30, 2 << 30)
+    else:
+        assert execution["tile_points"] == expected
+
+
+@pytest.mark.parametrize("mutation", ("policy", "request", "duplicate"))
+def test_shared_policy_trial_rejects_unknown_bindings(
+    sources: dict[str, str], mutation: str
+) -> None:
+    text = shared_request_source(sources[BATCH_PATH])
+    if mutation == "policy":
+        text = text.replace(
+            '"budget-auto" if tile_points is None else "fixed"', "choose(tile_points)"
+        )
+    elif mutation == "request":
+        text = text.replace(
+            "policy_tile_points = tile_points", "policy_tile_points = None"
+        )
+    else:
+        text = text.replace(
+            "        workload = ",
+            "        policy_tile_points = None\n        workload = ",
+        )
+    sources[BATCH_PATH] = text
+    with pytest.raises(ValueError):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
 
 
 def test_foreign_grid_structure_rejects_before_partial_changes(
@@ -270,13 +405,12 @@ def test_ingredient_point_trial_rejects_source_drift(
 def test_actual_ingredient_point_trial_executes_only_pbe_override(
     tmp_path: Path, native_cxx: object
 ) -> None:
+    import importlib.util
+    import re
+
     from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
     from generativeqc_compiler.dft._generated_split_hybrid_consumers import (
         SPLIT_HYBRID_POINT_CONSUMERS,
-    )
-    from generativeqc_compiler.dft.ao_cuda import (
-        emit_native_xc_contraction_kernels,
-        emit_native_xc_point_feature_terms,
     )
 
     root = Path(__file__).resolve().parents[2]
@@ -285,99 +419,127 @@ def test_actual_ingredient_point_trial_executes_only_pbe_override(
         {POINT_PATH: source}, CudaScheduleTrial(pbe_point_threads=64)
     )[POINT_PATH]
 
-    def kernel_template(text: str) -> str:
-        values = [
-            ast.literal_eval(node.value)
-            for node in ast.parse(text).body
-            if isinstance(node, ast.Assign)
-            and any(
-                isinstance(target, ast.Name)
-                and target.id == "_NATIVE_XC_CONTRACTION_KERNELS"
-                for target in node.targets
-            )
-        ]
-        assert len(values) == 1
-        return values[0]
-
-    original = kernel_template(source)
-    candidate = kernel_template(changed)
-    begin = candidate.index(
-        "constexpr I feature_terms = point_feature_terms(functional);"
+    # Execute only this trusted repository source variant. Relative compiler
+    # imports retain their canonical package objects; no runtime or GPU is used.
+    variant_path = tmp_path / "point_schedule_trial.py"
+    variant_path.write_text(changed, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(
+        "generativeqc_compiler.dft._point_schedule_trial", variant_path
     )
-    end = candidate.index("\n  if constexpr (!response)", begin)
-    declaration = candidate[begin:end]
-    assert candidate.replace(declaration, POINT_POLICY_ANCHOR) == original
-    start = original.index("constexpr I point_threads(")
-    stop = original.index("\n}", start) + 2
-    helper = original[start:stop]
-    split_start = candidate.index("void launch_split_hybrid_points(")
-    split_width = "constexpr I threads = point_threads(feature_terms);"
-    assert candidate.index(split_width, split_start) > split_start
-    generated = emit_native_xc_contraction_kernels()
-    batch_start = generated.index(
-        "CudaXcPointBatchLauncher resolve_point_batch_launcher("
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaStream_t = void*;\n", encoding="utf-8"
     )
-    batch_stop = generated.index("\n}", batch_start) + 2
-    batch = generated[batch_start:batch_stop]
+    (tmp_path / "point_program.hpp").write_text(
+        re.sub(
+            r"([A-Za-z_]\w*<[^;]*?>)\s*<<<([^>]*?)>>>\s*\(",
+            r"host_launch(\1, \2)(",
+            module.emit_native_xc_point_program(),
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "point_dispatch.hpp").write_text(
+        '#include "point_program.hpp"\n'
+        + module.emit_native_xc_point_dispatch()
+        + module.emit_native_xc_point_batch_dispatch(),
+        encoding="utf-8",
+    )
     checks = []
-    batch_checks = []
     for record in SEMILOCAL_FAMILIES:
         if not record["cuda_ks"]:
             continue
         width = 5 if record["requires_tau"] else 4 if record["requires_gradient"] else 1
         expected = 64 if record["symbol"] == "Pbe" else 32 if width == 4 else 128
         checks.append(
-            f"static_assert(observe<{record['code']}, false>() == {expected});"
+            f"check({record['code']}, {expected}, {32 if width == 4 else 128});"
         )
-        checks.append(f"static_assert(observe<{record['code']}, true>() == 128);")
-        batch_checks.append(
-            f"assert(resolve_point_batch_launcher({record['code']})() == {32 if width == 4 else 128});"
+    for code, width in SPLIT_HYBRID_POINT_CONSUMERS:
+        checks.append(f"probe_split_codes.push_back({code});")
+        if width == 5:
+            checks.append(f"probe_split_mgga.push_back({code});")
+        checks.append(
+            f"check({code}, {32 if width == 4 else 128}, {32 if width == 4 else 128});"
         )
-    split_codes = " || ".join(
-        f"functional == {code}" for code, _ in SPLIT_HYBRID_POINT_CONSUMERS
-    )
-    split_mgga = " || ".join(
-        f"functional == {code}"
-        for code, width in SPLIT_HYBRID_POINT_CONSUMERS
-        if width == 5
-    )
-    batch_checks.extend(
-        f"assert(resolve_point_batch_launcher({code})() == {32 if width == 4 else 128});"
-        for code, width in SPLIT_HYBRID_POINT_CONSUMERS
-    )
     probe = tmp_path / "point_trial.cpp"
     probe.write_text(
-        '#include <cassert>\n#include <cstdint>\n#include <stdexcept>\n#include "dft/semilocal_family.hpp"\n'
-        "using I = long;\nusing generativeqc::dft::SemilocalFamily;\n"
-        "using generativeqc::dft::semilocal_family_code;\n"
-        + emit_native_xc_point_feature_terms()
-        + "\n"
-        + helper
-        + "\ntemplate<I functional, bool response> constexpr I observe() {\n"
-        + declaration
-        + "\nreturn threads;\n}\n"
-        + "template<I feature_terms> constexpr I split_observe() {\n"
-        + split_width
-        + "\nreturn threads;\n}\n"
-        + "static_assert(split_observe<4>() == 32);\n"
-        + "static_assert(split_observe<5>() == 128);\n"
+        r"""
+#define main point_arithmetic_contract_main
+#include "contract.cpp"
+#undef main
+void check(unsigned functional, unsigned physical_threads, unsigned batch_threads) {
+  double features[10]{}, weights[1]{1}, coefficients[10]{}, totals[3]{};
+  int error = 0;
+  for (const char* equal : {"0", "1"}) for (const char* family : {"0", "1"}) {
+    policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
+    policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", family);
+    for (std::size_t spins : {1U, 2U}) {
+      auto launch = resolve_point_launcher(functional, false);
+      launch(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, nullptr);
+      require(observed_threads == physical_threads, "trial changed wrong physical geometry");
+      auto batch = resolve_point_batch_launcher(functional, launch);
+      batch(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, 1);
+      require(observed_threads == batch_threads, "trial changed batch geometry");
+      if (functional < 2) {
+        auto response = resolve_point_launcher(functional, true);
+        response(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, features);
+        require(observed_threads == 128, "trial changed response geometry");
+      }
+    }
+  }
+}
+int main() {
+  execute_kernels = false; // Execute real dispatch; no numerical/GPU claim here.
+"""
         + "\n".join(checks)
-        + "\nusing CudaXcPointBatchLauncher = I(*)();\n"
-        + "template<I width, I threads> I launch_point_batches() { return threads; }\n"
-        + "namespace generated {\n"
-        + f"bool split_hybrid_registered(unsigned functional) {{ return {split_codes}; }}\n"
-        + f"bool split_hybrid_is_mgga(unsigned functional) {{ return {split_mgga}; }}\n"
-        + "}\n"
-        + batch
-        + "\nint main() {\n"
-        + "\n".join(batch_checks)
-        + "\n}\n"
+        + "\n}\n",
+        encoding="utf-8",
     )
-    binary = native_cxx.build_executable(
-        [probe],
-        tmp_path / "point_trial",
-        compile_args=("-std=c++17", f"-I{root / 'src'}"),
-    )
+    try:
+        binary = native_cxx.build_executable(
+            [probe],
+            tmp_path / "point_trial",
+            compile_args=(
+                "-std=c++17",
+                f"-I{root / 'src'}",
+                f"-I{tmp_path}",
+                f"-I{root / 'tests/native/fixtures/xc_point_policy'}",
+            ),
+        )
+    except subprocess.CalledProcessError as exc:
+        # A captured compile error otherwise hides its diagnostic from pytest.
+        # Keep the exact inputs and complete streams in the existing failure artifact.
+        evidence = root / ".artifacts/point-schedule-trial-native-failure"
+        evidence.mkdir(parents=True, exist_ok=True)
+        inputs = {}
+        for source_file in (
+            probe,
+            variant_path,
+            tmp_path / "point_program.hpp",
+            tmp_path / "point_dispatch.hpp",
+            tmp_path / "cuda_runtime_api.h",
+            root / "tests/native/fixtures/xc_point_policy/contract.cpp",
+        ):
+            data = source_file.read_bytes()
+            (evidence / source_file.name).write_bytes(data)
+            inputs[source_file.name] = hashlib.sha256(data).hexdigest()
+        record = {
+            "command": exc.cmd,
+            "returncode": exc.returncode,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
+            "input_sha256": inputs,
+        }
+        (evidence / "failure.json").write_text(
+            json.dumps(record, indent=2) + "\n", encoding="utf-8"
+        )
+        diagnostic = f"Native probe evidence: {evidence}\n{(exc.stderr or '')[:6000]}"
+        if hasattr(exc, "add_note"):
+            exc.add_note(diagnostic)
+        else:
+            print(diagnostic)
+        raise
     subprocess.run([str(binary)], check=True, timeout=30)
 
 
@@ -442,7 +604,7 @@ def repository(tmp_path: Path, sources: dict[str, str]) -> Path:
     for path, text in sources.items():
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
+        target.write_bytes(text.encode("utf-8"))
     git(root, "add", ".")
     git(root, "commit", "-qm", "Synthetic source-contract fixture")
     return root
@@ -463,6 +625,10 @@ def test_real_detached_worktree_preserves_invoking_checkout(
     assert set(result["changed_files"]) == {RESOURCE_PATH, MATRIX_PATH}
     patch = (target / ".artifacts/cuda-schedule-trial/source.patch").read_bytes()
     assert result["patch_sha256"] == hashlib.sha256(patch).hexdigest()
+    for path, hashes in result["changed_files"].items():
+        assert (
+            hashes["after"] == hashlib.sha256((target / path).read_bytes()).hexdigest()
+        )
     manifest = json.loads(
         (target / ".artifacts/cuda-schedule-trial/manifest.json").read_text()
     )
@@ -519,3 +685,64 @@ def test_actual_repository_source_contracts() -> None:
     for path, text in result.items():
         ast.parse(text)
         assert inputs[path] == (root / path).read_bytes().decode("utf-8")
+
+
+@pytest.mark.parametrize(
+    "device,host", [(None, None), (1024, None), (None, 1024), (1024, 2048)]
+)
+@pytest.mark.parametrize("fitted", [False, True])
+def test_policy_caps_preserve_unrequested_reservation_and_composite(
+    sources: dict[str, str], device: int | None, host: int | None, fitted: bool
+) -> None:
+    from types import SimpleNamespace
+
+    call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
+    source = sources[BATCH_PATH].replace("512 << 20, 256 << 20", call)
+    sources[BATCH_PATH] = source
+    trial = CudaScheduleTrial(device_budget_mib=device, host_budget_mib=host)
+    changed = render_trial(sources, trial)
+    if device is None and host is None:
+        assert changed == {}
+    namespace = {
+        "basis": SimpleNamespace(natom=96),
+        "density_fitted": fitted,
+        "source": SimpleNamespace(hamiltonian="all-electron"),
+        "ordinary_cuda_force_limits": lambda atoms, density_fitted, hamiltonian: (
+            (1 << 30, 512 << 20) if density_fitted else (512 << 20, 256 << 20)
+        ),
+    }
+    exec(changed.get(BATCH_PATH, source), namespace)  # noqa: S102 - controlled fixture
+    owner = namespace["PreparedBatch"]()
+    assert owner._public_dft_cuda_force(1, None)[0] == (
+        "budget-auto",
+        None,
+        1 << 30,
+        2 << 30,
+    )
+    default = namespace["ordinary_cuda_force_limits"](96, fitted, "all-electron")
+    assert owner._public_dft_cuda_force(0, None)[0] == (
+        "fixed",
+        256,
+        default[0] if device is None else device << 20,
+        default[1] if host is None else host << 20,
+    )
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("basis.natom", "96"),
+        ("density_fitted=density_fitted", "density_fitted=True"),
+        ("hamiltonian=source.hamiltonian", "hamiltonian='all-electron'"),
+        ("ordinary_cuda_force_limits", "unknown_force_limits"),
+    ],
+)
+def test_policy_budget_call_drift_is_rejected(
+    sources: dict[str, str], old: str, new: str
+) -> None:
+    call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
+    sources[BATCH_PATH] = sources[BATCH_PATH].replace(
+        "512 << 20, 256 << 20", call.replace(old, new)
+    )
+    with pytest.raises(ValueError, match="ordinary budget expression changed"):
+        render_trial(sources, CudaScheduleTrial(device_budget_mib=1024))

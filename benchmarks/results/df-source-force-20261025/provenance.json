@@ -1,0 +1,26 @@
+{
+  "base_revision": "6d508c262b82afbba0f0710ab083ac69321fc0b2",
+  "measured_change_sha256": "9b5aaa6909963681938681eded80e047c6433ac33c5bf50a3fa11db696be29df",
+  "source_files": {
+    "python/generativeqc/_cuda_force_resources.py": "2c3767d8cc40a79f5210f77ac962fcd467839abc43aa4c1408129723c1d51ce2",
+    "python/generativeqc/_stationary_cuda.py": "66b2ff09e432ab657bb58c7a96df15eb168f57d15caf0f40a459f93b637cfd09",
+    "python/generativeqc/batch.py": "e7ef52f41809a2e829014f323f9909209f0a2e6b630bbc4d54dc7db3a495c6fd",
+    "python/generativeqc/resources_ks.py": "3b70614d122da35d052e09d6ea8120a0f9e6e4253fdf0a58bc326fde269ff57c",
+    "src/scf/cuda/df_md_j.cuh": "71b7e5c261e1caeedf6e337c7f0918b6d512f9b879c20ae33495089a1cd6bd7d",
+    "src/scf/cuda/df_md_j.hpp": "12d6b7c6a0965df39dafda0f8c8ae988013cdc3c5b431a602140f027ddca3db0",
+    "src/scf/cuda/df_md_layout.hpp": "5f86a66ed923e9773eb620625ef65b614aa84c1a547aaf21d6683c6729de5c56",
+    "src/scf/cuda/df_md_owner.cu": "9a8a7a7edaf934ed8aa6b26049d4e1e125f81065eda3533133146012dce9e95c",
+    "src/scf/cuda/df_md_owner.hpp": "85e160a5332e617825d48ca25f6222193bfc3096de5d44874b122d2b2f76c07e",
+    "tests/native/df_md_j_probe.cu": "07eb2a1950309cdedd34d77727deaf7b26d1b86f1bd2e0088f2cd4378def8c09",
+    "tests/python/test_stationary_grid_schedule.py": "d21f6075ee64b372855dbde0e49003b61344cf71a1c76d04d7e4ae8c228dc0b9"
+  },
+  "native_library_variant": "df-source-compact-complete-library",
+  "native_compiled_source": "df-source-compact-source",
+  "timed_python_source": "df-force-capacity-source",
+  "final_test_source": "df-source-force-final-source",
+  "source_relationship": "Every submitted production source is byte-identical to the timed capacity snapshot; native sources are byte-identical to the compact build. The final private probe additionally tests nonfinite inputs; it is independently compiled and executed against the same native implementation.",
+  "remote_root": "n1:/data/jzzeng/gpu4-parity-research-20261025",
+  "compiler_cache": "sccache 0.16.0",
+  "scope": "Default FP64 DF PBE48/96 and r2SCAN-3c96 complete energy plus analytic forces, original and moved geometry. No tolerance screening or lowered value-memory allowance.",
+  "qualification_limits": "Water geometries on RTX 5090; force caps are additional finite reservations, not full-calculator exact-byte admission. DFT DF public exact-byte resource planning remains unsupported."
+}

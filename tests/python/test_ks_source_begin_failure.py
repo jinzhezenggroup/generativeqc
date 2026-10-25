@@ -32,6 +32,7 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
 #include <optional>
 #include <stdexcept>
 #include <vector>
+#include "scf/coulomb_exchange_work.hpp"
 constexpr int GENERATIVEQC_PRECISION_FP64 = 64;
 constexpr int cudaMemcpyDeviceToDevice = 0, cudaMemcpyHostToDevice = 1;
 int cudaMemsetAsync(void*, int, std::size_t, void*) { return 0; }
@@ -81,10 +82,15 @@ struct Owner {
   } options;
   struct { struct { int requested_mode{}; } precision;
     struct { std::uint64_t owner_id{}; std::vector<int> operators; } precision_work;
+    struct {
+      generativeqc::scf::CoulombExchangeWork coulomb_exchange_work =
+          generativeqc::scf::CoulombExchangeWork::empty();
+    } dft_diagnostic;
   } output;
   std::uint64_t owner = 1, solve_epoch = 1;
   std::uint64_t warm_density_generation{}, warm_factor_generation{};
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
+  const void* automatic_program{};
   bool device_nonlocal{}, device_chunk_mode{};
   bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
   int *nonlocal_domain_error{}, *nonlocal_pair_error{};
@@ -159,6 +165,7 @@ int main(int argc, char** argv) {
     try { owner.begin(); } catch (...) { thrown = true; }
     assert(thrown);
     assert(owner.is_failed && !owner.is_active);
+    assert(!owner.output.dft_diagnostic.coulomb_exchange_work.complete);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
     assert(!owner.pending_mixed_contractions);
@@ -182,5 +189,7 @@ int main(int argc, char** argv) {
 """
     )
     executable = tmp_path / "begin"
-    native_cxx.build_executable([cpp], executable, compile_args=("-std=c++17",))
+    native_cxx.build_executable(
+        [cpp], executable, compile_args=("-std=c++17", f"-I{ROOT / 'src'}")
+    )
     subprocess.run([str(executable), str(scenario)], check=True, timeout=10)

@@ -39,6 +39,10 @@ def _native(
     streamed: bool = False,
     unbatched: bool = False,
     batch_chunked: bool = False,
+    physical_cpks: bool = False,
+    serial_one_electron: bool = False,
+    serial_grid: bool = False,
+    directional_exact: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -55,6 +59,10 @@ def _native(
     mode += "-streamed" if streamed else ""
     mode += "-unbatched" if unbatched else ""
     mode += "-batch-chunked" if batch_chunked else ""
+    mode += "-physical-cpks" if physical_cpks else ""
+    mode += "-serial-one-electron" if serial_one_electron else ""
+    mode += "-serial-grid" if serial_grid else ""
+    mode += "-directional-exact" if directional_exact else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -77,6 +85,41 @@ def _native(
             result.stdout
         )
     return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("fitted", (False, True))
+def test_stationary_response_reuse_and_parallel_integrals_preserve_hessians(
+    spins: int, fitted: bool
+) -> None:
+    """Gate optional schedules on the complete spin/DF/ECP/spherical endpoint."""
+    cached = _native(spins, fitted, True, fitted, True)
+    physical = _native(
+        spins,
+        fitted,
+        True,
+        fitted,
+        True,
+        physical_cpks=True,
+        serial_one_electron=True,
+        serial_grid=True,
+        directional_exact=True,
+    )
+    assert cached["cpks_operator_columns"] > 0
+    # Symmetric minimal fixtures may have an exactly zero nuclear RHS, so a
+    # successful solve need not execute a cached Krylov action.
+    assert cached["cpks_physical_checks"] == 3 * cached["atoms"]
+    assert cached["parallel_one_electron_actions"] > 0
+    assert physical["cpks_operator_columns"] == 0
+    assert physical["cpks_physical_checks"] == 0
+    assert physical["parallel_one_electron_bytes"] == 0
+    assert cached["frozen_exact_bytes"] > 0
+    assert cached["frozen_exact_columns"] > 0
+    assert physical["frozen_exact_bytes"] == 0
+    for field in ("energy", "hvp", "hessian", "response_residual"):
+        np.testing.assert_allclose(
+            cached[field], physical[field], atol=3e-12, rtol=3e-12
+        )
 
 
 @pytest.mark.parametrize("spins", (1, 2))

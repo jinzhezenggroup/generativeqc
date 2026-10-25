@@ -72,7 +72,7 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
   // Reserve the retained ΔD anchors unconditionally so this remains a safe upper bound.
   bool incremental_diis_gram = false;
   try {
-    incremental_diis_gram = diis_history >= 2 && incremental_diis_gram_requested();
+    incremental_diis_gram = hf_incremental_diis_gram_requested(nbf, diis_history, spins);
   } catch (const std::invalid_argument&) {
     return false;
   }
@@ -122,7 +122,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
 
   bool incremental_diis_gram = false;
   try {
-    incremental_diis_gram = diis_history >= 2 && incremental_diis_gram_requested();
+    incremental_diis_gram = hf_incremental_diis_gram_requested(nbf, diis_history, spins);
   } catch (const std::invalid_argument&) {
     return false;
   }
@@ -435,9 +435,10 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
         execution_options.screening_tolerance) {
       throw std::invalid_argument("CUDA screening differs from its resolved Fock strategy");
     }
-    incremental_diis_gram =
-        execution_options.diis_history >= 2 && incremental_diis_gram_requested();
-    ordered_diis_gram = incremental_diis_gram && ordered_incremental_diis_gram_requested();
+    incremental_diis_gram = hf_incremental_diis_gram_requested(
+        systems.empty() ? 0 : molecule::ao_count(systems.front()), execution_options.diis_history,
+        unrestricted ? 2 : 1);
+    ordered_diis_gram = incremental_diis_gram && hf_ordered_diis_gram_requested();
   } catch (const std::invalid_argument&) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);

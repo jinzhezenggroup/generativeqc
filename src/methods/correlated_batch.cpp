@@ -183,9 +183,10 @@ std::unique_ptr<PreparedBatch> prepare_correlated_batch(
     generativeqc_method reference_method, bool indexed_buckets, bool cc_diagnostics) {
   // Batch owners currently copy only the legacy descriptor prefix. Reject an
   // allowance before copying rather than losing it or reading past that copy.
-  if (detail::application_precision_budget(descriptor) != std::array<double, 3>{})
+  if (detail::application_precision_budget(descriptor) != std::array<double, 3>{} ||
+      detail::correlation_preconvergence(descriptor) != core::DfPreconvergence::Legacy)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "correlated convergence budgets require single-point groups");
+                      "correlated convergence and execution options require single-point groups");
   if (cc_diagnostics)
     return std::make_unique<CcPreparedBatch>(capabilities, context, std::move(systems), descriptor,
                                              warm_starts_enabled, factory, name, reference_method,

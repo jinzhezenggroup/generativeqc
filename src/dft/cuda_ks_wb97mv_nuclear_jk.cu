@@ -99,7 +99,9 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
             "J/K topology differs from normalized native basis");
     const CudaWb97mvJkShape integral_shape{shape.atoms, shape.primitives, shape.nao, shape.spins};
     std::size_t bytes{};
-    check(cuda_wb97mv_jk_workspace(integral_shape, shells, options, bytes));
+    const auto admission =
+        cuda_wb97mv_jk_workspace(integral_shape, shells, options, bytes, &detail);
+    if (admission != cudaSuccess) throw std::runtime_error("J/K workspace admission: " + detail);
     check(cudaMalloc(&candidate->arena, bytes));
     const CudaWb97mvJkReference reference{lease.basis, device, candidate->stream,
                                           Impl::authenticate, candidate.get()};

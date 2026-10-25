@@ -1,0 +1,26 @@
+{
+  "id": "scf.ordered-hf-diis-gram",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM",
+    "hf-runtime:GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/scf_diis_kernels.cu",
+    "src/scf/cuda/rhf_bucket.cpp",
+    "src/scf/cuda_rhf.cpp"
+  ],
+  "rationale": "Restricted HF automatically reuses the separately charged physical-slot Gram cache at >=512 AOs with history capacity >=2, using the existing scalar-order FP64 reducer. Resource admission, cached-plan invalidation and execution share the guard. Smaller/unrestricted owners retain serial defaults. Explicit 0 rolls back; explicit 1 keeps cooperative or explicitly selected ordered diagnostics. Three alternating complete HF48/96 endpoint rounds and independent original/moved/property/rollback gates qualify the scoped cold gain without changing Fock work, tolerances, arithmetic order or cache size.",
+  "revisit_condition": "Qualify complete endpoints and independent original/moved forces before widening spin or size admission or changing reduction order. Preserve inactive-control semantics, reset/cache ownership and explicit rollback. The remaining HF96 cold gap is dominated by full Fock work, not Gram reuse.",
+  "evidence": [
+    "docs/developer/array_api_frontend.md",
+    "tests/python/test_ordered_diis_endpoint_contract.py",
+    "tests/native/test_cuda_diis_cached_gram.cpp",
+    ".agents/notes/implemented/performance/2026-10-25-restricted-hf-ordered-gram.md",
+    "benchmarks/results/hf-ordered-gram-20261025/README.md"
+  ]
+}

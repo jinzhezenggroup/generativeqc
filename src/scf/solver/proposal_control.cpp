@@ -23,7 +23,8 @@ std::uint64_t new_scf_generation(const ScfOptions& options) {
  * repairs an input. Determinant proposals also require integer occupations.
  */
 std::string invalid_proposal(const ScfSnapshot& state, const ScfProposal& proposal,
-                             const initial_guess::EigenOperation& eigen) {
+                             const initial_guess::EigenOperation& eigen,
+                             const initial_guess::MatrixProductOperation& products) {
   if (proposal.generation != state.generation || proposal.iteration != state.iteration)
     return "stale_state";
   if (proposal.representation != ProposalRepresentation::ensemble_density &&
@@ -34,7 +35,7 @@ std::string invalid_proposal(const ScfSnapshot& state, const ScfProposal& propos
   if (!std::all_of(candidate.begin(), candidate.end(), [](double x) { return std::isfinite(x); }))
     return "nonfinite";
   const auto n = state.nbf;
-  const ValidationProducts multiply;
+  const ValidationProducts multiply(products);
   const auto diagonalize = [&](const Matrix& matrix) {
     // The legacy seed contract permits 1e-7 asymmetry; the ordinary device
     // frame requires 1e-12 relative symmetry. Keep that acceptance boundary
@@ -85,7 +86,8 @@ std::string invalid_proposal(const ScfSnapshot& state, const ScfProposal& propos
 
 void validate_seed(const Matrix& overlap, const Matrix& seed, std::size_t n,
                    const std::vector<unsigned>& electrons, double weight,
-                   const initial_guess::EigenOperation& eigen) {
+                   const initial_guess::EigenOperation& eigen,
+                   const initial_guess::MatrixProductOperation& products) {
   reference::observation::Reason scope(reference::observation::EigenReason::seed_validation);
   ScfSnapshot state;
   state.nbf = n;
@@ -93,8 +95,8 @@ void validate_seed(const Matrix& overlap, const Matrix& seed, std::size_t n,
   state.electrons = electrons;
   state.occupation_weight = weight;
   state.density.resize(electrons.size() * n * n);
-  const auto reason =
-      invalid_proposal(state, {ProposalRepresentation::ensemble_density, 0, 0, seed}, eigen);
+  const auto reason = invalid_proposal(
+      state, {ProposalRepresentation::ensemble_density, 0, 0, seed}, eigen, products);
   if (!reason.empty()) throw std::invalid_argument("invalid initial proposal: " + reason);
 }
 

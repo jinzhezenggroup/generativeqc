@@ -115,6 +115,26 @@ CASES = {
     },
 }
 
+CASES["water-tetramer"] = {
+    "atoms": [
+        (
+            symbol,
+            tuple(
+                coordinate + shift
+                for coordinate, shift in zip(position, translation, strict=True)
+            ),
+        )
+        for translation in (
+            (0.0, 0.0, 0.0),
+            (6.5, 0.0, 0.4),
+            (0.0, 6.5, 0.8),
+            (6.5, 6.5, 1.2),
+        )
+        for symbol, position in CASES["water"]["atoms"]
+    ],
+    "spin": 0,
+}
+
 
 def _digest(path: Path) -> str:
     with path.open("rb") as stream:

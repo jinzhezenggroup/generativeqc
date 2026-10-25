@@ -2,6 +2,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -15,6 +16,7 @@
 #include "response/solve.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/host_cache_budget.hpp"
 #include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -87,7 +89,8 @@ class Owner {
   Owner(const core::System& system, const PhysicalReference& ref, int device,
         const RHFFrameResponseOptions& options, bool prepare, RHFFrameResponseResult& diagnostic,
         std::size_t direct_budget, std::size_t arena_elements, std::size_t resident_budget,
-        bool& resident_values_prepared, std::size_t df_derivative_budget)
+        bool& resident_values_prepared, std::size_t& attempted_capacity,
+        std::size_t df_derivative_budget)
       : n(ref.nbf),
         o(ref.nocc),
         v(n - o),
@@ -119,10 +122,42 @@ class Owner {
       if (resident_budget) {
         const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
         require(bucket_policy.valid, "invalid resident bucket mask or byte ceiling");
+        const auto* host_limit = std::getenv("GENERATIVEQC_RHF_RESPONSE_HOST_MAX_BYTES");
+        const auto host = scf::cuda_execution::direct_jk_resident_bucket_policy(
+            std::getenv("GENERATIVEQC_RHF_RESPONSE_HOST_BUCKET_MASK"), host_limit,
+            !host_limit ? runtime::automatic_host_cache_bytes() : 0);
+        const auto host_tile = scf::cuda_execution::direct_jk_resident_bucket_policy(
+            nullptr, std::getenv("GENERATIVEQC_RHF_RESPONSE_HOST_TILE_BYTES"), 256ULL << 20);
+        require(host.valid && host_tile.valid &&
+                    (!host.ceiling || (host_tile.ceiling && host_tile.ceiling <= (512ULL << 20) &&
+                                       host_tile.ceiling % sizeof(double) == 0)),
+                "invalid RHF response host ERI capacity, bucket mask or tile size");
+        const bool use_host = host.ceiling && host.mask && options.relax_orbitals &&
+                              options.orbital_screening_tolerance == 0.0;
+        // The remaining response/derivative inventory is still unallocated.
+        // Reserving its full numeric bound on the device is conservative even
+        // though part lives on the host; free VRAM alone is not admission.
+        const auto mandatory = stats.numeric_capacity_bytes - resident_budget;
+        const auto device_reserve = checked_add(mandatory, 256ULL << 20);
+        auto gpu_allowance = std::min(resident_budget, bucket_policy.ceiling);
+        auto gpu_mask = bucket_policy.mask;
+        if (use_host) {
+          std::size_t available = 0, total = 0;
+          cuda_resource_check(cudaMemGetInfo(&available, &total));
+          gpu_allowance =
+              std::min(gpu_allowance, available > device_reserve ? available - device_reserve : 0);
+          std::array<std::size_t, 28> bucket_bytes{};
+          for (unsigned bucket = 0; bucket < bucket_bytes.size(); ++bucket)
+            bucket_bytes[bucket] =
+                scf::cuda_direct_jk_selected_resident_value_bytes(direct.get(), 1U << bucket);
+          gpu_mask = scf::cuda_execution::direct_jk_fit_resident_buckets(bucket_bytes,
+                                                                         gpu_allowance, gpu_mask);
+        }
         const auto cache_started = Clock::now();
-        const auto cache_status = scf::prepare_cuda_direct_jk_selected_resident_values(
-            direct.get(), std::min(resident_budget, bucket_policy.ceiling), bucket_policy.mask,
-            detail);
+        const auto cache_status = gpu_mask && gpu_allowance
+                                      ? scf::prepare_cuda_direct_jk_selected_resident_values(
+                                            direct.get(), gpu_allowance, gpu_mask, detail)
+                                      : GENERATIVEQC_STATUS_SUCCESS;
         stats.resident_jk_setup_seconds = seconds(cache_started);
         if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
             cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
@@ -133,8 +168,48 @@ class Owner {
         stats.resident_jk_bytes = cache_info.resident_value_bytes;
         stats.resident_jk_values = cache_info.resident_value_count;
         stats.direct_device_bytes = cache_info.device_bytes;
+        stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
+        if (use_host && stats.resident_jk_bytes &&
+            stats.resident_jk_bytes < scf::cuda_direct_jk_resident_value_bytes(direct.get())) {
+          const auto host_started = Clock::now();
+          const auto remaining = options.maximum_bytes - stats.numeric_capacity_bytes;
+          std::size_t available = 0, total = 0;
+          cuda_resource_check(cudaMemGetInfo(&available, &total));
+          const auto device_available = available > device_reserve ? available - device_reserve : 0;
+          // Staging must leave room for numerical values in both the host
+          // allowance and the combined inventory, even under a small budget.
+          auto tile =
+              std::min({host_tile.ceiling, device_available / 2, host.ceiling / 4, remaining / 8});
+          tile -= tile % sizeof(double);
+          // The provider's limit covers values and pinned staging. Reserve its
+          // two device tiles separately, then charge the combined actual cap.
+          const auto allowance = tile ? std::min(host.ceiling, remaining - 2 * tile) : 0;
+          if (allowance) {
+            const auto host_status = scf::prepare_cuda_direct_jk_host_values(
+                direct.get(), allowance, device_available, tile, host.mask, detail);
+            if (host_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
+                host_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+              // The unpublished host owner has unwound. Keep the admitted GPU
+              // buckets, but never hide a pending execution fault behind OOM.
+              const auto pending = cudaGetLastError();
+              if (pending != cudaErrorMemoryAllocation) cuda_resource_check(pending);
+              cuda_resource_check(cudaStreamSynchronize(stream));
+            } else {
+              status(host_status, detail);
+            }
+          }
+          stats.host_jk_bytes = scf::cuda_direct_jk_host_value_bytes(direct.get());
+          stats.host_jk_capacity_bytes = scf::cuda_direct_jk_host_capacity_bytes(direct.get());
+          require(stats.host_jk_capacity_bytes <= remaining,
+                  "RHF response host ERIs exceeded complete numeric allowance");
+          stats.numeric_capacity_bytes =
+              checked_add(stats.numeric_capacity_bytes, stats.host_jk_capacity_bytes);
+          attempted_capacity = std::max(attempted_capacity, stats.numeric_capacity_bytes);
+          stats.direct_device_bytes =
+              scf::cuda_direct_jk_plan_diagnostic(direct.get()).device_bytes;
+          stats.host_jk_setup_seconds = seconds(host_started);
+        }
       }
-      stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
       stats.linear_screening_available = scf::cuda_direct_jk_linear_available(direct.get());
       compensation.allocate(device, scf::cuda_direct_jk_compensation_elements(direct.get()),
                             stream);
@@ -312,6 +387,10 @@ class Owner {
       ++stats.resident_jk_actions;
       stats.resident_jk_value_reads =
           checked_add(stats.resident_jk_value_reads, stats.resident_jk_values);
+    }
+    if (stats.host_jk_bytes && !linear) {
+      ++stats.host_jk_actions;
+      stats.host_jk_h2d_bytes = checked_add(stats.host_jk_h2d_bytes, stats.host_jk_bytes);
     }
     if (threshold > 0) ++stats.screened_jk_actions;
     if (profile) {
@@ -726,10 +805,8 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   auto resident_budget = std::min(options.resident_jk_allowance(n, options.maximum_bytes - total),
                                   bucket_policy.ceiling);
   if (options.df_reference) resident_budget = 0;
-  const auto layout_bytes =
-      resident_budget && bucket_policy.mask && bucket_policy.mask != (1U << 28) - 1
-          ? 28 * sizeof(std::size_t)
-          : 0;
+  // Automatic GPU fitting may retain a partial mask before host admission.
+  const auto layout_bytes = resident_budget && bucket_policy.mask ? 28 * sizeof(std::size_t) : 0;
   if (!bucket_policy.mask || layout_bytes > options.maximum_bytes - total) resident_budget = 0;
   if (resident_budget) {
     total = checked_add(total, layout_bytes);
@@ -740,7 +817,7 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   result.operator_hash = maps::orbital_action_hash;
   runtime::CudaDeviceScope device_scope(device);
   Owner owner(system, ref, device, options, prepare, result, direct_bound, arena, resident_budget,
-              resident_values_prepared, df_derivative_budget);
+              resident_values_prepared, attempted_capacity, df_derivative_budget);
   // Cache identity includes the admitted execution policy. Optional provider
   // setup can reject prepared execution after cache admission; do not reuse or
   // publish an image under that now-stale policy. The scalar solve remains valid.
@@ -924,6 +1001,13 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   Scope::number("rhf_response_jk_actions", result.jk_actions);
   Scope::number("rhf_response_materialized_actions", result.materialized_jk_actions);
   Scope::number("rhf_response_materialized_launches", result.materialized_jk_launches);
+  Scope::number("rhf_response_gpu_eri_bytes", result.resident_jk_bytes);
+  Scope::number("rhf_response_host_eri_bytes", result.host_jk_bytes);
+  Scope::number("rhf_response_host_capacity_bytes", result.host_jk_capacity_bytes);
+  Scope::number("rhf_response_host_actions", result.host_jk_actions);
+  Scope::number("rhf_response_host_h2d_bytes", result.host_jk_h2d_bytes);
+  Scope::number("rhf_response_host_build_d2h_bytes", result.host_jk_bytes);
+  Scope::number("rhf_response_host_setup_us", result.host_jk_setup_seconds * 1e6);
   Scope::number("rhf_response_setup_us", result.setup_seconds * 1e6);
   Scope::number("rhf_response_reference_audit_us", result.reference_audit_seconds * 1e6);
   Scope::number("rhf_response_weights_us", result.weights_seconds * 1e6);

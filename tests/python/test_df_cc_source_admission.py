@@ -204,7 +204,9 @@ int main(int argc, char** argv) {
       if (allocation_probe::peak>p.numeric_bytes || allocation_probe::live) return 3;
     } catch (const std::length_error&) {
       allocation_probe::enabled=false;
-      if (mode==2 || factory_entries || device_entries) return 4;
+      // Shared-source selection now enters the device scope before choosing
+      // fresh construction. Rejection must still precede the source factory.
+      if (mode==2 || factory_entries || device_entries!=1) return 4;
     }
   } else if (mode==3) {
     auto a=scf::df_source_capacity::shape(auxiliary);
@@ -331,11 +333,21 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         source.index("using posthf::checked_add;") : source.index("struct SourceDelete")
     ]
     start = source.index("DFSourceResult build_df_source_cuda(")
-    prefix = source[
-        start : source.index(
-            "  std::unique_ptr<scf::CudaDensityFittingIntegralSource", start
-        )
-    ]
+    # Exercise fresh construction, not the separately qualified shared-owner
+    # selection. Keep both production admission boundaries and the real factory
+    # call; fail closed if a caller supplies a shared owner to this probe.
+    owner_start = source.index(
+        "  std::unique_ptr<scf::CudaDensityFittingJkPlan, PlanDelete> owner;", start
+    )
+    fresh_start = source.index("    const auto construction =", owner_start)
+    fresh_end = source.index(
+        "    std::unique_ptr<scf::CudaDensityFittingIntegralSource", fresh_start
+    )
+    prefix = (
+        source[start:owner_start]
+        + "  assert(!shared_reference);\n"
+        + source[fresh_start:fresh_end]
+    )
     kernels = (ROOT / "src/scf/cuda/df_source_kernels.hpp").read_text()
     start = kernels.index("struct DfPublicAoExpansion {")
     expansion = kernels[start : kernels.index("\n};", start) + 4]

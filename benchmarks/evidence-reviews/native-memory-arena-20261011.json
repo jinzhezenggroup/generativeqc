@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "native-memory-arena-20261011",
-  "owner": "native FP64 cross-size arena complete-endpoint qualification",
-  "reason": "Lossless XZ recompression retains the exact original 6,352,916 decoded JSON bytes, including all cold/warm/moved-warm measurements, independent references, source and script receipts, full logs and unfavorable serial-scratch evidence. No observations, policy caps or acceptance decisions change; original and decoded identities are pinned in storage.json.",
-  "review_document": "benchmarks/results/native-memory-arena-20261011/README.md",
-  "files": []
-}

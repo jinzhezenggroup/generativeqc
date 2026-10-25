@@ -101,6 +101,9 @@ struct RHFFrameResponseOptions {
    * frames with at least 64 public AOs, capped at 8 GiB. Explicit zero disables
    * reuse; a positive value requests it independently of that crossover.
    * Complete-endpoint and Direct inventory/device admission still apply.
+   * Eligible eager responses may retain omitted strict values in bounded RAM
+   * after GPU admission. GENERATIVEQC_RHF_RESPONSE_HOST_MAX_BYTES=0 disables
+   * that tier; its numeric footprint still counts toward maximum_bytes.
    * Final scalar residuals always independently recompute the exact source. */
   std::optional<std::size_t> resident_jk_maximum_bytes;
 
@@ -151,6 +154,12 @@ struct RHFFrameResponseResult {
   std::size_t resident_jk_bytes{}, resident_jk_values{}, resident_jk_actions{};
   std::uint64_t resident_jk_value_reads{};
   double resident_jk_setup_seconds{}, resident_jk_seconds{}, resident_jk_device_seconds{};
+  // Pageable FP64 values and both pinned/device staging pairs belong to the
+  // immutable Direct plan. These provider transfers are separate from the
+  // response matrix-map traffic below; final uncached audits read none of them.
+  std::size_t host_jk_bytes{}, host_jk_capacity_bytes{}, host_jk_actions{};
+  std::uint64_t host_jk_h2d_bytes{};
+  double host_jk_setup_seconds{};
   // Other phase/work diagnostics describe only the successful attempt.
   // Complete endpoint time and capacity also include the discarded attempt.
   bool resident_jk_discarded_attempt{};

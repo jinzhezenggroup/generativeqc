@@ -180,6 +180,7 @@ class Calculator:
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
         _application_precision_budget: typing.Any = None,
         _correlation_convergence_budget: typing.Any = None,
+        _correlation_preconvergence: str | None = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -611,7 +612,8 @@ class Calculator:
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
         # CBS convergence allowances share the size-tagged transport, but have
-        # a separate capability and never request lower-precision arithmetic.
+        # a separate capability. An independent execution extension can request
+        # bounded auxiliary warmup without relaxing any final stopping limit.
         self._correlation_convergence_budget = _correlation_convergence_budget
         if _correlation_convergence_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -627,6 +629,16 @@ class Calculator:
                 _native.METHOD_DF_RCCSD_T,
             }:
                 raise ValueError("correlation convergence requires closed-shell MP2/CC")
+        if _correlation_preconvergence not in (None, "auto", "fp64", "mixed"):
+            raise ValueError("correlation preconvergence must be auto/fp64/mixed")
+        if _correlation_preconvergence is not None and (
+            self._method != _native.METHOD_DF_RCCSD_T or device != "cuda"
+        ):
+            raise NotImplementedError(
+                "correlation preconvergence requires CUDA DF-CCSD(T)"
+            )
+        self._correlation_preconvergence = None
+        self._correlation_preconvergence_fallback = None
         self._application_precision_budget = _application_precision_budget
         if _application_precision_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -688,6 +700,13 @@ class Calculator:
                 else self._method_name
             )
             self._ks_options = resolve_ks_options(ks_resolution_name, ks_options)
+            from .ks import _automatic_semilocal_name
+
+            # Explicit MethodIR/composition inputs use the same capability
+            # boundary as selectors; their transport family grants no forces.
+            self._automatic_libxc_name = _automatic_semilocal_name(
+                self._ks_options.method_ir
+            )
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
@@ -853,6 +872,35 @@ class Calculator:
         ):
             raise ValueError("canonical correlated methods require precision='fp64'")
         self._library = _native.load_library(device=device, device_id=self._device_id)
+        if _correlation_preconvergence is not None:
+            query = getattr(
+                self._library, "generativeqc_correlation_execution_version_v1", None
+            )
+            if query is not None:
+                query.argtypes, query.restype = [], ctypes.c_uint32
+            if query is None or query() != 1:
+                if _correlation_preconvergence != "auto":
+                    raise NotImplementedError(
+                        "native library lacks correlated preconvergence transport"
+                    )
+                # Preserve older libraries' strict or legacy Fast execution;
+                # missing transport is not evidence of mixed work or a failure.
+                self._correlation_preconvergence_fallback = (
+                    "native_execution_transport_unavailable"
+                )
+            else:
+                self._correlation_preconvergence = _correlation_preconvergence
+                if (
+                    getattr(
+                        self._library,
+                        "generativeqc_calculation_get_cc_precision_v1",
+                        None,
+                    )
+                    is None
+                ):
+                    raise NotImplementedError(
+                        "native library lacks correlated FP32 telemetry"
+                    )
         from ._context_owner import ContextOwner
 
         self._singlepoint_context = (
@@ -1414,8 +1462,11 @@ class Calculator:
         budget = getattr(self, "_application_precision_budget", None)
         if budget is None:
             budget = getattr(self, "_correlation_convergence_budget", None)
+        preconvergence = getattr(self, "_correlation_preconvergence", None)
         descriptor_type = (
-            _native.ApplicationPrecisionMethodDescriptor
+            _native.CorrelationExecutionMethodDescriptor
+            if preconvergence is not None
+            else _native.ApplicationPrecisionMethodDescriptor
             if budget is not None
             else _native.MethodDescriptor
         )
@@ -1468,6 +1519,11 @@ class Calculator:
             descriptor.application_energy_budget = budget.energy_abs
             descriptor.application_max_force_budget = budget.force_max_abs
             descriptor.application_rms_force_budget = budget.force_rms or 0.0
+        if preconvergence is not None:
+            descriptor.df_preconvergence = {"fp64": 1, "mixed": 2, "auto": 3}[
+                preconvergence
+            ]
+        if budget is not None or preconvergence is not None:
             prefix = _native.MethodDescriptor.from_buffer(descriptor)
             prefix._extension_owner = descriptor
             return prefix
@@ -1778,6 +1834,11 @@ class Calculator:
                     }
                     if getattr(self, "_correlation_convergence_budget", None)
                     is not None
+                    else {}
+                ),
+                **(
+                    {"correlation_preconvergence": self._correlation_preconvergence}
+                    if getattr(self, "_correlation_preconvergence", None) is not None
                     else {}
                 ),
                 "target_accuracy": self._target_accuracy.to_dict()

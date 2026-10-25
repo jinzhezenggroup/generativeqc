@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "ecp-real-f-171",
-  "owner": "ecp-real-f-171",
-  "reason": "Reviewed retained large evidence for Real LANL2DZ Au f-projector qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/ecp-real-f-171/README.md",
-  "files": []
-}

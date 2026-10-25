@@ -241,7 +241,7 @@ def _standard_fallback_admitted(
     This is the native Standard contract, not an observable-error certificate.
     Require strict execution under the native final-state contract, and never
     extend the fallback to tighter budgets or caller-relaxed solver controls.
-    Direct HF can reuse an already checked final Fock on a warm call; fitted
+    Direct HF can retain its checked physical final Fock on cold or warm calls; fitted
     HF lacks the optional work ledger. Keep those accounting limits explicit
     without repeating an otherwise completed Standard endpoint.
     Explicit TargetAccuracy requests bypass this policy in the caller.
@@ -255,8 +255,9 @@ def _standard_fallback_admitted(
             work.get("final_residual_audits", 0) > 0
             or (
                 calculator.capabilities.family == "hartree_fock"
-                and getattr(candidate, "warm_start_used", False) is True
-                and getattr(candidate, "warm_start_fallback", True) is False
+                # The native force-ready path validates the retained D/F[D]
+                # inside SCF even on a cold solve. Its reuse counter records
+                # that proof; warm-start metadata describes only the seed.
                 and work.get("skipped_final_fock_builds", 0) > 0
             )
         )
@@ -296,7 +297,9 @@ class PrecisionPolicy:
 
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
     native FP32 admission. CCSDTCBSCalculator also uses this allowance for
-    final FP64 convergence limits. It is not a measured per-call error certificate.
+    final FP64 convergence limits; its Standard uses the default Fast allowance
+    and its CBS-only Tight preset retains strict convergence. These are not
+    measured per-call error certificates.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
     Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
@@ -322,13 +325,17 @@ class PrecisionPolicy:
         if not isinstance(self.profile, str) or self.profile not in (
             "fast",
             "standard",
+            "tight",
             "fp64",
             *_DEFAULT_BUDGETS,
         ):
             raise ValueError(
-                "precision profile must be 'standard', 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
+                "precision profile must be 'standard', 'tight', 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
             )
-        if self.profile in ("fast", "standard", "fp64") and self.target is None:
+        if (
+            self.profile in ("fast", "standard", "tight", "fp64")
+            and self.target is None
+        ):
             return
         if self.target is None:
             energy, maximum, rms = _DEFAULT_BUDGETS[self.profile]
@@ -661,6 +668,10 @@ class PrecisionCalculator:
             policy = PrecisionPolicy(policy)
         if not isinstance(policy, PrecisionPolicy):
             raise TypeError("policy must be a PrecisionPolicy or preset name")
+        if policy.profile == "tight":
+            raise NotImplementedError(
+                "the tight preset is specific to CCSDTCBSCalculator"
+            )
         if {
             "precision",
             "target_accuracy",

@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "issue404-407-df",
-  "owner": "issue404-407-df",
-  "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/issue404-407-df/README.md",
-  "files": []
-}

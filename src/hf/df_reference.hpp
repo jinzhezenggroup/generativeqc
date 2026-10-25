@@ -29,6 +29,10 @@ class DFReference {
   [[nodiscard]] bool matches(const core::System&, const PhysicalReference&, int) const;
   [[nodiscard]] scf::CudaDensityFittingJkPlan* plan() const { return plan_; }
   [[nodiscard]] std::size_t storage_bytes() const { return storage_bytes_; }
+  /** Frozen forward rank/conditioning receipt; the same owner survives correlation. */
+  [[nodiscard]] const scf::CudaDensityFittingMetricDiagnostic& metric_diagnostic() const {
+    return metric_diagnostic_;
+  }
   /** Contract the complete fixed-rank A/M derivative of E2(density).
    * maximum_bytes bounds additional host+device response capacity together. */
   std::vector<double> quadratic_gradient(std::span<const double>, std::size_t maximum_bytes);
@@ -43,5 +47,6 @@ class DFReference {
   std::shared_ptr<const PhysicalReference> reference_;
   int device_{-1};
   std::size_t storage_bytes_{};
+  scf::CudaDensityFittingMetricDiagnostic metric_diagnostic_;
 };
 }  // namespace generativeqc::hf

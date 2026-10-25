@@ -20,7 +20,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _definition(source: str, signature: str) -> str:
     begin = source.index(signature)
-    end = source.index("{", begin) + 1
+    body_start = begin
+    if "(" in signature:
+        body_start = source.index("(", begin) + 1
+        parameters = 1
+        while parameters:
+            parameters += (source[body_start] == "(") - (source[body_start] == ")")
+            body_start += 1
+    end = source.index("{", body_start) + 1
     depth = 1
     while depth:
         depth += (source[end] == "{") - (source[end] == "}")
@@ -46,6 +53,7 @@ def profile_program(
     )
     range_method = _definition(source, "  void enqueue_range_correction(")
     range_active = _definition(source, "  bool range_source_active()")
+    observer = _definition(source, "  generativeqc_status observe_value_dispatch(")
     harness = r"""
 #include <algorithm>
 #include <array>
@@ -55,13 +63,16 @@ def profile_program(
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
+#include "scf/cuda_value_work.hpp"
 using cudaStream_t = int;
 using cudaStreamCaptureStatus = int;
 constexpr int cudaStreamCaptureStatusNone = 0, cudaMemcpyDeviceToHost = 1;
+constexpr int cudaStreamCaptureStatusInvalidated = 2, cudaSuccess = 0;
 static int mode{}, drains{}, range_drains{}, submissions{}, records{}, synchronizations{}, reads{};
 static bool timing{};
 static std::vector<std::function<void()>> pending, range_pending;
@@ -149,6 +160,7 @@ struct RangeEvent {
   }
 };
 namespace scf {
+using generativeqc::scf::observe_cuda_value_dispatch;
 struct Term { bool present{true}; double coefficient{1.0}; };
 struct Spec { Term coulomb, exchange{true, -0.125}; };
 struct Strategy { Spec spec; double screening_tolerance{1e-12}; };
@@ -276,6 +288,9 @@ struct Xc {
   }
 };
 struct Impl {
+  struct { struct {
+    generativeqc::scf::CoulombExchangeWork coulomb_exchange_work{true, 123, 456};
+  } dft_diagnostic; } output;
   bool final_state_ready{true}, final_frame_ready{true}, final_stationary_weights_ready{true};
   bool final_fitted_projection_ready{true};
   unsigned final_generation{5};
@@ -308,6 +323,7 @@ RANGE_ACTIVE
   }
   void current_device() const { check(cudaSetDevice(device)); }
   Impl() { correction.spec.coulomb.present = false; correction.spec.exchange.coefficient = -0.375; }
+OBSERVER_METHOD
 RANGE_METHOD
 };
 struct Owner {
@@ -397,6 +413,8 @@ int main(int argc, char** argv) {
     else
       assert(p.phase_source->calls == 1 && p.phase_source->audits == (mode == 33 || mode == 38 ? 0U : 1U));
   }
+  const auto& work = p.output.dft_diagnostic.coulomb_exchange_work;
+  assert(work.complete && work.coulomb_applications == 123 && work.exchange_applications == 456);
 }
 """
     directory = tmp_path_factory.mktemp("fixed-density-profile")
@@ -407,6 +425,7 @@ int main(int argc, char** argv) {
         .replace("METHODS", methods)
         .replace("RANGE_METHOD", range_method)
         .replace("RANGE_ACTIVE", range_active)
+        .replace("OBSERVER_METHOD", observer)
     )
     native_cxx.build_executable(
         [cpp],
@@ -418,6 +437,8 @@ int main(int argc, char** argv) {
             "-Werror",
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(ROOT / "src"),
         ],
         compile_timeout=60,
     )

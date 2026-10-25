@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "scf/cuda/direct_coulomb.hpp"
+#include "scf/cuda/direct_jk_host_cache.hpp"
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_direct_jk.hpp"
@@ -121,6 +122,7 @@ struct CudaDirectJkPlan {
    * order is exactly the geometry-bound canonical bucket traversal. This
    * lease never changes range, screening or derivative fallback semantics. */
   double* resident_values{};
+  std::unique_ptr<DirectJkHostCache> host_cache;
   float* resident_mixed_values{};
   FockOperator resident_operator{FockOperator::FullRange};
   double resident_omega{};

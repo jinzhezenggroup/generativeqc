@@ -1,6 +1,7 @@
-"""Narrow CPU value-provider observations, separate from precision evidence."""
+"""Observed value-provider applications, separate from precision evidence."""
 
 import ctypes
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -107,4 +108,112 @@ def test_decoder_never_certifies_missing_work(
         "complete": complete,
         "coulomb_applications": 17 if complete else None,
         "exchange_applications": 3 if complete else None,
+    }
+
+
+def require_allocated_cuda() -> None:
+    allocated = os.environ.get("SLURM_JOB_ID") or os.environ.get("INSPIRE_JOB_NAME")
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES") or os.environ.get(
+        "NVIDIA_VISIBLE_DEVICES"
+    )
+    if not allocated or not visible:
+        pytest.skip("requires an actual GPU allocation")
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize(
+    "family,k_terms", (("lda", 0), ("pbe", 0), ("pbe0", 1), ("wb97m-v", 2))
+)
+def test_cuda_observes_value_dispatches(
+    monkeypatch: pytest.MonkeyPatch, family: str, k_terms: int, spins: int
+) -> None:
+    require_allocated_cuda()
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "0")
+    calculator = Calculator(
+        method=f"{family}-{'rks' if spins == 1 else 'uks'}",
+        device="cuda",
+        precision="fp64",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
+        ),
+    )
+    result = calculator.singlepoint(
+        ATOMS, charge=spins - 1, multiplicity=spins, properties=("energy",)
+    )
+    assert result.converged
+    diagnostic = result.ks_diagnostic
+    assert diagnostic.coulomb_exchange_work == {
+        "complete": True,
+        "coulomb_applications": diagnostic.fock_builds,
+        "exchange_applications": k_terms * spins * diagnostic.fock_builds,
+    }
+
+
+def test_cuda_replay_resets_census_and_api_failure_invalidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_allocated_cuda()
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "0")
+    calculator = Calculator(
+        method="pbe0-rks",
+        device="cuda",
+        precision="fp64",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
+        ),
+    )
+    with calculator.prepare_batch([ATOMS], warm_start=True) as batch:
+        for _ in range(2):
+            result = batch.execute(properties=("energy",), strict=True).items[0]
+            assert result.converged
+            assert result.ks_diagnostic.coulomb_exchange_work == {
+                "complete": True,
+                "coulomb_applications": result.ks_diagnostic.fock_builds,
+                "exchange_applications": result.ks_diagnostic.fock_builds,
+            }
+        query = batch._library.generativeqc_batch_get_ks_coulomb_exchange_work_v1
+        assert query(batch._batch, 0, None) == _native.STATUS_SUCCESS
+        outputs = (_native.BatchItemResultDescriptor * 1)()
+        outputs[0].struct_size = ctypes.sizeof(_native.BatchItemResultDescriptor)
+        outputs[0].abi_version = _native.ABI_VERSION
+        assert (
+            batch._library.generativeqc_batch_execute(batch._batch, None, 0, outputs, 0)
+            == _native.STATUS_INVALID_ARGUMENT
+        )
+        assert query(batch._batch, 0, None) == _native.STATUS_NOT_IMPLEMENTED
+
+
+def test_cuda_device_chunks_do_not_certify_capture_as_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_allocated_cuda()
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2")
+    calculator = Calculator(
+        method="pbe-rks", device="cuda", precision="fp64", initial_guess=None
+    )
+    result = calculator.singlepoint(ATOMS, properties=("energy",))
+    assert result.converged
+    assert result.ks_diagnostic.coulomb_exchange_work == {
+        "complete": False,
+        "coulomb_applications": None,
+        "exchange_applications": None,
+    }
+
+
+def test_cuda_auto_keeps_uncertified_conditional_applications_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_allocated_cuda()
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "0")
+    calculator = Calculator(
+        method="pbe-rks", device="cuda", precision="auto", initial_guess=None
+    )
+    result = calculator.singlepoint(ATOMS, properties=("energy",))
+    assert result.converged
+    assert result.ks_diagnostic.coulomb_exchange_work == {
+        "complete": False,
+        "coulomb_applications": None,
+        "exchange_applications": None,
     }

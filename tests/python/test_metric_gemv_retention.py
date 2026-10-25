@@ -10,6 +10,31 @@ import pytest
 from tools.generativeqc_validation.record import load_record
 
 
+@pytest.mark.parametrize(
+    ("aos", "variant"), ((192, "blas"), (384, "blas"), (192, "serial"))
+)
+def test_single_batch_force_record_preserves_exact_historical_bytes(
+    aos: int, variant: str
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    path = (
+        root
+        / f"benchmarks/results/issue206-metric-gemv/measurements/{aos}ao-b1-forces-{variant}.storage.json"
+    )
+    metadata = json.loads(path.read_bytes())
+    stored = (root / metadata["stored_path"]).read_bytes()
+    original = gzip.decompress(stored)
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert len(original) == metadata["original_bytes"]
+    assert hashlib.sha256(original).hexdigest() == metadata["original_sha256"]
+    assert (
+        hashlib.sha1(f"blob {len(original)}\0".encode() + original).hexdigest()
+        == metadata["original_git_blob"]
+    )
+    assert load_record(root / metadata["stored_path"]) == json.loads(original)
+
+
 def test_metric_gemv_summary_restores_its_hash_bound_original() -> None:
     root = (
         Path(__file__).resolve().parents[2] / "benchmarks/results/issue206-metric-gemv"

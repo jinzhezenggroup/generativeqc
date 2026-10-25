@@ -1,0 +1,20 @@
+{
+  "scope": "exact frozen old/new transport RED/GREEN on actual-shaped synthetic CPU proof, no actual GPU/native/science or marker",
+  "results": [
+    {
+      "version": "v3",
+      "status": "EXPECTED_RED",
+      "error": "runtime hostname does not bind to one allocated qz instance/node",
+      "source_sha256": "a540bc5a6da30f3b605a9a56c91668ac8a896b44126972c733e111420f46400b",
+      "native_call_count": 0
+    },
+    {
+      "version": "v4",
+      "status": "GREEN_SYNTHETIC_CPU_FIXTURE_ONLY",
+      "source_sha256": "e57fcbdffb689ec637346105ad5a976fe57dd29df5ed26d35eb21c3c4a419496",
+      "platform_instance_id": null,
+      "platform_instance_id_status": "UNAVAILABLE",
+      "rank": 0
+    }
+  ]
+}

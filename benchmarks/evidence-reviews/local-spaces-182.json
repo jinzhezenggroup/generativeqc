@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "local-spaces-182",
-  "owner": "local-spaces-182",
-  "reason": "Reviewed retained large evidence for Restricted local-space evidence (#182). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/local-spaces-182/README.md",
-  "files": []
-}

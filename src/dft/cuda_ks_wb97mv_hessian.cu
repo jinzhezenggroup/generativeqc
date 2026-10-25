@@ -19,8 +19,9 @@ namespace maps = generativeqc_wb97mv_stationary_maps;
 void require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
-void check(cudaError_t error) {
-  if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
+void check(cudaError_t error, const char* phase = "stationary Hessian CUDA operation") {
+  if (error != cudaSuccess)
+    throw std::runtime_error(std::string(phase) + ": " + cudaGetErrorString(error));
 }
 std::size_t product(std::size_t first, std::size_t second) {
   require(!second || first <= SIZE_MAX / second, "stationary Hessian extent overflow");
@@ -74,6 +75,19 @@ __global__ void unit(double* output, std::size_t count, std::size_t coordinate) 
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     output[index] = index == coordinate ? 1.0 : 0.0;
 }
+__global__ void frozen_exact_response(const double* derivatives, const double* frozen,
+                                      const double* delta_density, std::size_t panels,
+                                      std::size_t coordinates, std::size_t column, double* output,
+                                      int* status) {
+  for (std::size_t left = blockIdx.x * blockDim.x + threadIdx.x; left < coordinates;
+       left += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+    double value = frozen[column * coordinates + left];
+    for (std::size_t index = 0; index < panels; ++index)
+      value += derivatives[left * panels + index] * delta_density[index];
+    if (!isfinite(value)) atomicExch(status, 1);
+    output[left] = value;
+  }
+}
 __global__ void pack_pairs(const double* basis, const double* charges, const double* direction,
                            const std::size_t* atoms, std::size_t pairs, double* first_charge,
                            double* second_charge, double* first_position, double* second_position,
@@ -119,6 +133,7 @@ struct CudaKsWb97mvHessian::Impl {
   CudaKsWb97mvHessianOptions options;
   CudaKsGridReference grid_reference;
   response::CudaKsCpksReference cpks_reference;
+  response::CudaCpksOperatorCache cpks_operator;
   CudaKsResidentFockBinding fock;
   CudaKsResidentOrbitalFrameBinding frame;
   CudaKsWb97mvResponse induced;
@@ -133,6 +148,9 @@ struct CudaKsWb97mvHessian::Impl {
   bool has_df{}, has_ecp{};
   cudaStream_t stream{};
   void* arena{};
+  double* operator_matrix{};
+  double* frozen_exact{};
+  bool frozen_exact_ready{};
   std::size_t bytes{}, remaining{}, matrix{}, panels{}, coordinates{}, pairs{}, raw{}, metric{};
   std::size_t map_offset{}, map_bytes{}, cpks_offset{}, cpks_bytes{}, geometry_offset{},
       geometry_bytes{}, grid_offset{}, grid_bytes{}, status_offset{};
@@ -154,6 +172,8 @@ struct CudaKsWb97mvHessian::Impl {
         remaining(policy.max_device_bytes) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
+    if (operator_matrix) (void)cudaFree(operator_matrix);
+    if (frozen_exact) (void)cudaFree(frozen_exact);
     if (arena) (void)cudaFree(arena);
   }
   template <class Value = double>
@@ -219,7 +239,10 @@ struct CudaKsWb97mvHessian::Impl {
     if ((error = device(destination)) != cudaSuccess) return error;
     if (!full && (error = device(source)) != cudaSuccess) return error;
     if (!disjoint(destination, {arena, bytes}) ||
-        (!full && (!disjoint(source, {arena, bytes}) || !disjoint(source, destination))))
+        (frozen_exact && !disjoint(destination, {frozen_exact, receipt.frozen_exact_bytes})) ||
+        (!full &&
+         (!disjoint(source, {arena, bytes}) || !disjoint(source, destination) ||
+          (frozen_exact && !disjoint(source, {frozen_exact, receipt.frozen_exact_bytes})))))
       return cudaErrorInvalidValue;
     const auto shape = grid_reference.shape();
     const Range immutable[]{
@@ -300,7 +323,32 @@ struct CudaKsWb97mvHessian::Impl {
     }
     return cudaSuccess;
   }
-  cudaError_t compute(CudaKsWb97mvHessianResult& result) {
+  cudaError_t prepare_frozen_exact() {
+    frozen_exact_ready = false;
+    if (!frozen_exact) return cudaSuccess;
+    auto error = authenticate();
+    for (std::size_t column = 0; column < coordinates && error == cudaSuccess; ++column) {
+      unit<<<maps::blocks(coordinates), 128, 0, stream>>>(at(direction), coordinates, column);
+      error = cudaGetLastError();
+      if (error == cudaSuccess)
+        error = exact.apply(at(direction), at(zero), exact_output(), stream);
+      if (error == cudaSuccess)
+        error = cudaMemcpyAsync(frozen_exact + column * panels, at(exact_direction),
+                                panels * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+      if (error == cudaSuccess)
+        error =
+            cudaMemcpyAsync(frozen_exact + coordinates * panels + column * coordinates, vector(3),
+                            coordinates * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+      if (error == cudaSuccess) ++receipt.frozen_exact_columns;
+    }
+    const auto completed = cudaStreamSynchronize(stream);
+    if (error == cudaSuccess) error = completed;
+    if (error == cudaSuccess) error = authenticate();
+    frozen_exact_ready = error == cudaSuccess;
+    return error;
+  }
+  cudaError_t compute(CudaKsWb97mvHessianResult& result, bool repeated_rhs = false,
+                      std::size_t column = SIZE_MAX) {
     ++receipt.attempted_directions;
     auto error = authenticate();
     if (error != cudaSuccess) return error;
@@ -317,8 +365,13 @@ struct CudaKsWb97mvHessian::Impl {
                                                    at(totals) + matrix, at(delta_totals) + matrix};
     if ((error = one_electron.apply(at(direction), frozen, core_output(), stream)) != cudaSuccess)
       return error;
-    if ((error = exact.apply(at(direction), at(zero), exact_output(), stream)) != cudaSuccess)
-      return error;
+    const bool cached_exact = repeated_rhs && frozen_exact_ready && column < coordinates;
+    if (cached_exact)
+      error = cudaMemcpyAsync(at(exact_direction), frozen_exact + column * panels,
+                              panels * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+    else
+      error = exact.apply(at(direction), at(zero), exact_output(), stream);
+    if (error != cudaSuccess) return error;
     if (has_df) {
       auto* values = at(raw_values);
       const integrals::CudaDfNuclearValues output{values, values + raw, values + raw + metric,
@@ -355,7 +408,8 @@ struct CudaKsWb97mvHessian::Impl {
     error = response::solve_cuda_cpks(
         cpks_reference.shape(), options.cpks, cpks_reference.reference(), at(rhs),
         at(overlap_direction), CudaKsWb97mvResponse::induced_fock, &induced, at(delta_density),
-        at(delta_weights), at(cpks_offset), cpks_bytes, stream, result.response);
+        at(delta_weights), at(cpks_offset), cpks_bytes, stream, result.response,
+        repeated_rhs && operator_matrix ? &cpks_operator : nullptr);
     if (error != cudaSuccess) return error;
     if (!result.response.converged()) {
       result.status = CudaKsWb97mvHessianStatus::response_not_converged;
@@ -364,10 +418,20 @@ struct CudaKsWb97mvHessian::Impl {
     if ((error = sum_weights(at(delta_density), at(delta_weights), delta_totals)) != cudaSuccess ||
         (error = gate()) != cudaSuccess)
       return error;
-    if ((error = one_electron.apply(at(direction), frozen, core_output(), stream)) != cudaSuccess ||
-        (error = exact.apply(at(direction), at(delta_density), exact_output(), stream)) !=
-            cudaSuccess)
+    if ((error = one_electron.apply(at(direction), frozen, core_output(), stream)) != cudaSuccess)
       return error;
+    if (cached_exact) {
+      // Exact J/K is quadratic in D: d(gradient)/dD : dD = F_R(D) : dD.
+      // Retain contracted AO derivatives, not four-index value/gradient jets.
+      frozen_exact_response<<<maps::blocks(coordinates), 128, 0, stream>>>(
+          frozen_exact, frozen_exact + coordinates * panels, at(delta_density), panels, coordinates,
+          column, vector(3), at<int>(status_offset));
+      error = cudaGetLastError();
+      if (error == cudaSuccess) ++receipt.frozen_exact_contractions;
+    } else {
+      error = exact.apply(at(direction), at(delta_density), exact_output(), stream);
+    }
+    if (error != cudaSuccess) return error;
     if (has_df) {
       if ((error = fitted_action(at(delta_density))) != cudaSuccess) return error;
       const auto* weight = at(fitted_weights);
@@ -446,7 +510,18 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     const auto lease = owner->grid_reference.reference();
     const auto shape = owner->grid_reference.shape();
-    const auto geometry_shape = owner->grid_reference.geometry_shape();
+    auto geometry_shape = owner->grid_reference.geometry_shape();
+    for (const auto& shell : owner->fock.primary->system().shells) {
+      const auto angular = static_cast<std::size_t>(shell.angular_momentum);
+      const bool spherical =
+          owner->fock.primary->system().basis_representation == core::kSphericalBasis;
+      const auto components = spherical ? 2 * angular + 1 : (angular + 1) * (angular + 2) / 2;
+      const auto terms = spherical && angular > 1 ? 3 : 1;
+      const auto incidences = product(product(components, shell.primitives.size()), terms);
+      require(incidences <= SIZE_MAX - geometry_shape.ao_primitive_terms,
+              "moving-grid AO primitive incidence overflow");
+      geometry_shape.ao_primitive_terms += incidences;
+    }
     require(geometry_shape.atoms && shape.nao == owner->frame.nao &&
                 shape.spins == owner->frame.spins && lease.density == owner->frame.density &&
                 lease.device_id == owner->frame.device_id &&
@@ -498,29 +573,24 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       map(maps::workspace_nuclear_second, maps::work_nuclear_second);
       map(maps::workspace_nuclear_atom, maps::work_nuclear_atom, shape.atoms);
     }
+    // First reserve the complete mandatory baseline. Optional grid replay and
+    // parallel one-electron schedules may spend only the surplus after every
+    // mandatory consumer, including the geometry AO output and exact sources.
     owner->options.grid.nuclear_response = true;
-    owner->options.grid.max_workspace_bytes =
-        std::min(options.grid.max_workspace_bytes, owner->remaining);
-    check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes));
-    owner->charge(owner->grid_bytes);
+    owner->options.grid.replay_nuclear_maps = false;
+    check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes),
+          "stationary Hessian XC/VV10 workspace admission");
     owner->options.geometry.partition_iterations =
         owner->grid_reference.geometry_options().partition_iterations;
     owner->options.geometry.coincident_tolerance =
         owner->grid_reference.geometry_options().coincident_tolerance;
-    owner->options.geometry.max_workspace_bytes =
-        std::min(options.geometry.max_workspace_bytes, owner->remaining);
     check(cuda_grid_geometry_workspace(geometry_shape, owner->options.geometry,
-                                       owner->geometry_bytes));
-    owner->charge(owner->geometry_bytes);
-    owner->options.cpks.max_workspace_bytes =
-        std::min(options.cpks.max_workspace_bytes, owner->remaining);
+                                       owner->geometry_bytes),
+          "stationary Hessian moving-grid workspace admission");
     check(response::cuda_cpks_workspace(owner->cpks_reference.shape(), owner->options.cpks,
-                                        owner->cpks_bytes));
-    owner->charge(owner->cpks_bytes);
+                                        owner->cpks_bytes),
+          "stationary Hessian CPKS workspace admission");
     Layout layout;
-    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
-    owner->geometry_offset = layout.reserve(owner->geometry_bytes, 1);
-    owner->cpks_offset = layout.reserve(owner->cpks_bytes, 1);
     owner->map_offset = layout.reserve(owner->map_bytes, 1);
     owner->status_offset = layout.reserve(1, sizeof(int));
     const auto matrix = owner->matrix, panels = owner->panels, coordinates = owner->coordinates;
@@ -552,45 +622,27 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->pair_first = layout.reserve(product(3, owner->pairs));
     owner->pair_second = layout.reserve(product(3, owner->pairs));
     owner->incidences = layout.reserve(product(3, shape.atoms - 1));
+    owner->geometry_offset = layout.reserve(owner->geometry_bytes, 1);
+    owner->cpks_offset = layout.reserve(owner->cpks_bytes, 1);
+    // Keep the optional grid tail last so its aligned reservation can grow
+    // without moving any mandatory output or response workspace.
+    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
     owner->bytes = layout.bytes;
-    owner->charge(owner->bytes - owner->grid_bytes - owner->geometry_bytes - owner->cpks_bytes);
-    check(cudaMalloc(&owner->arena, owner->bytes));
-    std::vector<double> charges;
-    for (const auto& atom : owner->fock.primary->system().atoms)
-      charges.push_back(atom.ionic_charge());
-    std::vector<std::size_t> pair_atoms(product(2, owner->pairs));
-    std::size_t pair{};
-    for (std::size_t first = 0; first < shape.atoms; ++first)
-      for (std::size_t second = first + 1; second < shape.atoms; ++second, ++pair) {
-        pair_atoms[pair] = first;
-        pair_atoms[owner->pairs + pair] = second;
-      }
-    DrainOnFailure upload_drain{owner->stream};
-    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
-    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
-                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
-    if (owner->pairs)
-      check(cudaMemcpyAsync(owner->at<std::size_t>(owner->pair_atoms), pair_atoms.data(),
-                            pair_atoms.size() * sizeof(std::size_t), cudaMemcpyHostToDevice,
-                            owner->stream));
-    check(cudaStreamSynchronize(owner->stream));
-    upload_drain.active = false;
-    check(owner->geometry.prepare(geometry_shape, owner->options.geometry,
-                                  owner->grid_reference.geometry_reference(),
-                                  owner->at(owner->geometry_offset), owner->geometry_bytes));
-    check(owner->grid.prepare(shape, owner->options.grid, lease, owner->at(owner->grid_offset),
-                              owner->grid_bytes));
+    owner->charge(owner->bytes);
+    auto core_options = options.one_electron;
+    core_options.parallel_streams = 0;
+    const auto core_bytes = cuda_ks_one_electron_workspace(
+        owner->fock.primary->system(), {shape.atoms, shape.primitives, shape.nao}, core_options);
+    owner->charge(core_bytes);
     auto induced_options = options.induced;
     induced_options.defer_resident_integrals = true;
     induced_options.max_device_bytes = std::min(induced_options.max_device_bytes, owner->remaining);
     status = owner->induced.prepare(batch, item, expected, induced_options, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      detail = "stationary Hessian induced Fock: " + detail;
+      return status;
+    }
     owner->charge(owner->induced.work().device_bytes);
-    auto core_options = options.one_electron;
-    core_options.max_workspace_bytes = std::min(core_options.max_workspace_bytes, owner->remaining);
-    status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    owner->charge(owner->one_electron.work().device_bytes);
     if (owner->has_df) {
       auto raw_options = options.raw_df;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
@@ -617,9 +669,90 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     exact_options.max_workspace_bytes =
         std::min(exact_options.max_workspace_bytes, owner->remaining);
     status = owner->exact.prepare(batch, item, expected, exact_options, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      detail = "stationary Hessian exact nuclear J/K: " + detail;
+      return status;
+    }
     owner->charge(owner->exact.work().workspace_bytes);
+    const auto grid_reserved = owner->bytes - owner->grid_offset;
+    owner->options.grid.replay_nuclear_maps = options.grid.replay_nuclear_maps;
+    // All arena slots are 256-byte aligned. Do not let an optional payload
+    // consume the alignment bytes needed by its enclosing reservation.
+    owner->options.grid.max_workspace_bytes =
+        std::min(options.grid.max_workspace_bytes, (grid_reserved + owner->remaining) / 256 * 256);
+    check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes),
+          "stationary Hessian optional XC/VV10 workspace admission");
+    layout.bytes = owner->grid_offset;
+    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
+    owner->charge(layout.bytes - owner->bytes);
+    owner->bytes = layout.bytes;
+    core_options = options.one_electron;
+    core_options.max_workspace_bytes =
+        std::min(core_options.max_workspace_bytes, core_bytes + owner->remaining);
+    status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    require(owner->one_electron.work().device_bytes >= core_bytes,
+            "one-electron preparation differs from its mandatory reservation");
+    owner->charge(owner->one_electron.work().device_bytes - core_bytes);
+    check(cudaMalloc(&owner->arena, owner->bytes));
+    std::vector<double> charges;
+    for (const auto& atom : owner->fock.primary->system().atoms)
+      charges.push_back(atom.ionic_charge());
+    std::vector<std::size_t> pair_atoms(product(2, owner->pairs));
+    std::size_t pair{};
+    for (std::size_t first = 0; first < shape.atoms; ++first)
+      for (std::size_t second = first + 1; second < shape.atoms; ++second, ++pair) {
+        pair_atoms[pair] = first;
+        pair_atoms[owner->pairs + pair] = second;
+      }
+    DrainOnFailure upload_drain{owner->stream};
+    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
+    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
+                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
+    if (owner->pairs)
+      check(cudaMemcpyAsync(owner->at<std::size_t>(owner->pair_atoms), pair_atoms.data(),
+                            pair_atoms.size() * sizeof(std::size_t), cudaMemcpyHostToDevice,
+                            owner->stream));
+    check(cudaStreamSynchronize(owner->stream));
+    upload_drain.active = false;
+    check(owner->geometry.prepare(geometry_shape, owner->options.geometry,
+                                  owner->grid_reference.geometry_reference(),
+                                  owner->at(owner->geometry_offset), owner->geometry_bytes));
+    check(owner->grid.prepare(shape, owner->options.grid, lease, owner->at(owner->grid_offset),
+                              owner->grid_bytes));
+    std::size_t operator_bytes{};
+    check(response::cuda_cpks_operator_workspace(owner->cpks_reference.shape(), owner->options.cpks,
+                                                 operator_bytes));
+    if (operator_bytes && operator_bytes <= options.max_resident_cpks_bytes &&
+        operator_bytes <= owner->remaining &&
+        operator_bytes <= owner->options.cpks.max_workspace_bytes - owner->cpks_bytes) {
+      const auto allocation =
+          cudaMalloc(reinterpret_cast<void**>(&owner->operator_matrix), operator_bytes);
+      if (allocation == cudaErrorMemoryAllocation) {
+        (void)cudaGetLastError();
+        owner->operator_matrix = nullptr;
+      } else {
+        check(allocation);
+        owner->charge(operator_bytes);
+        owner->receipt.cpks_operator_bytes = operator_bytes;
+        owner->cpks_operator.reset(owner->operator_matrix, operator_bytes);
+      }
+    }
     const auto induced_bytes = owner->induced.work().device_bytes;
+    const auto frozen_bytes =
+        product(product(owner->coordinates, owner->panels + owner->coordinates), sizeof(double));
+    if (frozen_bytes <= options.max_frozen_exact_bytes && frozen_bytes <= owner->remaining) {
+      const auto allocation =
+          cudaMalloc(reinterpret_cast<void**>(&owner->frozen_exact), frozen_bytes);
+      if (allocation == cudaErrorMemoryAllocation) {
+        (void)cudaGetLastError();
+        owner->frozen_exact = nullptr;
+      } else {
+        check(allocation);
+        owner->charge(frozen_bytes);
+        owner->receipt.frozen_exact_bytes = frozen_bytes;
+      }
+    }
     status = owner->induced.retain_integrals(owner->remaining, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     owner->charge(owner->induced.work().device_bytes - induced_bytes);
@@ -680,12 +813,13 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
     auto error = owner.admit(nullptr, output, true, stream);
     if (error != cudaSuccess) return error;
     DrainOnFailure drain{stream};
+    if ((error = owner.prepare_frozen_exact()) != cudaSuccess) return error;
     for (std::size_t coordinate = 0; coordinate < owner.coordinates; ++coordinate) {
       result.status = CudaKsWb97mvHessianStatus::failed;
       unit<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(owner.at(owner.direction),
                                                                 owner.coordinates, coordinate);
       if ((error = cudaGetLastError()) != cudaSuccess ||
-          (error = owner.compute(result)) != cudaSuccess || !result.converged())
+          (error = owner.compute(result, true, coordinate)) != cudaSuccess || !result.converged())
         return error;
       result.status = CudaKsWb97mvHessianStatus::failed;
       store_column<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(
@@ -718,6 +852,9 @@ CudaKsWb97mvHessianWork CudaKsWb97mvHessian::work() const noexcept {
   if (!impl_) return {};
   auto receipt = impl_->receipt;
   receipt.induced = impl_->induced.work();
+  receipt.cpks_operator_columns = impl_->cpks_operator.columns();
+  receipt.cpks_cached_actions = impl_->cpks_operator.actions();
+  receipt.cpks_physical_checks = impl_->cpks_operator.physical_checks();
   receipt.geometry = impl_->geometry.work();
   receipt.grid = impl_->grid.work();
   receipt.one_electron = impl_->one_electron.work();

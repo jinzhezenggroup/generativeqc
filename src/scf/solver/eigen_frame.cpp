@@ -9,6 +9,33 @@
 #include "scf/solver/validation_products.hpp"
 
 namespace generativeqc::scf::solver {
+namespace {
+// Scaled sum-of-squares avoids one hypot per entry while preserving finite-
+// input overflow and tiny-value protection. It is only a reduction schedule;
+// the absolute/scaled residual thresholds below remain unchanged.
+struct ScaledNorm {
+  double scale = 0.0, sum = 1.0;
+  bool valid = true;
+  void add(double value) {
+    const double x = std::abs(value);
+    if (!std::isfinite(x)) {
+      valid = false;
+      return;
+    }
+    if (!x) return;
+    if (scale < x) {
+      const double r = scale / x;
+      sum = 1.0 + sum * r * r;
+      scale = x;
+    } else {
+      const double r = x / scale;
+      sum += r * r;
+    }
+  }
+  double value() const { return valid ? scale * std::sqrt(sum) : INFINITY; }
+};
+}  // namespace
+
 bool order_eigenpairs(std::vector<double>& eigenvalues, std::vector<double>& coefficients,
                       std::size_t dimension) {
   const auto finite = [](const auto& values) {
@@ -44,7 +71,8 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
                           const std::vector<double>& values,
                           const std::vector<double>& coefficients, std::size_t n,
                           EigenFrameDiagnostic& diagnostic, std::string& detail,
-                          bool require_eigen_residual) {
+                          bool require_eigen_residual,
+                          const initial_guess::MatrixProductOperation& products) {
   const auto finite = [](const auto& values) {
     return std::all_of(values.begin(), values.end(),
                        [](double value) { return std::isfinite(value); });
@@ -76,7 +104,7 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
   }
   // Validate the original F/S inputs on the host. Only the dense product
   // schedule is optional; every finiteness, norm and physical gate below stays.
-  const ValidationProducts multiply;
+  const ValidationProducts multiply(products);
   const auto sc = overlap ? multiply(*overlap, coefficients, n) : coefficients;
   const auto gram = multiply(coefficients, sc, n, true);
   // Allocate FC after any fallback transpose temporary has been released.
@@ -87,6 +115,7 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
     detail = "DF eigenframe validation products are nonfinite";
     return false;
   }
+  ScaledNorm rn, mn, cn, bn;
   double residual_norm = 0, matrix_norm = 0, coefficient_norm = 0, rhs_norm = 0;
   diagnostic.maximum_eigen_residual = diagnostic.maximum_metric_error = 0;
   for (std::size_t row = 0; row < n; ++row) {
@@ -94,16 +123,20 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
       const auto k = row * n + column;
       const double rhs = sc[k] * values[column];
       const double residual = fc[k] - rhs;
-      residual_norm = std::hypot(residual_norm, residual);
-      matrix_norm = std::hypot(matrix_norm, matrix[k]);
-      coefficient_norm = std::hypot(coefficient_norm, coefficients[k]);
-      rhs_norm = std::hypot(rhs_norm, rhs);
+      rn.add(residual);
+      mn.add(matrix[k]);
+      cn.add(coefficients[k]);
+      bn.add(rhs);
       diagnostic.maximum_eigen_residual =
           std::max(diagnostic.maximum_eigen_residual, std::abs(residual));
       diagnostic.maximum_metric_error = std::max(diagnostic.maximum_metric_error,
                                                  std::abs(gram[k] - (row == column ? 1.0 : 0.0)));
     }
   }
+  residual_norm = rn.value();
+  matrix_norm = mn.value();
+  coefficient_norm = cn.value();
+  rhs_norm = bn.value();
   const double scale = matrix_norm * coefficient_norm + rhs_norm;
   diagnostic.scaled_eigen_residual = scale == 0 ? residual_norm : residual_norm / scale;
   if (!std::isfinite(scale) || !std::isfinite(residual_norm)) {

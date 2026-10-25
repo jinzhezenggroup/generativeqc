@@ -1,8 +1,0 @@
-{
-  "schema": "generativeqc.legacy-large-evidence-family.v1",
-  "family": "spatial-tasks",
-  "owner": "spatial-tasks",
-  "reason": "Reviewed retained large evidence for Bounded spatial AO task evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-  "review_document": "benchmarks/results/spatial-tasks/README.md",
-  "files": []
-}

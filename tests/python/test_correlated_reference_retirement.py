@@ -427,6 +427,7 @@ void provider_probe(int failure, bool resident, bool fitted) {
     std::size_t storage_bytes() const { return 7; }
   };
   auto fitted_reference = fitted ? std::make_shared<FittedReference>() : nullptr;
+  expected_fitted_reference = fitted_reference.get();
   const std::size_t fitted_bytes = fitted ? 7 : 0;
   const bool cuda = true, retain_df_response = true, df_mp2_mode = false;
   const core::System* correlation_auxiliary = nullptr;
@@ -668,11 +669,14 @@ struct ProbeState {
     diagnostic.reference_execution_plan_reused = 1;
   }
 };
+const void* expected_fitted_reference = nullptr;
+template <class FittedReference>
 cc::Problem build_problem(const core::System&, const integrals::ElectronInteractionSource* source,
     const hf::PhysicalReference&, const cc::SolverOptions& options, bool, int,
     posthf::ProviderWork& work, generativeqc_tensor::Metrics& metrics, const core::System*,
     cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*,
-    bool df_mp2_mode) {
+    bool df_mp2_mode, std::shared_ptr<FittedReference> shared_reference) {
+  assert(shared_reference.get() == expected_fitted_reference);
   PhaseOwner partial_problem;
   assert(!df_mp2_mode);
   assert(source && source->nbf() == 2 && retained && !retained->response_state);

@@ -1,0 +1,71 @@
+{
+  "scope": "host-only proof-contract/finalizer/gate tests; synthetic fixtures; no GPU or platform resource action",
+  "results": [
+    {
+      "test": "test_qz_smoke.py",
+      "options": [],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "...............\n----------------------------------------------------------------------\nRan 15 tests in 0.472s\n\nOK\n"
+    },
+    {
+      "test": "test_qz_smoke.py",
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "...............\n----------------------------------------------------------------------\nRan 15 tests in 0.476s\n\nOK\n"
+    },
+    {
+      "test": "test_gate_wait.py",
+      "options": [],
+      "returncode": 0,
+      "stdout": "{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:06.758642+00:00\", \"pid\": 4147756, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"fde3a90a65f33660673dd966b25f094c053a37471f1d1655fcd744aefc7a6c4d\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:06.832918+00:00\", \"pid\": 4147756, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"7ff93c0c13f9d11c2eedf0b6b7c5302913108f21fdf1ea030b0261541dc950e0\", \"wait_cap_seconds\": 2, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:07.095216+00:00\", \"pid\": 4147756, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"328d027743cd2b99f03aaeae1f0641ad09b286070339c0fda0830b692fc7e436\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.509s\n\nOK\n"
+    },
+    {
+      "test": "test_gate_wait.py",
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:07.567523+00:00\", \"pid\": 4147770, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"8cdfa03b130b7c2fb0e45d7088c2255a3e83149e35e8340d24e7c8d7c159a9a3\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:07.626875+00:00\", \"pid\": 4147770, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"a0d70cc4b6acbf01990261cf3b8b1cc2ba7ce6906b9350a5159bc0a623f46178\", \"wait_cap_seconds\": 2, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"job_name\": \"synthetic-unit-test\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T09:05:07.892331+00:00\", \"pid\": 4147770, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"3364c7f15113630de9aee7d940f12bfc319727fba653fdf34a2f09257d590c08\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.499s\n\nOK\n"
+    },
+    {
+      "test": "test_finalize_release.py",
+      "options": [],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.323s\n\nOK\n"
+    },
+    {
+      "test": "test_finalize_release.py",
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.342s\n\nOK\n"
+    }
+  ],
+  "bash_n": {
+    "returncode": 0,
+    "stderr": ""
+  },
+  "files": {
+    "scripts/adapter-prepared-v5/replay.py": "b8b003939523f0a56720544591923fcdb9556bfd188eeee239fb2e83a390e14a",
+    "scripts/adapter-prepared-v5/qz_smoke.py": "66bd120eea89abf44a5a4e4a77616afc91979c7fb67822eab1a58011e6bb7b66",
+    "scripts/adapter-prepared-v5/test_qz_smoke.py": "1c2665787e54fceb4e42769ca324b51e949921bcc4872fe8386635fcb83069ab",
+    "scripts/adapter-prepared-v5/protocol-manifest-v2.json": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761",
+    "scripts/gate-wait-v3/build_support.py": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+    "scripts/gate-wait-v3/test_gate_wait.py": "588562aa0cb4d78fe394795a08f7d63b32fbffa7836b3a4345966d2ce2946f47",
+    "scripts/gate-wait-v3/job-entry.sh": "ea38ac6f410f8397fcbc7dd40f1d7684611b3d98a6501571f1913f4aabde4016",
+    "scripts/gate-wait-v3/test_finalize_release.py": "8aae58e69ad3447344650d62156bd6f08997ad9fb0364b2bc9162463e43f2a8c",
+    "scripts/gate-wait-v3/gate_wait.py": "b35b3f18a054922f47e1700a2918544a9b2e63131f213eebd596e3b7bb1f865c",
+    "scripts/gate-wait-v3/finalize_release.py": "76edfc8e70f90862c1c4fbff156d54c08a7fd8df46b49b21bafd4016e59b492b"
+  },
+  "r2_output_absent": true,
+  "source_runtime_DSO_changed": false
+}

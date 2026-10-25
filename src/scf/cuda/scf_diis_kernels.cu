@@ -115,6 +115,25 @@ bool incremental_diis_gram_requested() {
   throw std::invalid_argument("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM must be 0 or 1");
 }
 
+bool hf_incremental_diis_gram_requested(std::size_t aos, std::size_t history, std::size_t spins) {
+  if (history < 2) return false;
+  if (std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"))
+    return incremental_diis_gram_requested();
+  // The existing staged ordered kernel uses a full CTA at this vector size.
+  // Smaller and unrestricted owners retain their separately qualified policy.
+  if (aos < 512 || spins != 1) return false;
+  (void)ordered_incremental_diis_gram_requested();
+  return true;
+}
+
+bool hf_ordered_diis_gram_requested() {
+  // Unset automatic admission preserves the scalar FP64 accumulation order.
+  // Explicit enable/reducer controls keep their preexisting meaning.
+  return (!std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM") &&
+          !std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION")) ||
+         ordered_incremental_diis_gram_requested();
+}
+
 cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
                                      std::int32_t spins, std::uint32_t history,
                                      const double* residual, const double* residual_history,
