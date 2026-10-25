@@ -25,7 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
-    "method,xc", [("lda", "LDA_X,LDA_C_PW"), ("pbe", "PBE"), ("pbe0", "PBE0")]
+    "method,xc",
+    [("lda", "LDA_X,LDA_C_PW"), ("pbe", "PBE"), ("pbe0", "PBE0"), ("r2scan", "R2SCAN")],
 )
 @pytest.mark.parametrize("spin", ["rks", "uks"])
 def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
@@ -106,7 +107,7 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
     profile = next(
         profile
         for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-        if profile.profile_id == "fitted-exact-jet-bitmask-v1-budget-auto"
+        if profile.density_fitted and profile.tile_policy == "budget-auto"
     )
     profile = replace(
         profile, min_dense_point_ao_square_work=1, max_active_fraction=1.0

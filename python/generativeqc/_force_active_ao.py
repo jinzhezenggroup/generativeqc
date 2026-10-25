@@ -191,6 +191,11 @@ class ForceActiveAoDecision:
 # #1893 extends previously dense work to the resident pre-AO producer below it;
 # occupancy/resource misses remain dense, without product or shape whitelists.
 _SAMPLED_DENSE_WORK_CROSSOVER = 173_946_175_488
+# Native bitmask discovery has a different cost from the older sampled/host
+# producer. Complete cold/replay measurements admit it at 2**35 point*AO**2
+# work; smaller workloads keep their dense route. The existing occupancy and
+# complete-owner capacity checks still decide whether an admitted map is useful.
+_FITTED_BITMASK_DENSE_WORK_CROSSOVER = 1 << 35
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
         profile_id="ordinary-direct-active-ao-cost-v3",
@@ -235,15 +240,16 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
     # the SCF's order-one masks for an order-two force. Discovery, rebinding and
     # optional storage are owned by the existing token-checked grid consumer.
     QualifiedForceActiveAoProfile(
-        profile_id="fitted-exact-jet-bitmask-v1",
+        profile_id="fitted-exact-jet-bitmask-v2",
         evidence=(
             ".agents/notes/implemented/performance/2026-10-10-df-force-active-ao.md",
+            ".agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md",
         ),
         compositions=("ordinary",),
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
         density_fitted=True,
-        min_dense_point_ao_square_work=_SAMPLED_DENSE_WORK_CROSSOVER,
+        min_dense_point_ao_square_work=_FITTED_BITMASK_DENSE_WORK_CROSSOVER,
         tile_policy="fixed",
         tile_points=256,
         min_device_bytes=512 << 20,
