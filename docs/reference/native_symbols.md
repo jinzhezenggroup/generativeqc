@@ -67,6 +67,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
+- [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
+- [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
 - [generativeqc_calculation_get_supported_properties_v1](#native-c-generativeqc-calculation-get-supported-properties-v1)
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
@@ -165,6 +167,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::CalculationResult](#native-cpp-generativeqc-calculationresult)
 - [generativeqc::Calculation](#native-cpp-generativeqc-calculation)
 - [generativeqc::Calculation::Calculation](#native-cpp-generativeqc-calculation-calculation)
+- [generativeqc::Calculation::Calculation-named-ks](#native-cpp-generativeqc-calculation-calculation-named-ks)
 - [generativeqc::Calculation::~Calculation](#native-cpp-generativeqc-calculation-destructor-calculation)
 - [generativeqc::Calculation::Calculation-copy](#native-cpp-generativeqc-calculation-calculation-copy)
 - [generativeqc::Calculation::operator=-copy](#native-cpp-generativeqc-calculation-copy-assignment-copy)
@@ -185,6 +188,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
 - [generativeqc::Batch::last_density_fitting_metric_diagnostics](#native-cpp-generativeqc-batch-last-density-fitting-metric-diagnostics)
 - [generativeqc::KsGrid](#native-cpp-generativeqc-ksgrid)
+- [generativeqc::prepare_named_ks](#native-cpp-generativeqc-prepare-named-ks)
 - [generativeqc::KsComposition](#native-cpp-generativeqc-kscomposition)
 - [generativeqc::KsComposition::KsComposition](#native-cpp-generativeqc-kscomposition-kscomposition)
 - [generativeqc::KsComposition::set_grid](#native-cpp-generativeqc-kscomposition-set-grid)
@@ -1728,6 +1732,59 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Method energy tolerances use Hartree; geometries use Bohr. Resource limits are bytes,
 and convergence residuals retain the method-specific descriptor meanings.
+
+(native-c-generativeqc-calculation-prepare-named-ks-v1)=
+## generativeqc_calculation_prepare_named_ks_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Prepare a complete compiled KS program, including its dispersion terms.
+
+**Inputs.** context/system/descriptor/name/output are required. Both descriptors need ABI
+headers. descriptor.method must be the PBE_RKS/PBE_UKS transport carrier matching the
+named program's spin. ks_options, when supplied, contributes execution controls only;
+the catalog owns every scientific primitive. NULL ks_options selects level-3 quadrature,
+device-fused XC and a 256 MiB nonlocal budget.
+
+**Outputs.** Clears the output slot on entry and publishes an owned calculation on success.
+
+**Lifetime.** Copies all inputs; context must outlive the returned calculation.
+
+**Errors.** Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
+return INVALID_ARGUMENT. Usual preparation ABI, capacity and numerical gates apply.
+
+**Execution.** Synchronous native preparation, without Python, SCF or reference engines.
+
+**Units.** Energy in Hartree, coordinates in Bohr, capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-v1)=
+## generativeqc_batch_prepare_named_ks_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare a complete named KS program for an input-ordered native batch.
+
+**Inputs.** systems/system_count and flags follow generativeqc_batch_prepare. The method and
+named descriptors follow generativeqc_calculation_prepare_named_ks_v1, including exact
+identity checks and execution-control-only ks_options.
+
+**Outputs.** Clears the output slot on entry; success publishes one owning batch.
+
+**Lifetime.** Copies inputs and retains the context, which must outlive the batch.
+
+**Errors.** Uses the same fail-closed preparation statuses as the single-system endpoint.
+
+**Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
+
+**Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
 
 (native-c-generativeqc-calculation-destroy)=
 ## generativeqc_calculation_destroy
@@ -4373,6 +4430,26 @@ Allocation failures may throw standard exceptions.
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
 
+(native-cpp-generativeqc-calculation-calculation-named-ks)=
+## generativeqc::Calculation::Calculation-named-ks
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+Calculation ( Context & context , const System & system , const generativeqc_method_descriptor & method , const generativeqc_named_ks_descriptor & name )
+```
+
+**Behavior.** Prepare a complete named KS graph through the native C API.
+
+**Inputs.** method supplies the matching spin carrier and solver controls; name supplies
+a catalog selector, optional exact identity and correction capacity.
+
+**Lifetime.** Copies inputs; context must outlive this calculation.
+
+**Errors.** Throws Error with native detail on identity, capability or preparation failure.
+
+**Execution.** Synchronous preparation, without numerical work in this wrapper.
+
 (native-cpp-generativeqc-calculation-destructor-calculation)=
 ## generativeqc::Calculation::~Calculation
 
@@ -4819,6 +4896,32 @@ coincident-center threshold; tile_points bounds the grid tile size.
 **Errors.** Construction does not validate the grid; native preparation validates it.
 
 **Units.** coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
+
+(native-cpp-generativeqc-prepare-named-ks)=
+## generativeqc::prepare_named_ks
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr )
+```
+
+**Behavior.** Prepare a catalog KS graph, including range exchange, nonlocal correlation and
+dispersion when present. The native library owns scientific assembly and admission.
+
+**Inputs.** name is a generated selector; identity optionally pins its exact MethodIR. method
+supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
+execution policy; this helper replaces method.ks_options with those controls.
+
+**Outputs.** Returns one owned Calculation.
+
+**Lifetime.** All inputs are copied at preparation; context must outlive the calculation.
+
+**Errors.** Throws Error on unsupported methods, identity mismatch or native admission failure.
+
+**Execution.** Synchronous, with no Python or external reference execution.
+
+**Units.** Grid coordinates in Bohr, memory budgets in bytes.
 
 (native-cpp-generativeqc-kscomposition)=
 ## generativeqc::KsComposition

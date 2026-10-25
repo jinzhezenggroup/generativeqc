@@ -289,6 +289,12 @@ def operation_name(owner: str | None, head: list[Token]) -> str:
             name += "-basis-template"
         elif owner == "System" and name == "System" and "basis_name" in params:
             name += "-bundled"
+        elif (
+            owner == "Calculation"
+            and name == "Calculation"
+            and "generativeqc_named_ks_descriptor" in params
+        ):
+            name += "-named-ks"
     return "generativeqc::" + (owner + "::" if owner else "") + name
 
 
