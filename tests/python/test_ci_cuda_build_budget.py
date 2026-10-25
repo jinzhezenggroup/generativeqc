@@ -38,10 +38,11 @@ def _assert_cold_budget(workflow: str) -> None:
     job = _job(workflow)
     header = job.split("    steps:\n", 1)[0]
     build = _step(job, "Compile production CUDA and runtime CTest")
-    # Retain both the final integration limit and the complete job ceiling.
-    # A prerequisite phase shares the latter; phase limits are not additive.
+    prerequisite = _step(job, "Compile production CUDA prerequisite archive")
+    # Both serial build phases must fit without consuming setup/probe/cleanup time.
+    assert _minutes(prerequisite) == 10
     assert _minutes(build) == 30
-    assert _minutes(build) + 5 <= _minutes(header) <= 35
+    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 50
     assert "continue-on-error:" not in header
     gates = (
         (
@@ -73,8 +74,6 @@ def _assert_cold_budget(workflow: str) -> None:
         assert "continue-on-error:" not in section
         positions.append(job.index(f"      - name: {name}\n"))
     assert positions == sorted(positions)
-    prerequisite = _step(job, gates[1][0])
-    assert _minutes(prerequisite) == 10
     radial = _step(job, gates[3][0])
     assert (
         "test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device"
@@ -118,8 +117,12 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("timeout-minutes: 35", "timeout-minutes: 30"),
-        ("timeout-minutes: 35", "timeout-minutes: 60"),
+        ("timeout-minutes: 50", "timeout-minutes: 35"),
+        ("timeout-minutes: 50", "timeout-minutes: 40"),
+        ("timeout-minutes: 50", "timeout-minutes: 45"),
+        ("timeout-minutes: 50", "timeout-minutes: 60"),
+        ("timeout-minutes: 10", "timeout-minutes: 0"),
+        ("timeout-minutes: 10", "# timeout omitted"),
         ("timeout-minutes: 30", "timeout-minutes: 0"),
         ("timeout-minutes: 30", "# timeout omitted"),
         ("timeout-minutes: 30", "timeout-minutes: 30\n        continue-on-error: true"),
