@@ -773,9 +773,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);
   const bool requested_incremental_diis_gram =
-      diis_history >= 2 && incremental_diis_gram_requested();
+      hf_incremental_diis_gram_requested(host.nbf, diis_history, unrestricted ? 2 : 1);
   const bool requested_ordered_diis_gram =
-      requested_incremental_diis_gram && ordered_incremental_diis_gram_requested();
+      requested_incremental_diis_gram && hf_ordered_diis_gram_requested();
   const bool requested_fp32_block_screening = direct_fp32_block_screening_requested();
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
