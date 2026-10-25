@@ -90,6 +90,13 @@ ordinary native KS owner. The contract is strict-FP64, device-fused, all-electro
 execution with J only. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
 Analytic automatic CUDA forces and other unqualified products remain rejected.
+Automatic CUDA UKS additionally requires nonzero occupations in both spin
+channels. Empty-spin requests fail at preparation with an explicit physical-birth
+derivative diagnostic; native construction and detached final-state validation
+enforce the same boundary. Libxc raw work-domain coefficients at an empty spin
+are not the derivative of its original-density-weighted, clipped energy under a
+spin birth. Fixed-density point/XC execution retains that raw-work contract.
+This admission restriction does not change the CPU or curated CUDA KS domains.
 
 For bounded packages, set `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` to a
 semicolon-separated list of exact structural registration names, for example

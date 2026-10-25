@@ -34,6 +34,13 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
+  // Detached evidence cannot reopen a product rejected by live preparation.
+  // This checks the determinant's occupations, not a display name or a zeroed
+  // potential: empty-spin raw-work coefficients remain available to XC users.
+  if (automatic_libxc && fock.backend == scf::FockBackend::Cuda && model.spins == 2 &&
+      std::any_of(identity.determinant.occupied.begin(), identity.determinant.occupied.end(),
+                  [](auto occupied) { return occupied == 0; }))
+    return false;
   bool automatic_backend_valid = fock.backend == scf::FockBackend::Cpu;
 #if GENERATIVEQC_HAS_CUDA
   if (automatic_libxc && fock.backend == scf::FockBackend::Cuda) {

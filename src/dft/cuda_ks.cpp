@@ -1487,6 +1487,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!provider.system().electron_count || occupations[0] > n || occupations[1] > n ||
         (spins == 1 && (occupations[0] != occupations[1] || provider.system().multiplicity != 1)))
       throw std::invalid_argument("CUDA KS occupations do not match the spin/orbital space");
+    // Direct native construction must enforce the public admission boundary as
+    // well. Raw Libxc work coefficients cannot certify empty-spin birth Fock.
+    if (automatic_program && spins == 2 && (!occupations[0] || !occupations[1]))
+      throw std::invalid_argument(
+          "automatic CUDA KS has no empty-spin physical-birth derivative qualification; "
+          "both spin occupations must be nonzero");
     // A valid overlap does not imply finite physical data: unlike two equal
     // H centers, coincident O/H centers can retain a nonsingular AO metric
     // while nuclear repulsion is infinite. Fail before staging a cold seed.

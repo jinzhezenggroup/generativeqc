@@ -618,8 +618,8 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
   return grid;
 }
 
-void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
-                            const core::System& system) {
+void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan, const core::System& system,
+                            generativeqc_backend backend) {
   if (execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
       dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
       !system.ecp_terms.empty())
@@ -637,6 +637,15 @@ void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
     throw std::invalid_argument(
         "UKS requires electron count and multiplicity to define integer "
         "nonnegative spin occupations");
+  // Automatic providers export interior derivatives at projected Libxc work
+  // inputs. At an empty spin these are not derivatives of the original-density
+  // weighted energy under a physical spin birth. Preserve that point contract,
+  // but do not advertise a complete CUDA KS Fock for this unqualified boundary.
+  if (backend == GENERATIVEQC_BACKEND_CUDA && execution_plan.automatic_program &&
+      system.electron_count == spin_excess)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "automatic CUDA KS has no empty-spin physical-birth derivative "
+                      "qualification; both spin occupations must be nonzero");
 }
 
 generativeqc_status validate_dft_system(generativeqc_method, const core::System& system,

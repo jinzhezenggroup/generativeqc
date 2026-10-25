@@ -8,8 +8,13 @@
 #include "cc/reference_input.hpp"
 #include "dft/ks_final_state.hpp"
 #include "dft/semilocal_family.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
+
+#if GENERATIVEQC_HAS_CUDA
+#include "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp"
+#endif
 
 namespace {
 using namespace generativeqc;
@@ -294,6 +299,38 @@ void analytic_rks_and_uks() {
     cpu_uks.sync();
     require(cpu_uks.validate(true, &state), "CPU UKS final-state proof rejected");
     require(state.weighted_density.size() == 2, "CPU UKS lost a spin W block");
+  }
+}
+
+void automatic_empty_spin_identity() {
+  // A nonorthogonal, exactly solvable two-orbital state isolates model
+  // admission from SCF convergence. Validate the same zero-spin shape under
+  // the incumbent CPU contract, then require CUDA to reject its unqualified
+  // physical-birth semantics even when handed otherwise valid detached data.
+  const auto entry = generated::automatic_libxc_entry("MGGA_C_TPSS");
+  require(static_cast<bool>(entry), "automatic TPSS CPU registry is unavailable");
+  for (const unsigned empty : {0U, 1U, 2U}) {
+    Fixture uks;
+    uks.id.model.functional = entry.functional_code;
+    uks.id.model.scf_domain_version = entry.program->domain_version;
+    uks.id.model.spins = 2;
+    uks.id.determinant.model = ks_fock(FockSpin::Unrestricted);
+    uks.id.determinant.occupied = {empty == 0 ? 0U : 1U, empty == 1 ? 0U : 1U};
+    uks.physical.density = {{empty == 0 ? 0.0 : .5, 0, 0, 0}, {empty == 1 ? 0.0 : .5, 0, 0, 0}};
+    uks.physical.fock.push_back(uks.physical.fock[0]);
+    uks.candidate.spins.push_back(uks.candidate.spins[0]);
+    auto cpu = uks;
+    cpu.id.determinant.model = resolve_fock_build(cpu.id.determinant.model.spec, FockBackend::Cpu);
+    cpu.id.model.device = -1;
+    cpu.sync();
+    require(cpu.validate(), "empty-spin admission repair changed the CPU work-domain contract");
+#if GENERATIVEQC_HAS_CUDA
+    if (generated::automatic_cuda_point_entry(entry.functional_code)) {
+      uks.sync();
+      require(uks.validate() == (empty == 2),
+              "detached automatic CUDA state bypassed its empty-spin admission boundary");
+    }
+#endif
   }
 }
 
@@ -659,6 +696,7 @@ int main() {
     resident_evidence_contract();
     backend_product_policy();
     analytic_rks_and_uks();
+    automatic_empty_spin_identity();
     cuda_range_exchange_identity();
     cuda_global_hybrid_identity();
 #if GENERATIVEQC_HAS_CUDA

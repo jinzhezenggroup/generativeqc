@@ -222,6 +222,8 @@ macro(generativeqc_add_native_tests)
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)
     generativeqc_native_test(generativeqc_ks_final_state_tests tests/native/test_ks_final_state.cpp)
+    target_include_directories(generativeqc_ks_final_state_tests PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
     if(GENERATIVEQC_ENABLE_CUDA)
       target_link_libraries(generativeqc_ks_final_state_tests PRIVATE CUDA::cudart)
     endif()

@@ -54,6 +54,40 @@ BASIS = {
 }
 
 
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("input_form", ("selector", "method-ir"))
+@pytest.mark.parametrize(("charge", "multiplicity"), ((1, 2), (0, 3)))
+def test_automatic_cuda_ks_rejects_empty_spin_work_derivative(
+    name: str, input_form: str, charge: int, multiplicity: int
+) -> None:
+    """A raw-work provider cannot certify the empty-spin energy-birth Fock.
+
+    H2+ and fully polarized H2 cover one and multiple occupied alpha orbitals.
+    Test native preparation through both public routes, before any solve or
+    snapshot can advertise an unqualified physical final state.
+    """
+    assert os.environ.get("SLURM_JOB_ID"), "real CUDA qualification requires Slurm"
+    method = (
+        f"libxc-uks:{name}"
+        if input_form == "selector"
+        else resolve_bulk_ks(name, spin="polarized", backend="cuda").method
+    )
+    calculator = Calculator(
+        method=method,
+        basis="sto-3g",
+        device="cuda",
+        precision="fp64",
+        ks_options=KsOptions(grid=GRID),
+    )
+    with (
+        pytest.raises(RuntimeError, match="automatic CUDA KS.*empty-spin"),
+        calculator.prepare_batch(
+            [ATOMS[:2]], charges=[charge], multiplicities=[multiplicity]
+        ),
+    ):
+        pytest.fail("empty-spin raw-work derivatives were admitted as physical KS Fock")
+
+
 @pytest.mark.parametrize(
     "policy",
     ("host-unfused", "mixed-precision", "incremental-j"),

@@ -45,3 +45,7 @@ expression is changed by the replay. Clearance still requires an explicitly
 defined one-sided composite derivative, justified floor/ferromagnetic behavior,
 and independent AO directional/endpoint gates. The replay makes the remaining
 problem reproducible without a historical binary or a GPU.
+
+The later [admission decision](../implemented/compatibility/2026-10-25-automatic-cuda-empty-spin-admission.md)
+retains this negative evidence and explicitly rejects empty-spin automatic CUDA
+KS. It does not claim that the physical-birth derivative has been repaired.
