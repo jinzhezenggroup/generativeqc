@@ -57,9 +57,10 @@ method owns representation and basis data. Named calculation/batch preparation
 also verifies the actual normalized orbital basis, including systems created
 through other APIs. A matching name/checksum alone cannot bypass this check.
 Currently r²SCAN-3c supplies the pinned H–Ar spherical def2-mTZVPP template and
-complete CPU energy (r²SCAN + special-profile D4 + gCP). The correction budget
-reserves gCP output storage before admitting D4. Native forces and CUDA remain
-unqualified for this complete named program.
+complete CPU/CUDA energy (r²SCAN + special-profile D4 + gCP). The correction budget
+reserves gCP storage before admitting D4. Native force admission follows the
+prepared electronic context; CUDA evaluates gCP on device. See the
+[r²SCAN-3c capability contract](r2scan3c.md) for the bounded supported domains.
 
 ## Explicit PBE0 energy in C++
 
@@ -138,8 +139,8 @@ support depend on their qualified native provider and execution context.
 
 The public native `Calculation::supported_properties()` reports
 **context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS/UKS and B3LYP RKS**
-execution domain. B3LYP UKS remains unqualified. The
+strict-FP64 **CPU Direct or density-fitted PBE/PBE0/r²SCAN RKS/UKS and B3LYP RKS**
+execution domain. Canonical WB97M-V also admits bounded Direct RKS/UKS forces. B3LYP UKS remains unqualified. The
 method-global registry remains energy-only: exact source coefficients,
 spin, backend, fitting provider, basis/ECP and correction terms determine
 admission for the prepared calculation. Request
@@ -150,9 +151,9 @@ The same native, token-verified stationary-force consumer is used by
 `generativeqc_batch_execute` when **every member** of the prepared batch
 qualifies and a force output buffer is supplied. Mixed/unsupported native
 DFT force contexts fail before execution; a malformed or nonconverged item
-does not publish partial forces for that item. Range-separated, ECP and nonlocal contexts remain
-unqualified for native DFT forces, even when Python has a separately
-supported DFT-force path. For linked CUDA stationary contexts, see the
+does not publish partial forces for that item. ECP and range/nonlocal graphs
+without a complete qualified derivative provider remain unavailable. For the
+bounded WB97M-V range/VV10 and linked CUDA stationary contexts, see the
 [CLI force contract](native_cli.md#context-qualified-native-dft-analytic-forces).
 Complete named D3/D4 programs combine the correction gradient with the qualified
 electronic force in the native owner. The legacy `pbe-d4-rks` ABI selector retains
@@ -160,7 +161,9 @@ its previous compatibility contract.
 
 The Direct owner requires the packaged CPU first-derivative inventory
 (`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON`, the default), all-electron
-s/p/d shells, exact full-range J and the canonical PBE/PBE0/B3LYP exchange composition.
+s/p/d shells and a qualified generated semilocal/exchange composition.
+WB97M-V adds the packaged long-range derivative and native VV10 response
+within its separately documented bounds.
 It contracts compiler-generated stationary AD weights with shell-local
 derivatives, sharing each primitive evaluation between J and K. It does not
 materialize a molecular coordinate-by-AO-rank-four derivative tensor, compile

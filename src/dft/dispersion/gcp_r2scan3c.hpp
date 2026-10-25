@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,12 @@
 
 #include "dft/dispersion/gcp_r2scan3c_data.hpp"
 #include "generated_method_parameters.hpp"
+
+#if defined(__CUDACC__)
+#define GENERATIVEQC_GCP_HD __host__ __device__
+#else
+#define GENERATIVEQC_GCP_HD
+#endif
 
 namespace generativeqc::dft::dispersion {
 
@@ -36,10 +43,20 @@ struct GCPParameters {
 inline constexpr GCPParameters r2scan3c_gcp_parameters() { return {}; }
 
 namespace gcp_detail {
+// A tiny trivially copied array keeps the audited scalar program usable in
+// host and device code without depending on a host standard-library ABI.
+template <class T, int N>
+struct Array {
+  T data[N]{};
+  GENERATIVEQC_GCP_HD T& operator[](int i) { return data[i]; }
+  GENERATIVEQC_GCP_HD const T& operator[](int i) const { return data[i]; }
+};
+GENERATIVEQC_GCP_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
+
 inline constexpr double kAngstromToBohr = 1.8897261254578281;
 
-inline std::array<double, 9> aaux(double x) {
-  std::array<double, 9> a{};
+GENERATIVEQC_GCP_HD inline Array<double, 9> aaux(double x) {
+  Array<double, 9> a{};
   const double ex = std::exp(-x), rx = 1.0 / x;
   a[0] = ex * rx;
   for (int k = 1; k < 9; ++k) {
@@ -48,13 +65,13 @@ inline std::array<double, 9> aaux(double x) {
   return a;
 }
 
-inline std::array<double, 9> bint(double x) {
-  std::array<double, 9> b{};
+GENERATIVEQC_GCP_HD inline Array<double, 9> bint(double x) {
+  Array<double, 9> b{};
   if (std::abs(x) < 1.0e-6) {
     for (int k = 0; k < 9; k += 2) b[k] = 2.0 / static_cast<double>(k + 1);
     return b;
   }
-  std::array<double, 13> pw{};
+  Array<double, 13> pw{};
   pw[0] = 1.0;
   for (int i = 1; i < 13; ++i) {
     pw[i] = pw[i - 1] * (-x) / static_cast<double>(i);
@@ -69,8 +86,8 @@ inline std::array<double, 9> bint(double x) {
   return b;
 }
 
-inline std::array<double, 9> baux(double x) {
-  std::array<double, 9> b{};
+GENERATIVEQC_GCP_HD inline Array<double, 9> baux(double x) {
+  Array<double, 9> b{};
   const double ep = std::exp(x), em = std::exp(-x), rx = 1.0 / x;
   for (int k = 0; k < 9; ++k) {
     double term = rx;
@@ -87,13 +104,13 @@ inline std::array<double, 9> baux(double x) {
   return b;
 }
 
-inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, double* s,
-                    double* ds) {
+GENERATIVEQC_GCP_HD inline bool overlap(double r, int shell_a, int shell_b, double za, double zb,
+                                        double* s, double* ds) {
   const bool same = std::abs(za - zb) < 0.1;
   const int key = shell_a * shell_b;
   int m = 0, terms = 0;
-  std::array<double, 6> wt{};
-  std::array<int, 6> pa{}, qb{};
+  Array<double, 6> wt{};
+  Array<int, 6> pa{}, qb{};
   double cnorm = 0.0;
   if (key == 1) {
     m = 3;
@@ -103,7 +120,11 @@ inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, do
     qb = {0, 2, 0, 0, 0, 0};
     cnorm = 0.25 * std::sqrt(std::pow(za * zb, 3));
   } else if (key == 2) {
-    if (shell_a >= shell_b) std::swap(za, zb);
+    if (shell_a >= shell_b) {
+      const double old = za;
+      za = zb;
+      zb = old;
+    }
     m = 4;
     terms = 4;
     wt = {1, -1, 1, -1, 0, 0};
@@ -111,7 +132,11 @@ inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, do
     qb = {0, 3, 1, 2, 0, 0};
     cnorm = std::sqrt(1.0 / 3.0) * std::sqrt(std::pow(za, 3) * std::pow(zb, 5)) * 0.125;
   } else if (key == 3) {
-    if (shell_a >= shell_b) std::swap(za, zb);
+    if (shell_a >= shell_b) {
+      const double old = za;
+      za = zb;
+      zb = old;
+    }
     m = 5;
     terms = 4;
     wt = {1, -1, 2, -2, 0, 0};
@@ -126,7 +151,11 @@ inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, do
     qb = {0, 4, 2, 0, 0, 0};
     cnorm = std::sqrt(std::pow(za * zb, 5)) * 0.0625 / 3.0;
   } else if (key == 6) {
-    if (shell_a >= shell_b) std::swap(za, zb);
+    if (shell_a >= shell_b) {
+      const double old = za;
+      za = zb;
+      zb = old;
+    }
     m = 6;
     terms = 6;
     wt = {1, 1, -2, -2, 1, 1};
@@ -153,7 +182,37 @@ inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, do
   }
   *s = cnorm * std::pow(r, m) * f0;
   if (ds) *ds = cnorm * (static_cast<double>(m) * std::pow(r, m - 1) * f0 + std::pow(r, m) * f1);
-  return std::isfinite(*s) && (!ds || std::isfinite(*ds)) && *s > 0.0;
+  return finite(*s) && (!ds || finite(*ds)) && *s > 0.0;
+}
+/** Shared audited pair equation. r and r0 are in Bohr; derivative is dE/dr.
+ * A null derivative performs energy work only, on either backend. */
+GENERATIVEQC_GCP_HD inline GCPStatus pair(const gcp_data::Element& ei, const gcp_data::Element& ej,
+                                          double r0, double r, const GCPParameters& p,
+                                          double* energy, double* derivative) {
+  double s = 0.0, ds = 0.0;
+  if (!overlap(r, ei.shell, ej.shell, ei.slater, ej.slater, &s, derivative ? &ds : nullptr)) {
+    return GCPStatus::numerical_failure;
+  }
+  const double bsse = std::exp(-p.alpha * std::pow(r, p.beta)) / std::sqrt(s);
+  const double x = r / r0;
+  const double damp_power = p.damping_scale * std::pow(x, p.damping_exponent);
+  const double damp = 1.0 - 1.0 / (1.0 + damp_power);
+  const double xi = ei.xv >= 0.5 ? 1.0 / std::sqrt(ei.xv) : 0.0;
+  const double xj = ej.xv >= 0.5 ? 1.0 / std::sqrt(ej.xv) : 0.0;
+  const double pref = p.sigma * (ei.emiss * xj + ej.emiss * xi);
+  const double pair = pref * bsse * damp;
+  if (!finite(pair)) return GCPStatus::numerical_failure;
+  *energy = pair;
+  if (!derivative) return GCPStatus::success;
+  const double ddamp = p.damping_scale * p.damping_exponent *
+                       std::pow(x, p.damping_exponent - 1.0) / r0 / std::pow(1.0 + damp_power, 2);
+  const double dbsse = bsse * (-p.alpha * p.beta * std::pow(r, p.beta - 1.0) - 0.5 * ds / s);
+  const double dedr = pref * (dbsse * damp + bsse * ddamp);
+  if (!finite(dedr)) {
+    return GCPStatus::numerical_failure;
+  }
+  *derivative = dedr;
+  return GCPStatus::success;
 }
 }  // namespace gcp_detail
 
@@ -191,33 +250,15 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
       }
       if (!(r2 > 0.0) || !std::isfinite(r2)) return GCPStatus::coincident_atoms;
       const double r = std::sqrt(r2);
-      double s = 0.0, ds = 0.0;
-      if (!gcp_detail::overlap(r, ei.shell, ej.shell, ei.slater, ej.slater, &s,
-                               gradient ? &ds : nullptr)) {
-        return GCPStatus::numerical_failure;
-      }
-      const double bsse = std::exp(-p.alpha * std::pow(r, p.beta)) / std::sqrt(s);
       const int hi = std::max(z[i], z[j]), lo = std::min(z[i], z[j]);
-      const std::size_t ridx = static_cast<std::size_t>(hi * (hi - 1) / 2 + lo - 1);
-      const double r0 = gcp_data::kVdwAngstrom[ridx] * gcp_detail::kAngstromToBohr;
-      const double x = r / r0;
-      const double damp_power = p.damping_scale * std::pow(x, p.damping_exponent);
-      const double damp = 1.0 - 1.0 / (1.0 + damp_power);
-      const double xi = ei.xv >= 0.5 ? 1.0 / std::sqrt(ei.xv) : 0.0;
-      const double xj = ej.xv >= 0.5 ? 1.0 / std::sqrt(ej.xv) : 0.0;
-      const double pref = p.sigma * (ei.emiss * xj + ej.emiss * xi);
-      const double pair = pref * bsse * damp;
-      if (!std::isfinite(pair)) return GCPStatus::numerical_failure;
+      const auto ridx = static_cast<std::size_t>(hi * (hi - 1) / 2 + lo - 1);
+      double pair = 0.0, dedr = 0.0;
+      const auto status =
+          gcp_detail::pair(ei, ej, gcp_data::kVdwAngstrom[ridx] * gcp_detail::kAngstromToBohr, r, p,
+                           &pair, gradient ? &dedr : nullptr);
+      if (status != GCPStatus::success) return status;
       *energy += pair;
       if (!gradient) continue;
-      const double ddamp = p.damping_scale * p.damping_exponent *
-                           std::pow(x, p.damping_exponent - 1.0) / r0 /
-                           std::pow(1.0 + damp_power, 2);
-      const double dbsse = bsse * (-p.alpha * p.beta * std::pow(r, p.beta - 1.0) - 0.5 * ds / s);
-      const double dedr = pref * (dbsse * damp + bsse * ddamp);
-      if (!std::isfinite(dedr)) {
-        return GCPStatus::numerical_failure;
-      }
       for (int k = 0; k < 3; ++k) {
         const double g = dedr * v[k] / r;
         gradient[3 * i + k] += g;
@@ -229,3 +270,5 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
 }
 
 }  // namespace generativeqc::dft::dispersion
+
+#undef GENERATIVEQC_GCP_HD

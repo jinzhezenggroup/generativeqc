@@ -86,3 +86,10 @@ A native r²SCAN electronic force owner or explicitly identified CUDA gCP/mixed
 owner is qualified, or another basis-bound composite requires a generated list
 of defining templates. Preserve exact basis admission and same-transaction
 component publication when extending this program.
+
+## Subsequent force and CUDA extension
+
+[Complete native meta-GGA forces](2026-10-25-native-meta-forces.md) supersedes
+this note's CPU-energy-only and CUDA gCP exclusions. It retains the defining
+basis and transaction contract while qualifying native analytic forces and a
+device gCP provider in explicit bounded contexts.

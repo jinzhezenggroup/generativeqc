@@ -157,11 +157,15 @@ class NativeDftDfCliTests(unittest.TestCase):
                     data["basis_identity"],
                     "af55e4a3e21efd9d813231d5c5b043429ebc6ca3878d2cb08802b97920719996",
                 )
+            force_result = invoke(("--forces",))
+            self.assertEqual(force_result.returncode, 0, force_result.stderr)
+            force_data = json.loads(force_result.stdout)
+            self.assertAlmostEqual(force_data["energy_hartree"], energy, delta=2e-8)
+            self.assertEqual(len(force_data["forces_hartree_per_bohr"]), 2)
             for rejected in (
                 ("--basis", "sto-3g"),
                 ("--representation", "cartesian"),
                 ("--dispersion-memory-bytes", "1"),
-                ("--forces",),
             ):
                 result = invoke(rejected)
                 self.assertNotEqual(result.returncode, 0)
@@ -222,8 +226,8 @@ class NativeDftDfCliTests(unittest.TestCase):
         for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
             self.assertTrue(data[name]["cpu"])
         self.assertTrue(data["r2scan-3c-rks"]["cpu"])
-        self.assertFalse(data["r2scan-3c-rks"]["cuda"])
-        self.assertIn("gCP", data["r2scan-3c-rks"]["reason"])
+        self.assertTrue(data["r2scan-3c-rks"]["cuda"])
+        self.assertFalse(data["r2scan-3c-rks"]["reason"])
 
     def test_generated_pbe0_and_b3lyp_energy(self) -> None:
         pbe0 = self.call_named("PBE0-RKS", "--backend", "cpu")

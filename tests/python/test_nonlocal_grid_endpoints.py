@@ -6,6 +6,7 @@ implementation checks, not claims that these deliberately small grids converge.
 
 import os
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -15,12 +16,14 @@ ATOMS = (("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.8)))
 PRIMARY = GridSpec(8, 4, 8)
 
 
-def _cpu_reference(spin: int, secondary: GridSpec) -> tuple[float, np.ndarray]:
+def _cpu_reference(
+    spin: int, secondary: GridSpec, *, atoms: Any = ATOMS, basis: Any = "sto-3g"
+) -> tuple[float, np.ndarray]:
     """Reconstruct product rules independently; PySCF owns XC/AO/grid response."""
     from pyscf import dft, gto
 
     molecule = gto.M(
-        atom=ATOMS, unit="Bohr", basis="sto-3g", spin=spin, charge=spin, verbose=0
+        atom=atoms, unit="Bohr", basis=basis, spin=spin, charge=spin, verbose=0
     )
     engine = (dft.UKS if spin else dft.RKS)(molecule)
     engine.xc = "WB97M_V"
@@ -49,7 +52,7 @@ def _cpu_reference(spin: int, secondary: GridSpec) -> tuple[float, np.ndarray]:
             polar_weights * 2 * np.pi / len(angles), len(angles)
         )
         weights = (measures[:, None] * angular_weights).ravel()
-        table = {"H": (coordinates, weights)}
+        table = {symbol: (coordinates, weights) for symbol, _ in atoms}
         target.gen_atomic_grids = lambda molecule, *args, table=table, **kwargs: table
         target.radii_adjust = None
         target.becke_scheme = dft.gen_grid.original_becke

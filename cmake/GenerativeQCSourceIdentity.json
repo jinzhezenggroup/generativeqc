@@ -104,6 +104,7 @@
     "tools/generate_gfn2_density_cuda.py",
     "tools/generate_ordered_history_native.py",
     "tools/generate_stationary_force_aot.py",
+    "tools/generate_native_range_force.py",
     "tools/generate_stationary_cpu_derivative_aot.py",
     "tools/stationary_cpu_source_receipt.py",
     "tools/generate_wb97mv_rsh_cpu_aot.py",

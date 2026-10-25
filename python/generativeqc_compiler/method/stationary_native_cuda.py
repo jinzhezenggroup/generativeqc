@@ -18,6 +18,7 @@ from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
+    COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     QUALIFIED_PARTITION_ITERATIONS,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
@@ -29,8 +30,8 @@ from .stationary_cuda import (
 NATIVE_STATIONARY_CUDA_PROFILES = tuple(
     profile
     for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
-    if (plan := _qualified_aot_profile(profile).plan).source_names
-    == stationary_runtime_sources(plan)
+    if set((plan := _qualified_aot_profile(profile).plan).external_source_names)
+    <= set(COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES)
 )
 
 
@@ -99,7 +100,7 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         raise ValueError(f"unsupported native stationary CUDA profile: {profile}")
     selected = _qualified_aot_profile(profile)
     plan = selected.plan
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=True)
     if sources != plan.source_names or len(sources) > 64:
         raise ValueError(
             "native stationary binding requires a complete bounded source inventory"
@@ -124,7 +125,9 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         raise ValueError(
             "native shared CUDA reduction requires the exact unit-source sum"
         )
-    wrapper = emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
+    wrapper = emit_stationary_profile_aot_wrapper_cuda(
+        profile, include_reduction=False, include_external=True
+    )
     runtime = asset_path("src/dft/stationary_gradient_cuda.cuh").read_text()
     transport = asset_path("src/dft/native_stationary_runtime.cuh").read_text()
     identifiers = set(
@@ -154,7 +157,14 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     exchange_slot = slots.get("exact_exchange", -1)
     integral_mask = sum(
         1 << slots[name]
-        for name in ("one_electron", "coulomb", "overlap_pulay", "exact_exchange")
+        for name in (
+            "one_electron",
+            "coulomb",
+            "overlap_pulay",
+            "exact_exchange",
+            "exchange_short_range",
+            "exchange_long_range",
+        )
         if name in slots
     )
     nuclear_kind = qualified_sp_requests().index(("nuclear", ()))
@@ -164,10 +174,39 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     )
     if functional != selected.functional:
         raise ValueError("stationary profile and native point selector disagree")
+    execution = compile_ks_execution_plan(plan.method)
+    ranged = {
+        term.operator: term
+        for term in execution.exchange
+        if term.operator != "full-range"
+    }
+    sr = ranged.get("short-range")
+    lr = ranged.get("long-range")
+    if bool(sr) != bool(lr) or (sr and sr.omega != lr.omega):
+        raise ValueError("native stationary range graph requires matched SR/LR")
+    nlc = execution.nonlocal_correlation
+    if bool(ranged) != bool(nlc):
+        raise ValueError(
+            "native stationary composite requires complete range/VV10 providers"
+        )
+    range_values = ", ".join(
+        exact_cuda_literal(value)
+        for value in (
+            sr.coefficient if sr else 0,
+            lr.coefficient if lr else 0,
+            sr.omega if sr else 0,
+            nlc.spec.b if nlc else 0,
+            nlc.spec.c if nlc else 0,
+            nlc.coefficient if nlc else 0,
+        )
+    )
     # Partition response has no XC or spin dependence. Every admitted native
     # profile shares the existing large-system crossover and resource guards.
     metadata = f"""
 namespace generativeqc_stationary_cuda {{
+constexpr int native_short_exchange_slot = {slots.get("exchange_short_range", -1)};
+constexpr int native_long_exchange_slot = {slots.get("exchange_long_range", -1)};
+constexpr int native_nonlocal_slot = {slots.get("nonlocal_ao", -1)};
 constexpr size_t native_one_electron_slot = {slots["one_electron"]};
 constexpr size_t native_coulomb_slot = {slots["coulomb"]};
 constexpr size_t native_overlap_slot = {slots["overlap_pulay"]};
@@ -194,8 +233,9 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       native_source_span, native_metrics, native_destroy,
       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
-       {exchange}}},
-      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology
+       {exchange}, {range_values}}},
+      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology,
+      native_nonlocal_slot >= 0 ? native_nonlocal_geometry : nullptr
   }};
   return binding;
 }}

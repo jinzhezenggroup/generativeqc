@@ -467,7 +467,7 @@ advertise forces only when their prepared electronic context qualifies. The
 resource dry-run currently rejects these complete compositions because its
 inventory does not include their additional owners.
 
-Canonical `r2scan-3c-rks` and `r2scan-3c-uks` run complete CPU energies with the
+Canonical `r2scan-3c-rks` and `r2scan-3c-uks` run complete CPU/CUDA energies with the
 method-owned spherical H–Ar `def2-mTZVPP` basis, special D4-EEQ profile and gCP.
 Omit `--basis` or name `def2-mTZVPP`; the C API expands its compiled snapshot.
 Explicit local basis files are accepted only when their actual normalized data
@@ -477,9 +477,12 @@ match that snapshot. A different basis or Cartesian representation fails.
 generativeqc run molecule.xyz --method r2scan-3c-rks --backend cpu --json
 ```
 
-Native r²SCAN-3c CUDA and analytic forces remain unavailable; the Python
-[capability contract](r2scan3c.md) retains its existing explicit compatibility
-consumers. WB97M-V energy admission likewise does not add native CLI forces.
+Native r²SCAN-3c also admits complete analytic forces on qualified CPU Direct/DF
+and CUDA Direct contexts. CUDA evaluates gCP on device, alongside native D4;
+there is no host gCP numerical fallback in this named route. See its
+[capability contract](r2scan3c.md) for basis and derivative bounds.
+Canonical WB97M-V admits complete native Direct forces on CPU and CUDA in the
+bounded domain described below.
 Exact backend/basis/property preparation remains authoritative. Independent
 small-grid PySCF/correction references and reconverged energy differences check
 implementation parity, not grid convergence. Real-device named CLI qualification
@@ -487,7 +490,7 @@ runs `tests/native/test_cli_cuda_named.py` inside a finite Slurm GPU allocation.
 
 ### Context-qualified native DFT analytic forces
 
-A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0 RKS/UKS and B3LYP RKS** force path composes
+A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0/r²SCAN RKS/UKS and B3LYP RKS** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -538,11 +541,31 @@ A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 
 Strict PBE0/RKS also admits the native d-shell force consumer for 24–384 AOs
-and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
+and 2–32 atoms. Strict r²SCAN RKS/UKS also admits s/p/d bases with at most
+8 atoms, 64 AOs and 128 primitives, including the defining r²SCAN-3c water
+basis. This exact executor improvement is shared with ordinary FP64;
 the Python [application precision policy](application_precision.md) separately
 selects budget-qualified FP32 arithmetic.
 
-CUDA DF DFT forces, ECP, remaining d/f-shell force contexts and ωB97M-V forces
+Canonical WB97M-V RKS/UKS forces include the complete short-/long-range
+exchange, meta-GGA, VV10 AO/point/weight response, moving grid and nuclear
+terms. Both backends require all-electron Direct, at most 8 atoms and 64 AOs,
+and at most 8192 nonlocal points. CPU additionally requires at most 128
+primitives, s/p/d orbitals and the existing bounded Direct primitive-work gate.
+CUDA requires s/p orbitals, strict FP64, device-fused XC and three partition
+iterations. Separate XC and VV10 grids are supported, including Treutler grids.
+The nonlocal sub-budget and complete stationary device allowance both apply.
+For example, an implementation-parity calculation on a small explicit grid is:
+
+```bash
+generativeqc run h2.xyz --method wb97m-v-rks --basis sto-3g \
+  --backend cuda --grid-radial-points 8 --grid-polar-points 4 \
+  --grid-azimuth-points 8 --forces --json
+```
+
+These small grids do not establish production quadrature accuracy. A default or
+larger grid outside the admitted domain still fails explicitly on `--forces`.
+CUDA DF DFT forces, ECP and remaining d/f-shell force contexts
 are **not** enabled by this native CUDA path. Named D3/D4 compositions retain
 their underlying electronic force gate. CPU B3LYP UKS
 also remains unqualified. Unsupported `--forces` requests fail before execution
@@ -551,14 +574,13 @@ rather than publishing incomplete gradients. Run
 under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
 finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
 linked symbols, but has no GPU and cannot supply numerical device evidence.
-Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
-RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
-context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
+Native **prepared batches** reuse the complete CPU/CUDA force consumers above
+only when every member has a qualified prepared context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
 native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
-whitelist in Python. Native CUDA and other Direct DFT batch forces
-remain work under #2151.
+whitelist in Python. Native batches publish forces only after the complete
+source inventory and final-state token pass their gates.
 See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation

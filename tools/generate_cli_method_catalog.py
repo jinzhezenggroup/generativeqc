@@ -109,15 +109,8 @@ def _canonical_r2scan3c(plan: Any) -> bool:
 def _admit(plan: Any) -> tuple[bool, bool, str, str]:
     if _canonical_r2scan3c(plan):
         record = _match_curated(plan)
-        # gCP currently has a CPU production owner. Do not introduce implicit
-        # host work into a CUDA named endpoint; its explicit compatibility
-        # consumer remains available until a complete backend is qualified.
-        return (
-            True,
-            False,
-            str(record["scf_domain"]),
-            "bound D4/gCP composition requires CPU",
-        )
+        # Both correction terms have native owners on the selected backend.
+        return True, bool(record["cuda_ks"]), str(record["scf_domain"]), ""
     if plan.method.basis is not None:
         return (
             False,

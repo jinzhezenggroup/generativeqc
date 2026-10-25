@@ -144,3 +144,9 @@ Raw local qualification logs are retained under the ignored
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
   python tests/native/test_cli_cuda_named.py build/native-ks-catalog/generativeqc
 ```
+
+## Subsequent force and CUDA extension
+
+[Complete native meta-GGA forces](2026-10-25-native-meta-forces.md) supersedes the
+remaining r²SCAN/WB97M-V force and CUDA gCP exclusions with bounded native
+providers and independent complete-endpoint qualification.

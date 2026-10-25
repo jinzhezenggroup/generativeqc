@@ -10,4 +10,5 @@ STATIONARY_AOT_BUILD_PROFILES = (
     ("pbe0", 1, "PBE0", False),
     ("b3lyp", 3, "B3LYP", False),
     ("m06_2x", 131522, "M06-2X", False),
+    ("wb97mv", 4, "WB97M-V", False),
 )

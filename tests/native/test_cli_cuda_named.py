@@ -47,6 +47,10 @@ def calculate(
         "200",
         "--json",
     ]
+    if method.startswith("r2scan-3c"):
+        # The native named system constructor supplies the immutable basis.
+        index = command.index("--basis")
+        del command[index : index + 2]
     if method.endswith("-uks"):
         command += ["--charge", "1", "--multiplicity", "2"]
     if forces:
@@ -82,6 +86,10 @@ def main() -> None:
                 flush=True,
             )
         for method in (
+            "wb97m-v-rks",
+            "wb97m-v-uks",
+            "r2scan-3c-rks",
+            "r2scan-3c-uks",
             "pbe-d3(bj)-rks",
             "pbe-d3(0)-uks",
             "pbe-d3(bj)-atm-rks",

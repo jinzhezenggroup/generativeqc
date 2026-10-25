@@ -11,6 +11,7 @@ struct System;
 
 namespace generativeqc::scf {
 class PreparedFockPlan;
+struct ResolvedFockBuild;
 
 /** Preserve the existing public Direct s/p/d force work ceilings: two million
  * primitive records, one million grid points and one hundred million Becke
@@ -48,4 +49,13 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
     std::span<const double> weighted_density, std::size_t maximum_numeric_bytes,
     std::span<const double> beta_density = {}, std::span<const double> beta_weighted_density = {});
+
+/** Add the operator-matched LR correction to the exchange source of a full-range
+ * baseline. Uses the compiler's shared CPU/CUDA Cartesian recurrence, with
+ * bounded public-AO batches and no rank-four derivative tensor. */
+std::vector<double> cpu_stationary_range_correction(const PreparedFockPlan& target,
+                                                    const ResolvedFockBuild& correction,
+                                                    std::span<const double> density,
+                                                    std::span<const double> beta_density,
+                                                    std::size_t maximum_bytes);
 }  // namespace generativeqc::scf

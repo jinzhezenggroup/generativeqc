@@ -4,7 +4,9 @@ from .direct_cartesian_contraction_cuda import emit_direct_cartesian_cpu_header
 from .range_separation import CoulombKernel, CoulombKernelFamily
 
 
-def emit_range_exchange_cpu(radial: CoulombKernel) -> str:
+def emit_range_exchange_cpu(
+    radial: CoulombKernel, *, entry_name: str = "generativeqc_range_exchange_cpu"
+) -> str:
     """Freeze the radial operator, not a functional or a Cartesian component.
 
     The native consumer expands already normalized public AO records and
@@ -17,6 +19,8 @@ def emit_range_exchange_cpu(radial: CoulombKernel) -> str:
         CoulombKernelFamily.LONG_RANGE,
     ):
         raise ValueError("CPU range exchange requires an explicit SR/LR kernel")
+    if not entry_name.isidentifier() or not entry_name.isascii():
+        raise ValueError("range exchange entry must be an ASCII C identifier")
     range_name = "Long" if radial.family == CoulombKernelFamily.LONG_RANGE else "Short"
     dispatch = "\n".join(
         f"    case {order}: return evaluate_order<{order}>(exponents, centers, angular, mask);"
@@ -66,4 +70,5 @@ extern "C" int generativeqc_range_exchange_cpu(
 """.replace("@RANGE@", range_name)
         .replace("@OMEGA@", float(radial.omega).hex())
         .replace("@DISPATCH@", dispatch)
+        .replace("generativeqc_range_exchange_cpu", entry_name)
     )

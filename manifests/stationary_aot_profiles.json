@@ -36,6 +36,12 @@
       "family": "split:M06-2X",
       "method": "M06-2X",
       "legacy": false
+    },
+    {
+      "name": "wb97mv",
+      "family": "Wb97mv",
+      "method": "WB97M-V",
+      "legacy": false
     }
   ]
 }

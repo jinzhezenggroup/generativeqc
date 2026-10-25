@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes as ct
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -66,19 +67,26 @@ def test_compiled_bound_basis_preserves_all_source_shells(
     subprocess.run([str(executable)], check=True, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("fitting", [False, True])
+@pytest.mark.parametrize(
+    "device,fitting", [("cpu", False), ("cpu", True), ("cuda", False)]
+)
 def test_native_owner_skips_python_composition_and_revokes_receipts(
-    monkeypatch: pytest.MonkeyPatch, fitting: bool
+    monkeypatch: pytest.MonkeyPatch, device: str, fitting: bool
 ) -> None:
-    """Both direct and DF energies own corrections; electronic force gates persist."""
+    """Both direct and DF forces own the complete scientific composition."""
     from generativeqc import dispersion
     from generativeqc._named_ks import CompositeCorrectionResult
 
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a Slurm-allocated CUDA device")
+        assert os.environ.get("SLURM_JOB_ID"), "CUDA tests must run through srun"
     options = (
         {"density_fitting": "cpu", "auxiliary_basis": "def2-svp"} if fitting else {}
     )
     calculator = Calculator(
         method="r2scan-3c-rks",
+        device=device,
         ks_options=KsOptions(grid=GRID),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
@@ -92,10 +100,11 @@ def test_native_owner_skips_python_composition_and_revokes_receipts(
     monkeypatch.setattr(dispersion, "D4CorrectionBatch", forbidden)
     monkeypatch.setattr(dispersion, "R2SCAN3CCorrectionBatch", forbidden)
     monkeypatch.setattr(dispersion, "_evaluate_gcp_result", forbidden)
-    properties = ("energy",)
+    properties = ("energy", "forces")
     with calculator.prepare_batch([ATOMS, ATOMS], warm_start=False) as batch:
         first = batch.execute(strict=True, properties=properties).items[0]
-        assert first.dispersion.gcp.backend == "cpu"
+        assert first.dispersion.gcp.backend == device
+        assert f"gcp-{device}-" in first.dispersion.gcp.provider_identity
         assert batch.dispersion_diagnostic.d4.profile == "r2scan3c"
         assert first.dispersion.energy == pytest.approx(
             first.dispersion.d4.energy + first.dispersion.gcp.energy, abs=1e-15
@@ -120,6 +129,7 @@ def test_native_owner_skips_python_composition_and_revokes_receipts(
         assert restored.energy == pytest.approx(first.energy, abs=1e-11)
     bounded = Calculator(
         method="r2scan-3c-rks",
+        device=device,
         ks_options=KsOptions(grid=GRID),
         dispersion_memory_budget_bytes=1,
     )
@@ -128,8 +138,17 @@ def test_native_owner_skips_python_composition_and_revokes_receipts(
 
 
 @pytest.mark.parametrize("spin", [0, 1])
-def test_total_matches_independent_pyscf_d4_and_gcp(spin: int) -> None:
+@pytest.mark.parametrize(
+    "device,water", [("cpu", False), ("cuda", False), ("cuda", True)]
+)
+def test_total_matches_independent_pyscf_d4_and_gcp(
+    spin: int, device: str, water: bool
+) -> None:
     """Independent SCF and correction engines with exactly the same quadrature."""
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a Slurm-allocated CUDA device")
+        assert os.environ.get("SLURM_JOB_ID")
     pytest.importorskip("pyscf")
     pytest.importorskip("dftd4")
     from dftd4.interface import DampingParam, DispersionModel
@@ -140,22 +159,32 @@ def test_total_matches_independent_pyscf_d4_and_gcp(spin: int) -> None:
     snapshot = json.loads(
         (ROOT / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json").read_text()
     )
-    hydrogen = next(item for item in snapshot["elements"] if item["atomic_number"] == 1)
-    basis = [
-        [
-            shell["angular_momentum"],
-            *[
-                [
-                    float(exponent),
-                    *[float(column[i]) for column in shell["coefficients"]],
-                ]
-                for i, exponent in enumerate(shell["exponents"])
-            ],
+    atoms = (
+        [("O", (0.1, -0.1, 0.0)), ("H", (0.1, 0.2, 1.7)), ("H", (1.6, -0.2, -0.5))]
+        if water
+        else ATOMS
+    )
+    numbers = np.array([8, 1, 1] if water else [1, 1])
+    basis = {}
+    for symbol, z in zip((symbol for symbol, _ in atoms), numbers, strict=True):
+        element = next(
+            item for item in snapshot["elements"] if item["atomic_number"] == z
+        )
+        basis[symbol] = [
+            [
+                shell["angular_momentum"],
+                *[
+                    [
+                        float(exponent),
+                        *[float(column[i]) for column in shell["coefficients"]],
+                    ]
+                    for i, exponent in enumerate(shell["exponents"])
+                ],
+            ]
+            for shell in element["shells"]
         ]
-        for shell in hydrogen["shells"]
-    ]
     molecule = gto.M(
-        atom=ATOMS, basis={"H": basis}, unit="Bohr", spin=spin, charge=spin, verbose=0
+        atom=atoms, basis=basis, unit="Bohr", spin=spin, charge=spin, verbose=0
     )
     engine = (dft.UKS if spin else dft.RKS)(molecule)
     engine.xc = "R2SCAN"
@@ -180,10 +209,11 @@ def test_total_matches_independent_pyscf_d4_and_gcp(spin: int) -> None:
         2 * np.pi / GRID.angular_azimuth
     )
     table = {
-        "H": (
+        symbol: (
             (radii[:, None, None] * directions[None, :, :]).reshape(-1, 3),
             (measures[:, None] * angular[None, :]).reshape(-1),
         )
+        for symbol, _ in atoms
     }
     engine.grids.gen_atomic_grids = lambda *args, **kwargs: table
     engine.grids.radii_adjust = None
@@ -193,17 +223,29 @@ def test_total_matches_independent_pyscf_d4_and_gcp(spin: int) -> None:
     engine.conv_tol, engine.conv_tol_grad = 1e-12, 1e-10
     electronic = engine.kernel()
     assert engine.converged
-    xyz = np.array([position for _, position in ATOMS])
+    xyz = np.array([position for _, position in atoms])
     d4_result = DispersionModel(
-        np.array([1, 1]), xyz, charge=float(spin), ga=2.0, gc=1.0
-    ).get_dispersion(DampingParam(s6=1.0, s8=0.0, s9=2.0, a1=0.42, a2=5.65), grad=False)
-    gcp = evaluate_r2scan3c_gcp((1, 1), xyz)
-    result = Calculator(
+        numbers, xyz, charge=float(spin), ga=2.0, gc=1.0
+    ).get_dispersion(DampingParam(s6=1.0, s8=0.0, s9=2.0, a1=0.42, a2=5.65), grad=True)
+    gcp = evaluate_r2scan3c_gcp(numbers, xyz)
+    calculator = Calculator(
         method="r2scan-3c-uks" if spin else "r2scan-3c-rks",
+        device=device,
         ks_options=KsOptions(grid=GRID),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
-    ).singlepoint(ATOMS, charge=spin, multiplicity=spin + 1, properties=("energy",))
+    )
+    with calculator.prepare_batch(
+        [atoms], charges=[spin], multiplicities=[spin + 1], warm_start=False
+    ) as batch:
+        assert batch._native_dft_force_eligible()
+        result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+    gradient_engine = engine.nuc_grad_method()
+    gradient_engine.grid_response = True
+    reference_gradient = (
+        gradient_engine.kernel() + d4_result["gradient"] + np.array(gcp.gradient)
+    )
+    np.testing.assert_allclose(result.forces, -reference_gradient, atol=2e-7, rtol=0)
     print(
         f"independent r2SCAN-3c spin={spin}: {electronic + float(d4_result['energy']) + gcp.energy:.17g}"
     )

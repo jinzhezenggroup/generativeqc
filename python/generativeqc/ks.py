@@ -635,8 +635,25 @@ def cpu_stationary_all_electron_force_eligible(
     nonlocal_range = plan.nonlocal_correlation is not None and {
         term.operator for term in plan.exchange
     } == {"short-range", "long-range"}
-    return bool(record["stationary_ecp_gradient"]) and (
-        has_dispersion or full_range or nonlocal_range
+    # This is a candidate capability only. The native prepared owner still
+    # authenticates the actual basis, integral work bound and final-state token.
+    exchange, correlation, exact = ks_coefficients(method_ir)
+    native_profile = (
+        not plan.nonlocal_correlation
+        and not any(term.operator != "full-range" for term in plan.exchange)
+        and any(
+            (2 if method_ir.spin == "polarized" else 1) in spins
+            and float(Fraction(exact_profile)) == exact
+            and float(Fraction(exchange_profile)) == exchange
+            and float(Fraction(correlation_profile)) == correlation
+            for spins, exact_profile, exchange_profile, correlation_profile in record[
+                "cpu_stationary_force_profiles"
+            ]
+        )
+    )
+    return native_profile or (
+        bool(record["stationary_ecp_gradient"])
+        and (has_dispersion or full_range or nonlocal_range)
     )
 
 

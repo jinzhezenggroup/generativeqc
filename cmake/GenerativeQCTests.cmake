@@ -384,6 +384,12 @@ macro(generativeqc_add_native_tests)
   target_sources(generativeqc_d4_eeq_tests PRIVATE
     src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
+  if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_native_test(generativeqc_gcp_cuda_tests tests/native/test_gcp_r2scan3c.cpp SKIP_77)
+    target_compile_definitions(generativeqc_gcp_cuda_tests PRIVATE GENERATIVEQC_GCP_CUDA_TEST=1)
+    target_include_directories(generativeqc_gcp_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(generativeqc_gcp_cuda_tests generativeqc_method_parameters_codegen)
+  endif()
   foreach(_generativeqc_parameter_test IN ITEMS
           generativeqc_d4_reference_tests generativeqc_d4_eeq_tests generativeqc_gcp_r2scan3c_tests)
     add_dependencies(${_generativeqc_parameter_test} generativeqc_method_parameters_codegen)

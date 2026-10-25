@@ -273,7 +273,10 @@ class NativeKsDispersion:
 
         query = self.library.generativeqc_r2scan3c_gcp_provider_identity
         query.argtypes, query.restype = [], ct.c_char_p
-        return query().decode("ascii"), canonical_hash(self.gcp.semantic_payload())
+        provider = query().decode("ascii")
+        if self.batch._calculator._device_name == "cuda":
+            provider = "r2scan3c-gcp-cuda-v1"
+        return provider, canonical_hash(self.gcp.semantic_payload())
 
     def _composite_result(self, index: int, gradients: bool, d4: Any) -> Any:
         """Copy the already combined result and gCP term, with no Python arithmetic."""
@@ -304,10 +307,21 @@ class NativeKsDispersion:
             context=self.batch._context,
         )
         component = GCPCorrectionResult(
-            0, output.gcp_energy, gcp, "cpu", "success", *self._gcp_identities()
+            0,
+            output.gcp_energy,
+            gcp,
+            self.batch._calculator._device_name,
+            "success",
+            *self._gcp_identities(),
         )
         return R2SCAN3CCorrectionResult(
-            0, output.energy, total, "cpu", "success", d4, component
+            0,
+            output.energy,
+            total,
+            self.batch._calculator._device_name,
+            "success",
+            d4,
+            component,
         )
 
     def diagnostic(self) -> Any:
@@ -409,6 +423,9 @@ class NativeKsDispersion:
             from .dispersion import R2SCAN3CRuntimeDiagnostic
 
             return R2SCAN3CRuntimeDiagnostic(
-                self.graph.identity, result, "cpu", *self._gcp_identities()
+                self.graph.identity,
+                result,
+                self.batch._calculator._device_name,
+                *self._gcp_identities(),
             )
         return result

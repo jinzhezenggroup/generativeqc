@@ -40,10 +40,16 @@ def test_composite_cpu_energy_and_replay_preserve_both_spin_layouts(spin: str) -
         reference.energy + correction.energy, abs=2e-11
     )
     assert total.forces is None
-    # A composite must not silently widen the underlying CPU force capability.
-    for calculator in (plain, composite):
-        with pytest.raises(ValueError, match="does not support properties: forces"):
-            calculator.singlepoint(atoms, properties=("energy", "forces"))
+    # Qualified native electronic forces now compose both correction gradients.
+    electronic_force = plain.singlepoint(atoms, properties=("energy", "forces"))
+    complete_force = composite.singlepoint(atoms, properties=("energy", "forces"))
+    derivative = evaluate_r2scan3c_correction(graph, [1, 1], xyz, gradients=True)
+    np.testing.assert_allclose(
+        complete_force.forces,
+        electronic_force.forces - derivative.gradient,
+        atol=2e-10,
+        rtol=0,
+    )
     moved = xyz.copy()
     moved[1] += [0.02, -0.03, 0.06]
     with composite.prepare_batch([atoms, atoms]) as batch:
