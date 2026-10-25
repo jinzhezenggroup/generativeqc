@@ -255,10 +255,10 @@
       "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
       "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
     },
-    "hf-cold-work-20261025": {
-      "owner": "HF cold final-state work and resident DF source qualification",
-      "reason": "Lossless full-precision receipts retain all 75 populations and 300 complete cold/warm calls across baseline, candidate and fresh GPU4, including failed independent fitting gates and every exposed precision solve. Shared compression avoids repeating provenance; source-matched ablations, independent references and executable replay remain in the compact publication. No numerical acceptance or storage cap is changed.",
-      "review_document": "benchmarks/results/hf-cold-work-20261025/README.md"
+    "df-metric-pairs-20261025": {
+      "owner": "Bounded auxiliary metric derivative pair reuse",
+      "reason": "Lossless full receipts retain all 36 alternating cold/three-warm energy-and-force populations, semantic work and immutable source/binary identities. Shared compression keeps the complete vectors together; every independent gate, failed baseline assertion, rerun and exploratory refusal remains in the capsule within unchanged file and change budgets.",
+      "review_document": "benchmarks/results/df-metric-pairs-20261025/README.md"
     }
   },
   "files": [
@@ -911,12 +911,12 @@
       "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
     },
     {
-      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
-      "family": "hf-cold-work-20261025",
+      "path": "benchmarks/results/df-metric-pairs-20261025/endpoints.json.xz",
+      "family": "df-metric-pairs-20261025",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
-      "bytes": 219828,
-      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
+      "role": "All 36 alternating complete cold/three-warm E/F populations with work and immutable source/binary identities; no completed sample omitted.",
+      "bytes": 159984,
+      "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

@@ -315,6 +315,7 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     [
         "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
         "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
+        "GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS",
     ],
 )
 def test_direct_execution_selection_changes_resource_identity(
