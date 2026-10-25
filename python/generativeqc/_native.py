@@ -333,6 +333,18 @@ class KsOptionsDescriptor(ctypes.Structure):
     ]
 
 
+class NamedKsDescriptor(ctypes.Structure):
+    """Complete compiled program selected by name and exact MethodIR identity."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("name", ctypes.c_char_p),
+        ("identity", ctypes.c_char_p),
+        ("dispersion_maximum_bytes", ctypes.c_uint64),
+    ]
+
+
 class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
     """Private size-tagged extension; requires the matching native feature query."""
 

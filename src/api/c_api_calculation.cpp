@@ -5,6 +5,7 @@
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/named_ks_inputs.hpp"
 #include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
@@ -121,9 +122,11 @@ generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(calculation->initial_guess, out);
 }
 
-generativeqc_status generativeqc_calculation_prepare(
-    generativeqc_context* context, const generativeqc_system* system,
-    const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
+static generativeqc_status prepare_calculation(generativeqc_context* context,
+                                               const generativeqc_system* system,
+                                               const generativeqc_method_descriptor* descriptor,
+                                               generativeqc_calculation** calculation,
+                                               const generativeqc_named_ks_descriptor* named) {
   generativeqc::runtime::host_trace::Region trace("calculation_prepare");
   if (context == nullptr || system == nullptr || descriptor == nullptr || calculation == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -135,23 +138,48 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
-  if (!generativeqc::api::valid_system_roles(*system, *descriptor,
-                                             context->state.executed_backend)) {
-    context->last_detail =
-        "auxiliary handle role requires its matching method and density-fitting backend";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
   try {
+    std::optional<generativeqc::api::NamedKsInputs> named_inputs;
+    if (named) {
+      named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
+      descriptor = &named_inputs->method.base;
+    }
+
+    if (!generativeqc::api::valid_system_roles(*system, *descriptor,
+                                               context->state.executed_backend)) {
+      context->last_detail =
+          "auxiliary handle role requires its matching method and density-fitting backend";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
     candidate->plan = generativeqc::methods::prepare_calculation(
         context->state, system->data, *descriptor,
-        generativeqc::api::native_auxiliary_basis(*descriptor));
+        generativeqc::api::native_auxiliary_basis(*descriptor),
+        named_inputs && named_inputs->program->dispersion.kind ? &named_inputs->program->dispersion
+                                                               : nullptr,
+        named ? named->dispersion_maximum_bytes : 0);
     *calculation = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_calculation_prepare(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
+  return prepare_calculation(context, system, descriptor, calculation, nullptr);
+}
+
+generativeqc_status generativeqc_calculation_prepare_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_calculation** calculation) {
+  if (calculation) *calculation = nullptr;
+  if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return prepare_calculation(context, system, descriptor, calculation, name);
 }
 
 void generativeqc_calculation_destroy(generativeqc_calculation* calculation) {

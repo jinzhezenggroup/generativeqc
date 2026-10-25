@@ -414,10 +414,12 @@ The CLI method catalog is generated **at build time** from
 `generativeqc_compiler.method.spec.METHOD_CATALOG`, its upstream aliases, and
 `compile_ks_execution_plan`, not from handwritten method-name branches. The
 generated C++ constants carry the exact semilocal components, coefficients,
-full-range exchange contributions, SCF domain, spin and MethodIR identity.
+full-/short-/long-range exchange, nonlocal correlation, supported D3/D4 corrections,
+SCF domain, spin and MethodIR identity.
 The native method manifest remains the authority for stable C ABI IDs; these
-composition names are not new ABI IDs. C++ `KsComposition` and the CLI use the
-same native prepared-calculation owner.
+composition names are not new ABI IDs. CLI singlepoints and optimization use
+the [named C/C++ preparation API](native_cpp.md#complete-named-ks-programs), which
+owns complete method assembly and execution.
 
 ```bash
 generativeqc run molecule.xyz --method pbe0-rks --basis sto-3g \
@@ -445,12 +447,33 @@ Compiler-generated compositions accept `--grid-level 0..9`. Their existing
 select an explicit legacy version-1 tensor grid and cannot be combined with
 `--grid-level`. Native-manifest methods use the common native default.
 
-**Representation is not execution qualification.** Methods requiring
-unrepresented range-separated exchange, VV10/rVV10 nonlocal correlation,
-or a D3/D4/gCP/basis correction (such as WB97M-V or r²SCAN-3c) are currently
-listed as unavailable instead of silently dropping operators or returning a
-partial energy. Newly generated MethodIR rows do not automatically gain
-native capability: preparation remains authoritative.
+Canonical `wb97m-v-rks` and `wb97m-v-uks` execute their complete semilocal,
+short-/long-range exchange and self-consistent VV10 energy. Native D3(BJ),
+D3(BJ)-ATM, D3(0), and functional-specific D4-EEQ compositions use the generated
+parameter records and the same native KS owner. For example:
+
+```bash
+generativeqc run molecule.xyz --method wb97m-v-rks --basis def2-svp --json
+generativeqc run molecule.xyz --method 'pbe0-d3(bj)-rks' --basis def2-svp --forces --json
+generativeqc run molecule.xyz --method 'b3lyp-d4(bj-eeq-atm)-rks' --basis def2-svp --json
+```
+
+`--nonlocal-memory-bytes` and `--dispersion-memory-bytes` each default to
+256 MiB and bound their respective native owners. Zero or insufficient capacity
+fails the applicable calculation. Dispersion compositions require FP64. An
+energy-only request skips correction gradients; forces subtract the correction's
+`dE/dR` exactly once after the electronic stationary force. Corrected methods
+advertise forces only when their prepared electronic context qualifies. The
+resource dry-run currently rejects these complete compositions because its
+inventory does not include their additional owners.
+
+**Representation is not execution qualification.** The generated catalog still
+rejects missing operators or bound basis/gCP compositions, including r²SCAN-3c;
+it does not substitute a partial energy. WB97M-V energy admission does not add
+native CLI analytic forces. Exact backend/basis/property preparation remains
+authoritative. The CLI tests independently compare small-grid WB97M-V energies
+with PySCF and correction-bearing forces with reconverged energy differences;
+these are CPU implementation checks, not grid-convergence or CUDA qualification.
 
 ### Context-qualified native DFT analytic forces
 
@@ -509,8 +532,9 @@ and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
 the Python [application precision policy](application_precision.md) separately
 selects budget-qualified FP32 arithmetic.
 
-CUDA DF DFT forces, ECP, remaining d/f-shell force contexts, ωB97M-V and correction-bearing
-MethodIR forces are **not** enabled by this native CUDA path. CPU B3LYP UKS
+CUDA DF DFT forces, ECP, remaining d/f-shell force contexts and ωB97M-V forces
+are **not** enabled by this native CUDA path. Named D3/D4 compositions retain
+their underlying electronic force gate. CPU B3LYP UKS
 also remains unqualified. Unsupported `--forces` requests fail before execution
 rather than publishing incomplete gradients. Run
 `python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`

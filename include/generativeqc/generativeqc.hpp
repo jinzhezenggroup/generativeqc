@@ -502,6 +502,24 @@ class Calculation {
         capabilities_(method_capabilities(method.method)) {
     check(generativeqc_calculation_prepare(context_, system.get(), &method, &handle_));
   }
+  /** @native-contract generativeqc::Calculation::Calculation-named-ks
+   * @behavior Prepare a complete named KS graph through the native C API.
+   * @inputs method supplies the matching spin carrier and solver controls; name supplies
+   * a catalog selector, optional exact identity and correction capacity.
+   * @lifetime Copies inputs; context must outlive this calculation.
+   * @errors Throws Error with native detail on identity, capability or preparation failure.
+   * @execution Synchronous preparation, without numerical work in this wrapper.
+   */
+  Calculation(Context& context, const System& system, const generativeqc_method_descriptor& method,
+              const generativeqc_named_ks_descriptor& name)
+      : context_(context.get()),
+        atom_count_(system.atom_count()),
+        capabilities_(method_capabilities(method.method)) {
+    const auto status = generativeqc_calculation_prepare_named_ks_v1(context_, system.get(),
+                                                                     &method, &name, &handle_);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context_));
+  }
   /** @native-contract generativeqc::Calculation::~Calculation
    * @behavior Destroy the owned native calculation and release resources.
    * @lifetime Owns one native calculation; associated Context must outlive execution and

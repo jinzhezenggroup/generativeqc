@@ -20,6 +20,10 @@
 
 namespace generativeqc::methods {
 
+namespace named_ks {
+struct Dispersion;
+}
+
 /** Registry metadata used by the public capability query and method factory. */
 struct Capabilities {
   generativeqc_method method{};
@@ -43,6 +47,14 @@ struct ResultCompanion {
   double energy{};
   std::vector<double> forces;
   std::optional<generativeqc_correlation_diagnostic> correlation;
+};
+
+/** Same-transaction correction evidence. Gradients are present only when a
+ * complete force was requested; none of this state is an SCF warm seed. */
+struct DispersionResult {
+  double two_body_energy{}, atm_energy{};
+  std::vector<double> gradient, charges;
+  const char* variant{};
 };
 
 /** Common calculation result. Method-specific retained state stays in the plan. */
@@ -72,6 +84,7 @@ struct Result {
    * They are absent unless requested and never survive a failed transaction. */
   using Companion = ResultCompanion;
   std::optional<Companion> hf_component, mp2_component;
+  std::optional<DispersionResult> dispersion;
 };
 
 inline constexpr unsigned kHfComponent = 1;
@@ -282,14 +295,16 @@ class MethodError final : public std::runtime_error {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor,
-    const core::System* auxiliary_basis = nullptr);
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis = nullptr,
+    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0);
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
                                              generativeqc_batch_flags flags,
-                                             const core::System* auxiliary_basis = nullptr);
+                                             const core::System* auxiliary_basis = nullptr,
+                                             const named_ks::Dispersion* dispersion = nullptr,
+                                             std::uint64_t dispersion_bytes = 0);
 
 }  // namespace generativeqc::methods
 

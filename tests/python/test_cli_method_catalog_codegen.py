@@ -69,8 +69,15 @@ class NativeMethodirProjectionTests(unittest.TestCase):
                 self.assertEqual(row.identity, "")
                 self.assertIn("automatic bulk components cannot mix", row.reason)
 
-        self.assertFalse(table["wb97m-v-rks"].cpu)
-        self.assertIn("nonlocal", table["wb97m-v-rks"].reason)
+        nonlocal_row = table["wb97m-v-rks"]
+        self.assertTrue(nonlocal_row.cpu)
+        self.assertTrue(nonlocal_row.cuda)
+        self.assertEqual(nonlocal_row.range_omega, 0.3)
+        self.assertEqual(nonlocal_row.exchange, ((2, 0.15, 0.3), (3, 1.0, 0.3)))
+        self.assertEqual(nonlocal_row.nonlocal_correlation, (1, 6.0, 0.01, 1.0))
+        for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
+            self.assertTrue(table[name].cpu)
+            self.assertNotEqual(table[name].dispersion[0], 0)
         self.assertFalse(table["r2scan-3c-rks"].cuda)
         self.assertIn("correction", table["r2scan-3c-rks"].reason)
 

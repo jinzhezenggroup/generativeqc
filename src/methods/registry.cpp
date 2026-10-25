@@ -262,11 +262,20 @@ const Capabilities* find_capabilities(generativeqc_method method) noexcept {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis,
+    const named_ks::Dispersion* dispersion, std::uint64_t dispersion_bytes) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
   validate_preliminary_system(descriptor, system);
+  if (dispersion) {
+    if (definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "KS dispersion requires a DFT carrier");
+    return detail::prepare_composed_dft_calculation(definition.provider.domain, context, system,
+                                                    descriptor, auxiliary_basis, *dispersion,
+                                                    dispersion_bytes);
+  }
   return definition.prepare_calculation(definition.provider.domain, context, system, descriptor,
                                         auxiliary_basis);
 }
@@ -275,7 +284,9 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
                                              generativeqc_batch_flags flags,
-                                             const core::System* auxiliary_basis) {
+                                             const core::System* auxiliary_basis,
+                                             const named_ks::Dispersion* dispersion,
+                                             std::uint64_t dispersion_bytes) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   if (!definition.provider.domain.supports_batch || definition.prepare_batch == nullptr) {
@@ -285,6 +296,14 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
   for (const core::System& system : systems) {
     validate_system(definition, system);
     validate_preliminary_system(descriptor, system);
+  }
+  if (dispersion) {
+    if (definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "KS dispersion requires a DFT carrier");
+    return detail::prepare_composed_dft_batch(definition.provider.domain, context,
+                                              std::move(systems), descriptor, flags,
+                                              auxiliary_basis, *dispersion, dispersion_bytes);
   }
   return definition.prepare_batch(definition.provider.domain, context, std::move(systems),
                                   descriptor, flags, auxiliary_basis);

@@ -17,6 +17,7 @@
 #include "dft/application_precision.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_spd_force_policy.hpp"
+#include "dft/dispersion/d3_runtime.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
@@ -479,7 +480,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
           range_correction_.get());
     }
 #endif
-    if (execution_plan_.d4_correction) prepare_d4(device);
+    if (execution_plan_.d4_correction || execution_plan_.dispersion.kind == 3) prepare_d4(device);
+    if (execution_plan_.dispersion.kind == 1 || execution_plan_.dispersion.kind == 2)
+      prepare_d3(device);
     runtime::sample_cpu_capacity(host_numeric_capacity());
   }
 
@@ -585,6 +588,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
     if (d4_) {
       const auto& resources = d4_->resources();
+      bytes = runtime::add_capacity(bytes, static_cast<std::size_t>(resources.plan_host_bytes));
+      bytes =
+          runtime::add_capacity(bytes, static_cast<std::size_t>(resources.execution_host_bytes));
+    }
+    if (d3_) {
+      const auto& resources = d3_->resources();
       bytes = runtime::add_capacity(bytes, static_cast<std::size_t>(resources.plan_host_bytes));
       bytes =
           runtime::add_capacity(bytes, static_cast<std::size_t>(resources.execution_host_bytes));
@@ -2066,26 +2075,82 @@ class KsPreparedState final : public KsSingleOwnerPort {
     }
   }
 
-  void apply_d4(Result& result) {
-    if (!d4_) return;
+  void apply_dispersion(Result& result) {
+    if ((!d4_ && !d3_) || !result.convergence.converged) return;
     std::vector<double> coordinates;
     coordinates.reserve(3 * system_.atoms.size());
     for (const auto& atom : system_.atoms)
       coordinates.insert(coordinates.end(), atom.position.begin(), atom.position.end());
     const std::uint8_t active = 1;
-    const std::uint8_t want_gradient = 0;
-    std::vector<dft::dispersion::D4Status> statuses;
+    const std::uint8_t want_gradient = !result.forces.empty();
     std::vector<double> components, gradients, charges;
     std::string detail;
-    const auto status =
-        d4_->execute(coordinates, std::span(&active, 1), std::span(&want_gradient, 1), statuses,
-                     components, gradients, charges, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS || statuses.size() != 1 ||
-        statuses[0] != dft::dispersion::D4Status::success || components.size() != 2)
+    generativeqc_status status;
+    bool complete = false;
+    if (d4_) {
+      std::vector<dft::dispersion::D4Status> statuses;
+      status = d4_->execute(coordinates, std::span(&active, 1), std::span(&want_gradient, 1),
+                            statuses, components, gradients, charges, detail);
+      complete = statuses.size() == 1 && statuses[0] == dft::dispersion::D4Status::success &&
+                 components.size() == 2;
+    } else {
+      std::vector<dft::dispersion::D3Status> statuses;
+      status = d3_->execute(coordinates, std::span(&active, 1), std::span(&want_gradient, 1),
+                            statuses, components, gradients, detail);
+      complete = statuses.size() == 1 && statuses[0] == dft::dispersion::D3Status::success &&
+                 components.size() == 1;
+    }
+    if (status != GENERATIVEQC_STATUS_SUCCESS || !complete ||
+        (want_gradient && gradients.size() != result.forces.size()) ||
+        !std::all_of(components.begin(), components.end(),
+                     [](double x) { return std::isfinite(x); }) ||
+        !std::all_of(gradients.begin(), gradients.end(), [](double x) { return std::isfinite(x); }))
       throw MethodError(
           status == GENERATIVEQC_STATUS_SUCCESS ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : status,
-          detail.empty() ? "PBE-D4 correction failed" : detail);
-    result.energy += components[0] + components[1];
+          detail.empty() ? "complete native dispersion correction failed" : detail);
+    for (const auto energy : components) result.energy += energy;
+    // The correction providers return +dE/dR; public forces are -dE/dR.
+    for (std::size_t index = 0; index < result.forces.size(); ++index)
+      result.forces[index] -= gradients[index];
+    if (!want_gradient) gradients.clear();
+    result.dispersion = DispersionResult{
+        components[0], d4_ ? components[1] : 0.0, std::move(gradients), std::move(charges),
+        d3_ ? dft::dispersion::d3_variant_identity(d3_->parameters()) : "d4-bj-eeq-v1"};
+  }
+
+  generativeqc_status dispersion_diagnostic(generativeqc_d3_runtime_diagnostic* d3,
+                                            generativeqc_d4_runtime_diagnostic* d4) const {
+    const auto copy_resources = [&](auto& out, const auto& r) {
+      out.backend = backend_;
+      out.plan_host_bytes = r.plan_host_bytes;
+      out.execution_host_bytes = r.execution_host_bytes;
+      out.device_bytes = r.device_bytes;
+      out.table_bytes = r.table_bytes;
+      out.workspace_bytes = r.workspace_bytes;
+      out.maximum_bytes = r.maximum_bytes;
+      out.total_atoms = r.total_atoms;
+      out.system_count = r.system_count;
+      out.maximum_atoms = r.maximum_atoms;
+    };
+    if (d3 && d3_) {
+      copy_resources(*d3, d3_->resources());
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
+    if (d4 && d4_) {
+      copy_resources(*d4, d4_->resources());
+      d4->profile = GENERATIVEQC_D4_PROFILE_STANDARD_EEQ;
+      d4->worker_blocks = d4_->resources().worker_blocks;
+      d4->workspace_slots = d4_->resources().workspace_slots;
+      d4->atm_enabled = d4_->parameters().s9 != 0;
+      const auto& counters = d4_->counters();
+      d4->execution_count = counters.execution_count;
+      d4->unchanged_geometry_replays = counters.unchanged_geometry_replays;
+      d4->changed_geometry_replays = counters.changed_geometry_replays;
+      d4->coordinate_h2d_bytes = counters.coordinate_h2d_bytes;
+      d4->kernel_launches = counters.kernel_launches;
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   /** CPU solve used by the common scheduler; CUDA is advanced there per stream. */
@@ -2277,6 +2342,23 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                              source.atm_cutoff,
                                              source.ga,
                                              source.gc};
+    if (execution_plan_.dispersion.kind == 3) {
+      const auto& p = execution_plan_.dispersion;
+      parameters = {dft::dispersion::D4ReferenceModel::eeq,
+                    p.s6,
+                    p.s8,
+                    p.s9,
+                    p.a1,
+                    p.a2,
+                    p.cn_cutoff,
+                    p.pair_cutoff,
+                    p.atm_cutoff,
+                    p.ga,
+                    p.gc};
+      // The current native EEQ owner fixes the charge-CN domain at 25 Bohr.
+      if (p.charge_cn_cutoff != 25.0)
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "unsupported D4 charge-CN cutoff");
+    }
     std::vector<std::uint32_t> offsets{0, static_cast<std::uint32_t>(system_.atoms.size())};
     std::vector<std::int32_t> atomic_numbers;
     std::vector<double> coordinates;
@@ -2291,11 +2373,38 @@ class KsPreparedState final : public KsSingleOwnerPort {
     d4_ = dft::dispersion::D4Plan::prepare(
         backend_, device, std::move(offsets), std::move(atomic_numbers),
         std::vector<double>{static_cast<double>(system_.charge)}, std::move(coordinates),
-        parameters, dft::dispersion::D4EEQProfile::standard, 256ull * 1024ull * 1024ull, detail,
-        status);
+        parameters, dft::dispersion::D4EEQProfile::standard,
+        execution_plan_.dispersion.kind ? execution_plan_.dispersion_maximum_bytes
+                                        : 256ull * 1024ull * 1024ull,
+        detail, status);
     if (!d4_)
       throw MethodError(status,
                         detail.empty() ? "PBE-D4 production plan preparation failed" : detail);
+  }
+
+  void prepare_d3(int device) {
+    using namespace dft::dispersion;
+    const auto& p = execution_plan_.dispersion;
+    D3ModelParameters parameters;
+    parameters.damping = p.kind == 1 ? D3Damping::bj : D3Damping::zero;
+    parameters.bj = {p.s6, p.s8, p.a1, p.a2, 0.0, p.cn_cutoff, p.pair_cutoff, p.pair_switch_width};
+    parameters.zero = {p.s6,  p.s8,        p.rs6,         p.rs8,
+                       p.alp, p.cn_cutoff, p.pair_cutoff, p.pair_switch_width};
+    parameters.atm_enabled = p.s9 != 0;
+    parameters.atm = {p.s9, p.cn_cutoff, p.atm_cutoff, p.atm_switch_width};
+    std::vector<std::int32_t> numbers;
+    std::vector<double> coordinates;
+    for (const auto& atom : system_.atoms) {
+      numbers.push_back(atom.atomic_number);
+      coordinates.insert(coordinates.end(), atom.position.begin(), atom.position.end());
+    }
+    generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    std::string detail;
+    const auto atom_count = static_cast<std::uint32_t>(numbers.size());
+    d3_ = D3Plan::prepare(backend_, device, {0, atom_count}, std::move(numbers),
+                          std::move(coordinates), parameters,
+                          execution_plan_.dispersion_maximum_bytes, detail, status);
+    if (!d3_) throw MethodError(status, detail.empty() ? "native D3 preparation failed" : detail);
   }
 
   Capabilities capabilities_;
@@ -2318,6 +2427,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   std::uint64_t cpu_epoch_{};
   std::optional<dft::KsPhysicalState> cpu_physical_;
   std::unique_ptr<dft::dispersion::D4Plan> d4_;
+  std::unique_ptr<dft::dispersion::D3Plan> d3_;
   std::unique_ptr<dft::nlc::Vv10Plan> nonlocal_;
   std::optional<std::size_t> stationary_device_allowance_;
 #if GENERATIVEQC_HAS_CUDA
@@ -2331,6 +2441,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
  * No HF graph or Python calculation loop participates in this schedule. */
 class KsPreparedBatch final : public PreparedBatch,
                               public KsBatchOwnerPort,
+                              public BatchDispersionDiagnostics,
                               public BatchWarmStarts,
                               public BatchKsTransportDiagnostics,
                               public BatchDfMetricDiagnostics {
@@ -2358,6 +2469,14 @@ class KsPreparedBatch final : public PreparedBatch,
   }
 
   std::size_t size() const noexcept override { return systems_.size(); }
+
+  generativeqc_status dispersion_diagnostic(std::size_t index,
+                                            generativeqc_d3_runtime_diagnostic* d3,
+                                            generativeqc_d4_runtime_diagnostic* d4) const override {
+    if (index >= items_.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    if (!items_[index].plan) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    return items_[index].plan->dispersion_diagnostic(d3, d4);
+  }
 
   std::optional<generativeqc_property_flags> supported_properties(
       std::size_t index) const noexcept override {
@@ -2466,7 +2585,7 @@ class KsPreparedBatch final : public PreparedBatch,
       result.calculation = adapt_result(std::move(native), backend_);
       if (wants_forces(i) && result.calculation.convergence.converged)
         items_[i].plan->add_prepared_native_forces(result.calculation);
-      items_[i].plan->apply_d4(result.calculation);
+      items_[i].plan->apply_dispersion(result.calculation);
       const auto& calculation = result.calculation;
       result.status = calculation.convergence.converged ? GENERATIVEQC_STATUS_SUCCESS
                                                         : GENERATIVEQC_STATUS_NOT_CONVERGED;
@@ -3068,12 +3187,11 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
 }
 
 namespace {
-std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabilities,
-                                                  core::ContextState& context,
-                                                  std::vector<core::System> systems,
-                                                  const generativeqc_method_descriptor& descriptor,
-                                                  generativeqc_batch_flags flags,
-                                                  const core::System* auxiliary_basis) {
+std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
+    const Capabilities& capabilities, core::ContextState& context,
+    std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
+    generativeqc_batch_flags flags, const core::System* auxiliary_basis,
+    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0) {
   if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
@@ -3083,6 +3201,21 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
+  if (dispersion) {
+    if (!dispersion_bytes || execution_plan.d4_correction || dispersion->kind < 1 ||
+        dispersion->kind > 3)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "invalid or duplicate KS dispersion owner");
+    if (options.precision_mode != GENERATIVEQC_PRECISION_FP64)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "named dispersion requires strict FP64");
+    execution_plan.dispersion = *dispersion;
+    // KS retains a correction owner per system. Equal shares conservatively
+    // bound their aggregate storage, including replicated immutable tables.
+    execution_plan.dispersion_maximum_bytes = dispersion_bytes / systems.size();
+    if (!execution_plan.dispersion_maximum_bytes)
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY, "dispersion fleet exceeds its budget");
+  }
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system);
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
@@ -3179,6 +3312,27 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
                                                  const core::System* auxiliary_basis) {
   return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags,
                           auxiliary_basis);
+}
+
+std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(
+    const Capabilities& capabilities, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis,
+    const named_ks::Dispersion& dispersion, std::uint64_t maximum_bytes) {
+  auto owner = prepare_ks_batch(capabilities, context, {system}, descriptor,
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, auxiliary_basis, &dispersion,
+                                maximum_bytes);
+  return std::make_unique<KsPreparedCalculation>(capabilities, system.atoms.size(),
+                                                 context.requested_backend, context.device_id,
+                                                 std::move(owner));
+}
+
+std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(
+    const Capabilities& capabilities, core::ContextState& context,
+    std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
+    generativeqc_batch_flags flags, const core::System* auxiliary_basis,
+    const named_ks::Dispersion& dispersion, std::uint64_t maximum_bytes) {
+  return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags,
+                          auxiliary_basis, &dispersion, maximum_bytes);
 }
 
 }  // namespace generativeqc::methods::detail

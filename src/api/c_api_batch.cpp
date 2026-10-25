@@ -8,6 +8,8 @@
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/ks_dispersion.hpp"
+#include "api/named_ks_inputs.hpp"
 #include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
@@ -17,6 +19,68 @@
 #include "runtime/host_component_trace.hpp"
 
 extern "C" {
+
+generativeqc_status generativeqc_ks_batch_dispersion_result_v1(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_d4_batch_item_result_descriptor* out) {
+  if (!batch || !out || index >= batch->dispersion.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  if (batch->plan->execution_lifecycle().state() !=
+          generativeqc::runtime::CompiledExecutionState::Warm ||
+      !batch->dispersion[index])
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const auto& result = *batch->dispersion[index];
+  if ((!out->gradient && out->gradient_count) || (!out->charges && out->charge_count) ||
+      (out->gradient && out->gradient_count != 3 * batch->atom_counts[index]) ||
+      (out->charges && out->charge_count != batch->atom_counts[index]))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if ((out->gradient && result.gradient.size() != out->gradient_count) ||
+      (out->charges && result.charges.size() != out->charge_count))
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (out->gradient) std::copy(result.gradient.begin(), result.gradient.end(), out->gradient);
+  if (out->charges) std::copy(result.charges.begin(), result.charges.end(), out->charges);
+  out->status = GENERATIVEQC_STATUS_SUCCESS;
+  out->energy = result.two_body_energy + result.atm_energy;
+  out->two_body_energy = result.two_body_energy;
+  out->atm_energy = result.atm_energy;
+  out->executed_backend = batch->context->state.executed_backend;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+const char* generativeqc_ks_batch_dispersion_variant_v1(const generativeqc_batch* batch,
+                                                        uint32_t index) {
+  if (!batch || index >= batch->dispersion.size()) return nullptr;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  return batch->plan->execution_lifecycle().state() ==
+                     generativeqc::runtime::CompiledExecutionState::Warm &&
+                 batch->dispersion[index]
+             ? batch->dispersion[index]->variant
+             : nullptr;
+}
+
+generativeqc_status generativeqc_ks_batch_d3_diagnostic_v1(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_d3_runtime_diagnostic* out) {
+  if (!batch || !out) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto* diagnostic =
+      dynamic_cast<const generativeqc::methods::BatchDispersionDiagnostics*>(batch->plan.get());
+  return diagnostic ? diagnostic->dispersion_diagnostic(index, out, nullptr)
+                    : GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status generativeqc_ks_batch_d4_diagnostic_v1(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_d4_runtime_diagnostic* out) {
+  if (!batch || !out) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto* diagnostic =
+      dynamic_cast<const generativeqc::methods::BatchDispersionDiagnostics*>(batch->plan.get());
+  return diagnostic ? diagnostic->dispersion_diagnostic(index, nullptr, out)
+                    : GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
 
 /** Private v1 bridge: expose the *prepared item* capability rather than
  * copying method/backend/DF/spin qualification logic into Python. No mutation,
@@ -40,12 +104,12 @@ generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(batch->initial_guesses[index], out);
 }
 
-generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
-                                               const generativeqc_system* const* systems,
-                                               uint32_t system_count,
-                                               const generativeqc_method_descriptor* descriptor,
-                                               generativeqc_batch_flags flags,
-                                               generativeqc_batch** batch) {
+static generativeqc_status prepare_batch(generativeqc_context* context,
+                                         const generativeqc_system* const* systems,
+                                         uint32_t system_count,
+                                         const generativeqc_method_descriptor* descriptor,
+                                         generativeqc_batch_flags flags, generativeqc_batch** batch,
+                                         const generativeqc_named_ks_descriptor* named) {
   generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
@@ -60,6 +124,12 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
 
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
+    std::optional<generativeqc::api::NamedKsInputs> named_inputs;
+    if (named) {
+      named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
+      descriptor = &named_inputs->method.base;
+    }
+
     std::vector<generativeqc::core::System> native_systems;
     native_systems.reserve(system_count);
     std::vector<std::uint32_t> atom_counts;
@@ -86,14 +156,36 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     candidate->scf_diagnostics.resize(system_count);
     candidate->ks_diagnostics.resize(system_count);
     candidate->initial_guesses.resize(system_count);
+    candidate->dispersion.resize(system_count);
     candidate->plan = generativeqc::methods::prepare_batch(
         context->state, std::move(native_systems), *descriptor, flags,
-        generativeqc::api::native_auxiliary_basis(*descriptor));
+        generativeqc::api::native_auxiliary_basis(*descriptor),
+        named_inputs && named_inputs->program->dispersion.kind ? &named_inputs->program->dispersion
+                                                               : nullptr,
+        named ? named->dispersion_maximum_bytes : 0);
     *batch = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
+                                               const generativeqc_system* const* systems,
+                                               uint32_t system_count,
+                                               const generativeqc_method_descriptor* descriptor,
+                                               generativeqc_batch_flags flags,
+                                               generativeqc_batch** batch) {
+  return prepare_batch(context, systems, system_count, descriptor, flags, batch, nullptr);
+}
+
+generativeqc_status generativeqc_batch_prepare_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, generativeqc_batch** batch) {
+  if (batch) *batch = nullptr;
+  if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return prepare_batch(context, systems, system_count, descriptor, flags, batch, name);
 }
 
 void generativeqc_batch_destroy(generativeqc_batch* batch) {
@@ -639,6 +731,7 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
   std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
   std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
   std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
+  std::fill(batch->dispersion.begin(), batch->dispersion.end(), std::nullopt);
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
@@ -738,6 +831,8 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
       const bool valid_force_buffer =
           omit_forces || (output.forces != nullptr && output.force_count >= required_forces);
       output.status = valid_force_buffer ? item.status : GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      if (output.status == GENERATIVEQC_STATUS_SUCCESS)
+        batch->dispersion[i] = std::move(item.calculation.dispersion);
       if (output.status == GENERATIVEQC_STATUS_SUCCESS ||
           output.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
         batch->precision_work[i] = std::move(item.calculation.precision_work);

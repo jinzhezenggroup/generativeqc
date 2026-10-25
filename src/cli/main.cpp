@@ -238,6 +238,7 @@ void print_usage(std::ostream& out) {
          "  --precision fp64|auto    Native precision admission (default: fp64)\n"
          "  --density-fitting-threshold F --density-fitting-memory-bytes N\n"
          "  --correlation-memory-bytes N --mp2-denominator-threshold F\n"
+         "  --nonlocal-memory-bytes N --dispersion-memory-bytes N\n"
          "  --ccsd-max-iterations N --ccsd-diis-history N\n"
          "  --ccsd-energy-tolerance F --ccsd-residual-tolerance F\n"
          "  --ccsd-denominator-threshold F --ccsd-damping F --ccsd-level-shift F\n"
@@ -583,6 +584,10 @@ RunOptions parse_run(int argc, char** argv) {
         options.precision = GENERATIVEQC_PRECISION_AUTO;
       else
         throw UsageError("--precision must be fp64 or auto");
+    } else if (option == "--nonlocal-memory-bytes") {
+      options.nonlocal_memory_bytes = parse_bytes(value(), "nonlocal memory bytes");
+    } else if (option == "--dispersion-memory-bytes") {
+      options.dispersion_memory_bytes = parse_bytes(value(), "dispersion memory bytes");
     } else if (option == "--correlation-memory-bytes") {
       options.correlation_memory_bytes = parse_bytes(value(), "correlation memory bytes");
     } else if (option == "--density-fitting-memory-bytes") {
@@ -802,18 +807,9 @@ int run(RunOptions options) {
   generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
     const auto* row = options.composition;
     if (!row) return {context, system, method};
-    // Build the exact build-time-compiled primitive graph through one SDK owner.
-    // Preparation retains authority over basis, device, provider, and SCF admission.
-    generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
-    composed.set_grid(options.grid);
-    using namespace generativeqc::cli::method_generated;
-    for (const auto& term : components(*row)) {
-      composed.add_semilocal(term.component_id, term.coefficient);
-    }
-    for (const auto& term : exchanges(*row)) {
-      composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
-    }
-    return composed.prepare(context, system, method);
+    return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
+                                          options.grid, options.nonlocal_memory_bytes,
+                                          options.dispersion_memory_bytes, row->identity.data());
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.

@@ -51,6 +51,7 @@ struct RunOptions {
   double headroom_fraction{0};
   generativeqc_precision_mode precision{GENERATIVEQC_PRECISION_FP64};
   std::uint64_t correlation_memory_bytes{0}, density_fitting_memory_bytes{0};
+  std::uint64_t nonlocal_memory_bytes{256ull << 20}, dispersion_memory_bytes{256ull << 20};
   double density_fitting_threshold{1e-10}, mp2_denominator_threshold{1e-10};
   std::uint32_t ccsd_max_iterations{100}, ccsd_diis_history{6};
   double ccsd_energy_tolerance{1e-11}, ccsd_residual_tolerance{1e-9};

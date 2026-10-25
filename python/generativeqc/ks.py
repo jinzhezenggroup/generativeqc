@@ -1252,6 +1252,11 @@ def native_ks_options(
         xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
         if options.xc_schedule == "device_fused"
         else _native.XC_EXECUTION_HOST_UNFUSED,
+        nonlocal_maximum_bytes=(
+            options.nonlocal_memory_budget_bytes
+            if options.execution_plan.nonlocal_correlation is not None
+            else 0
+        ),
     )
     descriptor._domain_owner = domain
     descriptor._radii_owner = radii

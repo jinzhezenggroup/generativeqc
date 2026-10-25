@@ -100,6 +100,7 @@ struct generativeqc_batch {
   std::vector<std::optional<generativeqc::dft::ScfDiagnostic>> ks_diagnostics;
   std::vector<std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic>>
       initial_guesses;
+  std::vector<std::optional<generativeqc::methods::DispersionResult>> dispersion;
 };
 
 #endif

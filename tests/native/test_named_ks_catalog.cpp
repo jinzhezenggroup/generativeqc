@@ -3,9 +3,14 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
+#include "api/ks_dispersion.hpp"
+#include "dft/application_precision.hpp"
+#include "generativeqc/ks.hpp"
+#include "methods/application_precision.hpp"
 #include "methods/named_ks_catalog.hpp"
 
 extern "C" generativeqc_status generativeqc_ks_catalog_plan_v1(const char*, std::size_t,
@@ -30,6 +35,7 @@ generativeqc_ks_options controls() {
   result.partition_iterations = 3;
   result.tile_points = 101;
   result.coincident_tolerance = 1e-12;
+  result.nonlocal_maximum_bytes = 1234567;
   return result;
 }
 
@@ -44,8 +50,14 @@ void test_complete_catalog() {
       require(generativeqc_ks_catalog_plan_v1(entry.name.data(), entry.name.size(), nullptr, 0,
                                               backend, &output, &selected) == 0,
               "metadata query loaded a backend or rejected a valid row");
-      const bool admitted = backend == GENERATIVEQC_BACKEND_CUDA ? entry.cuda : entry.cpu;
+      const bool complete = backend == GENERATIVEQC_BACKEND_CUDA ? entry.cuda : entry.cpu;
+      const bool admitted = complete && !entry.dispersion.kind;
       require(selected == static_cast<unsigned>(admitted), "catalog admission flags diverged");
+      if (complete) {
+        const char* name = nullptr;
+        require(generativeqc_ks_catalog_name_v1(entry.identity.data(), backend, &name) == 0 && name,
+                "complete named program was unavailable by identity");
+      }
       if (!admitted) {
         require(std::memcmp(&output, &before, sizeof(output)) == 0,
                 "explicit compiler route changed caller controls");
@@ -61,6 +73,7 @@ void test_complete_catalog() {
                   output.angular_polar == before.angular_polar &&
                   output.angular_azimuth == before.angular_azimuth &&
                   output.tile_points == before.tile_points &&
+                  output.nonlocal_maximum_bytes == before.nonlocal_maximum_bytes &&
                   output.coincident_tolerance == before.coincident_tolerance,
               "catalog selection changed caller execution policy");
       auto by_identity = controls();
@@ -75,8 +88,15 @@ void test_complete_catalog() {
               "identity lookup changed the scientific inventory");
       for (const auto& term : exchanges(entry))
         require(std::isfinite(term.fock_coefficient) &&
-                    term.operator_kind == GENERATIVEQC_KS_EXCHANGE_FULL_RANGE,
+                    term.fock_coefficient == -term.coefficient / (entry.spin == 1 ? 2.0 : 1.0) &&
+                    term.operator_kind >= GENERATIVEQC_KS_EXCHANGE_FULL_RANGE &&
+                    term.operator_kind <= GENERATIVEQC_KS_EXCHANGE_LONG_RANGE,
                 "compiler exchange output was lost");
+      require(output.semilocal_range_omega == entry.range_omega &&
+                  output.has_nonlocal_correlation == (entry.nonlocal.variant != 0) &&
+                  output.nonlocal_b == entry.nonlocal.b && output.nonlocal_c == entry.nonlocal.c &&
+                  output.nonlocal_coefficient == entry.nonlocal.coefficient,
+              "complete nonlocal program was truncated");
     }
   }
 }
@@ -175,6 +195,113 @@ void test_borrowed_controls_and_extension_aliases() {
           extended.application_force == extended_before.application_force,
       "valid selection changed the application extension after alias refusal");
 }
+
+void test_named_preparation_failures_and_lifetime() {
+  generativeqc::Context context({sizeof(generativeqc_context_descriptor), GENERATIVEQC_ABI_VERSION,
+                                 0, GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+  std::unique_ptr<generativeqc::Calculation> calculation;
+  std::unique_ptr<generativeqc::Calculation> nonlocal;
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
+      nullptr, generativeqc_batch_destroy);
+  {
+    generativeqc::System system(context, atoms, "sto-3g");
+    const generativeqc_system* systems[]{system.get()};
+    auto method = generativeqc::default_method_descriptor("pbe-rks");
+    auto grid = controls();
+    grid.grid_version = 1;
+    grid.radial_points = 8;
+    grid.angular_polar = 4;
+    grid.angular_azimuth = 8;
+    method.ks_options = &grid;
+    std::string selector = "pbe-d3(bj)-rks";
+    std::string identity(generativeqc::methods::named_ks::find_method(selector)->identity);
+    generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
+                                           selector.c_str(), identity.c_str(), 256ull << 20};
+    // Both public entry points must clear an old output value even when
+    // rejection happens before any numerical owner is constructed.
+    const auto rejected = [&](const generativeqc_method_descriptor& request,
+                              const generativeqc_named_ks_descriptor* name,
+                              generativeqc_status expected) {
+      auto* single = reinterpret_cast<generativeqc_calculation*>(1);
+      auto* fleet = reinterpret_cast<generativeqc_batch*>(1);
+      require(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &request,
+                                                           name, &single) == expected &&
+                  !single,
+              "named single refusal published an owner or wrong status");
+      require(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &request, name, 0,
+                                                     &fleet) == expected &&
+                  !fleet,
+              "named batch refusal published an owner or wrong status");
+    };
+    rejected(method, nullptr, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    auto invalid = named;
+    invalid.abi_version += 1;
+    rejected(method, &invalid, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    invalid = named;
+    invalid.identity = "incorrect-identity";
+    rejected(method, &invalid, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    invalid = named;
+    invalid.name = "unrepresented-functional-rks";
+    rejected(method, &invalid, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    invalid = named;
+    invalid.dispersion_maximum_bytes = 0;
+    rejected(method, &invalid, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    auto wrong_spin = method;
+    wrong_spin.method = GENERATIVEQC_METHOD_PBE_UKS;
+    rejected(wrong_spin, &named, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+
+    // Invalid extension controls must reach their existing validators, not
+    // disappear when the named adapter replaces scientific fields.
+    generativeqc::methods::detail::ApplicationPrecisionMethodOptions extended_method{};
+    extended_method.base = method;
+    extended_method.base.struct_size = sizeof(extended_method);
+    extended_method.energy = -1;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    extended_method.energy = 0;
+    generativeqc::dft::NonlocalGridKsOptions extended_grid{};
+    extended_grid.base.base = grid;
+    extended_grid.base.base.struct_size = sizeof(extended_grid);
+    extended_grid.base.energy = -1;
+    extended_method.base.ks_options = &extended_grid.base.base;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    extended_grid.base.energy = 0;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    extended_grid.grid = &grid;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    extended_grid.base.base.struct_size = sizeof(extended_grid.base);
+
+    calculation =
+        std::make_unique<generativeqc::Calculation>(context, system, extended_method.base, named);
+    generativeqc_batch* raw = nullptr;
+    generativeqc::check(generativeqc_batch_prepare_named_ks_v1(
+        context.get(), systems, 1, &extended_method.base, &named, 0, &raw));
+    batch.reset(raw);
+    extended_grid.base.base.struct_size = sizeof(extended_grid);
+    named.name = "wb97m-v-rks";
+    named.identity = nullptr;
+    nonlocal =
+        std::make_unique<generativeqc::Calculation>(context, system, extended_method.base, named);
+    selector.assign(selector.size(), 'x');
+    identity.assign(identity.size(), '0');
+    extended_method = {};
+    extended_grid = {};
+  }
+  // Descriptors, strings and source system are now gone; both prepared
+  // endpoints must still compute the same complete energy from owned inputs.
+  const auto single = calculation->execute(GENERATIVEQC_PROPERTY_ENERGY);
+  generativeqc_batch_item_result_descriptor item{};
+  item.struct_size = sizeof(item);
+  item.abi_version = GENERATIVEQC_ABI_VERSION;
+  generativeqc::check(generativeqc_batch_execute(batch.get(), nullptr, 0, &item, 1));
+  require(item.status == GENERATIVEQC_STATUS_SUCCESS && std::isfinite(item.energy) &&
+              std::abs(item.energy - single.energy) < 1e-12,
+          "named owners lost copied controls/system or diverged between endpoints");
+  // Same independent PySCF/Libxc grid oracle as the CLI endpoint fixture.
+  require(
+      std::abs(nonlocal->execute(GENERATIVEQC_PROPERTY_ENERGY).energy + 1.150312466420175) < 2e-8,
+      "named preparation lost its borrowed nonlocal-grid controls");
+}
 }  // namespace
 
 int main() {
@@ -182,6 +309,7 @@ int main() {
     test_complete_catalog();
     test_identity_and_transaction_boundaries();
     test_borrowed_controls_and_extension_aliases();
+    test_named_preparation_failures_and_lifetime();
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

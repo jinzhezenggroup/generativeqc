@@ -208,15 +208,8 @@ Calculation prepare(Context& context, System& system, const RunOptions& o, const
   const auto d = descriptor(o, aux);
   const auto* row = o.composition;
   if (!row) return {context, system, d};
-  KsComposition composed(row->carrier, std::string(row->domain), row->spin);
-  composed.set_grid(o.grid);
-  for (const auto& term : method_generated::components(*row)) {
-    composed.add_semilocal(term.component_id, term.coefficient);
-  }
-  for (const auto& term : method_generated::exchanges(*row)) {
-    composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
-  }
-  return composed.prepare(context, system, d);
+  return prepare_named_ks(context, system, d, std::string(row->name), o.grid,
+                          o.nonlocal_memory_bytes, o.dispersion_memory_bytes, row->identity.data());
 }
 
 // Rebuild a complete native System/Calculation at each geometry, preserving

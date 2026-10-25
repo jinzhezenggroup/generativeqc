@@ -55,6 +55,26 @@ skip force work. This shared entry does not expand qualified force domains:
 Python compatibility consumers remain for properties the native owner does not
 admit, and native CLI/SDK calls continue rejecting those requests.
 
+Complete named KS preparation resolves compiler-generated immutable programs
+behind the C API. The native KS state owns optional D3/D4 plans, computes their
+geometry-only energy/gradient after electronic convergence, and publishes the
+combined result in the same transaction. Its electronic final-state token stays
+bound to the SCF Hamiltonian; correction metadata is a separate result receipt,
+revoked on every attempted replay. No correction derivative runs for energy-only
+requests. The explicit low-level electronic catalog API declines corrected
+graphs rather than returning an incomplete program.
+
+Python selects these complete programs by exact full MethodIR identity for
+FP64 calculations without a global resource plan. Missing symbols, custom graphs,
+unrepresented basis/gCP compositions and global resource plans retain their
+existing explicit correction owners. Resource-plan compatibility is necessary
+because the native KS scheduler retains per-system correction owners while the
+existing standalone D3 inventory models one ragged correction fleet. A selected
+native refusal never retries another owner. For electronic forces still using
+Python compatibility consumers, a separate correction-gradient consumer remains;
+its energy is not added again. Correction diagnostics describe current native
+KS owners, including their duplicated tables and rebuild lifetimes.
+
 Python DFT force routing queries each prepared item's capability. When a batch
 mixes native and compatibility consumers, an additive private bridge submits
 force work only for the qualified slots under the same C++ transaction and

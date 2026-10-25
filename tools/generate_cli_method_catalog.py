@@ -24,11 +24,17 @@ from generativeqc_compiler.method._generated_xc_aliases import (
     METHOD_ALIASES,
 )
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+from generativeqc_compiler.method.dispersion import (
+    D3Spec,
+    D4Spec,
+    DispersionCorrectionPrimitive,
+)
 from generativeqc_compiler.method.ks_execution import (
     compile_ks_execution_plan,
 )
 from generativeqc_compiler.method.spec import (
     METHOD_CATALOG,
+    d4_composite_method_identifiers,
     resolve_method,
 )
 from generativeqc_compiler.xc._generated_split_hybrids import (
@@ -51,6 +57,9 @@ class Row:
     cpu: bool
     cuda: bool
     reason: str
+    range_omega: float = 0.0
+    nonlocal_correlation: tuple[int, float, float, float] = (0, 0.0, 0.0, 0.0)
+    dispersion: tuple[float | int, ...] = (0,) + (0.0,) * 16
 
 
 def _match_curated(plan: Any) -> Any:
@@ -86,34 +95,51 @@ def _match_split(plan: Any) -> bool:
 
 
 def _admit(plan: Any) -> tuple[bool, bool, str, str]:
-    if plan.method.basis is not None or plan.post_scf:
+    if plan.method.basis is not None:
         return (
             False,
             False,
             "",
             "basis/dispersion/gCP correction is not natively composed",
         )
-    if plan.nonlocal_correlation is not None:
-        return (
-            False,
-            False,
-            "",
-            "nonlocal contribution needs a complete native composition",
-        )
-    if any(term.operator != "full-range" or term.omega for term in plan.exchange):
-        return False, False, "", "range exchange needs a complete native composition"
-    if len(plan.exchange) > 1:
-        return False, False, "", "multiple exact-exchange terms are not supported"
-
+    if plan.post_scf and (
+        len(plan.post_scf) != 1
+        or not isinstance(plan.post_scf[0], DispersionCorrectionPrimitive)
+        or not isinstance(plan.post_scf[0].specification, (D3Spec, D4Spec))
+    ):
+        return False, False, "", "no complete native post-SCF correction owner"
     record = _match_curated(plan)
     if record is not None:
         if record["exchange_policy"] == "canonical":
-            return (
-                False,
-                False,
-                "",
-                "canonical semilocal family requires its full method graph",
+            canonical = compile_ks_execution_plan(
+                resolve_method(record["canonical_method"], spin=plan.method.spin)
             )
+            if (
+                plan.semilocal.semantic_payload()
+                != canonical.semilocal.semantic_payload()
+                or plan.exchange != canonical.exchange
+                or plan.nonlocal_correlation != canonical.nonlocal_correlation
+            ):
+                return (
+                    False,
+                    False,
+                    "",
+                    "canonical semilocal family requires its full method graph",
+                )
+            # The complete canonical graph is already lowered by the native KS
+            # owner. Carry SR/LR and VV10 together; omitting either changes SCF.
+            return (
+                True,
+                bool(record["cuda_nonlocal_correlation"]),
+                str(record["scf_domain"]),
+                "",
+            )
+        if plan.nonlocal_correlation is not None:
+            return False, False, "", "no qualified complete native nonlocal composition"
+        if any(term.operator != "full-range" or term.omega for term in plan.exchange):
+            return False, False, "", "no qualified complete native range composition"
+        if len(plan.exchange) > 1:
+            return False, False, "", "multiple exact-exchange terms are not supported"
         if plan.exchange and record["exchange_policy"] == "none":
             return False, False, "", "semilocal family has no exact-exchange lowerer"
         if any(value < 0 for _, value in plan.semilocal.functional.components):
@@ -146,6 +172,9 @@ def _row(identifier: str, spin: str) -> Row:
     components: tuple[tuple[str, float], ...] = ()
     exchange: tuple[tuple[int, float, float], ...] = ()
     fock_coefficients: tuple[float, ...] = ()
+    range_omega = 0.0
+    nonlocal_correlation = (0, 0.0, 0.0, 0.0)
+    dispersion = (0,) + (0.0,) * 16
     try:
         method = resolve_method(identifier, spin=spin)
         source = method.identifier
@@ -161,9 +190,54 @@ def _row(identifier: str, spin: str) -> Row:
                 for name, coefficient in plan.semilocal.functional.components
             )
             exchange = tuple(
-                (1, float(term.coefficient), float(term.omega))
+                (
+                    {"full-range": 1, "short-range": 2, "long-range": 3}[term.operator],
+                    float(term.coefficient),
+                    float(term.omega),
+                )
                 for term in plan.exchange
             )
+            range_omega = float(plan.semilocal.functional.range_omega)
+            if plan.nonlocal_correlation is not None:
+                nlc = plan.nonlocal_correlation
+                nonlocal_correlation = (
+                    {"vv10": 1, "rvv10": 2}[nlc.spec.variant],
+                    float(nlc.spec.b),
+                    float(nlc.spec.c),
+                    float(nlc.coefficient),
+                )
+            if plan.post_scf:
+                spec = plan.post_scf[0].specification
+                if isinstance(spec, D4Spec) and spec.profile != "standard":
+                    raise NotImplementedError(
+                        "named D4 requires the standard EEQ profile"
+                    )
+                kind = (
+                    3
+                    if isinstance(spec, D4Spec)
+                    else (1 if spec.damping == "bj" else 2)
+                )
+                fields = (
+                    "s6",
+                    "s8",
+                    "s9",
+                    "a1",
+                    "a2",
+                    "rs6",
+                    "rs8",
+                    "alp",
+                    "cn_cutoff",
+                    "pair_cutoff",
+                    "atm_cutoff",
+                    "pair_switch_width",
+                    "atm_switch_width",
+                    "ga",
+                    "gc",
+                    "charge_cn_cutoff",
+                )
+                dispersion = (kind,) + tuple(
+                    float(getattr(spec, field, 0) or 0) for field in fields
+                )
             fock_coefficients = tuple(
                 float(term.fock_coefficient) for term in plan.exchange
             )
@@ -185,6 +259,9 @@ def _row(identifier: str, spin: str) -> Row:
         cpu=cpu,
         cuda=cuda,
         reason=reason,
+        range_omega=range_omega,
+        nonlocal_correlation=nonlocal_correlation,
+        dispersion=dispersion,
     )
 
 
@@ -192,6 +269,8 @@ def rows() -> tuple[Row, ...]:
     identifiers = {name.lower(): name for name in METHOD_CATALOG}
     for alias in sorted(METHOD_ALIASES):
         identifiers.setdefault(alias.lower(), alias)
+    for name in d4_composite_method_identifiers():
+        identifiers.setdefault(name.lower(), name)
     result: dict[str, Row] = {}
     for identifier in identifiers.values():
         for spin in ("unpolarized", "polarized"):
@@ -262,6 +341,9 @@ def render(items: tuple[Row, ...]) -> str:
             "true" if row.cpu else "false",
             "true" if row.cuda else "false",
             _q(row.reason),
+            repr(row.range_omega),
+            "{" + ", ".join(repr(value) for value in row.nonlocal_correlation) + "}",
+            "{" + ", ".join(repr(value) for value in row.dispersion) + "}",
         )
         rows_cpp.append("    {" + ", ".join(fields) + "},")
     output = [
