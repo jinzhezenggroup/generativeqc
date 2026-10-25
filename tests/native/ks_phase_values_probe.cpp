@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -103,7 +104,7 @@ void capacity(const Fixture& fixture) {
 }
 
 /** Exercise raw coefficients, signed density, screening and source teardown. */
-void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
+void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false, bool disk = false) {
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   double* matrices{};
@@ -122,16 +123,19 @@ void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
                          molecule::ao_count(fixture.system) < 64
                              ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                              : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
-                         buckets, 1, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
-                         4096) == GENERATIVEQC_STATUS_SUCCESS &&
+                         buckets, 1, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1,
+                         4096, disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
               source.active(),
           source.reason());
       const auto host_bytes = scf::cuda_direct_jk_host_value_bytes(
           static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
       require((host_bytes > 0) == (host && buckets == 0x1555U),
               "full-range host source must fill only omitted GPU buckets");
+      const auto disk_bytes = scf::cuda_direct_jk_disk_value_bytes(
+          static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+      require((disk_bytes > 0) == (disk && buckets == 0x1555U), "full disk source selection");
       require(source.mixed_recurrence() == mixed &&
-                  source.value_bytes() + host_bytes ==
+                  source.value_bytes() + host_bytes + disk_bytes ==
                       source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
               "resident source precision/storage inventory mismatch");
       require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
@@ -209,7 +213,7 @@ void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
 
 /** UKS shares ERIs, not spin weights: signed beta checks J(total), K(alpha),
  * K(beta) against the independent fixture for full and partial residency. */
-void raw_oracle_uks(const Fixture& fixture, bool host = false) {
+void raw_oracle_uks(const Fixture& fixture, bool host = false, bool disk = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   const auto elements = fixture.density.size();
@@ -236,13 +240,16 @@ void raw_oracle_uks(const Fixture& fixture, bool host = false) {
                            molecule::ao_count(fixture.system) < 64
                                ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                                : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
-                           buckets, 2, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
-                           4096) == GENERATIVEQC_STATUS_SUCCESS &&
+                           buckets, 2, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1,
+                           4096, disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
                 source.active(),
             source.reason());
     require((scf::cuda_direct_jk_host_value_bytes(static_cast<const scf::CudaDirectJkPlan*>(
                  source.source_identity())) > 0) == (host && buckets == 0x1555U),
             "UKS host source did not preserve GPU priority");
+    require((scf::cuda_direct_jk_disk_value_bytes(static_cast<const scf::CudaDirectJkPlan*>(
+                 source.source_identity())) > 0) == (disk && buckets == 0x1555U),
+            "UKS disk source selection");
     for (const bool has_exchange : {true, false}) {
       auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Unrestricted, 0.25);
       if (!has_exchange) spec.exchange.present = false;
@@ -272,7 +279,8 @@ void raw_oracle_uks(const Fixture& fixture, bool host = false) {
 /** Exercise a tiny residual device allowance without allocating artificial
  * VRAM pressure. GPU selection must survive while pageable values use small
  * tiles; the independent K matrix validates every tile boundary and tail. */
-void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false) {
+void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false,
+                                bool disk = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   scf::CudaDirectJkPlan* raw = nullptr;
@@ -290,17 +298,22 @@ void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false)
               full_range ? 0.0 : 0.3, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   const auto before = scf::cuda_direct_jk_plan_diagnostic(raw);
-  require(scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, 0, 256ULL << 20, (1U << 28) - 1,
-                                                  detail) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+  const auto prepare = [&](std::size_t device_budget) {
+    return disk ? scf::prepare_cuda_direct_jk_disk_values(raw, 2ULL << 30, device_budget,
+                                                          1ULL << 20, 256ULL << 20, (1U << 28) - 1,
+                                                          "/tmp", detail)
+                : scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, device_budget,
+                                                          256ULL << 20, (1U << 28) - 1, detail);
+  };
+  require(prepare(0) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
               scf::cuda_direct_jk_host_value_bytes(raw) == 0 &&
+              scf::cuda_direct_jk_disk_value_bytes(raw) == 0 &&
               scf::cuda_direct_jk_plan_diagnostic(raw).device_bytes == before.device_bytes,
-          "host capacity refusal altered the admitted GPU source");
-  require(
-      scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, 8192, 256ULL << 20, (1U << 28) - 1,
-                                              detail) == GENERATIVEQC_STATUS_SUCCESS,
-      detail);
+          "backing refusal altered the admitted GPU source");
+  require(prepare(8192) == GENERATIVEQC_STATUS_SUCCESS, detail);
   const auto after = scf::cuda_direct_jk_plan_diagnostic(raw);
-  require(scf::cuda_direct_jk_host_value_bytes(raw) > 0 &&
+  require((disk ? scf::cuda_direct_jk_disk_value_bytes(raw)
+                : scf::cuda_direct_jk_host_value_bytes(raw)) > 0 &&
               after.device_bytes - before.device_bytes <= 8192 &&
               before.resident_value_bytes == after.resident_value_bytes,
           "adaptive host staging displaced GPU values or exceeded its allowance");
@@ -337,11 +350,44 @@ void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false)
   for (std::size_t i = 0; i < elements; ++i)
     require(std::isfinite(actual[i]) && std::abs(actual[i] - reference[i]) < 2e-9,
             "adaptive host staging differs from independent K");
+#if defined(__linux__)
+  if (disk) {
+    bool truncated = false;
+    for (const auto& fd : std::filesystem::directory_iterator("/proc/self/fd")) {
+      std::error_code error_code;
+      const auto target = std::filesystem::read_symlink(fd.path(), error_code).string();
+      if (!error_code && target.starts_with("/tmp/generativeqc-eri-")) {
+        require(::ftruncate(std::stoi(fd.path().filename()), 0) == 0,
+                "disk read failure injection");
+        truncated = true;
+      }
+    }
+    require(truncated, "missing temporary disk descriptor");
+    const auto execute = [&](bool resident) {
+      return scf::enqueue_cuda_direct_jk_compensated_device(
+          raw, spec, storage.get(), elements, nullptr, storage.get() + elements,
+          storage.get() + 2 * elements, corrections, error.get(), 1e-12, census.get(), detail,
+          resident);
+    };
+    require(execute(true) == GENERATIVEQC_STATUS_INTERNAL_ERROR,
+            "failed disk read published a partial action");
+    // A caller may explicitly retry the complete action through Direct. This
+    // must reset every partial accumulation rather than add missing pieces.
+    require(execute(false) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    cuda_check(cudaStreamSynchronize(stream.get()));
+    cuda_check(cudaMemcpy(actual.data(), storage.get() + elements, elements * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+    for (std::size_t i = 0; i < elements; ++i)
+      require(std::isfinite(actual[i]) && std::abs(actual[i] - reference[i]) < 2e-9,
+              "Direct retry after disk failure lost independent K parity");
+  }
+#endif
 }
 
 /** Independent SR/LR matrices protect radial identity, both spins and partial
  * caches. Invalid operator requests fail before any retained value is used. */
-void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
+void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = false,
+                      bool disk = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   const auto elements = fixture.density.size();
@@ -368,21 +414,24 @@ void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = fa
           if (mixed && spins != 1) continue;
           const auto op = range == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
           scf::cuda_execution::DirectJkSourceLease source(stream.get(), op, 0.3, mixed);
-          require(
-              source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
-                             4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
-                             false, false, screening, 8ULL << 30, false,
-                             scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
-                             buckets, spins, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
-                             4096) == GENERATIVEQC_STATUS_SUCCESS &&
-                  source.active(),
-              source.reason());
+          require(source.prepare(
+                      0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                      4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle", false,
+                      false, screening, 8ULL << 30, false,
+                      scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold, buckets,
+                      spins, false, host ? (2ULL << 30) : 0, disk ? 0x8U : (1U << 28) - 1, 4096,
+                      disk ? (2ULL << 30) : 0) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.active(),
+                  source.reason());
           const auto* prepared_host =
               static_cast<const scf::CudaDirectJkPlan*>(source.source_identity());
           const auto host_bytes = scf::cuda_direct_jk_host_value_bytes(prepared_host);
           require((host_bytes > 0) == (host && range == 1 && buckets == 0x1555U),
                   "host source did not preserve GPU priority and radial scope");
-          require(source.value_bytes() + host_bytes ==
+          const auto disk_bytes = scf::cuda_direct_jk_disk_value_bytes(prepared_host);
+          require((disk_bytes > 0) == (disk && range == 1 && buckets == 0x1555U),
+                  "range disk source selection");
+          require(source.value_bytes() + host_bytes + disk_bytes ==
                       source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
                   "range source precision/storage inventory mismatch");
           std::string detail;
@@ -1041,16 +1090,27 @@ int main(int argc, char** argv) {
                   std::string(argv[2]) == "range-mixed-oracle" ||
                   std::string(argv[2]) == "range-host-oracle" ||
                   std::string(argv[2]) == "full-host-oracle" ||
+                  std::string(argv[2]) == "full-disk-oracle" ||
+                  std::string(argv[2]) == "range-disk-oracle" ||
+                  std::string(argv[2]) == "full-tiered-oracle" ||
+                  std::string(argv[2]) == "range-tiered-oracle" ||
                   std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
                   std::string(argv[2]) == "mixed-refinement" ||
                   std::string(argv[2]) == "mixed-source")),
             "usage: ks-phase-values-probe INPUT "
             "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
-    const bool full_host_oracle = argc == 3 && std::string(argv[2]) == "full-host-oracle";
+    const std::string mode = argc == 3 ? argv[2] : "";
+    const bool disk = mode == "full-disk-oracle" || mode == "range-disk-oracle" ||
+                      mode == "full-tiered-oracle" || mode == "range-tiered-oracle";
+    const bool tiered = mode == "full-tiered-oracle" || mode == "range-tiered-oracle";
+    const bool full_host_oracle =
+        mode == "full-host-oracle" || mode == "full-disk-oracle" || mode == "full-tiered-oracle";
     const bool mixed_range_oracle = argc == 3 && std::string(argv[2]) == "range-mixed-oracle";
     const bool host_range_oracle = argc == 3 && std::string(argv[2]) == "range-host-oracle";
-    const bool range_oracle = argc == 3 && (std::string(argv[2]) == "range-oracle" ||
-                                            mixed_range_oracle || host_range_oracle);
+    const bool range_oracle =
+        argc == 3 &&
+        (std::string(argv[2]) == "range-oracle" || mixed_range_oracle || host_range_oracle ||
+         mode == "range-disk-oracle" || mode == "range-tiered-oracle");
     const Fixture fixture(argv[1],
                           argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
                               std::string(argv[2]) == "mixed-source" || range_oracle ||
@@ -1058,17 +1118,17 @@ int main(int argc, char** argv) {
                           range_oracle);
     std::cout << std::setprecision(17);
     if (full_host_oracle) {
-      raw_oracle(fixture, false, true);
-      raw_oracle_uks(fixture, true);
-      host_staging_budget_oracle(fixture, true);
+      raw_oracle(fixture, false, !disk || tiered, disk);
+      raw_oracle_uks(fixture, !disk || tiered, disk);
+      host_staging_budget_oracle(fixture, true, disk);
       std::cout << "full host oracle checks passed\n";
     } else if (mixed_range_oracle) {
       raw_mixed_full_range_oracle(fixture);
       raw_mixed_range_oracle(fixture);
       raw_range_oracle(fixture, true);
     } else if (range_oracle) {
-      raw_range_oracle(fixture, false, host_range_oracle);
-      if (host_range_oracle) host_staging_budget_oracle(fixture);
+      raw_range_oracle(fixture, false, host_range_oracle || tiered, disk);
+      if (host_range_oracle || disk) host_staging_budget_oracle(fixture, false, disk);
     } else if (argc == 3 && std::string(argv[2]) == "mixed-source") {
       raw_oracle(fixture, true);
     } else if (argc == 3 && std::string(argv[2]) == "capacity") {

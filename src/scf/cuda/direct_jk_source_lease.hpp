@@ -53,7 +53,9 @@ class DirectJkSourceLease {
       DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
       std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1,
       bool fit_buckets_to_capacity = false, std::size_t host_ceiling = 0,
-      std::uint32_t host_bucket_mask = (1U << 28) - 1, std::size_t host_tile_bytes = 256ULL << 20);
+      std::uint32_t host_bucket_mask = (1U << 28) - 1, std::size_t host_tile_bytes = 256ULL << 20,
+      std::size_t disk_ceiling = 0, std::uint32_t disk_bucket_mask = (1U << 28) - 1,
+      const std::string& disk_directory = "/tmp");
   bool active() const noexcept { return direct_ != nullptr; }
   bool mixed_recurrence() const noexcept { return mixed_recurrence_; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
@@ -112,7 +114,7 @@ class DirectJkSourceLease {
   std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{}, source_value_count_{};
   std::size_t completed_values_{};
   double source_screening_{}, last_screening_{};
-  std::size_t host_value_bytes_{}, host_capacity_bytes_{};
+  std::size_t host_value_bytes_{}, host_capacity_bytes_{}, disk_value_bytes_{};
   bool prepared_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};
