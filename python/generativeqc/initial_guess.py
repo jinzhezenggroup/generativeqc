@@ -512,8 +512,9 @@ def initial_guess_for_systems(
 def _huckel_numeric_capacity(
     dimension: int, atomic_aos: int, atoms: int, primitives: int, diis_history: int
 ) -> int:
-    """Mirror native Huckel lifetimes, including the retained output density.
+    """Portable compatibility bound for old libraries and offline analysis.
 
+    Current runtime planning queries the selected native library instead.
     Molecular assembly and strict seed admission are serialized. Sixteen FP64
     target matrices cover the larger fourteen-matrix admission peak, including
     eigenframe validation and both nested product temporaries. Atomic cache and
@@ -538,6 +539,93 @@ def _huckel_numeric_capacity(
         + byte_product(512, dimension + atoms)
         + byte_product(128, primitives)
     )
+
+
+def _huckel_preparation_capacity(
+    dimension: int,
+    atoms: typing.Sequence[typing.Any],
+    shells: typing.Sequence[typing.Any],
+    representation: str,
+    diis_history: int,
+    library: object,
+) -> int:
+    """Query native occupied-channel counts and preparation capacity together.
+
+    Only topology is marshalled; coordinates and scientific arrays stay out of
+    resource estimation. A missing additive symbol retains old-library planning,
+    while a selected query's refusal propagates without a Python numeric retry.
+    """
+    from generativeqc_compiler.common.resources import checked_bytes
+
+    query = getattr(library, "generativeqc_resource_huckel_numeric_capacity_v1", None)
+    if query is None:
+        atomic_aos = [0] * len(atoms)
+        for shell in shells:
+            number = atoms[shell.atom_index].atomic_number
+            if shell.angular_momentum == 0 or (
+                shell.angular_momentum == 1 and number >= 5
+            ):
+                atomic_aos[shell.atom_index] += 2 * shell.angular_momentum + 1
+        return _huckel_numeric_capacity(
+            dimension,
+            max(atomic_aos),
+            len(atoms),
+            sum(len(shell.primitives) for shell in shells),
+            diis_history,
+        )
+    if (
+        not atoms
+        or not shells
+        or len(atoms) > 2**32 - 1
+        or representation not in ("cartesian", "spherical")
+        or type(diis_history) is not int
+        or not 1 <= diis_history <= 16
+        or any(not 1 <= atom.atomic_number <= 18 for atom in atoms)
+        or any(
+            not 0 <= shell.atom_index < len(atoms)
+            or not 0 <= shell.angular_momentum <= 2**32 - 1
+            for shell in shells
+        )
+    ):
+        raise ValueError("invalid native Huckel capacity topology or controls")
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.c_int,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    query.restype = ctypes.c_int
+    numbers = (ctypes.c_int32 * len(atoms))(*(atom.atomic_number for atom in atoms))
+    owners = (ctypes.c_uint32 * len(shells))(*(shell.atom_index for shell in shells))
+    angular = (ctypes.c_uint32 * len(shells))(
+        *(shell.angular_momentum for shell in shells)
+    )
+    primitives = (ctypes.c_uint64 * len(shells))(
+        *(len(shell.primitives) for shell in shells)
+    )
+    result = ctypes.c_uint64()
+    if query(
+        numbers,
+        len(atoms),
+        owners,
+        angular,
+        primitives,
+        len(shells),
+        _native.BASIS_SPHERICAL
+        if representation == "spherical"
+        else _native.BASIS_CARTESIAN,
+        diis_history,
+        ctypes.byref(result),
+    ):
+        raise ValueError("native Huckel numeric capacity query rejected topology")
+    if not result.value:
+        raise ValueError("native Huckel numeric capacity query returned an empty bound")
+    return checked_bytes(int(result.value))
 
 
 def with_initial_guess_resources(
@@ -609,21 +697,15 @@ def with_initial_guess_resources(
                 if isinstance(selected, BasisSet)
                 else selected
             )
-            atomic_aos = [0] * len(atoms)
-            for shell in shells:
-                number = atoms[shell.atom_index].atomic_number
-                if shell.angular_momentum == 0 or (
-                    shell.angular_momentum == 1 and number >= 5
-                ):
-                    atomic_aos[shell.atom_index] += 2 * shell.angular_momentum + 1
             dimension = item["orbital"]["nbf"]
             seed = byte_product(8, dimension, dimension)
-            capacity = _huckel_numeric_capacity(
+            capacity = _huckel_preparation_capacity(
                 dimension,
-                max(atomic_aos),
-                len(atoms),
-                sum(len(shell.primitives) for shell in shells),
+                atoms,
+                shells,
+                calculator._representation_name,
                 policy.diis_history,
+                calculator._library,
             )
             retained = checked_bytes(retained + seed)
             largest_workspace = max(largest_workspace, capacity - seed)

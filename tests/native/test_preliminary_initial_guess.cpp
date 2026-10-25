@@ -22,6 +22,10 @@ extern "C" int generativeqc_resource_minao_numeric_capacity_v1(std::size_t targe
                                                                const std::int32_t* atomic_numbers,
                                                                std::size_t atom_count,
                                                                std::uint64_t* output);
+extern "C" int generativeqc_resource_huckel_numeric_capacity_v1(
+    const std::int32_t* atomic_numbers, std::size_t atom_count, const std::uint32_t* shell_atoms,
+    const std::uint32_t* angular_momenta, const std::uint64_t* primitive_counts,
+    std::size_t shell_count, int representation, std::uint32_t diis_history, std::uint64_t* output);
 
 namespace {
 using namespace generativeqc;
@@ -130,6 +134,27 @@ void check() {
   const std::int32_t z[] = {8, 1, 1};
   std::uint64_t minao_query_bytes = 0;
   const auto exact_native_bytes = preliminary_numeric_capacity(system, minao_resource_policy);
+  // The same compact shape used by Python must match actual SDK preparation,
+  // including repeated contractions on one atom and every admitted DIIS size.
+  const std::uint32_t shell_atoms[]{0, 0, 0, 1, 2}, angular[]{0, 0, 1, 0, 0};
+  const std::uint64_t primitives[]{3, 3, 3, 3, 3};
+  PreliminaryOptions huckel_policy;
+  huckel_policy.kind = PreliminaryKind::Huckel;
+  for (unsigned history : {1U, 8U, 16U}) {
+    huckel_policy.diis_history = history;
+    std::uint64_t capacity = 0;
+    require(generativeqc_resource_huckel_numeric_capacity_v1(z, 3, shell_atoms, angular, primitives,
+                                                             5, system.basis_representation,
+                                                             history, &capacity) == 0 &&
+                capacity == preliminary_numeric_capacity(system, huckel_policy),
+            "Huckel compact query disagrees with native preparation");
+    const auto retained = capacity;
+    require(generativeqc_resource_huckel_numeric_capacity_v1(z, 3, shell_atoms, angular, primitives,
+                                                             5, system.basis_representation, 17,
+                                                             &capacity) != 0 &&
+                capacity == retained,
+            "invalid Huckel query published a partial allowance");
+  }
   require(generativeqc_resource_minao_numeric_capacity_v1(molecule::ao_count(system), z, 3,
                                                           &minao_query_bytes) == 0 &&
               minao_query_bytes == exact_native_bytes,

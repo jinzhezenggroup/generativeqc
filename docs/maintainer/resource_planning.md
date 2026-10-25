@@ -23,7 +23,7 @@ with calculator.prepare_batch([h2]) as batch:
 
 `Calculator.estimate_resources(systems, charges=..., multiplicities=...)`
 resolves that calculator's actual basis, auxiliary basis, spin and solver
-controls, including automatic MINAO preparation when admitted. The standalone
+controls, including automatic Hückel/MINAO preparation when admitted. The standalone
 `estimate_hf_resources` estimator describes the Hcore target inventory; use
 `initial_guess=None` when executing that exact inventory, or use the calculator
 estimator to include its active preparation policy. `singlepoint` also accepts
@@ -51,6 +51,18 @@ loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
 ## Native composition authority
+
+Hückel preparation planning queries the selected native library's
+`generativeqc_resource_huckel_numeric_capacity_v1`. Compact atom and contracted
+shell metadata uses the same occupied atomic-channel counts and checked numeric
+capacity as execution admission, including Cartesian/spherical target dimensions
+and empty occupied subspaces. The query uses one metadata counter per atom and
+linear work in atoms plus shells; it creates no scientific arrays or GPU state.
+The planner retains all cold seeds and the largest serialized preparation
+workspace alongside the target inventory. This is a conservative numeric bound,
+not a measurement of provider allocations or whole-process memory. A missing
+symbol keeps old-library portable sizing; a discovered query's rejection is an
+error and never triggers a portable retry.
 
 With an already-loaded library exposing `generativeqc_resource_compose_v1`,
 runtime `plan_resources(..., library=library)`, calculator estimation and
