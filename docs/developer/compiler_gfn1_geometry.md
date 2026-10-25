@@ -3,7 +3,7 @@
 GFN1-xTB scientific equations remain compiler-owned whenever they are pure
 functions of immutable parameters and geometry.
 
-## Delivered pairwise slice
+## Pairwise terms
 
 `python/generativeqc_compiler/geometry/gfn1.py` lowers two GFN1 geometry terms
 through the existing GeometryIR / PairIR / TensorIR stack:

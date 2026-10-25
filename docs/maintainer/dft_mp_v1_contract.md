@@ -49,7 +49,7 @@ mixed receipts must report the same numeric control and SCF targets.
 
 Changing a case, source, mathematical model, basis, grid, mandatory row or
 acceptance gate requires a new contract version and hash. Record the reason,
-affected gates and migration mapping in the issue and PR. A change may replace
+affected gates and migration mapping in the change proposal. A change may replace
 an infeasible implementation detail with an equivalent reviewed contract, but
 cannot silently weaken the numerical gates or the single-revision final-acceptance
 gate.

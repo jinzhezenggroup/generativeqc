@@ -104,7 +104,7 @@ history/solve/combination intervals remaining zero. A single missing executed
 interval makes the receipt incomplete even when the sum of other intervals is
 positive. Do not aggregate
 cycles across SMs or convert them to milliseconds using nominal clock rate. A
-complete SCC wall-time denominator is not exposed by this slice, so mixer/SCC
+complete SCC wall-time denominator is not exposed by the current receipt, so mixer/SCC
 fraction is `UNAVAILABLE`. Report complete endpoint timing alongside local stage
 shares without calling either a whole-graph mixer fraction.
 

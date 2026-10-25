@@ -321,7 +321,7 @@ The owner requires a build artifact digest, exact host capacity and an externall
 qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
-release does not zero this charge. This native slice has no production profile.
+release does not zero this charge. This native path has no production profile.
 The reservation is charged before the first module-loading call and survives
 failed preparation as well as successful-plan release. The enclosing context/build
 owner must retain it after the local binding is destroyed. Loading failures

@@ -204,10 +204,11 @@ Rationale: [generated Becke response note](../../.agents/notes/implemented/numer
 
 ### Mixed moving-grid response
 
-The Hessian slice reuses the same scalar graph rather than differentiating the
-first-response implementation numerically. `grid_mixed_response_program`
-generates the primal, two independent JVPs and their mixed derivative for norm,
-ratio, Becke switch and log primitives. `partition_mixed_response` composes
+The Hessian mixed-response path reuses the same scalar graph rather than
+differentiating the first-response implementation numerically.
+`grid_mixed_response_program` generates the primal, two independent JVPs and
+their mixed derivative for norm, ratio, Becke switch and log primitives.
+`partition_mixed_response` composes
 those roots through the normalized Becke product and keeps exact-zero factors
 explicit: zero-, one- and two-zero product branches each use their correct mixed
 limit. Left/right interchange is checked directly.

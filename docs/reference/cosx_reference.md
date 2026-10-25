@@ -20,7 +20,7 @@ V_{\mu\nu}(g)=\int \chi_\mu(r)\frac{1}{|r-R_g|}\chi_\nu(r)\,dr.
 The CPU ESP oracle reuses the normalized contracted Gaussian Hermite/Boys
 recurrence already used by the independent nuclear-attraction reference, but
 with a unit positive probe and no nuclear charge. Probe coordinates are fixed
-external coordinates in this value-only slice.
+external coordinates in this value-only contract.
 
 The one-sided seminumerical two-electron approximation is
 
@@ -137,6 +137,6 @@ Cold and warm starts share the same model identity.
 This promotion remains **internal and energy-only**. It does not authorize AUTO
 selection, the public C Fock ABI, batching, hybrid method exposure,
 screening/fitting, analytic derivatives or forces, and it establishes no RI-K
-crossover/performance claim. Proposal hooks are also rejected by the first SCF
-slice so their target-operator semantics cannot be inherited accidentally.
+crossover/performance claim. Proposal hooks are also rejected by this SCF
+contract so their target-operator semantics cannot be inherited accidentally.
 Those capabilities require separate evidence and registration.

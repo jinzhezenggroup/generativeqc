@@ -222,8 +222,8 @@ domains, degree histograms, and baseline-versus-scheduled ragged work. Static
 so each output traverses only its members instead of scanning the full source
 axis. Members retain ascending source order, preserving the previous reduction
 order. `segment_sum` keeps its already-linear contiguous-offset lowering and
-`indexed_gather` remains a direct indexed load. This first scheduling slice
-does not yet add degree-bucketed warp/CTA queues or runtime-varying topology.
+`indexed_gather` remains a direct indexed load. This schedule does not yet add
+degree-bucketed warp/CTA queues or runtime-varying topology.
 
 Generated JVP/VJP programs are ordinary TensorIR programs and use
 the same planning, compilation and execution path. The fixed CC-like RTX 5090
@@ -258,10 +258,10 @@ are checked against **physical** axis order rather than assuming C-order.
 Inputs, constants and every named output remain pinned in logical C-order, so
 ordinary transfers and resident ABI spans do not change. Existing virtual-view,
 fusion and recomputation contracts remain intact. A virtual operand has no direct
-buffer descriptor and retains generated packing; this slice does not infer affine
-aliases through virtual views, create shared pack-once buffers, or propagate
-layouts across ProgramIR subsystems. Those remain follow-up work for ProgramIR
-resource ownership.
+buffer descriptor and retains generated packing; this contract does not infer
+affine aliases through virtual views, create shared pack-once buffers, or
+propagate layouts across ProgramIR subsystems. Those remain follow-up work for
+ProgramIR resource ownership.
 
 `plan.layout_decision` reports attempted trials, changed steps and semantic panel
 conversion bytes, including repeated A packing across N tiles and B packing

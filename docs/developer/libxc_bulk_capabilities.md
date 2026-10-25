@@ -250,7 +250,7 @@ complete energy/vxc output contract. This binding is content-addressed and
 included in the receipt hash. A matrix cannot be retained as production-domain
 evidence without naming the exact mathematical execution that produced its
 candidate values. Backend compilation/runtime qualification remains a separate
-stage; the current B1 campaign explicitly records the shared array-Graph
+stage; the current campaign explicitly records the shared array-Graph
 executor rather than pretending that interpreted evidence is a compiled-CPU or
 CUDA result.
 

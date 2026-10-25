@@ -213,7 +213,7 @@ and the required Slurm allocation.
 `generativeqc_dft_tests` retains the identical-grid oracle and adds unequal
 spin directional tests, isolated symmetric off-diagonal perturbations,
 spin swaps, and deliberate half/double-factor failures. These tests precede
-SCF acceptance. The CPU slice's empty/near-empty-spin continuity and
+SCF acceptance. The CPU path's empty/near-empty-spin continuity and
 returned-state regressions remain enabled. Native single-system CUDA SCF and
 replay tests are documented separately in `xc_native_cuda.md`; prepared ragged
 batching and full resource evidence remain part of the complete milestone.

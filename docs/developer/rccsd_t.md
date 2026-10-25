@@ -262,7 +262,7 @@ ordered schedule. No additional rank-four weight storage is introduced.
 
 Accepted CC amplitudes and MO blocks are host-owned between the resident CC solve
 and `(T)`; the triples owner stages those inputs once. The corrected-Lambda
-scientific RHS and transpose actions are now generated CUDA programs, with the
+scientific RHS and transpose actions are generated CUDA programs, with the
 symmetry-packed GMRES control flow still on host. Native CPU and CUDA Lambda
 solves use the shared GMRES right diagonal preconditioner `-d1, -d2` by default.
 The doubles coordinate weights cancel for this diagonal. Unsafe small or

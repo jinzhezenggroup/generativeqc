@@ -172,7 +172,7 @@ approximation from the correlation-integral approximation:
 - correlation Hamiltonian: density-fitted two-electron integrals only;
 - DF metric: the existing square-symmetric thresholded inverse square root;
 - precision: FP64;
-- frozen orbitals: unsupported in this slice;
+- frozen orbitals: unsupported;
 - triples: standard canonical noniterative (T), with no local/truncated-triples
   approximation.
 
@@ -219,13 +219,14 @@ invariance explicitly.
 The dense oracle is intentionally small-system-only. Before reconstruction it
 preflights a numeric budget that includes the caller-owned B tensor, the
 immutable owned B copy, the dense four-index result, and a conservative
-full-sized contraction temporary. The production slices must not rely on this
+full-sized contraction temporary. Production paths must not rely on this
 `NMO^4` allocation.
 
 The existing `DFProvider` remains responsible for bounded construction of B.
-Slice B retains `B_ov` and `B_vv`, charges both arrays against the provider
-budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`, and
-`oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never requested.
+The factorized solver retains `B_ov` and `B_vv`, charges both arrays against the
+provider budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`,
+and `oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never
+requested.
 
 Every conventional singles/doubles term containing `ovvv` or `vvvv` is removed
 from the DF TensorIR feed and evaluated by an exact auxiliary-index reduction.
@@ -251,8 +252,8 @@ up pair storage, expanded replay, tiles, or the matrix provider. Releasing works
 drains its stream and invalidates earlier prepared binding generations. Larger
 explicit force tiles do not inherit energy-only timing qualification.
 
-The first Slice-C endpoint now evaluates standard canonical (T) directly from
-the same retained `B_ov`/`B_vv` data model. For
+The canonical `(T)` energy endpoint evaluates standard non-iterative triples
+directly from the same retained `B_ov`/`B_vv` data model. For
 `vvov[a,b,i,f] = sum_Q B_ov[Q,i,a] B_vv[Q,f,b]`, W1 reduces Q directly
 into the occupied-space W tensor. It therefore forms neither a complete
 `ovvv` tensor nor full T3. H2/H2O same-Hamiltonian tests compare the composed
@@ -261,8 +262,8 @@ compares the factorized (T) correction with the audited dense triples equations.
 
 ### Source-level executable energy facade
 
-The source-level `df_rccsd_t_energy` facade now composes the already validated
-pieces without changing their scientific ownership:
+The source-level `df_rccsd_t_energy` facade composes the validated pieces
+without changing their scientific ownership:
 
 1. run a conventional unscreened CPU RHF export with no DF metric supplied;
 2. build and validate the auxiliary metric factor;

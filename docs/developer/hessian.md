@@ -49,9 +49,9 @@ public Calculator Hessian/HVP endpoint exists for CPU direct
 all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS;
 see [DFT Hessians](dft_hessian.md).
 
-Explicitly outside this slice, and left fail-closed rather than approximated:
+Explicitly outside this contract, and left fail-closed rather than approximated:
 
-- **DFT public execution beyond the qualified slice** — the Calculator endpoint
+- **DFT public execution beyond the qualified domain** — the Calculator endpoint
   is limited to CPU direct all-electron Cartesian strict-FP64 closed-shell
   LDA/PBE RKS; its raw matrix is never post-hoc symmetrized;
 - **one global end-to-end Hessian memory cap** is not claimed: dense output and
@@ -94,7 +94,7 @@ Supplies the matrix-free CPHF operator (`RHFResponseOperator`), a true-residual
 Krylov solver with multi-RHS strategies, and two independent oracles
 (`explicit_rhf_response_matrix`, `finite_rotation_jvp`). It constructs **no
 right-hand side**: `docs/developer/response.md` assigns nuclear-perturbation RHS
-construction to the caller. This work reuses that operator and does not add a
+construction to the caller. The Hessian path reuses that operator and adds no
 second response solver.
 
 The shared response layer now also has an explicit direct-CUDA J/K adapter,
@@ -200,13 +200,13 @@ Here `G^R(P)` differentiates the integrals at fixed AO density, whereas
 The response operator supplies only the remaining rotation-induced density
 response. The relaxation assembly must also retain the known metric terms;
 neither the overlap second derivative in term 3 nor the rotation solution alone
-replaces them. A2 must check this complete RHS and metric contribution against
-displaced references before claiming an analytic Hessian.
+replaces them. The analytic assembly must check this complete RHS and metric
+contribution against displaced references before claiming an analytic Hessian.
 
 ## Conventions to pin down, and how
 
 Three layers meet here with independently chosen conventions, which is the
-highest-risk part of this work:
+highest-risk part of the analytic Hessian:
 
 - The second-integral provider carries `output_sign` on the consumer and
   `sign` / `prefactor` on the weight descriptor. The output name alone never
@@ -237,7 +237,7 @@ otherwise cancel against another.
 
 ## Nuclear response RHS
 
-The next A2 boundary is ``build_rhf_nuclear_rhs``. It consumes the MO forms
+The nuclear-RHS boundary is ``build_rhf_nuclear_rhs``. It consumes the MO forms
 of the frozen Fock derivative, overlap derivative, and the Fock response to
 the known metric density connection, then returns ``b[i, a]`` in the
 occupied-major/virtual-minor layout required by the response solver. The metric Fock input is
@@ -252,7 +252,7 @@ inside a default.
 
 ## Frozen skeleton assembly
 
-The A2 assembly boundary is now represented by
+The frozen-skeleton assembly boundary is
 ``tools.generativeqc_hessian.assemble_frozen_skeleton``. It accepts the nuclear,
 one-electron, overlap/Pulay, and folded two-electron second-derivative
 components in the canonical ``(atom, xyz, atom, xyz)`` layout, validates that
@@ -267,13 +267,14 @@ analytic Hessian and are not substituted with zero arrays.
 
 ## Numerical oracle
 
-Step 2 supplies a finite-difference-of-analytic-gradient Hessian: central
+The numerical oracle supplies a finite-difference-of-analytic-gradient Hessian: central
 differences of the *analytic energy gradient* over nuclear coordinates, at
 several step sizes, with no best-step selection. It is clearly labelled a
 numerical Hessian and is an oracle and early utility — it does not constitute
 analytic Hessian support.
 
-It is independent of the assembly in step 4 in the useful direction: it depends
+It is independent of the analytic skeleton and relaxation assembly in the useful
+direction: it depends
 only on the analytic first derivatives, so an error shared between the skeleton
 and relaxation assembly cannot hide from it.
 
@@ -594,15 +595,15 @@ stage. `second_backend="cuda"` requires an explicit `CudaCompilerAdapter`; the
 one-electron, Coulomb and overlap/Pulay fixed-weight second-integral HVP tiles
 execute on CUDA and only compact coordinate HVP tiles return to the host.
 The response-weight first-integral contractions, CPKS/XC mixed geometry,
-nuclear term and molecular assembly remain host-owned in this slice. Therefore
+nuclear term and molecular assembly remain host-owned here. Therefore
 this is **not** a complete CUDA DFT Hessian claim and `Calculator` CUDA Hessian
 capability remains off. CPU remains the default and CUDA selection never falls
 back to the CPU second-integral compiler.
 This is a **device-final-assembly** path, not a claim that every Hessian stage is
 device-resident. Directional H1/S1 are still published to host, nuclear-RHS and
 metric preparation remain host-owned, projected GMRES least-squares/scalars are
-host-controlled, and compatibility response publication is retained. What is now
-resident through final assembly is D1/W1 consumption for CUDA relaxation,
+host-controlled, and compatibility response publication is retained. Resident
+through final assembly is D1/W1 consumption for CUDA relaxation,
 compact second-integral HVP outputs, the nuclear HVP, the molecular HVP sum and,
 when requested, full-Hessian column assembly. Diagnostics separately report
 provider and accumulator storage; they are not a combined SCF/compiler/CUDA

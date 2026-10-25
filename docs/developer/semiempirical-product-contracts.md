@@ -93,6 +93,6 @@ PYTHONPATH=python python -m pytest -q \
   tests/python/test_semiempirical_product_requirements.py
 ```
 
-No CUDA device is needed because this work only adds immutable requirement
+No CUDA device is needed because this layer only adds immutable requirement
 extraction and CPU-side contract tests. Any future CUDA lowering or production
 device-route change must undergo its own validation.

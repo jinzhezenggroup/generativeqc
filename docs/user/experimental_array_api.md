@@ -315,7 +315,7 @@ multiple zero factors without a comparison-selector opt-in or division by an
 input. Native execution is limited here to the existing materializing CPU FP64
 contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
 explicitly rejected. Higher derivatives, scientific endpoints and performance
-are outside this slice. Standard eager `prod` behavior is unchanged.
+are outside this contract. Standard eager `prod` behavior is unchanged.
 
 The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
 
@@ -342,7 +342,7 @@ constant inputs. This is the existing real-arithmetic AD convention, without a
 claim about classical derivatives of floating-point rounding. Opt-in native
 execution uses only the existing CPU FP64 contract. Public CUDA compile/lower,
 execution and AD entries reject this unqualified operation. Native FP32, higher
-derivatives, molecular endpoints and performance are outside this slice.
+derivatives, molecular endpoints and performance are outside this contract.
 
 The comparison target is [Array API 2025.12 var](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.var.html);
 this finite captured subset does not implement its full IEEE special cases.

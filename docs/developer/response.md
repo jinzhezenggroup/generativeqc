@@ -41,7 +41,7 @@ and selected operator backends execute native J/K. This split
 lets downstream property, Hessian, and correlated-gradient code reuse one
 scientific owner without making installed runtime code depend on repository
 `tools.*`.
-This slice is partial: the RHF response layer and the direct-CPU UHF response
+This boundary is partial: the RHF response layer and the direct-CPU UHF response
 layer (including `export_uhf`), host-orchestrated spin CUDA exact/DF J/K, and
 native CPU/CUDA LDA/PBE RKS/UKS CPKS handoffs are delivered. Exact-RHF resident
 scalar, blocked and recycled multi-RHS execution share the same solver and are

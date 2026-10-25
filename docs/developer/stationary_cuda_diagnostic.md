@@ -8,7 +8,7 @@ ordered ERI derivative provider, with MethodIR-owned coefficients and same-spin
 `D[a,c] D[b,d]` weights. Source storage and final reduction follow the gradient
 plan, including its order and complete source inventory.
 The result is an energy gradient in Eh/bohr; force is its negative. The public
-Python C2 endpoint reuses this consumer for qualified CUDA LDA/PBE/r2SCAN RKS/UKS
+Python endpoint reuses this consumer for qualified CUDA LDA/PBE/r2SCAN RKS/UKS
 forces, and admitted direct global-hybrid RKS/UKS graphs. All-electron execution
 admits Cartesian and real-spherical s/p/d public AOs; scalar ECP execution remains
 s/p. Public ECP scope and
@@ -439,7 +439,7 @@ python -m pytest tests/python/test_ecp_stationary_cuda.py -q
 ```
 
 Diagnostic tests explicitly request `properties=("energy",)` when preparing
-snapshots, so the C2 default property set cannot trigger an unrelated public
+snapshots, so that endpoint's default property set cannot trigger an unrelated public
 force calculation. Host-side admission and live-owner wrapper regressions in
 `tests/python/test_ecp_cuda_public_boundary.py` run without a CUDA device; they
 do not replace this real-device numerical gate.

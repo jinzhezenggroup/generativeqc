@@ -348,7 +348,7 @@ The current checkout also carries a hash-bound review of every retained
 `benchmarks/results/**` file at or above 128 KiB in
 [`benchmarks/legacy-evidence-review.json`](../../benchmarks/legacy-evidence-review.json).
 Each row records the exact path, byte count and SHA-256 plus a storage role and
-one of the issue's retention classes (`required-compact-accepted-evidence` or
+one of the policy's retention classes (`required-compact-accepted-evidence` or
 `test-reference-input`). Family metadata names an owner, a concrete review
 document and the reason the large records remain in Git. This is a storage
 classification, not a new numerical acceptance decision.

@@ -145,8 +145,8 @@ added to ordinary CI.
 Method-level implicit-rule dispatch is available through StationaryProblem v2:
 a state that declares `implicit_operator_identity` is compiled automatically
 to an identity-bearing `ImplicitVJPPlan`; coupled state rows are rejected until
-they are represented as one explicit independent block. Native response-provider
-binding is now qualified by the response-operator path above, including strict
+they are represented as one explicit independent block. The response-operator
+path above qualifies native response-provider binding, including strict
 stale-state and simultaneous logical resource checks.
 
 Installed public runtime integration, production-scale force evidence and the

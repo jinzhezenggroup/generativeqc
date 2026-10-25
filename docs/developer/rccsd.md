@@ -126,8 +126,9 @@ components `weight[u]*lambda[u]` when lambda denotes this metric's vector.
 These are coordinate conventions, not an implicit spin-orbital Lambda
 normalization. Lambda implementations must explicitly map their dual
 projectors to this residual and metric. A plain unweighted packed dot product
-cannot substitute for the dense contraction. Slice A defines no T2 projector
-or Lambda solver and makes no derivative-validation claim.
+cannot substitute for the dense contraction. This coordinate/metric contract
+defines no T2 projector or Lambda solver and makes no derivative-validation
+claim.
 
 In particular the physical excitation-state overlap is a different metric:
 `<Phi|T(x)^dagger T(y)|Phi> = 2 sum x1*y1 + sum x2*(2*y2-y2_ijba)`.

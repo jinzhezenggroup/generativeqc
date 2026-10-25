@@ -107,7 +107,7 @@ not a speedup or an external-engine parity result. Complete traffic/device
 work still comes from the separate CUDA/Nsight ledger; the original matched
 DF-versus-DF matrix remains the owner of parity acceptance.
 
-For the lazy-initial-density slice, add `--eager-core-ablation` to the host
+For the lazy-initial-density path, add `--eager-core-ablation` to the host
 workload invocation. The baseline selection explicitly requests the old warm
 core frame through `GENERATIVEQC_DF_EAGER_CORE_GUESS=1`; the candidate consumes the
 same frozen density without that unused solve. Cold density, overlap and

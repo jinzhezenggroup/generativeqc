@@ -36,7 +36,7 @@ objects, allocator overhead and caller-retained result history are excluded.
 The diagnostic `retain_temporaries=True` alternative is a retain-all model, not a
 measurement of an existing runtime or an end-to-end performance baseline.
 
-## First native consumer
+## Dense CPU potential tile program
 
 For dense synchronous CPU potential requests, `PreparedXCContractions.tile_program`
 is an immutable description of the existing path:
@@ -78,11 +78,10 @@ analysis happen during preparation, not per tile. Native state/provider checks,
 numerical domains, quadrature, precision, reduction order and failure propagation
 remain with the established owners.
 
-## Second consumer: DFT feature layout into native XC
+## Polarized XC feature layout with DFT-owned storage
 
-The initial lifetime slice kept the complete XC contraction opaque. The second
-qualified slice is narrower scientifically but more explicit operationally: for
-dense synchronous **polarized** CPU LDA/PBE potential tiles, ProgramIR records
+The complete XC contraction is otherwise opaque to ProgramIR. For dense
+synchronous **polarized** CPU LDA/PBE potential tiles, ProgramIR records
 
 ```text
 NativeAO.evaluate
@@ -234,7 +233,7 @@ ProgramIR last-use resource intervals now consume these shared ranges.
 This remains analysis, not a second allocator. Unknown alias metadata blocks
 reuse for its memory space and opaque effects retain touched owners through the
 region boundary. TensorIR keeps its qualified arena offsets as the execution plan
-of record until a later slice independently validates allocator migration.
+of record until allocator migration is independently validated.
 
 ProgramStoragePlan schema v2 also admits explicit same-call ownership transfer
 through `CallDonationBinding`. A donation maps one call read to one call write
@@ -246,7 +245,7 @@ never inferred from liveness alone, does not donate borrowed inputs, and does no
 turn ProgramIR providers into implicit in-place operations. Schema-v1 replay
 remains supported for plans without donation metadata.
 
-The first production layout-propagation slice goes beyond the feature-input
+The production layout-propagation path goes beyond the feature-input
 prototype on polarized native CPU fixed-density potentials. Scalar
 XC writes a consumer-ready physical owner whose first row is energy and whose
 remaining rows are the complete feature gradient; inactive derivative rows are

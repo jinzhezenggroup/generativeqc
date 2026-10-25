@@ -199,7 +199,7 @@ described in [Architecture decisions](architecture.md#executable-method-boundary
 and queryable through `Calculator.capabilities`; the
 [DF force interface](../user/dft_density_fitting.md) and
 [WB97M-V CUDA guide](../user/wb97mv_cuda.md) document the admitted force
-domains. Do not infer a force or density-fitting claim from an energy slice.
+domains. Do not infer a force or density-fitting claim from an energy-only contract.
 
 Matched-grid tests cover H2, He and water (RKS), and H, Li and H2+ (UKS), each
 with two independent PySCF guesses. Native final physical residuals must pass

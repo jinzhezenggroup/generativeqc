@@ -237,7 +237,7 @@ translation/rotation covariance, changed geometry, immutable results and
 rejection of stale, failed, nonfinite and under-budget requests. Negative tests
 remove overlap or orbital response and require a visible error. `gradient_capabilities()`
 continues to describe this internal validation endpoint, while `public_calculator=True`
-records that the same qualified conventional <=12-AO RCCSD force capability is now
+records that the same qualified conventional <=12-AO RCCSD force capability is
 published through the native Calculator owner. The older
 `tools.generativeqc_cc.api.method_capabilities("rccsd")` energy helper remains a narrow
 internal energy facade rather than the public capability registry. A fully resident

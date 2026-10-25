@@ -54,7 +54,7 @@ print(run.target.energy, run.verification.status)
 identity, basis mathematical/source hashes, observable accuracy requirements,
 solver tolerances, requested atom count and the final physical-residual gate.
 Grid and local-policy identities are explicit fields and must be absent in the
-first HF slice. This prevents a later adapter from silently changing those parts
+first HF contract. This prevents a later adapter from silently changing those parts
 of the target.
 
 `StagePlan` separately records the resolved model, provider, arithmetic policy,

@@ -184,7 +184,7 @@ symmetric matrix rule owns its qualified spectral mathematics and remains
 separate; neither response execution nor spectral mathematics is reimplemented
 here.
 
-Future slices can extend the same boundary to UHF/multiple-density response and
+Future work can extend the same boundary to UHF/multiple-density response and
 direct dynamic-shape execution, while composing upstream provider pullbacks,
 metric response and complete nuclear derivatives into supported public force
 endpoints. They must preserve qualified native state/provider contracts and
@@ -192,7 +192,7 @@ complete nuclear-derivative gates. Higher-order derivatives and Hessian
 composition remain separately registered work; a first-order implicit VJP does
 not grant second-order support. Joint native resource admission, stale-state
 rejection and automatic provider-rule dispatch are not supplied by this
-first-order compiler-only slice.
+first-order compiler-only contract.
 
 Run the independent scalar, nonsymmetric and constrained tests with:
 

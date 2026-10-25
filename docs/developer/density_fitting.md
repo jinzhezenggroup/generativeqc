@@ -88,7 +88,7 @@ propagate instead of silently selecting CPU integral evaluation.
 
 ## Execution notes and acceptance boundary
 
-- CUDA two-/three-center integral evaluation kernels are now packed across
+- CUDA two-/three-center integral evaluation kernels are packed across
   homogeneous fleet buckets, including coordinate-major derivative output;
   one-electron generation is exposed through the same batch boundary but still
   dispatches validated per-system launches internally.

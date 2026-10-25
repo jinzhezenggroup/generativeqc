@@ -4,7 +4,7 @@
 moving restricted CC amplitudes between orbital frames. It does not decide when
 to run a source or target calculation and it does not make a transported state a
 target result. Target orchestration, projected amplitudes, residual refinement,
-DIIS/Krylov history and GPU kernels remain outside this slice.
+DIIS/Krylov history and GPU kernels are not part of this contract.
 
 ## Complete endpoint identity
 

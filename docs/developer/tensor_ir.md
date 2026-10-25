@@ -293,7 +293,7 @@ backend-independent TensorIR `Program` DAGs:
   Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
-  CUDA, portable/scalar and HVP are outside this slice. The public scalar
+  CUDA, portable/scalar and HVP are outside this contract. The public scalar
   `grad`/`value_and_grad` wrappers, selected-argument `vjp` and fixed-mask `jvp`
   expose the same explicit opt-in on reference/CPU; see the [Array API contract](../user/experimental_array_api.md).
   Combined primal/derivative graphs use the generated execution inputs, preserving

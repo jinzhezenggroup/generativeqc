@@ -115,19 +115,19 @@ but new post-HF interfaces should name `hf::PhysicalReference` directly.
 
 The architecture checker treats `src/hf/` as a concrete method area. The
 remaining `src/scf/` tree is tracked as transitional ownership rather than
-being counted as HF-only; later slices can move concrete RHF/UHF execution out
+being counted as HF-only; concrete RHF/UHF execution can move out later
 without changing the shared solver contracts.
 
-The current Infrastructure A--F boundary mapping is:
+The current shared-facility boundary mapping is:
 
-| Slice | Shared owner | Enforced boundary |
+| Facility | Shared owner | Enforced boundary |
 | --- | --- | --- |
-| A: iteration / DIIS | `src/solver/` | directory cannot depend on a concrete method; CC and SCF remain include-graph consumers |
-| B: electronic reference | `src/core/electronic_reference.hpp` | `src/core/` cannot depend on a concrete method; SCF and DFT remain consumers |
-| C: interaction provider | `src/integrals/electron_interaction_source.hpp` | the individual provider contract cannot depend on a concrete method; SCF and post-HF remain consumers |
-| D: MethodIR / ExecutionIR | `python/generativeqc_compiler/method/` | `tools/check_compiler_structure.py` enforces compiler-package directions |
-| E: linear response | `src/response/` | directory cannot depend on a concrete method; post-HF remains a transitive consumer |
-| F: runtime / workspace | `src/runtime/` | directory cannot acquire new concrete-method edges; the two existing reverse edges remain explicit debt |
+| Iteration and DIIS | `src/solver/` | directory cannot depend on a concrete method; CC and SCF remain include-graph consumers |
+| Electronic reference | `src/core/electronic_reference.hpp` | `src/core/` cannot depend on a concrete method; SCF and DFT remain consumers |
+| Interaction provider | `src/integrals/electron_interaction_source.hpp` | the individual provider contract cannot depend on a concrete method; SCF and post-HF remain consumers |
+| MethodIR and ExecutionIR | `python/generativeqc_compiler/method/` | `tools/check_compiler_structure.py` enforces compiler-package directions |
+| Linear response | `src/response/` | directory cannot depend on a concrete method; post-HF remains a transitive consumer |
+| Runtime and workspace | `src/runtime/` | directory cannot acquire new concrete-method edges; the two existing reverse edges remain explicit debt |
 
 For the native facilities in this table, the JSON report derives direct and
 transitive consumers separately from resolved repository include edges. A

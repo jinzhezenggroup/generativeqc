@@ -128,7 +128,7 @@ The sp8 source response owns 8,240/12,336 device bytes for RHF and
 9,520/13,616 for UHF at auxiliary caps 3/7. It retains 1,168 host bytes,
 compared with 7,568–11,792 bytes in the compatibility resident adapter.
 Those resident inputs avoid value regeneration, so their shorter component
-latencies are not a like-for-like comparison of this change's speed. The
+latencies do not compare like-for-like with the regeneration path. The
 complete profiled batch-3 HF median is 133.88 ms, including profiler overhead;
 this is an execution record, not a speedup claim.
 

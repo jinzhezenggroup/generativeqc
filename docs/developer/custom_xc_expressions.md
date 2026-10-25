@@ -33,7 +33,7 @@ unpolarized inputs must explicitly supply half the total density in each channel
 Zero total density and zero minority spin are included. There is no clipping,
 tail regularization, unit conversion, or implicit spin averaging.
 
-The vocabulary reserved for later slices is `sigma_aa = grad(rho_a).grad(rho_a)`,
+The v2 vocabulary excludes `sigma_aa = grad(rho_a).grad(rho_a)`,
 `sigma_ab = grad(rho_a).grad(rho_b)`, `sigma_bb = grad(rho_b).grad(rho_b)`
 (bohr^-8), and `tau_a`, `tau_b = (1/2) sum_i occupation_i |grad(orbital_i)|^2`
 per spin (bohr^-5). All five are rejected by v2. There is no GGA or meta-GGA

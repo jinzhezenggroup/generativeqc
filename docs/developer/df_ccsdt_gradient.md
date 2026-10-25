@@ -376,8 +376,9 @@ cotangents because its full-Fock response replaces them. Passing `0 1`
 restores the original serial/all-output path for matched validation. The
 lower-level fixed-canonical triples API still requests all nine cotangents by
 default, while using the parallel gap schedule unless explicitly disabled.
-The separately tracked large-force repeatability issue is pre-existing and does
-not by itself block these defaults; its strict numerical gates remain unchanged.
+Large-force repeatability is a separate, pre-existing qualification boundary
+and does not by itself block these defaults; its strict numerical gates remain
+unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 

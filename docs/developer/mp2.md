@@ -416,14 +416,14 @@ stages, and allocator overhead. It must not populate the complete endpoint field
 A zero
 `measured_endpoint_peak_bytes` means that endpoint allocation telemetry is
 unavailable; it is not a zero-memory observation or a copy of the plan. This
-slice currently reports that unavailable sentinel, so the measured-resource
+path currently reports that unavailable sentinel, so the measured-resource
 qualification gate remains unsatisfied. Once measured, numeric ownership must
 not exceed the simultaneous plan, which in turn must fit the configured numeric
 capacity. CUDA transfer counters disclose staging; they are
 not a claim that the full endpoint is device-resident. Older C callers receive
 the supported struct prefix selected by `struct_size`.
 
-## Qualification evidence and remaining issue scope
+## Qualification evidence and remaining scope
 
 Separate tests cover fixed identical-C/ERI OS and SS, explicit spin sums,
 permutations and rectangular tiles; native eight-loop AO→MO and independent RI

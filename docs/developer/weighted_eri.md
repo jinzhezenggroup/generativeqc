@@ -19,26 +19,25 @@ the value schedule when force and Fock schedules differ; it does not change the
 task domain or screening. See the
 [packed-grid rationale](../../.agents/notes/implemented/performance/2026-09-23-packed-fock-claim-grids.md).
 
-| Consumer/class | Existing execution | Selection and this change |
+| Consumer/class | Execution | Selection |
 | --- | --- | --- |
-| HF, at most 16 public AOs | Persistent ERI values and their native force path | AO cutoff; does not exercise the direct psss migration |
-| Direct HF psss Fock | Compiler-generated multi-output value lowering for both fixed-topology and bounded streaming execution | The production psss row is enabled for fixed and bounded Fock; the former psss-specific native value body is retired, while a shared generic order-one fallback remains available when generated exact-class execution is unavailable |
-| Direct HF psss force | Generated force-only weighted-ERI expression over the existing native primitive-pair scheduler | Compiler-generated mathematics is unconditional; resident/fixed/paged scheduling remains native, while the superseded handwritten weighted derivative formula and route selector are retired |
+| HF, at most 16 public AOs | Persistent ERI values and their native force path | AO cutoff; outside the direct psss route |
+| Direct HF psss Fock | Compiler-generated multi-output value lowering for both fixed-topology and bounded streaming execution | The production psss row covers fixed and bounded Fock; a shared generic order-one fallback covers availability gaps in generated exact-class execution |
+| Direct HF psss force | Generated force-only weighted-ERI expression over the existing native primitive-pair scheduler | Compiler-generated mathematics is unconditional; resident/fixed/paged scheduling remains native, and no handwritten weighted derivative formula or route selector remains |
 | Direct HF psss resident force | Resident bra pairs and primitive-length descriptors | `GENERATIVEQC_PSSS_RESIDENT_BRA`; the generated expression uses the same resident pairs and canonical-orientation scales |
 | Bounded direct psss force | Lossless paged exact-class consumer | `GENERATIVEQC_BOUNDED_DIRECT_STREAMING=force` or topology limits; uses the same weighted expression, retains page traversal |
-| Direct HF ssss force | Generated force-only weighted-ERI expression over the native primitive-pair cache | Generated mathematics is the unconditional production path; the qualified bounded/packed native scheduler remains, while the superseded handwritten ssss derivative body and runtime selector are deleted |
-| Direct HF psps/ppss | Common generated production kernels | Already migrated before this issue; manifest, signature policies and queues are retained |
+| Direct HF ssss force | Generated force-only weighted-ERI expression over the native primitive-pair cache | Generated mathematics is the unconditional production path; the qualified bounded/packed native scheduler remains, and no handwritten `ssss` derivative body or runtime selector remains |
+| Direct HF psps/ppss | Common generated production kernels | Manifest, signature policies and queues are retained |
 | Direct HF PPPS/DSPS/DPSS/FSSS force | Generated force-only Weighted IntegralIR over the existing compact order-three queue | Compiler-generated mathematics is unconditional for the native order-three route; generated-AOT mask ownership remains disjoint, while screening, density folding and atom scatter stay native |
-| Other direct HF classes | Manifest-selected generated kernels plus validated native fallbacks | Registry selects by architecture, consumer and class; no manifest rows added here |
+| Other direct HF classes | Manifest-selected generated kernels plus validated native fallbacks | Registry selects by architecture, consumer and class |
 | External psss weights | Generated precontracted Hermite DAG | One primitive record carries all x/y/z weights; optional independent fallback |
 | External unmigrated s/p/d/f weights | Unscreened Hermite/Dual3 primitive fallback | One explicit component per record, with the caller's actual external weight |
 
-For forces, total angular order zero/one no longer has a generic AO-quartet scientific fallback.
+For forces, total angular order zero/one has no generic AO-quartet scientific fallback.
 The fixed, resident, and bounded dispatchers consume generated `ssss_force` /
 `psss_force` through their exact shell tasks, and
-`contract_two_electron_force_quartet_subtile` now rejects `AngularOrder < 2`
-at compile time. The obsolete `direct_native_order01_gradient.cuh` body is
-therefore deleted rather than retained as a dead alternate implementation.
+`contract_two_electron_force_quartet_subtile` rejects `AngularOrder < 2` at
+compile time, and `direct_native_order01_gradient.cuh` does not exist.
 
 ### Bounded Direct-HF coverage and diagnostics
 
@@ -65,8 +64,8 @@ PySCF/libcint energies and analytic forces. See the
 
 The existing [component ledger](../../benchmarks/results/rtx5090-0b6a573-issue-41-current-head-component-ledger.json)
 measured psss as the largest exact force class, 137.054 ms per replay, on its
-384-AO workload. That measured hotspot motivates this slice. Its timings
-are historical and are not claimed as current candidate results.
+384-AO workload. That measurement motivated the bounded high-`l` schedule; its
+timings are historical and are not claimed as current candidate results.
 
 ## Weight and permutation contracts
 

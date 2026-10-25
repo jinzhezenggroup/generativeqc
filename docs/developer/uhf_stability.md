@@ -136,7 +136,7 @@ diagnostic's own dense matrix is never the independent oracle. A PySCF skip is
 not a scientific PASS; the environment flag makes missing PySCF a failure.
 JUnit records version, reference residual/energy, curvature and certificate
 identity. Record source hashes and the actual focused execution artifacts with
-the PR's exact head; generic CI green cannot replace these molecular gates.
+the exact tested head; generic CI green cannot replace these molecular gates.
 
 
 ## Experimental bounded CPU UHF root recovery

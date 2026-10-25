@@ -205,8 +205,9 @@ must be integrated before activating CUDA reuse.
 ## Scope and testing
 
 HF/DFT already share the fixed-point controller in `src/solver/self_consistent.hpp`
-and retain integral/Fock/grid resources through existing owners. This first implementation slice does
-not replace those caches or integrate a new molecular AO cache into DFT. Tests
+and retain integral/Fock/grid resources through existing owners. This
+implementation does not replace those caches or integrate a new molecular AO
+cache into DFT. Tests
 apply the same analysis to real restricted/unrestricted Fock composition graphs,
 where Hcore can be invariant but density-dependent J/K/XC remains dynamic.
 

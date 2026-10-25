@@ -125,8 +125,8 @@ The independent CUDA HF Fock route already owns host SCF algebra; it uses the
 shared native scalar HF eigensolver for preparation and target iteration while
 J/K remains on the GPU. Neither route silently retries a failed admission with
 a different eigensolver. This is an explicit hybrid preparation contract.
-All of this work is included in
-the complete endpoint. Atomic convergence requires at least `1e-10` energy,
+All of these steps are included in the complete endpoint. Atomic convergence
+requires at least `1e-10` energy,
 `1e-8` density and `1e-7` physical residual accuracy; tighter requested controls
 are respected. The iteration limit bounds each unique atomic problem.
 

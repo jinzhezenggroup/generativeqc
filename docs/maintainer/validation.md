@@ -87,7 +87,7 @@ for the shared-owner evidence and restoration criteria.
 
 ## Existing tests and oracle independence
 
-DFT03's first fixed-density slice is documented in [XC integration](../developer/xc_integration.md).
+The initial fixed-density XC contract is documented in [XC integration](../developer/xc_integration.md).
 `test_xc_integration.py` checks saved identical-grid PySCF/Libxc energy and AO
 matrix references, trace variations, spin/weight factors and stale-grid failures.
 Its exporter and evidence runner preserve the existing FP64 element gate and

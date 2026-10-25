@@ -21,10 +21,10 @@ GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=nucleus_cooperative your-command
 GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=serial your-command
 ```
 
-The compiler-owned generated consumer is now the only CUDA S/T/V first-derivative
-and weighted-force owner. The former `GENERATIVEQC_ONE_ELECTRON_DERIVATIVES`
-selector, cooperative native force/reference kernel, and derivative-specific
-Hermite workspace are retired. Independent validation remains through the
+The compiler-owned generated consumer is the only CUDA S/T/V first-derivative
+and weighted-force owner. No `GENERATIVEQC_ONE_ELECTRON_DERIVATIVES` selector,
+cooperative native force/reference kernel, or derivative-specific Hermite
+workspace remains. Independent validation uses the
 CPU/libcint/PySCF references and raw derivative tests; `serial` is only a
 deterministic generated schedule diagnostic, not a second scientific formula
 owner.
@@ -137,7 +137,8 @@ O(Natom) nuclear-repulsion response. Cached DF data compare implementation and
 mapping policy before reuse. The existing DF J/K and two-electron response
 paths keep their own placement; the new one-electron bridge uploads final
 weights and returns a small gradient for final assembly. This host boundary is
-explicit, and this change does not claim a fully device-resident DF workflow.
+explicit: the generated consumer does not make the DF workflow fully
+device-resident.
 
 ## Validation and reproduction
 

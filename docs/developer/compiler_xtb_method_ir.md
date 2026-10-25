@@ -77,7 +77,7 @@ different constants:
 9. the GFN1 halogen correction as its own geometry primitive;
 10. non-self-consistent two-body D3(BJ).
 
-The halogen primitive is now concretely composable with the compiler-owned
+The halogen primitive is concretely composable with the compiler-owned
 TripletIR lowering. Its method-bound program identity includes the resolved
 GFN1 MethodIR identity, the exact primitive semantics, the pinned halogen
 parameter identity, the triplet topology and the TensorIR equation. This does
@@ -89,7 +89,7 @@ reuse one onsite-third-order TensorIR equation for `gamma3*q^3/3` and its
 charge derivative while binding different state-resolution semantics: GFN1
 uses atomic charge and GFN2 uses shell charge. The GFN1 binding also includes
 the canonical parameter-set identity. This is one fixed-state electronic
-slice; H0, ES2, population assembly, SCC execution, and public GFN1 admission
+contract; H0, ES2, population assembly, SCC execution, and public GFN1 admission
 remain separate gates.
 
 The canonical parameter-set revision is the SHA-256 identity of
