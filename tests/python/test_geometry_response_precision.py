@@ -35,6 +35,7 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         geometry_external_device = lambda *a, **k: None
 
         def __init__(self, *a: Any, **k: Any) -> None:
+            self.artifact = NS(metadata={"artifact_kind": "runtime-jit"})
             self.fp32 = k.get("fp32_geometry", False)
             self.points = 0
             self.kinds = {}
@@ -84,13 +85,20 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         "nuclear",
         "xc",
     )
+
+    def validate_coverage(*, sources: Any) -> tuple[str, ...]:
+        """Model the compiler's coverage contract at the mocked CUDA boundary."""
+        if set(sources) != set(names):
+            raise ValueError("incomplete or unknown gradient source coverage")
+        return names
+
     plan = NS(
         identity="plan",
         source_names=names,
         spin_blocks=1,
         range_exchange_sources=[NS(name=x) for x in names[3:5]],
         range_exchange_primitives=[NS(operator="short"), NS(operator="long")],
-        reduction_program=lambda **k: None,
+        validate_source_coverage=validate_coverage,
     )
     prepared = NS(
         identity="prepared",
