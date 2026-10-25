@@ -2,9 +2,11 @@
 // kernels consume the basis; no reference integral enters their preparation.
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -117,6 +119,18 @@ int main(int argc, char** argv) {
   try {
     const auto orbital = read_system(), auxiliary = read_system();
     DeviceOwner owner;
+    CudaDfMdScreening screening;
+    if (const auto* budget = std::getenv("GENERATIVEQC_TEST_DF_MD_SCREEN_BUDGET")) {
+      const auto count = molecule::ao_count(auxiliary);
+      std::vector<double> q(count * count, 0.0), eigenvalues(count, 1.0);
+      const auto* scale = std::getenv("GENERATIVEQC_TEST_DF_MD_METRIC_SCALE");
+      const double lambda = scale ? std::strtod(scale, nullptr) : 1.0;
+      for (std::size_t i = 0; i < count; ++i) {
+        q[i * count + i] = 1.25;  // Stored factors need not be exactly orthogonal.
+        eigenvalues[i] = lambda;
+      }
+      screening = {std::strtod(budget, nullptr), owner.upload(q), owner.upload(eigenvalues)};
+    }
     CudaDfMdOwner* raw = nullptr;
     CudaDfMdResources resources;
     std::string detail;
@@ -131,14 +145,14 @@ int main(int argc, char** argv) {
         raw)
       throw std::runtime_error("mismatched source geometry was admitted");
     auto status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                          &raw, resources, detail);
+                                          &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     const auto admitted_bytes = resources.device_bytes;
     destroy_cuda_df_md_owner(raw);
     raw = nullptr;
     LedgerScope ledger(admitted_bytes - 1);
     status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                     &raw, resources, detail);
+                                     &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY || raw || ledger.ledger->live ||
         !ledger.ledger->allocations || !ledger.ledger->rejected) {
       destroy_cuda_df_md_owner(raw);
@@ -146,7 +160,7 @@ int main(int argc, char** argv) {
     }
     ledger.ledger->limit = admitted_bytes;
     status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                     &raw, resources, detail);
+                                     &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     std::unique_ptr<CudaDfMdOwner, decltype(&destroy_cuda_df_md_owner)> prepared(
         raw, destroy_cuda_df_md_owner);
@@ -226,6 +240,23 @@ int main(int argc, char** argv) {
                      gradient_elements * sizeof(double));
       if (!output) throw std::runtime_error("cannot write probe output");
     }
+    // Exact-zero compaction must not turn an invalid current source into a
+    // finite result for an otherwise zero density. IEEE NaN * zero is
+    // deliberately active; the list is rebuilt by the captured charge call.
+    for (const double invalid :
+         {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+      std::vector<double> invalid_density(n * n, 0.0), invalid_charge(a);
+      invalid_density[n - 1] = invalid;
+      check(cudaMemcpyAsync(d, invalid_density.data(), n * n * sizeof(double),
+                            cudaMemcpyHostToDevice, owner.stream));
+      check(cudaGraphLaunch(graph.executable, owner.stream));
+      check(cudaMemcpyAsync(invalid_charge.data(), rho, a * sizeof(double), cudaMemcpyDeviceToHost,
+                            owner.stream));
+      check(cudaStreamSynchronize(owner.stream));
+      if (std::all_of(invalid_charge.begin(), invalid_charge.end(),
+                      [](double value) { return std::isfinite(value); }))
+        throw std::runtime_error("source compaction hid a nonfinite density");
+    }
     if (ledger.ledger->allocations != allocations_before_replay)
       throw std::runtime_error("charge/J replay allocated native device storage");
     check(cudaGraphExecDestroy(graph.executable));
@@ -237,7 +268,11 @@ int main(int argc, char** argv) {
     std::cout << "public_aos=" << n << " auxiliary_aos=" << a
               << " orbital_primitive_pairs=" << resources.orbital_primitives
               << " auxiliary_primitives=" << resources.auxiliary_primitives
-              << " owner_device_bytes=" << resources.device_bytes << '\n';
+              << " owner_device_bytes=" << resources.device_bytes
+              << " max_j_omission=" << resources.max_j_omission
+              << " source_norm_limit=" << resources.source_norm_limit
+              << " projection_error_per_primitive=" << resources.projection_error_per_primitive
+              << '\n';
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

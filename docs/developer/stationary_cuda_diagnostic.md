@@ -8,7 +8,7 @@ ordered ERI derivative provider, with MethodIR-owned coefficients and same-spin
 `D[a,c] D[b,d]` weights. Source storage and final reduction follow the gradient
 plan, including its order and complete source inventory.
 The result is an energy gradient in Eh/bohr; force is its negative. The public
-Python C2 endpoint reuses this consumer for qualified CUDA LDA/PBE/r2SCAN RKS/UKS
+Python endpoint reuses this consumer for qualified CUDA LDA/PBE/r2SCAN RKS/UKS
 forces, and admitted direct global-hybrid RKS/UKS graphs. All-electron execution
 admits Cartesian and real-spherical s/p/d public AOs; scalar ECP execution remains
 s/p. Public ECP scope and
@@ -255,9 +255,10 @@ counts, snapshot export counters, streams, grid allocation/timing metrics,
 TensorIR execution/transfer totals, declared numeric bounds, endpoint time and
 the paths/hashes of every loaded generated artifact. `work["timeline"]` is an
 exclusive host-wall timeline: its phase durations sum to `endpoint_seconds`
-without overlap and without introducing CUDA synchronization. The #662 benchmark
-also enables `profile_device=True`: four reusable CUDA events bracket each already
-synchronized source batch, so `work["device_phase_ms"]` separates primitive H2D,
+without overlap and without introducing CUDA synchronization. The stationary
+timeline benchmark also enables `profile_device=True`: four reusable CUDA events
+bracket each already synchronized source batch, so `work["device_phase_ms"]`
+separates primitive H2D,
 derivative kernels, reductions, geometry H2D/kernels/reductions, setup work and
 final D2H. Event elapsed times are read only after an existing source synchronization;
 no extra synchronization point is inserted. `synchronization_wait_wall` measures
@@ -314,10 +315,10 @@ python tools/run_stationary_cuda_validation.py --sanitizer memcheck -k 'analytic
 python tools/run_stationary_cuda_validation.py --sanitizer initcheck -k 'analytic or source_failure'
 python tools/run_stationary_cuda_validation.py --cpu-regression
 
-# Issue #662: cold/artifact-warm/same-state/changed-geometry evidence.
+# Collect cold/artifact-warm/same-state/changed-geometry evidence.
 # Invoke this command inside the allocated Slurm shell used by the project.
 python tools/benchmark_stationary_cuda_timeline.py \
-  --output build/issue662-stationary-timeline.json
+  --output build/stationary-timeline.json
 ```
 
 The opt-in device suite compares H2 and asymmetric s/p water, LDA and PBE,
@@ -330,7 +331,7 @@ device, stale/replaced state, late failure, recovery, empty tiles, exact-zero
 products and vacuum tails. CPU scientific/interpreter entrypoints are blocked
 during complete CUDA execution. Sanitizer runs are separately invoked/counted.
 Evidence is retained locally in ignored `build-cuda/stationary-evidence/`.
-The #662 benchmark additionally records three default AO-size fixtures, RKS/UKS,
+The timeline benchmark additionally records three default AO-size fixtures, RKS/UKS,
 state-export time and the complete diagnostic timeline in one JSON schema. A
 method that is still outside the checked-out branch's CUDA force capability is
 retained as an explicit `unsupported` row rather than silently omitted.
@@ -438,7 +439,7 @@ python -m pytest tests/python/test_ecp_stationary_cuda.py -q
 ```
 
 Diagnostic tests explicitly request `properties=("energy",)` when preparing
-snapshots, so the C2 default property set cannot trigger an unrelated public
+snapshots, so that endpoint's default property set cannot trigger an unrelated public
 force calculation. Host-side admission and live-owner wrapper regressions in
 `tests/python/test_ecp_cuda_public_boundary.py` run without a CUDA device; they
 do not replace this real-device numerical gate.

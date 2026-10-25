@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # UCCSD amplitude layout and coordinates
 
 `generativeqc_compiler.cc.uccsd_layout` supplies an internal, real-FP64

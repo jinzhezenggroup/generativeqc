@@ -91,11 +91,19 @@ struct Capture::Impl {
   bool external_integrals{};
   FockPreparationDiagnostic diagnostic;
   CudaDirectJkPlan* cuda_exact = nullptr;
+  std::shared_ptr<CudaDensityFittingJkPlan> cuda_df;
 """
     unit += prepared[initializer_start:initializer_end]
     unit += "(void)aux; (void)retained_direct_derivative_order;\n"
     unit += prepared[validation_start:validation_end]
     unit += "diagnostic.strategy = strategy; }\n};\n"
+    # These reservation probes never publish a CUDA owner. Preserve the real
+    # matches() branch while keeping device policy queries outside this fixture.
+    unit += r"""
+bool cuda_density_fitting_host_policy_matches(const CudaDensityFittingJkPlan*) noexcept {
+  std::abort();
+}
+"""
     unit += definition(prepared, "PreparedFockPlan::PreparedFockPlan(").replace(
         "PreparedFockPlan::PreparedFockPlan(", "Capture::Capture("
     )
@@ -109,6 +117,10 @@ DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reserva
     DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget,
     bool automatic = false, ResolvedFockBuild strategy = {}) {
   const auto reserved_rank = reservation.restricted_rank;
+  // Mirror the production raw-source dimensions used by its storage estimate.
+  // CUDA owner admission stays outside this host-only reservation fixture.
+  struct RawShape { std::size_t nbf, naux; };
+  struct SourceShape { RawShape raw; } data{{n, a}};
   FockPreparationDiagnostic diagnostic;
   diagnostic.variant.df_pair_storage_request =
       automatic ? DfPairStorageRequest::Automatic :
@@ -157,6 +169,7 @@ void allocate(const DensityFittingTilePlan& tiles) {
 struct NativeKsExecutionPlan {
   unsigned spin_channels=1;
   bool range_exchange=false;
+  const void* automatic_program{};
   bool density_fitted_range_exchange=false;
 };
 """
@@ -166,7 +179,8 @@ struct NativeKsExecutionPlan {
     )
     unit += definition(method, "std::size_t ks_fitted_provider_budget(")
     unit += r"""
-unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend) {
+unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend,
+                                    const NativeKsExecutionPlan&) {
   assert(false); return 0;
 }
 std::size_t ks_provider_bytes(const core::System&, generativeqc_backend, unsigned) {
@@ -237,6 +251,7 @@ int main(int argc, char** argv) {
   } else if (mode == "forwarding") {
     const auto method=method_prepare(system,execution,strategy);
     assert(method.impl_->projection_reservation == reserved);
+    assert(method.impl_->retained_fitted_derivative_order == 1);
     auto rsh=execution;
     rsh.range_exchange=true;
     const auto rsh_method=method_prepare(system,rsh,strategy);
@@ -293,6 +308,19 @@ int main(int argc, char** argv) {
       catch (const std::invalid_argument&) { rejected=true; }
       assert(rejected);
     }
+  } else if (mode == "automatic") {
+    // Automatic energy-only KS is J-only and must not retain force staging.
+    strategy.spec.exchange.present=false;
+    const auto curated=method_prepare(system,execution,strategy);
+    assert(!curated.impl_->projection_reservation.restricted_rank);
+    assert(curated.impl_->retained_fitted_derivative_order == 1);
+    execution.automatic_program=&execution;
+    const auto automatic=method_prepare(system,execution,strategy);
+    assert(!automatic.impl_->projection_reservation.restricted_rank);
+    assert(automatic.impl_->retained_fitted_derivative_order == 0);
+    assert(automatic.impl_->requested_budget == 1U<<30);
+    assert(automatic.matches(system,nullptr,strategy,0,1U<<30,0,0));
+    assert(!automatic.matches(system,nullptr,strategy,0,1U<<30,0,1));
   } else if (mode == "coulomb_planning") {
     const auto dense = DfPairStorage::Dense;
     auto j_only = strategy;
@@ -382,7 +410,7 @@ int main(int argc, char** argv) {
 
 
 @pytest.mark.parametrize(
-    "mode", ["authorization", "forwarding", "planning", "coulomb_planning"]
+    "mode", ["authorization", "forwarding", "automatic", "planning", "coulomb_planning"]
 )
 def test_method_owned_projection_reservation(
     reservation_probe: Path, mode: str

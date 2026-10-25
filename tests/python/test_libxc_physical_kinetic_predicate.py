@@ -159,6 +159,45 @@ def test_exact_input_and_empty_spin_coefficients_match_pinned_libxc(
     np.testing.assert_allclose(actual[:11], case["expected"], atol=2e-11, rtol=2e-9)
 
 
+@pytest.mark.parametrize("empty_spin", (0, 1))
+def test_empty_spin_raw_work_is_not_the_composite_energy_derivative(
+    native_point: Any, empty_spin: int
+) -> None:
+    """An exact subfloor PSD birth separates the two contracts without extrapolation.
+
+    A local AO value of one and zero spatial derivative realizes D_empty(h)=h.
+    Below the density floor every work input is constant; only the original
+    density prefactor changes. Thus dE/dh=E(0)/rho, independently of symbolic
+    derivative roots. Keep pinned Libxc energies as a second implementation.
+    """
+    from pyscf.dft import libxc
+
+    assert libxc.__version__ == "7.0.0"
+    active_spin = 1 - empty_spin
+    inputs = np.zeros((1, 10))
+    inputs[0, active_spin] = 1e-10
+    point = _evaluate(native_point, inputs)[0]
+    expected = point[0] / inputs[0, active_spin]
+    reference_input = np.zeros((2, 6, 1))
+    reference_input[active_spin, 0, 0] = inputs[0, active_spin]
+    reference = libxc.eval_xc("MGGA_C_TPSS", reference_input, spin=1, deriv=0)[0][0]
+    assert abs(expected - reference) < 2e-14
+    # This is an incompatible derivative contract, not a floating-point error.
+    assert abs(point[1 + empty_spin] - expected) > 1e-4
+    for step in (1.25e-16, 2.5e-16, 5e-16):
+        shifted = inputs.copy()
+        shifted[0, empty_spin] = step
+        slope = (_evaluate(native_point, shifted)[0, 0] - point[0]) / step
+        assert abs(slope - expected) < 1e-10
+        reference_input[empty_spin, 0, 0] = step
+        displaced = libxc.eval_xc("MGGA_C_TPSS", reference_input, spin=1, deriv=0)[0][0]
+        reference_slope = (
+            displaced * (inputs[0, active_spin] + step)
+            - reference * inputs[0, active_spin]
+        ) / step
+        assert abs(reference_slope - expected) < 1e-10
+
+
 @pytest.mark.parametrize("fixed_electrons", (False, True))
 def test_rank_one_fock_is_the_inward_psd_energy_derivative(
     native_point: Any, fixed_electrons: bool

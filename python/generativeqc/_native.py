@@ -453,6 +453,15 @@ class ApplicationPrecisionMethodDescriptor(MethodDescriptor):
     ]
 
 
+class CorrelationExecutionMethodDescriptor(ApplicationPrecisionMethodDescriptor):
+    """Private DF warmup selector; zero allowance retains strict convergence."""
+
+    _fields_ = [
+        ("df_preconvergence", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32),
+    ]
+
+
 class MethodCapabilitiesDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),

@@ -1,0 +1,22 @@
+{
+  "id": "response.df-preconditioning",
+  "classification": "negative-evidence",
+  "controls": [
+    "response-option:df_preconditioning"
+  ],
+  "owner_issues": [
+    1901,
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp",
+    "benchmarks/results/rhf-response-accelerators-1901/README.md"
+  ],
+  "rationale": "The stronger DF numerical inverse is exact-corrected but did not reduce representative large Z iterations or exact J/K action counts, so its setup/resource cost has no established large complete-endpoint benefit.",
+  "revisit_condition": "Reconsider only with a different preconditioner or workload guard that reproducibly reduces exact physical actions after charging setup, resource ownership and final audits.",
+  "evidence": [
+    "issue:#1901",
+    "issue:#1972",
+    "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+  ]
+}

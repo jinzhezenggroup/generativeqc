@@ -11,6 +11,7 @@
 
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "scf/cuda/df_host_panels.hpp"
 #include "scf/cuda/df_jk_internal.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/df_metric_kernels.hpp"
@@ -86,8 +87,9 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
     if (error != cudaSuccess) return cuda_failure(error, "DF Hermite projection", detail);
     runtime::cuda_trace::trace_counter("coulomb_md_owner_bytes",
                                        plan.md_coulomb_resources.device_bytes);
-    // These count submitted complete unscreened traversals. Graph replay must
-    // be measured from executed kernels, not multiplied by host submissions.
+    // These are submitted unscreened upper bounds, not executed radial work.
+    // The owner emits separate executed counts in non-captured trace runs.
+    // Graph replay must not be inferred from host submission counts.
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_charge_passes", !raw_charge_ready);
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_projection_passes", 1);
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_primitive_interactions",
@@ -168,9 +170,8 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
           return generate_cuda_density_fitting_packed_raw_tile(
               plan.integral_source, system, first, pairs, begin, count,
               reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-        return generate_cuda_density_fitting_raw_tile(
-            plan.integral_source, system, first, pairs, begin, count, -1,
-            reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+        return raw_panel(plan, system, first, pairs, begin, count, plan.auxiliary_tile_values,
+                         detail);
       };
       runtime::cuda_trace::trace_counter("streamed_coulomb_pairs", pair_count);
       runtime::cuda_trace::trace_counter("streamed_coulomb_packed", packed_pairs);

@@ -157,6 +157,8 @@ def _publication_members(blobs: dict[str, bytes]) -> set[str]:
 
 
 LEGACY_LARGE_REVIEW_SCHEMA = "generativeqc.legacy-large-evidence-review.v1"
+LEGACY_LARGE_REVIEW_INDEX_SCHEMA = "generativeqc.legacy-large-evidence-index.v2"
+LEGACY_LARGE_REVIEW_FAMILY_SCHEMA = "generativeqc.legacy-large-evidence-family.v1"
 LEGACY_CLASSIFICATIONS = {
     "required-compact-accepted-evidence",
     "test-reference-input",
@@ -168,6 +170,81 @@ def _family(path: str) -> str:
     return relative.split("/", 1)[0] if "/" in relative else "(root)"
 
 
+def expand_legacy_large_review(
+    blobs: dict[str, bytes], review: dict
+) -> tuple[dict, list[str]]:
+    """Assemble independent family records without a shared mutable index.
+
+    The former v1 monolith remains supported for historical fixtures and
+    migration verification. The v2 index stays fixed as families are added.
+    """
+    if not isinstance(review, dict):
+        return {}, ["legacy large-evidence review must be an object"]
+    if review.get("schema") == LEGACY_LARGE_REVIEW_SCHEMA:
+        return review, []
+    if review.get("schema") != LEGACY_LARGE_REVIEW_INDEX_SCHEMA:
+        return {}, ["legacy large-evidence review has unsupported schema"]
+    if "families" in review or "files" in review:
+        return {}, ["sharded legacy review must not embed mutable inventories"]
+    directory = review.get("directory")
+    if not isinstance(directory, str):
+        return {}, ["legacy large-evidence family directory is missing"]
+    try:
+        safe_relative(directory)
+    except ValueError as error:
+        return {}, [f"invalid legacy review directory: {error}"]
+    prefix = directory.rstrip("/") + "/"
+    if not directory.startswith("benchmarks/") or directory.endswith("/"):
+        return {}, ["legacy review family directory must be under benchmarks/"]
+    paths = sorted(path for path in blobs if path.startswith(prefix))
+    if not paths:
+        return {}, ["legacy large-evidence family directory is empty"]
+    families: dict[str, dict] = {}
+    files: list[dict] = []
+    errors: list[str] = []
+    for path in paths:
+        name = path[len(prefix) :]
+        if "/" in name or not name.endswith(".json") or name == ".json":
+            errors.append(f"{path}: invalid legacy family record path")
+            continue
+        family = name[:-5]
+        try:
+            payload = json.loads(blobs[path])
+        except (TypeError, ValueError, UnicodeError):
+            errors.append(f"{path}: invalid legacy family JSON")
+            continue
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != LEGACY_LARGE_REVIEW_FAMILY_SCHEMA
+        ):
+            errors.append(f"{path}: unsupported legacy family schema")
+            continue
+        if payload.get("family") != family:
+            errors.append(f"{path}: legacy family identifier differs from filename")
+            continue
+        if family in families:
+            errors.append(f"{path}: duplicate legacy family")
+            continue
+        records = payload.get("files")
+        if not isinstance(records, list):
+            errors.append(f"{path}: legacy family files must be an array")
+            continue
+        if any(not isinstance(record, dict) for record in records):
+            errors.append(f"{path}: invalid legacy family file row")
+            continue
+        families[family] = {
+            field: payload.get(field)
+            for field in ("owner", "reason", "review_document")
+        }
+        files.extend(records)
+    return {
+        "schema": LEGACY_LARGE_REVIEW_SCHEMA,
+        "threshold_bytes": review.get("threshold_bytes"),
+        "families": families,
+        "files": files,
+    }, errors
+
+
 def large_legacy_review_errors(
     blobs: dict[str, bytes], review: dict, threshold: int
 ) -> list[str]:
@@ -177,9 +254,9 @@ def large_legacy_review_errors(
     review documents explain why large legacy bytes remain in the checkout; each
     file hash prevents a reviewed historical record from drifting silently.
     """
-    errors: list[str] = []
+    review, errors = expand_legacy_large_review(blobs, review)
     if review.get("schema") != LEGACY_LARGE_REVIEW_SCHEMA:
-        return ["legacy large-evidence review has unsupported schema"]
+        return errors or ["legacy large-evidence review has unsupported schema"]
     if type(threshold) is not int or threshold <= 0:
         return ["legacy_large_review_threshold_bytes must be a positive integer"]
     if review.get("threshold_bytes") != threshold:
@@ -273,7 +350,10 @@ def large_legacy_review_members(blobs: dict[str, bytes], policy: dict) -> set[st
         return set()
     if large_legacy_review_errors(blobs, review, threshold):
         return set()
-    return {row["path"] for row in review["files"]}
+    expanded, errors = expand_legacy_large_review(blobs, review)
+    if errors:
+        return set()
+    return {row["path"] for row in expanded["files"]}
 
 
 def campaign_inventory(blobs: dict[str, bytes], policy: dict) -> dict:

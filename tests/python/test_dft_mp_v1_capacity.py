@@ -216,11 +216,32 @@ def test_optional_ao_schedule_contract_executes_capacity_and_failure_policy(
             "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=n, primitives=basis.nprimitive",
             "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=1, primitives=basis.nprimitive",
         ),
-        ("_complete_rks_cuda_gradient_diagnostic", "        256\n", "        512\n"),
         (
             "_complete_rks_cuda_gradient_diagnostic",
-            "if na >= _AUTO_PHASED_BECKE_MIN_ATOMS",
-            "if True",
+            "            1024\n",
+            "            512\n",
+        ),
+        ("_complete_rks_cuda_gradient_diagnostic", "else 256", "else 1024"),
+        ("_complete_rks_cuda_gradient_diagnostic", "if large_fitted:", "if True:"),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "max_device_bytes >= DF_FORCE_DEVICE_CAP",
+            "True",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "max_host_bytes >= DF_FORCE_HOST_CAP",
+            "True",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "preferred_tile_points = 512",
+            "preferred_tile_points = 1024",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "na >= _AUTO_PHASED_BECKE_MIN_ATOMS",
+            "True",
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",

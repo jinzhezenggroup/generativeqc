@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
         require(std::abs(after[i] - incumbent[i]) < 1e-10, "refusal changed incumbent J");
     }
     require(try_install_cuda_df_md_coulomb(plan.get(), orbital, auxiliary, cap, cap, diagnostics,
-                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+                                           detail, 1e-12) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
     const bool admitted = diagnostics.front().effective_rank == a;
     require(diagnostics.front().md_coulomb == admitted && bool(plan->md_coulomb) == admitted,

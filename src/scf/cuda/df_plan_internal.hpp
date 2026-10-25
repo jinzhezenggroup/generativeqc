@@ -155,6 +155,12 @@ struct CudaDensityFittingJkPlan {
   cuda_execution::CudaDfMdOwner* md_coulomb{};
   cuda_execution::CudaDfMdResources md_coulomb_resources{};
   double* inverse_square_roots{};
+  // Optional generated raw A[pair,P], bound to this geometry/source. It never
+  // aliases density-dependent U or replaces device-resident fitted values.
+  std::vector<double> host_raw_three_center;
+  std::size_t host_panel_policy_limit{std::numeric_limits<std::size_t>::max()};
+  bool host_panel_automatic{true};
+  std::uint64_t host_panel_hits{}, host_panel_h2d_bytes{};
   std::vector<double> streamed_raw_three_center;
   std::vector<double> streamed_inverse_square_roots;
   // Opaque persistent SCF state.  The definition lives with the device

@@ -12,18 +12,31 @@ namespace generativeqc::scf::cuda_execution {
 
 struct CudaDfMdOwner;
 
+/** Optional primal omission certificate. The enclosing full-rank plan supplies
+ * its actual device eigenvectors/eigenvalues and an absolute per-J-entry budget.
+ * Zero, missing factors or an unrepresentable bound retain exact-nonzero work.
+ * The factors are borrowed only during preparation, before graph capture. */
+struct CudaDfMdScreening {
+  double max_j_error{};
+  const double *eigenvectors{}, *eigenvalues{};
+};
+
 /** Optional owner's complete additional storage. The caller must reserve this
  * in its enclosing budget; these values exclude the borrowed input/output
  * vectors, metric factor/solver, stream and other source/SCF state. */
 struct CudaDfMdResources {
   std::size_t device_bytes{}, host_resident_bytes{}, host_peak_bytes{};
   std::size_t orbital_primitives{}, auxiliary_primitives{}, nbf{}, naux{};
+  double max_j_omission{}, source_norm_limit{}, projection_error_per_primitive{};
 };
 
-/** Prepare a complete unscreened, strict-FP64 single-system DF charge/J owner.
+/** Prepare a strict-FP64 single-system DF charge/J owner.
  * Inputs carry native radial normalization. No integral oracle, public-AO
- * three-center tensor, metric solve, screening or force calculation occurs
- * during preparation. Raised Hermite potentials are included in its budget.
+ * three-center tensor, metric solve or force calculation occurs in preparation.
+ * Optional primal screening certifies a cumulative final-J omission allowance
+ * using the supplied metric factors; derivatives retain every nonzero source.
+ * Raised Hermite potentials and current-source compaction are budgeted and
+ * refreshed on every charge/force call, including changed-density graph replay.
  * The borrowed stream must outlive the owner and all captured graphs using it.
  * Creation is forbidden inside capture; replay methods are allocation-free.
  * On refusal/failure, *owner remains null and all partial allocations retire.
@@ -33,7 +46,7 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
                                             const core::System& auxiliary,
                                             std::size_t device_budget, std::size_t host_budget,
                                             CudaDfMdOwner** owner, CudaDfMdResources& resources,
-                                            std::string& detail);
+                                            std::string& detail, CudaDfMdScreening screening = {});
 
 /** Drain the borrowed stream before releasing its resident storage; restore
  * the caller's previous current device. The stream must still be alive. */

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "vv10-warp-packet-20261015",
+  "owner": "guarded FP64 rotating-partner VV10 pair traversal",
+  "reason": "Compact complete 3/12-atom off/on E/F records, independent references, exact source/library inventory, semantic pair work and sanitizer receipts. Larger original-limit failures remain separately retained; no profiler database, binary, storage-budget increase or 96-atom completion claim.",
+  "review_document": "benchmarks/results/vv10-warp-packet-20261015/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/vv10-warp-packet-20261015/evidence.json.xz",
+      "family": "vv10-warp-packet-20261015",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independent E/F, semantic pair work and source-bound packet qualification",
+      "bytes": 142064,
+      "sha256": "134ddb110994824e29195af84243c8c4bb879db07b2b4b0b943d52cba54e6dc5"
+    }
+  ]
+}

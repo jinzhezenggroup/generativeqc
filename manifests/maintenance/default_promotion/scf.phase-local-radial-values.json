@@ -1,0 +1,27 @@
+{
+  "id": "scf.phase-local-radial-values",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"
+  ],
+  "owner_issues": [
+    2426
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/scf/cuda/direct_jk.cpp"
+  ],
+  "rationale": "Automatic screened SPD strict range sources serve restricted VV10 cold initialization with at least 65536 points, the existing reuse threshold and a 16 GiB optional ceiling. The independent Direct range correction may accompany a Direct or fitted full-range primary. Both providers host inventory and actual device headroom remain charged; omitted buckets stream exactly. Warm calls never construct a quartic source. Explicit zero, unsupported precision and public-ledger fallbacks remain. Fitted-default candidate endpoint qualification is tracked separately from earlier explicit-cache pilots.",
+  "revisit_condition": "Require source-matched complete cold/warm/moved endpoints, independent energy/force gates and capacity/lifetime evidence for any broader automatic domain; retain failed populations and do not relabel explicit-cache pilots as default evidence.",
+  "evidence": [
+    "docs/developer/xc_native_cuda.md",
+    ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
+    "tests/python/test_range_resident_values_cuda.py",
+    "tests/python/test_range_resident_ks_cuda.py",
+    "issue:#2426",
+    ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
+    ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md",
+    ".agents/notes/proposed/2026-10-24-fitted-primary-exact-range-cache.md"
+  ]
+}

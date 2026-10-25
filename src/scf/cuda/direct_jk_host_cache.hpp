@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <memory>
 
+#include "runtime/temporary_cache_file.hpp"
+
 namespace generativeqc::scf {
 
 /** Experimental geometry-bound FP64 backing for omitted full/LR buckets.
@@ -16,7 +18,9 @@ namespace generativeqc::scf {
  */
 struct DirectJkHostCache {
   std::unique_ptr<double[]> values;
-  std::array<std::size_t, 28> offsets{};
+  std::array<std::size_t, 28> offsets{}, disk_offsets{};
+  std::unique_ptr<runtime::TemporaryCacheFile> disk;
+  std::size_t disk_count{};
   std::size_t count{}, tile_elements{}, next_slot{};
   cudaStream_t copy_stream{}, consumer_stream{};
   std::array<double*, 2> pinned{}, device{};

@@ -60,8 +60,8 @@ retained center geometry and the executor's actual-device sm_120 checks.
 This is an execution-policy change, not a new partition formula or a pruning
 rule; the grid, screening thresholds and arithmetic policies are unchanged.
 Mixed geometry retains its existing executor. Composite/nonlocal owners already
-use the generic phase policy; this change does not expand their scientific
-admission or enable pruning defaults for additional functionals.
+use the generic phase policy; their scientific admission and pruning defaults
+are unchanged.
 
 The pair panels are optional storage charged to the published **cached**
 stationary capacity, alongside the retained center cache. They do not enlarge
@@ -102,3 +102,16 @@ solver histories, semantic work counts and independent numerical gates.
 
 The rationale, rejected trials and measured scope are retained in
 `.agents/notes/implemented/performance/2026-10-06-pbe0-budget-admitted-cuda-schedule.md`.
+
+## Large ordinary Direct and meta-GGA owners
+
+All-electron ordinary Direct force owners with at least 96 atoms request
+512 MiB host and 1 GiB additional device capacity. When both allowances are
+available, the complete dry planner prefers a 1024-point tile; it retains its
+bounded search and capacity fallbacks. ECP and smaller Direct owners keep
+their existing limits. Fleet resource estimates apply the same per-item policy.
+
+SCF point batching separately uses up to 64 tiles and 1 GiB optional capacity
+for meta-GGA layouts with at least 512 AOs, 2**19 points and four AO/work jets.
+Explicit caps take precedence; public resource ledgers and allocation refusal
+retain the existing bounded path. This changes neither quadrature nor precision.

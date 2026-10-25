@@ -67,8 +67,8 @@ requires review of generated diffs, enum/type additions if any, and the existing
 host ABI, Implib, wheel payload and real CUDA smoke tests.
 
 The initial checked-in inventory was bootstrapped from the previously reviewed
-handwritten declarations plus the independently reviewed
-`cublasDgemmBatched` prototype in #2266. A full real-SDK regeneration and
+handwritten declarations plus an independently reviewed `cublasDgemmBatched`
+prototype. A full real-SDK regeneration and
 manylinux wheel qualification are required before declaring the entire SDK
 snapshot validated; synthetic Clang tests do not establish GPU numeric behavior.
 

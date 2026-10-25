@@ -3,6 +3,10 @@
 #include "scf/cuda_density_fitting_final_state.hpp"
 
 namespace generativeqc::scf {
+bool cuda_density_fitting_integral_source_policy_matches(
+    const CudaDensityFittingIntegralSource*, const cuda_execution::CudaDfSourcePolicy&) noexcept {
+  return false;
+}
 bool cuda_density_fitting_rhf_warm_matches(const CudaDensityFittingJkPlan*,
                                            const reference::Matrix&, const reference::Matrix&,
                                            const reference::Matrix&, const reference::Matrix&,
@@ -202,6 +206,15 @@ generativeqc_status generate_cuda_density_fitting_metric_derivative_tile(
 std::size_t cuda_density_fitting_jk_plan_batch_size(const CudaDensityFittingJkPlan*) noexcept {
   return 0U;
 }
+generativeqc_status prepare_cuda_density_fitting_host_panels(
+    CudaDensityFittingJkPlan*, std::size_t, std::vector<CudaDensityFittingMetricDiagnostic>&,
+    std::string&) {
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+bool cuda_density_fitting_host_policy_matches(const CudaDensityFittingJkPlan*) noexcept {
+  return false;
+}
+
 void set_cuda_density_fitting_scf_value_budget(CudaDensityFittingJkPlan*, std::size_t) noexcept {}
 
 void set_cuda_density_fitting_scf_diis_history(CudaDensityFittingJkPlan*, unsigned) noexcept {}

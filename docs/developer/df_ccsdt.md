@@ -1,9 +1,9 @@
 # DF-CCSD(T) same-Hamiltonian definition and factorized path
 
-Status: the #157 factorized energy route and the #158 native/public force route
-are implemented. The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes
-CUDA/FP64 energy and analytic forces for the conventional-RHF +
-correlation-only-DF variant. Prepared batches remain unsupported.
+The factorized energy route and the native/public force route are implemented.
+The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes CUDA/FP64 energy and
+analytic forces for the conventional-RHF + correlation-only-DF variant.
+Prepared batches remain unsupported.
 
 ## First supported method definition
 
@@ -21,13 +21,16 @@ remain unchanged. The internal native `std::optional<bool>` request defaults to
 ablations at every size. Supplied-Hamiltonian `SolverOptions.df_mixed_precision`
 remains an explicit opt-in independent of the native default policy.
 
-The grouped owner `run_df_correlation_group_native` selects FP64 CCSD and Lambda
-for Standard. It serves same-reference companion calls, DF-CBS,
+The grouped owner `run_df_correlation_group_native` serves same-reference companion calls, DF-CBS,
 correlation-only DF-MP2, and full DF-HF endpoints (including standalone full-DF
-CCSD(T)). Those callers do not inherit the standalone CCSD warmup default.
-The public `CCSDTCBSCalculator(policy="fast")` requests FP32 auxiliary CCSD
-warmup at every shape and selects relaxed convergence limits for the reference,
-CCSD and force response. Its switch residual is
+CCSD(T)). Legacy callers retain their previous convergence-dependent schedule.
+CBS transports an independent private execution selector: `fp64`, `mixed`, or
+`auto`. Routine Standard/Fast requests bounded mixed warmup at every shape;
+strict Tight auto requests it at occupied/virtual dimensions 9/48 for forces
+and 9/128 for energy-only. Explicit `mixed` bypasses those shape gates, while
+resource/provider admission and final FP64 checks remain mandatory. The
+convergence profile independently selects SCF, CCSD and force-response limits.
+The mixed switch residual is
 `max(default_switch, 100 * selected_cc_residual)`; the existing 24-evaluation
 limit and resource/provider refusal apply. Force calls also request the bounded
 Lambda warm start described below; triples and final response remain FP64.
@@ -38,12 +41,13 @@ the frozen public descriptor. It is unavailable for energy-only/conventional
 endpoints and old libraries. Shared transpose action counts exclude independent
 audit actions; Lambda phase time includes preparation, solve, audit and VJPs.
 The complete
-policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#fast-convergence).
+policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#convergence-profiles).
 A copied `core::CorrelationConvergence` travels through the prepared group,
 solver result, Lambda and frame-response owners, including MP2 companions.
 Its private size-tagged budget transport has a separate native capability
 symbol from mean-field arithmetic admission. Decode the extension before
-copying a legacy descriptor prefix. Prepared batches reject this allowance.
+copying a legacy descriptor prefix. Prepared batches reject the allowance and
+explicit execution selector rather than silently discarding either extension.
 Selecting `precision="auto"` on a correlated `Calculator` remains unsupported;
 the internal warmup policy is distinct from convergence selection.
 
@@ -58,17 +62,18 @@ At `df_mixed_precision_switch_residual` (default `100.0 * 1e-9`, approximately
 `1e-7`), or after at most
 `df_mixed_precision_max_evaluations` (default 24) warmup graph calls, the controller clears
 mixed DIIS history and permanently switches to the original FP64 auxiliary graph.
-When the original supplied guess admitted restricted-pair coordinates and the
-strict pair workspace is available, the internal warm-start doubles are projected
+When the original supplied guess is exactly pair-symmetric, internal warm-start doubles are projected
 with the compiler-owned pair map to remove redundant-coordinate FP32 noise.
+This handoff is independent of optional spectator-pair workspace admission,
+including the one-occupied and resource-refused schedules.
 An asymmetric supplied guess is never repaired. A packed history refused during
 warmup may borrow the larger full-history lease again at its original packed
 stride, with empty rows and the unchanged strict symmetry gate. FP64 reevaluation
 then observes this warm-start state. Strict polishing uses half
 the warmup Q batch, down to one Q. The shared arena includes its Q-independent
 FP64 slots and optional qualified occupied-pair workspace; it never allocates a
-second batched arena. Pair projection keeps the original physical error bound
-and may refuse states that do not meet that bound.
+second batched arena. The separate strict spectator-pair tau projection keeps
+its original physical error bound and may refuse states that do not meet it.
 Neither mixed residuals nor rounded cuts can certify convergence: the original
 selected energy/residual tolerances and independent expanded FP64 replay still apply.
 The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear
@@ -167,7 +172,7 @@ approximation from the correlation-integral approximation:
 - correlation Hamiltonian: density-fitted two-electron integrals only;
 - DF metric: the existing square-symmetric thresholded inverse square root;
 - precision: FP64;
-- frozen orbitals: unsupported in this slice;
+- frozen orbitals: unsupported;
 - triples: standard canonical noniterative (T), with no local/truncated-triples
   approximation.
 
@@ -179,7 +184,7 @@ in the contract identity instead of allowing two differently defined DF
 Hamiltonians to share a cache/result identity.
 
 Changing the correlation Hamiltonian does **not** recompute or replace the
-conventional RHF Fock matrix. This is intentional: the first #157 variant is
+conventional RHF Fock matrix. This is intentional: this variant is
 “conventional RHF reference + correlation-only DF”.
 
 ## Dense same-Hamiltonian oracle
@@ -206,7 +211,7 @@ implementations of the **same Hamiltonian**, rather than a comparison of DF
 against conventional four-center integrals.
 
 An orthogonal rotation of the retained auxiliary B axis leaves `g_DF` and the
-physical RCCSD(T) energy invariant. The slice-A tests exercise that gauge
+physical RCCSD(T) energy invariant. The dense-oracle tests exercise that gauge
 invariance explicitly.
 
 ## Memory scope
@@ -214,13 +219,14 @@ invariance explicitly.
 The dense oracle is intentionally small-system-only. Before reconstruction it
 preflights a numeric budget that includes the caller-owned B tensor, the
 immutable owned B copy, the dense four-index result, and a conservative
-full-sized contraction temporary. The production slices must not rely on this
+full-sized contraction temporary. Production paths must not rely on this
 `NMO^4` allocation.
 
 The existing `DFProvider` remains responsible for bounded construction of B.
-Slice B retains `B_ov` and `B_vv`, charges both arrays against the provider
-budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`, and
-`oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never requested.
+The factorized solver retains `B_ov` and `B_vv`, charges both arrays against the
+provider budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`,
+and `oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never
+requested.
 
 Every conventional singles/doubles term containing `ovvv` or `vvvv` is removed
 from the DF TensorIR feed and evaluated by an exact auxiliary-index reduction.
@@ -246,18 +252,18 @@ up pair storage, expanded replay, tiles, or the matrix provider. Releasing works
 drains its stream and invalidates earlier prepared binding generations. Larger
 explicit force tiles do not inherit energy-only timing qualification.
 
-The first Slice-C endpoint now evaluates standard canonical (T) directly from
-the same retained `B_ov`/`B_vv` data model. For
+The canonical `(T)` energy endpoint evaluates standard non-iterative triples
+directly from the same retained `B_ov`/`B_vv` data model. For
 `vvov[a,b,i,f] = sum_Q B_ov[Q,i,a] B_vv[Q,f,b]`, W1 reduces Q directly
 into the occupied-space W tensor. It therefore forms neither a complete
 `ovvv` tensor nor full T3. H2/H2O same-Hamiltonian tests compare the composed
 factorized energy with the dense oracle, and an independent random-factor test
 compares the factorized (T) correction with the audited dense triples equations.
 
-### C2a executable energy facade
+### Source-level executable energy facade
 
-The source-level `df_rccsd_t_energy` facade now composes the already validated
-pieces without changing their scientific ownership:
+The source-level `df_rccsd_t_energy` facade composes the validated pieces
+without changing their scientific ownership:
 
 1. run a conventional unscreened CPU RHF export with no DF metric supplied;
 2. build and validate the auxiliary metric factor;
@@ -271,13 +277,13 @@ set is exactly `{"energy"}`. A force request fails before source validation or
 solver work, so the conventional RCCSD(T) force capability cannot be inherited
 accidentally.
 
-C2a is deliberately not a native Calculator registration. It uses the existing
+This facade is deliberately not a native Calculator registration. It uses the existing
 native RHF snapshot-export bridge and retains that bridge's <=12-AO validation
 boundary. Production public energy and forces are owned separately by the native
 DfRccsdt provider, which preserves the same conventional-RHF +
 correlation-only-DF method definition.
 
-C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
+The public `df-rccsd(t)` / `df-ccsd(t)` selector is a distinct registered method. It is
 CUDA/FP64, requires an explicit auxiliary basis and keeps the reference
 conventional RHF while passing that auxiliary only to the correlation
 Hamiltonian. The method selector is intrinsically DF: the Python Calculator
@@ -541,7 +547,7 @@ native consumer against its matching header; the public C/Python ABI is unchange
 The default-promotion inventory audits the strict-FP64 admission as
 `cc-execution:df-triples-distinct-moments`, separately from SolverOptions.
 
-#1764 now has an explicit compiler-owned first precision candidate:
+A compiler-owned first precision candidate now exists:
 `w_fp32_candidate_program` lowers only the two reduction-heavy W contractions
 inside each occupied moment to FP32 storage/compute/accumulation. The surrounding
 W sum, V algebra, denominator checks, energy epilogue, reductions and published
@@ -694,18 +700,32 @@ The internal validation helpers live in
 - `run_dense_df_ccsdt_oracle` evaluates the trusted RCCSD/(T) equations;
 - `df_fitting_error` reports DF-versus-exact integral error separately.
 
-Slice B additionally exposes the internal `solve_df_ccsd` / `PreparedDFCCSD`
-validation path. C2a adds `df_rccsd_t_method_capabilities` and
-`df_rccsd_t_energy` as the executable energy-only source facade. The latter
+The internal `solve_df_ccsd` / `PreparedDFCCSD` validation path is also
+exposed. `df_rccsd_t_method_capabilities` and `df_rccsd_t_energy` form the
+executable energy-only source facade. The latter
 requires a live `NativeSource` with an explicit auxiliary basis and records the
 conventional-reference/correlation-DF split in every successful result. It does
 not register a Calculator method.
 
-## Non-goals after slice B
+## Non-goals
 
 - no production full-`NMO^4` DF integral storage;
-- no prepared-batch DF-CCSD(T) public owner in C2b;
-- the C2a source-level validation facade remains energy-only; public native
+- no prepared-batch DF-CCSD(T) public owner;
+- the source-level validation facade remains energy-only; public native
   DF-CCSD(T) analytic forces use the separate complete owner documented in
   [df_ccsdt_gradient.md](df_ccsdt_gradient.md);
 - no frozen-core, open-shell, ECP, local, or DLPNO variant.
+
+## Shared full-DF reference source
+
+Full-DF MP2/CCSD(T) automatically reuses its retained DF-HF integral source and
+forward metric eigensystem when exact geometry, both bases, physical reference,
+device, cutoff and generated source policy match. Correlation still generates
+compensated raw high/low expansions and its own MO factors. Exact-RHF plus DF
+correlation and mismatches keep the independent source builder.
+
+The retained response owns a strong reference through its final stream use.
+Resource admission charges the shared reference lease once and all new transform
+storage separately. `GENERATIVEQC_DF_SHARED_SOURCE=0` restores independent
+construction for diagnosis; the default needs no opt-in. Progress traces report
+`shared_reference_bytes`, `source_constructions` and `metric_factorizations`.

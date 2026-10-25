@@ -1,6 +1,7 @@
 # GeometryIR / PairIR
 
-Issue #502 adds a thin backend-neutral geometry layer above the shared TensorIR.
+GeometryIR/PairIR is a thin backend-neutral geometry layer above the shared
+TensorIR.
 It does not own neighbor-list rebuild policy or a method-specific CUDA generator.
 
 ## Contract
@@ -85,6 +86,3 @@ policy into PairIR or adding a method-specific CUDA scientific kernel.
 Public production ownership remains native until the candidate also reproduces
 per-item failure isolation, energy-only behavior and qualified endpoint/resource
 performance. The generated equation itself remains the scientific source of truth.
-
-Agent: ChatGPT
-Model: GPT-5.6 Sol

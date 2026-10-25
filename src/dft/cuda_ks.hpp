@@ -222,7 +222,9 @@ enum class CudaKsSeedOrigin { External, NativeColdGuess };
 class CudaKsPlan {
  public:
   /** Curated and generated codes share the same owner; keep range-exchange and
-   * nonlocal bindings when adapting an existing curated functional to its code. */
+   * nonlocal bindings when adapting an existing curated functional to its code.
+   * Automatic AOT programs require strict-FP64 device-fused all-electron pure
+   * semilocal execution. They do not inherit curated chunk/graph qualifications. */
   CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis, const MolecularGrid& grid,
              const scf::ScfOptions& options, std::uint32_t functional_code,
              std::size_t tile_points = 256,

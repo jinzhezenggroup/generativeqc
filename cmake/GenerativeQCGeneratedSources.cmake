@@ -428,6 +428,21 @@ macro(generativeqc_register_host_generated_sources target)
 
   set(GENERATIVEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/libxc_semilocal_cpu")
+  # CPU expression identities bind the same compiler/data inventory as CUDA,
+  # even files not imported by this generator. Keep incremental builds from
+  # pairing a stale CPU descriptor with a freshly regenerated CUDA descriptor.
+  file(GLOB_RECURSE _generativeqc_libxc_cpu_science_inputs CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc-fulltree/7.0.0/*")
+  list(APPEND _generativeqc_libxc_cpu_science_inputs
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc/7.0.0/functionals.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc/7.0.0/work_mgga_inc.c")
   set(GENERATIVEQC_LIBXC_SEMILOCAL_CPU_SOURCES
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_registry.hpp"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_registry.cpp")
@@ -442,6 +457,7 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
     OUTPUTS ${GENERATIVEQC_LIBXC_SEMILOCAL_CPU_SOURCES}
     DEPENDS
+      ${_generativeqc_libxc_cpu_science_inputs}
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/expr.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/scalar_c.py"

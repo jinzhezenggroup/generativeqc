@@ -45,7 +45,7 @@ available.
 `generativeqc.extensions.tensor` exposes a curated backend-neutral TensorIR subset:
 typed indices/tensors, immutable programs, serialization, optimization, AD and
 the interpreter. Advanced users may explicitly request the first public native
-compilation slice with `tensor.compile(program, target="cpu", mode="jit")`.
+compilation path with `tensor.compile(program, target="cpu", mode="jit")`.
 This path is CPU-only today and activates the host compiler only after the
 request has passed TensorIR and resource admission.
 

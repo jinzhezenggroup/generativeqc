@@ -51,6 +51,33 @@ int main() {
     }
     assert(!admit_ks_incremental_cold_auto(probe));
   }
+  auto coulomb = good;
+  coulomb.exact_fp64_direct_hybrid = false;
+  coulomb.exact_fp64_direct_coulomb = true;
+  for (std::size_t n : {512U, 768U, 1088U, 1536U}) {
+    coulomb.public_aos = n;
+    assert(admit_ks_incremental_cold_auto(coulomb));
+  }
+  for (std::size_t n : {0U, 511U, 1537U}) {
+    auto probe = coulomb; probe.public_aos = n;
+    assert(!admit_ks_incremental_cold_auto(probe));
+  }
+  for (std::size_t atoms : {47U, 129U}) {
+    auto probe = coulomb; probe.atoms = atoms;
+    assert(!admit_ks_incremental_cold_auto(probe));
+  }
+  for (int guard = 0; guard < 6; ++guard) {
+    auto probe = coulomb;
+    switch (guard) {
+      case 0: probe.requested = false; break;
+      case 1: probe.exact_fp64_direct_coulomb = false; break;
+      case 2: probe.standard_default_grid = false; break;
+      case 3: probe.through_d_shells = false; break;
+      case 4: probe.all_electron = false; break;
+      case 5: probe.no_resource_ledger = false; break;
+    }
+    assert(!admit_ks_incremental_cold_auto(probe));
+  }
   // Seed provenance is independent of storage representation. In particular,
   // automatic Huckel/MINAO cold guesses arrive as non-null density buffers.
   for (bool prepared : {false, true})

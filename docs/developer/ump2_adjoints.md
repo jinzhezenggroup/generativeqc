@@ -99,7 +99,7 @@ that pinned dependency and includes new test files in its core shards.
 Its Python coverage artifacts also retain JUnit records so molecular gate
 success can be checked explicitly, including failure/skip status, at the tested head.
 
-These checks qualify the fixed-orbital MO derivative slice. The complete CPU
+These checks qualify the fixed-orbital MO derivative contract. The complete CPU
 endpoint has separate molecular gates below; CUDA is not admitted.
 
 

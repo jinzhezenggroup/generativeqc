@@ -144,9 +144,9 @@ void destroy_ordinary_eigensystem(void*& opaque) noexcept {
 namespace generativeqc::scf {
 std::size_t cuda_density_fitting_seed_host_numeric_bytes(const CudaDensityFittingJkPlan* plan) {
   if (!plan) return 0;
-  auto bytes = runtime::vector_capacities(plan->streamed_raw_three_center,
-                                          plan->streamed_inverse_square_roots,
-                                          plan->metric_full_rank, plan->metric_response_valid);
+  auto bytes = runtime::vector_capacities(
+      plan->host_raw_three_center, plan->streamed_raw_three_center,
+      plan->streamed_inverse_square_roots, plan->metric_full_rank, plan->metric_response_valid);
   const auto* eigen = static_cast<const cuda_df::OrdinaryEigensystem*>(plan->ordinary_eigensystem);
   if (eigen) bytes = runtime::add_capacity(bytes, runtime::vector_bytes(eigen->host_workspace));
   return runtime::add_capacity(

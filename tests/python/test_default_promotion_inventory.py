@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from tools.check_default_promotion_inventory import (
     DEFAULT_INVENTORY,
     ROOT,
+    expand_inventory_shards,
     load_and_validate,
     validate_inventory,
 )
@@ -976,3 +977,51 @@ def test_phase_value_inventory_tracks_control_names_across_call_forms(
     assert set(_discover_ks_phase_values(tmp_path)) == {
         f"ks-runtime:{name}" for name in controls
     }
+
+
+def test_current_policy_shards_have_unique_file_owned_ids() -> None:
+    root = json.loads(DEFAULT_INVENTORY.read_text())
+    assert root["schema_version"] == 2
+    assert "entries" not in root
+    assembled, errors = expand_inventory_shards(root, root=ROOT)
+    assert not errors
+    assert assembled["schema_version"] == 1
+    assert len(assembled["entries"]) >= 83
+    assert len({entry["id"] for entry in assembled["entries"]}) == len(
+        assembled["entries"]
+    )
+
+
+@pytest.mark.parametrize("damage", ["absent", "wrong-id", "invalid", "nested"])
+def test_policy_shards_fail_closed_before_control_validation(
+    tmp_path: Path, damage: str
+) -> None:
+    directory = tmp_path / "manifests/maintenance/default_promotion"
+    directory.mkdir(parents=True)
+    shard = directory / "ks.test.json"
+    shard.write_text(json.dumps({"id": "ks.test", "controls": ["ks-runtime:test"]}))
+    index = {
+        "schema": "generativeqc.default-promotion-inventory",
+        "schema_version": 2,
+        "entries_dir": "manifests/maintenance/default_promotion",
+    }
+    if damage == "absent":
+        shard.unlink()
+    elif damage == "wrong-id":
+        shard.write_text(json.dumps({"id": "different"}))
+    elif damage == "invalid":
+        shard.write_text("{bad-json")
+    elif damage == "nested":
+        (directory / "unexpected").mkdir()
+    _, errors = expand_inventory_shards(index, root=tmp_path)
+    assert errors
+
+
+def test_policy_shard_rejects_escape_directory(tmp_path: Path) -> None:
+    root = {
+        "schema": "generativeqc.default-promotion-inventory",
+        "schema_version": 2,
+        "entries_dir": "manifests/maintenance/../../outside",
+    }
+    _, errors = expand_inventory_shards(root, root=tmp_path)
+    assert errors

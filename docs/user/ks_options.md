@@ -316,13 +316,19 @@ qualified energy `1e-9`, density `1e-5` and screening `1e-12` controls.
 The real Direct producer and complete physical/canonical final-state proof
 remain authoritative. This narrow cold default is a guarded performance choice,
 not a globally enabled incremental Fock setting.
+Restricted pure-Coulomb PBE and r2SCAN owners (including r2SCAN-3c) also admit
+this cold policy at 512–1536 public AOs and 48–128 atoms under the same
+all-electron, through-d, default-grid, FP64 and resource guards. They use the
+existing bounded proposal controller and retain the full-density energy pair
+and canonical closure. The hybrid size domain is unchanged.
 Native initial guesses, including the default Hückel guess, remain cold solves;
 supplying their density internally does not make them imported warm states.
 
 Same-owner frozen-density Warm retains its one-full-Fock proof. Imported or
 moved seeds, an active public resource ledger, Fast, DF, UKS, range/nonlocal
-and D4 owners, strict custom settings and unqualified geometry/size/resource
-domains keep the previous execution. Set
+and hybrid D4 owners, strict custom settings and unqualified geometry/size/resource
+domains keep the previous execution. Pure-Coulomb D4 composition does not
+change the eligible electronic operator. Set
 `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=0` (or `off`) to turn off the
 automatic choice; a present legacy selector also prevents automatic
 admission. Explicit `1/on` retains the broader experimental capability checks
@@ -366,7 +372,7 @@ refresh). The optional density-RMS gate can still request an earlier full build.
 Unscreened exact-linear providers may advance the anchor after each delta.
 The `anchor_updates` diagnostic counts those advances, not fixed-anchor deltas.
 This explicit fixed-anchor policy remains opt-in and is not a speedup guarantee.
-The guarded automatic KS owner retains its qualified rolling-anchor policy:
+The guarded automatic hybrid KS owner retains its qualified rolling-anchor policy:
 at most one delta per full build when proposals are disabled, or the bounded
 proposal chain described below when they are enabled.
 

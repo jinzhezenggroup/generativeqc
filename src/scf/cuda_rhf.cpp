@@ -773,9 +773,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);
   const bool requested_incremental_diis_gram =
-      diis_history >= 2 && incremental_diis_gram_requested();
+      hf_incremental_diis_gram_requested(host.nbf, diis_history, unrestricted ? 2 : 1);
   const bool requested_ordered_diis_gram =
-      requested_incremental_diis_gram && ordered_incremental_diis_gram_requested();
+      requested_incremental_diis_gram && hf_ordered_diis_gram_requested();
   const bool requested_fp32_block_screening = direct_fp32_block_screening_requested();
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -3279,7 +3279,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     // DIIS count advances; borrow them without allocating another GPU owner.
     prepare_hf_cuda_initial_densities(
         plan, host, systems, options,
-        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active},
+        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active,
+         diis_history >= 2 ? fock_history + matrix_size : nullptr},
         *seed_diagnostics);
     // A native cold guess has no previous-energy baseline, so it cannot pass
     // the first convergence check. That iteration accepts its new density and

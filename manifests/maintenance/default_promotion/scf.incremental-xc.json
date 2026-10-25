@@ -1,0 +1,19 @@
+{
+  "id": "scf.incremental-xc",
+  "classification": "needs-qualification",
+  "controls": [
+    "scf-option:experimental_incremental_xc"
+  ],
+  "owner_issues": [
+    237
+  ],
+  "sources": [
+    "src/scf/types.hpp"
+  ],
+  "rationale": "The incremental XC anchor/update route is an experimental controller and is not a public/default execution policy.",
+  "revisit_condition": "Revisit after complete-solve numerical and endpoint qualification demonstrates a profitable guarded domain without weakening final-state or force checks.",
+  "evidence": [
+    "issue:#237",
+    "issue:#1598"
+  ]
+}

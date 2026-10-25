@@ -162,27 +162,39 @@ _SCIENCE_INPUTS = (
 
 
 @pytest.mark.parametrize(
-    ("enabled", "functionals"),
-    ((False, ()), (True, ()), (True, ("GGA_X_APBE", "MGGA_X_LTA"))),
-    ids=("off", "full", "selected"),
+    ("backend", "enabled", "functionals"),
+    (
+        ("cuda", False, ()),
+        ("cuda", True, ()),
+        ("cuda", True, ("GGA_X_APBE", "MGGA_X_LTA")),
+        ("cpu", True, ()),
+    ),
+    ids=("cuda-off", "cuda-full", "cuda-selected", "cpu"),
 )
 def test_registry_incremental_build_tracks_science_only_when_enabled(
-    tmp_path: Path, enabled: bool, functionals: tuple[str, ...]
+    tmp_path: Path, backend: str, enabled: bool, functionals: tuple[str, ...]
 ) -> None:
-    """Execute the real declaration with a counter generator, not CUDA/NVCC."""
+    """Both registries must invalidate on hashed bytes absent from import depfiles."""
     cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
     if cmake is None or ninja is None:
         pytest.skip("incremental graph probe requires CMake and Ninja")
     source = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
-    start = source.index("  set(GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY")
-    end = source.index("  # Reuse the exact AOT objects", start)
+    start = source.index(
+        f"  set(GENERATIVEQC_LIBXC_SEMILOCAL_{backend.upper()}_DIRECTORY"
+    )
+    end = source.index(
+        "  # Reuse the exact AOT objects"
+        if backend == "cuda"
+        else "  generativeqc_register_generated_sources(\n    NAME generativeqc_weighted_gram_cpu_codegen",
+        start,
+    )
     declaration = source[start:end]
     inputs = set(re.findall(r'"\$\{CMAKE_CURRENT_SOURCE_DIR\}/([^"*$]+)"', declaration))
     for relative in inputs | set(_SCIENCE_INPUTS):
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# source input\n")
-    generator = tmp_path / "tools/generate_libxc_semilocal_cuda_registry.py"
+    generator = tmp_path / f"tools/generate_libxc_semilocal_{backend}_registry.py"
     generator.parent.mkdir(parents=True, exist_ok=True)
     generator.write_text(
         "import argparse, pathlib\n"
@@ -196,13 +208,14 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))\n"
         "(a.output_directory / 'functionals.txt').write_text(';'.join(a.functional or []))\n"
         "names = ['registry.hpp', 'registry.cpp']\n"
-        "if not a.disabled: names += [str(i) + '.cu' for i in range(32)]\n"
+        f"if not a.disabled: names += [str(i) + '{'.cu' if backend == 'cuda' else '.cpp'}' for i in range({32 if backend == 'cuda' else 8})]\n"
         "for name in names:\n"
-        "    (a.output_directory / ('generated_libxc_semilocal_cuda_' + name)).write_text('// inert probe\\n')\n"
+        f"    (a.output_directory / ('generated_libxc_semilocal_{'cuda_' if backend == 'cuda' else ''}' + name)).write_text('// inert probe\\n')\n"
     )
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
         "project(AutomaticCudaGraph LANGUAGES NONE)\n"
+        "add_custom_target(probe)\nset(target probe)\n"
         f'include("{ROOT / "cmake/GenerativeQCGenerated.cmake"}")\n'
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if enabled else 'OFF'})\n"
@@ -222,26 +235,38 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "--build",
         str(build),
         "--target",
-        "generativeqc_libxc_semilocal_cuda_codegen",
+        f"generativeqc_libxc_semilocal_{backend}_codegen",
     ]
 
     def run() -> int:
         subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
-        return int((build / "generated/libxc_semilocal_cuda/runs.txt").read_text())
+        return int(
+            (build / f"generated/libxc_semilocal_{backend}/runs.txt").read_text()
+        )
 
     assert run() == 1
     assert run() == 1
     assert (
-        build / "generated/libxc_semilocal_cuda/functionals.txt"
+        build / f"generated/libxc_semilocal_{backend}/functionals.txt"
     ).read_text() == ";".join(functionals)
     expected = 1
-    for relative in (*_SCIENCE_INPUTS, "python/generativeqc_compiler/common/added.py"):
+    identity_only = (
+        ("python/generativeqc_compiler/xc/automatic_cuda.py",)
+        if backend == "cpu"
+        else ()
+    )
+    for relative in (
+        *_SCIENCE_INPUTS,
+        *identity_only,
+        "python/generativeqc_compiler/common/added.py",
+    ):
         path = tmp_path / relative
         path.write_text("# changed scientific or identity input\n")
         expected += int(enabled)
         assert run() == expected, relative
-    shards = list((build / "generated/libxc_semilocal_cuda").glob("*.cu"))
-    assert len(shards) == (32 if enabled else 0)
+    directory = build / f"generated/libxc_semilocal_{backend}"
+    shards = list(directory.glob("*.cu" if backend == "cuda" else "*.cpp"))
+    assert len(shards) == (9 if backend == "cpu" else 32 if enabled else 0)
 
 
 @pytest.mark.parametrize("cuda_enabled", (False, True))

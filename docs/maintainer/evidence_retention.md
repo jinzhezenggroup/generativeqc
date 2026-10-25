@@ -1,7 +1,7 @@
 # Scientific evidence retention
 
 GenerativeQC keeps the independent fixtures and numerical/performance evidence
-required by [the validation protocol](validation.md) (#138). Storage policy
+required by [the validation protocol](validation.md). Storage policy
 does not change tolerances, reference independence, statistics or promotion
 gates. Three classes have different lifetimes:
 
@@ -229,8 +229,9 @@ python tools/evidence.py publish \
 Prepare the specification from the measured run after reviewing its result.
 The command writes local files only: it does not upload or authorize a GitHub
 Release, tag, asset or publishing workflow. It does not infer a winner, rewrite
-samples, stage Git changes or modify production selectors. Performance acceptance still requires #138's
-comparison, numerical, endpoint, compilation and resource gates. Historical
+samples, stage Git changes or modify production selectors. Performance
+acceptance still requires the comparison, numerical, endpoint, compilation and
+resource gates of the validation protocol. Historical
 schemas retain their original meaning; migration does not retroactively
 certify incomplete provenance. The publisher adds storage metadata, not a
 second numerical schema or a different promotion policy.
@@ -347,10 +348,20 @@ The current checkout also carries a hash-bound review of every retained
 `benchmarks/results/**` file at or above 128 KiB in
 [`benchmarks/legacy-evidence-review.json`](../../benchmarks/legacy-evidence-review.json).
 Each row records the exact path, byte count and SHA-256 plus a storage role and
-one of the issue's retention classes (`required-compact-accepted-evidence` or
+one of the policy's retention classes (`required-compact-accepted-evidence` or
 `test-reference-input`). Family metadata names an owner, a concrete review
 document and the reason the large records remain in Git. This is a storage
 classification, not a new numerical acceptance decision.
+
+The root review file is now a **stable v2 index**, not a mutable ledger.
+Each experiment owns `benchmarks/evidence-reviews/<family>.json`, which
+contains its original owner, rationale, review document and hash-bound file
+rows. The retention checker assembles these files deterministically and
+enforces the same complete coverage, size, digest and review-document gates;
+a missing or corrupt shard fails closed. New experiments create only their
+own shard, so unrelated pull requests need not edit one global JSON.
+The publication compactor updates only the owning family's shard. No generated
+aggregate is checked into Git.
 
 `tools/evidence.py check` requires complete coverage at the threshold configured
 in `benchmarks/evidence-policy.json`. Missing review data, a changed hash, a
@@ -359,7 +370,7 @@ review threshold is intentionally below the separate hard 1 MiB file cap and the
 2 MiB incoming-change budget: it makes legacy retained volume auditable without
 turning every small JSON measurement into permanent policy metadata.
 
-The [#488 final-flow snapshot](../../benchmarks/results/retention-488/README.md) moves
+The [final-flow retention snapshot](../../benchmarks/results/retention-488/README.md) moves
 progress/journal execution streams and four unreferenced root-level legacy dumps
 out of the checkout while preserving their exact bytes in existing ancestor Git
 objects. Clean samples, numerical/resource gates, independent inputs, summaries
@@ -445,28 +456,33 @@ inputs, mathematical definitions, accepted raw samples/statistics and stable
 reproduction entrypoints stay in Git. A URL without a checksum is not evidence
 identity. Availability of debugging archives is distinct from numerical truth.
 
-## Baseline cleanup (#238)
+## Recovering pre-migration artifacts
 
-The [migration audit](../../benchmarks/results/retention-238/migration.json.gz)
-records original hashes/bytes, extracted JSON measurements, compiler resource
-diagnostics, test totals/failures/skips and retained profiler CSV exports.
-It removes 161 transient files (3,482,611 bytes) from baseline
-`ce3b6c89a418985d5b8a979e5adba5812b5a6145`, retaining a 382,561-byte audit.
-Class totals are stored beside it. Reproduce the full per-file reports with:
+One prior cleanup moved transient profiling debris out of the baseline tree and
+replaced it with a compact audit. That audit
+([`retention-238/migration.json.gz`](../../benchmarks/results/retention-238/migration.json.gz))
+records original hashes and byte counts, extracted JSON measurements, compiler
+resource diagnostics, test totals, and retained profiler CSV exports for every
+removed path.
 
-```bash
-python tools/evidence.py inventory \
-  --revision ce3b6c89a418985d5b8a979e5adba5812b5a6145 \
-  --output .artifacts/inventory-before.json
-python tools/evidence.py audit-migration \
-  --revision ce3b6c89a418985d5b8a979e5adba5812b5a6145 \
-  --output .artifacts/migration.json
-```
-
-Original debris remains recoverable from existing baseline Git objects, with
+Original debris remains recoverable from the baseline Git objects, with
 `git:REVISION:PATH` identities in the audit. Use `git show REVISION:PATH` and
 verify SHA-256 to inspect an old full trace. This does not rewrite history or
 store new transient runs there. Profiling conclusions retain CSV/JSON exports;
 stdout timing/memory measurements are extracted without resampling. Scientific
 arrays, compact replay archives and measured-source patches retain their exact
 bytes and pinned reasons.
+
+To compare a checkout against the recorded inventory:
+
+```bash
+python tools/evidence.py inventory \
+  --revision <baseline-revision> \
+  --output .artifacts/inventory-before.json
+python tools/evidence.py audit-migration \
+  --revision <baseline-revision> \
+  --output .artifacts/migration.json
+```
+
+Pass the revision named by a specific audit rather than assuming the current
+baseline still matches it.

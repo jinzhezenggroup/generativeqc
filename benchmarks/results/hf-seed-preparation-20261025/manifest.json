@@ -1,0 +1,11 @@
+{
+  "README.md": "9c9da866abd83dc8d11eecfc2cf02c7fb3441acd6c04ed092046dcd6118e931f",
+  "execution-receipts.json.gz": "f3e5cfd2ce680d57e16d45efe427a709d188108385833dec3af7ca897af3dbd1",
+  "launchers.json.gz": "5e9c993ebd28a2633069e9e37f0df351651cc39a6ba3476331bb4f0a6fad4388",
+  "measured-change.patch.gz": "6abae891f264c5a4af2c74a99a6a9ea714f8f15f55922ab5c5f8edc0760ee086",
+  "moved.json.gz": "a1c6abd38144f730b7075eae0994db28ff5cc8f8e466f367e89fd62add9bce9a",
+  "paired.json.gz": "1ad04020cc1bec21cdb8f7709cee3105db8805ef8d95dca433615724208f8da6",
+  "provenance.json": "72e63dba2a31e7a2d1c776140652aec99d249382ab2a1ca346611cd2b587173c",
+  "reproduce.py": "a67b38b2aa56769bfb44c31ff0995b9e1b2e299c2c1b77ffde6f5b42194e1c57",
+  "test-logs.json.gz": "4191974f4d786d926335baff694af014b5bcf8436121a9da47f481551e728671"
+}

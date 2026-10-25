@@ -351,9 +351,7 @@ def test_matrix_retains_failures_and_finishes_remaining_cases(
             command.index("--density-fitting-memory-budget-bytes") + 1
         ] == str(32 << 20)
         assert "--reference-full-fock" in command
-        assert kwargs["env"].get("CUDA_VISIBLE_DEVICES") == os.environ.get(
-            "CUDA_VISIBLE_DEVICES"
-        )
+        assert kwargs["env"].get("CUDA_VISIBLE_DEVICES") == "protocol-test"
         assert ("--energy-only" in command) == energy_only
         assert ("--maximum-force-error" in command) != energy_only
         assert command[command.index("--maximum-energy-error") + 1] == "1e-9"
@@ -372,9 +370,7 @@ def test_matrix_retains_failures_and_finishes_remaining_cases(
     monkeypatch.setattr(matrix.subprocess, "run", endpoint)
     # Exercise only the visibility preflight; no device state is changed and
     # the child launcher above is a pure Python test double.
-    monkeypatch.setattr(
-        matrix.os, "environ", {**os.environ, "CUDA_VISIBLE_DEVICES": "protocol-test"}
-    )
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "protocol-test")
     with pytest.raises(SystemExit, match="DF matrix failed"):
         matrix.run_matrix(
             payload,

@@ -701,15 +701,53 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     plan->derivative = scratch(gradient_bytes);
     plan->numerical_failure = reinterpret_cast<int*>(scratch(sizeof(int)));
     direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    std::vector<std::int32_t> bounds_order;
+    const auto* order_choice = std::getenv("GENERATIVEQC_DIRECT_ORDERED_SCHWARZ");
+    if ((!order_choice || std::strcmp(order_choice, "0") != 0) &&
+        !runtime::active_device_resource_ledger) {
+      try {
+        bounds_order.resize(systems.size() * host.nbf);
+        for (std::size_t item = 0; item < systems.size(); ++item) {
+          auto begin = bounds_order.begin() + item * host.nbf;
+          for (std::size_t ao = 0; ao < host.nbf; ++ao) begin[ao] = ao;
+          const auto signature = [&](std::int32_t ao) {
+            const auto index = item * host.nbf + ao;
+            const auto shell = host.ao_shells[index];
+            return std::array<std::int64_t, 4>{
+                host.shell_angular[shell],
+                host.shell_primitive_offsets[shell + 1] - host.shell_primitive_offsets[shell],
+                host.ao_term_counts[index], ao};
+          };
+          // Neighboring lanes should have comparable primitive/expansion work.
+          // Only output ownership is permuted: every oriented (ij|ij) keeps
+          // its original evaluator and summation order, including signed AOs.
+          std::sort(begin, begin + host.nbf,
+                    [&](auto a, auto b) { return signature(a) < signature(b); });
+        }
+      } catch (const std::bad_alloc&) {
+        bounds_order.clear();  // Optional host scheduling cannot refuse a plan.
+      }
+    }
+    // The density is uninitialized until replay. Borrow its first B*N int32
+    // slots for this preparation-only permutation; B*N^2 doubles always fit.
+    // The existing synchronization below ends both host and device borrowing.
+    DirectJkDownloadFence bounds_fence{plan->stream};
+    const auto* device_order =
+        bounds_order.empty() ? nullptr : reinterpret_cast<std::int32_t*>(plan->density);
+    if (device_order)
+      direct_jk_check(cudaMemcpyAsync(const_cast<std::int32_t*>(device_order), bounds_order.data(),
+                                      bounds_order.size() * sizeof(std::int32_t),
+                                      cudaMemcpyHostToDevice, plan->stream));
     const auto blocks =
         static_cast<unsigned>((elements + kIndependentJkThreads - 1) / kIndependentJkThreads);
     launch_independent_jk_bounds_kernel(blocks, kIndependentJkThreads, 0, plan->stream, plan->batch,
-                                        plan->bounds, plan->numerical_failure);
+                                        plan->bounds, plan->numerical_failure, false, device_order);
     direct_jk_check(cudaGetLastError());
     int numerical_failure = 0;
     direct_jk_check(cudaMemcpyAsync(&numerical_failure, plan->numerical_failure, sizeof(int),
                                     cudaMemcpyDeviceToHost, plan->stream));
     direct_jk_check(cudaStreamSynchronize(plan->stream));
+    bounds_fence.complete();
     if (numerical_failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite direct J/K Schwarz bound"};
@@ -1304,7 +1342,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     // Include those temporary capacities even though this provider uploads only AO data.
     info.direct_nbf = host.direct_nbf;
     info.host_preparation_bytes =
-        info.host_bytes + sizeof(host) + span_host_preparation_bytes +
+        info.host_bytes + sizeof(host) + sizeof(bounds_order) +
+        runtime::vector_bytes(bounds_order) + span_host_preparation_bytes +
         canonical_host_preparation_bytes +
         runtime::vector_capacities(
             host.atom_offsets, host.atom_systems, host.atomic_numbers, host.positions,
@@ -1919,11 +1958,15 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
             const bool host_bucket =
                 resident && plan->host_cache &&
                 plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max();
+            const bool disk_bucket =
+                resident && plan->host_cache && plan->host_cache->disk &&
+                plan->host_cache->disk_offsets[bucket] != std::numeric_limits<std::size_t>::max();
             std::unique_ptr<runtime::cuda_trace::TraceRegion> bucket_profile;
             if (source_profile) {
               const auto label = std::string(long_range_action ? "lr_" : "full_") +
                                  (gpu_bucket    ? "gpu_replay/"
                                   : host_bucket ? "host_replay/"
+                                  : disk_bucket ? "disk_replay/"
                                                 : "direct_recompute/") +
                                  std::to_string(bucket);
               bucket_profile =
@@ -1931,10 +1974,13 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
               const auto values = direct_jk_resident_bucket_count(plan, item, first, second);
               runtime::cuda_trace::trace_counter(gpu_bucket    ? "gpu_cached_values"
                                                  : host_bucket ? "host_cached_values"
+                                                 : disk_bucket ? "disk_cached_values"
                                                                : "direct_candidate_upper_bound",
                                                  values);
-              if (host_bucket)
+              if (host_bucket || disk_bucket)
                 runtime::cuda_trace::trace_counter("host_h2d_bytes", values * sizeof(double));
+              if (disk_bucket)
+                runtime::cuda_trace::trace_counter("disk_read_bytes", values * sizeof(double));
             }
             if (mixed_resident && cached_offset != std::numeric_limits<std::size_t>::max())
               launch_mixed_resident_canonical_jk_kernel(
@@ -1971,8 +2017,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
-            else if (resident && plan->host_cache &&
-                     plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max()) {
+            else if (host_bucket || disk_bucket) {
               auto& host = *plan->host_cache;
               const auto count = direct_jk_resident_bucket_count(plan, item, first, second);
               // Never overwrite pinned memory until its H2D finishes, nor a
@@ -1985,8 +2030,16 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   direct_jk_check(cudaEventSynchronize(host.ready[slot]));
                   direct_jk_check(cudaStreamWaitEvent(host.copy_stream, host.consumed[slot], 0));
                 }
-                std::memcpy(host.pinned[slot], host.values.get() + host.offsets[bucket] + begin,
-                            tile * sizeof(double));
+                if (disk_bucket) {
+                  if (!host.disk->read((host.disk_offsets[bucket] + begin) * sizeof(double),
+                                       host.pinned[slot], tile * sizeof(double)))
+                    throw DirectJkFailure{
+                        GENERATIVEQC_STATUS_INTERNAL_ERROR,
+                        "temporary ERI read failed; partial action was not published"};
+                } else {
+                  std::memcpy(host.pinned[slot], host.values.get() + host.offsets[bucket] + begin,
+                              tile * sizeof(double));
+                }
                 direct_jk_check(cudaMemcpyAsync(host.device[slot], host.pinned[slot],
                                                 tile * sizeof(double), cudaMemcpyHostToDevice,
                                                 host.copy_stream));
@@ -2693,9 +2746,34 @@ std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* plan) noexce
 std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan* plan) noexcept {
   return plan && plan->host_cache
              ? cuda_direct_jk_host_value_bytes(plan) + 2 * plan->host_cache->staging_bytes() +
-                   sizeof(DirectJkHostCache)
+                   sizeof(DirectJkHostCache) +
+                   (plan->host_cache->disk ? sizeof(runtime::TemporaryCacheFile) : 0)
              : 0;
 }
+
+namespace {
+/** One staging owner is shared by pageable and temporary-file buckets. */
+std::unique_ptr<DirectJkHostCache> direct_jk_host_staging(CudaDirectJkPlan* plan, std::size_t count,
+                                                          std::size_t tile_elements) {
+  auto host = std::make_unique<DirectJkHostCache>();
+  host->consumer_stream = plan->stream;
+  host->count = count;
+  host->tile_elements = tile_elements;
+  host->offsets.fill(std::numeric_limits<std::size_t>::max());
+  host->disk_offsets.fill(std::numeric_limits<std::size_t>::max());
+  if (count) host->values = std::make_unique<double[]>(count);
+  direct_jk_check(cudaStreamCreateWithFlags(&host->copy_stream, cudaStreamNonBlocking));
+  const auto bytes = tile_elements * sizeof(double);
+  for (unsigned slot = 0; slot < 2; ++slot) {
+    direct_jk_check(cudaMallocHost(reinterpret_cast<void**>(&host->pinned[slot]), bytes));
+    direct_jk_check(
+        runtime::resource_cuda_malloc(reinterpret_cast<void**>(&host->device[slot]), bytes));
+    direct_jk_check(cudaEventCreateWithFlags(&host->ready[slot], cudaEventDisableTiming));
+    direct_jk_check(cudaEventCreateWithFlags(&host->consumed[slot], cudaEventDisableTiming));
+  }
+  return host;
+}
+}  // namespace
 
 generativeqc_status prepare_cuda_direct_jk_host_values(
     CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::size_t device_budget,
@@ -2730,22 +2808,7 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
     for (unsigned bucket = 0; bucket < 28; ++bucket)
       if (mask & (1U << bucket)) count = direct_jk_sum(count, bytes[bucket] / sizeof(double));
     if (!count) return;
-    auto host = std::make_unique<DirectJkHostCache>();
-    host->consumer_stream = plan->stream;
-    host->count = count;
-    host->tile_elements = std::min(count, tile_bytes / sizeof(double));
-    host->offsets.fill(std::numeric_limits<std::size_t>::max());
-    host->values = std::make_unique<double[]>(count);
-    direct_jk_check(cudaStreamCreateWithFlags(&host->copy_stream, cudaStreamNonBlocking));
-    const auto actual_tile_bytes = host->tile_elements * sizeof(double);
-    for (unsigned slot = 0; slot < 2; ++slot) {
-      direct_jk_check(
-          cudaMallocHost(reinterpret_cast<void**>(&host->pinned[slot]), actual_tile_bytes));
-      direct_jk_check(runtime::resource_cuda_malloc(reinterpret_cast<void**>(&host->device[slot]),
-                                                    actual_tile_bytes));
-      direct_jk_check(cudaEventCreateWithFlags(&host->ready[slot], cudaEventDisableTiming));
-      direct_jk_check(cudaEventCreateWithFlags(&host->consumed[slot], cudaEventDisableTiming));
-    }
+    auto host = direct_jk_host_staging(plan, count, std::min(count, tile_bytes / sizeof(double)));
     direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
     std::size_t offset = 0;
     const auto& pairs = plan->canonical_pair_offsets[0];
@@ -2795,6 +2858,131 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
         direct_jk_sum(plan->diagnostic.host_bytes,
                       count * sizeof(double) + host->staging_bytes() + sizeof(*host));
     plan->host_cache = std::move(host);
+  });
+}
+
+std::size_t cuda_direct_jk_disk_value_bytes(const CudaDirectJkPlan* plan) noexcept {
+  return plan && plan->host_cache ? plan->host_cache->disk_count * sizeof(double) : 0;
+}
+
+generativeqc_status prepare_cuda_direct_jk_disk_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::size_t device_budget,
+    std::size_t host_staging_budget, std::size_t tile_bytes, std::uint32_t bucket_mask,
+    const std::string& directory, std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(
+        plan && plan->resident_values && !plan->resident_mixed_values &&
+            (plan->resident_operator == FockOperator::LongRange ||
+             plan->resident_operator == FockOperator::FullRange) &&
+            plan->diagnostic.batch_size == 1 && bucket_mask < (1U << 28) &&
+            (!plan->host_cache || (!plan->host_cache->disk && !plan->host_cache->next_slot)),
+        "disk backing requires an unpublished strict full/LR source");
+    int device = -1;
+    direct_jk_check(cudaGetDevice(&device));
+    direct_jk_require(device == plan->device_id, "disk source device mismatch");
+    if (!maximum_bytes || !bucket_mask) return;
+    if (host_staging_budget < sizeof(runtime::TemporaryCacheFile)) throw std::bad_alloc();
+    host_staging_budget -= sizeof(runtime::TemporaryCacheFile);
+    const auto allowance =
+        std::min(maximum_bytes, runtime::TemporaryCacheFile::allowance(directory));
+    auto candidates = bucket_mask & ~plan->resident_bucket_mask;
+    std::array<std::size_t, 28> bytes{}, offsets{};
+    offsets.fill(std::numeric_limits<std::size_t>::max());
+    for (unsigned bucket = 0; bucket < 28; ++bucket) {
+      bytes[bucket] = cuda_direct_jk_selected_resident_value_bytes(plan, 1U << bucket);
+      if (plan->host_cache &&
+          plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max())
+        candidates &= ~(1U << bucket);
+    }
+    const auto mask = direct_jk_fit_resident_buckets(bytes, allowance, candidates);
+    std::size_t count = 0;
+    for (unsigned bucket = 0; bucket < 28; ++bucket)
+      if (mask & (1U << bucket)) count = direct_jk_sum(count, bytes[bucket] / sizeof(double));
+    if (!count) return;
+    auto file = std::make_unique<runtime::TemporaryCacheFile>();
+    if (!file->reserve(directory, count * sizeof(double)))
+      throw DirectJkFailure{GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                            "temporary ERI file reservation refused"};
+    std::unique_ptr<DirectJkHostCache> staged;
+    auto* host = plan->host_cache.get();
+    if (!host) {
+      if (host_staging_budget <= sizeof(DirectJkHostCache)) throw std::bad_alloc();
+      tile_bytes = std::min(
+          {tile_bytes, device_budget / 2, (host_staging_budget - sizeof(DirectJkHostCache)) / 4});
+      tile_bytes -= tile_bytes % sizeof(double);
+      if (!tile_bytes) throw std::bad_alloc();
+      staged = direct_jk_host_staging(plan, 0, std::min(count, tile_bytes / sizeof(double)));
+      host = staged.get();
+    }
+    direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    const auto& pairs = plan->canonical_pair_offsets[0];
+    std::size_t offset = 0;
+    for (unsigned first = 0; first < 7; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        const auto bucket = first * (first + 1U) / 2U + second;
+        if (!(mask & (1U << bucket)) || !bytes[bucket]) continue;
+        offsets[bucket] = offset;
+        const auto bucket_count = bytes[bucket] / sizeof(double);
+        for (std::size_t begin = 0; begin < bucket_count;) {
+          const auto tile = std::min(host->tile_elements, bucket_count - begin);
+          launch_canonical_jk_kernel(
+              plan->stream, plan->canonical_batch, plan->canonical_cartesian, 0, first + second,
+              plan->canonical_pairs, direct_jk_pair_rows(plan, second, pairs[first]), pairs[first],
+              pairs[first + 1U] - pairs[first], pairs[second], pairs[second + 1U] - pairs[second],
+              first == second, false, true, false,
+              plan->resident_operator == FockOperator::FullRange ? DirectCoulombRange::Full
+                                                                 : DirectCoulombRange::Long,
+              plan->resident_omega, plan->screening_tolerance, plan->canonical_bounds, nullptr,
+              nullptr, nullptr, nullptr, host->device[0], nullptr, nullptr, tile, begin);
+          direct_jk_check(cudaGetLastError());
+          plan->diagnostic.resident_values_submitted += tile;
+          launch_independent_jk_finite_kernel(plan->stream, host->device[0], tile,
+                                              plan->numerical_failure);
+          direct_jk_check(cudaGetLastError());
+          direct_jk_check(cudaMemcpyAsync(host->pinned[0], host->device[0], tile * sizeof(double),
+                                          cudaMemcpyDeviceToHost, plan->stream));
+          direct_jk_check(cudaStreamSynchronize(plan->stream));
+          plan->diagnostic.resident_values_completed += tile;
+          if (!file->write((offset + begin) * sizeof(double), host->pinned[0],
+                           tile * sizeof(double))) {
+            // Resource fallback must not hide a numerical failure in the tile
+            // whose write failed. The stream has already completed its audit.
+            int failed = 0;
+            direct_jk_check(
+                cudaMemcpy(&failed, plan->numerical_failure, sizeof(int), cudaMemcpyDeviceToHost));
+            if (failed)
+              throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                                    "nonfinite disk ERI source"};
+            throw DirectJkFailure{GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                  "temporary ERI file write refused"};
+          }
+          begin += tile;
+        }
+        offset += bucket_count;
+      }
+    int failure = 0;
+    DirectJkDownloadFence fence{plan->stream};
+    direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    fence.complete();
+    if (failure)
+      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "nonfinite disk ERI source"};
+    direct_jk_require(offset == count, "disk ERI inventory drift");
+    if (!file->finish_writes())
+      throw DirectJkFailure{GENERATIVEQC_STATUS_OUT_OF_MEMORY, "temporary ERI file flush refused"};
+    if (staged) {
+      plan->device_bytes = direct_jk_sum(plan->device_bytes, staged->staging_bytes());
+      plan->diagnostic.device_bytes =
+          direct_jk_sum(plan->diagnostic.device_bytes, staged->staging_bytes());
+      plan->diagnostic.host_bytes =
+          direct_jk_sum(plan->diagnostic.host_bytes, staged->staging_bytes() + sizeof(*staged));
+    }
+    plan->diagnostic.host_bytes =
+        direct_jk_sum(plan->diagnostic.host_bytes, sizeof(runtime::TemporaryCacheFile));
+    host->disk_offsets = offsets;
+    host->disk_count = count;
+    host->disk = std::move(file);
+    if (staged) plan->host_cache = std::move(staged);
   });
 }
 

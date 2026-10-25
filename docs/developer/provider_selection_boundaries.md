@@ -47,10 +47,9 @@ The remaining debt contains two families:
 
 - CC/DF-CCSD(T) still carries `matrix_gemm`, `df_matrix_gemm`,
   the internal expanded-replay ablation/diagnostic `df_replay_matrix_gemm`, and
-  `lambda_matrix_gemm` through method/solver surfaces. This is migration debt
-  under #1890.
+  `lambda_matrix_gemm` through method/solver surfaces. This is migration debt.
 - RHF/SCF still carries `use_cublas` through policy and prepared execution.
-  This is migration debt under #1890.
+  This is migration debt.
 
 The guard scans production native sources, the scientific compiler package, and
 source generators. A new named selector fails unless it is explicitly reviewed

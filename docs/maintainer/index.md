@@ -1,8 +1,8 @@
 # Maintainer Guide
 
-Maintain scientific correctness, reproducible performance, resource discipline, and repository health. Use the core workflows for recurring work; subsystem qualification documents define specific acceptance contracts.
-
-Keep the distinction clear: the current rules and qualification procedures live here; raw measurements belong under `benchmarks/results/`, and historical investigation or discarded designs belong under `.agents/notes/`.
+Find validation procedures, performance measurements, resource limits and
+repository maintenance instructions. Raw benchmark runs are stored in
+`benchmarks/results/`; historical engineering decisions are in `.agents/notes/`.
 
 ## Core workflows
 
@@ -29,6 +29,7 @@ generated-files
 :maxdepth: 1
 :caption: Scientific qualification
 
+application_precision_qualification
 df_frozen_precision
 dft_mp_v1_contract
 f_shell_validation
@@ -47,6 +48,7 @@ stationary_large_domain_qualification
 
 cuda_ownership
 generated_cuda_host_api
+runtime_compilation
 vendor_boundaries
 cpu_autotuning
 source_work_audit

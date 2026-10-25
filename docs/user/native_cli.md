@@ -1,36 +1,18 @@
-# Native CLI without Python
+# Native CLI
 
-GenerativeQC's computational runtime is a native C/C++ shared library. A native SDK
-install also provides a `generativeqc` executable, so the target machine does not need
-a Python interpreter to discover methods or run the native CLI endpoints.
+`generativeqc` is a compiled C++ executable. Running it does not require
+Python; building it from source still uses Python for code generation.
+An SDK install places the executable in `bin/`. Python wheels include
+the same native executable and a small native launcher.
 
-Python is still a **build-time** dependency for source builds because repository
-code generation is currently implemented in Python. This is separate from the
-installed runtime dependency.
+## Build and install
 
-The installed SDK places `generativeqc` directly in `bin/`. Wheels place the
-full C++ executable next to `generativeqc/lib/` and install a small **native**
-launcher into the environment's `bin/` (the wheel scripts directory).
-The launcher locates the matching packaged binary within its own installation
-prefix and replaces its process using `execv`. Ordinary native commands never
-launch or import Python. A missing or ambiguous packaged binary fails closed.
-Python APIs remain available but do not supply any runtime console-script
-fallback. The opt-in `hessian`/`hvp` CUDA endpoint also executes linked native
-code only; its compiler AD runs during the build, not during a calculation.
-
-## Install a native runtime
+Native CLI builds require CMake, a C++20 compiler, nlohmann-json 3.7+,
+OpenSSL Crypto and libarchive. On Debian/Ubuntu the extra packages are
+`nlohmann-json3-dev`, `libssl-dev` and `libarchive-dev`.
+On macOS with Homebrew, install `nlohmann-json`, `openssl@3` and `libarchive`.
 
 For a CPU build:
-
-Native CLI builds also require nlohmann-json 3.7+, OpenSSL Crypto and libarchive
-development packages. On Debian/Ubuntu these are `nlohmann-json3-dev libssl-dev
-libarchive-dev`; on Homebrew they are `nlohmann-json openssl@3 libarchive` (add
-their prefixes to `CMAKE_PREFIX_PATH`). Library-only builds can set
-`GENERATIVEQC_BUILD_CLI=OFF`.
-
-Wheel builds can obtain the pinned JSON headers from their isolated build
-dependencies when no suitable system CMake package exists; that header package
-is not an installed Python runtime dependency.
 
 ```bash
 cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF
@@ -38,102 +20,35 @@ cmake --build build
 cmake --install build --prefix /opt/generativeqc
 ```
 
-The installed executable uses a relocatable RPATH to find the adjacent
-`libgenerativeqc`, so an ordinary prefix install does not require Python or a
-package-specific `LD_LIBRARY_PATH`.
+The executable finds the adjacent GenerativeQC shared library in a normal
+SDK installation. You do not need a Python interpreter or a
+GenerativeQC-specific `LD_LIBRARY_PATH`.
 
-## Precompiled CUDA CLI distributions
+## Precompiled CUDA CLI
 
-The [CI workflow](https://github.com/jinzhezenggroup/generativeqc/actions/workflows/ci.yml)
-builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
-`master` push, using the `cuda-release-cli-sm120` CMake preset:
-
-- Full `Release` code generation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`),
-  CLI-reachable AOT shell kernels and native CPU derivative shards, precompiled
-  C++ headers, ccache, and the pinned CUDA 12.9 toolchain.
-- `GENERATIVEQC_MONOLITHIC_CLI=ON`: links the GenerativeQC **core** statically
-  into `bin/generativeqc`, removing its `libgenerativeqc.so` dependency.
-  The normal shared-library C++ SDK and Python wheel are unchanged.
-- A smoke test checks CLI version, methods, basis catalog and ELF dependencies
-  before uploading an archive and `SHA256SUMS` to **GitHub Actions Artifacts**.
-  Download the artifact from the successful CI run for the desired commit.
-- When a `vX.Y.Z` tag is pushed **and exactly matches the CMake project version**
-  on a commit already on `master`, the same production build uploads a
-  previously unpublished version to [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
-  Ordinary `master` pushes do **not** create releases or tags. Existing
-  releases and their assets are never automatically overwritten.
-  Manual CI dispatches build Actions artifacts only, even when run on a tag.
-  Publication rechecks that the current remote tag still identifies the built
-  commit; a moved tag fails instead of receiving mismatched artifacts.
-
-### Pull-request packaging gate
-
-Relevant pull requests and merge groups must now **link, smoke-test, install
-and package a real monolithic CUDA CLI before passing CI**. Changes to CMake,
-CLI, packaging, or their CI configuration use the full release-mode
-code-generation settings. Other native/runtime/compiler changes use faster NVCC
-compilation, but still execute the static link, binary smoke tests, archive
-checksums and extracted-binary comparison. Documentation-only changes skip
-the expensive build; an unknown Git diff runs the full build rather than
-silently skipping it. PR archives are retained for seven days, without
-publishing any GitHub Release.
-
-The CI job summary reports exact unstripped ELF, a stripped ELF size estimate
-and `.tar.gz` byte counts. These compile-only checks are not a real-GPU runtime
-or performance qualification.
-
-After extracting the archive:
+Successful `master` CI runs provide a Linux x86_64 CUDA 12.9 / sm_120
+(Blackwell) executable through
+[GitHub Actions artifacts](https://github.com/jinzhezenggroup/generativeqc/actions/workflows/ci.yml).
+Download the archive for the desired commit, verify its checksum and run:
 
 ```bash
 tar -xzf generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120.tar.gz
 ./generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120/bin/generativeqc --version
 ```
 
-The filename is an illustration; master branch artifacts additionally include
-a Git SHA suffix. A binary includes the compiled native core, but this is **not**
-a fully statically linked Linux executable: CUDA runtime/math libraries and the
-NVIDIA driver, plus normal host providers (such as OpenBLAS, OpenSSL and
-libarchive), still need to be installed. On a host with a nonstandard CUDA
-library location, configure the dynamic loader's library path. The archive
-contains **one GenerativeQC executable** (`bin/generativeqc`), with no
-GenerativeQC shared libraries or separate stationary AOT plug-ins. Existing
-native AOT shell and CPU derivative code is compiled into the C++ core. The Python-specific `stationary_*` CUDA derivative `.so` modules remain
-separate from the single-executable CLI. Instead, the release preset enables
-`GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA` while leaving
-`GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF`: generated native s/p stationary
-force graphs and their generated registry are statically linked into the core. Shared
-SDK and Python AOT artifact semantics remain unchanged.
+The filename is an example; `master` artifacts also contain a commit SHA.
+This package embeds the GenerativeQC core but still needs the appropriate
+NVIDIA driver, CUDA libraries and host dependencies. It targets sm_120 only;
+other GPUs require another build. No Python process is launched by the CLI.
 
-The monolithic distribution cannot replace its linked core with a local binary
-profile through loader interposition. Automatic discovery of a cached binary
-profile retains the official core and reports the rejection in `profile diagnose`.
-An explicitly requested binary profile (`GENERATIVEQC_PROFILE=/path/to/bundle`)
-is refused with guidance to use the shared-core CLI or set
-`GENERATIVEQC_PROFILE=off`. Installing such a profile is also refused without
-changing the active cache. Shared-core SDK and wheel commands keep their
-existing profile activation behavior. DFT schedule-only diagnostics are unchanged.
+The monolithic binary does not support replacing its linked core with a
+locally activated binary profile. Use the shared-library SDK to activate
+those profiles; CLI-only scheduling diagnostics still work.
 
-The current distributable specifically targets **sm_120 (Blackwell)**. It does
-not support every CUDA architecture (for example, Ada sm_89) without a separate
-build. The packaging is **no-Python-at-runtime**, not no-Python-at-build-time:
-code generators still use Python on CI.
-
-To reproduce this build from source (with CUDA 12.9 and ccache installed):
-
-```bash
-cmake --preset cuda-release-cli-sm120
-cmake --build --preset cuda-release-cli-sm120 --parallel 3
-cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
-python3 tools/package_native_cli.py \
-  --prefix "$PWD/build/native-cli-prefix" --output-dir dist \
-  --version 0.1.0 --commit "$(git rev-parse HEAD)" \
-  --source-date-epoch "$(git log -1 --format=%ct)"
-```
-
-The explicit project version should match the one in `CMakeLists.txt`.
-Optional external providers and experimental optimizations are **not**
-implicitly enabled merely because this is a distribution build; existing
-production numerical fallbacks are retained.
+For the release-mode build preset, archive tooling, library-only builds and
+package CI checks, see [build and CUDA configuration](../developer/build.md).
+Tagged releases, when published, are listed on
+[GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
 
 ## Compiler-AD WB97M-V Hessian and HVP
 
@@ -574,7 +489,9 @@ CUDA DF DFT forces, ECP and remaining d/f-shell force contexts
 are **not** enabled by this native CUDA path. Named D3/D4 compositions retain
 their underlying electronic force gate. CPU B3LYP UKS
 also remains unqualified. Unsupported `--forces` requests fail before execution
-rather than publishing incomplete gradients. Run
+rather than publishing incomplete gradients. For Python execution-context routes, see
+[WB97M-V CUDA energy and forces](wb97mv_cuda.md) and
+[density-fitted DFT](../user/dft_density_fitting.md). Run
 `python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
 under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
 finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
@@ -664,15 +581,19 @@ reserve/headroom use exact integer rounding. Zero caps permit no allocation.
 `--diis-history 0` resolves to the native default of eight history vectors for
 both execution and planning; it does not disable DIIS or erase its capacities.
 
-Inventories cover CPU RHF/UHF including DF, CPU energy-only LDA/PBE RKS/UKS,
+Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE RKS/UKS energy plans,
 small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
 and conventional CUDA KS energy arenas. ECP workspace uses the same generated
 two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
 auxiliary-size and other provider admission limits remain fail-closed.
-Unqualified correlated/tau-dependent/other inventories return JSON
-`status: unsupported` and exit 2; budget failures return `infeasible` and exit 2;
-feasible plans exit 0. Output includes phase capacities, fleet peaks, resident
-storage, effective limits, controls, topology/source identities and exclusions.
+Unqualified correlated, tau-dependent, force, density-fitted KS and other
+inventories return JSON `status: unsupported` and exit 2; budget failures return
+`infeasible` and exit 2; feasible plans exit 0. The Python
+`Calculator.estimate_resources` estimator is the entry point that plans a
+qualified force context, because its per-context capability record knows which
+workspace the force consumer reserves. Output includes phase capacities, fleet
+peaks, resident storage, effective limits, controls, topology/source identities
+and exclusions.
 `scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
 checkpoint, process-RSS cap or free-memory guarantee.
 

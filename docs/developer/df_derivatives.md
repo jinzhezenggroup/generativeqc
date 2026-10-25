@@ -27,6 +27,18 @@ quantity is a **positive energy gradient**, without one-electron, overlap
 Pulay, or nuclear-repulsion terms. HF force assembly negates the total once.
 The interface does not require a density matrix or an HF energy expression.
 
+For a complete contiguous metric panel, the cooperative CUDA schedule evaluates
+the generated derivative once per unordered auxiliary pair, since `M[P,Q]` and
+`M[Q,P]` are the same function of physical centers. It scatters the two original
+weights separately; weights need not be symmetric, diagonal terms are not
+doubled, and adding large opposing weights cannot overflow an intermediate sum.
+Partial, offset, strided and serial panels, and distributed gradient sinks,
+retain the dense traversal. `GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS=0` restores
+dense metric evaluation; unset or `1` admits the eligible reuse route, while
+other values reject. The control participates in resource/checkpoint identity.
+Component traces retain dense weight count, actual pair tasks and folded-panel
+count; reducing derivative work does not reduce the dense weight storage.
+
 Orbital and auxiliary systems share physical atom coordinates, but their
 shells can have different owners, orderings, and Cartesian/spherical
 representations. Both auxiliary centers move in dM. The three mathematical
@@ -81,7 +93,7 @@ projection, and multiple finite-difference steps.
 algebra through the common `StationaryProblem` boundary. The native response
 adapters remain execution owners for dynamic-size tiling, cuBLAS/cuSolVER,
 resident/packed storage and callbacks; they are not a second source of integral
-derivative mathematics. Geometry pullbacks terminate at the generated #143
+derivative mathematics. Geometry pullbacks terminate at the generated
 three-center/metric derivative providers. The RHF force entry takes its `cJ=1` and
 `cK=1/4` contract from this plan, and the dense A/M Coulomb/exchange accumulation
 kernels are emitted from the same stationary-plan identity.

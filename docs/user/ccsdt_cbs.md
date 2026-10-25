@@ -43,20 +43,56 @@ Set `properties=("energy",)` to omit all analytic forces. The default requests
 both energy and forces. Ionic charge is passed identically to every component;
 only a closed-shell singlet is currently admitted.
 
-## Fast convergence
+<a id="fast-convergence"></a>
 
-Pass `policy="fast"` to `CCSDTCBSCalculator` to relax SCF, CCSD, Lambda and
-orbital-response convergence. `policy="standard"` (the default) and `"fp64"`
-retain the original strict controls. Fast also enables bounded FP32 auxiliary
-preconvergence for CUDA DF-CCSD and Lambda by default. Final CCSD/Lambda
-solves and independent checks, triples and analytic force response use FP64.
-The selected Hamiltonian, basis groups and complete analytic-force work are preserved. Relaxed convergence
+## Convergence profiles
+
+`CCSDTCBSCalculator` defaults to `policy="standard"`: budget-scaled SCF,
+CCSD, Lambda and orbital-response convergence. `policy="tight"` retains the
+original strict CBS stopping limits. `policy="fp64"` uses those same strict
+limits with all-FP64 preconvergence. Tight is a CBS-only preset; the HF/DFT
+`PrecisionCalculator` profiles are unchanged.
+
+`policy="fast"` remains a compatibility name for Standard's default allowance.
+It is not an additional faster tier. Existing
+`PrecisionPolicy("fast", budget=TargetErrorBudget(...))` calls retain their
+custom allowance. Explicit target audits and other precision presets are not
+implemented for CBS. To recover the old Standard convergence, select `tight`;
+to recover its original FP64 schedule as well, select `fp64`.
+
+The independent `preconvergence` option selects bounded auxiliary FP32 warmup
+for CUDA DF-CCSD and Lambda. Final CCSD/Lambda solves and independent checks,
+triples and analytic force response use FP64. The selected Hamiltonian, basis
+groups and complete analytic-force work are preserved. Budget-scaled stopping
 applies to conventional CPU/CUDA CBS and both CUDA DF reference models;
 CPU and conventional CCSD keep FP64 arithmetic.
 
-```python
-from generativeqc import PrecisionPolicy, TargetErrorBudget
+| Request | Final convergence | Auxiliary preconvergence |
+| --- | --- | --- |
+| `policy="standard", preconvergence="mixed"` | Budget-scaled | Bounded mixed request |
+| `policy="standard", preconvergence="fp64"` | Budget-scaled | FP64 |
+| `policy="tight", preconvergence="mixed"` | Strict | Bounded mixed request |
+| `policy="tight", preconvergence="fp64"` | Strict | FP64 |
 
+`preconvergence="auto"` is the default. Admitted Standard/Fast CUDA DF calls
+request mixed warmup. Tight fitted CUDA energy+force owners request it with at
+least 9 occupied and 48 virtual orbitals; energy-only Tight calls use the
+existing CCSD domain of at least 9 occupied and 128 virtual orbitals. Smaller
+Tight endpoints retain FP64 because conversion and a fresh strict iteration
+can offset the savings. An explicit mixed request bypasses these shape gates,
+but never the resource/provider checks or final numerical requirements.
+
+Older libraries without the independent execution capability retain their
+legacy schedule for `auto` and report
+`preconvergence_fallback="native_execution_transport_unavailable"`. Explicit
+`mixed` or `fp64` selections on fitted Standard/Tight/Fast require that
+capability. Mixed selection requires auxiliary bases. `policy="fp64"` rejects
+an explicit mixed request. Libraries without correlated convergence transport
+reject budget-scaled Standard/Fast before execution; they cannot silently
+substitute a different stopping policy. DF budget-scaled calls also require
+native precision telemetry.
+
+```python
 workflow = CCSDTCBSCalculator(
     (CBSBasis(load_basis("cc-pvdz.json"), 2),
      CBSBasis(load_basis("cc-pvtz.json"), 3)),
@@ -64,18 +100,18 @@ workflow = CCSDTCBSCalculator(
                      load_basis("cc-pvtz-jkfit.json")),
     hf_reference="df",
     device="cuda",
-    policy="fast",
     calculator_options={"correlation_memory_budget_bytes": 32 << 30},
 )
 result = workflow.singlepoint(atoms)
 print(result.convergence)
 ```
 
-For a smaller allowance, replace `policy="fast"` with
+For strict convergence, add `policy="tight"`. For a custom smaller allowance,
+import `PrecisionPolicy` and `TargetErrorBudget` and pass
 `policy=PrecisionPolicy("fast", budget=TargetErrorBudget(5e-6, 5e-5, 1.5e-5))`.
 
 The default composite allowance is `1e-5 Eh` energy, `1e-4 Eh/Bohr` maximum
-force error and `3e-5 Eh/Bohr` RMS force error. The workflow first combines
+force error and `3e-5 Eh/Bohr` RMS force error. The workflow combines
 coefficients of repeated method/basis components, then divides each allowance
 by the sum of absolute combined coefficients. This accounts for extrapolation
 amplification without assuming cancellation. For default DZ/TZ extrapolation
@@ -85,56 +121,89 @@ The component allowance selects a scale `s`: the minimum of one and its
 energy/max-force/RMS ratios to `1e-5`, `1e-4`, `3e-5`, respectively (omit the RMS
 ratio when unspecified). The following ceilings apply:
 
-| Control | Standard CBS default | Fast ceiling |
+| Control | Standard ceiling | Tight default |
 | --- | ---: | ---: |
-| Reference SCF energy change | `1e-12` | `max(1e-11, s * 1e-8)` |
-| Reference SCF density change | `1e-11` | `max(1e-11, s * 1e-9)` |
-| CCSD energy change | `1e-12` | `1e-8` |
-| CCSD residual maximum | `1e-10` | `max(1e-9, s * 1e-6)` |
-| Lambda residual | `1e-9` | `max(1e-9, s * 1e-7)` |
-| Response absolute solve tolerance | `1e-12` | `max(1e-12, s * 1e-8)` |
-| Independent CC orbital residual | `1e-10` | `max(1e-10, s * 1e-7)` |
-| Complete CC orbital stationarity | `1e-8` | `max(1e-8, s * 1e-6)` |
+| Reference SCF energy change | `max(1e-11, s * 1e-8)` | `1e-12` |
+| Reference SCF density change | `1e-11` | `1e-11` |
+| CCSD energy change | `1e-8` | `1e-12` |
+| CCSD residual maximum | `min(1e-7, max(1e-9, s * 1e-6))` | `1e-10` |
+| Lambda residual | `max(1e-9, s * 1e-7)` | `1e-9` |
+| Response absolute solve tolerance | `max(1e-12, s * 1e-8)` | `1e-12` |
+| Independent CC orbital residual | `max(1e-10, s * 1e-7)` | `1e-10` |
+| Complete CC orbital stationarity | `max(1e-8, s * 1e-6)` | `1e-8` |
 
 Explicit tighter SCF/CC values in `calculator_options` take precedence. Below
-`s=1e-3`, Fast retains standard convergence and reports
-`component_budget_requires_strict`. An older native library without correlated
-convergence support rejects an admitted Fast request before execution. DF Fast
-also requires native precision telemetry so the executed arithmetic is observable.
+`s=1e-3`, budget-scaled policies retain strict convergence and report
+`component_budget_requires_strict`. Tight CBS energy/residual defaults
+(`1e-12`/`1e-10`) are tighter than standalone
+`Calculator(method="ccsd(t)")` defaults (`1e-11`/`1e-9`), which are unchanged.
+All CBS profiles cap the SCF density tolerance at `1e-11` to preserve the
+physical reference export contract, including at stretched geometries.
+Use `result.convergence["limits"]` for effective controls. With default
+DZ/TZ weights, Standard's `s` is about `0.238273`; the independent `1e-7`
+CCSD residual cap is tighter than its budget-scaled value of about `2.38e-7`.
+The same cap applies to Fast, including custom allowances. Stabilized energy
+alone does not ensure a sufficiently small physical residual.
 
-Fresh physical residual replays still gate publication using the selected
-limits. Reference canonical-frame checks, denominator/gap safeguards,
-nonfinite rejection, iteration limits and resource checks remain active.
-The more conservative SCF density ceiling compared with DFT Fast preserves
-the post-HF canonical-reference contract. Integral screening remains unchanged.
-DF-CCSD warmup switches to FP64 at a residual of at least 100 times the selected
-CC residual ceiling, or after at most 24 warmup evaluations. It clears the mixed
-DIIS history before FP64 iterations. Resource or provider refusal retains the
-bounded FP64 path; numerical failures remain visible.
-Lambda uses at most 16 FP32 warmup iterations with a `1e-6` handoff tolerance,
-then starts a fresh FP64 GMRES solve with empty Krylov history. Its independent
-transpose audit and parameter/factor derivatives remain FP64. The bounded
-auxiliary batch retains the ordinary Q32 ceiling; memory admission may reduce it.
+Stopping thresholds do not estimate the accuracy of CCSD(T) or of the CBS
+approximation. The energy-change threshold controls CCSD iteration; the
+conventional `(T)` correction is noniterative. Tightening it cannot remove
+basis, fitting or correlation-model errors. Force calculations additionally
+require converged Lambda and orbital response. The allowance-to-tolerance
+mapping is empirical, not a per-call observable certificate or a mathematical
+error bound. No duplicate strict endpoint is run to estimate the error.
+Validate representative molecules against Tight or an independent reference
+when choosing an allowance, especially for sensitive relative energies or
+numerical derivatives. Static energy/force qualification does not establish
+frequency accuracy, force continuity or long-time energy conservation.
+
+RHF convergence does not guarantee the lowest or a stable electronic state.
+Different initial guesses can reach different stationary branches, especially
+at stretched bonds. Compare numerical tolerances on the same branch and check
+reference stability separately; tighter CCSD convergence cannot resolve a
+different HF state. The [retained qualification](../../benchmarks/results/cbs-routine-standard-20261025/README.md)
+includes an independently matched stretched-N2 branch and its original
+default-reference mismatch.
+
+To isolate scheduling from stopping policy, compare the four combinations
+above at the same geometry, basis, resource budget and endpoint. FP64 final
+arithmetic checks the selected limits; it does not restore Tight convergence.
+An allowance is a ceiling rather than a target error: an easy case can agree
+much more closely. Correlated reference controls should not be replaced by
+HF/DFT thresholds without validating the complete E+F endpoint.
+
+Fresh physical residual replays gate publication using the selected limits.
+Reference canonical-frame checks, denominator/gap safeguards, nonfinite
+rejection, iteration limits and resource checks remain active. The SCF density
+ceiling preserves the post-HF canonical-reference contract. Integral screening
+is unchanged. DF-CCSD warmup switches to FP64 at a residual of at least 100 times
+the selected CC residual ceiling, or after at most 24 warmup evaluations, and
+clears mixed DIIS history. Resource/provider refusal retains the bounded FP64
+path; numerical failures remain visible. Lambda uses at most 16 FP32 warmup
+iterations with a `1e-6` handoff tolerance, then starts a fresh FP64 GMRES solve
+with empty Krylov history. Its independent transpose audit and parameter/factor
+derivatives remain FP64. The auxiliary batch retains the ordinary Q32 ceiling;
+memory admission may reduce it.
 
 `result.convergence` records the requested policy, selected route, composite
-and component allowances, coefficient sum and configured limits. Its
-`arithmetic_request` records the FP32 preconvergence request; `arithmetic`
-reports `"mixed"` only when CCSD or Lambda FP32 GEMMs actually executed,
-otherwise `"fp64"`. `lambda_arithmetic_request` and `lambda_arithmetic` record
-Lambda separately; energy-only calls report `"not_requested"`.
+and component allowances, coefficient sum, effective limits and preconvergence.
+Budget-scaled Standard/Fast reports `selected="relaxed"`; strict convergence
+with mixed warmup reports `"strict"`, and strict FP64 execution reports
+`"strict_fp64"`. These values describe execution, not an accuracy audit.
+`preconvergence_selection` records the native request after shape admission,
+before possible resource refusal. `arithmetic_request` records that request;
+`arithmetic` reports `"mixed"` only when CCSD or Lambda FP32 GEMMs actually
+executed, otherwise `"fp64"`. `lambda_arithmetic_request` and
+`lambda_arithmetic` record Lambda separately; energy-only calls report
+`"not_requested"`.
+
 Component `cc_performance` records admission/refusal, evaluations or iterations,
 GEMMs and casts. DF force endpoints also expose Lambda, source-response and
 orbital phase times, actual auxiliary batch and numeric/device capacities.
-Lambda action counts cover the shared transpose operator, excluding its separate
-independent audit. Capacities are not measured peak VRAM. Unavailable telemetry
-is `None`, distinct from measured zero. Native diagnostics retain measured
-residuals and iteration counts. The allowance-to-tolerance mapping is a stopping policy: it is not a per-call
-observable certificate, a mathematical error bound, or a basis-set error
-estimate. No strict duplicate endpoint is run to estimate the error. Validate
-representative molecules against Standard or an independent reference when
-choosing a budget. Explicit `PrecisionPolicy.target` audits and other precision
-presets are not implemented for CBS; private correlated-budget transport also
-rejects prepared batches and legacy RI-MP2.
+Lambda action counts exclude its separate independent audit. Capacities are
+not measured peak VRAM. Unavailable telemetry is `None`, distinct from measured
+zero. Native diagnostics retain measured residuals and iteration counts.
+Private correlated-budget transport rejects prepared batches and legacy RI-MP2.
 
 ## Correlation-only DF-CBS on CUDA
 
@@ -267,7 +336,8 @@ Every component uses the same geometry, charge, spin, nonrelativistic
 all-electron reference and full correlated occupied space. The default uses
 exact correlation integrals; explicit auxiliaries select correlation DF, while
 `hf_reference` selects exact or RI-JK reference response. Final physical checks
-and response use FP64; [Fast](#fast-convergence) can use FP32 DF-CCSD warmup.
+and response use FP64; the [preconvergence policy](#convergence-profiles) can
+select bounded FP32 DF-CCSD/Lambda warmup independently of stopping limits.
 Frozen-core, ECP and unrestricted
 variants are not admitted. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO

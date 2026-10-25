@@ -1,0 +1,20 @@
+{
+  "id": "response.orbital-screening",
+  "classification": "negative-evidence",
+  "controls": [
+    "response-option:orbital_screening_tolerance"
+  ],
+  "owner_issues": [
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp",
+    "benchmarks/results/rhf-orbital-response-20261004/README.md"
+  ],
+  "rationale": "Positive provisional orbital-response screening removes little work in the retained large endpoint and shows no meaningful response-time benefit while requiring an unscreened residual/refinement contract. Zero remains the justified default.",
+  "revisit_condition": "Reconsider only with a materially different screening/error model that removes substantial exact J/K work and passes complete force, exact-residual and endpoint gates across a declared workload domain.",
+  "evidence": [
+    "issue:#1972",
+    "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
+  ]
+}

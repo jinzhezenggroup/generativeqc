@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "df-dft48-work-20261025",
+  "owner": "DF force work admission and complete HF/DFT README refresh",
+  "reason": "All 192 fresh populations retain their 768 full-precision E/F calls, settings, semantic work and exact source/binary identity. Existing independent accuracy failures remain visible. Separate clean controls, small/intermediate-size negative ablations, moved geometry and resolved qualification setup failures remain reproducible without increasing retention budgets.",
+  "review_document": "benchmarks/results/df-dft48-work-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/standard.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 211680,
+      "sha256": "4f3b17851b64585f6b00d63e5e2b0812e93f99c2159316b6dc3e794b0d21b266"
+    },
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/fast.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 239116,
+      "sha256": "6cdfa043521e11ec7e51f599e08c4c9b488669fa4399c6811b6ec43f50ab8dbc"
+    },
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/gpu4pyscf.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 188260,
+      "sha256": "97d542336545cb727c1649bf390e715ec644549e184a480a64f497003a034075"
+    }
+  ]
+}

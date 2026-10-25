@@ -27,6 +27,7 @@ from generativeqc_compiler.common.resources import (
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
+from ._cuda_force_resources import ordinary_cuda_force_limits
 from ._snapshot_grid_cache import SNAPSHOT_GRID_CACHE_BYTES
 from .basis import BasisSet
 from .basis_capabilities import require_basis
@@ -42,7 +43,6 @@ from .resources_hf import (
 from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
-_CUDA_FORCE_HOST_CAP = 256 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
     "provider_allowance",
@@ -464,7 +464,7 @@ def _cuda_leaf_inventory(
     query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
     selector = functional_code
     if query is None:
-        if requires_tau:
+        if functional_code >= 0x30000 or requires_tau:
             raise NotImplementedError(
                 "tau-dependent CUDA KS planning requires point-program allocation inventory v2"
             )
@@ -472,7 +472,7 @@ def _cuda_leaf_inventory(
         selector = int(requires_first_ao_derivatives)
     if query is None:
         raise NotImplementedError(
-            "native library has no KS CUDA allocation inventory v1"
+            "native library has no KS CUDA allocation inventory v1/v2"
         )
     orbital = item["orbital"]
     args = (
@@ -495,6 +495,12 @@ def _cuda_leaf_inventory(
     query.restype = ctypes.c_int
     output = (ctypes.c_uint64 * 3)()
     if query(*args, output, len(output)):
+        if functional_code >= 0x30000:
+            raise NotImplementedError(
+                "automatic KS CUDA inventory requires a packaged static point provider; "
+                "build with GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON and use "
+                "valid launch/DIIS dimensions"
+            )
         raise NotImplementedError(
             "KS CUDA inventory requires a CUDA build and valid launch/DIIS dimensions"
         )
@@ -907,17 +913,14 @@ def ks_resource_request(
     from .ks import _automatic_semilocal_name
 
     automatic_name = _automatic_semilocal_name(model.method_ir)
-    if automatic_name is not None and backend != "cpu":
-        raise NotImplementedError(
-            "automatic Libxc KS resource planning currently supports CPU only"
-        )
-    automatic_cpu = automatic_name is not None
+    automatic = automatic_name is not None
+    automatic_cuda = automatic and backend == "cuda"
     if model.has_separate_nonlocal_grid:
         raise NotImplementedError(
             "KS resource-ledger planning does not yet support independent XC/VV10 grids"
         )
     requires_tau = "tau" in model.functional.ingredients
-    if requires_tau and not automatic_cpu and backend == "cpu":
+    if requires_tau and not automatic and backend == "cpu":
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -926,6 +929,12 @@ def ks_resource_request(
         raise ValueError("KS precision must be 'fp64' or 'auto'")
     if precision == "auto" and backend != "cuda":
         raise NotImplementedError("KS automatic precision currently requires CUDA")
+    if automatic_cuda and (precision != "fp64" or model.xc_schedule != "device_fused"):
+        raise NotImplementedError(
+            "automatic CUDA KS requires strict-FP64 device-fused execution"
+        )
+    if automatic_cuda and include_forces:
+        raise NotImplementedError("automatic CUDA KS forces are not qualified")
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
@@ -1015,13 +1024,34 @@ def ks_resource_request(
         "density_tolerance": density_tolerance,
         "screening_tolerance": screening_tolerance,
         "ks_options": model.to_payload(),
-        "outputs": "energy+forces" if backend == "cuda" or cpu_forces else "energy",
+        "outputs": "energy+forces"
+        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        else "energy",
         "inventory_version": 1,
         "schedule": "ordinary-stream-round-robin"
         if backend == "cuda"
         else "serialized-native",
     }
     has_ecp = any(item["orbital"].get("ecp_terms") for item in items)
+    # Serialized generated-force ownership can retain the largest member's
+    # arena across the next SCF replay. Charge exactly the execution policy's
+    # maximum caps, including a mixed fleet's all-electron and ECP members.
+    # Automatic CUDA owners expose energy only and cannot retain a force
+    # arena. Do not charge unavailable force work to either host/device budget.
+    force_caps = tuple(
+        (0, 0)
+        if automatic_cuda
+        else ordinary_cuda_force_limits(
+            item["atoms"],
+            density_fitted=False,
+            hamiltonian="scalar-semilocal-ecp"
+            if item["orbital"].get("ecp_terms")
+            else "all-electron",
+        )
+        for item in items
+    )
+    force_device_cap = max(cap[0] for cap in force_caps)
+    force_host_cap = max(cap[1] for cap in force_caps)
     if has_ecp:
         controls["ecp_host_inventory"] = _ecp_inventory_owner(library)
     if _application_precision_budget is not None:
@@ -1042,6 +1072,8 @@ def ks_resource_request(
     if backend == "cuda":
         controls.update(
             device_id=device_id,
+            generated_force_device_cap=force_device_cap,
+            generated_force_host_cap=force_host_cap,
             one_electron_mapping=os.environ.get(
                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
             ),
@@ -1054,13 +1086,19 @@ def ks_resource_request(
     if precision == "auto":
         history_iterations = checked_bytes(2 * max_iterations + 4, "KS mixed history")
         controls["history_iterations"] = history_iterations
+    elif automatic_cuda:
+        # Automatic RKS/UKS share a bounded physical F[D] closure after DIIS.
+        history_iterations = checked_bytes(max_iterations + 4, "KS automatic history")
+        controls["history_iterations"] = history_iterations
     identity = ResourceIdentity(
         method,
         "native-ks-direct-v1",
         backend,
         precision,
         json.dumps({"items": items}),
-        ("energy", "forces") if backend == "cuda" or cpu_forces else ("energy",),
+        ("energy", "forces")
+        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        else ("energy",),
         json.dumps(controls, sort_keys=True),
     )
     exclusions = (
@@ -1104,7 +1142,7 @@ def ks_resource_request(
         items,
         backend=backend,
         workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
-        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + _CUDA_FORCE_HOST_CAP)
+        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + force_host_cap)
         if backend == "cuda"
         else 0,
         diis_history=diis_history,
@@ -1175,7 +1213,7 @@ def ks_resource_request(
         estimates.append(
             ResourceEstimate(
                 "serialized generated KS force host staging cap",
-                _CUDA_FORCE_HOST_CAP,
+                force_host_cap,
                 "pageable",
                 first_phase,
                 last_phase,
@@ -1223,23 +1261,30 @@ def ks_resource_request(
                     raise NotImplementedError(
                         "native library lacks method precision transport"
                     )
-            descriptor = _cuda_stationary_descriptor(
-                model,
-                library=library,
-                precision=precision,
-                max_iterations=max_iterations,
-                diis_history=diis_history,
-                energy_tolerance=energy_tolerance,
-                density_tolerance=density_tolerance,
-                screening_tolerance=screening_tolerance,
-                application_precision_budget=_application_precision_budget,
-            )
-            stationary = [
-                _native_cuda_stationary_inventory(library, item, descriptor)
-                for item in items
-            ]
+            if automatic_cuda:
+                stationary = [None for _ in items]
+            else:
+                descriptor = _cuda_stationary_descriptor(
+                    model,
+                    library=library,
+                    precision=precision,
+                    max_iterations=max_iterations,
+                    diis_history=diis_history,
+                    energy_tolerance=energy_tolerance,
+                    density_tolerance=density_tolerance,
+                    screening_tolerance=screening_tolerance,
+                    application_precision_budget=_application_precision_budget,
+                )
+                stationary = [
+                    _native_cuda_stationary_inventory(library, item, descriptor)
+                    for item in items
+                ]
             native_stationary = all(item is not None for item in stationary)
-            if model.has_nondefault_composition and not native_stationary:
+            if (
+                model.has_nondefault_composition
+                and not native_stationary
+                and not automatic_cuda
+            ):
                 raise NotImplementedError(
                     "CUDA KS planning does not claim this scaled/global-hybrid execution"
                 )
@@ -1329,11 +1374,11 @@ def ks_resource_request(
                     last_phase,
                 )
             )
-            if not native_stationary:
+            if not native_stationary and not automatic_cuda:
                 estimates.append(
                     ResourceEstimate(
                         "serialized generated KS force device staging cap",
-                        512 << 20,
+                        force_device_cap,
                         f"device:{device_id}",
                         first_phase,
                         last_phase,

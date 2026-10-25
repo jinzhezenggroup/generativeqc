@@ -1,9 +1,9 @@
 # GFN1 geometry compiler
 
-Issue #837 keeps GFN1-xTB scientific equations compiler-owned whenever they
-are pure functions of immutable parameters and geometry.
+GFN1-xTB scientific equations remain compiler-owned whenever they are pure
+functions of immutable parameters and geometry.
 
-## Delivered pairwise slice
+## Pairwise terms
 
 `python/generativeqc_compiler/geometry/gfn1.py` lowers two GFN1 geometry terms
 through the existing GeometryIR / PairIR / TensorIR stack:
@@ -78,7 +78,4 @@ second GFN1 D3 implementation or data table is introduced here.
 
 This module does not implement SCC iteration, mixing, eigensolution,
 occupations, warm starts, or public method admission. Those remain runtime
-policy under #837.
-
-Agent: ChatGPT
-Model: GPT-5.6 Sol
+policy owned outside the compiler.

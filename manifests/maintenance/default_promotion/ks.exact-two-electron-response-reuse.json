@@ -1,0 +1,22 @@
+{
+  "id": "ks.exact-two-electron-response-reuse",
+  "classification": "needs-qualification",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE"
+  ],
+  "owner_issues": [
+    2426
+  ],
+  "sources": [
+    "src/methods/dft_method.cpp",
+    "src/methods/exact_density_response_cache.hpp"
+  ],
+  "rationale": "Default-off experiment retaining only the Direct RSH two-electron response inside an immutable prepared owner after exact comparison of the already authenticated host snapshot density. W-dependent Pulay and one-electron response always run; bounded optional storage refusal preserves computation.",
+  "revisit_condition": "Require independent complete E/F, geometry/one-ULP/failure/resource invalidation and original-protocol endpoint populations before any default promotion.",
+  "evidence": [
+    "tests/python/test_exact_density_response_cache.py",
+    ".agents/notes/proposed/2026-10-14-exact-two-electron-response-reuse.md",
+    "issue:#2426",
+    "benchmarks/results/exact-integral-response-20261014/README.md"
+  ]
+}

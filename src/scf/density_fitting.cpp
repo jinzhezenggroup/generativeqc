@@ -980,7 +980,7 @@ std::vector<double> build_density_fitting_uhf_forces(
 static DensityFittingTilePlan plan_density_fitting_tiles_impl(
     std::size_t batch_size, std::size_t nbf, std::size_t naux, std::size_t occupied,
     std::size_t memory_budget_bytes, std::size_t fixed_device_bytes, bool generated_source,
-    bool occupied_exchange) {
+    bool occupied_exchange, bool retain_values = true) {
   if (batch_size == 0 || nbf == 0 || naux == 0 || occupied == 0) {
     throw std::invalid_argument("DF planner dimensions must all be positive");
   }
@@ -1029,7 +1029,7 @@ static DensityFittingTilePlan plan_density_fitting_tiles_impl(
                                                                 : naux;
     plan.stores_full_three_center = generated_source;
     update_bytes();
-    if (plan.peak_workspace_bytes <= memory_budget_bytes) {
+    if (retain_values && plan.peak_workspace_bytes <= memory_budget_bytes) {
       plan.stores_full_three_center = true;
       return plan;
     }
@@ -1037,7 +1037,7 @@ static DensityFittingTilePlan plan_density_fitting_tiles_impl(
       const auto retained_minimum =
           workspace_bytes(ao_pair_count, 1, batch_size, nbf, naux, metric_bytes, fixed_device_bytes,
                           true, occupied_exchange, true);
-      if (retained_minimum <= memory_budget_bytes) {
+      if (retain_values && retained_minimum <= memory_budget_bytes) {
         // All persistent/setup/SCF/source reservations are already charged.
         // Find the largest bounded resident Q that fits this same live set.
         std::size_t lower = 1, upper = plan.auxiliary_tile;
@@ -1104,6 +1104,12 @@ static DensityFittingTilePlan plan_density_fitting_tiles_impl(
   plan.stores_full_three_center = plan.batch_tile == batch_size &&
                                   plan.ao_pair_tile == ao_pair_count && plan.auxiliary_tile == naux;
   return plan;
+}
+
+DensityFittingTilePlan plan_streamed_density_fitting_tiles(std::size_t nbf, std::size_t naux,
+                                                           std::size_t budget, std::size_t fixed) {
+  if (!budget) throw DensityFittingBudgetError();
+  return plan_density_fitting_tiles_impl(1, nbf, naux, nbf, budget, fixed, true, false, false);
 }
 
 /** Automatic factors are optional: retain dense residency when it fits, and

@@ -31,6 +31,7 @@
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #endif
@@ -405,11 +406,15 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
     // in for this five-array lifetime, even when XC reads only points/weights.
     const auto xc_and_grid = generativeqc::runtime::size_add(
         xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
-    // Prepared exact KS owners retain first-order J/K source leases even when
-    // the current replay requests energy only. Charge that simultaneous live
-    // storage instead of relying on a serialized force-staging allowance.
-    const auto direct =
-        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives, 1);
+    // Curated exact owners retain first-order J/K leases. Automatic energy-only
+    // owners deliberately omit derivative staging; match their preparation.
+    // A missing automatic provider has already failed the XC layout query.
+    const auto direct = generativeqc::scf::cuda_direct_coulomb_device_bytes(
+        1, nao, atoms, shells, primitives,
+        generativeqc::dft::generated::automatic_cuda_point_entry(
+            static_cast<std::uint32_t>(functional))
+            ? 0U
+            : 1U);
     output[0] = state;
     output[1] = xc_and_grid;
     output[2] = direct;

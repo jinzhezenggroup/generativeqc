@@ -123,6 +123,18 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
 std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* plan) noexcept;
 std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan* plan) noexcept;
 
+/** Add temporary-file backing only to buckets omitted from GPU and RAM tiers.
+ * File bytes are separate from numeric RAM admission. A new staging owner must
+ * fit device_budget and host_staging_budget; an existing owner reuses its tiles.
+ * Reservation/write refusal preserves the published GPU/RAM source. Read errors
+ * fail the action rather than publishing partially accumulated matrices.
+ */
+generativeqc_status prepare_cuda_direct_jk_disk_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::size_t device_budget,
+    std::size_t host_staging_budget, std::size_t tile_bytes, std::uint32_t bucket_mask,
+    const std::string& directory, std::string& detail);
+std::size_t cuda_direct_jk_disk_value_bytes(const CudaDirectJkPlan* plan) noexcept;
+
 /** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
  * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
  * last axis fastest and uses the prepared Direct plan's public AO basis.

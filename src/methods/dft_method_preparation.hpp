@@ -55,6 +55,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend, NativeKsExecutionPlan& plan);
 dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
                               scf::ScfOptions& options, const NativeKsExecutionPlan& plan);
-void validate_ks_spin_state(const NativeKsExecutionPlan& plan, const core::System& system);
+void validate_ks_spin_state(const NativeKsExecutionPlan& plan, const core::System& system,
+                            generativeqc_backend backend);
 
 }  // namespace generativeqc::methods::detail

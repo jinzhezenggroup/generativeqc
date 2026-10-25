@@ -76,7 +76,9 @@ The domain-consumer boundary and byte-stability rationale are recorded in
 
 `libxc-7.0.0` owns one union inventory under `upstream/libxc/7.0.0/` plus named `core`, `rsh`, and `wb97mv` collections. The historical `manifest.json`, `rsh-manifest.json`, and `wb97mv-manifest.json` files are derived compatibility views. Their bytes are regenerated from the common registry so existing compiler artifact identities do not change merely because provenance ownership moved.
 
-Issue #739 continues to own Maple syntax admission, Graph lowering, functional qualification, and retirement of handwritten XC mathematics. The source registry only owns acquisition and provenance identity.
+Maple syntax admission, Graph lowering, functional qualification, and retirement
+of handwritten XC mathematics are owned outside this module. The source registry
+only owns acquisition and provenance identity.
 
 ## Updating an upstream source
 

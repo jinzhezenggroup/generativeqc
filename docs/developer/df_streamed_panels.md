@@ -1,8 +1,8 @@
 # Bounded generated DF J/K panels
 
-The generated streamed provider uses the same four physical tile buffers as
-the existing value plan. No full host tensor, additional device allocation,
-stream, or synchronization is introduced by the traversal.
+The generated streamed provider uses the same four physical device tile buffers
+as the existing value plan. GPU-resident B keeps priority; an eligible generated
+streamed plan may additionally retain immutable raw A in bounded host RAM.
 
 For raw three-center values `A[pair,P]` and the retained symmetric inverse
 metric factor `X`, Coulomb uses `J = A X X^T A^T D`. A first raw pass accumulates
@@ -11,6 +11,38 @@ and raw pass produce J. This avoids transformed three-center production for J.
 Two raw passes remain because retaining the entire raw tensor would exceed
 the resolved capacity. The full metric factor, including discarded directions,
 is unchanged, so the existing metric-rank policy still defines the operator.
+
+## Automatic raw host panels
+
+Single-system generated streamed HF plans can retain complete auxiliary rows of FP64 raw
+`A[pair,P]` on the host within both the existing host value allowance and
+available-job-RAM policy. Unset `GENERATIVEQC_DF_HOST_MAX_BYTES` permits up to
+min(32 GiB, one quarter of machine and enclosing cgroup headroom); explicit zero
+disables backing. Unknown automatic headroom, insufficient capacity and host
+allocation failure preserve regeneration. A partial prefix is allowed; consumers
+that cross its pair boundary copy the prefix and regenerate only the suffix. The host budget includes prior plan
+setup peaks and the complete actual vector capacity. Full GPU-resident plans,
+imported tensors, batches, packed pure-J and the dedicated MD Coulomb owner retain their paths.
+
+Setup generates A through the existing CUDA provider into borrowed K scratch,
+downloads bounded rectangles and audits finiteness before publication. Repeated
+dense and occupied K then upload requested rectangles from that immutable prefix;
+metric whitening and current-orbital projections still execute on device. Dense
+J can use the same reader; packed J retains its existing generated source.
+`host_raw_factor_bytes` reports the additional payload; traces distinguish
+`host_raw_panel_hits`, `host_raw_panel_h2d_bytes` and actual source evaluations.
+The cache belongs to the geometry/basis/metric plan, whose policy fingerprint
+also captures the requested host ceiling. Changed geometry or policy rebuilds it.
+
+Pageable uploads require eager SCF scheduling. Plans with admitted host A do
+not capture SCF iteration graphs. The low-level reader itself falls back to
+on-device generation if called during capture; no pageable pointer is embedded
+in a graph. Teardown drains the stream before releasing backing storage. Force
+response retains its independently generated zero-order/derivative sources and
+fixed-rank metric reverse map. Host fitted B/E, density-dependent U and temporary
+disk are not part of this cache.
+
+## Device contraction traversal
 
 For dense fallback K, the existing capacity is rebalanced into full AO panels with a smaller
 auxiliary width whenever one AO matrix fits. Each transformed panel then feeds

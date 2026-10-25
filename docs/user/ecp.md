@@ -388,7 +388,7 @@ exports, f-orbital grid refinement, complete Cartesian/spherical RHF/UHF
 forces, and budgeted changed-geometry replay with complete-energy differences.
 
 Real numerical parameter tables are read from the test installation and are
-not redistributed by this change. PySCF is Apache-2.0; consult its installed
+not redistributed with the package. PySCF is Apache-2.0; consult its installed
 basis-file notices and the original LANL2DZ references before redistributing
 those data. User-imported basis records retain their source/version/license
 provenance. Synthetic test parameters and this implementation use the

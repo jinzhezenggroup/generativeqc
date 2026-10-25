@@ -4,7 +4,7 @@
 
 namespace generativeqc::dft {
 
-/** Bound a guarded automatic cold Direct hybrid default separately from the
+/** Bound guarded automatic cold Direct defaults separately from the
  * explicit incremental controller. The caller already owns default Standard
  * FP64 controls; no public resource ledger can borrow uncounted anchor space. */
 struct KsIncrementalColdAutoDomain {
@@ -16,13 +16,18 @@ struct KsIncrementalColdAutoDomain {
   bool through_d_shells{};
   bool all_electron{};
   bool no_resource_ledger{};
+  bool exact_fp64_direct_coulomb{};
 };
 
 constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain) noexcept {
-  return domain.requested && domain.exact_fp64_direct_hybrid && domain.standard_default_grid &&
-         domain.through_d_shells && domain.all_electron && domain.no_resource_ledger &&
-         domain.public_aos >= 64 && domain.public_aos <= 768 && domain.atoms >= 2 &&
-         domain.atoms <= 96;
+  const bool hybrid = domain.exact_fp64_direct_hybrid && domain.public_aos >= 64 &&
+                      domain.public_aos <= 768 && domain.atoms >= 2 && domain.atoms <= 96;
+  // Pure Coulomb reuses the fixed-anchor controller and bounded proposal
+  // mode. Its larger domain amortizes storage; small systems keep full builds.
+  const bool coulomb = domain.exact_fp64_direct_coulomb && domain.public_aos >= 512 &&
+                       domain.public_aos <= 1536 && domain.atoms >= 48 && domain.atoms <= 128;
+  return domain.requested && (hybrid || coulomb) && domain.standard_default_grid &&
+         domain.through_d_shells && domain.all_electron && domain.no_resource_ledger;
 }
 
 /** Select each solve from a prepared capability without confusing a native

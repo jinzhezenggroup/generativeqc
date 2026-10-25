@@ -297,7 +297,9 @@ class PrecisionPolicy:
 
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
     native FP32 admission. CCSDTCBSCalculator also uses this allowance for
-    final FP64 convergence limits. It is not a measured per-call error certificate.
+    final FP64 convergence limits; its Standard uses the default Fast allowance
+    and its CBS-only Tight preset retains strict convergence. These are not
+    measured per-call error certificates.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
     Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
@@ -323,13 +325,17 @@ class PrecisionPolicy:
         if not isinstance(self.profile, str) or self.profile not in (
             "fast",
             "standard",
+            "tight",
             "fp64",
             *_DEFAULT_BUDGETS,
         ):
             raise ValueError(
-                "precision profile must be 'standard', 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
+                "precision profile must be 'standard', 'tight', 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
             )
-        if self.profile in ("fast", "standard", "fp64") and self.target is None:
+        if (
+            self.profile in ("fast", "standard", "tight", "fp64")
+            and self.target is None
+        ):
             return
         if self.target is None:
             energy, maximum, rms = _DEFAULT_BUDGETS[self.profile]
@@ -662,6 +668,10 @@ class PrecisionCalculator:
             policy = PrecisionPolicy(policy)
         if not isinstance(policy, PrecisionPolicy):
             raise TypeError("policy must be a PrecisionPolicy or preset name")
+        if policy.profile == "tight":
+            raise NotImplementedError(
+                "the tight preset is specific to CCSDTCBSCalculator"
+            )
         if {
             "precision",
             "target_accuracy",

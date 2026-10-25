@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "native-grid-binding-20261024",
+  "owner": "native grid identity at consumer admission",
+  "reason": "Lossless original JSON retains 160 complete paired cold/replay E/F calls with full vectors, actual work and convergence controls, exact source/binary/runner identity and device/compiler-cache validation. The control reproduces prior caller binding plus consumer digest verification. No external archive or limit relaxation.",
+  "review_document": "benchmarks/results/native-grid-binding-20261024/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/native-grid-binding-20261024/receipts.json.xz",
+      "family": "native-grid-binding-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete paired native cold/replay qualification and immutable build/runtime provenance",
+      "bytes": 258688,
+      "sha256": "af7e5d8be05f19c1a219adf670e1784201eb4c35d06fdc687e636f54bf643724"
+    }
+  ]
+}

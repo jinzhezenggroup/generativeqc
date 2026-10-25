@@ -2463,6 +2463,27 @@ int main() {
     const auto default_plan = generativeqc::scf::plan_density_fitting_tiles(1, 8, 8, 2, 0);
     require(default_plan.batch_tile > 0 && default_plan.auxiliary_tile > 0,
             "zero DF planner budget should select the default policy");
+    // An admitted vector-J consumer can prefer streamed work even when raw
+    // residency fits. It must keep the caller's full cap and charged fallback
+    // panels, including fixed owners, rather than manufacture memory pressure.
+    for (const std::size_t allowance : {8U << 20, 1U << 28}) {
+      constexpr std::size_t fixed = 1U << 16;
+      const auto vector_plan =
+          generativeqc::scf::plan_streamed_density_fitting_tiles(32, 128, allowance, fixed);
+      require(!vector_plan.stores_full_three_center && vector_plan.ao_pair_tile &&
+                  vector_plan.auxiliary_tile && vector_plan.peak_workspace_bytes > fixed &&
+                  vector_plan.peak_workspace_bytes <= allowance,
+              "streamed work preference lost bounded fallback capacity");
+    }
+    for (const std::size_t allowance : {0U, 1U, 1U << 16}) {
+      bool refused = false;
+      try {
+        (void)generativeqc::scf::plan_streamed_density_fitting_tiles(32, 128, allowance, 1U << 16);
+      } catch (const generativeqc::scf::DensityFittingBudgetError&) {
+        refused = true;
+      }
+      require(refused, "streamed work policy exceeded its complete allowance");
+    }
     const auto bounded_plan =
         generativeqc::scf::plan_density_fitting_tiles(4, 192, 600, 48, 1024ULL * 1024 * 1024);
     require(!bounded_plan.stores_full_three_center &&

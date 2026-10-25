@@ -1,0 +1,101 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The generated derivative reuse passes independent weighted/finite-difference, complete endpoint, moved/property/rollback, g-auxiliary and range-separated gates. Every timing observation and preexisting failure remains retained.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 5139,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "f2971c9140f22e8a134d09ef1e3dc4a58d18521290085e9d494228ceec5278c3"
+    },
+    {
+      "bytes": 3756,
+      "path": "comparisons.json.xz",
+      "role": "summary",
+      "sha256": "ebe0824e7979f785d3e22ffb047be215330d4eb4dc5fb5f2cdbac001ed548c04"
+    },
+    {
+      "bytes": 159984,
+      "path": "endpoints.json.xz",
+      "role": "samples",
+      "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
+    },
+    {
+      "bytes": 9688,
+      "path": "jobs.json.xz",
+      "role": "reproduction",
+      "sha256": "18860c786b245ee0583de421a4fc0494fc1ac901eb8b78478dc8ad62bc9ff900"
+    },
+    {
+      "bytes": 48248,
+      "path": "moved.json.xz",
+      "role": "samples",
+      "sha256": "b62c9966c89fe50022068b370e212478332fadae9c561f9f7fc40a30b26b421d"
+    },
+    {
+      "bytes": 4832,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "b17f8eaece154408a5dfeb8608ba6a6b478ab4451d73be762c94eb4566e55bc3"
+    },
+    {
+      "bytes": 8333,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "792e26eff7d66ceb117ab7d22f213be92d05dc577ae51206e6db43dace2ed068"
+    },
+    {
+      "bytes": 6668,
+      "path": "tests.json.xz",
+      "role": "summary",
+      "sha256": "d6bc8ae634048c7a1f6c3e9a0e124528d397d12e2ff92b097f797b368f426ae1"
+    },
+    {
+      "bytes": 43456,
+      "path": "tile-trials.json.xz",
+      "role": "samples",
+      "sha256": "94e97320e50a8ce81405000fa14e583f4e8061c7cddebe4bbd5b86f97db8848e"
+    },
+    {
+      "bytes": 1332,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "cb2bdb7eb7101df645956a244284085656761dd27f4fcfa947d6021aa0ad60e4"
+    },
+    {
+      "bytes": 7024,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "80c7dfc5cc47c03ec2af5e97cd366bee1e061eb2b65ae0039605750ceb01b83b"
+    },
+    {
+      "bytes": 22688,
+      "path": "work-endpoints.json.xz",
+      "role": "samples",
+      "sha256": "7704357f236412eebb112cb2911983cf7d08c9e49fb0070f8d0ae1f5a4e7ba8e"
+    },
+    {
+      "bytes": 27792,
+      "path": "work-traces.json.xz",
+      "role": "samples",
+      "sha256": "64796db3bcdcd813b6c4b2fbb6266d4d4bb8a47a51cb66ae2496a926398ae0dc"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/df-metric-pairs-20261025/reproduce.py",
+      "--output",
+      ".artifacts/df-metric-pairs-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "a55214c7c458694aaa93a5b533e71b842f3a73d6"
+  }
+}

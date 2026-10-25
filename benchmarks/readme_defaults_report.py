@@ -147,13 +147,18 @@ def render(
     *,
     qualifications: list[dict] | None = None,
     include_unqualified: bool = False,
+    default_labels: bool = False,
 ) -> list[dict]:
     """Render complete latency populations, retaining independent accuracy status.
 
     Performance-only publication can include inaccurate endpoints without changing
     their qualification. Incomplete or invalid endpoints remain excluded by the
     reducer. The default preserves historical accuracy-filtered figure replay.
+    ``default_labels`` omits the Standard preset name for homepage figures;
+    it requires a default-only population and never relabels Fast receipts.
     """
+    if default_labels and any(record.get("arm") == "fast" for record in records):
+        raise ValueError("default labels require receipts without Fast")
     if len({record.get("schema") for record in records}) > 1:
         raise ValueError("mixed measurement protocols")
     if any(record.get("schema") != SCHEMA for record in records):
@@ -267,7 +272,15 @@ def render(
                         color="#666666",
                     )
             handles = [
-                Line2D([], [], color=COLORS[arm], lw=2, label=ARM_LABELS[arm])
+                Line2D(
+                    [],
+                    [],
+                    color=COLORS[arm],
+                    lw=2,
+                    label="GenerativeQC"
+                    if default_labels and arm == "standard"
+                    else ARM_LABELS[arm],
+                )
                 for arm in MEASUREMENT_ARMS
                 if any(
                     row["mode"] == mode and row["arm"] == arm and row["cold"]
@@ -352,6 +365,11 @@ def main() -> None:
     parser.add_argument("--oracles", type=Path, nargs="+")
     parser.add_argument("--reference-reuse", type=Path)
     parser.add_argument(
+        "--default-labels",
+        action="store_true",
+        help="Omit preset names in default-only homepage figures",
+    )
+    parser.add_argument(
         "--include-unqualified",
         action="store_true",
         help="Plot complete performance points regardless of retained accuracy status",
@@ -377,6 +395,7 @@ def main() -> None:
         args.output,
         qualifications=qualifications,
         include_unqualified=args.include_unqualified,
+        default_labels=args.default_labels,
     )
     if qualifications is not None:
         (args.output / "qualification.json").write_text(

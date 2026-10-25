@@ -22,6 +22,7 @@
 #include "scf/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #endif
 
@@ -247,11 +248,32 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
     execution_plan.automatic_program = semilocal.automatic_program;
     execution_plan.automatic_restricted_program = semilocal.automatic_restricted_program;
-    if (execution_plan.automatic_program &&
-        (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
-         ks_input->has_nonlocal_correlation != 0))
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "automatic Libxc semilocal KS currently requires pure CPU execution");
+    if (execution_plan.automatic_program) {
+      if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+          ks_input->exchange_term_count != 0 || ks_input->has_nonlocal_correlation != 0)
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                          "automatic Libxc KS requires pure CPU/CUDA semilocal execution");
+#if GENERATIVEQC_HAS_CUDA
+      if (backend == GENERATIVEQC_BACKEND_CUDA) {
+        const auto* program = dft::generated::automatic_cuda_point_entry(execution_plan.functional);
+        if (!program)
+          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                            "automatic Libxc CUDA KS requires a static provider; build with "
+                            "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON");
+        // Authenticate individual CPU spin contracts; the CUDA expression
+        // identity combines both layouts and cannot equal either part's hash.
+        const auto& cpu = *execution_plan.automatic_program;
+        const auto* restricted = execution_plan.automatic_restricted_program;
+        if (!program->matches_cpu_science(cpu.expression_identity,
+                                          restricted ? restricted->expression_identity : "",
+                                          cpu.ingredient_mask, cpu.domain_version) ||
+            (restricted && (restricted->ingredient_mask != cpu.ingredient_mask ||
+                            restricted->domain_version != cpu.domain_version)))
+          throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
+                            "automatic Libxc CPU/CUDA scientific identity mismatch");
+      }
+#endif
+    }
     if (execution_plan.generated_split_hybrid && backend != GENERATIVEQC_BACKEND_CUDA)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -483,12 +505,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   // and an explicit 1/on keeps the original native capability checks.
   if (!std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK") &&
       !std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")) {
+    const bool pure_coulomb =
+        !fock.exchange.present &&
+        (functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe) ||
+         functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan));
     options.incremental_direct_jk_auto =
-        backend == GENERATIVEQC_BACKEND_CUDA && cuda_matched_global_hybrid &&
-        fock.spin == scf::FockSpin::Restricted && fock.exchange.present &&
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        ((cuda_matched_global_hybrid && fock.exchange.present) || pure_coulomb) &&
+        fock.spin == scf::FockSpin::Restricted &&
         options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         options.precision_mode == GENERATIVEQC_PRECISION_FP64 && !execution_plan.range_exchange &&
-        !execution_plan.nonlocal_correlation && !execution_plan.d4_correction &&
+        !execution_plan.nonlocal_correlation && (pure_coulomb || !execution_plan.d4_correction) &&
         options.energy_tolerance == 1e-9 && options.density_tolerance == 1e-5 &&
         options.screening_tolerance == 1e-12 &&
         scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
@@ -596,8 +623,8 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
   return grid;
 }
 
-void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
-                            const core::System& system) {
+void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan, const core::System& system,
+                            generativeqc_backend backend) {
   if (execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
       dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
       !system.ecp_terms.empty())
@@ -615,6 +642,15 @@ void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
     throw std::invalid_argument(
         "UKS requires electron count and multiplicity to define integer "
         "nonnegative spin occupations");
+  // Automatic providers export interior derivatives at projected Libxc work
+  // inputs. At an empty spin these are not derivatives of the original-density
+  // weighted energy under a physical spin birth. Preserve that point contract,
+  // but do not advertise a complete CUDA KS Fock for this unqualified boundary.
+  if (backend == GENERATIVEQC_BACKEND_CUDA && execution_plan.automatic_program &&
+      system.electron_count == spin_excess)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "automatic CUDA KS has no empty-spin physical-birth derivative "
+                      "qualification; both spin occupations must be nonzero");
 }
 
 generativeqc_status validate_dft_system(generativeqc_method, const core::System& system,

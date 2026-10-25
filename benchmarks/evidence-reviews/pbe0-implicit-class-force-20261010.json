@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "pbe0-implicit-class-force-20261010",
+  "owner": "explicit composed PBE0 Hcore and class-major force endpoints",
+  "reason": "All 46 complete 96-atom construction/setup/prime/sample calls retain full independent numerical outputs, semantic work, resources, owner seed identities and five interleaved timings per side/phase. Lossless gzip only; no full logs, binaries, timing retries, default-promotion waiver or storage-budget increase.",
+  "review_document": "benchmarks/results/pbe0-implicit-class-force-20261010/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/pbe0-implicit-class-force-20261010/paired-96.json.gz",
+      "family": "pbe0-implicit-class-force-20261010",
+      "bytes": 153936,
+      "sha256": "02d860f90dbeecfc85ca708df03edcea64ea60881280506f8badeb29c727f428",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched clean endpoint and all-call scientific/work records; composed explicit selection only, with differing cross-owner seeds and no cold/default/peak-memory claim."
+    }
+  ]
+}

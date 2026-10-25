@@ -3449,17 +3449,39 @@ def _complete_rks_cuda_gradient_diagnostic(
         return layout, work
 
     requested_tile_points = tile_points
-    # Large fitted grids need the admitted pair-phase cache more than a larger
-    # AO tile. A 512-point tile can fit while leaving only the slow tiled Becke
-    # route; 256 points retains point concurrency and the existing phased math.
-    # Explicit caller tiles and unknown providers keep their original policy.
-    preferred_tile_points = (
-        256
-        if na >= _AUTO_PHASED_BECKE_MIN_ATOMS
+    from . import _cuda_force_resources
+    from ._cuda_force_resources import DF_FORCE_DEVICE_CAP, DF_FORCE_HOST_CAP
+
+    # Large fitted grids need both a larger AO tile and the phased Becke cache.
+    # A larger tile under the original small cap can evict that cache and lose
+    # point concurrency. Prefer 1024 only with the larger explicit reservations;
+    # the dry admission search still includes every concurrent owner and may
+    # shrink the tile. Explicit requests never raise either caller budget.
+    large_fitted = (
+        na >= _AUTO_PHASED_BECKE_MIN_ATOMS
         and bool(getattr(state._source, "density_fitted", False))
         and callable(getattr(state._source, "stationary_integral_device_reserve", None))
-        else 512
     )
+    preferred_tile_points = 512
+    if large_fitted:
+        preferred_tile_points = (
+            1024
+            if max_device_bytes >= DF_FORCE_DEVICE_CAP
+            and max_host_bytes >= DF_FORCE_HOST_CAP
+            else 256
+        )
+    if (
+        not large_fitted
+        and not ecp
+        and na >= _cuda_force_resources.DIRECT_FORCE_MIN_ATOMS
+        and callable(getattr(state._source, "cuda_integral_derivatives", None))
+        and max_device_bytes >= DF_FORCE_DEVICE_CAP
+        and max_host_bytes >= DF_FORCE_HOST_CAP
+    ):
+        # Large Direct owners can otherwise fall to 256 points when the
+        # original host cap cannot hold both AO staging and phased geometry.
+        # The shared dry search retains smaller tiles on any capacity refusal.
+        preferred_tile_points = 1024
     layout, grid_work, ao_capacity_fallback = _plan_stationary_optional_ao_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,

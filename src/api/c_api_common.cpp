@@ -37,6 +37,9 @@ GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v2(void) { 
 /** Independent admission for budget-selected correlated stopping criteria. */
 GENERATIVEQC_API uint32_t generativeqc_correlation_convergence_version_v1(void) { return 1; }
 
+/** Independent bounded DF warmup selection; the public descriptor ABI is unchanged. */
+GENERATIVEQC_API uint32_t generativeqc_correlation_execution_version_v1(void) { return 1; }
+
 /** Private capability: budget-selected full-range FP32 J/K and physical gates. */
 GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v1(void) { return 1; }
 

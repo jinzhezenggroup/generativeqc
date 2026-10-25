@@ -1,12 +1,12 @@
 # Native semilocal XC device boundary
 
 `dft/cuda_xc.hpp` supplies the ordinary-stream fixed-density LDA/PBE RKS/UKS
-component for #162. It consumes current device density matrices and returns
-device XC energy/electron totals, potential matrices and a numerical-error
-flag. `dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the
-registered method adapter exposes CPU/CUDA single-system and native prepared
-ragged energy execution. The public #203 method resource plan accounts for
-preparation and execution with one persistent ledger; see
+component. It consumes current device density matrices and returns device XC
+energy/electron totals, potential matrices and a numerical-error flag.
+`dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the registered
+method adapter exposes CPU/CUDA single-system and native prepared ragged energy
+execution. The public method resource plan accounts for preparation and
+execution with one persistent ledger; see
 [resource planning](../maintainer/resource_planning.md).
 
 ## Ownership and data movement
@@ -38,10 +38,13 @@ and count their synchronization boundaries. The surrounding method must also
 account for its density input, one-electron setup, J provider and final outputs.
 
 The geometry, basis, grid and functional are immutable within a plan. Changes
-require a new plan. The currently supported compositions are exactly
-LDA_X+LDA_C_PW and PBE_X+PBE_C, with the
-[versioned SCF point-domain policy](xc_scf_domain.md). No meta-GGA or force
-capability is implied by these interfaces.
+require a new plan. This device component itself currently supports exactly the
+LDA_X+LDA_C_PW and PBE_X+PBE_C compositions, with the
+[versioned SCF point-domain policy](xc_scf_domain.md). It is a fixed-density
+energy/potential consumer: neither a meta-GGA nor a force capability follows
+from these interfaces. Analytic-force promotion is a separate prepared-owner
+contract described in
+[Architecture decisions](architecture.md#executable-method-boundary).
 
 ## Numerical path
 
@@ -84,9 +87,19 @@ not a clipped density or a successful Fast result after strict recovery.
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
 entries from the common structural automatic registry. It is off by default;
-the disabled registry returns no automatic entries. Enabling this internal
-build option **does not admit public automatic CUDA KS or force methods**.
-Unsupported products continue to fail explicitly rather than stage CPU science.
+the disabled registry returns no automatic entries. An enabled library can
+prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
+ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
+execution with J only. Missing static providers fail with a build-option
+diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
+Analytic automatic CUDA forces and other unqualified products remain rejected.
+Automatic CUDA UKS additionally requires nonzero occupations in both spin
+channels. Empty-spin requests fail at preparation with an explicit physical-birth
+derivative diagnostic; native construction and detached final-state validation
+enforce the same boundary. Libxc raw work-domain coefficients at an empty spin
+are not the derivative of its original-density-weighted, clipped energy under a
+spin birth. Fixed-density point/XC execution retains that raw-work contract.
+This admission restriction does not change the CPU or curated CUDA KS domains.
 
 For bounded packages, set `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` to a
 semicolon-separated list of exact structural registration names, for example
@@ -112,6 +125,16 @@ turning it into an installed artifact/cache key or a resource admission claim.
 Automatic entries reuse the existing AO, density-feature and potential kernels
 with strict FP64 and the bounded one-tile fallback. They do not inherit curated
 mixed precision, response, local-AO selection, batching or graph qualification.
+The KS owner also keeps automatic programs on ordinary single-iteration streams
+rather than admitting curated device chunks, graph replay or incremental J.
+CPU/CUDA resolve the same MethodIR and bind the same canonical expression and
+work-domain identity. The code-scoped KS resource inventory v2 obtains the
+actual static ingredient/feature widths, including tau; it never substitutes a
+same-family LDA/PBE shape or claims automatic force storage/capability.
+Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
+with four additional history slots accounted by both native and public resource
+owners. Detached snapshots retain the shared physical/canonical validation
+gates rather than treating an SCF convergence flag as sufficient authorization.
 
 The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
 structurally registered automatic provider (`0` restores the old path).
@@ -129,6 +152,17 @@ binary and run `tests/python/test_libxc_automatic_cuda_xc.py`. The independent
 PySCF 2.14.0 / Libxc 7.0.0 gate checks both physical spin layouts, partial tiles,
 fixed-density XC energy/potential, replay, density directions and changed
 geometry. This is not an SCF, analytic-force or installed-bundle qualification.
+
+For the public ordinary-stream SCF gate, build the native library with the
+option enabled, set `GENERATIVEQC_LIBRARY` to that library and
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_TEST=1` inside a finite Slurm allocation, and run
+`tests/python/test_libxc_automatic_cuda_ks.py`. It compares cold, warm
+recomputation and changed-geometry RKS/UKS with pinned PySCF/Libxc on exported
+exact grids using explicit Hcore seeds and an asymmetric H4/STO-3G fixture,
+checks physical density/Fock and energy directions, and records
+complete endpoint timings and J-only semantic work. Optional
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR` retains source/binary-bound receipts.
+These are qualification data, not an installed bundle or a positive user list.
 
 ### Curated execution
 
@@ -369,7 +403,7 @@ kernel and its retained fallback for multi-tile automatic execution. The
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
 qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
-ablations belong to the independent #2072 arm.
+ablations belong to a separate source-specialization arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped
@@ -459,18 +493,18 @@ neither a scientific-code retirement nor a performance advantage is claimed.
 
 ## Direct J connection
 
-`scf/cuda_direct_jk_device.hpp` exposes the #202 provider's ordinary stream and
+`scf/cuda_direct_jk_device.hpp` exposes the direct-J/K provider's ordinary stream and
 an enqueue operation over caller-owned device density/J/K arrays. It reuses
 the existing operator validation and contracted-ERI kernel, with device finite
 checks and no success-path staging or synchronization. This lets a method use
 one stream for matrix production, J and XC without inheriting the HF graph
 layout. `CudaKsPlan` uses this seam directly, with an exact state arena charged
-through the #203 device ledger. It reuses the existing matrix, DIIS, eigensolver
+through the shared device ledger. It reuses the existing matrix, DIIS, eigensolver
 and density kernels, keeps current physical Fock and proposal state separate,
 and reads one scalar diagnostic record per iteration. Convergence returns the
 current evaluated density; only converged states replace the resident warm
-cache. An energy-only public call omits final matrix export. Full #203 public
-planning remains separate integration work.
+cache. An energy-only public call omits final matrix export. Full public planning
+of this seam remains separate integration work.
 
 Strict-FP64 restricted resident VV10 solves use bounded native initialization
 before the ordinary physical target tail. The initializer first solves a
@@ -513,6 +547,34 @@ terms before optional values are retired. An authenticated unchanged fitted
 primary retains its current J/K and final occupied projection during a range-only
 rebase. This preserves the physical replay gates and counts the operators
 actually executed.
+
+### Temporary ERI disk spill
+
+Eligible cold strict LR KS sources automatically back buckets omitted from both
+GPU and RAM with a temporary local file. `GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES`
+defaults to at most 64 GiB and one quarter of local available disk space.
+Full-range sources retain Direct by default because qualified local-NVMe replay
+is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
+enables controlled full-range experiments. Explicit `0` disables that tier; the matching
+`DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
+or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
+filesystems are refused. Complete GPU residency creates no temporary file.
+
+The file is physically preallocated and immediately unlinked, so its owning
+descriptor controls lifetime and cleanup. Disk values share the RAM tier's
+bounded pinned/device staging pairs. Creating a new staging owner must fit
+both numeric/device admission and available job RAM. Setup I/O refusal retains
+GPU/RAM and exact Direct; replay read failure returns an error instead of
+publishing a partial J/K. Geometry/precision changes retire the owner, and
+range disk control changes invalidate warm reuse.
+
+Construction flushes and advises file-page eviction; consumed read ranges are
+also advised for eviction. These OS hints do not guarantee physical I/O.
+`disk_source_value_bytes`, `disk_source_build_write_bytes`, `disk_cached_values`
+and `disk_read_bytes` expose logical work; event traces add `*_disk_replay/`
+regions. Benchmark receipts report process-wide physical I/O separately.
+This is ephemeral reuse within one calculation, not persistent SSD caching.
+See the [disk decision](../../.agents/notes/implemented/performance/2026-10-25-temporary-eri-spill.md).
 
 ### Full-range host ERI backing
 
@@ -559,6 +621,7 @@ host tier; driver and numerical failures propagate. Values retain the owner's
 geometry, basis, radial operator, omega, screening and precision identity.
 Changing any host control retires the lease before warm reuse. Mixed sources,
 CUDA graph capture, persistent storage and CPU integral production are excluded.
+Temporary disk spill is a separate tier governed by the controls above.
 
 Eager replay copies sequential pageable tiles to pinned storage, then uses a
 separate stream for H2D. Events protect both pinned and device buffer reuse;
@@ -617,8 +680,10 @@ clearing seeds while frozen prevents later solves from creating replacements.
 The additive `generativeqc_batch_get_scf_diagnostic` query returns density-update and
 physical-commutator RMS values without changing the legacy result array stride.
 Unavailable and failed items report absence, including after a rejected replay.
-Python batch calls default to the method's supported observables, so KS defaults
-to energy and rejects forces. HF retains its energy-plus-force default.
+Python batch calls default to the context's advertised observables, so an
+energy-only KS context requests energy and rejects an explicit force request,
+while an admitted force context may request both. HF retains its
+energy-plus-force default.
 
 ## SCF local AO selection
 
@@ -692,7 +757,7 @@ before promotion, counting discovery in setup rather than amortizing it away.
 ## Validation
 
 `generativeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
-full-matrix integration, the independent #214 H2 fixture, spin-resolved finite
+full-matrix integration, the independent H2 fixture, spin-resolved finite
 differences, empty spin/vacuum tails, partial tiles and Cartesian/spherical f
 shells. It checks a density changed by a device kernel without re-upload,
 generation rejection, same-shape stale grid rejection, independent-stream
@@ -710,12 +775,13 @@ forces. `tests/python/test_dft_scf.py` compares CPU/CUDA stable small endpoints
 against two independently converged PySCF guesses on the identical grid.
 `tests/python/test_dft_batch.py` separately exercises public ragged replay,
 geometry rebuilds, per-item failures, frozen/cleared/imported seeds, ABI
-diagnostics and method-specific derivative requirements. The combined batch
-and independent SCF modules pass all 45 cases on the CPU/CUDA build with a
-Slurm-allocated RTX 5090. Resource budget boundaries and ledger lifetime are
-separately covered by `tests/python/test_ks_resources.py`; the full workload
-evidence required by #162 remains a separate acceptance gate.
-The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
+diagnostics and method-specific derivative requirements. Resource budget
+boundaries and ledger lifetime are separately covered by
+`tests/python/test_ks_resources.py`. These are endpoint and lifecycle gates, not
+evidence of complete-endpoint workload or profitability; that evidence follows
+[Performance engineering](../maintainer/performance_engineering.md) and
+[Evidence retention](../maintainer/evidence_retention.md).
+The CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
 
 An admitted radial source survives fixed-geometry warm replay by default.

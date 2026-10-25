@@ -1,9 +1,9 @@
-# Current-density D/C feature sources (#235)
+# Current-density D/C feature sources
 
 `generativeqc_compiler.dft.DensitySource` provides a fixed-input CPU contract for
 choosing between the original density matrix D and compatible occupied or
-fractionally occupied orbitals C/f. Slice A (#295) defines source validity;
-slice B (#297) adds bounded native CUDA execution below.
+fractionally occupied orbitals C/f. The CPU contract defines source validity;
+bounded native CUDA execution is described below.
 It builds on the [grid feature conventions](dft_grid.md) and supplies
 the same feature dictionary consumed by XC contractions.
 
@@ -115,10 +115,10 @@ Native `src/scf/density_factor.hpp` already owns the SCF/RI-K factor contract:
 its integer occupations, exact density witness, native reference/orbital IDs
 and restricted-spin convention remain authoritative there. This CPU external
 reference adds fractional-spin mathematical acceptance without changing native
-SCF semantics. The native CPU RKS adapter in #301 reuses that producer contract
-as described below. GPU SCF, geometric derivatives and automatic candidate
-selection under #168 remain staged integrations. Neither A nor B supplies a new
-molecular method, solver, force capability or speedup claim.
+SCF semantics. The native CPU RKS adapter reuses that producer contract as
+described below. GPU SCF, geometric derivatives and automatic candidate
+selection remain separate work. Neither contract supplies a new molecular
+method, solver, force capability or speedup claim.
 
 ## Bounded native CUDA execution
 
@@ -142,8 +142,8 @@ are valid. Local CUDA maps follow the existing sorted-unique device ABI.
 prepared orbital capacity execute the original D. `source_statistics` reports
 the route, factor/source identity, fallback reason, occupied counts, weighted
 factor packing time and upload bytes/time. Explicit `orbitals` rejects an
-unavailable route. This policy is not the #168 cost selector. Response sources
-always retain D; C geometric derivatives are not exposed.
+unavailable route. This policy is not the profile-selection cost model. Response
+sources always retain D; C geometric derivatives are not exposed.
 
 Requested ingredients prune arithmetic and unnecessary GEMMs. Rho-only accepts
 order-zero AO jets; sigma requires gradients internally; tau is optional. The
@@ -152,7 +152,7 @@ arrays. Borrowed device task ABI v1 describes the full feature layout and
 rejects pruned requests. Calls sharing an owner serialize; independent owners
 have separate streams and memory.
 
-Pass `resource_budget=ResourceBudget(...)` for composed #203 preflight, or
+Pass `resource_budget=ResourceBudget(...)` for composed native preflight, or
 the legacy `budget_bytes`, but not both. The planner charges global D, bounded
 AO/work/output tiles, global B, active-AO-by-orbital packing, a Psi capacity
 of `8 * 4 * tile_points * orbital_tile` bytes, host copies and a cuBLAS allowance.
@@ -211,8 +211,8 @@ The benchmark records five interleaved D/C pairs per endpoint case, cold
 compilation, owner construction, source/fixture-factor/validation costs and
 full available E/V wall time. Small fixtures and CPU staging do not establish
 a performance winner; larger molecular/throughput endpoints and promotion
-remain with #235 C/#168. Publish reviewed numerical records through the
-[existing evidence envelope](../maintainer/evidence_retention.md).
+remain separate qualification work. Publish reviewed numerical records through
+the [existing evidence envelope](../maintainer/evidence_retention.md).
 
 ## Validation
 
@@ -229,7 +229,7 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   .venv/bin/python -m pytest tests/python/test_density_source.py -q
 ```
 
-## Prepared spatial integration (#235 C1 / #299)
+## Prepared spatial integration
 
 `PreparedSpatialGrid(..., backend="cuda", orbital_capacity=(na, nb),
 orbital_tile=..., ingredients=..., basis_generation=...)` prepares the same
@@ -275,7 +275,7 @@ selected AO tile, downloads its jets/features, and assembles/scatters local
 potential blocks on the CPU using the same fixed mask. The observable remains
 fixed-density energy plus potential. CUDA response and geometry requests are
 rejected. Full native SCF, complete forces and automatic candidate selection
-remain #162/#163/#168 work.
+remain separate work.
 
 The composed budget charges spatial metadata, D/B, bounded AO/orbital panels,
 the cuBLAS allowance, CPU XC workspace and global potential output. The borrowed
@@ -306,14 +306,16 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   --output .artifacts/benchmarks/spatial-density-sources --samples 5
 ```
 
-## Native CPU RKS producer and XC consumer (#301)
+## Native CPU RKS producer and XC consumer
 
 `ScfOptions::xc_density_route` is an internal explicit candidate override.
 `DensityMatrix` remains the default, including the public LDA/PBE calculation
 API. `OccupiedOrbitals` runs the same native RKS loop, Coulomb provider, DIIS,
-eigensolver and XC/potential assembly. PBE retains the existing
-`pbe-tail-v2-lda-fallback` model; this change does not promote a pure-PBE tail
-or change its domain. Native UKS and GPU SCF are not supplied by this adapter.
+eigensolver and XC/potential assembly. PBE uses the same
+[`semilocal-scaled-v1` point-domain policy](xc_scf_domain.md) as the
+`DensityMatrix` route; selecting this route changes only how the density
+features are produced, not the functional domain. Native UKS and GPU SCF do
+not accept the orbital route.
 
 A native run receives a unique basis/reference binding and advances both
 orbital and density generations only after an actual unmixed eigensolver
@@ -338,7 +340,8 @@ specific `XcDensityFallback`. An explicit `Response` role also keeps D, even
 for a positive response. Complex or fractional native factors cannot be
 constructed with the canonical native contract; general fractional real spin
 inputs continue to use the independently validated prepared API. Unvalidated
-geometric C consumers must retain D until #163 supplies their complete role.
+geometric C consumers must retain D until moving-grid geometry consumers accept
+a factor.
 
 Native C collocation reduces each occupied orbital immediately at a point,
 using at most four scalar jets; it allocates no point-by-orbital matrix. LDA
@@ -368,9 +371,9 @@ field), cold/warm starts, fresh run identities, and immutable nonconverged
 snapshots. The water endpoint has five occupied orbitals and requires multiple
 SCF iterations. An exploratory stretched H4/core-guess run did not converge
 with the existing default D solver; it is not accepted endpoint evidence.
-This slice makes no performance or complete-force claim.
+This integration makes no performance or complete-force claim.
 
-## Executable registrations for #168 (#303)
+## Executable candidate registrations
 
 The existing `generativeqc.autotune.dft_density_candidates(prepared, source,
 stamp=source.stamp)` entry returns explicit D and C candidates bound to the
@@ -386,7 +389,8 @@ rather than changing mathematical or source-route identity. Deterministic
 candidate admission also records workspace, generated-source-size and
 conservative live-value bounds before timing.
 
-Optional DFT winners reuse the #136 profile bundle/cache. They require exact
+Optional DFT winners reuse the autotuning profile bundle/cache. They require
+exact
 architecture/functional/ingredient/jet/grid/screening/precision/spin/observable/
 source-route identity, independent numerical evidence, and the DFT-specific
 complete energy-plus-force promotion gate. The current public CUDA KS loop does
@@ -424,7 +428,8 @@ consumer, response densities, and geometric/response derivative requests.
 Its D sibling executes the existing analytic derivative consumer on the
 original D. Those geometric results are fixed-D AO-center/point/weight
 partials, not complete stationary nuclear forces. Complete moving-grid DFT
-forces remain #163; the registration makes no unvalidated C derivative claim.
+forces remain separate work; the registration makes no unvalidated C derivative
+claim.
 The internal native CPU RKS candidates described above use the same loop and
 are measured separately from the GPU-feature/fixed-density XC registration.
 

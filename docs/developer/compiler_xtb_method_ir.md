@@ -1,9 +1,8 @@
 # GFN-family compiler MethodIR
 
-Issue #503 introduced the compiler-owned representation layer for GFN-family
-semiempirical methods. #837 extends that layer with an audited GFN1-xTB graph
-beside GFN2-xTB. This layer is deliberately not a public xTB execution
-endpoint.
+The compiler owns the representation layer for GFN-family semiempirical
+methods, covering an audited GFN1-xTB graph beside GFN2-xTB. This layer is
+deliberately not a public xTB execution endpoint.
 
 ## Ownership boundary
 
@@ -34,7 +33,7 @@ eigensolution, but it does not contain iteration counts, tolerances, Broyden or
 DIIS history, or an eigensolver implementation choice.
 
 Host-controlled fixed-point execution shares the method-neutral solver services
-under `src/solver/` (#581, #1240). HF/KS consume `self_consistent.hpp`;
+under `src/solver/`. HF/KS consume `self_consistent.hpp`;
 the production GFN2 CPU SCC endpoint consumes the same bounded iteration
 controller while retaining GFN-owned electronic state, occupations, Hamiltonian
 construction, mixing and convergence semantics. The resident CUDA SCC
@@ -78,7 +77,7 @@ different constants:
 9. the GFN1 halogen correction as its own geometry primitive;
 10. non-self-consistent two-body D3(BJ).
 
-The halogen primitive is now concretely composable with the compiler-owned
+The halogen primitive is concretely composable with the compiler-owned
 TripletIR lowering. Its method-bound program identity includes the resolved
 GFN1 MethodIR identity, the exact primitive semantics, the pinned halogen
 parameter identity, the triplet topology and the TensorIR equation. This does
@@ -90,7 +89,7 @@ reuse one onsite-third-order TensorIR equation for `gamma3*q^3/3` and its
 charge derivative while binding different state-resolution semantics: GFN1
 uses atomic charge and GFN2 uses shell charge. The GFN1 binding also includes
 the canonical parameter-set identity. This is one fixed-state electronic
-slice; H0, ES2, population assembly, SCC execution, and public GFN1 admission
+contract; H0, ES2, population assembly, SCC execution, and public GFN1 admission
 remain separate gates.
 
 The canonical parameter-set revision is the SHA-256 identity of
@@ -114,8 +113,8 @@ the same audited composition can reuse compiler caches. It is retained in
 `manifest_identity` for result provenance.
 
 GFN2 retains its published method identity contract. GFN1 binds directly to
-the canonical repository snapshot and D3 table digest introduced by #837 so
-changing either scientific input changes compiler identity.
+the canonical repository snapshot and D3 table digest, so changing either
+scientific input changes compiler identity.
 
 ## Capability boundary
 
@@ -135,8 +134,4 @@ and type-check the audited scientific graph; it does **not** mean a
 
 Production GenerativeQC code in this layer depends only on GenerativeQC compiler modules.
 It does not import xTBloom and does not invoke an external xtb executable or
-library. xTBloom may be used independently as a qualification oracle in later
-implementation slices.
-
-Agent: ChatGPT
-Model: GPT-5.6 Sol
+library. xTBloom may be used independently as a qualification oracle.

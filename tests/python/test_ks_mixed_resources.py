@@ -173,3 +173,76 @@ def test_cuda_retained_force_host_arena_is_not_merged_into_scf_workspace(
     assert by_name["serialized KS transient host phase peak"].bytes == 320 * mib
     force = by_name["serialized generated KS force host staging cap"]
     assert force.bytes == 256 * mib and force.kind == "persistent"
+
+
+@pytest.mark.parametrize("atoms,force_mib", [(48, 512), (96, 1024), (120, 1024)])
+def test_large_direct_force_cap_coexists_with_ragged_fleet(
+    monkeypatch: pytest.MonkeyPatch, atoms: int, force_mib: int
+) -> None:
+    """A larger retained force arena cannot be lent to either fleet member."""
+    from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+
+    library = _inventory_library(monkeypatch)
+    molecule = [(1, (float(i), 0.0, 0.0)) for i in range(atoms)]
+    request = resources_ks.ks_resource_request(
+        [H2, molecule], backend="cuda", library=library
+    )
+    unrestricted = plan_resources([request], ResourceBudget()).require_feasible()
+    by_name = {estimate.name: estimate for estimate in unrestricted.estimates}
+    assert (
+        by_name["serialized generated KS force device staging cap"].bytes
+        == force_mib << 20
+    )
+    assert (
+        by_name["serialized generated KS force host staging cap"].bytes
+        == force_mib << 19
+    )
+    peak = unrestricted.peak_bytes["device"]
+    plan_resources([request], ResourceBudget(device_bytes=peak)).require_feasible()
+    with pytest.raises(MemoryError, match="no supported plan fits"):
+        plan_resources(
+            [request], ResourceBudget(device_bytes=peak - 1)
+        ).require_feasible()
+
+
+@pytest.mark.parametrize("atoms", [2, 96, 120])
+def test_automatic_cuda_energy_does_not_reserve_unavailable_force_arenas(
+    monkeypatch: pytest.MonkeyPatch, atoms: int
+) -> None:
+    """Automatic energy-only owners cannot retain generated force scratch."""
+    from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+
+    library = _inventory_library(monkeypatch)
+    allowances = []
+
+    def inventory(*args: typing.Any, **kwargs: typing.Any) -> None:
+        allowances.append(kwargs["retained_allowance"])
+
+    monkeypatch.setattr(resources_ks, "_native_host_fleet_inventory", inventory)
+    molecule = [(1, (float(i), 0.0, 0.0)) for i in range(atoms)]
+    request = resources_ks.ks_resource_request(
+        [H2, molecule], method="libxc:GGA_C_AM05", backend="cuda", library=library
+    )
+    assert request.identity.observables == ("energy",)
+    controls = json.loads(request.identity.schedule)
+    assert controls["generated_force_host_cap"] == 0
+    assert controls["generated_force_device_cap"] == 0
+    assert allowances == [resources_ks.SNAPSHOT_GRID_CACHE_BYTES]
+    plan = plan_resources([request], ResourceBudget()).require_feasible()
+    by_name = {estimate.name: estimate for estimate in plan.estimates}
+    assert by_name["serialized generated KS force host staging cap"].bytes == 0
+    assert "serialized generated KS force device staging cap" not in by_name
+    plan_resources(
+        [request],
+        ResourceBudget(
+            host_bytes=plan.peak_bytes["host"], device_bytes=plan.peak_bytes["device"]
+        ),
+    ).require_feasible()
+    with pytest.raises(NotImplementedError, match="forces are not qualified"):
+        resources_ks.ks_resource_request(
+            [H2, molecule],
+            method="libxc:GGA_C_AM05",
+            backend="cuda",
+            library=library,
+            include_forces=True,
+        )

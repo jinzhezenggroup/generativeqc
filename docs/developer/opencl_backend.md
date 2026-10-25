@@ -111,4 +111,4 @@ performance claims.
    submission; keep graphs optional and expose unavailable methods clearly.
 5. Run cold, unchanged and moved-geometry RHF/UHF/batch endpoints with density,
    energy and force gates, resource limits and full timing evidence. Promote
-   only validated operator/method/target combinations; this issue promotes none.
+   only validated operator/method/target combinations; this plan promotes none.

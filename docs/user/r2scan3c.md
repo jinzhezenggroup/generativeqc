@@ -1,4 +1,4 @@
-# r2SCAN-3c capability contract
+# r2SCAN-3c
 
 GenerativeQC exposes canonical r2SCAN-3c through the Python selectors
 "r2scan-3c", "r2scan-3c-rks", and "r2scan-3c-uks". These names resolve to the
@@ -37,7 +37,7 @@ native per-item resource and generated derivative domain remain authoritative.
 Real-device qualification for the canonical DF endpoint (including changed
 geometry, translation and an independent reference) is in
 `tests/python/test_r2scan3c_execution.py` and the source-matched
-`benchmarks/run_readme_dft_benchmarks.sh` harness from #2401. CPU or ordinary
+`benchmarks/run_readme_dft_benchmarks.sh` harness. CPU or ordinary
 CI without a scheduler-allocated CUDA device does not establish CUDA
 performance or force qualification.
 
@@ -97,3 +97,5 @@ different stationary states with nearly equal energy and different transverse
 forces. The current method does not promise automatic root following across
 that case; compare the final states before interpreting a cross-run force
 difference as an error in one state's analytic force.
+
+See the [method table](../public_methods.md) for the current selector inventory.

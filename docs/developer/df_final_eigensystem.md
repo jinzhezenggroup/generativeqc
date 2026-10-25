@@ -4,7 +4,7 @@ The fused CUDA RHF/UHF DF finalizers use the existing ordinary FP64 Xsyevd
 dispatch for their required physical Fock eigensolves. RHF physical-reference
 export uses the same operation. The independent CPU reference eigensolver is
 unchanged. Cold overlap/core preparation and the independent host-iterative
-Fock API retain their existing routes in this increment of #310.
+Fock API retain their existing routes.
 
 ## Operation and numerical contract
 
@@ -32,7 +32,8 @@ Signs and rotations within degenerate subspaces are irrelevant to these gates.
 The finalizer still projects density, rebuilds physical Fock, computes energy,
 and assembles the complete one-electron/Pulay/DF response for force requests.
 The existing physical-reference validator also runs when exporting a frame.
-Mutually consistent final-state retention and bounded correction remain #311.
+Mutually consistent final-state retention and bounded correction remain
+separate work.
 
 ## Ownership and failures
 
@@ -70,12 +71,14 @@ capacity-rejection detail, rather than assumed from the asymptotic formula.
 ## Causal measurement
 
 The private diagnostic `GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN=1` restores the actual
-independent reference final solves. The existing #206 runner exposes
+independent reference final solves. The DF matrix runner
+(`benchmarks/issue206_df_matrix.py`) exposes
 `--host-workloads --final-eigen-ablation`: baseline uses that reference control,
 candidate uses ordinary device solves, and both retain identical lazy/cached
-preparation. This mode is separate from #309's preparation ablations.
+preparation. This mode is separate from the preparation ablations.
 The input identity records the control; intrusive tracing uses separate runs.
 Actual final reference/device leaves, overlap/core/cache scopes, SCF iterations
 and retry branches gate the comparison. Finalizer device traces record uploads,
 transforms, solver calls, downloads and validation separately from complete
-synchronized endpoint time. External numerical/performance parity remains #206.
+synchronized endpoint time. External numerical and performance parity remain
+separate acceptance work.
