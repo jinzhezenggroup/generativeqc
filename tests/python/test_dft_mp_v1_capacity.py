@@ -19,6 +19,7 @@ from test_stationary_geometry_resources import (
     assert_native_allocation_contract,
     assert_native_create_contract,
 )
+
 from tools.dft_mp_v1 import qualify_capacity
 
 if TYPE_CHECKING:

@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+
 from tools.cuda_schedule_trials import (
     BATCH_PATH,
     EMITTER_PATH,
