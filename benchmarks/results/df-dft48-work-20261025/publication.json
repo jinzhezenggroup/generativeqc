@@ -127,10 +127,10 @@
       "sha256": "15f0d7c6976521018e4f61da244e7ff73998ad3c192c956cca9188c4cc767917"
     },
     {
-      "bytes": 6628,
+      "bytes": 6624,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "b72b8962edc9a8996654f4138cdfcac8e12ed76a636bef6597796ee8e78fb458"
+      "sha256": "f7147bbd0c8fe40521aed2b230fc6dc1cba57e2c8e5a766225af350f8066b32e"
     },
     {
       "bytes": 15930,
