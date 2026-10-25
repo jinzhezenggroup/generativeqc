@@ -276,7 +276,9 @@ generativeqc_status DirectJkSourceLease::prepare(
   capacity_bytes_ = checked_add(overhead, value_bytes_);
   // The existing GPU selection has priority. Host capacity is additional,
   // explicitly bounded storage, including both pinned and device staging pairs.
-  if (host_ceiling && !mixed_recurrence_ && source_operator_ == FockOperator::LongRange &&
+  if (host_ceiling && !mixed_recurrence_ &&
+      (source_operator_ == FockOperator::LongRange ||
+       source_operator_ == FockOperator::FullRange) &&
       value_count_ < source_value_count_) {
     const auto used = checked_add(required, capacity_bytes_);
     const auto remaining = used < budget ? budget - used : 0;

@@ -17,7 +17,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "readme-dft-20261013": {
@@ -31,7 +31,7 @@
       "review_document": "benchmarks/results/occupied-xc-cold-20261023/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "owner": "bounded DFT scheduling qualification for #2475–#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -239,6 +239,11 @@
       "owner": "README complete HF/DFT endpoint comparison",
       "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
       "review_document": "benchmarks/results/readme-final-20261024/README.md"
+    },
+    "host-full-eri-20261025": {
+      "owner": "#2762 full-range KS host ERI qualification",
+      "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
+      "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
     }
   },
   "files": [
@@ -849,6 +854,14 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
+    },
+    {
+      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
+      "family": "host-full-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
+      "bytes": 176688,
+      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
