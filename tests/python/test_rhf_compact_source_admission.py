@@ -77,6 +77,7 @@ CUDA_API = r"""
 #define __host__
 #define __device__
 using cudaStream_t=void*; using cudaGraph_t=void*; using cudaGraphExec_t=void*;
+using cudaEvent_t=void*;
 using cudaError_t=int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaErrorMemoryAllocation=2;
 constexpr int cudaErrorInvalidDevice=10;
