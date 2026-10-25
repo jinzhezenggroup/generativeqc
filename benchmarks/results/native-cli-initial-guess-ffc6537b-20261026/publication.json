@@ -1,0 +1,51 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All 16 scoped default CLI timing gates pass, but full performance promotion requires complete work/allocation and compile-cost evidence.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 5597,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "7b39208dcce025738894184579a6faa03c3199e9715bddb0d1e8cf0d856b7890"
+    },
+    {
+      "bytes": 6067,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "932dd6c9d8dd53abdb6cdd5b615d45e67f2c923915d83254bcf3e32aee1c1dfd"
+    },
+    {
+      "bytes": 59463,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "f9e4ce628fc760cf1583192b3694c8c78e9fbc20536307240f832ff6e2832cd6"
+    },
+    {
+      "bytes": 2667,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "2b63ee23a2de80d58e0fbdad2031aa38d812a5bad8a54beee5d412abf8bdef43"
+    },
+    {
+      "bytes": 84186,
+      "path": "build-receipts.json.gz",
+      "role": "input",
+      "sha256": "b1fc7ae6a88788c76b7d9b88eb2fcdb1d58c2583da53c67d87438963478c0d72"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "qualification/qualify-cli-cuda-v2.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "ffc6537b15b7df10240a1b9bb94f6f6190715408"
+  }
+}
