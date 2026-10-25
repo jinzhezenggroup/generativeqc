@@ -70,6 +70,8 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
 # switches dormant for a small shape: a prepared resource identity must not
 # silently accept a different arithmetic, profiling or scheduling policy.
 _CUDA_SCHEDULE_VARIABLES = (
+    "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM",
+    "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",
     "GENERATIVEQC_FINAL_FOCK_REBUILD",
     "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD",
     "GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE",

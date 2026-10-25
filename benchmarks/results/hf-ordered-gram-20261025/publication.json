@@ -1,0 +1,95 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The admission-only change passes independent complete endpoint, moved/property/rollback and native ordered-dot/bitwise gates. The scoped timing gain and all controls remain separately visible.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 4037,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c0badf6c0fde6a1bf0abbb03895ca2b8aa99845736e4c5374fe178f83600cda3"
+    },
+    {
+      "bytes": 2616,
+      "path": "comparisons.json.xz",
+      "role": "summary",
+      "sha256": "733a740a6facefe47d6d6db0d40f22ab2eaeb496d3620b35a58860a8ccd8bcaa"
+    },
+    {
+      "bytes": 84512,
+      "path": "endpoints.json.xz",
+      "role": "samples",
+      "sha256": "75b8f7d1292dd1cb008d6b0833a79a0e39afb612393fe74845cb6d88b724bba3"
+    },
+    {
+      "bytes": 7980,
+      "path": "jobs.json.xz",
+      "role": "reproduction",
+      "sha256": "d202de2e1d6037320fc3fd1b89e1b50a30a6cced0d3292494de517f2a0e73709"
+    },
+    {
+      "bytes": 40844,
+      "path": "moved.json.xz",
+      "role": "samples",
+      "sha256": "db45df108049479baa789cc03e6fdf0e21ff0f1b8b2c9118ec7b3391bb6d1ef3"
+    },
+    {
+      "bytes": 14036,
+      "path": "negative-trials.json.xz",
+      "role": "samples",
+      "sha256": "11a018c9f9ee815c46a0893615b0fa71404ca1bef851580b2242f11a92e39c2a"
+    },
+    {
+      "bytes": 4832,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "b17f8eaece154408a5dfeb8608ba6a6b478ab4451d73be762c94eb4566e55bc3"
+    },
+    {
+      "bytes": 11996,
+      "path": "references.json.xz",
+      "role": "samples",
+      "sha256": "d6d99d5154086d46e8711d5198564cc0ba9f5e152edfb1dc7598878d67da567e"
+    },
+    {
+      "bytes": 6551,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "18702b924a2d43ff8378fe6d412e9f73f60fa475c0f51b4c63155e73521df205"
+    },
+    {
+      "bytes": 2808,
+      "path": "tests.json.xz",
+      "role": "summary",
+      "sha256": "efc79221acbdd9c38c15a84c564b9611044d566361b391d0d9cbffd963e429ac"
+    },
+    {
+      "bytes": 948,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "832f15256bea83cba7313cc8bb8e60e96c0dcc6116df755e61bd771a0634324e"
+    },
+    {
+      "bytes": 6860,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "086db6583fd10dfe42f0188dd867dcbc86d5bf707b193ca5c9edf421c97321a4"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/hf-ordered-gram-20261025/reproduce.py",
+      "--output",
+      ".artifacts/hf-ordered-gram-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "fba34e9192edf0ea0d5baf6e3cd1f0b9ab14dc5d"
+  }
+}

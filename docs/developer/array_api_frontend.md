@@ -188,10 +188,11 @@ inaccurate affine solves retire the oldest history and retry; at two histories,
 failure retains the current Fock. This acceptance check applies to every
 normalized reduction route and leaves SCF convergence tolerances unchanged.
 
-Ordinary CUDA HF keeps its serial DIIS default. CUDA KS automatically admits
-the separately charged physical-slot Gram cache for at least 512 AOs and a
-history capacity of at least two, using the ordered reducer. Smaller KS owners
-keep the serial schedule.
+Restricted CUDA HF and CUDA KS automatically admit the separately charged
+physical-slot Gram cache for at least 512 AOs and a history capacity of at least
+two, using the ordered reducer. Smaller owners and unrestricted HF keep the
+serial schedule. HF resource admission and cached-plan invalidation use the same
+selection as execution; enabling reuse does not add an uncharged allocation.
 `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=0` restores serial DIIS; `1` explicitly
 admits the cache for either HF or KS with a usable history. With
 `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
