@@ -1,0 +1,59 @@
+{
+  "scope": "current publication reader only; stdlib original-byte replay, no native/SDK/solver/remote execution or oldHOST reruns",
+  "python": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+  "tests_run": 10,
+  "checks": [
+    {
+      "command": [
+        "python",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "benchmarks\\results\\h100-direct-wb97mv-20261024",
+        "-p",
+        "test_reader.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "test_bounded_decoder_rejects_trailing_truncated_oversized_and_duplicate_keys (test_reader.ReaderTests.test_bounded_decoder_rejects_trailing_truncated_oversized_and_duplicate_keys) ... ok\ntest_corrupt_missing_and_unreferenced_objects_are_rejected (test_reader.ReaderTests.test_corrupt_missing_and_unreferenced_objects_are_rejected) ... ok\ntest_duplicate_paths_and_unadmitted_exclusions_are_rejected (test_reader.ReaderTests.test_duplicate_paths_and_unadmitted_exclusions_are_rejected) ... ok\ntest_full_1176_and_2328_byte_frames_refuse_partial_nan_and_noncanonical_ordinal (test_reader.ReaderTests.test_full_1176_and_2328_byte_frames_refuse_partial_nan_and_noncanonical_ordinal) ... ok\ntest_full_original_history_and_independent_two_size_statistics (test_reader.ReaderTests.test_full_original_history_and_independent_two_size_statistics) ... ok\ntest_independent_process_statistics_do_not_pool_warm_arrays (test_reader.ReaderTests.test_independent_process_statistics_do_not_pool_warm_arrays) ... ok\ntest_inventory_only_binary_and_existing_output_preserved (test_reader.ReaderTests.test_inventory_only_binary_and_existing_output_preserved) ... ok\ntest_noncanonical_public_repeat_and_foreign_guard_nonce_fail_replay (test_reader.ReaderTests.test_noncanonical_public_repeat_and_foreign_guard_nonce_fail_replay) ... ok\ntest_original_host_failure_is_not_promoted_to_a_full_suite_pass (test_reader.ReaderTests.test_original_host_failure_is_not_promoted_to_a_full_suite_pass) ... ok\ntest_unsafe_paths_fail_before_restoration (test_reader.ReaderTests.test_unsafe_paths_fail_before_restoration) ... ok\n\n----------------------------------------------------------------------\nRan 10 tests in 0.686s\n\nOK\n"
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "ruff",
+        "check",
+        "--select",
+        "E,F",
+        "benchmarks\\results\\h100-direct-wb97mv-20261024\\reader.py",
+        "benchmarks\\results\\h100-direct-wb97mv-20261024\\test_reader.py"
+      ],
+      "returncode": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "ruff",
+        "format",
+        "--check",
+        "benchmarks\\results\\h100-direct-wb97mv-20261024\\reader.py",
+        "benchmarks\\results\\h100-direct-wb97mv-20261024\\test_reader.py"
+      ],
+      "returncode": 0,
+      "stdout": "2 files already formatted\n",
+      "stderr": ""
+    }
+  ],
+  "summary_recomputed_from_originals_equal": true,
+  "formal48_and_formal96_statistics_equal_independent_original_replays": true,
+  "reader_sha256": "60d2686099903f20f8721fe4b97cd6f4c90609753d54c46f5b42175d3adb0eaf",
+  "test_reader_sha256": "9b6e8e46328deb09c6874ec91b8e598f5a3c73737f1db65b68b54f871d6423c6",
+  "scientific_scope": "72 formal E/F original gates only; diagnostic26 and NOT_RUN10 preserved",
+  "publication_delivery": "PENDING requiredCI/independentlatestheadreview/protectedmerge"
+}
