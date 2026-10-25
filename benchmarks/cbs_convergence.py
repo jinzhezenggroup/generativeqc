@@ -15,6 +15,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_cbs import HF_WEIGHTS, MP2_WEIGHTS, checkpoint, digest
 
 WATER = [(8, (0.0, 0.0, 0.0)), (1, (1.4, 0.0, 1.1)), (1, (-1.4, 0.0, 1.1))]
@@ -321,7 +322,7 @@ def main() -> int:
         "--reference-cc-solver", choices=("diis", "krylov"), default="diis"
     )
     parser.add_argument("--budget-mib", type=int, default=8192)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     parser.add_argument("--source-patch", required=True, type=Path)
     args = parser.parse_args()
     if args.engine == "native" and not os.environ.get("SLURM_JOB_ID"):
