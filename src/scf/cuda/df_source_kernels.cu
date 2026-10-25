@@ -249,7 +249,12 @@ __global__ void build_cuda_df_transformed_tile_kernel(
   }
 }
 
-/** Generate one public-basis auxiliary metric (or its derivative). */
+/** Generate one public-basis auxiliary metric (or its derivative).
+ * A complete value panel owns both orientations of the symmetric Coulomb
+ * metric. Evaluate its lower triangle once and publish the identical value to
+ * both entries. Partial panels and coordinate derivatives retain their original
+ * independent ownership; they may not write outside the caller's row interval.
+ */
 template <bool Derivative>
 __global__ void build_cuda_df_metric_source_kernel(
     DeviceBatch batch, std::size_t cartesian_orbital_count, std::size_t cartesian_auxiliary_count,
@@ -269,6 +274,11 @@ __global__ void build_cuda_df_metric_source_kernel(
       (components_contiguous ? element % auxiliary_row_count : element / public_naux);
   const std::size_t second =
       components_contiguous ? element / auxiliary_row_count : element % public_naux;
+  const bool symmetric_full =
+      !Derivative && auxiliary_row_begin == 0 && auxiliary_row_count == public_naux;
+  // Primitive-cooperative mappings assign a whole warp to one public pair, so
+  // every lane takes the same branch before the complete-warp reduction below.
+  if (symmetric_full && first < second) return;
   const auto& first_expansion = auxiliary_to_cartesian[system * public_naux + first];
   const auto& second_expansion = auxiliary_to_cartesian[system * public_naux + second];
   double value = 0.0;
@@ -292,7 +302,10 @@ __global__ void build_cuda_df_metric_source_kernel(
       value += __shfl_down_sync(0xffffffffU, value, offset);
     }
   }
-  if (lane == 0U) output[(first - auxiliary_row_begin) * public_naux + second] = value;
+  if (lane == 0U) {
+    output[(first - auxiliary_row_begin) * public_naux + second] = value;
+    if (symmetric_full && first != second) output[second * public_naux + first] = value;
+  }
 }
 
 }  // namespace
