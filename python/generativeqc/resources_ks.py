@@ -1036,8 +1036,12 @@ def ks_resource_request(
     # Serialized generated-force ownership can retain the largest member's
     # arena across the next SCF replay. Charge exactly the execution policy's
     # maximum caps, including a mixed fleet's all-electron and ECP members.
+    # Automatic CUDA owners expose energy only and cannot retain a force
+    # arena. Do not charge unavailable force work to either host/device budget.
     force_caps = tuple(
-        ordinary_cuda_force_limits(
+        (0, 0)
+        if automatic_cuda
+        else ordinary_cuda_force_limits(
             item["atoms"],
             density_fitted=False,
             hamiltonian="scalar-semilocal-ecp"

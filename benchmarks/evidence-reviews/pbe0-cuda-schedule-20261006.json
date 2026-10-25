@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "pbe0-cuda-schedule-20261006",
+  "owner": "ordinary CUDA force schedule qualification",
+  "reason": "Two separately authenticated frozen-source populations retain exact complete endpoint vectors, matched warm work, independent references, source/binary/cache/sanitizer receipts and rejected experiments. Each lossless bundle stays below 1 MiB and the complete publication below the unchanged 2 MiB review budget; no binaries, profiler traces, external archive or policy exception is introduced.",
+  "review_document": "benchmarks/results/pbe0-cuda-schedule-20261006/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 375072,
+      "sha256": "13af6f5df073207897e6400eff44f4e818228b53b2035f907ff353c086e0740c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
+    },
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 202072,
+      "sha256": "587cacf3e9783d393e1e0610d1ff2bf38569c8ae62ba21d2cf84802c34850f9c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
+    }
+  ]
+}

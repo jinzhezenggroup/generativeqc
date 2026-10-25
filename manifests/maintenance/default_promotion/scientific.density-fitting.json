@@ -1,0 +1,23 @@
+{
+  "id": "scientific.density-fitting",
+  "classification": "scientific-choice",
+  "controls": [
+    "public-model:density-fitting"
+  ],
+  "owner_issues": [
+    5,
+    1080
+  ],
+  "sources": [
+    "python/generativeqc/calculator.py",
+    "include/generativeqc/generativeqc.h",
+    "docs/user/dft_density_fitting.md"
+  ],
+  "rationale": "Density fitting changes the finite numerical Hamiltonian through an auxiliary basis, Coulomb-metric factorization and threshold. The public default therefore remains direct/exact; selecting auto chooses a backend only after the caller has explicitly selected the density-fitted model.",
+  "revisit_condition": "Do not silently replace an exact/direct request with density fitting. Higher-level workflows may recommend or explicitly select DF only while preserving the auxiliary-basis and metric-threshold model identity.",
+  "evidence": [
+    "issue:#5",
+    "issue:#1080",
+    "docs:docs/user/dft_density_fitting.md"
+  ]
+}

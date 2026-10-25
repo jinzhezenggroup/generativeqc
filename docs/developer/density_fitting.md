@@ -44,7 +44,7 @@ and failure status.
   on the device, with a host-orchestrated fallback for provider limitations.
   CUDA finalization constructs bounded raw-value response weights and contracts
   the shared generated center derivatives on the persistent plan stream.
-  One-electron/overlap Pulay response uses the separate #141 generated consumer.
+  One-electron/overlap Pulay response uses its own generated consumer.
   CUDA response failures propagate; independent CPU response serves CPU callers.
 - A persistent homogeneous CUDA J/K plan performs device-side metric
   eigendecomposition and inverse-square-root construction, cuBLAS three-center
@@ -110,7 +110,7 @@ documents metric amplification, capacity ownership and rejected alternatives.
 
 ## Execution notes and acceptance boundary
 
-- CUDA two-/three-center integral evaluation kernels are now packed across
+- CUDA two-/three-center integral evaluation kernels are packed across
   homogeneous fleet buckets, including coordinate-major derivative output;
   one-electron generation is exposed through the same batch boundary but still
   dispatches validated per-system launches internally.
@@ -124,7 +124,7 @@ documents metric amplification, capacity ownership and rejected alternatives.
 - Generated weighted RI-J/K analytic-force response supports RHF and UHF,
   including metric pseudoinverse and auxiliary response terms. Positive-budget
   source plans construct those weights on device and report metadata/density
-  uploads separately from tensor transfers. The #141 one-electron and Pulay
+  uploads separately from tensor transfers. The one-electron and Pulay
   consumer retains the CPU oracle's variational weighted-density convention.
 - `benchmarks/real_molecule_gate.py --density-fitting cuda` runs a separate
   DF acceptance matrix for 96-, 192-, and 384-AO workloads.  It records the

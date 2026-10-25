@@ -29,6 +29,7 @@ generated-files
 :maxdepth: 1
 :caption: Scientific qualification
 
+application_precision_qualification
 df_frozen_precision
 dft_mp_v1_contract
 f_shell_validation
@@ -47,6 +48,7 @@ stationary_large_domain_qualification
 
 cuda_ownership
 generated_cuda_host_api
+runtime_compilation
 vendor_boundaries
 cpu_autotuning
 source_work_audit

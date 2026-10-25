@@ -25,6 +25,7 @@ methods
 :caption: Run and reuse calculations
 
 geometry_optimization
+correlated_methods
 unrestricted_cc
 batched_hf
 checkpoint
@@ -42,9 +43,11 @@ initial_guesses
 
 ks_options
 libxc
+dispersion
 dft_density_fitting
 wb97mv_cuda
 r2scan3c
+hessians
 ```
 
 ## Basis and Hamiltonian

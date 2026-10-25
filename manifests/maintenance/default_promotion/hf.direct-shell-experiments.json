@@ -1,0 +1,25 @@
+{
+  "id": "hf.direct-shell-experiments",
+  "classification": "needs-qualification",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_PPPS_RESIDENT_BRA",
+    "hf-runtime:GENERATIVEQC_PPPS_SIGNATURE_BUCKETING",
+    "hf-runtime:GENERATIVEQC_PSPS_SIGNATURE_BUCKETING",
+    "hf-runtime:GENERATIVEQC_PPSS_SIGNATURE_BUCKETING",
+    "hf-runtime:GENERATIVEQC_PPPS_BLOCK_THREADS",
+    "hf-runtime:GENERATIVEQC_PSSS_RESIDENT_BRA"
+  ],
+  "owner_issues": [
+    597
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "These shell-class schedule overrides remain explicit experiments/ablation controls and lack one shared qualified workload guard for normal execution.",
+  "revisit_condition": "The Direct scheduling owner #597 retains these shell-class experiments. Reclassify each selector only when complete endpoint evidence admits a guarded default or establishes a durable negative decision; preserve explicit comparison controls and all existing fallbacks.",
+  "evidence": [
+    "issue:#1598",
+    "issue:#597",
+    ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+  ]
+}

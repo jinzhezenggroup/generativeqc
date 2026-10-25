@@ -1,0 +1,23 @@
+{
+  "id": "tensor.primal-comparison-where-ad",
+  "classification": "retained-opt-in",
+  "controls": [
+    "tensor-ad:_validate_external_mask_inputs.allow_comparison_where",
+    "tensor-ad:linearize.allow_comparison_where",
+    "tensor-ad:transpose_program.allow_comparison_where"
+  ],
+  "owner_issues": [
+    2137,
+    2111
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/ad_program.py"
+  ],
+  "rationale": "First-order generic finite FP64 selected-branch derivatives with primal comparison selectors require explicit selection. Boolean edges stop derivative ancestry; predicate-only computations retain primal checks, while real branches retain forward-domain checks. Only reference/materializing native CPU is qualified. The external-mask-only default remains unchanged.",
+  "revisit_condition": "Preserve explicit selector and switching-point semantics. Broader dtype/backend, scientific or higher-order admission requires independent qualification and ownership review.",
+  "evidence": [
+    "tests/python/test_array_api_comparison_where_ad.py",
+    "docs/developer/tensor_ir.md",
+    ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
+  ]
+}

@@ -113,8 +113,8 @@ executed.
 
 This qualification is a generated-kernel result, not a claim that the current
 SCF CPU default has been replaced. Portable runtime ISA selection and
-multi-variant dispatch are tracked separately by #470; CPU cost-model and
-schedule autotuning are tracked by #471. The independent native oracle remains
+multi-variant dispatch remain separate work; CPU cost-model and schedule
+autotuning are also separate. The independent native oracle remains
 outside this generated production-candidate path.
 
 ## Portable multi-ISA bundles and runtime dispatch

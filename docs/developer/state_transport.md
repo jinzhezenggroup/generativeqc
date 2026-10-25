@@ -4,7 +4,7 @@
 moving restricted CC amplitudes between orbital frames. It does not decide when
 to run a source or target calculation and it does not make a transported state a
 target result. Target orchestration, projected amplitudes, residual refinement,
-DIIS/Krylov history and GPU kernels remain outside this slice.
+DIIS/Krylov history and GPU kernels are not part of this contract.
 
 ## Complete endpoint identity
 
@@ -49,7 +49,7 @@ reference change rather than treating it as a four-index rotation.
 | --- | --- | --- |
 | `identity` | Same complete endpoint and identity frame | Yes |
 | `exact_orbital_rotation` | Full-rank square occupied and virtual maps are independently orthogonal and cross-block mixing is below the gate | Yes |
-| `projected_warm_start` | A basis/frame change preserves occupied rank but is not a complete isometry | No; classification only in slice A |
+| `projected_warm_start` | A basis/frame change preserves occupied rank but is not a complete isometry | No; classification only |
 | `incompatible` | Identity mismatch, occupied-rank loss, occupied-virtual mixing, stale same-ID frame, or same-basis nonunitary map | No |
 
 An otherwise exact block map must also transform the occupied and virtual
@@ -68,7 +68,7 @@ fabricated finite score.
 ## Exact restricted-amplitude transformation
 
 For compatible exact maps `O = M_oo` and `V = M_vv`, the restricted spatial
-amplitudes use the #148 axis and simultaneous-pair conventions:
+amplitudes use the shared axis and simultaneous-pair conventions:
 
 ```text
 t1_target[k,c]     = sum_ia       O[k,i] V[c,a] t1_source[i,a]

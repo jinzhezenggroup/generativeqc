@@ -2,7 +2,8 @@
 
 This page describes the current reuse contract. Before/after 96/192-AO
 timings, generated-work counts, numerical gates, resources and source identity
-are retained in the [#283 benchmark record](../../benchmarks/results/issue283-response-panels/README.md)
+are retained in the
+[response-panel benchmark record](../../benchmarks/results/issue283-response-panels/README.md)
 rather than copied into a current-state developer guide.
 
 Charge construction now fills the first reserved raw panel. The response

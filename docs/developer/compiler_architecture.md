@@ -58,7 +58,8 @@ JVP/VJP/RHS/source programs without importing the runtime solver.
 `src/integrals`, `src/tensor` and `src/dft` own the corresponding native interfaces, runtime allocation and
 execution templates; method and SCF code consume these interfaces. A compiler
 package move does not promote a new scientific capability or retire a native
-fallback. Native scientific ownership and retirement are tracked by #231.
+fallback. Native scientific ownership and retirement are tracked by the
+[CUDA ownership ledger](../maintainer/cuda_ownership.md).
 
 The compiler also owns the [shared iteration-invariant proof and symbolic native
 arena schedule](iteration_reuse.md). RCCSD and DF Lambda generators bind their
@@ -335,7 +336,7 @@ all-electron/direct full-range Coulomb, fixed integer occupations, real FP64,
 the XC point model and a stable differentiable grid branch. An XC graph alone
 cannot supply the Hamiltonian or overlap constraint.
 
-The implemented compiler/diagnostic slice provides:
+The implemented compiler/diagnostic path provides:
 
 - bounded ordered-element one-electron, Coulomb and overlap/Pulay objectives;
   TensorIR VJP generates their source weights with an exact unit seed;
@@ -360,7 +361,7 @@ and shapes. The existing CUDA planner owns schedule/target identities. Native
 state leases remain runtime-owned and must be checked before and after execution;
 this compile-time plan neither creates nor renews a lease.
 
-**Still unavailable in this slice:** live native gradient/provider binding,
+**Still unavailable:** live native gradient/provider binding,
 complete CPU/CUDA molecular gradients, native XC/grid derivative integration and
 public DFT forces. `require_native_endpoint` rejects both backends explicitly.
 The existing `StationaryDerivativeContract` gates remain unchanged; detached or

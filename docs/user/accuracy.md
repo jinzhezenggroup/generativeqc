@@ -144,8 +144,8 @@ not substitutes for physical residuals or independently requested force errors.
 
 The [measured report](../../benchmarks/results/accuracy-173/README.md) includes raw
 errors, holdout misses and excess conservatism, audit overhead, model/rank changes,
-failures and reproduction commands. This issue supplies evidence and calibration;
-the precision selection/refinement controller remains owned by #174.
+failures and reproduction commands. This report supplies evidence and calibration;
+the precision selection/refinement controller remains a separate owner.
 
 The opt-in NUM03 SCF-effort estimator reports the same distinction for its
 geometry-step holdouts: `force_coverage` counts independently observed strict

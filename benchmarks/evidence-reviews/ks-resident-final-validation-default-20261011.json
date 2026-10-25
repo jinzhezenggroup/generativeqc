@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ks-resident-final-validation-default-20261011",
+  "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
+  "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
+  "review_document": "benchmarks/results/ks-resident-final-validation-default-20261011/README.md",
+  "files": [
+    {
+      "bytes": 197796,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-default-20261011",
+      "path": "benchmarks/results/ks-resident-final-validation-default-20261011/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
+    }
+  ]
+}

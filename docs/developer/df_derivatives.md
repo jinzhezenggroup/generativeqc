@@ -93,7 +93,7 @@ projection, and multiple finite-difference steps.
 algebra through the common `StationaryProblem` boundary. The native response
 adapters remain execution owners for dynamic-size tiling, cuBLAS/cuSolVER,
 resident/packed storage and callbacks; they are not a second source of integral
-derivative mathematics. Geometry pullbacks terminate at the generated #143
+derivative mathematics. Geometry pullbacks terminate at the generated
 three-center/metric derivative providers. The RHF force entry takes its `cJ=1` and
 `cK=1/4` contract from this plan, and the dense A/M Coulomb/exchange accumulation
 kernels are emitted from the same stationary-plan identity.

@@ -1,7 +1,7 @@
 # Prepared typed TensorIR CUDA plans
 
-CG09 (#146) lowers the immutable [TensorIR](tensor_ir.md) into an executable
-CUDA shared library. A prepared executor makes one native call for a complete
+The prepared executor lowers the immutable [TensorIR](tensor_ir.md) into an
+executable CUDA shared library. A prepared executor makes one native call for a complete
 program. All tensor arithmetic runs on the allocated GPU; Python validates
 and stages supplied arrays and returns detached results. These tools execute
 supplied equations and do not implement a complete CCSD/MP2 method.
@@ -122,7 +122,7 @@ profile promotion or full SCF/CC qualification is implied.
 
 The shared owner is `src/runtime/cuda_graph_region.cuh`. Existing device-tail-launch
 SCF/eigensolver experiments use a different control abstraction; ProgramIR and
-iterative electronic-structure adoption remain follow-on #460/#370/#507 work.
+iterative electronic-structure adoption remain separate follow-on work.
 See the [decision note](../../.agents/notes/implemented/architecture/2026-09-19-compiled-cuda-replay.md).
 
 ## Layouts and contractions
@@ -222,10 +222,10 @@ domains, degree histograms, and baseline-versus-scheduled ragged work. Static
 so each output traverses only its members instead of scanning the full source
 axis. Members retain ascending source order, preserving the previous reduction
 order. `segment_sum` keeps its already-linear contiguous-offset lowering and
-`indexed_gather` remains a direct indexed load. This first scheduling slice
-does not yet add degree-bucketed warp/CTA queues or runtime-varying topology.
+`indexed_gather` remains a direct indexed load. This schedule does not yet add
+degree-bucketed warp/CTA queues or runtime-varying topology.
 
-Generated JVP/VJP programs from #151/#501 are ordinary TensorIR programs and use
+Generated JVP/VJP programs are ordinary TensorIR programs and use
 the same planning, compilation and execution path. The fixed CC-like RTX 5090
 numerical/resource evidence is recorded in
 [`benchmarks/results/tensor-ad-151`](../../benchmarks/results/tensor-ad-151/README.md).
@@ -258,9 +258,10 @@ are checked against **physical** axis order rather than assuming C-order.
 Inputs, constants and every named output remain pinned in logical C-order, so
 ordinary transfers and resident ABI spans do not change. Existing virtual-view,
 fusion and recomputation contracts remain intact. A virtual operand has no direct
-buffer descriptor and retains generated packing; this slice does not infer affine
-aliases through virtual views, create shared pack-once buffers, or propagate
-layouts across ProgramIR subsystems. Those remain follow-up work for #509/#460.
+buffer descriptor and retains generated packing; this contract does not infer
+affine aliases through virtual views, create shared pack-once buffers, or
+propagate layouts across ProgramIR subsystems. Those remain follow-up work for
+ProgramIR resource ownership.
 
 `plan.layout_decision` reports attempted trials, changed steps and semantic panel
 conversion bytes, including repeated A packing across N tiles and B packing
@@ -276,7 +277,8 @@ arena slots or alter lifetimes; eliminated panels reduce the charged peak.
 Plan schema 4 serializes physical descriptors, the layout decision, the
 semantic-traffic record, and the resolved precision schedule. The separate
 `plan.layout_identity` can be supplied as an exact `layout_identity` workload
-fact to #459 specialization guards; it must not replace scientific, compiler or
+fact to the shared `ImplementationProfile` specialization guards; it must not
+replace scientific, compiler or
 full-plan identity checks. Existing artifact keys and native identity checks
 already include the complete plan, preventing reuse across different layouts or
 precision schedules. Generated JVP/VJP programs use the same pass without new
@@ -284,7 +286,7 @@ derivative rules.
 
 ### Opt-in precision schedules
 
-Issue #528 makes precision an explicit typed scheduling dimension rather than a
+Precision is an explicit typed scheduling dimension rather than a
 global mixed-precision flag. `cast` nodes are materialized SSA boundaries;
 FP64-to-FP32 lowering emits round-to-nearest conversion and FP32-to-FP64
 conversion is explicit. There are no implicit dtype promotions in TensorIR
@@ -306,7 +308,7 @@ candidate leaves those boundaries in FP64. The numerical/backend rationale and
 qualification boundary are recorded in the
 [FP64 accumulation decision](../../.agents/notes/implemented/numerics/2026-09-21-tensor-fp64-accumulation.md).
 
-Precision candidates are passed to the existing #508 schedule search and tuner.
+Precision candidates are passed to the existing schedule search and tuner.
 They share the same planning budgets, deduplication, compilation cache, resource
 gates, strict-FP64 reference parity and complete-endpoint promotion evidence.
 No precision candidate is searched unless the caller opts in; the default
@@ -502,7 +504,7 @@ JSON `null` with an `invalid_seconds` description rather than invalid JSON NaN/I
 See the [screening decision note](../../.agents/notes/implemented/performance/2026-09-19-tensor-screening-shortlist.md)
 for the sampling tradeoff and validation boundary.
 
-Accepted rows and the selected winner carry shared #459 `ImplementationProfile`
+Accepted rows and the selected winner carry shared `ImplementationProfile`
 records, with the original artifact key, schedule hash and candidate evidence
 hash. Correctness guards bind the equation, numeric-buffer budget, reservations
 and target; performance guards additionally restrict promotion to each measured

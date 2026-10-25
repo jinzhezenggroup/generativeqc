@@ -220,9 +220,10 @@ For restricted CUDA DF response, the Coulomb J' component also borrows the exact
 final resident density under the same live KS token. The detached host density
 remains the finite/symmetric scientific witness, but the response bridge reads
 the device matrix directly and therefore reports zero density H2D bytes for
-that J-only call. Exchange K' deliberately keeps its existing density/projection
-path in this change, and unrestricted/multi-term response retains the ordinary
-upload path. This is therefore not a zero-upload resident whole-force path.
+that J-only call. Exchange K' deliberately keeps its existing
+density/projection path, and unrestricted/multi-term response retains the
+ordinary upload path. This is therefore not a zero-upload resident whole-force
+path.
 
 Full-rank J-only response contracts the resident whitened factor once with the
 folded density, applies its symmetric metric root to that charge, and emits

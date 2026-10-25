@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ks-resident-final-validation-20261010",
+  "owner": "opt-in resident KS final-state products and complete restricted PBE0 endpoints",
+  "reason": "Lossless compact records retain both separate frozen cohorts, all 80 timed E/F records, numerical/work/seed/lease gates, historical below-gate and failed attempts, independent references and source/scheduler/cache receipts. No broad default promotion, external archive, GPU rerun or storage-budget increase.",
+  "review_document": "benchmarks/results/ks-resident-final-validation-20261010/README.md",
+  "files": [
+    {
+      "bytes": 227600,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
+    },
+    {
+      "bytes": 192100,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.xz",
+      "role": "endpoint-or-numerical-samples",
+      "sha256": "573a3132d73d971a93424f9226eac59823bf87fcb9baa124d815e685d4619204"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "response.recycling",
+  "classification": "guarded-promotion-candidate",
+  "controls": [
+    "response-option:recycling"
+  ],
+  "owner_issues": [
+    1901,
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp",
+    "benchmarks/results/rhf-response-accelerators-1901/README.md"
+  ],
+  "rationale": "Strict same-operator recycling can reduce work on an identical retained frame, but representative large cold/warm frames miss the exact identity and show no general endpoint gain. Retained cache capacity is also charged before any possible hit.",
+  "revisit_condition": "Promote only behind exact reference/operator identity, bounded retained-resource admission and repeated complete-endpoint evidence for a real reuse domain; every miss must remain the ordinary exact solve.",
+  "evidence": [
+    "issue:#1901",
+    "issue:#1972",
+    "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+  ]
+}

@@ -9,7 +9,7 @@ and unprobed targets retain the generic consumer. Serial mappings and
 attribution probes retain their explicit fallbacks. The packed occupied-response
 layout remains separately qualified; shell admission never grants that layout.
 
-Historical #308 shell-schedule measurements remain in
+Historical shell-schedule measurements remain in
 `benchmarks/results/issue308-shell-schedules/`; they are not current endpoint
 latencies. The current work-based decision is recorded in the
 [admission note](../../.agents/notes/implemented/performance/2026-09-19-df-work-admission.md).

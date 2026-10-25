@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "pbe0-spd-spatial-reuse-20261011",
+  "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
+  "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
+  "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md",
+  "files": [
+    {
+      "bytes": 218108,
+      "classification": "required-compact-accepted-evidence",
+      "family": "pbe0-spd-spatial-reuse-20261011",
+      "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/prototype-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "15ab5b8c856e6179dcba32cdca99c780e0325b41ce9123d86d8c585a782b4293"
+    },
+    {
+      "bytes": 338108,
+      "classification": "required-compact-accepted-evidence",
+      "family": "pbe0-spd-spatial-reuse-20261011",
+      "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "r2scan-endpoints-20261025",
+  "owner": "Large pure-Coulomb endpoints and default HF/DFT figure refresh",
+  "reason": "Retain all 128 fresh populations and 512 complete E/F calls with semantic work, settings and source/binary identities. The compact exploration capsule preserves rejected and cancelled trials separately from the figure cohort. Independent accuracy failures remain visible; this storage review does not assert universal performance or numerical acceptance. The existing size budgets are unchanged.",
+  "review_document": "benchmarks/results/r2scan-endpoints-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/r2scan-endpoints-20261025/exploration-00.json.xz",
+      "family": "r2scan-endpoints-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Rejected/partial exploratory receipts, diagnostic work and source reconstruction; excluded from figure timings",
+      "bytes": 818152,
+      "sha256": "ce0d5e65cd5eb00f5c5b580dde29308b54d0db94413393182915599e4f384f19"
+    },
+    {
+      "path": "benchmarks/results/r2scan-endpoints-20261025/gpu4pyscf.json.xz",
+      "family": "r2scan-endpoints-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 64 complete source-matched cold/three-warm populations, E/F outputs, controls and work counts",
+      "bytes": 188144,
+      "sha256": "2cb953f9ee814157be79a72bdf918a60e7368307132732a92fd6148fbf81e00f"
+    },
+    {
+      "path": "benchmarks/results/r2scan-endpoints-20261025/standard.json.xz",
+      "family": "r2scan-endpoints-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 64 complete source-matched cold/three-warm populations, E/F outputs, controls and work counts",
+      "bytes": 213956,
+      "sha256": "5b4df2126afaa42d00df6f320ae4e9e194673c5ea4f9763aabe9fa29d8da315e"
+    }
+  ]
+}

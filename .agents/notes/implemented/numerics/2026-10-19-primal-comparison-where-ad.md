@@ -69,4 +69,4 @@ error gates remain required.
 - Refs #2137 (requested P0) and #2111.
 - Supersedes only the computed-selector exclusion in the
   [external-mask reference decision](2026-10-13-external-mask-reference-where-ad.md).
-- [Current contract](../../../../docs/developer/tensor_ir.md#derivative-programs-151).
+- [Current contract](../../../../docs/developer/tensor_ir.md#derivative-programs).

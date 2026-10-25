@@ -1,0 +1,23 @@
+{
+  "id": "dft.xc-spatial-order",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_XC_SPATIAL_ORDER"
+  ],
+  "owner_issues": [
+    2609
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_xc.cpp",
+    "src/dft/grid_spatial_order.hpp"
+  ],
+  "rationale": "Eligible resident semilocal XC with admitted local AO maps defaults to an exact spatial permutation of points and weights. Canonical grid ownership remains authoritative for moving-grid forces. Explicit 0, insufficient allowances and optional device OOM retain canonical execution; nonlocal and public-ledger owners remain excluded. Independent E/V, graph/tail/resource/sanitizer and complete 96-atom energy+force qualification support promotion.",
+  "revisit_condition": "Require renewed canonical force identity, resource reservation and independent endpoint qualification before enabling nonlocal or public-ledger consumers or changing quadrature, AO thresholds or precision.",
+  "evidence": [
+    "docs/developer/dft_grid.md",
+    "tests/native/test_dft_cuda.cu",
+    "note:.agents/notes/implemented/performance/2026-10-19-xc-spatial-grid-order.md",
+    "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
+  ]
+}

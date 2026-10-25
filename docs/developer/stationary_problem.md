@@ -2,8 +2,8 @@
 
 `generativeqc_compiler.method.stationary` composes an explicit scalar objective,
 physical residual equations, independent state coordinates and a parameter-source
-inventory. It implements the first compiler slice of #181, not a new solver or a
-complete molecular-gradient endpoint.
+inventory. It is a compiler boundary, not a solver or a complete
+molecular-gradient endpoint.
 
 ## Mathematical contract
 
@@ -23,7 +23,8 @@ residual blocks must include their actual KKT stationarity equations. Neither
 constraints nor orthogonality/overlap terms can be inferred from an energy alone.
 
 `StationaryProblem.compile()` builds the Lagrangian from the declared residuals
-and uses the existing #151 TensorIR reverse generator. It returns:
+and uses the existing [TensorIR reverse generator](tensor_ir.md#derivative-programs).
+It returns:
 
 - `lagrangian`: the explicit scalar L;
 - `rhs`: `-E_x`, keyed by state name;
@@ -106,8 +107,9 @@ state are rejected rather than treated as an ordinary acyclic pullback.
 
 **Provider declarations remain an inventory, while declared implicit state rules
 are executable compiler dispatch.** A state with `implicit_operator_identity`
-causes `compile()` to build an identity-bearing #465 `ImplicitVJPPlan` directly
-from that residual graph. The residual must be an independent state block; a
+causes `compile()` to build an identity-bearing `ImplicitVJPPlan`
+([generated first-order implicit response](implicit_response.md)) directly from
+that residual graph. The residual must be an independent state block; a
 coupled KKT/CC row is rejected until the caller exposes the coupled unknowns as
 one explicit independent state. This prevents silently solving only part of a
 stationary system.
@@ -140,51 +142,57 @@ with the explicitly declared Euclidean inner product. Redundant symmetric or
 packed state coordinates are rejected, not flattened with guessed multiplicities.
 Dense symmetric **source** fields retain the shared TensorIR projected adjoint.
 Packed coordinates and non-Euclidean state metrics require an explicit compatible
-#465 adapter. A coordinate/gauge label is not a numerical certificate.
+[implicit-response](implicit_response.md) adapter. A coordinate/gauge label is
+not a numerical certificate.
 
 Generated fragments can be independently passed to the existing TensorIR CPU
-interpreter or CUDA planner. `max_elements` preserves #151's generation limit for
-projection/incidence constants. It is not an overall live host/device byte limit.
+interpreter or CUDA planner. `max_elements` preserves the
+[TensorIR](tensor_ir.md) generation limit for projection/incidence constants. It
+is not an overall live host/device byte limit.
 Separate fragment plans do not establish the simultaneous primal/adjoint/provider
 resource budget required by a molecular runtime. CUDA planning is not real-device
 execution evidence. No public force capability or native execution path changes.
 
 ## Ownership and next integration
 
-`DensityFittingRHFResponsePlan` is the first production-shaped #358 consumer.
-It declares the fitted tensor residual `M B - A = 0` and the stationary RHF
-two-electron objective, so the common reverse derives one-electron, overlap,
-three-center and metric source weights. Its provider DAG stops at #143's
-generated geometry derivatives. Full-rank fitted-state algebra is represented
-directly; a truncated DF metric binds the shared `pseudoinverse` matrix-function
-custom rule, whose CUDA lowering is compiler-generated. The production RHF force
-entry also consumes generated `cJ/cK` constants and generated A/M source-weight
-kernels carrying this derivative-plan identity; native code retains dynamic-size
-storage, BLAS/eigensolver calls and streams.
+`DensityFittingRHFResponsePlan` is the first production-shaped
+stationary-problem consumer. It declares the fitted tensor residual `M B - A = 0`
+and the stationary RHF two-electron objective, so the common reverse derives
+one-electron, overlap, three-center and metric source weights. Its provider DAG
+stops at the generated three-center/metric derivative providers described in
+[generated density-fitting response](df_derivatives.md). Full-rank fitted-state
+algebra is represented directly; a truncated DF metric binds the shared
+[pseudoinverse matrix-function rule](matrix_function.md), whose CUDA lowering is
+compiler-generated. The production RHF force entry also consumes generated
+`cJ/cK` constants and generated A/M source-weight kernels carrying this
+derivative-plan identity; native code retains dynamic-size storage,
+BLAS/eigensolver calls and streams.
 
-MethodIR (#396) remains the method/component front end. The existing semilocal
-`StationaryGradientPlan` (#163) remains a specialized fixed-stationary-density
-source-contraction consumer and is not replaced by this schema.
+[MethodIR](electronic_method_ir.md) remains the method/component front end. The
+existing semilocal `StationaryGradientPlan` remains a specialized
+fixed-stationary-density source-contraction consumer and is not replaced by this
+schema; see
+[native stationary consumers](stationary_native_consumers.md).
 
-The implicit-solve primitive (#465) owns response execution, true residuals,
-The implicit-solve primitive (#465) owns response execution, true residuals,
-solver failure propagation and current-state binding. StationaryProblem v2 now
-dispatches explicitly declared independent state blocks to that primitive; the
-runtime may bind the resulting plan to an existing qualified ResponseProblem
-operator without replacing generated source VJPs. The symmetric matrix rule
-(#466) owns its qualified spectral mathematics and remains separate; neither
-response execution nor spectral mathematics is reimplemented here.
+The implicit-solve primitive owns response execution, true residuals, solver
+failure propagation and current-state binding; see
+[generated first-order implicit response](implicit_response.md).
+StationaryProblem v2 dispatches explicitly declared independent state blocks to
+that primitive; the runtime may bind the resulting plan to an existing qualified
+`ResponseProblem` operator without replacing generated source VJPs. The
+symmetric matrix rule owns its qualified spectral mathematics and remains
+separate; neither response execution nor spectral mathematics is reimplemented
+here.
 
-Subsequent #181/#193 slices can extend the same boundary to UHF/multiple-density
-response and direct dynamic-shape execution, while composing upstream provider
-pullbacks, #466 metric response and complete nuclear derivatives into supported
-public force endpoints. They must preserve qualified native state/provider
-contracts and complete nuclear-derivative gates. The optional #460
-execution/lifetime graph is not required here. Higher-order derivatives and
-Hessian composition remain separately registered work; a first-order implicit
-VJP does not grant second-order support. Joint native resource admission,
-stale-state rejection and automatic provider-rule dispatch are not supplied by
-this first-order compiler-only slice.
+Future work can extend the same boundary to UHF/multiple-density response and
+direct dynamic-shape execution, while composing upstream provider pullbacks,
+metric response and complete nuclear derivatives into supported public force
+endpoints. They must preserve qualified native state/provider contracts and
+complete nuclear-derivative gates. Higher-order derivatives and Hessian
+composition remain separately registered work; a first-order implicit VJP does
+not grant second-order support. Joint native resource admission, stale-state
+rejection and automatic provider-rule dispatch are not supplied by this
+first-order compiler-only contract.
 
 Run the independent scalar, nonsymmetric and constrained tests with:
 

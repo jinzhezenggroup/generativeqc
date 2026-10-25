@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "host-full-eri-20261025",
+  "owner": "#2762 full-range KS host ERI qualification",
+  "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
+  "review_document": "benchmarks/results/host-full-eri-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
+      "family": "host-full-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
+      "bytes": 176688,
+      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
+    }
+  ]
+}

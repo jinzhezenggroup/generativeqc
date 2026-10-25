@@ -31,7 +31,8 @@ work-count gates sum reference and device leaves; provider comparison checks
 each side separately. Production must not silently retry a rejected device
 setup through the reference eigensolver.
 
-The #206 matrix runner exposes `--host-workloads --setup-eigen-ablation` for
+The DF matrix runner (`benchmarks/issue206_df_matrix.py`) exposes
+`--host-workloads --setup-eigen-ablation` for
 five-pair comparisons with frozen warm seeds and matching iteration/retry
 branches. It rejects ambient provider controls and mixed ablations. Use
 `--host-trace-dir` in a separate intrusive run to verify actual setup and final
@@ -42,5 +43,5 @@ warm bypass, cutoff boundaries, failed replacement, actual device cutoff
 handling, and a corrupted overlap in a prepared bucket followed by recovery.
 Molecular tests compare setup providers for RHF/UHF, Cartesian/spherical,
 batch 1/4, cold/warm/changed geometries and complete forces. Provider ablation
-timing, the remaining independent host driver, and #311 final-state retention
-are separate increments; this document makes no new performance claim.
+timing, the remaining independent host driver, and final-state retention are
+separate increments; this document makes no new performance claim.
