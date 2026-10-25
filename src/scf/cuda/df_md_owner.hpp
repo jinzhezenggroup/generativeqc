@@ -22,8 +22,10 @@ struct CudaDfMdResources {
 
 /** Prepare a complete unscreened, strict-FP64 single-system DF charge/J owner.
  * Inputs carry native radial normalization. No integral oracle, public-AO
- * three-center tensor, metric solve, screening or force calculation occurs
- * during preparation. Raised Hermite potentials are included in its budget.
+ * three-center tensor, metric solve, tolerance screening or force calculation
+ * occurs during preparation. Raised Hermite potentials and exact-zero source
+ * compaction are included in its budget; the latter refreshes on every charge
+ * or force call, including captured replay with changed density.
  * The borrowed stream must outlive the owner and all captured graphs using it.
  * Creation is forbidden inside capture; replay methods are allocation-free.
  * On refusal/failure, *owner remains null and all partial allocations retire.

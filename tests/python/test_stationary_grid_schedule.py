@@ -74,6 +74,54 @@ def test_dense_large_basis_does_not_reserve_unused_indexed_density_storage() -> 
         )
 
 
+@pytest.mark.parametrize("atoms,aos", [(48, 384), (96, 768), (96, 1088)])
+def test_large_df_force_reservation_admits_full_tile_and_pair_cache(
+    atoms: int, aos: int
+) -> None:
+    """The larger public DF reservation covers all concurrent dry owners."""
+    from generativeqc._cuda_force_resources import ordinary_cuda_force_limits
+
+    device, host = ordinary_cuda_force_limits(
+        atoms, density_fitted=True, hamiltonian="all-electron"
+    )
+    layout = _ordinary(
+        atoms,
+        aos=aos,
+        tile_points=1024,
+        max_device_bytes=device,
+        max_host_bytes=host,
+        features_only=True,
+    )
+    assert layout.grid_plan.tile_points == 1024
+    assert layout.host_bound <= host
+    assert layout.source_resources.phased_becke_bytes > 0
+    assert (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + layout.native_geometry_reserve
+        <= device
+    )
+
+
+@pytest.mark.parametrize(
+    "atoms,fitted,hamiltonian",
+    [
+        (24, True, "all-electron"),
+        (96, False, "all-electron"),
+        (96, True, "scalar-semilocal-ecp"),
+    ],
+)
+def test_other_force_owners_keep_existing_reservations(
+    atoms: int, fitted: bool, hamiltonian: str
+) -> None:
+    """The large DF policy cannot borrow capacity from direct/ECP ledgers."""
+    from generativeqc._cuda_force_resources import ordinary_cuda_force_limits
+
+    assert ordinary_cuda_force_limits(
+        atoms, density_fitted=fitted, hamiltonian=hamiltonian
+    ) == (512 << 20, 256 << 20)
+
+
 def test_feature_only_force_keeps_indexed_maps_under_existing_caps() -> None:
     """Force feature leases never stage local potential matrices on the host."""
     layout = _ordinary(96, aos=1088, features_only=True)

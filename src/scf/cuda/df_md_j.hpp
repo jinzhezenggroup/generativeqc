@@ -43,6 +43,10 @@ struct DfMdView {
   double *transforms{}, *density{}, *potential{}, *response_potential{};
   std::size_t count{}, nbf{};
   bool auxiliary{};
+  /** Optional exact-zero source compaction, refreshed after each density
+   * precontraction. Null preserves dense traversal for transform-only views.
+   * Angular offsets are immutable; counts and indices belong to this stream. */
+  std::size_t *active_indices{}, *active_offsets{}, *active_counts{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

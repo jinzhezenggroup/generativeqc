@@ -87,7 +87,12 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
   const auto source_view = Charge ? pairs : auxiliary;
   const auto target = target_view.primitives[(Charge ? auxiliary_begin : pair_begin) + blockIdx.x];
   const auto begin = Charge ? pair_begin : auxiliary_begin;
-  const auto count = Charge ? pair_count : auxiliary_count;
+  // The prepared list removes only exactly zero *current Hermite densities*.
+  // This is also valid when the auxiliary target is raised for response; the
+  // derivative of the orbital source still uses the complete projection path.
+  const auto count = Charge && pairs.active_counts ? pairs.active_counts[PairAngular]
+                     : Charge                      ? pair_count
+                                                   : auxiliary_count;
   // A charge class can have few auxiliary targets but many orbital primitives.
   // Independent CTAs traverse contiguous source groups; the caller reduces
   // their partials in split order before launching the next angular class.
@@ -101,7 +106,10 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
     bool active = offset + lane < count;
     DfMdPrimitive source{};
     if (active) {
-      source = source_view.primitives[begin + offset + lane];
+      const auto index = Charge && pairs.active_indices
+                             ? pairs.active_indices[begin + offset + lane]
+                             : begin + offset + lane;
+      source = source_view.primitives[index];
       active = source.density_active;
     }
     if (component_lane == 0) {
