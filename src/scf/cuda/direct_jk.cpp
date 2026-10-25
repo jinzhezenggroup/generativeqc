@@ -3270,6 +3270,19 @@ generativeqc_status consume_cuda_direct_shell_rsh_energy_derivatives_device(
     detail = "prepared Direct owner has no retained shell derivative lease";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
+  // Reject capture before entering the failure drain: synchronizing a captured
+  // stream would invalidate the caller's graph even though no work was submitted.
+  auto capture_error = cudaSetDevice(plan->device_id);
+  cudaStreamCaptureStatus capture{};
+  if (capture_error == cudaSuccess) capture_error = cudaStreamIsCapturing(plan->stream, &capture);
+  if (capture_error != cudaSuccess) {
+    detail = cudaGetErrorString(capture_error);
+    return source_cuda_status(capture_error);
+  }
+  if (capture != cudaStreamCaptureStatusNone) {
+    detail = "resident shell derivatives require an ordinary noncapturing stream";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan->diagnostic.batch_size == 1,
                       "resident shell RSH derivative requires one prepared item");
@@ -3286,9 +3299,14 @@ generativeqc_status consume_cuda_direct_shell_rsh_energy_derivatives_device(
     direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
                       "resident shell RSH derivative spin storage is invalid");
     direct_jk_check(cudaSetDevice(plan->device_id));
-    direct_jk_check(cuda_execution::consume_generated_rsh_energy_derivatives(
-        *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        short_exchange_coefficient, long_exchange_coefficient, omega, consumer));
+    try {
+      direct_jk_check(cuda_execution::consume_generated_rsh_energy_derivatives(
+          *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+          short_exchange_coefficient, long_exchange_coefficient, omega, consumer));
+    } catch (const generativeqc::Error& error) {
+      // Keep callback driver/status failures distinct from invalid source input.
+      throw DirectJkFailure{error.status(), error.what()};
+    }
   });
 }
 

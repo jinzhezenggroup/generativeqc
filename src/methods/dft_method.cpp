@@ -1937,8 +1937,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
         // Driver, token and resource failures must not masquerade as rounding.
         ++precision->geometry_retries;
         detail.clear();
-        status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
-                                                  qualified_spatial_force_default(), nullptr);
+        status = stationary_controller_->gradient(
+            density, weights, fock_, current, output, detail,
+            qualified_spatial_force_default(), nullptr,
+            range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr);
       }
       if (status == GENERATIVEQC_STATUS_SUCCESS)
         resources = stationary_controller_->resources();
