@@ -163,6 +163,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
     "df_jk",
     "df_jk_internal",
     "df_generated_tiles",
+    "df_host_panels",
     "df_coulomb",
     "df_exchange",
     "df_occupied_exchange",
