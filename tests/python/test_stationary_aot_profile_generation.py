@@ -20,7 +20,7 @@ def test_stationary_aot_manifest_generates_package_metadata() -> None:
 
 def test_aot_profile_legacy_transport_is_generated_without_name_branch() -> None:
     assert QUALIFIED_FUNCTIONALS == (0, 1, 2)
-    assert len(QUALIFIED_STATIONARY_AOT_PROFILES) == 14
+    assert len(QUALIFIED_STATIONARY_AOT_PROFILES) == 16
     assert {profile.name for profile in QUALIFIED_STATIONARY_AOT_PROFILES} == {
         "lda",
         "pbe",
@@ -28,6 +28,7 @@ def test_aot_profile_legacy_transport_is_generated_without_name_branch() -> None
         "pbe0",
         "b3lyp",
         "m06_2x",
+        "mn15",
         "wb97mv",
     }
     assert all(profile.plan.identity for profile in QUALIFIED_STATIONARY_AOT_PROFILES)

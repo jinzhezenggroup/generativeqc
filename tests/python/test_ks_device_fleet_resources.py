@@ -31,6 +31,41 @@ def topology(cartesian_aos: int, atoms: int = 2) -> dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize("cores", ((0, 0), (10, 0), (28, 46)))
+def test_stationary_shape_reduces_per_atom_ecp_core_counts(
+    cores: tuple[int, ...],
+) -> None:
+    """The seven-scalar native shape receives the total, never an atom tuple."""
+    observed = []
+
+    class Query:
+        def __call__(
+            self, descriptor: Any, shape: Any, count: int, output: Any, size: int
+        ) -> int:
+            observed.append(tuple(shape))
+            assert count == 7 and size == 9
+            return _native.STATUS_NOT_IMPLEMENTED
+
+    item = {
+        "atoms": 2,
+        "grid_points": 768,
+        "orbital": {
+            "nbf": 7,
+            "primitives": 21,
+            "maximum_angular": 1,
+            "ecp_terms": 3,
+            "ecp_core_electrons": cores,
+        },
+    }
+    library = SimpleNamespace(generativeqc_resource_ks_stationary_cuda_v1=Query())
+    descriptor = _native.MethodDescriptor()
+    assert (
+        resources_ks._native_cuda_stationary_inventory(library, item, descriptor)
+        is None
+    )
+    assert observed == [(2, 7, 21, 768, 1, 3, sum(cores))]
+
+
 def leaves(item: dict[str, Any], *, ecp: bool = False) -> dict[str, int]:
     atoms = item["atoms"]
     return {
@@ -69,6 +104,20 @@ def test_ragged_fleet_matches_independent_portable_lifetimes(
     if not fused:
         for inventory in expected:
             inventory["xc"] = 0
+    if ecp and stationary:
+        # The force's ECP quadrature and bridge temporaries coexist with SCF;
+        # the old energy setup retires those arenas before allocating scratch.
+        for item, inventory in zip(items, expected, strict=True):
+            shape = item["orbital"]
+            n, a, s, p = (
+                shape["cartesian_nbf"],
+                item["atoms"],
+                shape["shells"],
+                shape["primitives"],
+            )
+            bridge = 64 * (1 + a + s + p + n + s * (s + 1) // 2 + n * n) + 48 * a
+            retained = sum(inventory[key] for key in ("state", "xc", "coulomb"))
+            inventory["setup"] = max(inventory["setup"], retained + (1 << 20) + bridge)
     actual, aggregate = resources_ks._native_cuda_fleet_inventory(
         library, items, consumers, device_fused_xc=fused
     )

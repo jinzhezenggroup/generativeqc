@@ -109,6 +109,31 @@ consumer and writes directly into its LR source slot. General RSH retains its
 existing fused fallback. This is a transport/schedule repair, not a different
 radial equation or a cached-force shortcut.
 
+Final frozen qualification is retained in
+[`r1-native-forces-20261025`](../../../../benchmarks/results/r1-native-forces-20261025/README.md):
+192 ABBA/BAAB cold/warm/moved comparisons pass with a maximum median ratio of
+1.00637 and equal SCF work. Full E/F samples, source/binary identities, compact
+provider counters and a reproduction wrapper are retained. This compares
+implementation `685478ca1` with parent `df2ded411`; the later parent CI-budget
+fix does not change numerical source. The CUDA API AUTO-provenance assertion
+fails on both versions and remains unchanged. Provider counters do not certify
+whole-process RSS or simultaneous complete-device memory.
+
+Post-campaign exact-budget ECP tests exposed a separate planner defect. The
+shape adapter must reduce per-atom core counts to the scalar ABI field. More
+subtly, energy setup retires SCF storage before ECP work, but a stationary ECP
+derivative retains SCF and force arenas while allocating the same two-grid
+scratch and standalone one-electron bridge. The native fleet now charges that
+overlap, including the compact Hcore/Pulay outputs, instead of treating it as
+retired setup storage. The old estimate caused UKS to reject its batched ECP
+allocation and retry a smaller radial tile even with the advertised budget.
+The retained fallback is unchanged; the corrected plan passes both spins and
+representations with zero rejected allocations. Slurm job 14348 records explicit
+owned-device plus provider-reservation peaks below the planned limits; it is
+separate from the frozen all-electron timing campaign. Rebuilt CPU CTest remains
+120/120, and the public budget/replay/failure tests and resource transport gates
+exercise the follow-up.
+
 ## Rejected alternatives and invariants
 
 Copying Python force equations into native code would create another scientific

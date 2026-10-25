@@ -764,7 +764,12 @@ def _native_cuda_stationary_inventory(
         item["grid_points"],
         orbital["maximum_angular"],
         orbital.get("ecp_terms", 0),
-        orbital.get("ecp_core_electrons", 0),
+        # Basis metadata retains one core count per atom; the native shape ABI
+        # takes their scalar total to distinguish ECP from all-electron owners.
+        sum(
+            checked_bytes(core, "ECP core electrons")
+            for core in orbital.get("ecp_core_electrons", ())
+        ),
     )
     shape = (ctypes.c_uint64 * len(dimensions))(
         *(checked_bytes(value, "CUDA KS stationary shape") for value in dimensions)
@@ -1318,8 +1323,9 @@ def ks_resource_request(
                 )
             )
             # The prepared force arena remains live during a later SCF replay.
-            # Keep its reservation persistent and add only actual setup excess
-            # to the transient phase model; preserve resident execution reuse.
+            # The native transient peak also includes ECP derivative scratch
+            # alongside live SCF owners. Add only its excess here; the force
+            # arena itself has a separate persistent reservation below.
             estimates.append(
                 ResourceEstimate(
                     "serialized KS transient device phase peak",

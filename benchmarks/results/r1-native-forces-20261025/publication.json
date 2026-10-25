@@ -1,0 +1,104 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Cross-version endpoint E/F parity passes; native numerical oracles are separate committed gates. The complete paired timing comparison also meets the 1.05 non-regression threshold; no universal performance promotion is claimed.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 91816,
+      "path": "comparison.json",
+      "role": "summary",
+      "sha256": "72c8f7a8184d2d94f156be80ffeb0f6b21272ea89d29b870337077fab3468bb3"
+    },
+    {
+      "bytes": 10984,
+      "path": "provenance.json",
+      "role": "summary",
+      "sha256": "cf927aa541d36d6a59bbd260ccaf1457231df83d417f6432f46ff6fa405b5cb2"
+    },
+    {
+      "bytes": 5794,
+      "path": "reproduction/audit_paired.py",
+      "role": "reproduction",
+      "sha256": "c50d3ca69d40d75af5aef32e6ed7de8feea1f5a58b71c0e7fbfa62cfa0fdea15"
+    },
+    {
+      "bytes": 4937,
+      "path": "reproduction/endpoint_benchmark.py",
+      "role": "reproduction",
+      "sha256": "684a697702ebea47110732d8d314bac1fed0b24836f2fbb3c044aad3e2a9913c"
+    },
+    {
+      "bytes": 2233,
+      "path": "reproduction/reproduce.sh",
+      "role": "reproduction",
+      "sha256": "4e0a8314ef43ca0d8480916bcaf74cb1a3b3aa76c2f1448ec19a35802b276df4"
+    },
+    {
+      "bytes": 852442,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "8e4bc68eae5c91ad57f9d1a47bac7fee467aed5793d5674a7deddb4f945dd81f"
+    },
+    {
+      "bytes": 7354,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "d091e94304aa0dd2f5fd5221559ef33a5cdba4cf180a6246576680a624d8901f"
+    },
+    {
+      "bytes": 79637,
+      "path": "trace-summary.json",
+      "role": "summary",
+      "sha256": "608749100b113756a8ca7c4cccac13f5fdf195c1e852293a929cb5c0be614d04"
+    },
+    {
+      "bytes": 5304,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "39eed957698547faa1f1caf623aca15b126367f90177a17765607fccd2e7e391"
+    },
+    {
+      "bytes": 4198,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "73660c49e2c5912566c8945cca021a2f85973ee263e9aeafa66a8c70d517fab2"
+    },
+    {
+      "bytes": 6665,
+      "path": "ecp-resource-followup.json",
+      "role": "summary",
+      "sha256": "9d21d1127822d199fca0b90097ebb38885c9e8d9bd7a4e3bac16dee816df5f3e"
+    },
+    {
+      "bytes": 14364,
+      "path": "ecp-resource-followup.patch",
+      "role": "source-patch",
+      "sha256": "e69aff1942ef80b0d8a7db7fa685557362b1b93fee40101aae9b18ade47e6d85"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=01:30:00",
+      "bash",
+      "reproduction/reproduce.sh",
+      "BASELINE_CHECKOUT",
+      "CANDIDATE_CHECKOUT",
+      "OUTPUT_DIRECTORY"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "685478ca1111407573a5cbfa813d63ae0a5713ce"
+  }
+}

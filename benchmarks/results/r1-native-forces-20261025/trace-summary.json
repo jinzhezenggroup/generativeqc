@@ -1,0 +1,2989 @@
+{
+  "scope": "Provider counters grouped by operation. Sums and maxima are per emitted trace field, not simultaneous live memory. Full diagnostic streams remain in ignored local artifacts; no trace timings enter endpoint timing.",
+  "receipts": {
+    "final-trace-baseline-pbe0-1-cold.jsonl": {
+      "sha256": "bba9e6c1d7defad774459c841a3590534384076c77d40fd8c0a3fd2d4b8abb83",
+      "bytes": 89270,
+      "records": 111,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2141813,
+              "maximum": 2141813,
+              "sum": 2141813
+            },
+            "retained_state_bytes": {
+              "minimum": 25288,
+              "maximum": 25288,
+              "sum": 25288
+            },
+            "retained_xc_bytes": {
+              "minimum": 616728,
+              "maximum": 616728,
+              "sum": 616728
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 452608,
+              "maximum": 452608,
+              "sum": 6789120
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 15
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 28,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 7056
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 49392
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 392,
+              "maximum": 784,
+              "sum": 1176
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1612,
+              "maximum": 2004,
+              "sum": 3616
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35195899,
+              "maximum": 35196291,
+              "sum": 70392190
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197191,
+              "maximum": 35197583,
+              "sum": 70394774
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "response_scratch_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-baseline-pbe0-1-warm.jsonl": {
+      "sha256": "353e7124515900300737137a2fbc534b74e80fda353917658439457c3f5c655e",
+      "bytes": 19854,
+      "records": 21,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2141813,
+              "maximum": 2141813,
+              "sum": 2141813
+            },
+            "retained_state_bytes": {
+              "minimum": 25288,
+              "maximum": 25288,
+              "sum": 25288
+            },
+            "retained_xc_bytes": {
+              "minimum": 616728,
+              "maximum": 616728,
+              "sum": 616728
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 452608,
+              "maximum": 452608,
+              "sum": 905216
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 3,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 504
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 3528
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 392,
+              "maximum": 784,
+              "sum": 1176
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1612,
+              "maximum": 2004,
+              "sum": 3616
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35195899,
+              "maximum": 35196291,
+              "sum": 70392190
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197191,
+              "maximum": 35197583,
+              "sum": 70394774
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "response_scratch_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "resident_three_center_materialization": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "raw_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_raw_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_transformed_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "transformed_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-baseline-wb97m-v-0-cold.jsonl": {
+      "sha256": "ebbfc4090eb58d7e9fd97565cc7fd885be8c345898c96145340e99d921cc785f",
+      "bytes": 134204,
+      "records": 126,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "retained_provider_bytes": {
+              "minimum": 2167015,
+              "maximum": 2167015,
+              "sum": 2167015
+            },
+            "retained_state_bytes": {
+              "minimum": 189784,
+              "maximum": 189784,
+              "sum": 189784
+            },
+            "retained_xc_bytes": {
+              "minimum": 534416,
+              "maximum": 534416,
+              "sum": 534416
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 391168,
+              "maximum": 391168,
+              "sum": 6649856
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 18,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 17
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 280,
+              "maximum": 280,
+              "sum": 4480
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1960,
+              "maximum": 1960,
+              "sum": 31360
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 392,
+              "sum": 392
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1612,
+              "sum": 2832
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 16464
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10028,
+              "sum": 19664
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10028,
+              "sum": 19664
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_density_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 392
+            }
+          }
+        },
+        "direct_jk_force": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        }
+      }
+    },
+    "final-trace-baseline-wb97m-v-0-warm.jsonl": {
+      "sha256": "1733f6d2e93f0e321a03ef3348d5df42b91d37cbba27357b318326328f3a4b1d",
+      "bytes": 16542,
+      "records": 14,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2167015,
+              "maximum": 2167015,
+              "sum": 2167015
+            },
+            "retained_state_bytes": {
+              "minimum": 189784,
+              "maximum": 189784,
+              "sum": 189784
+            },
+            "retained_xc_bytes": {
+              "minimum": 534416,
+              "maximum": 534416,
+              "sum": 534416
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k_occupied": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 280,
+              "maximum": 280,
+              "sum": 280
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1960,
+              "maximum": 1960,
+              "sum": 1960
+            }
+          }
+        },
+        "cuda_lr_eri_action": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 391168,
+              "maximum": 391168,
+              "sum": 391168
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 392,
+              "sum": 392
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1612,
+              "sum": 2832
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 16464
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10028,
+              "sum": 19664
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10028,
+              "sum": 19664
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_density_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 392
+            }
+          }
+        },
+        "direct_jk_force": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "resident_three_center_materialization": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "raw_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_raw_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_transformed_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "transformed_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-baseline-wb97m-v-1-cold.jsonl": {
+      "sha256": "3befac3d048cdd07155c35e0cf5ddd705a911cf9eaa0d5da6133074d10d8a856",
+      "bytes": 149017,
+      "records": 135,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2167015,
+              "maximum": 2167015,
+              "sum": 2167015
+            },
+            "retained_state_bytes": {
+              "minimum": 201280,
+              "maximum": 201280,
+              "sum": 201280
+            },
+            "retained_xc_bytes": {
+              "minimum": 715032,
+              "maximum": 715032,
+              "sum": 715032
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 493568,
+              "maximum": 493568,
+              "sum": 7897088
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 16
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 30,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 7560
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 52920
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 392,
+              "maximum": 784,
+              "sum": 1176
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1612,
+              "maximum": 2004,
+              "sum": 3616
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35195899,
+              "maximum": 35196291,
+              "sum": 70392190
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197191,
+              "maximum": 35197583,
+              "sum": 70394774
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "response_scratch_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "direct_jk_force": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        }
+      }
+    },
+    "final-trace-baseline-wb97m-v-1-warm.jsonl": {
+      "sha256": "46998451db396fff457b073813e97ee81c6af3f36bd4a79a6b2dbd1a142c873c",
+      "bytes": 25651,
+      "records": 23,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2167015,
+              "maximum": 2167015,
+              "sum": 2167015
+            },
+            "retained_state_bytes": {
+              "minimum": 201280,
+              "maximum": 201280,
+              "sum": 201280
+            },
+            "retained_xc_bytes": {
+              "minimum": 715032,
+              "maximum": 715032,
+              "sum": 715032
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 493568,
+              "maximum": 493568,
+              "sum": 987136
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 3,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 504
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 3528
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 144,
+              "maximum": 144,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 392,
+              "maximum": 784,
+              "sum": 1176
+            },
+            "device_to_host_bytes": {
+              "minimum": 72,
+              "maximum": 72,
+              "sum": 144
+            },
+            "host_to_device_bytes": {
+              "minimum": 1612,
+              "maximum": 2004,
+              "sum": 3616
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35195899,
+              "maximum": 35196291,
+              "sum": 70392190
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197191,
+              "maximum": 35197583,
+              "sum": 70394774
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "response_scratch_bytes": {
+              "minimum": 10028,
+              "maximum": 10532,
+              "sum": 20560
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "direct_jk_force": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        }
+      }
+    },
+    "final-trace-current-pbe0-1-cold.jsonl": {
+      "sha256": "8ebb1c9b3355d655f28bd1c1553a4a74f3cdc2943ebcdfed70da075a4ad11d64",
+      "bytes": 89891,
+      "records": 112,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2141813,
+              "maximum": 2141813,
+              "sum": 2141813
+            },
+            "retained_state_bytes": {
+              "minimum": 25288,
+              "maximum": 25288,
+              "sum": 25288
+            },
+            "retained_xc_bytes": {
+              "minimum": 616728,
+              "maximum": 616728,
+              "sum": 616728
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 452608,
+              "maximum": 452608,
+              "sum": 6789120
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 15,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 15
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 28,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 7056
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 49392
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 224,
+              "maximum": 224,
+              "sum": 224
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-current-pbe0-1-warm.jsonl": {
+      "sha256": "f6c3c89e9191c45813317e8fe63880c5cdbfee2d6cb4fdb11d372d015294e0e2",
+      "bytes": 20467,
+      "records": 22,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2141813,
+              "maximum": 2141813,
+              "sum": 2141813
+            },
+            "retained_state_bytes": {
+              "minimum": 25288,
+              "maximum": 25288,
+              "sum": 25288
+            },
+            "retained_xc_bytes": {
+              "minimum": 616728,
+              "maximum": 616728,
+              "sum": 616728
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 452608,
+              "maximum": 452608,
+              "sum": 905216
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 3,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 504
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 3528
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 224,
+              "maximum": 224,
+              "sum": 224
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "resident_three_center_materialization": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "raw_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_raw_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_transformed_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "transformed_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-current-wb97m-v-0-cold.jsonl": {
+      "sha256": "ccaf1cb3fdf30210fe09386082a739c7cdfcaeb837db75c8d893c3c0df25c004",
+      "bytes": 134840,
+      "records": 127,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "retained_provider_bytes": {
+              "minimum": 2173705,
+              "maximum": 2173705,
+              "sum": 2173705
+            },
+            "retained_state_bytes": {
+              "minimum": 189784,
+              "maximum": 189784,
+              "sum": 189784
+            },
+            "retained_xc_bytes": {
+              "minimum": 534416,
+              "maximum": 534416,
+              "sum": 534416
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 391168,
+              "maximum": 391168,
+              "sum": 6649856
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 18,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 17
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 280,
+              "maximum": 280,
+              "sum": 4480
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1960,
+              "maximum": 1960,
+              "sum": 31360
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 112,
+              "maximum": 112,
+              "sum": 112
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 16464
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 9636,
+              "sum": 19272
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 9636,
+              "sum": 19272
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            }
+          }
+        },
+        "direct_rsh_force_resident": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "isolated_canonical_lr": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "source_channels": {
+              "minimum": 3,
+              "maximum": 3,
+              "sum": 3
+            }
+          }
+        }
+      }
+    },
+    "final-trace-current-wb97m-v-0-warm.jsonl": {
+      "sha256": "9f39a4c24c0197396d630dad727cd30cfc87a36bcbe16f58f0e627315e8d43c2",
+      "bytes": 17182,
+      "records": 15,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2173705,
+              "maximum": 2173705,
+              "sum": 2173705
+            },
+            "retained_state_bytes": {
+              "minimum": 189784,
+              "maximum": 189784,
+              "sum": 189784
+            },
+            "retained_xc_bytes": {
+              "minimum": 534416,
+              "maximum": 534416,
+              "sum": 534416
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k_occupied": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 280,
+              "maximum": 280,
+              "sum": 280
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1960,
+              "maximum": 1960,
+              "sum": 1960
+            }
+          }
+        },
+        "cuda_lr_eri_action": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 391168,
+              "maximum": 391168,
+              "sum": 391168
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 112,
+              "maximum": 112,
+              "sum": 112
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 16464
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 9636,
+              "sum": 19272
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 9636,
+              "sum": 19272
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            }
+          }
+        },
+        "direct_rsh_force_resident": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "isolated_canonical_lr": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "source_channels": {
+              "minimum": 3,
+              "maximum": 3,
+              "sum": 3
+            }
+          }
+        },
+        "resident_three_center_materialization": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "raw_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_raw_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "resident_transformed_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "transformed_value_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        }
+      }
+    },
+    "final-trace-current-wb97m-v-1-cold.jsonl": {
+      "sha256": "5df09664b2ee57e0de6bbbd6117108d4007b5762f81826b36507204f87aee902",
+      "bytes": 149699,
+      "records": 136,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2173705,
+              "maximum": 2173705,
+              "sum": 2173705
+            },
+            "retained_state_bytes": {
+              "minimum": 201280,
+              "maximum": 201280,
+              "sum": 201280
+            },
+            "retained_xc_bytes": {
+              "minimum": 715032,
+              "maximum": 715032,
+              "sum": 715032
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 493568,
+              "maximum": 493568,
+              "sum": 7897088
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 17,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 16,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 16
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 30,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 7560
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 52920
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 224,
+              "maximum": 224,
+              "sum": 224
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "direct_rsh_force_resident": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "isolated_canonical_lr": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "source_channels": {
+              "minimum": 3,
+              "maximum": 3,
+              "sum": 3
+            }
+          }
+        }
+      }
+    },
+    "final-trace-current-wb97m-v-1-warm.jsonl": {
+      "sha256": "925e618d958f669b48ae6d6611d5f15d2104adcb6c71186e0106b0cd3df16ca0",
+      "bytes": 26349,
+      "records": 24,
+      "operations": {
+        "ks_begin": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "retained_provider_bytes": {
+              "minimum": 2173705,
+              "maximum": 2173705,
+              "sum": 2173705
+            },
+            "retained_state_bytes": {
+              "minimum": 201280,
+              "maximum": 201280,
+              "sum": 201280
+            },
+            "retained_xc_bytes": {
+              "minimum": 715032,
+              "maximum": 715032,
+              "sum": 715032
+            }
+          }
+        },
+        "ri_j": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ri_k": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_exact_jk_shared": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_lr_eri_action": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "cuda_ks_xc_shared": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "xc_point_batch_bytes": {
+              "minimum": 493568,
+              "maximum": 493568,
+              "sum": 987136
+            }
+          }
+        },
+        "structured_gram": {
+          "calls": 3,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_iteration": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {}
+        },
+        "ks_finish": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            }
+          }
+        },
+        "ri_k_occupied": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "occupied_factor_bytes": {
+              "minimum": 224,
+              "maximum": 280,
+              "sum": 504
+            },
+            "occupied_intermediate_bytes": {
+              "minimum": 1568,
+              "maximum": 1960,
+              "sum": 3528
+            }
+          }
+        },
+        "resident_final_state_validation": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 224,
+              "maximum": 224,
+              "sum": 224
+            },
+            "explicit_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "one_electron_stationary_pair": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 722,
+              "maximum": 722,
+              "sum": 722
+            },
+            "response_scratch_bytes": {
+              "minimum": 866,
+              "maximum": 866,
+              "sum": 866
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            }
+          }
+        },
+        "force_response": {
+          "calls": 2,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "density_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 1220,
+              "maximum": 1220,
+              "sum": 2440
+            },
+            "metric_derivative_weight_bytes": {
+              "minimum": 392,
+              "maximum": 392,
+              "sum": 784
+            },
+            "raw_value_reused_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            },
+            "raw_value_upload_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_available_device_headroom_bytes": {
+              "minimum": 35196291,
+              "maximum": 35196291,
+              "sum": 70392582
+            },
+            "response_borrowed_jk_bytes": {
+              "minimum": 8232,
+              "maximum": 8232,
+              "sum": 8232
+            },
+            "response_declared_device_budget_bytes": {
+              "minimum": 35197583,
+              "maximum": 35197583,
+              "sum": 70395166
+            },
+            "response_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "response_probe_total_device_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "response_scratch_bytes": {
+              "minimum": 9636,
+              "maximum": 10532,
+              "sum": 20168
+            },
+            "stream_synchronizations": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 2
+            },
+            "tensor_host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "three_center_derivative_weight_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 5488
+            },
+            "response_borrowed_whitened_bytes": {
+              "minimum": 2744,
+              "maximum": 2744,
+              "sum": 2744
+            }
+          }
+        },
+        "direct_rsh_force_resident": {
+          "calls": 1,
+          "invalid": 0,
+          "cuda_errors": [],
+          "counters": {
+            "device_to_host_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "host_to_device_bytes": {
+              "minimum": 0,
+              "maximum": 0,
+              "sum": 0
+            },
+            "isolated_canonical_lr": {
+              "minimum": 1,
+              "maximum": 1,
+              "sum": 1
+            },
+            "source_channels": {
+              "minimum": 3,
+              "maximum": 3,
+              "sum": 3
+            }
+          }
+        }
+      }
+    }
+  }
+}

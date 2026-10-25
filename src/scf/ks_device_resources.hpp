@@ -40,10 +40,12 @@ inline std::uint64_t product(std::uint64_t first, std::uint64_t second) {
 }
 }  // namespace cuda_ks_capacity
 
-/** State, effective XC, Coulomb, setup, quadrature setup and provider allowance.
+/** State, effective XC, Coulomb, transient peak, quadrature and provider allowance.
  * The value-only one-electron exporter retires its temporary storage before J
  * preparation. Quadrature preparation instead overlaps the new Coulomb owner.
- * ECP scratch is an alternative setup phase, not another persistent owner.
+ * A native ECP force reuses the two-grid scratch while all SCF arenas and the
+ * stationary consumer remain live. Its standalone one-electron bridge also
+ * owns metadata and two compact outputs until that derivative call drains.
  */
 inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
     const CudaKsDeviceResourceItem& shape) {
@@ -58,8 +60,15 @@ inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
   const auto one_electron =
       product(64, sum({1, shape.atoms, shape.shells, shape.primitives, shape.cartesian_aos,
                        shell_pairs, product(shape.cartesian_aos, shape.cartesian_aos)}));
-  const auto setup =
+  auto setup =
       std::max({one_electron, shape.ecp_workspace, sum({shape.coulomb, shape.quadrature_setup})});
+  if (shape.ecp_workspace && (shape.stationary_minimum || shape.stationary_cached)) {
+    const auto retained = sum({shape.state, shape.device_fused_xc ? shape.xc : 0, shape.coulomb});
+    // The existing exporter bound covers the bridge's AO/shell metadata. Its
+    // extra Hcore/Pulay outputs coexist with ECP scratch, unlike energy setup.
+    const auto force_scratch = sum({one_electron, product(48, shape.atoms), shape.ecp_workspace});
+    setup = std::max(setup, sum({retained, force_scratch}));
+  }
   return {shape.state,
           shape.device_fused_xc ? shape.xc : 0,
           shape.coulomb,
@@ -70,7 +79,7 @@ inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
 
 /** Compose retained arenas, opaque-provider allowances and serialized rebuilds.
  * A rebuilt item's retired storage need not coexist with its setup temporary;
- * only setup excess above that item's retained arenas is an additional phase.
+ * only transient excess above that item's retained arenas is an additional phase.
  * Both stationary candidates coexist with the fleet during SCF replay. These
  * are declared numeric/provider bounds, not complete allocation or RSS receipts.
  * Appending validates both candidate peaks before changing any fleet state.

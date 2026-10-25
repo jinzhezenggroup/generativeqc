@@ -27,10 +27,10 @@ void test_fleet() {
   require(fleet.inventory() ==
               std::array<std::uint64_t, 9>{100, 200, 300, 50, 680, 700, 900, 2030, 2230},
           "CUDA first-item provider/stationary peak is inconsistent");
-  require(fleet.append(second) == std::array<std::uint64_t, 6>{20, 0, 60, 4000, 500, 30},
-          "CUDA host-unfused XC or ECP setup lifetime is inconsistent");
+  require(fleet.append(second) == std::array<std::uint64_t, 6>{20, 0, 60, 4576, 500, 30},
+          "CUDA ECP derivative scratch must coexist with retained SCF arenas");
   const auto before = fleet.inventory();
-  require(before == std::array<std::uint64_t, 9>{120, 200, 360, 80, 3920, 710, 920, 5390, 5600},
+  require(before == std::array<std::uint64_t, 9>{120, 200, 360, 80, 4496, 710, 920, 5966, 6176},
           "CUDA ragged fleet must sum retention and serialize setup excess");
   for (const auto copies : {std::uint64_t{0}, std::numeric_limits<std::uint64_t>::max()}) {
     bool refused = false;
@@ -90,7 +90,7 @@ void test_bridge() {
   const auto pristine = output;
   require(!generativeqc_resource_ks_cuda_fleet_v1(shapes.data(), shapes.size(), output.data(), 21),
           "valid CUDA fleet transport failed without a device");
-  const std::array<std::uint64_t, 9> expected{120, 200, 360, 80, 3920, 710, 920, 5390, 5600};
+  const std::array<std::uint64_t, 9> expected{120, 200, 360, 80, 4496, 710, 920, 5966, 6176};
   require(std::equal(expected.begin(), expected.end(), output.begin()),
           "CUDA transport published inconsistent aggregate capacities");
   require(output[21] == pristine[21] && output[22] == pristine[22],
