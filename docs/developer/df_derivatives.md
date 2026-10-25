@@ -27,6 +27,18 @@ quantity is a **positive energy gradient**, without one-electron, overlap
 Pulay, or nuclear-repulsion terms. HF force assembly negates the total once.
 The interface does not require a density matrix or an HF energy expression.
 
+For a complete contiguous metric panel, the cooperative CUDA schedule evaluates
+the generated derivative once per unordered auxiliary pair, since `M[P,Q]` and
+`M[Q,P]` are the same function of physical centers. It scatters the two original
+weights separately; weights need not be symmetric, diagonal terms are not
+doubled, and adding large opposing weights cannot overflow an intermediate sum.
+Partial, offset, strided and serial panels, and distributed gradient sinks,
+retain the dense traversal. `GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS=0` restores
+dense metric evaluation; unset or `1` admits the eligible reuse route, while
+other values reject. The control participates in resource/checkpoint identity.
+Component traces retain dense weight count, actual pair tasks and folded-panel
+count; reducing derivative work does not reduce the dense weight storage.
+
 Orbital and auxiliary systems share physical atom coordinates, but their
 shells can have different owners, orderings, and Cartesian/spherical
 representations. Both auxiliary centers move in dM. The three mathematical

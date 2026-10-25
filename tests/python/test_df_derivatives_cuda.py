@@ -185,8 +185,8 @@ def test_mixed_representations_and_permuted_auxiliary_shells(
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 # Complete forces split the DF allowance in half. Metric, compact SCF and
 # ordinary AO eigensolvers each reserve a fixed workspace floor on current
-# CUDA providers; the old 1/4-MiB requests fail before derivative execution.
-# Keep two feasible bounded cases and test the smaller rejected budgets below.
+# CUDA providers. Keep two comfortably feasible bounded cases and test the
+# smaller rejected request and near-floor RHF endpoint separately below.
 @pytest.mark.parametrize("budget", [0, 8 << 20, 16 << 20])
 def test_complete_hf_replay_two_budgets_and_force_components(
     monkeypatch: typing.Any,
@@ -261,7 +261,7 @@ def test_complete_hf_replay_two_budgets_and_force_components(
             assert policy["GENERATIVEQC_DF_DERIVATIVE_MAPPING"] == mapping
 
 
-@pytest.mark.parametrize("budget", [1 << 20, 4 << 20])
+@pytest.mark.parametrize("budget", [1 << 20])
 def test_complete_force_rejects_budget_below_provider_workspace_floors(
     budget: typing.Any,
 ) -> None:
@@ -283,12 +283,16 @@ def test_complete_force_rejects_budget_below_provider_workspace_floors(
         batch.execute(strict=True, properties=("energy", "forces"))
 
 
-@pytest.mark.parametrize("method,charge,multiplicity", [("rhf", 0, 1), ("uhf", 1, 2)])
+@pytest.mark.parametrize(
+    "method,charge,multiplicity,budget",
+    [("rhf", 0, 1, 4 << 20), ("rhf", 0, 1, 8 << 20), ("uhf", 1, 2, 8 << 20)],
+)
 def test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps(
     monkeypatch: typing.Any,
     method: typing.Any,
     charge: typing.Any,
     multiplicity: typing.Any,
+    budget: int,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     # This tier is explicitly enabled in an allocated GPU job. Missing oracle
@@ -317,7 +321,7 @@ def test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps(
         method=method,
         basis="def2-svp",
         density_fitting="cuda",
-        density_fitting_memory_budget_bytes=8 << 20,
+        density_fitting_memory_budget_bytes=budget,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
@@ -386,6 +390,33 @@ def test_metric_pair_reuse_preserves_skew_and_one_sided_weights(
             orbital, auxiliary, atoms, np.zeros_like(a), weights
         )
         np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
+
+
+def test_metric_pair_control_rejection_and_recovery(
+    monkeypatch: typing.Any,
+) -> None:
+    """Invalid scheduling controls reject; a subsequent valid call remains usable."""
+    assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
+    oi, xi = fixture_inputs("spherical", False)
+    orbital, auxiliary = calculator(oi), calculator(xi)
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
+    a, metric, _, derivative = reference_df_matrices(oi, xi)
+    weights = np.random.default_rng(993).normal(size=metric.shape)
+    expected = np.einsum("axpq,pq->ax", derivative, weights)
+    for selection in ("bad", "", "1", "0"):
+        monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", selection)
+        if selection in ("bad", ""):
+            with pytest.raises(RuntimeError, match="DF gradient status"):
+                execute_df_gradient(
+                    orbital, auxiliary, atoms, np.zeros_like(a), weights
+                )
+        else:
+            actual, _ = execute_df_gradient(
+                orbital, auxiliary, atoms, np.zeros_like(a), weights
+            )
+            np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
 
 
 @pytest.mark.parametrize("null_a,null_m", [(True, False), (False, True), (True, True)])

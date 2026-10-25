@@ -254,6 +254,11 @@
       "owner": "#2762 full-range KS host ERI qualification",
       "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
       "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
+    },
+    "df-metric-pairs-20261025": {
+      "owner": "Bounded auxiliary metric derivative pair reuse",
+      "reason": "Lossless full receipts retain all 36 alternating cold/three-warm energy-and-force populations, semantic work and immutable source/binary identities. Shared compression keeps the complete vectors together; every independent gate, failed baseline assertion, rerun and exploratory refusal remains in the capsule within unchanged file and change budgets.",
+      "review_document": "benchmarks/results/df-metric-pairs-20261025/README.md"
     }
   },
   "files": [
@@ -904,6 +909,14 @@
       "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
       "bytes": 176688,
       "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
+    },
+    {
+      "path": "benchmarks/results/df-metric-pairs-20261025/endpoints.json.xz",
+      "family": "df-metric-pairs-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 36 alternating complete cold/three-warm E/F populations with work and immutable source/binary identities; no completed sample omitted.",
+      "bytes": 159984,
+      "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
