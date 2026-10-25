@@ -34,6 +34,10 @@ def _auxiliary_basis(fitted: bool) -> Any:
         "host",
         "host-auto",
         "host-refused",
+        "disk",
+        "disk-auto",
+        "tiered",
+        "disk-refused",
     ],
 )
 @pytest.mark.parametrize("fitted", (False, True))
@@ -74,7 +78,17 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
             "0x1555"
-            if policy in {"partial", "host", "host-auto", "host-refused"}
+            if policy
+            in {
+                "partial",
+                "host",
+                "host-auto",
+                "host-refused",
+                "disk",
+                "disk-auto",
+                "tiered",
+                "disk-refused",
+            }
             else "0xfffffff",
         )
         monkeypatch.setenv(
@@ -93,7 +107,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
             str(2 << 30)
-            if policy == "host"
+            if policy in {"host", "tiered"}
             else "1"
             if policy == "host-refused"
             else "0",
@@ -101,6 +115,21 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         if policy == "host-auto":
             monkeypatch.delenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES")
         monkeypatch.setenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES", "4096")
+        monkeypatch.setenv(
+            "GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK",
+            "0x8" if policy == "tiered" else "0xfffffff",
+        )
+        monkeypatch.setenv(
+            "GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES",
+            str(2 << 30)
+            if policy in {"disk", "tiered"}
+            else "1"
+            if policy == "disk-refused"
+            else "0",
+        )
+        if policy == "disk-auto":
+            # RAM is explicitly exhausted; disk spill itself needs no opt-in.
+            monkeypatch.delenv("GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES")
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
@@ -140,7 +169,15 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         host_bytes = [
             r["value"] for r in rows if r.get("key") == "host_source_value_bytes"
         ]
-        assert any(host_bytes) == (enabled and policy in {"host", "host-auto"})
+        assert any(host_bytes) == (
+            enabled and policy in {"host", "host-auto", "tiered"}
+        )
+        disk_bytes = [
+            r["value"] for r in rows if r.get("key") == "disk_source_value_bytes"
+        ]
+        assert any(disk_bytes) == (
+            enabled and policy in {"disk", "disk-auto", "tiered"}
+        )
         admitted = enabled and policy not in {"refused", "auto-refused"}
         # Fitted primary plus exact LR is an explicit composition candidate;
         # automatic selection must retain its existing fallback.
@@ -203,6 +240,7 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         PreparedBatch,
     )
 
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES", "0")
     monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "1")
     monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", "1")
     monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")

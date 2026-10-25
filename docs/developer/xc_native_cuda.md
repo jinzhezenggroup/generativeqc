@@ -545,6 +545,34 @@ primary retains its current J/K and final occupied projection during a range-onl
 rebase. This preserves the physical replay gates and counts the operators
 actually executed.
 
+### Temporary ERI disk spill
+
+Eligible cold strict LR KS sources automatically back buckets omitted from both
+GPU and RAM with a temporary local file. `GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES`
+defaults to at most 64 GiB and one quarter of local available disk space.
+Full-range sources retain Direct by default because qualified local-NVMe replay
+is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
+enables controlled full-range experiments. Explicit `0` disables that tier; the matching
+`DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
+or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
+filesystems are refused. Complete GPU residency creates no temporary file.
+
+The file is physically preallocated and immediately unlinked, so its owning
+descriptor controls lifetime and cleanup. Disk values share the RAM tier's
+bounded pinned/device staging pairs. Creating a new staging owner must fit
+both numeric/device admission and available job RAM. Setup I/O refusal retains
+GPU/RAM and exact Direct; replay read failure returns an error instead of
+publishing a partial J/K. Geometry/precision changes retire the owner, and
+range disk control changes invalidate warm reuse.
+
+Construction flushes and advises file-page eviction; consumed read ranges are
+also advised for eviction. These OS hints do not guarantee physical I/O.
+`disk_source_value_bytes`, `disk_source_build_write_bytes`, `disk_cached_values`
+and `disk_read_bytes` expose logical work; event traces add `*_disk_replay/`
+regions. Benchmark receipts report process-wide physical I/O separately.
+This is ephemeral reuse within one calculation, not persistent SSD caching.
+See the [disk decision](../../.agents/notes/implemented/performance/2026-10-25-temporary-eri-spill.md).
+
 ### Full-range host ERI backing
 
 Admitted cold strict global-hybrid KS sources (including PBE0/B3LYP) use the
@@ -590,6 +618,7 @@ host tier; driver and numerical failures propagate. Values retain the owner's
 geometry, basis, radial operator, omega, screening and precision identity.
 Changing any host control retires the lease before warm reuse. Mixed sources,
 CUDA graph capture, persistent storage and CPU integral production are excluded.
+Temporary disk spill is a separate tier governed by the controls above.
 
 Eager replay copies sequential pageable tiles to pinned storage, then uses a
 separate stream for H2D. Events protect both pinned and device buffer reuse;
