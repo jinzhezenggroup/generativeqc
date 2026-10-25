@@ -14,6 +14,7 @@ import numpy as np
 from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
+from benchmarks._retention import raw_output_path
 
 
 def main() -> None:
@@ -24,7 +25,7 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--trace-only", action="store_true")
     parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID") or args.repeats < 1:
         parser.error("requires finite Slurm allocation and positive repeat count")
