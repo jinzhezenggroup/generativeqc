@@ -1605,17 +1605,19 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                       "device direct J/K requires full-plan value dimensions");
     const bool unrestricted = spec.spin == FockSpin::Unrestricted;
     // Diagnostic-only CUDA event/NVTX regions distinguish recurrence time from
-    // GPU replay and host-staged replay for each physical LR action. Ordinary
+    // GPU replay and host-staged replay for each physical full/LR action. Ordinary
     // endpoint runs keep DF_TRACE unset, preserving asynchronous execution.
-    std::unique_ptr<runtime::cuda_trace::TraceOperation> lr_profile;
+    std::unique_ptr<runtime::cuda_trace::TraceOperation> source_profile;
+    const bool long_range_action =
+        spec.exchange.op == FockOperator::LongRange && !spec.coulomb.present;
     if (std::getenv("GENERATIVEQC_DF_TRACE") && spec.exchange.present &&
-        spec.exchange.op == FockOperator::LongRange && !spec.coulomb.present)
-      lr_profile = std::make_unique<runtime::cuda_trace::TraceOperation>(
-          "cuda_lr_eri_action", plan->stream,
+        (long_range_action || spec.exchange.op == FockOperator::FullRange))
+      source_profile = std::make_unique<runtime::cuda_trace::TraceOperation>(
+          long_range_action ? "cuda_lr_eri_action" : "cuda_full_eri_action", plan->stream,
           runtime::cuda_trace::TraceShape{plan->diagnostic.batch_size, plan->diagnostic.nbf, 0,
                                           plan->resident_values != nullptr,
                                           plan->host_cache != nullptr});
-    if (lr_profile && plan->host_cache)
+    if (source_profile && plan->host_cache)
       runtime::cuda_trace::trace_counter("host_device_staging_bytes",
                                          plan->host_cache->staging_bytes());
     struct ProfileCensus {
@@ -1628,7 +1630,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         }
       }
     } profile_census{plan->stream};
-    if (lr_profile && !census) {
+    if (source_profile && !census) {
       cudaStreamCaptureStatus capture{};
       direct_jk_check(cudaStreamIsCapturing(plan->stream, &capture));
       if (capture == cudaStreamCaptureStatusNone) {
@@ -1916,10 +1918,11 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                 resident && plan->host_cache &&
                 plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max();
             std::unique_ptr<runtime::cuda_trace::TraceRegion> bucket_profile;
-            if (lr_profile) {
-              const auto label = std::string(gpu_bucket    ? "lr_gpu_replay/"
-                                             : host_bucket ? "lr_host_replay/"
-                                                           : "lr_direct_recompute/") +
+            if (source_profile) {
+              const auto label = std::string(long_range_action ? "lr_" : "full_") +
+                                 (gpu_bucket    ? "gpu_replay/"
+                                  : host_bucket ? "host_replay/"
+                                                : "direct_recompute/") +
                                  std::to_string(bucket);
               bucket_profile =
                   std::make_unique<runtime::cuda_trace::TraceRegion>(label.c_str(), plan->stream);
@@ -2072,7 +2075,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           beta_exchange, mixed_coulomb_work_count);
       direct_jk_check(cudaGetLastError());
     }
-    if (lr_profile && census && dispatch.canonical_exchange) {
+    if (source_profile && census && dispatch.canonical_exchange) {
       std::uint64_t work[2]{};
       DirectJkDownloadFence fence{plan->stream};
       direct_jk_check(
@@ -2697,10 +2700,11 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
     std::size_t tile_bytes, std::uint32_t bucket_mask, std::string& detail) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan && plan->resident_values && !plan->resident_mixed_values &&
-                          plan->resident_operator == FockOperator::LongRange &&
+                          (plan->resident_operator == FockOperator::LongRange ||
+                           plan->resident_operator == FockOperator::FullRange) &&
                           plan->diagnostic.batch_size == 1 && !plan->host_cache &&
                           bucket_mask < (1U << 28),
-                      "host values require an immutable single-system strict LR source");
+                      "host values require an immutable single-system strict full/LR source");
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
     direct_jk_require(current == plan->device_id, "host source device mismatch");
@@ -2755,9 +2759,11 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
               plan->stream, plan->canonical_batch, plan->canonical_cartesian, 0, first + second,
               plan->canonical_pairs, direct_jk_pair_rows(plan, second, pairs[first]), pairs[first],
               pairs[first + 1U] - pairs[first], pairs[second], pairs[second + 1U] - pairs[second],
-              first == second, false, true, false, DirectCoulombRange::Long, plan->resident_omega,
-              plan->screening_tolerance, plan->canonical_bounds, nullptr, nullptr, nullptr, nullptr,
-              host->device[0], nullptr, nullptr, tile, begin);
+              first == second, false, true, false,
+              plan->resident_operator == FockOperator::FullRange ? DirectCoulombRange::Full
+                                                                 : DirectCoulombRange::Long,
+              plan->resident_omega, plan->screening_tolerance, plan->canonical_bounds, nullptr,
+              nullptr, nullptr, nullptr, host->device[0], nullptr, nullptr, tile, begin);
           direct_jk_check(cudaGetLastError());
           plan->diagnostic.resident_values_submitted += tile;
           launch_independent_jk_finite_kernel(plan->stream, host->device[0], tile,
@@ -2778,8 +2784,8 @@ generativeqc_status prepare_cuda_direct_jk_host_values(
                                     cudaMemcpyDeviceToHost, plan->stream));
     fence.complete();
     if (failure)
-      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "nonfinite host LR source"};
-    direct_jk_require(offset == count, "host LR inventory drift");
+      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "nonfinite host ERI source"};
+    direct_jk_require(offset == count, "host ERI inventory drift");
     plan->device_bytes = direct_jk_sum(plan->device_bytes, host->staging_bytes());
     plan->diagnostic.device_bytes =
         direct_jk_sum(plan->diagnostic.device_bytes, host->staging_bytes());

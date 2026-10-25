@@ -2121,6 +2121,32 @@
         "tests/python/test_range_resident_ks_cuda.py",
         "benchmarks/results/host-lr-eri-20261025/DEFAULT.md"
       ]
+    },
+    {
+      "id": "ks.host-full-values",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_HOST_MAX_BYTES",
+        "ks-runtime:GENERATIVEQC_KS_HOST_TILE_BYTES",
+        "ks-runtime:GENERATIVEQC_KS_HOST_BUCKET_MASK"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/runtime/host_cache_budget.hpp"
+      ],
+      "rationale": "Admitted cold strict global-hybrid KS sources use the shared FP64 RAM tier for full-range J(total)/K(spin). The LR controls remain independent. Full GPU caches retain priority; partial GPU fitting is enabled only when host backing is admitted by policy. Default RAM is bounded by machine and enclosing cgroup headroom; explicit zero, complete capacity refusal and unsupported sources preserve existing execution. Natural incremental/generated consumer gates remain unchanged: complete evidence shows the faster default does not need these sources; RAM benefits source-eligible nonincremental schedules.",
+      "revisit_condition": "Qualify other consumers and changes to bucket fitting against complete independent endpoints, natural full GPU residency and capacity-limited cases. Do not infer RHF graph, mixed-storage, DF-primary, derivative-integral or response qualification from KS value reuse.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/implemented/performance/2026-10-25-full-range-host-eri.md",
+        "tests/python/test_full_host_ks_cuda.py",
+        "tests/python/test_range_resident_values_cuda.py",
+        "benchmarks/results/host-full-eri-20261025/README.md"
+      ]
     }
   ]
 }

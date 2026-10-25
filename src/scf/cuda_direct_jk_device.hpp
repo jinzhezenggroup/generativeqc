@@ -108,7 +108,7 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
                                                                     std::uint32_t bucket_mask,
                                                                     std::string& detail);
 
-/** Add bounded pageable FP64 backing to omitted buckets of a strict LR lease.
+/** Add bounded pageable FP64 backing to omitted buckets of a strict full/LR lease.
  * maximum_bytes includes pageable values and both pinned tiles; device_budget
  * includes both device tiles. A refusal publishes nothing and preserves the
  * existing GPU source. Only one immutable system and eager replay are supported.
