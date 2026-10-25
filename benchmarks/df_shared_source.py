@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 from generativeqc import Calculator
 
+from benchmarks._retention import raw_output_path
 from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot, energies
 
 
@@ -23,7 +24,7 @@ def main() -> None:
     parser.add_argument("--auxiliary", default="cc-pvtz-jkfit")
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     assert os.environ.get("SLURM_JOB_ID") and args.repeats > 0
     atoms = [(8, (0, 0, 0)), (1, (1.4, 0, 1.1)), (1, (-1.4, 0, 1.1))]
