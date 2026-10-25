@@ -28,6 +28,7 @@ Unsupported combinations raise an error instead of silently selecting
 a different method or backend. See [capability reference](../reference/capabilities.md)
 for details.
 
+(conventional-cpu-ump2-energy-and-analytic-forces)=
 ## Unrestricted MP2 on CPU
 
 `ump2` computes unrestricted MP2 energy from a converged UHF reference.
