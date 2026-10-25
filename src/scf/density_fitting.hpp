@@ -315,8 +315,10 @@ class DensityFittingBudgetError : public std::invalid_argument {
  * resource plan. Automatic promotion is bounded to singleton RHF, a
  * method-owned restricted occupation reservation, or a restricted physical
  * Coulomb-only Fock owner. The latter uses rank zero, with no occupied-factor
- * lease. Arbitrary-density callers retain dense storage: only replace a
- * streamed plan with one packed fitted owner that fits the same allowance.
+ * lease. Arbitrary-density callers retain dense storage. Eligible owners can
+ * replace streamed values or a resident dense source of at least 1 GiB with
+ * one fitted packed owner under the same allowance. The resident crossover
+ * additionally preserves the complete requested occupied projection.
  */
 [[nodiscard]] DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch_size, std::size_t nbf, std::size_t naux,

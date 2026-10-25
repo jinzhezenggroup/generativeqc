@@ -17,7 +17,9 @@ prepared-owner rebuild. This requires strict arithmetic and Standard-or-tighter
 solver controls, with the default-or-looser budget and no explicit target.
 The result retains Standard's final-state checks; it does not claim measured
 observable error or mixed work. Explicit targets and tighter budgets keep their
-independent audits. Legacy fitted-HF work counters remain unknown.
+independent audits. Direct HF can retain its physically validated final Fock on
+both cold and warm calls; the initial seed does not determine fallback admission.
+Legacy fitted-HF work counters remain unknown.
 
 ## Module-selected Fast Fock
 

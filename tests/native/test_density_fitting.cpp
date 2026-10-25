@@ -2146,10 +2146,11 @@ int main() {
       }
 
       // #2411: J-only must not replay the P/Q exchange Gram. Exercise the
-      // exact generated-source GPU reader with a partial auxiliary panel;
-      // the source visit count is one complete A per requested P block,
-      // rather than one per ordered P/Q pair. Resident and packed paths
-      // must retain the same independently calculated force.
+      // exact generated-source GPU reader with a partial auxiliary panel.
+      // Charge-first contraction needs at most one complete raw source pass;
+      // a fused charge provider may avoid materializing those values entirely.
+      // Bound semantic regeneration bytes rather than pinning the old fitted
+      // panel call count. Resident/packed paths retain the same oracle force.
       const auto j_only_oracle = generativeqc::scf::build_density_fitting_rhf_gradient(
           integrals, generated_rhf_density, 1e-12, {1.0, 0.0});
       const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
@@ -2170,13 +2171,9 @@ int main() {
           if (response_plan == source_plan.get()) {
             const auto width = work.auxiliary_weight_tile;
             require(width < integrals.naux, "streamed J-only test did not exercise bounded panels");
-            const auto panels = (integrals.naux + width - 1) / width;
-            const auto pair_tiles =
-                (integrals.nbf * integrals.nbf + integrals.naux - 1) / integrals.naux;
-            require(work.value_slices == panels * pair_tiles &&
-                        work.recomputed_value_bytes == panels * integrals.naux * integrals.nbf *
-                                                           integrals.nbf * sizeof(double),
-                    "streamed J-only response regenerated a quadratic number of raw panels");
+            const auto raw_bytes = integrals.naux * integrals.nbf * integrals.nbf * sizeof(double);
+            require(work.recomputed_value_bytes <= raw_bytes,
+                    "streamed J-only response regenerated more than one complete raw source");
           } else {
             require(work.recomputed_value_bytes == 0,
                     "resident J-only response unexpectedly regenerated raw integrals");
@@ -2499,6 +2496,37 @@ int main() {
                       generativeqc::scf::DfPairStorage::SymmetricLowerSingle &&
                   j_only.value_storage.rank_capacity == 0 && j_only.peak_workspace_bytes <= budget,
               "method-authorized J-only DF should retain a rank-zero packed value");
+    }
+
+    // Large resident physical sources also benefit from generating/whitening
+    // each symmetric AO pair once. Admission must preserve the complete
+    // method-owned occupied projection and the same memory allowance.
+    {
+      using generativeqc::scf::DfPairStorage;
+      using generativeqc::scf::DfPairStorageRequest;
+      constexpr std::size_t n = 384, a = 1808, rank = 80, budget = 16ULL << 30;
+      const auto resident = [&](DfPairStorageRequest policy, std::size_t batch, bool source,
+                                std::size_t method_rank) {
+        return generativeqc::scf::plan_requested_density_fitting_tiles(
+            policy, batch, n, a, rank, rank, budget, 0, source, method_rank);
+      };
+      const auto automatic = resident(DfPairStorageRequest::Automatic, 1, true, rank);
+      require(automatic.stores_full_three_center &&
+                  automatic.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+                  automatic.value_storage.rank_capacity >= rank &&
+                  automatic.peak_workspace_bytes <= budget,
+              "large physical source lost its resident packed values/occupied projection");
+      for (const auto& dense : {resident(DfPairStorageRequest::Dense, 1, true, rank),
+                                resident(DfPairStorageRequest::Automatic, 2, true, rank),
+                                resident(DfPairStorageRequest::Automatic, 1, false, rank),
+                                resident(DfPairStorageRequest::Automatic, 1, true, 0)})
+        require(dense.value_storage.pairs == DfPairStorage::Dense &&
+                    dense.peak_workspace_bytes <= budget,
+                "resident packing escaped its source, method, singleton or explicit boundary");
+      const auto small = generativeqc::scf::plan_requested_density_fitting_tiles(
+          DfPairStorageRequest::Automatic, 1, 96, 452, 20, 20, budget, 0, true, 20);
+      require(small.stores_full_three_center && small.value_storage.pairs == DfPairStorage::Dense,
+              "small resident source changed its dense execution schedule");
     }
 
     bool rejected_tiny_budget = false;

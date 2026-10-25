@@ -312,10 +312,12 @@ def test_fast_standard_fallback_never_bypasses_explicit_target(
     assert output.precision_validation.status == "observed_met"
 
 
-def test_fast_strict_warm_hf_retains_checked_final_fock(
+@pytest.mark.parametrize("warm_start", (False, True))
+def test_fast_strict_hf_retains_checked_final_fock(
     backend: SimpleNamespace,
+    warm_start: bool,
 ) -> None:
-    """Native warm reuse need not invent a second final-Fock audit count."""
+    """Physical closure belongs to the returned state, not its initial seed."""
     backend.block_auto = True
     native = strict_native_result(final_residual_audits=0, skipped_final_fock_builds=1)
     backend.outputs = [
@@ -324,7 +326,7 @@ def test_fast_strict_warm_hf_retains_checked_final_fock(
             status=0,
             status_message="",
             bucket_id=0,
-            warm_start_used=True,
+            warm_start_used=warm_start,
             warm_start_fallback=False,
             **{
                 field.name: getattr(native, field.name)
@@ -336,6 +338,22 @@ def test_fast_strict_warm_hf_retains_checked_final_fock(
     output = PrecisionCalculator(policy="fast", device="cuda").singlepoint(ATOMS)
     assert output.precision_validation.status == "strict_standard_fallback"
     assert output.precision_validation.solve_count == 1
+
+
+def test_fast_retained_hf_fock_still_obeys_explicit_target(
+    backend: SimpleNamespace,
+) -> None:
+    """Retained physical validation does not measure an observable difference."""
+    backend.block_auto = True
+    backend.outputs = [
+        strict_native_result(final_residual_audits=0, skipped_final_fock_builds=1),
+        strict_native_result(),
+    ]
+    output = PrecisionCalculator(
+        policy=PrecisionPolicy("fast", target=ENERGY), device="cuda"
+    ).singlepoint(ATOMS, properties=("energy",))
+    assert output.precision_validation.solve_count == 2
+    assert output.precision_validation.status == "observed_met"
 
 
 def test_fast_fitted_hf_keeps_unavailable_work_counters_unknown(
