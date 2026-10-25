@@ -39,8 +39,10 @@ class QuadraticCalculator:
         charges: typing.Any,
         multiplicities: typing.Any,
         strict: typing.Any,
+        properties: typing.Any = ("energy", "forces"),
     ) -> typing.Any:
         assert strict
+        assert properties == ("energy", "forces")
         items = tuple(
             self.singlepoint(atoms, charge=c, multiplicity=m)
             for atoms, c, m in zip(systems, charges, multiplicities, strict=True)
@@ -60,7 +62,13 @@ class QuadraticPreparedBatch:
     def __init__(self, calculator: typing.Any) -> None:
         self.calculator = calculator
 
-    def execute(self, coordinates: typing.Any, *, strict: typing.Any) -> typing.Any:
+    def execute(
+        self,
+        coordinates: typing.Any,
+        *,
+        strict: typing.Any,
+        properties: typing.Any = ("energy", "forces"),
+    ) -> typing.Any:
         return self.calculator.batch_singlepoint(
             [
                 list(zip(numbers, xyz, strict=True))

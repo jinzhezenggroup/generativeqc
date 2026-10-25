@@ -255,3 +255,22 @@ def test_uhf_molecular_source_gradient(owner: IntegralRHF, tmp_path: Path) -> No
     finally:
         compiled.close()
         direct.close()
+
+
+def test_public_hvp_uses_direction_budget_without_dense_hessian(
+    owner: IntegralRHF, tmp_path: Path
+) -> None:
+    model = xp.MolecularModel(
+        ("H", "H"),
+        method="rhf",
+        differentiation="integral-ad",
+        integral_options={"max_work": 4 * owner.primitive_evaluations},
+    )
+    derivative = xp.grad(lambda r: xp.square(model(r)), cache=tmp_path)
+    direction = np.ones_like(XYZ) * 0.1
+    try:
+        gradient, product = xp.jvp(derivative, (XYZ,), (direction,), cache=tmp_path)
+        np.testing.assert_allclose(product, 0, atol=2e-10)
+        assert np.isfinite(gradient).all()
+    finally:
+        derivative.close()

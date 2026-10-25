@@ -87,49 +87,109 @@ extern "C" GENERATIVEQC_API int generativeqc_integral_ad_rhf_v1(
   }
 }
 
-/** Versioned explicit-integral HF boundary. State arrays are [Da,Db,Wa,Wb]
- * with unit occupation in each spin; optional directions have the same layout.
- * The caller's ordered source pack is [S,h,ERI,Enuc]. Outputs commit only after
- * the primal and (when requested) true-residual response gates both pass. */
-extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_v2(
-    const generativeqc_system* system, const double* values, const double* direction, std::size_t n,
-    int unrestricted, int backend, int device, unsigned iterations, unsigned diis_history,
-    double energy_tolerance, double density_tolerance, std::size_t budget, double* state,
-    double* state_direction, double* receipt, char* detail, std::size_t detail_size) {
-  try {
-    using namespace generativeqc;
-    if (!system || !values || !state || !receipt || !detail || !detail_size || !n || n > 256 ||
-        (unrestricted != 0 && unrestricted != 1) || (backend != 0 && backend != 1) || device < 0 ||
-        !iterations || iterations > 10000 || !diis_history || diis_history > 32 ||
-        !std::isfinite(energy_tolerance) || energy_tolerance <= 0 ||
-        !std::isfinite(density_tolerance) || density_tolerance <= 0 ||
-        (direction && !state_direction))
+namespace {
+using namespace generativeqc;
+
+/** Own exactly one converged determinant and its immutable integral provider.
+ * Response actions borrow this state; they never rerun SCF. The owner is
+ * synchronous and non-reentrant, including on CUDA's retained provider stream.
+ */
+struct IntegralHFState {
+  using SourceFock = int (*)(const double*, const double*, const double*, const double*, double*);
+  struct Source {
+    SourceFock fock;
+    std::vector<double> parameters;
+    std::size_t builds{}, limit;
+  };
+  std::shared_ptr<Source> source;
+  core::System molecule;
+  std::size_t n, n2, budget, device_budget{}, numeric{};
+  bool unrestricted;
+  int device;
+  scf::FockBackend selected_backend;
+  std::unique_ptr<scf::PreparedFockPlan> plan;
+  api::integral_ad::SpinMatrices density, fock, weighted;
+  scf::ScfResult result;
+  std::array<double, 8> evidence{};
+
+  integrals::IntegralData unpack(const double* data) const {
+    integrals::IntegralData ints;
+    ints.nbf = n;
+    ints.overlap.assign(data, data + n2);
+    ints.hcore.assign(data + n2, data + 2 * n2);
+    if (!source) ints.eri.assign(data + 2 * n2, data + 2 * n2 + n2 * n2);
+    ints.nuclear_repulsion = data[2 * n2 + (source ? 0 : n2 * n2)];
+    return ints;
+  }
+
+  scf::PreparedFockPlan::ExternalBuilder builder(const double* motion = nullptr) const {
+    if (!source) return {};
+    std::vector<double> direction;
+    if (motion) direction.assign(motion, motion + source->parameters.size());
+    return [source = source, direction = std::move(direction), n = n, n2 = n2](
+               const scf::FockBuildSpec& spec, const std::vector<double>& da,
+               const std::vector<double>& db) {
+      const bool spin = spec.spin == scf::FockSpin::Unrestricted;
+      if (da.size() != n2 || (spin && db.size() != n2))
+        throw std::invalid_argument("streamed integral density shape mismatch");
+      if (source->builds >= source->limit)
+        throw std::runtime_error("direct integral AD exceeds max_work during Fock/response");
+      ++source->builds;
+      const std::vector<double> zero(n2, 0);
+      std::vector<double> output(3 * n2);
+      if (source->fock(source->parameters.data(), direction.empty() ? nullptr : direction.data(),
+                       da.data(), spin ? db.data() : zero.data(), output.data()) ||
+          !std::all_of(output.begin(), output.end(), [](double v) { return std::isfinite(v); }))
+        throw std::runtime_error("generated direct integral Fock action failed");
+      scf::DirectJkMatrices result;
+      result.nbf = n;
+      if (spec.coulomb.present) result.coulomb.assign(output.begin(), output.begin() + n2);
+      if (spec.exchange.present) {
+        result.exchange_alpha.assign(output.begin() + n2, output.begin() + 2 * n2);
+        if (spin) result.exchange_beta.assign(output.begin() + 2 * n2, output.end());
+      }
+      return result;
+    };
+  }
+
+  IntegralHFState(const generativeqc_system* system, const double* values, std::size_t n,
+                  int unrestricted, int backend, int device, unsigned iterations,
+                  unsigned diis_history, double energy_tolerance, double density_tolerance,
+                  std::size_t budget, SourceFock source_fock = nullptr,
+                  const double* parameters = nullptr, std::size_t parameter_count = 0,
+                  std::size_t max_source_builds = 0)
+      : n(n), n2(n * n), budget(budget), unrestricted(unrestricted), device(device) {
+    if (!system || !values || !n || n > 256 || (unrestricted != 0 && unrestricted != 1) ||
+        (backend != 0 && backend != 1) || device < 0 || !iterations || iterations > 10000 ||
+        !diis_history || diis_history > 32 || !std::isfinite(energy_tolerance) ||
+        energy_tolerance <= 0 || !std::isfinite(density_tolerance) || density_tolerance <= 0)
       throw std::invalid_argument("invalid integral AD HF arguments");
-    const auto& molecule = system->data;
+    molecule = system->data;
     const int electrons = molecule.electron_count, spin = molecule.multiplicity - 1;
     if (electrons <= 0 || spin < 0 || spin > electrons || (electrons - spin) % 2 ||
         (!unrestricted && spin != 0) || !molecule.ecp_terms.empty() ||
         molecule.basis_representation != core::kCartesianBasis ||
         molecule::ao_count(molecule) != n || std::size_t((electrons + spin) / 2) > n)
       throw std::invalid_argument("integral AD requires all-electron Cartesian HF occupations");
-    const auto n2 = n * n, n4 = n2 * n2;
+    if (source_fock) {
+      if (backend || !parameters || !parameter_count || parameter_count > 1000000 ||
+          !max_source_builds)
+        throw std::invalid_argument("invalid direct integral AD provider");
+      source = std::make_shared<Source>(
+          Source{source_fock, std::vector<double>(parameters, parameters + parameter_count), 0,
+                 max_source_builds});
+    }
+    const auto n4 = n2 * n2;
     // Reserve shared solver workspace separately from all live integral/state
     // copies; a response solve cannot borrow the caller's array allowance.
-    const auto device_budget = backend ? sizeof(double) * (n4 + 41 * n2 + n) + (2u << 20) + 5 : 0;
-    const auto numeric = sizeof(double) * (4 * n4 + 400 * n2 + 64 * n) + 3 * device_budget;
-    const auto selected_backend = backend ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+    device_budget = backend ? sizeof(double) * (n4 + 41 * n2 + n) + (2u << 20) + 5 : 0;
+    numeric = sizeof(double) * ((source ? 4 * parameter_count : 4 * n4) + 400 * n2 + 64 * n) +
+              3 * device_budget;
+    selected_backend = backend ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     if (budget < numeric) throw std::invalid_argument("integral AD HF exceeds numeric byte budget");
-    const auto unpack = [&](const double* data) {
-      integrals::IntegralData ints;
-      ints.nbf = n;
-      ints.overlap.assign(data, data + n2);
-      ints.hcore.assign(data + n2, data + 2 * n2);
-      ints.eri.assign(data + 2 * n2, data + 2 * n2 + n4);
-      ints.nuclear_repulsion = data[2 * n2 + n4];
-      return ints;
-    };
-    scf::PreparedFockPlan plan(molecule, unpack(values), scf::FockSpin::Unrestricted,
-                               selected_backend, device, device_budget);
+    plan = std::make_unique<scf::PreparedFockPlan>(molecule, unpack(values),
+                                                   scf::FockSpin::Unrestricted, selected_backend,
+                                                   device, device_budget, builder());
     scf::ScfOptions options;
     options.max_iterations = iterations;
     options.diis_history = diis_history;
@@ -137,19 +197,17 @@ extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_v2(
     options.density_tolerance = density_tolerance;
     options.screening_tolerance = 0;
     options.compute_forces = false;
-    options.resolved_fock_build = plan.strategy();
-    api::integral_ad::SpinMatrices density, fock, weighted, dd, dw;
-    scf::ScfResult result;
+    options.resolved_fock_build = plan->strategy();
     if (unrestricted) {
       result =
-          scf::solver::run_uhf_host_plan(molecule, options, plan.one_electron(), plan, nullptr);
+          scf::solver::run_uhf_host_plan(molecule, options, plan->one_electron(), *plan, nullptr);
       if (result.density.size() != 2 * n2)
         throw std::runtime_error("integral AD spin density extent mismatch");
       density[0].assign(result.density.begin(), result.density.begin() + n2);
       density[1].assign(result.density.begin() + n2, result.density.end());
     } else {
       scf::PreparedFockPlan restricted_plan(molecule, unpack(values), scf::FockSpin::Restricted,
-                                            selected_backend, device, device_budget);
+                                            selected_backend, device, device_budget, builder());
       options.resolved_fock_build = restricted_plan.strategy();
       result = scf::solver::run_rhf_host_plan(molecule, options, restricted_plan.one_electron(),
                                               restricted_plan, nullptr);
@@ -158,54 +216,181 @@ extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_v2(
       density[1] = density[0];
     }
     if (!result.converged) throw std::runtime_error("integral AD SCF did not converge");
-    auto physical = scf::assemble_fock(plan.strategy(), plan.one_electron().hcore,
-                                       plan.build(density[0], density[1]));
+    auto physical = scf::assemble_fock(plan->strategy(), plan->one_electron().hcore,
+                                       plan->build(density[0], density[1]));
     fock = {std::move(physical.alpha), std::move(physical.beta)};
     double maximum = 0;
     for (unsigned s = 0; s < 2; ++s) {
       maximum =
           std::max(maximum, scf::reference::residual_max_abs(scf::reference::commutator_residual(
-                                fock[s], density[s], plan.one_electron().overlap, n)));
+                                fock[s], density[s], plan->one_electron().overlap, n)));
       weighted[s] = scf::reference::physical_weighted_density(density[s], fock[s], n, 1);
     }
     if (!std::isfinite(result.energy) || !std::isfinite(maximum) ||
         maximum > std::max(1e-9, 10 * density_tolerance))
       throw std::runtime_error("integral AD final physical stationarity check failed");
-    double evidence[8] = {
+    evidence = {
         result.energy,        double(result.iterations), maximum, double(result.fock_builds + 1),
         result.energy_change, result.density_rms,        0,       0};
-    if (direction) {
-      scf::PreparedFockPlan direction_plan(molecule, unpack(direction), scf::FockSpin::Unrestricted,
-                                           selected_backend, device, device_budget);
-      api::integral_ad::response(
-          plan, direction_plan, density, fock,
-          {std::size_t((electrons + spin) / 2), std::size_t((electrons - spin) / 2)}, !unrestricted,
-          budget - numeric, dd, dw, evidence);
-    }
-    const auto check = [](const auto& matrices) {
-      for (const auto& matrix : matrices)
-        if (!std::all_of(matrix.begin(), matrix.end(), [](double v) { return std::isfinite(v); }))
-          throw std::runtime_error("integral AD physical state is nonfinite");
-    };
+    if (source) evidence[3] = double(source->builds);
     check(density);
     check(weighted);
-    check(dd);
-    check(dw);
+  }
+
+  static void check(const api::integral_ad::SpinMatrices& matrices) {
+    for (const auto& matrix : matrices)
+      if (!std::all_of(matrix.begin(), matrix.end(), [](double v) { return std::isfinite(v); }))
+        throw std::runtime_error("integral AD physical state is nonfinite");
+  }
+
+  void publish(double* state, double* receipt) const {
     for (unsigned s = 0; s < 2; ++s) {
       std::copy(density[s].begin(), density[s].end(), state + s * n2);
       std::copy(weighted[s].begin(), weighted[s].end(), state + (2 + s) * n2);
-      if (direction) {
-        std::copy(dd[s].begin(), dd[s].end(), state_direction + s * n2);
-        std::copy(dw[s].begin(), dw[s].end(), state_direction + (2 + s) * n2);
-      }
     }
-    std::copy(evidence, evidence + 8, receipt);
+    std::copy(evidence.begin(), evidence.end(), receipt);
+  }
+
+  void respond(const double* direction, double* output, double* receipt,
+               const double* parameter_motion = nullptr, std::size_t max_source_builds = 0) const {
+    if (!direction || !output || !receipt)
+      throw std::invalid_argument("invalid retained integral AD response buffers");
+    if (source && !parameter_motion)
+      throw std::invalid_argument("direct integral response requires parameter motion");
+    if (source) {
+      // The caller reserves primal/column and pullback work before admitting
+      // this response. Enforce the remaining budget inside every Fock action.
+      source->builds = 0;
+      source->limit = max_source_builds;
+    }
+    auto counters = evidence;
+    counters[1] = counters[3] = 0;  // This action performs no primal SCF iterations.
+    scf::PreparedFockPlan direction_plan(molecule, unpack(direction), scf::FockSpin::Unrestricted,
+                                         selected_backend, device, device_budget,
+                                         builder(parameter_motion));
+    api::integral_ad::SpinMatrices dd, dw;
+    const int electrons = molecule.electron_count, spin = molecule.multiplicity - 1;
+    api::integral_ad::response(
+        *plan, direction_plan, density, fock,
+        {std::size_t((electrons + spin) / 2), std::size_t((electrons - spin) / 2)}, !unrestricted,
+        budget - numeric, dd, dw, counters.data());
+    check(dd);
+    check(dw);
+    for (unsigned s = 0; s < 2; ++s) {
+      std::copy(dd[s].begin(), dd[s].end(), output + s * n2);
+      std::copy(dw[s].begin(), dw[s].end(), output + (2 + s) * n2);
+    }
+    std::copy(counters.begin(), counters.end(), receipt);
+  }
+};
+
+template <class Function>
+int integral_ad_status(Function&& function, char* detail, std::size_t detail_size) {
+  try {
+    if (!detail || !detail_size) throw std::invalid_argument("missing integral AD error buffer");
+    function();
     return 0;
   } catch (const std::exception& error) {
     if (detail && detail_size) std::snprintf(detail, detail_size, "%s", error.what());
-    return 1;
   } catch (...) {
     if (detail && detail_size) std::snprintf(detail, detail_size, "integral AD HF failed");
-    return 1;
   }
+  return 1;
+}
+}  // namespace
+
+/** Prepare an owned, immutable stationary state. No handle or numerical output
+ * is published on failure. The caller may release its system/inputs afterwards.
+ */
+extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_prepare_v1(
+    const generativeqc_system* system, const double* values, std::size_t n, int unrestricted,
+    int backend, int device, unsigned iterations, unsigned diis_history, double energy_tolerance,
+    double density_tolerance, std::size_t budget, void** owner, double* state, double* receipt,
+    char* detail, std::size_t detail_size) {
+  return integral_ad_status(
+      [&] {
+        if (!owner || !state || !receipt) throw std::invalid_argument("missing integral AD output");
+        auto prepared = std::make_unique<IntegralHFState>(
+            system, values, n, unrestricted, backend, device, iterations, diis_history,
+            energy_tolerance, density_tolerance, budget);
+        prepared->publish(state, receipt);
+        *owner = prepared.release();
+      },
+      detail, detail_size);
+}
+
+/** CPU streamed source: the compiler callback owns J/K mathematics, while
+ * this owner retains the copied parameter identity and enforces source work. */
+extern "C" GENERATIVEQC_API int generativeqc_integral_ad_direct_prepare_v1(
+    const generativeqc_system* system, const double* values, std::size_t n, int unrestricted,
+    int backend, int device, unsigned iterations, unsigned diis_history, double energy_tolerance,
+    double density_tolerance, std::size_t budget, IntegralHFState::SourceFock fock,
+    const double* parameters, std::size_t parameter_count, std::size_t max_source_builds,
+    void** owner, double* state, double* receipt, char* detail, std::size_t detail_size) {
+  return integral_ad_status(
+      [&] {
+        if (!owner || !state || !receipt) throw std::invalid_argument("missing integral AD output");
+        auto prepared = std::make_unique<IntegralHFState>(
+            system, values, n, unrestricted, backend, device, iterations, diis_history,
+            energy_tolerance, density_tolerance, budget, fock, parameters, parameter_count,
+            max_source_builds);
+        prepared->publish(state, receipt);
+        *owner = prepared.release();
+      },
+      detail, detail_size);
+}
+
+extern "C" GENERATIVEQC_API int generativeqc_integral_ad_direct_response_v1(
+    const void* owner, const double* direction, const double* parameter_motion,
+    std::size_t max_source_builds, double* state_direction, double* receipt, char* detail,
+    std::size_t detail_size) {
+  return integral_ad_status(
+      [&] {
+        if (!owner) throw std::invalid_argument("missing integral AD stationary owner");
+        static_cast<const IntegralHFState*>(owner)->respond(direction, state_direction, receipt,
+                                                            parameter_motion, max_source_builds);
+      },
+      detail, detail_size);
+}
+
+/** A response is transactional and may be retried after an invalid direction. */
+extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_response_v1(
+    const void* owner, const double* direction, double* state_direction, double* receipt,
+    char* detail, std::size_t detail_size) {
+  return integral_ad_status(
+      [&] {
+        if (!owner) throw std::invalid_argument("missing integral AD stationary owner");
+        static_cast<const IntegralHFState*>(owner)->respond(direction, state_direction, receipt);
+      },
+      detail, detail_size);
+}
+
+extern "C" GENERATIVEQC_API void generativeqc_integral_ad_hf_destroy_v1(void* owner) {
+  delete static_cast<IntegralHFState*>(owner);
+}
+
+/** Compatibility execution keeps the v2 ABI and its complete-call work counts. */
+extern "C" GENERATIVEQC_API int generativeqc_integral_ad_hf_v2(
+    const generativeqc_system* system, const double* values, const double* direction, std::size_t n,
+    int unrestricted, int backend, int device, unsigned iterations, unsigned diis_history,
+    double energy_tolerance, double density_tolerance, std::size_t budget, double* state,
+    double* state_direction, double* receipt, char* detail, std::size_t detail_size) {
+  return integral_ad_status(
+      [&] {
+        if (!state || !receipt || (direction && !state_direction))
+          throw std::invalid_argument("missing integral AD output");
+        IntegralHFState prepared(system, values, n, unrestricted, backend, device, iterations,
+                                 diis_history, energy_tolerance, density_tolerance, budget);
+        std::vector<double> motion(4 * n * n);
+        auto evidence = prepared.evidence;
+        if (direction) {
+          prepared.respond(direction, motion.data(), evidence.data());
+          evidence[1] += prepared.evidence[1];
+          evidence[3] += prepared.evidence[3];
+        }
+        prepared.publish(state, receipt);
+        if (direction) std::copy(motion.begin(), motion.end(), state_direction);
+        std::copy(evidence.begin(), evidence.end(), receipt);
+      },
+      detail, detail_size);
 }

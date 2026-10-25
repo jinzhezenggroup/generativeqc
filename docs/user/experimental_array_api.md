@@ -211,7 +211,9 @@ float32/mixed selection branches, nonfinite comparison semantics and native CUDA
 Boolean data remain
 unsupported. This subset does not establish complete Array API conformance.
 Other operations fail closed; full eager conformance does
-not imply full compiler coverage. Higher-order public transforms are unsupported.
+not imply full compiler coverage. General nested higher-order transforms are unsupported; the explicit
+`jvp(grad(...))` / `jvp(value_and_grad(...))` route supports second order where
+each participating molecular source admits an analytic HVP.
 
 Inputs are non-differentiable by default. When the lowered program will be used
 with TensorIR AD, declare that contract explicitly:
@@ -404,8 +406,12 @@ fallback. This is an *interface generalization*, **not** evidence that all DFT
 functionals, ECPs, unrestricted or CC methods already provide qualified analytic
 nuclear gradients. Energy-only calls are allowed for energy-capable methods;
 `grad`/`value_and_grad` require the method's genuine analytic forces.
-The initial public method-neutral source remains host-staged FP64 and first
-order; higher-order implicit/response gradients are not inferred.
+The method-neutral source remains host-staged FP64. Second-order composition
+uses the calculator's explicit contextual HVP admission; it does not infer new
+response physics. `jvp(grad(loss), ...)` also differentiates nonlinear outer
+losses and coordinate transformations. Native second-order calls enter the
+qualified public HVP endpoint and may solve SCF again; this does not claim the
+integral owner's retained-state optimization for every native method.
 
 ### User-composed XC methods inside Array API
 
@@ -524,8 +530,10 @@ loss_and_grad.close()
 Array API expressions. Each new geometry or basis input causes a fresh SCF
 solve; reusable VJP pullbacks retain the forward inputs. Capture and `lower()`
 do not execute SCF or compile integrals. `jvp(grad(loss), primals, directions)`
-uses a quadratic source jet and the analytic coupled orbital response, including
-outer nonlinear geometry and basis transformations. The SCF iteration history
+uses the gradient's directional source and the analytic coupled orbital response,
+including outer nonlinear geometry and basis transformations. Only the requested
+direction is evaluated: it does not materialize a joint Hessian. One converged
+integral-HF state supplies energy, gradient and response for each source. The SCF iteration history
 is not differentiated. `jvp(value_and_grad(loss), ...)` also returns the energy
 and its directional derivative. Arbitrary nesting of `grad` and orders above
 two are unsupported. DF/KS/post-HF methods, ECPs and spherical bases are outside
@@ -611,9 +619,28 @@ includes d/f/g one-electron components and mixed ERIs. Compact second-order
 tapes also pass an independent mixed `(gg|gg)` primitive gate and Boys F0..F18
 checks; this is not a qualification of a complete g-shell molecular endpoint.
 
+`owner.prepare(coordinates, exponents=..., coefficients=...)` returns an
+`IntegralHFState`. Its `energy`, `gradient()`, `hvp(direction)` and
+`hessian(parameters=...)` share one immutable converged determinant and its
+integral provider. Use a context manager or `close()`; input copies and detached
+results survive caller mutation, and the state survives `owner.close()`.
+Execution/close must be serialized. Failed responses publish no derivative or
+partial receipt. Diagnostics accumulate successful source evaluations, SCF solves,
+Fock builds and response actions. Full Hessian columns share the same primal
+state, and the matrix is neither projected nor symmetrized.
+
 The standalone owners default to `max_bytes=64 << 20`, `max_work=100_000_000`,
-`compiler_work=5_000_000`, and a finite `compile_timeout=300` seconds. Primal ERIs
-are dense. The numeric-array bound is
+`compiler_work=5_000_000`, and a finite `compile_timeout=300` seconds. `integral_storage="dense"` retains the established dense primal ERIs.
+On CPU, `integral_storage="direct"` instead streams the same generated primitive
+values into J/K, and contracts stationary weights before integral pullback.
+Its numeric storage is quadratic in AO count, plus parameter/tape workspace;
+ordered primitive work remains quartic and ERIs are recomputed for Fock and
+response actions. Native execution enforces the declared work budget during
+these actions, charging primal and response work together for an HVP and all
+columns together for a full Hessian. This is a memory/work tradeoff, not a speed claim. CUDA currently
+admits dense storage only. Explicit `integrals`, `integral_jvp` and `integral_vjp`
+retain their ordered dense publication contracts and require separate dense
+capacity even on a direct owner. The numeric-array bound is
 reported by `owner.numeric_peak_bytes`, including retained source/state copies,
 response workspace and, on CUDA, lane-private integral scratch and bounded
 solver workspace. It excludes
@@ -626,9 +653,10 @@ artifact cache; failures do not select a different scientific implementation.
 Full Hessian diagnostics aggregate the work of all columns. A failed column
 does not replace the last successful call's diagnostics with a partial receipt.
 
-`MolecularModel` uses these default integral budgets; its compiled tensor
-budgets independently constrain surrounding algebra. Use the standalone owner
-for custom integral budgets. Integral AD always uses unscreened integrals;
+`MolecularModel(..., integral_options={...})` accepts `integral_storage`,
+`max_bytes`, `max_work`, `compiler_work`, and `compile_timeout` for its integral
+source. These are copied immutable settings. Compiled tensor budgets independently
+constrain surrounding algebra; neither budget silently enlarges the other. Integral AD always uses unscreened integrals;
 `screening_tolerance=0` or the shared constructor default is accepted, while
 other screening values are rejected. `max_iterations` (at most 10000),
 `diis_history` (at most 32), and finite positive energy/density tolerances are
@@ -664,6 +692,29 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
   python -m pytest -q tests/python/test_integral_autodiff_cuda.py
 ```
+
+## Optimize a Gaussian basis with public derivatives
+
+`examples/optimize_gaussian_basis.py` jointly optimizes water's Gaussian exponents
+and signed contraction coefficients using `generativeqc.torch.integral_energy`.
+Logarithmic exponents enforce positivity inside the Torch graph. Bounded Armijo
+steps use analytic gradients; optional PySCF execution verifies the initial and
+optimized raw basis independently and never supplies optimizer values.
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so \
+  python examples/optimize_gaussian_basis.py --steps 6 --reference \
+    --output .artifacts/basis-optimization.json
+```
+
+Install the Torch extra and, for `--reference`, the reference-test extra.
+`--storage direct` selects the bounded CPU memory-saving path. CUDA uses
+`--backend cuda --storage dense` inside a finite Slurm allocation. The report
+retains each complete energy/gradient endpoint timing, work receipt, accepted
+energy, optimized parameters, setup time and numeric array bound. Setup may reuse
+compiler artifacts; it is not a compiler-cold or process-RSS measurement. A
+finite number of accepted descent steps is not a global optimization certificate.
 
 ## Compose native RHF energies with the unified molecular operator
 
@@ -709,8 +760,8 @@ runtime binds that jet exactly at the snapshot geometry, preserving the native
 energy without duplicate displacement arithmetic. TensorIR compiles the
 surrounding algebra and its chain rule; the native RHF driver still owns the
 solver and its analytic molecular derivative. This does not differentiate the
-SCF iteration history, implement arbitrary electronic methods, or add higher
-derivatives/response solvers. A molecular `lower()` result requires its public
+SCF iteration history or implement arbitrary electronic methods. Qualified
+second order binds directional gradient sources to existing response solvers. A molecular `lower()` result requires its public
 compiled owner's source bindings; it is not a standalone TensorIR executable
 with only the user's original inputs.
 

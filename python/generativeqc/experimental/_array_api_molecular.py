@@ -1,4 +1,4 @@
-"""Explicit native molecular source cuts for first-order Array API capture.
+"""Molecular energy/gradient sources with qualified directional response capture.
 
 The default native source owns SCF, integrals, and analytic nuclear derivatives.
 The explicit integral-ad source generates the integral/normalization pullback
@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import os
 import time
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
@@ -51,8 +52,9 @@ class MolecularModel:
 
     Native Calculator owns method resolution, electronic structure and its
     available analytic forces; TensorIR compiles only the surrounding algebra
-    and first-order chain rule. No new electronic method, numerical-gradient
-    fallback, differentiated SCF history or implicit higher derivative is
+    and its chain rule. Native second order requires the calculator's qualified
+    HVP endpoint; integral second order retains one converged state. No new
+    electronic method, numerical-gradient fallback or SCF-history derivative is
     invented. Coordinates are FP64 (natoms, 3) in Bohr; energy is in Hartree
     and complete native analytic gradients are in Hartree/Bohr.
 
@@ -80,6 +82,7 @@ class MolecularModel:
     _resource_budget: Any
     _ks_options: KsOptions | None
     _differentiation: str
+    _integral_options: tuple[tuple[str, Any], ...]
 
     def __init__(
         self,
@@ -101,6 +104,7 @@ class MolecularModel:
         screening_tolerance: float = 1e-14,
         resource_budget: Any = None,
         differentiation: str = "native",
+        integral_options: Mapping[str, Any] | None = None,
     ) -> None:
         """Bind a method selector and immutable derivative source contract.
 
@@ -117,6 +121,39 @@ class MolecularModel:
 
         if differentiation not in ("native", "integral-ad"):
             raise ValueError("differentiation must be 'native' or 'integral-ad'")
+        if integral_options is not None and not isinstance(integral_options, Mapping):
+            raise TypeError("integral_options must be a mapping")
+        options = dict(integral_options or {})
+        if options and differentiation != "integral-ad":
+            raise ValueError("integral_options require differentiation='integral-ad'")
+        allowed = {
+            "max_bytes",
+            "max_work",
+            "compiler_work",
+            "compile_timeout",
+            "integral_storage",
+        }
+        if options.keys() - allowed:
+            raise ValueError(
+                "unknown integral_options: "
+                + ", ".join(sorted(options.keys() - allowed))
+            )
+        for name in ("max_bytes", "max_work", "compiler_work"):
+            if name in options and (
+                type(options[name]) is not int or not 0 < options[name] < 2**63
+            ):
+                raise ValueError(name + " must be a positive int64")
+        if "compile_timeout" in options and (
+            type(options["compile_timeout"]) not in (int, float)
+            or not math.isfinite(options["compile_timeout"])
+            or options["compile_timeout"] <= 0
+        ):
+            raise ValueError("compile_timeout must be finite and positive")
+        if options.get("integral_storage", "dense") not in ("dense", "direct"):
+            raise ValueError("integral_storage must be dense or direct")
+        if options.get("integral_storage") == "direct" and backend != "cpu":
+            raise ValueError("direct integral AD storage currently requires CPU")
+        object.__setattr__(self, "_integral_options", tuple(sorted(options.items())))
         if not isinstance(elements, tuple) or not 1 <= len(elements) <= 256:
             raise ValueError("molecular elements must be a tuple of 1 to 256 nuclei")
         numbers = tuple(atomic_number(element) for element in elements)
@@ -280,6 +317,7 @@ class MolecularModel:
         }
         if self._differentiation == "integral-ad":
             payload["derivative"] = f"stationary-{self._method}-through-integral-ad-v2"
+            payload["integral_options"] = dict(self._integral_options)
         if not isinstance(self._method, str):
             # Canonical science, not a user label, determines deduplication/cache IDs.
             payload["method_ir_identity"] = self._method.identity
@@ -435,6 +473,7 @@ class _IntegralRHFSource:
             diis_history=controls["diis_history"],
             energy_tolerance=controls["energy_tolerance"],
             density_tolerance=controls["density_tolerance"],
+            **dict(operator._integral_options),
         )
         self._library = self.owner._calculator._library
 
@@ -453,31 +492,28 @@ class _IntegralRHFSource:
             raise ValueError("integral AD source molecular identity changed")
         coordinates = np.array([position for _, position in atoms], dtype=np.float64)
         derivative = "forces" in properties
-        if derivative:
-            energy, gradient = self.owner.value_and_grad(coordinates, **parameters)
-        else:
-            energy = self.owner.energy(coordinates, **parameters)
-            gradient = None
-        diagnostic = self.owner.diagnostics()
-        hessian = None
-        if "hessian" in properties:
-            hessian = self.owner.hessian(
-                coordinates, parameters=("coordinates", *parameters), **parameters
-            )
-            response = self.owner.diagnostics()
-            # The source call also evaluated its energy/gradient snapshot.
-            # Retain that work in the complete quadratic-jet receipt.
-            for name in (
-                "iterations",
-                "fock_builds",
-                "response_operator_actions",
-                "primitive_value_evaluations",
-                "primitive_pullback_evaluations",
-            ):
-                response[name] += diagnostic[name]
-            diagnostic = response
+        directions = parameters.pop("directions", None)
+        with self.owner.prepare(coordinates, **parameters) as state:
+            energy = state.energy
+            gradient = state.gradient() if derivative else None
+            gradient_direction = None
+            if directions is not None:
+                from .integral_autodiff import IntegralGradient
+
+                gradient_direction = state.hvp(
+                    IntegralGradient(
+                        directions["coordinates"],
+                        directions.get(
+                            "exponents", np.zeros_like(self.owner.exponents)
+                        ),
+                        directions.get(
+                            "coefficients", np.zeros_like(self.owner.coefficients)
+                        ),
+                    )
+                )
+            diagnostic = state.diagnostics()
         return SimpleNamespace(
-            hessian=hessian,
+            gradient_direction=gradient_direction,
             energy=energy,
             forces=None if gradient is None else -gradient.coordinates,
             basis_gradients=gradient,
@@ -509,7 +545,7 @@ class _MolecularSource:
             self.energy,
             self.gradient,
             self.snapshot,
-            *self.hessian_names,
+            *self.response_names,
             *(
                 name + "_" + parameter
                 for parameter in self.parameter_names
@@ -518,14 +554,18 @@ class _MolecularSource:
         )
 
     @property
-    def hessian_names(self) -> tuple[str, ...]:
-        if self.derivative_order < 2:
-            return ()
-        names = ("coordinates", *self.parameter_names)
-        return tuple(
-            self.gradient + "_hessian_" + left + "_" + right
-            for left in names
-            for right in names
+    def gradient_names(self) -> tuple[str, ...]:
+        return (
+            self.gradient,
+            *(self.gradient + "_" + name for name in self.parameter_names),
+        )
+
+    @property
+    def response_names(self) -> tuple[str, ...]:
+        return (
+            tuple("d_" + name for name in self.gradient_names)
+            if self.derivative_order == 2
+            else ()
         )
 
     @property
@@ -613,10 +653,6 @@ class _MolecularCapture:
                 "nested molecular geometry dependencies are unsupported"
             )
         order = _SOURCE_ORDER.get()
-        if order > 1 and operator._differentiation != "integral-ad":
-            raise ValueError(
-                "second-order molecular capture requires differentiation='integral-ad'"
-            )
         payload = {
             **operator._payload(),
             "geometry": geometry.logical_hash,
@@ -655,42 +691,28 @@ class _MolecularCapture:
         detached_spec = replace(
             coordinates.node.spec, role="input", differentiable=False
         )
-        gradient = input_array(source.gradient, detached_spec)
+        # The second transform differentiates the gradient with an explicitly
+        # supplied HVP seed. Snapshot coordinates stay fixed execution data.
+        gradient_spec = (
+            replace(detached_spec, role="parameter", differentiable=True)
+            if order == 2
+            else detached_spec
+        )
+        gradient = input_array(source.gradient, gradient_spec)
         snapshot = input_array(source.snapshot, detached_spec)
         # This exact local jet has value E at q=q0 and derivative g*dq.
         # g and q0 are immutable native snapshots, not differentiated SCF state.
         result = energy + symbolic.sum(gradient * (coordinates - snapshot))
-        displacements = {"coordinates": coordinates - snapshot}
         for name, value in parameters.items():
             spec = replace(value.node.spec, role="input", differentiable=False)
-            basis_gradient = input_array(source.gradient + "_" + name, spec)
+            gradient_spec = (
+                replace(spec, role="parameter", differentiable=True)
+                if order == 2
+                else spec
+            )
+            basis_gradient = input_array(source.gradient + "_" + name, gradient_spec)
             basis_snapshot = input_array(source.snapshot + "_" + name, spec)
             result = result + symbolic.sum(basis_gradient * (value - basis_snapshot))
-            displacements[name] = value - basis_snapshot
-        if source.derivative_order == 2:
-            # A quadratic local jet is differentiated before its displacement
-            # is bound to zero. Its Hessian includes the coupled SCF response,
-            # so outer nonlinear geometry/basis transforms get the full chain rule.
-            from fractions import Fraction
-
-            for left, dl in displacements.items():
-                for right, dr in displacements.items():
-                    nl, nr = math.prod(dl.shape), math.prod(dr.shape)
-                    hessian = input_array(
-                        source.gradient + "_hessian_" + left + "_" + right,
-                        TensorSpec(
-                            symbolic._generic_indices((nl, nr)),
-                            role="input",
-                            differentiable=False,
-                        ),
-                    )
-                    l = symbolic.reshape(
-                        dl, (nl, 1), indices=symbolic._generic_indices((nl, 1))
-                    )
-                    r = symbolic.reshape(
-                        dr, (1, nr), indices=symbolic._generic_indices((1, nr))
-                    )
-                    result = result + Fraction(1, 2) * symbolic.sum(l * hessian * r)
         return result
 
 
@@ -700,6 +722,7 @@ class _MolecularRuntime:
         self.calculators: dict[str, Any] = {}
         self.diagnostics: dict[str, dict[str, Any]] = {}
         self.bound_programs: dict[str, Program] = {}
+        self.directions: dict[str, np.ndarray] = {}
         self.profile_enabled = os.environ.get("GENERATIVEQC_ARRAY_API_PROFILE") == "1"
         self.profile_totals_ns: dict[str, int] = {}
         self.profile_counts: dict[str, int] = {}
@@ -721,7 +744,7 @@ class _MolecularRuntime:
             self.sources[source.energy] = source
 
     def bind_snapshots(self, program: Program) -> Program:
-        """Evaluate jets at their bound point *after* first-order AD lowering.
+        """Evaluate source expansions at their snapshot after all requested AD transforms.
 
         At q=q0 the jet displacement is identically zero. Substituting exact
         zero avoids duplicate geometry arithmetic and roundoff changing the
@@ -792,6 +815,7 @@ class _MolecularRuntime:
                 calculator = (
                     source.operator._calculator()
                     if source.derivative_order == 1
+                    or source.operator._differentiation != "integral-ad"
                     else _IntegralRHFSource(source.operator, derivative_order=2)
                 )
                 self.calculators[source.energy] = calculator
@@ -800,19 +824,59 @@ class _MolecularRuntime:
                     "source_calculator_lookup", time.perf_counter_ns() - mark
                 )
             derivative = bool((set(source.names) - {source.energy}) & needed)
-            second = bool(set(source.hessian_names) & needed)
+            second = bool(set(source.response_names) & needed)
             mark = time.perf_counter_ns() if profiling else 0
+            directions = None
+            if second:
+                if (
+                    source.operator._differentiation != "integral-ad"
+                    and "hvp" not in calculator.second_order_capabilities
+                ):
+                    raise NotImplementedError(
+                        "this molecular context has no qualified second-order response"
+                    )
+                from generativeqc_compiler.tensor import linearize
+
+                active = tuple(
+                    node.attrs["name"]
+                    for node in source.geometry.nodes
+                    if node.op == "input" and node.attrs["name"] in self.directions
+                )
+                active = tuple(dict.fromkeys(active))
+                motion = linearize(source.geometry, active)
+                motion_feeds = dict(feeds)
+                for seed, name in motion.input_map.items():
+                    motion_feeds[seed] = self.directions[name]
+                values = executor.execute(motion.program, motion_feeds)
+                directions = {
+                    name: values[generated]
+                    for generated, name in motion.output_map.items()
+                }
+            arguments = {
+                name: parameter_values[name] for name in source.parameter_names
+            }
+            if (
+                directions is not None
+                and source.operator._differentiation == "integral-ad"
+            ):
+                arguments["directions"] = directions
             result = calculator.singlepoint(
                 source.operator._atoms(geometry),
                 charge=source.operator._charge,
                 multiplicity=source.operator._multiplicity,
-                properties=("energy", "forces", "hessian")
-                if second
-                else ("energy", "forces")
-                if derivative
-                else ("energy",),
-                **{name: parameter_values[name] for name in source.parameter_names},
+                properties=("energy", "forces") if derivative else ("energy",),
+                **arguments,
             )
+            native_hvp = None
+            native_response = None
+            if second and source.operator._differentiation != "integral-ad":
+                native_response = calculator.hessian_vector_product(
+                    source.operator._atoms(geometry),
+                    directions["coordinates"],
+                    charge=source.operator._charge,
+                    multiplicity=source.operator._multiplicity,
+                )
+                native_hvp = native_response.value
             if profiling:
                 self.record_profile(
                     "source_native_singlepoint", time.perf_counter_ns() - mark
@@ -843,29 +907,31 @@ class _MolecularRuntime:
                         value, copy=True
                     )
             if second:
-                sizes = [
-                    geometry.size,
-                    *(parameter_values[name].size for name in source.parameter_names),
-                ]
-                boundaries = np.cumsum([0, *sizes])
-                hessian = np.asarray(result.hessian)
-                if (
-                    hessian.shape != (boundaries[-1], boundaries[-1])
-                    or not np.isfinite(hessian).all()
+                for name, generated in zip(
+                    ("coordinates", *source.parameter_names),
+                    source.response_names,
+                    strict=True,
                 ):
-                    raise ArithmeticError("integral AD source returned invalid Hessian")
-                names = ("coordinates", *source.parameter_names)
-                for i, left in enumerate(names):
-                    for j, right in enumerate(names):
-                        publication[
-                            source.gradient + "_hessian_" + left + "_" + right
-                        ] = np.array(
-                            hessian[
-                                boundaries[i] : boundaries[i + 1],
-                                boundaries[j] : boundaries[j + 1],
-                            ],
-                            copy=True,
+                    value = (
+                        native_hvp
+                        if native_hvp is not None
+                        else getattr(result.gradient_direction, name)
+                    )
+                    value = np.asarray(value)
+                    expected = (
+                        geometry.shape
+                        if name == "coordinates"
+                        else parameter_values[name].shape
+                    )
+                    if (
+                        value.shape != expected
+                        or value.dtype != np.float64
+                        or not np.isfinite(value).all()
+                    ):
+                        raise ArithmeticError(
+                            "molecular source returned invalid Hessian-vector product"
                         )
+                    publication[generated] = np.array(value, copy=True)
             feeds.update(publication)
             if profiling:
                 self.record_profile(
@@ -881,6 +947,11 @@ class _MolecularRuntime:
                     else source.operator._method.identifier
                 ),
                 "calls": previous.get("calls", 0) + 1,
+                "hvp_calls": previous.get("hvp_calls", 0) + int(second),
+                "iteration_count_scope": "energy-and-gradient-source",
+                "native_response_diagnostics": None
+                if native_response is None
+                else native_response.diagnostics,
                 "force_calls": previous.get("force_calls", 0)
                 + int(derivative and source.operator._differentiation == "native"),
                 "total_iterations": previous.get("total_iterations", 0)

@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 #define GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 
+#include <functional>
 #include <memory>
 
 #include "runtime/cuda_provider.hpp"
@@ -77,9 +78,14 @@ class PreparedFockPlan {
    * No integral or force provider is evaluated during construction. Such a plan
    * cannot match a geometry-only cache lookup: its tensors are part of its
    * scientific identity, and its caller owns their differentiated provenance. */
+  /** A compiler-generated source may stream J/K directly from its immutable
+   * differentiated parameters. It owns no geometry-only provider or dense ERI.
+   * The callback must validate finite output and retain all input lifetimes. */
+  using ExternalBuilder = std::function<DirectJkMatrices(
+      const FockBuildSpec&, const std::vector<double>&, const std::vector<double>&)>;
   PreparedFockPlan(const core::System& orbital, integrals::IntegralData values,
                    FockSpin spin = FockSpin::Restricted, FockBackend backend = FockBackend::Cpu,
-                   int device = 0, std::size_t device_budget = 0);
+                   int device = 0, std::size_t device_budget = 0, ExternalBuilder builder = {});
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
