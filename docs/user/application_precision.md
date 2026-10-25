@@ -1,8 +1,10 @@
 # Application precision and explicit audits
 
 `PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
-while `PrecisionCalculator(policy="fast")` selects qualified FP32 arithmetic
-from an application error budget, without asking users to select kernels.
+while `PrecisionCalculator(policy="fast")` permits qualified approximations
+from an application error budget: supported routes can use FP32 arithmetic,
+relaxed stopping limits, or both, without asking users to select kernels.
+Fast need not execute approximate work or be faster on every input.
 
 `policy="fp64"` remains a backward-compatible name for Standard: both use
 identical controls and execution, and the serialized `profile` preserves the
@@ -20,6 +22,22 @@ observable error or mixed work. Explicit targets and tighter budgets keep their
 independent audits. Direct HF can retain its physically validated final Fock on
 both cold and warm calls; the initial seed does not determine fallback admission.
 Legacy fitted-HF work counters remain unknown.
+
+On an unchanged geometry, a prepared warm density may already satisfy the
+selected physical checks. Fast can then return after a fresh FP64 Fock and
+audit with zero mixed SCF builds (`qualified_budget_fock_strict_warm`). Inspect
+the gradient ledger separately: zero mixed SCF work does not imply FP64 forces.
+Compare cold and moved-geometry endpoints as well as warm replay when evaluating
+the value of relaxed convergence. Compare complete energy and force errors;
+similar energies or identical pass/fail statuses do not establish equal accuracy.
+
+These profile names do not prescribe a common convergence threshold for every
+method. Correlated calculations have canonical-reference and response requirements;
+the [CBS convergence policy](ccsdt_cbs.md#convergence-profiles) has separate controls
+and allocates the composite budget across its extrapolation coefficients.
+CBS Standard uses routine budget-scaled convergence, while its `tight` preset
+retains the original strict controls. The CBS `fast` name remains a compatibility
+alias for its routine allowance; this does not change HF/DFT Fast.
 
 ## Module-selected Fast Fock
 

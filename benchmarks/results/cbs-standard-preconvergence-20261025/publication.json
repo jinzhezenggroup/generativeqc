@@ -1,0 +1,117 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Scoped independent C2 observables, water force tests and strict whole-endpoint controls pass without relaxed Standard tolerances. Timing observations retain their sample/statistical limits.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6828,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "2d19058917b30a87f992564045b914170ea6a31d74e77fdc1b71952712bc6028"
+    },
+    {
+      "bytes": 1336,
+      "path": "build-candidate.sh",
+      "role": "reproduction",
+      "sha256": "1debd0b86784081f29fa348e77a34f7ea3e10afced7d37e4ede67710aa9cefc9"
+    },
+    {
+      "bytes": 1560,
+      "path": "build-master.sh",
+      "role": "reproduction",
+      "sha256": "0e227072ef224443e8ae049b39124facac016ddef4ed7e579152ef868d17ab14"
+    },
+    {
+      "bytes": 52276,
+      "path": "candidate1.patch.xz",
+      "role": "source-patch",
+      "sha256": "8e1229f5c8b94a3649b8f2ac5914187342c6448d741f47a18908d6ea8b805a20"
+    },
+    {
+      "bytes": 52776,
+      "path": "candidate2.patch.xz",
+      "role": "source-patch",
+      "sha256": "97b91327a717d3f89598d6e0bc414530f68334441e1b27a4d015d305d96ccc45"
+    },
+    {
+      "bytes": 14044,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "e4faebe6cb12f5eec11295d9a317fb78623219efd31f36c14c944ad6b7eb4dae"
+    },
+    {
+      "bytes": 734,
+      "path": "execute.sh",
+      "role": "reproduction",
+      "sha256": "a06fa2bd94e489be9e359e43a958d0418e0b99a49348c43bbfe626e978c18056"
+    },
+    {
+      "bytes": 4358,
+      "path": "experiment.py",
+      "role": "reproduction",
+      "sha256": "d5d3f9ed662f4f3a65677cdd8fe1e4dfc70492e1618974b00c330d39965200e1"
+    },
+    {
+      "bytes": 3980,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "e23137f79b5acc74a1a248f3013415abd22c15f47bd39095ab60e134a49594f1"
+    },
+    {
+      "bytes": 2564,
+      "path": "reference.json.xz",
+      "role": "input",
+      "sha256": "266e9d8870f0d99a297be4e4fc89b01675e63731bef0168916dc799ff55e86a3"
+    },
+    {
+      "bytes": 2088,
+      "path": "refusal-probes.py",
+      "role": "reproduction",
+      "sha256": "7ee619075621dc61842589630f5a2844cc067a09076b8ed3136d6ac5287f057a"
+    },
+    {
+      "bytes": 1549,
+      "path": "resource-probe-high.py",
+      "role": "reproduction",
+      "sha256": "6206ae61d9916314c81d69048da02e9a87d992492e6397499f33460da420b515"
+    },
+    {
+      "bytes": 1561,
+      "path": "resource-probe.py",
+      "role": "reproduction",
+      "sha256": "6af8c4b0919e7a112b38832c8bc336e32e0d88ae044232c7778544f521dc1f3d"
+    },
+    {
+      "bytes": 94076,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "672115e672c6a69c1dc671703e5e549c2924b664bc08fd49d732d3d94d9d6d56"
+    },
+    {
+      "bytes": 12872,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "491d30d79f77b431f8de2164c9660e9aa98bc819c5fb13ee2676d71086a02fa7"
+    },
+    {
+      "bytes": 15060,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "8642e3a45038da5f495496edf8b1c726c83ed7a40c0f61a1b49ca18c4f25ebfa"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-standard-preconvergence-20261025/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "7b3dc64f96cee5b805f1e8c958cbe6f22d13336f"
+  }
+}

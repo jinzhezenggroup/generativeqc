@@ -131,7 +131,7 @@ struct Owner {
   std::size_t replay_batch{};
   generated::dfhoist::CudaState hoisted_state;
   generated::dfhoist::MixedAuxiliaryCudaState mixed_state;
-  bool mixed_active{}, mixed_packed_refused{};
+  bool mixed_active{}, mixed_packed_refused{}, mixed_pair_projection_admitted{};
   float *mixed_bov{}, *mixed_bvv{};
   generated::dfpairs::CudaState paired_state;
   bool pairs_enabled{};
@@ -164,18 +164,20 @@ struct Owner {
         coordinates{p.nocc, p.nvir},
         history(options.diis_size) {
     packed = options.packed_diis && options.diis_size;
+    mixed_pair_projection_admitted = options.df_mixed_precision;
     // A single occupied block has no missing spectator partner to eliminate.
     bool pair_candidate =
         p.nocc > 1 && p.naux && options.df_occupied_pairs && pair_bound::projection_supported;
     // Supplied amplitudes are a contract, not a projected guess. Require
     // exact symmetry here; the bounded rounding policy applies only later.
-    if (packed || pair_candidate) {
+    if (packed || pair_candidate || mixed_pair_projection_admitted) {
       for (std::size_t k = 0; k < n2; ++k) {
         const auto mate = coordinates(k).partner;
         if (std::bit_cast<std::uint64_t>(p.initial_t2[k]) !=
             std::bit_cast<std::uint64_t>(p.initial_t2[mate])) {
           diagnostic.packed_diis_refused = packed;
           diagnostic.df_pair_initial_symmetry_refused = pair_candidate;
+          mixed_pair_projection_admitted = false;
           packed = pair_candidate = false;
           break;
         }
@@ -714,16 +716,19 @@ struct Owner {
 
   void finish_mixed_warmup() {
     // A mixed residual is an iteration aid, never a physical certificate.
-    // Remove redundant-coordinate FP32 noise before strict pair admission.
-    // No supplied guess or FP64 iteration is projected by this boundary.
-    if (pairs_enabled) {
+    // Remove redundant-coordinate FP32 noise before the FP64 epoch, including
+    // one-occupied and resource-refused spectator-pair schedules. Lambda uses
+    // the same physical symmetry regardless of the optional contraction plan.
+    // Admission requires an exactly symmetric input; no supplied asymmetric
+    // guess or FP64 iteration is projected by this boundary.
+    if (mixed_pair_projection_admitted) {
       project_mixed_pair_state<<<generativeqc_tensor::blocks(n2, 256), 256, 0, stream>>>(
           const_cast<double*>(state.t2), n2, coordinates, state.error);
       cuda_check(cudaGetLastError());
       check_generated_error();
       ++diagnostic.df_mixed_pair_projection_calls;
       diagnostic.df_mixed_pair_projection_bytes = checked_mul(2 * sizeof(double), n2);
-      if (mixed_packed_refused && history.capacity()) {
+      if (pairs_enabled && mixed_packed_refused && history.capacity()) {
         // The full history lease is larger than the original packed one.
         // Borrow it at the packed stride after discarding all old rows;
         // retain actual allocation accounting and the original symmetry gate.

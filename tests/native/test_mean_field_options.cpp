@@ -105,6 +105,50 @@ void verify_descriptor_prefix() {
   }
 }
 
+void verify_independent_correlated_execution() {
+  using generativeqc::core::DfPreconvergence;
+  CorrelationExecutionMethodOptions options{};
+  auto& descriptor = options.base.base;
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  // A legacy/zero extension is still strict; adding an execution selector must
+  // not grant a numerical allowance or change the public descriptor prefix.
+  for (auto size : {sizeof(descriptor), sizeof(options.base), sizeof(options)}) {
+    descriptor.struct_size = size;
+    require(correlation_preconvergence(descriptor) == DfPreconvergence::Legacy,
+            "legacy correlated execution changed");
+  }
+  for (auto mode : {DfPreconvergence::Fp64, DfPreconvergence::Mixed, DfPreconvergence::Automatic}) {
+    options.df_preconvergence = static_cast<std::uint32_t>(mode);
+    require(correlation_preconvergence(descriptor) == mode,
+            "correlated execution selector was lost");
+    require(application_precision_budget(descriptor) == std::array<double, 3>{},
+            "execution selection relaxed the scientific allowance");
+  }
+  options.base.energy = 1e-5;
+  options.base.maximum_force = 1e-4;
+  options.df_preconvergence = static_cast<std::uint32_t>(DfPreconvergence::Fp64);
+  require(application_precision_budget(descriptor)[0] == 1e-5 &&
+              correlation_preconvergence(descriptor) == DfPreconvergence::Fp64,
+          "relaxed convergence cannot select strict arithmetic");
+  options.df_preconvergence = 4;
+  rejects_invalid([&] { (void)correlation_preconvergence(descriptor); }, "selector");
+  options.df_preconvergence = 0;
+  options.reserved = 1;
+  rejects_invalid([&] { (void)correlation_preconvergence(descriptor); }, "selector");
+  options.reserved = 0;
+  for (std::size_t size = sizeof(options.base) + 1; size < sizeof(options); ++size) {
+    descriptor.struct_size = size;
+    try {
+      (void)correlation_preconvergence(descriptor);
+    } catch (const MethodError& error) {
+      require(error.status() == GENERATIVEQC_STATUS_ABI_MISMATCH,
+              "truncated execution extension returned the wrong status");
+      continue;
+    }
+    throw std::runtime_error("truncated execution extension accepted");
+  }
+}
+
 void verify_incremental_selectors() {
   using generativeqc::scf::classify_incremental_direct_jk_control;
   using generativeqc::scf::IncrementalDirectJkControl;
@@ -141,6 +185,7 @@ int main() {
   try {
     verify_scf_defaults();
     verify_descriptor_prefix();
+    verify_independent_correlated_execution();
     verify_incremental_selectors();
     return 0;
   } catch (...) {

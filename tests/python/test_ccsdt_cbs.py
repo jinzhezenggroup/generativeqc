@@ -118,6 +118,9 @@ def bases() -> tuple[CBSBasis, CBSBasis]:
 
 @pytest.fixture
 def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    from generativeqc import _native
+    from generativeqc._api_types import CcPerformanceResult
+
     events = []
 
     class FakeCalculator:
@@ -125,6 +128,9 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
             self.method = method
             self.basis = basis
             self.options = options
+            self._correlation_preconvergence = options.get(
+                "_correlation_preconvergence"
+            )
             self.event = {"method": method, "basis": basis.identity, "closed": False}
             events.append(self.event)
             assert all(event["closed"] for event in events[:-1])
@@ -142,6 +148,30 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
             coordinates = np.asarray([atom.position for atom in atoms])
             self.event["properties"] = properties
             self.event["options"] = self.options
+            requested = self._correlation_preconvergence == "mixed" or (
+                self._correlation_preconvergence == "auto"
+                and "_correlation_convergence_budget" in self.options
+            )
+            # Model a valid optional-provider refusal: the request is copied,
+            # no FP32 work executes, and the numerical owner still completes.
+            performance = (
+                CcPerformanceResult(
+                    **{
+                        name: 0
+                        for name, _ in _native.CcPerformanceDiagnostic._fields_
+                        if name not in ("struct_size", "abi_version")
+                    },
+                    ccsd_fp32_requested=requested,
+                    ccsd_fp32_executed=False,
+                    ccsd_fp32_refused=requested,
+                    ccsd_fp32_gemm_calls=0,
+                    lambda_fp32_requested=requested if "forces" in properties else None,
+                    lambda_fp32_executed=False,
+                    lambda_fp32_gemm_calls=0,
+                )
+                if self.method == "df-ccsd(t)"
+                else None
+            )
             return Result(
                 energy=float(-scale + scale * np.sum(coordinates**2)),
                 forces=-2.0 * scale * coordinates if "forces" in properties else None,
@@ -152,6 +182,7 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
                 executed_backend="cuda"
                 if self.options["device"] == "cuda"
                 else "cpu_reference",
+                cc_performance=performance,
             )
 
         def clear_cache(self) -> None:
@@ -374,16 +405,18 @@ def test_invalid_completed_component_never_publishes_and_closes_owner(
 
 @pytest.mark.parametrize("correction", (None, "def2-svp", "def2-tzvp"))
 @pytest.mark.parametrize("hf_scheme", ("exponential", "highest"))
-def test_fast_allocates_combined_component_budget(
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+def test_routine_allocates_combined_component_budget(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
     correction: str | None,
     hf_scheme: str,
+    policy: str,
 ) -> None:
     """Duplicate MP2 roles share one error; arbitrary weights must be bounded."""
     result = CCSDTCBSCalculator(
         bases,
-        policy="fast",
+        policy=policy,
         correction_basis=correction,
         hf_extrapolation=hf_scheme,
         correlation_exponent=2.5,
@@ -404,9 +437,11 @@ def test_fast_allocates_combined_component_budget(
         assert event["closed"]
 
 
-def test_fast_preserves_tighter_explicit_controls(
+@pytest.mark.parametrize("policy", ("standard", "fast", "tight", "fp64"))
+def test_preserves_tighter_explicit_controls(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
+    policy: str,
 ) -> None:
     controls = {
         "energy_tolerance": 1e-13,
@@ -415,14 +450,14 @@ def test_fast_preserves_tighter_explicit_controls(
         "ccsd_residual_tolerance": 1e-11,
     }
     result = CCSDTCBSCalculator(
-        bases, policy="fast", calculator_options=controls
+        bases, policy=policy, calculator_options=controls
     ).singlepoint(ATOMS)
     for name, value in controls.items():
         assert result.convergence["limits"][name] == value
         assert all(event["options"][name] == value for event in fake_native)
 
 
-def test_fast_tight_budget_retains_standard_controls(
+def test_fast_tight_budget_retains_strict_controls(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
 ) -> None:
@@ -461,16 +496,69 @@ def test_convergence_metadata_is_detached(
     assert second.convergence["budget"]["energy_abs"] == 1e-5
 
 
+@pytest.mark.parametrize("policy", ("standard", "fast", "tight"))
+def test_explicit_fp64_preserves_independent_convergence(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    monkeypatch: pytest.MonkeyPatch,
+    policy: str,
+) -> None:
+    """Execution can be all-FP64 even when a scientific allowance is present."""
+    original = cbs_module.Calculator.__init__
+
+    def with_transport(self: object, *args: object, **kwargs: object) -> None:
+        original(self, *args, **kwargs)
+        self._correlation_preconvergence = kwargs.get("_correlation_preconvergence")
+
+    monkeypatch.setattr(cbs_module.Calculator, "__init__", with_transport)
+    result = CCSDTCBSCalculator(
+        bases,
+        auxiliary_bases=("sto-3g", "def2-svp"),
+        device="cuda",
+        policy=policy,
+        preconvergence="fp64",
+    ).singlepoint(ATOMS)
+    assert result.convergence["selected"] == (
+        "strict_fp64" if policy == "tight" else "relaxed"
+    )
+    assert result.convergence["arithmetic_request"] == "fp64"
+    assert result.convergence["lambda_arithmetic_request"] == "fp64"
+    assert result.convergence["arithmetic"] == "fp64"
+    assert (result.convergence["scale"] > 0) is (policy != "tight")
+    assert fake_native[0]["options"]["_correlation_preconvergence"] == "fp64"
+    assert "_correlation_preconvergence" not in fake_native[1]["options"]
+
+
+@pytest.mark.parametrize(
+    "options,error,match",
+    (
+        ({"preconvergence": "unknown"}, ValueError, "preconvergence"),
+        ({"preconvergence": "mixed"}, NotImplementedError, "DF bases"),
+        ({"policy": "fp64", "preconvergence": "mixed"}, ValueError, "fp64 policy"),
+    ),
+)
+def test_cbs_preconvergence_validation(
+    bases: tuple[CBSBasis, CBSBasis],
+    options: dict,
+    error: type[Exception],
+    match: str,
+) -> None:
+    with pytest.raises(error, match=match):
+        CCSDTCBSCalculator(bases, **options)
+
+
 @pytest.mark.parametrize("executed", (True, False))
+@pytest.mark.parametrize("policy", ("standard", "fast", "tight"))
 @pytest.mark.parametrize("lambda_executed", (True, False, None))
 @pytest.mark.parametrize("forces", (True, False))
-def test_fast_reports_executed_arithmetic_and_resource_fallback(
+def test_mixed_reports_executed_arithmetic_and_resource_fallback(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
     monkeypatch: pytest.MonkeyPatch,
     executed: bool,
     lambda_executed: bool | None,
     forces: bool,
+    policy: str,
 ) -> None:
     """A refused FP32 request must remain an observable FP64 result."""
     from generativeqc import _native
@@ -494,13 +582,23 @@ def test_fast_reports_executed_arithmetic_and_resource_fallback(
         lambda_fp32_gemm_calls=20 if lambda_executed else 0,
     )
     original = cbs_module.Calculator.singlepoint
+    original_init = cbs_module.Calculator.__init__
+
+    def with_transport(self: object, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)
+        self._correlation_preconvergence = kwargs.get("_correlation_preconvergence")
 
     def measured(self: object, *args: object, **kwargs: object) -> Result:
         return replace(original(self, *args, **kwargs), cc_performance=performance)
 
     monkeypatch.setattr(cbs_module.Calculator, "singlepoint", measured)
+    monkeypatch.setattr(cbs_module.Calculator, "__init__", with_transport)
     owner = CCSDTCBSCalculator(
-        bases, auxiliary_bases=("sto-3g", "def2-svp"), device="cuda", policy="fast"
+        bases,
+        auxiliary_bases=("sto-3g", "def2-svp"),
+        device="cuda",
+        policy=policy,
+        preconvergence="mixed",
     )
     properties = ("energy", "forces") if forces else ("energy",)
     if forces and lambda_executed is None:
@@ -508,6 +606,16 @@ def test_fast_reports_executed_arithmetic_and_resource_fallback(
             owner.singlepoint(ATOMS, properties=properties)
     else:
         result = owner.singlepoint(ATOMS, properties=properties)
+        assert result.convergence["selected"] == (
+            "strict" if policy == "tight" else "relaxed"
+        )
+        if policy == "tight":
+            assert result.convergence["budget"] is None
+            assert result.convergence["limits"]["ccsd_residual_tolerance"] == 1e-10
+            assert all(
+                "_correlation_convergence_budget" not in event["options"]
+                for event in fake_native
+            )
         assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
         assert result.convergence["arithmetic"] == (
             "mixed" if executed or (forces and lambda_executed) else "fp64"
@@ -521,11 +629,42 @@ def test_fast_reports_executed_arithmetic_and_resource_fallback(
     assert all(event["closed"] for event in fake_native)
 
 
-def test_fast_missing_precision_telemetry_cannot_publish(
-    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+def test_routine_missing_precision_telemetry_cannot_publish(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    monkeypatch: pytest.MonkeyPatch,
+    policy: str,
 ) -> None:
+    original = cbs_module.Calculator.singlepoint
+
+    def unmeasured(self: object, *args: object, **kwargs: object) -> Result:
+        return replace(original(self, *args, **kwargs), cc_performance=None)
+
+    monkeypatch.setattr(cbs_module.Calculator, "singlepoint", unmeasured)
     with pytest.raises(RuntimeError, match="FP32 admission telemetry"):
         CCSDTCBSCalculator(
-            bases, auxiliary_bases=("sto-3g", "def2-svp"), device="cuda", policy="fast"
+            bases, auxiliary_bases=("sto-3g", "def2-svp"), device="cuda", policy=policy
         ).singlepoint(ATOMS)
     assert all(event["closed"] for event in fake_native)
+
+
+def test_default_is_routine_and_tight_preserves_legacy_limits(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+) -> None:
+    """Default promotion and the explicit strict escape are observable contracts."""
+    default = CCSDTCBSCalculator(bases).singlepoint(ATOMS)
+    fast = CCSDTCBSCalculator(bases, policy="fast").singlepoint(ATOMS)
+    tight = CCSDTCBSCalculator(bases, policy="Tight").singlepoint(ATOMS)
+    fp64 = CCSDTCBSCalculator(bases, policy="fp64").singlepoint(ATOMS)
+    assert default.convergence["requested_policy"] == "standard"
+    assert default.convergence["limits"] == fast.convergence["limits"]
+    assert default.convergence["budget"] == fast.convergence["budget"]
+    assert default.convergence["limits"]["ccsd_energy_tolerance"] == 1e-8
+    assert default.convergence["limits"]["density_tolerance"] == 1e-11
+    assert default.convergence["limits"]["ccsd_residual_tolerance"] == 1e-7
+    assert tight.convergence["limits"] == fp64.convergence["limits"]
+    assert tight.convergence["limits"]["ccsd_energy_tolerance"] == 1e-12
+    assert tight.convergence["limits"]["ccsd_residual_tolerance"] == 1e-10
+    assert tight.convergence["budget"] is None

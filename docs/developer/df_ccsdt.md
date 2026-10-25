@@ -21,13 +21,16 @@ remain unchanged. The internal native `std::optional<bool>` request defaults to
 ablations at every size. Supplied-Hamiltonian `SolverOptions.df_mixed_precision`
 remains an explicit opt-in independent of the native default policy.
 
-The grouped owner `run_df_correlation_group_native` selects FP64 CCSD and Lambda
-for Standard. It serves same-reference companion calls, DF-CBS,
+The grouped owner `run_df_correlation_group_native` serves same-reference companion calls, DF-CBS,
 correlation-only DF-MP2, and full DF-HF endpoints (including standalone full-DF
-CCSD(T)). Those callers do not inherit the standalone CCSD warmup default.
-The public `CCSDTCBSCalculator(policy="fast")` requests FP32 auxiliary CCSD
-warmup at every shape and selects relaxed convergence limits for the reference,
-CCSD and force response. Its switch residual is
+CCSD(T)). Legacy callers retain their previous convergence-dependent schedule.
+CBS transports an independent private execution selector: `fp64`, `mixed`, or
+`auto`. Routine Standard/Fast requests bounded mixed warmup at every shape;
+strict Tight auto requests it at occupied/virtual dimensions 9/48 for forces
+and 9/128 for energy-only. Explicit `mixed` bypasses those shape gates, while
+resource/provider admission and final FP64 checks remain mandatory. The
+convergence profile independently selects SCF, CCSD and force-response limits.
+The mixed switch residual is
 `max(default_switch, 100 * selected_cc_residual)`; the existing 24-evaluation
 limit and resource/provider refusal apply. Force calls also request the bounded
 Lambda warm start described below; triples and final response remain FP64.
@@ -38,12 +41,13 @@ the frozen public descriptor. It is unavailable for energy-only/conventional
 endpoints and old libraries. Shared transpose action counts exclude independent
 audit actions; Lambda phase time includes preparation, solve, audit and VJPs.
 The complete
-policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#fast-convergence).
+policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#convergence-profiles).
 A copied `core::CorrelationConvergence` travels through the prepared group,
 solver result, Lambda and frame-response owners, including MP2 companions.
 Its private size-tagged budget transport has a separate native capability
 symbol from mean-field arithmetic admission. Decode the extension before
-copying a legacy descriptor prefix. Prepared batches reject this allowance.
+copying a legacy descriptor prefix. Prepared batches reject the allowance and
+explicit execution selector rather than silently discarding either extension.
 Selecting `precision="auto"` on a correlated `Calculator` remains unsupported;
 the internal warmup policy is distinct from convergence selection.
 
@@ -58,17 +62,18 @@ At `df_mixed_precision_switch_residual` (default `100.0 * 1e-9`, approximately
 `1e-7`), or after at most
 `df_mixed_precision_max_evaluations` (default 24) warmup graph calls, the controller clears
 mixed DIIS history and permanently switches to the original FP64 auxiliary graph.
-When the original supplied guess admitted restricted-pair coordinates and the
-strict pair workspace is available, the internal warm-start doubles are projected
+When the original supplied guess is exactly pair-symmetric, internal warm-start doubles are projected
 with the compiler-owned pair map to remove redundant-coordinate FP32 noise.
+This handoff is independent of optional spectator-pair workspace admission,
+including the one-occupied and resource-refused schedules.
 An asymmetric supplied guess is never repaired. A packed history refused during
 warmup may borrow the larger full-history lease again at its original packed
 stride, with empty rows and the unchanged strict symmetry gate. FP64 reevaluation
 then observes this warm-start state. Strict polishing uses half
 the warmup Q batch, down to one Q. The shared arena includes its Q-independent
 FP64 slots and optional qualified occupied-pair workspace; it never allocates a
-second batched arena. Pair projection keeps the original physical error bound
-and may refuse states that do not meet that bound.
+second batched arena. The separate strict spectator-pair tau projection keeps
+its original physical error bound and may refuse states that do not meet it.
 Neither mixed residuals nor rounded cuts can certify convergence: the original
 selected energy/residual tolerances and independent expanded FP64 replay still apply.
 The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear

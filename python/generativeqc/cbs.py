@@ -148,10 +148,13 @@ class CCSDTCBSCalculator:
     Thus the workflow does not retain several basis-dependent CUDA owners at
     once. ``calculator_options`` supplies common SCF/CC/resource controls;
     budgets remain native endpoint budgets, not a total process-RSS bound.
-    ``policy="fast"`` selects budget-scaled convergence, including force
-    response, and requests bounded FP32 auxiliary preconvergence for CUDA
-    DF-CCSD. Final residual checks and response remain FP64. It preserves
-    explicit tighter SCF/CC controls. The returned
+    ``policy="standard"`` selects budget-scaled convergence, including force
+    response. ``tight`` retains the original strict stopping limits; ``fp64``
+    additionally keeps FP64 preconvergence. ``fast`` remains a compatible name
+    for Standard's default allowance and accepts custom budgets.
+    ``preconvergence`` independently selects bounded auxiliary
+    warmup for CUDA DF-CCSD/Lambda. Final residual checks and response remain
+    FP64. It preserves explicit tighter SCF/CC controls. The returned
     convergence metadata describes stopping limits, not measured error bounds.
     Calls on one workflow are serialized. Use separate workflows for concurrency.
     """
@@ -171,6 +174,7 @@ class CCSDTCBSCalculator:
         hf_exponent: float = 1.63,
         calculator_options: Mapping[str, typing.Any] | None = None,
         policy: PrecisionPolicy | str = "standard",
+        preconvergence: str = "auto",
     ) -> None:
         """Bind basis/cardinal snapshots and the shared correlation Hamiltonian.
 
@@ -180,6 +184,11 @@ class CCSDTCBSCalculator:
         orbital bases must use the same auxiliary snapshot within this model.
         ``hf_reference="df"`` selects full DF rather than a DF initial guess;
         the supplied auxiliary snapshots then serve both JK and correlation.
+        ``preconvergence`` selects bounded DF-CCSD/Lambda auxiliary warmup
+        independently of final stopping limits: ``mixed``, ``fp64`` or ``auto``.
+        Auto uses native shape admission on supported fitted CUDA owners;
+        older libraries retain their legacy schedule. The ``fp64`` policy
+        keeps FP64 warmup.
         """
         from .precision_policy import PrecisionPolicy
 
@@ -188,13 +197,18 @@ class CCSDTCBSCalculator:
         if not isinstance(policy, PrecisionPolicy):
             raise TypeError("CBS policy must be a PrecisionPolicy or preset name")
         if (
-            policy.profile not in ("standard", "fp64", "fast")
+            policy.profile not in ("standard", "tight", "fp64", "fast")
             or policy.target is not None
         ):
             raise NotImplementedError(
-                "CBS supports standard/fp64/fast without target audits"
+                "CBS supports standard/tight/fp64/fast without target audits"
             )
         self.policy = policy
+        if preconvergence not in ("auto", "fp64", "mixed"):
+            raise ValueError("CBS preconvergence must be auto/fp64/mixed")
+        if policy.profile == "fp64" and preconvergence == "mixed":
+            raise ValueError("fp64 policy cannot request mixed preconvergence")
+        self.preconvergence = preconvergence
         bases = tuple(mp2_bases)
         if len(bases) != 2 or not all(isinstance(item, CBSBasis) for item in bases):
             raise ValueError("mp2_bases must contain two CBSBasis records")
@@ -250,6 +264,8 @@ class CCSDTCBSCalculator:
         elif correction_auxiliary_basis is not None:
             raise ValueError("correction_auxiliary_basis requires auxiliary_bases")
         self._auxiliary_bases = MappingProxyType(auxiliaries)
+        if preconvergence == "mixed" and not auxiliaries:
+            raise NotImplementedError("mixed CBS preconvergence requires CUDA DF bases")
         if hf_reference not in ("exact", "df"):
             raise ValueError("hf_reference must be 'exact' or 'df'")
         if hf_reference == "df" and not auxiliaries:
@@ -324,7 +340,14 @@ class CCSDTCBSCalculator:
             key = (method, basis.identity)
             coefficients[key] = coefficients.get(key, 0.0) + coefficient
         amplification = math.fsum(abs(value) for value in coefficients.values())
-        budget = policy.budget
+        # CBS owns its routine convergence contract. Do not change the shared
+        # HF/DFT Standard preset when promoting the previously explicit allowance.
+        # Keep Fast's custom-budget transport and the strict Tight/FP64 escapes.
+        budget = (
+            TargetErrorBudget(1e-5, 1e-4, 3e-5)
+            if policy.profile == "standard"
+            else policy.budget
+        )
         component_budget = (
             TargetErrorBudget(
                 budget.energy_abs / amplification,
@@ -349,9 +372,21 @@ class CCSDTCBSCalculator:
                     requested_options.get(name, limits[name]), limits[name]
                 )
             options["_correlation_convergence_budget"] = component_budget
+        # A post-HF reference must satisfy its canonical-frame export contract.
+        # Relaxing this density gate can terminate SCF before a valid reference
+        # exists (notably stretched H2), even when the energy has stabilized.
+        # Keep the same ceiling for both routine names and preserve tighter input.
+        options["density_tolerance"] = min(options["density_tolerance"], 1e-11)
+        # An energy-change plateau can coexist with observable error on a
+        # poorly conditioned reference branch. Retain a physical residual cap
+        # independently of the budget scale, while honoring tighter controls.
+        options["ccsd_residual_tolerance"] = min(
+            options["ccsd_residual_tolerance"], 1e-7
+        )
         # Publish configured limits, not an invented observable error estimate.
         self._convergence = {
             "requested_policy": policy.profile,
+            "preconvergence": preconvergence,
             "selected": "relaxed" if scale else "strict_fp64",
             "arithmetic_request": "df_ccsd_fp32_preconvergence"
             if scale and self._auxiliary_bases
@@ -359,7 +394,7 @@ class CCSDTCBSCalculator:
             "reason": "budget_scaled_convergence"
             if scale
             else (
-                "component_budget_requires_strict" if budget else "standard_convergence"
+                "component_budget_requires_strict" if budget else "tight_convergence"
             ),
             "budget": asdict(budget) if budget is not None else None,
             "component_budget": asdict(component_budget)
@@ -453,6 +488,9 @@ class CCSDTCBSCalculator:
             by_role: dict[str, Result] = {}
             groups = {basis.identity: basis for _, _, basis, _ in terms}
             execution_groups = []
+            warmup_requested = False
+            automatic_warmup = False
+            warmup_fallback = None
             for identity, basis in groups.items():
                 component_started = time.perf_counter()
                 primary = (
@@ -473,6 +511,11 @@ class CCSDTCBSCalculator:
                     device_id=self.device_id,
                     precision="fp64",
                     **(
+                        {"_correlation_preconvergence": self.preconvergence}
+                        if primary == "df-ccsd(t)" and self.policy.profile != "fp64"
+                        else {}
+                    ),
+                    **(
                         {
                             "density_fitting": (
                                 "full_cuda"
@@ -488,6 +531,17 @@ class CCSDTCBSCalculator:
                     ),
                     **self._options,
                 )
+                if primary == "df-ccsd(t)":
+                    selected_warmup = getattr(
+                        calculator, "_correlation_preconvergence", None
+                    )
+                    automatic_warmup = selected_warmup == "auto"
+                    warmup_requested = selected_warmup == "mixed" or (
+                        selected_warmup is None and self._convergence["scale"] > 0
+                    )
+                    warmup_fallback = getattr(
+                        calculator, "_correlation_preconvergence_fallback", None
+                    )
                 try:
                     results = calculator.singlepoint_components(
                         geometry,
@@ -604,21 +658,32 @@ class CCSDTCBSCalculator:
             arithmetic = "fp64"
             lambda_request = "fp64" if forces is not None else "not_requested"
             lambda_arithmetic = lambda_request
-            if self._convergence["arithmetic_request"] != "fp64":
+            if automatic_warmup:
+                # Native dimensions/resource ownership decide admission. Do
+                # not infer a mixed request merely from Python's auto setting.
+                performance = next(
+                    component.result.cc_performance
+                    for component in components
+                    if component.method == "df-ccsd(t)"
+                )
+                if performance is None or performance.ccsd_fp32_requested is None:
+                    raise RuntimeError("CBS lacks native FP32 admission telemetry")
+                warmup_requested = performance.ccsd_fp32_requested
+            if warmup_requested:
                 performance = next(
                     component.result.cc_performance
                     for component in components
                     if component.method == "df-ccsd(t)"
                 )
                 if performance is None or performance.ccsd_fp32_requested is not True:
-                    raise RuntimeError("CBS Fast lacks native FP32 admission telemetry")
+                    raise RuntimeError("CBS lacks native FP32 admission telemetry")
                 if performance.ccsd_fp32_executed and performance.ccsd_fp32_gemm_calls:
                     arithmetic = "mixed"
                 if forces is not None:
                     lambda_request = "df_lambda_fp32_preconvergence"
                     if performance.lambda_fp32_requested is not True:
                         raise RuntimeError(
-                            "CBS Fast lacks native Lambda FP32 admission telemetry"
+                            "CBS lacks native Lambda FP32 admission telemetry"
                         )
                     if (
                         performance.lambda_fp32_executed
@@ -668,6 +733,14 @@ class CCSDTCBSCalculator:
                 tuple(execution_groups),
                 {
                     **self._convergence,
+                    "selected": "strict"
+                    if warmup_requested and not self._convergence["scale"]
+                    else self._convergence["selected"],
+                    "arithmetic_request": "df_ccsd_fp32_preconvergence"
+                    if warmup_requested
+                    else "fp64",
+                    "preconvergence_fallback": warmup_fallback,
+                    "preconvergence_selection": "mixed" if warmup_requested else "fp64",
                     "arithmetic": arithmetic,
                     "lambda_arithmetic_request": lambda_request,
                     "lambda_arithmetic": lambda_arithmetic,

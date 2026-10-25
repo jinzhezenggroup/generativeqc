@@ -126,8 +126,8 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090**
 
-Standard and Fast outperform GPU4PySCF in **57/64** and **61/64** measured warm cases.
-For 96-atom Direct ωB97M-V, warm speedups are **4.11× (Standard)** and **4.34× (Fast)**.
+With default settings, GenerativeQC outperforms GPU4PySCF in **57/64** measured warm cases.
+For 96-atom Direct ωB97M-V, the measured warm speedup is **4.11×**.
 
 ![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
@@ -137,28 +137,22 @@ Default XC/VV10 grids, native SCF policies and full grid-response forces;
 all complete performance points are shown, including accuracy failures.
 Cold includes setup; warm is the median of three frozen-density calls.
 Independent energy/force accuracy results remain in the detailed tables.
-See [measurements and conditions](benchmarks/results/df-dft48-work-20261025/README.md).
+See [measurements and conditions](benchmarks/results/df-dft48-work-20261025/README.md)
+for accuracy checks and detailed comparisons.
 
-**DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
+**DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
-![Standard and Fast GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
+![GPU full-DF CCSD(T)/CBS complete endpoint timings](assets/readme-cbs-performance.svg)
 
 MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
 DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
-gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
-correlation within each basis group. Timings cover the
-complete two-group E+F endpoint, not just SCF or summed component timings.
-[Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
-convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
-by FP64 final solves, independent residual checks and response. The curves use one fresh
-complete call per mode and molecule, with the same binary and GPU within each
-pair; they do not imply a speedup for every case. All Fast points pass
-constituent and composite energy/full-force checks against Standard.
-See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-memory-20261021/timings.md)
-and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-memory-20261021/README.md).
-The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
-is retained separately: its fitting model differs, so the two series are not
-identical-Hamiltonian speedup measurements.
+gradients are fitted consistently**, with matching JKFIT auxiliaries and all
+electrons. Each point is the median of two fresh complete energy+force calls;
+process/CUDA startup is retained separately. Basis snapshots are outside timing.
+
+The [measurements, work counts and independent validation](benchmarks/results/cbs-routine-standard-20261025/README.md)
+retain every sample, source identity and failed candidate. Validation covers
+13 physical-basis populations, full Cartesian forces and relative energies.
 
 Other results are in the [benchmark archive](benchmarks/results/README.md).
 
