@@ -10,6 +10,15 @@ process contains one cold and three frozen-density warm calls. The original
 the updated curves. The HF improvements from the
 [preceding cold-work repair](../hf-cold-work-20261025/README.md) are included.
 
+Direct HF is included in this refresh. Relative to the prior README cohort,
+Fast Direct HF cold latency changes from **18.034 to 6.144 s** at 48 atoms and
+**62.424 to 19.079 s** at 96 atoms; warm latency changes from 1.911 to 0.754 s
+and 7.224 to 2.882 s, respectively. Standard Direct HF already used the retained
+FP64 path, so its refreshed cold measurements remain close to the prior ones
+(6.283 and 19.349 s). All Direct HF points, including the remaining 96-atom
+cold gap to GPU4PySCF, are in the first panel of the Direct figure and in
+[the complete before/after table](changes.md).
+
 ## Cause and scoped control
 
 The fitted native AO-jet bitmask producer inherited the older sampled producer's
