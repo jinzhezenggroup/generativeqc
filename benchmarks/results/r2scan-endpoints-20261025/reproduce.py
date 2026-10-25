@@ -221,16 +221,17 @@ def main() -> None:
             assert read(args.output / f"{name}.json") == read(ROOT / f"{name}.json.xz")
         for name in ("timings.md", "work.md"):
             assert (args.output / name).read_bytes() == (ROOT / name).read_bytes()
-        assets = ROOT.parents[2] / "assets"
+        # A later publication can replace the homepage figures. This historical
+        # campaign must still reproduce its own original images independently.
+        figure_hashes = {
+            "direct": "9901453a6ec9b45200acc2858e8f0c39a12457c9691beacce2801b9a8cbb6eee",
+            "df": "1d29083af432d0aacf842ad162c46d23c9187dae75cb6a2e672458cdaddc2b95",
+        }
         for mode in ("direct", "df"):
-            assert (args.output / f"{mode}.svg").read_bytes() == (
-                assets / f"readme-{mode}-defaults.svg"
-            ).read_bytes()
-        assert hashlib.sha256(
-            (assets / "readme-cbs-performance.svg").read_bytes()
-        ).hexdigest() == (
-            "5224236e07af9309cfe85bd77a25d797615a938dfc6517c13aef1a50e5478884"
-        )
+            assert (
+                hashlib.sha256((args.output / f"{mode}.svg").read_bytes()).hexdigest()
+                == figure_hashes[mode]
+            )
     print(json.dumps({k: v for k, v in result.items() if k != "targets"}, indent=2))
 
 

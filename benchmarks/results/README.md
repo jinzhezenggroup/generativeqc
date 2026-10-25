@@ -1,5 +1,11 @@
 # Published GPU benchmark artifacts
 
+The [final 2026-10-25 default-only refresh](readme-refresh-20261025/README.md)
+retains all 128 populations / 512 complete E+F calls under the #2786 framework,
+with one measured source, both engines, all independent accuracy failures shown,
+and unchanged CCSD(T)/CBS. The [preceding pure-Coulomb campaign](r2scan-endpoints-20261025/README.md)
+retains its implementation qualification and original figures.
+
 The [2026-10-25 README comparison](df-dft48-work-20261025/README.md)
 remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
 and one GPU4PySCF default SCF profile. Both engines include complete moving-grid
