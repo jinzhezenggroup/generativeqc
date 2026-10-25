@@ -483,4 +483,3 @@ def test_nonfinite_is_not_silently_replaced(report_probe: Path) -> None:
     raw = _run(report_probe, mode=2).stdout
     # Preserve the pre-existing stream behavior; this is not new JSON admission.
     assert re.search(r'"total_energy"\s*:\s*-?nan\b', raw, re.IGNORECASE)
-
