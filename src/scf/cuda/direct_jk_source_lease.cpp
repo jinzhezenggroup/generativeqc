@@ -6,6 +6,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/host_cache_budget.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/direct_jk_source_policy.hpp"
 #include "scf/cuda/runtime_support.hpp"
@@ -42,7 +43,8 @@ generativeqc_status DirectJkSourceLease::prepare(
     const char* trace_name, bool cold_phase, bool generic_fock, double screening,
     std::size_t value_ceiling, bool own_outputs, DirectJkSourceAutoPolicy auto_policy,
     std::uint32_t bucket_mask, unsigned spins, bool fit_buckets_to_capacity,
-    std::size_t host_ceiling, std::uint32_t host_bucket_mask, std::size_t host_tile_bytes) {
+    std::size_t host_ceiling, std::uint32_t host_bucket_mask, std::size_t host_tile_bytes,
+    std::size_t disk_ceiling, std::uint32_t disk_bucket_mask, const std::string& disk_directory) {
   using namespace posthf;
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
@@ -308,12 +310,43 @@ generativeqc_status DirectJkSourceLease::prepare(
     value_count_ += host_value_bytes_ / sizeof(double);
     capacity_bytes_ = checked_add(capacity_bytes_, host_capacity_bytes_);
   }
+  // Disk values are optional reconstructible storage, separate from numeric
+  // RAM capacity. Existing GPU/RAM buckets and their staging always win first.
+  if (disk_ceiling && !mixed_recurrence_ && value_count_ < source_value_count_ &&
+      (source_operator_ == FockOperator::LongRange ||
+       source_operator_ == FockOperator::FullRange)) {
+    const auto used = checked_add(required, capacity_bytes_);
+    const auto remaining = used < budget ? budget - used : 0;
+    error = cudaMemGetInfo(&available, &total);
+    if (error != cudaSuccess) return finish(cuda_status(error));
+    const auto device_available = available > (256ULL << 20) ? available - (256ULL << 20) : 0;
+    const auto staging_allowance = std::min(remaining, runtime::automatic_host_cache_bytes());
+    status = prepare_cuda_direct_jk_disk_values(direct_.get(), disk_ceiling, device_available,
+                                                staging_allowance, host_tile_bytes,
+                                                disk_bucket_mask, disk_directory, reason_);
+    if (optional_refusal(status)) {
+      const auto pending = cudaGetLastError();
+      const auto drain = cudaStreamSynchronize(stream_);
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+        return finish(cuda_status(pending));
+      if (drain != cudaSuccess) return finish(cuda_status(drain));
+    } else if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      return finish(status);
+    }
+    disk_value_bytes_ = cuda_direct_jk_disk_value_bytes(direct_.get());
+    value_count_ += disk_value_bytes_ / sizeof(double);
+    const auto total_host_capacity = cuda_direct_jk_host_capacity_bytes(direct_.get());
+    capacity_bytes_ = checked_add(capacity_bytes_, total_host_capacity - host_capacity_bytes_);
+    host_capacity_bytes_ = total_host_capacity;
+  }
+  runtime::df_progress::Scope::number("disk_source_value_bytes", disk_value_bytes_);
+  runtime::df_progress::Scope::number("disk_source_build_write_bytes", disk_value_bytes_);
   runtime::df_progress::Scope::number("host_source_value_bytes", host_value_bytes_);
   runtime::df_progress::Scope::number("host_source_capacity_bytes", host_capacity_bytes_);
   runtime::df_progress::Scope::number("host_source_build_d2h_bytes", host_value_bytes_);
 
-  if (host_value_bytes_) {
-    reason_ = "admitted FP64 GPU/host values plus exact Direct buckets";
+  if (host_value_bytes_ || disk_value_bytes_) {
+    reason_ = "admitted FP64 GPU/RAM/disk values plus exact Direct buckets";
     return finish(GENERATIVEQC_STATUS_SUCCESS, true);
   }
   reason_ = mixed_recurrence_
@@ -345,12 +378,14 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
   }
   runtime::df_progress::Scope action("cuda_eri_source_action", "cuda_enqueued");
   runtime::df_progress::Scope::number("canonical_values", source_value_count_);
-  runtime::df_progress::Scope::number("gpu_cached_values",
-                                      value_count_ - host_value_bytes_ / sizeof(double));
+  runtime::df_progress::Scope::number(
+      "gpu_cached_values", value_count_ - (host_value_bytes_ + disk_value_bytes_) / sizeof(double));
   runtime::df_progress::Scope::number("host_cached_values", host_value_bytes_ / sizeof(double));
   runtime::df_progress::Scope::number("direct_values_at_source_threshold",
                                       source_value_count_ - value_count_);
-  runtime::df_progress::Scope::number("host_h2d_bytes", host_value_bytes_);
+  runtime::df_progress::Scope::number("disk_cached_values", disk_value_bytes_ / sizeof(double));
+  runtime::df_progress::Scope::number("disk_read_bytes", disk_value_bytes_);
+  runtime::df_progress::Scope::number("host_h2d_bytes", host_value_bytes_ + disk_value_bytes_);
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
   if (mixed_recurrence_ && (spec.spin != FockSpin::Restricted || beta || beta_exchange)) {
@@ -397,7 +432,10 @@ void DirectJkSourceLease::observe_completed(std::size_t physical_focks) const no
   runtime::df_progress::Scope::label("resident_value_admission", reason_.c_str());
   runtime::df_progress::Scope::number("phase_resident_value_bytes", value_bytes_);
   runtime::df_progress::Scope::number("phase_host_value_bytes", host_value_bytes_);
-  runtime::df_progress::Scope::number("phase_host_h2d_bytes_per_action", host_value_bytes_);
+  runtime::df_progress::Scope::number("phase_disk_value_bytes", disk_value_bytes_);
+  runtime::df_progress::Scope::number("phase_disk_read_bytes_per_action", disk_value_bytes_);
+  runtime::df_progress::Scope::number("phase_host_h2d_bytes_per_action",
+                                      host_value_bytes_ + disk_value_bytes_);
   runtime::df_progress::Scope::number("phase_host_capacity_bytes", host_capacity_bytes_);
   runtime::df_progress::Scope::number("phase_resident_values_built", value_count_);
   runtime::df_progress::Scope::number("phase_canonical_source_values", source_value_count_);

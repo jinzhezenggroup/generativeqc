@@ -62,9 +62,24 @@ def test_full_host_cache_complete_endpoints(
     monkeypatch.setenv("GENERATIVEQC_KS_HOST_TILE_BYTES", "4096")
     observations = {}
     receipts = {}
-    for tier in ("direct", "gpu", "host", "default", "refused", "full", "fit"):
+    for tier in (
+        "direct",
+        "gpu",
+        "host",
+        "default",
+        "refused",
+        "full",
+        "fit",
+        "disk",
+        "disk-auto",
+    ):
         trace = tmp_path / f"{tier}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(trace))
+        monkeypatch.setenv(
+            "GENERATIVEQC_KS_DISK_MAX_BYTES", str(2 << 30) if tier == "disk" else "0"
+        )
+        if tier == "disk-auto":
+            monkeypatch.delenv("GENERATIVEQC_KS_DISK_MAX_BYTES")
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_VALUES", "0" if tier == "direct" else "1"
         )
@@ -127,6 +142,14 @@ def test_full_host_cache_complete_endpoints(
                 if row.get("key") == "host_source_value_bytes"
             ]
             assert any(host) == (tier in {"host", "default", "fit"})
+            disk_bytes = [
+                row["value"]
+                for row in rows
+                if row.get("key") == "disk_source_value_bytes"
+            ]
+            # Qualified full-range NVMe replay loses to recurrence. Keep its
+            # automatic fallback while testing explicit disk consumption.
+            assert any(disk_bytes) == (tier == "disk")
             receipts[tier] = {
                 "host_bytes": host,
                 "energies": [r.energy for r in observations[tier]],
