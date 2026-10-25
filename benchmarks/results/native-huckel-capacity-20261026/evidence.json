@@ -1,0 +1,206 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json.gz",
+      "sha256": "57c8adbc87b04943e5e54b3f06c940f761bd9fd11fca906f90448bc6623c7330"
+    }
+  ],
+  "backend_selected": "cpu",
+  "block_errors": {
+    "energies": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        2520
+      ]
+    },
+    "forces": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        1008,
+        2,
+        3
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Both source-matched Release products built successfully; cold compilation cost is not measured.",
+    "seconds": null
+  },
+  "device": {
+    "backend": "cpu",
+    "cpu_model": "AMD EPYC 7K62 48-Core Processor",
+    "host": "node3",
+    "machine": "x86_64"
+  },
+  "hardware": {
+    "host": "node3",
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "No scientific equation changes; existing RHF/PBE production owners and independent oracle tests retain their identities in the measured source revision.",
+    "ir": "This changes metadata resource ownership; no new scientific IR is introduced."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "25ec892bdafe9f02c39064ea101a1a64b31da8c904a9722aaec41d7a6a5e1571",
+    "source": "71f00ef9e83739d03e1e8f15fb6a31d526a1e83d68b7d402dfd5e64ad3e016f4"
+  },
+  "inputs_hash": "3ec37de44fc33a3fe02e6ea98b5548ffbb9d19dc7f41e5ae12d9fd39b06f2a9b",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Per-sample planned peaks match exactly in samples; this campaign does not measure whole-endpoint simultaneous live allocations or provider/RSS overhead."
+  },
+  "performance": {
+    "reason": "Scoped <=1.05 endpoint non-regression gates pass. Complete performance promotion needs allocation/compilation-cost and independent per-iteration residual evidence not measured here.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "device": "cpu",
+    "inputs": {
+      "cases": [
+        "rhf-h2-energy-force",
+        "pbe-h2-energy",
+        "pbe-h2-energy-force",
+        "pbe-ragged-energy"
+      ],
+      "grid": [
+        12,
+        4,
+        8
+      ],
+      "h2": [
+        [
+          "H",
+          [
+            0,
+            0,
+            -0.7
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            0,
+            0.7
+          ]
+        ]
+      ],
+      "moved_first_atom_dx_bohr": 0.013,
+      "water": [
+        [
+          "O",
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            -1.43,
+            1.11
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            1.43,
+            1.11
+          ]
+        ]
+      ]
+    },
+    "native_library_hashes": {
+      "cpu-ABBA-0-A.json": "6ea27761abb187b44735c8f913a399391660dfe69774a1e9acd668d46e3b794d",
+      "cpu-ABBA-1-B.json": "9ad37c4288a65eede5dc0e5e05e04333fb8793b03095003c058e49d22b41ce3b",
+      "cpu-ABBA-2-B.json": "9ad37c4288a65eede5dc0e5e05e04333fb8793b03095003c058e49d22b41ce3b",
+      "cpu-ABBA-3-A.json": "6ea27761abb187b44735c8f913a399391660dfe69774a1e9acd668d46e3b794d",
+      "cpu-BAAB-0-B.json": "9ad37c4288a65eede5dc0e5e05e04333fb8793b03095003c058e49d22b41ce3b",
+      "cpu-BAAB-1-A.json": "6ea27761abb187b44735c8f913a399391660dfe69774a1e9acd668d46e3b794d",
+      "cpu-BAAB-2-A.json": "6ea27761abb187b44735c8f913a399391660dfe69774a1e9acd668d46e3b794d",
+      "cpu-BAAB-3-B.json": "9ad37c4288a65eede5dc0e5e05e04333fb8793b03095003c058e49d22b41ce3b"
+    },
+    "orders": [
+      "ABBA",
+      "BAAB"
+    ],
+    "ratio_gate": 1.05,
+    "runner": "benchmarks/native_resource_composition.py",
+    "samples_per_block": 21,
+    "scalar_api_unknown_fock_counts": "retained as null; no fabricated operation census",
+    "scope": "construction+prepare+cold+warm+moved+closure",
+    "source_dirty_at_measurement": false,
+    "warmups": 3
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "ctest": {
+        "failed": 0,
+        "passed": 119
+      },
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "case_order_gates": 8,
+      "complete_endpoint_samples": 672,
+      "maximum_median_ratio": 1.0299035232137126,
+      "published_items": 2520,
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "scope": "Exact published endpoint energy/force/work parity against the unchanged baseline; independent scientific oracles are separate tests.",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353",
+      "status": "pass"
+    }
+  },
+  "subject": "Native Huckel resource authority: complete CPU endpoint non-regression",
+  "tier": "cpu",
+  "timings": [],
+  "toolchain": {
+    "cache": "sccache 0.16.0",
+    "cmake_build_type": "Release",
+    "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+    "cpu_linalg": "scalar",
+    "cuda": false,
+    "python": "3.13.9",
+    "threads": 1
+  }
+}
