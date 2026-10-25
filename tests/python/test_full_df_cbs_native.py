@@ -32,6 +32,25 @@ def displaced(atoms: tuple, direction: np.ndarray, step: float) -> list:
     ]
 
 
+def test_explicit_preconvergence_rejects_legacy_batch() -> None:
+    """A prepared batch must not shallow-copy away the execution extension."""
+    owner = Calculator(
+        method="df-ccsd(t)",
+        basis="sto-3g",
+        auxiliary_basis="def2-svp",
+        density_fitting="cuda",
+        device="cuda",
+        _correlation_preconvergence="mixed",
+    )
+    try:
+        with pytest.raises(
+            NotImplementedError, match="does not support prepared batches"
+        ):
+            owner.prepare_batch([HYDROGEN], warm_start=False)
+    finally:
+        owner.clear_cache()
+
+
 @pytest.mark.parametrize(
     "atoms,orbital,auxiliary,method,cartesian",
     (
@@ -120,10 +139,13 @@ def test_full_df_complete_energy_force_and_companions(
         owner.clear_cache()
 
 
-@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize("policy", ("standard", "tight"))
+@pytest.mark.parametrize("preconvergence", ("fp64", "mixed", "auto"))
 @pytest.mark.parametrize("hf_reference", ("exact", "df"))
 def test_full_df_cbs_complete_directional_derivative(
-    policy: str, hf_reference: str
+    policy: str,
+    hf_reference: str,
+    preconvergence: str,
 ) -> None:
     """The composite and every basis group use the same explicit RI-JK model."""
     bases = ("sto-3g", "cc-pvdz")
@@ -136,6 +158,7 @@ def test_full_df_cbs_complete_directional_derivative(
         auxiliary_bases=tuple(basis_snapshot(name, [1]) for name in auxiliaries),
         hf_reference=hf_reference,
         policy=policy,
+        preconvergence=preconvergence,
         device="cuda",
         calculator_options={"correlation_memory_budget_bytes": 2 << 30},
     )
@@ -147,12 +170,15 @@ def test_full_df_cbs_complete_directional_derivative(
         c.result.cc_performance for c in result.components if c.method == "df-ccsd(t)"
     )
     assert cc is not None
-    assert cc.ccsd_fp32_requested is (policy == "fast")
-    assert cc.lambda_fp32_requested is (policy == "fast")
+    mixed_requested = preconvergence == "mixed" or (
+        preconvergence == "auto" and policy == "standard"
+    )
+    assert cc.ccsd_fp32_requested is mixed_requested
+    assert cc.lambda_fp32_requested is mixed_requested
     assert cc.lambda_seconds > 0
     assert cc.lambda_auxiliary_batch_size > 0
     assert cc.lambda_numeric_capacity_bytes >= cc.lambda_owned_device_bytes > 0
-    if policy == "fast":
+    if mixed_requested:
         assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
         assert cc.ccsd_fp32_executed and not cc.ccsd_fp32_refused
         assert cc.ccsd_fp32_evaluations > 0 and cc.ccsd_fp32_gemm_calls > 0
@@ -208,3 +234,154 @@ def test_full_df_cbs_complete_directional_derivative(
             - oracle(displaced(HYDROGEN, direction, -step))
         ) / (2 * step)
         assert -np.vdot(result.forces, direction) == pytest.approx(slope, abs=3e-6)
+
+
+@pytest.mark.parametrize("hf_reference", ("exact", "df"))
+def test_strict_mixed_cbs_water_full_force_oracle(hf_reference: str) -> None:
+    """Strict warmup preserves all force components, replays and moved centers.
+
+    This compact pair exercises CBS algebra rather than a physical basis limit.
+    Independent reconverged energies supply all nine Cartesian derivatives;
+    the all-FP64 control cannot substitute for that scientific oracle.
+    """
+    names = ("sto-3g", "def2-svp")
+    auxiliary_name = "def2-svp-jkfit"
+    bases = tuple(
+        CBSBasis(basis_snapshot(name, [1, 8]), n)
+        for name, n in zip(names, (2, 3), strict=True)
+    )
+    auxiliary = basis_snapshot(auxiliary_name, [1, 8])
+    owners = {
+        mode: CCSDTCBSCalculator(
+            bases,
+            auxiliary_bases=(auxiliary, auxiliary),
+            hf_reference=hf_reference,
+            device="cuda",
+            policy="tight",
+            preconvergence=mode,
+            calculator_options={"correlation_memory_budget_bytes": 2 << 30},
+        )
+        for mode in ("fp64", "mixed")
+    }
+    moved = displaced(WATER, np.asarray(((0, 0, 0), (1, 0.5, -1), (0, 0, 0))), 0.03)
+    for atoms in (WATER, moved):
+        controls = {mode: owner.singlepoint(atoms) for mode, owner in owners.items()}
+        result = controls["mixed"]
+        assert result.convergence["selected"] == "strict"
+        assert result.convergence["budget"] is None
+        assert result.convergence["limits"]["ccsd_residual_tolerance"] == 1e-10
+        assert abs(result.energy - controls["fp64"].energy) < 1e-9
+        np.testing.assert_allclose(
+            result.forces, controls["fp64"].forces, atol=1e-8, rtol=0
+        )
+        replay = owners["mixed"].singlepoint(atoms)
+        assert abs(replay.energy - result.energy) < 1e-10
+        np.testing.assert_allclose(replay.forces, result.forces, atol=1e-9, rtol=0)
+        energy_only = owners["mixed"].singlepoint(atoms, properties=("energy",))
+        assert (
+            energy_only.forces is None
+            and abs(energy_only.energy - result.energy) < 1e-10
+        )
+
+        def oracle(
+            geometry: tuple | list, components: tuple = result.components
+        ) -> np.ndarray:
+            low = energies(
+                geometry,
+                names[0],
+                auxiliary_name,
+                triples=True,
+                df_reference=hf_reference == "df",
+            )
+            high = energies(
+                geometry, names[1], auxiliary_name, df_reference=hf_reference == "df"
+            )
+            return np.asarray(
+                [
+                    (low if c.basis_identity == bases[0].basis.identity else high)[
+                        c.method
+                    ]
+                    for c in components
+                ]
+            )
+
+        expected = oracle(atoms)
+        force = np.empty((len(result.components), len(atoms), 3))
+        step = 3e-5
+        for atom in range(len(atoms)):
+            for axis in range(3):
+                direction = np.zeros((len(atoms), 3))
+                direction[atom, axis] = 1
+                force[:, atom, axis] = -(
+                    oracle(displaced(atoms, direction, step))
+                    - oracle(displaced(atoms, direction, -step))
+                ) / (2 * step)
+        coefficients = np.asarray([c.coefficient for c in result.components])
+        assert abs(result.energy - coefficients @ expected) < 1e-8
+        np.testing.assert_allclose(
+            result.forces,
+            np.einsum("c,cij->ij", coefficients, force),
+            atol=3e-6,
+            rtol=0,
+        )
+        for index, component in enumerate(result.components):
+            assert abs(component.result.energy - expected[index]) < 1e-8
+            np.testing.assert_allclose(
+                component.result.forces, force[index], atol=3e-6, rtol=0
+            )
+
+
+def test_routine_mixed_single_occupied_stretched_force() -> None:
+    """One occupied orbital still needs physical pair symmetry at the FP64 handoff.
+
+    The spectator-pair contraction optimization is inapplicable to this shape.
+    It must not govern removal of FP32 warm-start noise before Lambda admission.
+    """
+    atoms = ((1, (0.0, 0.0, -4.0)), (1, (0.0, 0.0, 4.0)))
+    names = ("cc-pvdz", "cc-pvtz")
+    fits = tuple(name + "-jkfit" for name in names)
+    bases = tuple(
+        CBSBasis(basis_snapshot(name, [1]), n)
+        for name, n in zip(names, (2, 3), strict=True)
+    )
+    kwargs = {
+        "auxiliary_bases": tuple(basis_snapshot(name, [1]) for name in fits),
+        "hf_reference": "df",
+        "device": "cuda",
+        "calculator_options": {"correlation_memory_budget_bytes": 2 << 30},
+    }
+    result = CCSDTCBSCalculator(bases, **kwargs).singlepoint(atoms)
+    control = CCSDTCBSCalculator(bases, preconvergence="fp64", **kwargs).singlepoint(
+        atoms
+    )
+    cc = next(c.result for c in result.components if c.method == "df-ccsd(t)")
+    assert cc.cc_performance.ccsd_fp32_executed
+    assert cc.cc_performance.lambda_fp64_actions > 0
+    assert abs(result.energy - control.energy) < 1e-7
+    np.testing.assert_allclose(result.forces, control.forces, atol=3e-6, rtol=0)
+
+    def oracle(geometry: list | tuple) -> np.ndarray:
+        lower = energies(geometry, names[0], fits[0], triples=True, df_reference=True)
+        higher = energies(geometry, names[1], fits[1], df_reference=True)
+        return np.array(
+            [
+                (higher if "_high" in c.roles[0] else lower)[c.method]
+                for c in result.components
+            ]
+        )
+
+    coefficients = np.array([c.coefficient for c in result.components])
+    assert abs(result.energy - coefficients @ oracle(atoms)) < 1e-7
+    expected = np.zeros((2, 3))
+    for atom in range(2):
+        direction = np.zeros((2, 3))
+        direction[atom, 2] = 1
+        expected[atom, 2] = (
+            -coefficients
+            @ (
+                oracle(displaced(atoms, direction, 3e-5))
+                - oracle(displaced(atoms, direction, -3e-5))
+            )
+            / 6e-5
+        )
+    np.testing.assert_allclose(result.forces, expected, atol=3e-6, rtol=0)
