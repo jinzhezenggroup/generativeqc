@@ -259,6 +259,11 @@
       "owner": "#2732 bounded Direct WB97M-V water48/96 H100 evidence",
       "reason": "Lossless original scientific/control/source histories with explicit generated-binary inventory-only limits. Formal72/18process gates separate from diagnostic26 including failed2+NOT_RUN10; source-matched portable-sm90, not hardware-only or wholeparent acceptance.",
       "review_document": "benchmarks/results/h100-direct-wb97mv-20261024/README.md"
+    },
+    "df-metric-pairs-20261025": {
+      "owner": "Bounded auxiliary metric derivative pair reuse",
+      "reason": "Lossless full receipts retain all 36 alternating cold/three-warm energy-and-force populations, semantic work and immutable source/binary identities. Shared compression keeps the complete vectors together; every independent gate, failed baseline assertion, rerun and exploratory refusal remains in the capsule within unchanged file and change budgets.",
+      "review_document": "benchmarks/results/df-metric-pairs-20261025/README.md"
     }
   },
   "files": [
@@ -933,6 +938,14 @@
       "family": "h100-direct-wb97mv-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/df-metric-pairs-20261025/endpoints.json.xz",
+      "family": "df-metric-pairs-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 36 alternating complete cold/three-warm E/F populations with work and immutable source/binary identities; no completed sample omitted.",
+      "bytes": 159984,
+      "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
