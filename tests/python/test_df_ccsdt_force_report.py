@@ -122,6 +122,11 @@ resident_jk_values orbital.resident_jk_values W
 resident_jk_actions orbital.resident_jk_actions W
 resident_jk_value_reads orbital.resident_jk_value_reads W
 resident_jk_setup_seconds orbital.resident_jk_setup_seconds W
+host_jk_bytes orbital.host_jk_bytes W
+host_jk_capacity_bytes orbital.host_jk_capacity_bytes W
+host_jk_actions orbital.host_jk_actions W
+host_jk_h2d_bytes orbital.host_jk_h2d_bytes W
+host_jk_setup_seconds orbital.host_jk_setup_seconds W
 resident_jk_seconds orbital.resident_jk_seconds W
 resident_jk_device_seconds orbital.resident_jk_device_seconds W
 z_iterations orbital.orbital_response.iterations W
@@ -332,7 +337,7 @@ int main(int argc, char** argv) {
   result.triples_scalar_fusion.schedule = zero ? "" : "fusion-\\f";
   if (!zero) result.forces = {0.12345678901234566, -2.25, 3.5, -4.75, 5.125, -6.0};
   // Separate codewords also distinguish every requested option from the native
-  // bool inputs (whose indices are below 231). Shared true/false patterns would
+  // bool inputs (whose indices are below 236). Shared true/false patterns would
   // let an incorrect option-to-field mapping pass this contract.
   const auto requested = [bit](unsigned code) { return bool((code >> bit) & 1U); };
   DFCCSDTReportOptions options{31, 47, stage, requested(240), requested(241), requested(242),
@@ -478,3 +483,4 @@ def test_nonfinite_is_not_silently_replaced(report_probe: Path) -> None:
     raw = _run(report_probe, mode=2).stdout
     # Preserve the pre-existing stream behavior; this is not new JSON admission.
     assert re.search(r'"total_energy"\s*:\s*-?nan\b', raw, re.IGNORECASE)
+
