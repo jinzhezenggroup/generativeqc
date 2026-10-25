@@ -17,6 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
