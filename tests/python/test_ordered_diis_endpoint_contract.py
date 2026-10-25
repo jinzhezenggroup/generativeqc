@@ -30,6 +30,68 @@ def _branch(source: str, condition: str) -> str:
     return first + " " + _block(remaining, "else {")
 
 
+def test_hf_automatic_admission_and_explicit_controls(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Exercise the shared host selector, including inactive invalid controls."""
+    diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
+    selectors = "\n".join(
+        _block(diis, "bool " + name + "(")
+        for name in (
+            "ordered_incremental_diis_gram_requested",
+            "incremental_diis_gram_requested",
+            "hf_incremental_diis_gram_requested",
+            "hf_ordered_diis_gram_requested",
+        )
+    )
+    source = tmp_path / "hf_admission.cpp"
+    source.write_text(
+        "#include <cstddef>\n#include <cstdlib>\n#include <cstring>\n"
+        "#include <stdexcept>\n#include <initializer_list>\n"
+        + selectors
+        + r"""
+int main() {
+  const char* enable = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM";
+  const char* reduction = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION";
+  for (std::size_t aos : {1, 511, 512, 513, 768, 1024})
+    for (std::size_t spins : {1, 2})
+      for (std::size_t history : {0, 1, 2, 8, 64})
+        for (const char* flag : {static_cast<const char*>(nullptr), "0", "1", "bad"})
+          for (const char* reducer : {static_cast<const char*>(nullptr), "cooperative", "ordered", "", "bad"}) {
+            if (flag) setenv(enable, flag, 1); else unsetenv(enable);
+            if (reducer) setenv(reduction, reducer, 1); else unsetenv(reduction);
+            const bool explicit_on = flag && !std::strcmp(flag, "1");
+            const bool invalid_flag = flag && std::strcmp(flag, "0") && !explicit_on;
+            const bool enabled = history >= 2 &&
+                (flag ? explicit_on : (aos >= 512 && spins == 1));
+            const bool invalid_reducer = reducer && std::strcmp(reducer, "cooperative") &&
+                std::strcmp(reducer, "ordered");
+            const bool should_reject = (history >= 2 && invalid_flag) ||
+                (enabled && invalid_reducer);
+            bool rejected = false, incremental = false, ordered = false;
+            try {
+              incremental = hf_incremental_diis_gram_requested(aos, history, spins);
+              ordered = incremental && hf_ordered_diis_gram_requested();
+            } catch (const std::invalid_argument&) { rejected = true; }
+            if (rejected != should_reject) throw std::runtime_error("control validation");
+            if (rejected) continue;
+            const bool expected_ordered = enabled &&
+                ((!flag && !reducer) || (reducer && !std::strcmp(reducer, "ordered")));
+            if (incremental != enabled || ordered != expected_ordered)
+              throw std::runtime_error("HF default or diagnostic admission");
+          }
+}
+"""
+    )
+    executable = tmp_path / "hf_admission"
+    required_native_cxx.build_executable(
+        [source], executable, compile_args=("-std=c++20", "-O2")
+    )
+    subprocess.run(
+        [str(executable)], check=True, capture_output=True, text=True, timeout=30
+    )
+
+
 def test_selector_matrix_and_reachable_endpoint_dispatch(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
