@@ -105,6 +105,11 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
       transforms_only ? 0 : add(multiply(2, result.hermite_elements), result.response_elements);
   result.device_bytes =
       add(metadata, multiply(add(result.transform_elements, scratch), sizeof(double)));
+  // Full orbital owners always allocate the charged compaction storage, even
+  // when every source is active. Transform-only/raw and auxiliary views do not.
+  if (!auxiliary && !transforms_only)
+    result.device_bytes =
+        add(result.device_bytes, multiply(add(primitive_count, 16), sizeof(std::size_t)));
   // Public expansion temporaries are bounded by fifteen Cartesian g AOs with
   // six terms each. Include shell offsets, returned object and vector slack
   // below after actual allocation; the preflight deliberately reserves twice

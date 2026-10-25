@@ -270,6 +270,11 @@
       "reason": "Lossless full receipts retain all 36 alternating cold/three-warm energy-and-force populations, semantic work and immutable source/binary identities. Shared compression keeps the complete vectors together; every independent gate, failed baseline assertion, rerun and exploratory refusal remains in the capsule within unchanged file and change budgets.",
       "review_document": "benchmarks/results/df-metric-pairs-20261025/README.md"
     },
+    "df-source-force-20261025": {
+      "owner": "DF exact-zero source and bounded force scheduling qualification",
+      "reason": "Retain every complete control, candidate and GPU4PySCF observation from three rotated rounds, including all warm samples, settings, work counts and original environment/provenance. This lossless compressed population is independently replayed against retained references; splitting or dropping samples is unnecessary. The separate capsule preserves ablations, moved gates and failed AOT admission without pooling them into timing medians.",
+      "review_document": "benchmarks/results/df-source-force-20261025/README.md"
+    },
     "disk-eri-20261025": {
       "owner": "#2766 bounded temporary-file ERI qualification",
       "reason": "Compact original complete E+F receipts preserve profitable LR and slower full-range disk results, physical versus logical I/O, source/build inventories, independent gates, GPU/sanitizer and final default-policy validation, plus setup and missing-consumption failures. Large binary and raw journals remain untracked.",
@@ -964,6 +969,14 @@
       "role": "All 36 alternating complete cold/three-warm E/F populations with work and immutable source/binary identities; no completed sample omitted.",
       "bytes": 159984,
       "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
+    },
+    {
+      "path": "benchmarks/results/df-source-force-20261025/paired.json.gz",
+      "family": "df-source-force-20261025",
+      "bytes": 231784,
+      "sha256": "800fceddf5c0f96b768bec2dae3d94daaec95f4b4d113e356cf449c19696c21e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 81 complete energy/force calls in 27 fresh-process populations, original raw timing/settings/work/environment fields and executed command receipts; no sample selection or precision-failed-point suppression."
     },
     {
       "path": "benchmarks/results/disk-eri-20261025/measurements.json.xz",

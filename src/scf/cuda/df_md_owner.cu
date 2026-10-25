@@ -21,7 +21,7 @@ struct CudaDfMdOwner {
   std::array<std::size_t, 8> pair_offsets{}, auxiliary_offsets{};
   std::size_t pair_hermites{}, auxiliary_hermites{}, pair_responses{}, auxiliary_responses{};
   unsigned charge_splits{}, architecture{};
-  std::array<void*, 14> allocations{};
+  std::array<void*, 16> allocations{};
   std::size_t allocation_count{};
   CudaDfMdResources resources{};
 
@@ -55,6 +55,34 @@ struct CudaDfMdOwner {
 };
 
 namespace {
+/** Compact the current exact-nonzero source domain in stable angular order.
+ * No tolerance, norm estimate or frozen-density assumption enters this list.
+ * Precontraction marks NaNs/infinities active, including NaN * zero, so removing
+ * a zero source cannot hide invalid input. One CTA owns each disjoint class;
+ * refreshed counts make empty classes and changed-density graph replay safe. */
+__global__ void compact_density_sources(DfMdView pair) {
+  __shared__ unsigned prefix[128];
+  const auto begin = pair.active_offsets[blockIdx.x];
+  const auto end = pair.active_offsets[blockIdx.x + 1];
+  std::size_t retained = 0;
+  for (auto chunk = begin; chunk < end; chunk += blockDim.x) {
+    const auto index = chunk + threadIdx.x;
+    const bool keep = index < end && pair.primitives[index].density_active;
+    prefix[threadIdx.x] = keep;
+    __syncthreads();
+    for (unsigned shift = 1; shift < blockDim.x; shift *= 2) {
+      const auto extra = threadIdx.x >= shift ? prefix[threadIdx.x - shift] : 0;
+      __syncthreads();
+      prefix[threadIdx.x] += extra;
+      __syncthreads();
+    }
+    if (keep) pair.active_indices[begin + retained + prefix[threadIdx.x] - 1] = index;
+    retained += prefix[blockDim.x - 1];
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) pair.active_counts[blockIdx.x] = retained;
+}
+
 /** Freeze the override at owner creation, including graph replay. An absent
  * override permits the bounded per-class work/capacity policy below. */
 unsigned requested_charge_splits() {
@@ -249,6 +277,14 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     candidate->auxiliary_responses = aux_layout.response_elements;
     error = prepare_view(*candidate, pair_layout, candidate->pair);
     if (error == cudaSuccess) error = prepare_view(*candidate, aux_layout, candidate->auxiliary);
+    if (error == cudaSuccess)
+      error = candidate->allocate(candidate->pair.count, candidate->pair.active_indices);
+    if (error == cudaSuccess) error = candidate->allocate(16, candidate->pair.active_offsets);
+    if (error == cudaSuccess) {
+      candidate->pair.active_counts = candidate->pair.active_offsets + 8;
+      error = cudaMemcpyAsync(candidate->pair.active_offsets, candidate->pair_offsets.data(),
+                              8 * sizeof(std::size_t), cudaMemcpyHostToDevice, stream);
+    }
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
     if (error != cudaSuccess) return fail(error, detail);
     candidate->resources = {device_bytes,
@@ -282,6 +318,7 @@ cudaError_t cuda_df_md_charge(CudaDfMdOwner* owner, const double* density, doubl
   auto status = validate_replay(owner, density, charge);
   if (status != cudaSuccess) return status;
   df_md_precontract<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density);
+  compact_density_sources<<<7, 128, 0, owner->stream>>>(owner->pair);
   status = cudaPeekAtLastError();
   if (status != cudaSuccess) return status;
   status = cudaMemsetAsync(owner->auxiliary.potential, 0,
@@ -325,6 +362,7 @@ cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double*
   // Both inputs are refreshed: force response must not depend on a prior J or
   // charge submission, even after zero-density or captured-state replay.
   df_md_precontract<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density);
+  compact_density_sources<<<7, 128, 0, owner->stream>>>(owner->pair);
   df_md_precontract<<<owner->auxiliary.count, 128, 0, owner->stream>>>(owner->auxiliary, potential);
   status = cudaPeekAtLastError();
   if (status != cudaSuccess) return status;
