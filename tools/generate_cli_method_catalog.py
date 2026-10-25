@@ -7,8 +7,10 @@ lowerers are listed with reasons, never silently projected to a different energy
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
+import types
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -345,8 +347,18 @@ def _bound_basis_cpp() -> list[str]:
     The native template retains source shell/column order and raw decimal
     values. Its normalization is shared with every ordinary system constructor.
     """
-    from generativeqc.basis import load_basis
     from generativeqc_compiler.method.basis_binding import validate_basis_snapshot
+
+    # Reuse the canonical stdlib-only basis reader without importing the runtime
+    # package's eager numerical exports. A private namespace preserves relative
+    # imports without replacing or partially initializing ``generativeqc``.
+    package_name = "_generativeqc_cli_codegen"
+    if package_name not in sys.modules:
+        package = types.ModuleType(package_name)
+        package.__path__ = [str(ROOT / "python" / "generativeqc")]
+        package.__package__ = package_name
+        sys.modules[package_name] = package
+    load_basis = importlib.import_module(f"{package_name}.basis").load_basis
 
     binding = resolve_method("R2SCAN-3c").basis
     basis = validate_basis_snapshot(

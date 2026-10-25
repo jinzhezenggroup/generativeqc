@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,6 +15,25 @@ from generate_cli_method_catalog import render, rows
 
 
 class NativeMethodirProjectionTests(unittest.TestCase):
+    def test_generator_needs_no_installed_runtime_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "catalog.hpp"
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    str(ROOT / "tools" / "generate_cli_method_catalog.py"),
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(output.read_text(encoding="utf-8"), render(rows()))
+
     def test_automatic_bulk_selectors_preserve_the_public_resolver(self) -> None:
         from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
 
