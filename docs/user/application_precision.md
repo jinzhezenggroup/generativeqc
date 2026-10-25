@@ -658,86 +658,19 @@ NVE admission additionally needs energy-drift, force/energy consistency,
 continuity and sampling tests. The underlying native geometry optimizer is
 unchanged by this Python facade.
 
-## Reproducing PBE0 comparisons
+## Reproducing and qualifying comparisons
 
-`benchmarks/pbe0_precision.py` compares ordinary FP64, native AUTO and explicit
-`audit_auto` at fixed PBE0/def2-SVP spherical models and moving quadrature. It requires
-an independent PySCF reference and retains first calls separately from
-alternating measured repeats. All runs start from the same Hcore guess; warm
-timings reuse process caches, not converged densities. The endpoint includes
-calculator construction, SCF, analytic forces, host export and cache release.
-Audit timings include the complete audit/fallback work. The current benchmark
-schema is version 2; older measurements retain their original names and source
-identities and are not relabeled as results of the current revision.
+The existing benchmark runners (`benchmarks/pbe0_precision.py`,
+`benchmarks/pbe0_fast_fock.py`, `benchmarks/pbe0_fast.py` and
+`benchmarks.readme_dft --policy fast`) produce the evidence behind a Fast claim.
+The qualification rules, exact commands, timing scope and the limits of a
+reported ratio are owned by
+[Application precision qualification and reproduction](../maintainer/application_precision_qualification.md).
 
-With the source tree on `PYTHONPATH` and the matching native library selected,
-generate the CPU reference first (PySCF is an optional benchmark dependency):
+Two rules matter when reading this page's guarantees:
 
-```bash
-python -m benchmarks.pbe0_precision --engine reference \
-  --output .artifacts/pbe0-precision/reference.json
-```
-
-On an available, permitted Slurm GPU node, run the native comparison through
-the scheduler, preserving its assigned device visibility:
-
-```bash
-srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --cpus-per-task=4 --time=00:30:00 \
-  python -m benchmarks.pbe0_precision --engine native \
-  --reference .artifacts/pbe0-precision/reference.json \
-  --output .artifacts/pbe0-precision/native.json
-```
-
-Speed ratios are emitted only after independent energy/force gates pass.
-The report preserves native operator evidence and explicitly flags incomplete
-precision inventories instead of inferring FP32 execution from the request.
-
-For FP32 J/K Fast against already-optimized FP64, run
-`python -m benchmarks.pbe0_fast_fock --engine reference --output <oracle.json>`
-in one finite Slurm job, then `--engine native --oracle <oracle.json>
---output <comparison.json>` in another. The runner retains first calls and
-alternating complete endpoints, checks independent energy/force budgets, and
-rejects missing FP32 exchange or hidden extra solves. A source-matched existing
-independent oracle is reusable only when its complete scientific protocol matches.
-
-For the other qualified Fast routes, run `python -m benchmarks.pbe0_fast` inside the
-same finite Slurm allocation, with `--reference`, `--output` and `--repeats 5`.
-This reports the current ordinary FP64 default and budget-selected Fast, including
-facade construction, strict refinement, analytic forces and any fallback work.
-Use `--initial-guess automatic` to measure the default native Modified Huckel seed policy,
-or `--initial-guess minao` for the explicit policy; the default benchmark uses
-Hcore. Both timed modes always receive the same seed policy, and the independent
-oracle's Hcore protocol remains separately recorded. It checks the same
-scientific target; speed ratios are not kernel ratios.
-Historical no-reuse/FP64 facade and audit measurements
-remain bound to their original sources and are not relabeled.
-
-The actual README endpoint runner also accepts `--policy fast`:
-
-```bash
-python -m benchmarks.readme_dft --method pbe0 native --policy fast \
-  --atoms 3 --basis-file path/to/def2-svp.json --grid 48 16 32 --repeats 5 \
-  --reference path/to/independent-reference.json \
-  --output .artifacts/readme-fast/pbe0.json
-```
-
-Run this inside a finite Slurm allocation. Generate the matching reference with
-the same runner's `reference` engine, which remains FP64. Add
-`--density-fitting cuda --auxiliary-basis-file path/to/jkfit.json` to both engines
-for DF. The default native `--policy fp64` still uses ordinary optimized
-`Calculator`, not an audit facade. `--fast-budget ENERGY MAX_FORCE RMS_FORCE`
-sets explicit allowances in Eh and Eh/bohr; all three independent oracle gates
-must pass. Fast records keep the unchanged strict-parity `fp64_gate` separately
-and use a distinct schema; they must not be folded into historical FP64 figures.
-
-Cold includes facade/plan construction; frozen post-cold, moved, and frozen
-post-move calls include all requested work, including audits and seed restoration
-when needed. A successful Fast request outside a qualified FP32 domain uses
-the eligible Standard fallback or an audited FP64 call. Its report records which;
-runner support alone is **not** qualification of all README methods/sizes, proof
-of FP32 arithmetic, or a speedup claim. Private seed/force experiments cannot
-be combined with Fast in this runner.
+- a runnable benchmark is not qualification of every method or size, and
+- runner support is not proof that FP32 arithmetic ran.
 
 (python-precision-errors)=
 ## Failure behavior

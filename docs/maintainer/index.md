@@ -29,6 +29,7 @@ generated-files
 :maxdepth: 1
 :caption: Scientific qualification
 
+application_precision_qualification
 df_frozen_precision
 dft_mp_v1_contract
 f_shell_validation

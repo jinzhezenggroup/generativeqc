@@ -290,7 +290,9 @@ Every mixed-precision path must expose its actual precision provenance, retain a
 strict-FP64 route for the same scientific equation, and pass independent
 numerical gates with margin on difficult cases. Tensor-core or SGEMM utilization
 is implementation evidence; complete-endpoint speedup plus numerical acceptance
-is the promotion criterion.
+is the promotion criterion. [Application precision
+qualification](application_precision_qualification.md) owns the Fast-specific
+runners, timing scope and evidence rules.
 
 ### Reduce expensive solver/operator applications
 

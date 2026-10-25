@@ -70,15 +70,11 @@ for the request construction and the MethodIR exact-exchange lowering.
 
 The generated raw exact-K owner freezes
 `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive|work` at
-preparation. Unset and empty select `work` by default. Explicit `fill` restores
-the previous bounded cross-chunk schedule; `incumbent` retains per-original-chunk
-execution for rollback and comparisons. The prepared `DirectExchangeSelection`
-freezes this axis together with the K lowering masks, so topology and launcher
-selection cannot disagree after later environment changes.
-
-With both controls unset, the qualified [Rys-task preference](direct_rys_tasks.md)
-takes priority for its covered classes with its own Work companion; incumbent
-work kernels handle the remaining eligible classes.
+preparation. Unset and empty select `work`. Explicit `fill` selects the bounded
+cross-chunk fill schedule; `incumbent` retains per-original-chunk execution.
+The prepared `DirectExchangeSelection` freezes this axis together with the K
+lowering masks, so topology and launcher selection cannot disagree after later
+environment changes.
 
 `fill` holds accepted identities and contribution bounds across chunks in a
 bounded 2W arena, consumes full W-task batches, and flushes the final partial
@@ -105,7 +101,9 @@ existing workers, including high-angular generated classes beyond
 `psss`/`psps`. Task-parallel Rys has a separate Work companion sharing its
 quartet arithmetic; explicit component-Rys/block alternatives are unchanged.
 Unknown values fail at preparation. Change the setting before creating a new
-owner, not while replaying an existing one.
+owner, not while replaying an existing one. When the lowering selector is unset,
+the qualified [Rys-task preference](direct_rys_tasks.md) takes priority over this
+schedule for its covered classes; the work/incumbent workers handle the rest.
 
 The control affects covered packed/subgroup generated raw-K streams only.
 Coulomb, combined-HF preparation, other schedules and unsupported classes retain
@@ -117,11 +115,9 @@ Rys-task retains its value producer and selects its warp-private Work companion
 for that schedule. Component-Rys and restricted-only block lowerings retain
 their own workers; incumbent work dispatch applies where no alternative is
 selected. UHF cannot use restricted block contraction and follows the frozen
-work/incumbent fallback instead. `fill` alone does not disable the automatic
-Rys-task preference; restoring the pre-promotion generated defaults requires
-both `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` and
-`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill`. Set the latter to `incumbent` for
-per-original-chunk execution instead. Neither rollback changes Coulomb or forces.
+work/incumbent fallback instead. Lowering and schedule rollbacks are independent;
+[task-parallel Direct Rys-K](direct_rys_tasks.md) owns the combined-selector
+rollback rule. Neither rollback changes Coulomb or forces.
 
 Rationale and development evidence for these defaults are retained in the
 [queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md),
