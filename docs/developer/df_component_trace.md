@@ -31,14 +31,14 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   --output /path/to/evidence/components.json
 ```
 
-The default cases are the #206 96- and 192-AO systems. The probe retains energy
+The default cases are the 96- and 192-AO systems from the DF force matrix. The probe retains energy
 parity and iteration-count gates, stores exact library/patch/untracked-file
 hashes, preserves each solve's raw JSONL with a hash, and rejects missing or
 invalid instrumentation. Output paths should be outside the source tree (or
 ignored by Git) so writing evidence does not change the identified checkout.
 Trace files must be fresh; the probe never overwrites earlier captures.
 
-## Host eigensolve ledger for #308
+## Host eigensolve ledger
 
 `GENERATIVEQC_DF_HOST_TRACE=/absolute/fresh.jsonl` records host scopes and actual
 CPU-reference eigensolve invocations. The existing force probe's
@@ -87,7 +87,7 @@ timing assessment and is never a passing endpoint. Raw host traces remain
 available. Scientific endpoint comparisons that follow the branch gate are
 explicitly marked unchecked in the rejected record.
 
-The existing #206 matrix entry point also supports native protocol controls:
+The existing DF force-matrix entry point also supports native protocol controls:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
@@ -119,7 +119,7 @@ control is not a different physical initial guess or a fallback policy.
 The default `--memory-budget-bytes 0` preserves the original probe's host
 resident compatibility route. A positive value, for example `268435456`,
 selects the existing bounded generated-source execution. Record and compare
-both routes explicitly: the original #206 probe does not exercise source-backed
+both routes explicitly: the original probe does not exercise source-backed
 tile regeneration. Compatibility one-electron/nuclear derivative exports have
 their own roots, and host response weights remain labeled as host work.
 
@@ -162,16 +162,16 @@ binary identities. Nsight timing also has instrumentation overhead.
   kernel does not allocate or write a full nuclear derivative tensor. They
   must not be interpreted as materialized derivative bytes.
 - Scratch counters report per-operation allocation sizes. Their sums are not
-  live-memory peaks; the #203 resource ledger remains the complete memory gate.
+  live-memory peaks; the composed resource ledger remains the complete memory gate.
 - Each operation is limited to 65,536 regions and logical tile keys. Dropped
   entries, CUDA timing errors, malformed hierarchy, missing timings, truncated
   JSONL and inconsistent logical work totals invalidate evidence. Missing sink
   output is rejected by the probe rather than changing the scientific status.
 
-This instrumentation alone does not complete #282, #283 or #284. Resident and
-streamed reuse, force optimizations, occupied-factor exchange, numerical gates,
-and the full batch-1/batch-4 #206 matrix require separate implementation and
-evidence.
+This instrumentation alone does not establish resident/streamed reuse, force
+optimizations or occupied-factor exchange. Those, together with the numerical
+gates and the complete batch-1/batch-4 DF force matrix, require separate
+implementation and evidence.
 
 The final-state integration adds two explicit host workload comparisons:
 
@@ -197,9 +197,9 @@ on either side; omitted checks, accidental reuse in a forced sample or hidden
 reference fallback fail the gate. Source/library identities and SCF iteration/
 retry branches must match. Run at least five interleaved samples in clean and
 separate traced invocations; never multiply ratios from historical binaries to
-claim the combined improvement. External parity remains the matched #206 gate.
+claim the combined improvement. External parity remains the matched DF force-matrix gate.
 
-## Incomplete-stage journal for #308
+## Incomplete-stage journal
 
 `GENERATIVEQC_DF_PROGRESS_TRACE=/absolute/fresh.jsonl` writes a separate append-only
 journal. Every BEGIN, VALUE and END line is closed immediately. A killed process
@@ -261,7 +261,7 @@ python -m benchmarks.df_progress_ledger /path/progress.jsonl \
 The summary subtracts immediate completed children for exclusive diagnostic
 wall intervals, and leaves open scopes explicit. Its observations preserve
 parent IDs, execution modes and ordering. Concurrent root wall times must not
-be summed into endpoint time. Existing clean #206 runners reject an ambient
+be summed into endpoint time. Existing clean DF force-matrix runners reject an ambient
 progress trace, just as they reject ambient component tracing.
 
 `benchmarks/issue308_stage_probe.py` and `benchmarks/df_stage_probe.cpp` provide
@@ -293,5 +293,5 @@ reported planner shape and its rounded 7680-pair allocation. Use
 source/library identity, actual loaded-library identity from the probe, input
 hashes, build cache, all DF diagnostic variables, Slurm visibility, memory
 samples, completed rows and timeout/failure disposition. Its memory sampling
-makes all its timings diagnostic, even without `--progress`; existing #206
+makes all its timings diagnostic, even without `--progress`; existing DF force-matrix
 runners own separate clean endpoint timing.

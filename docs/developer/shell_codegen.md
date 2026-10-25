@@ -162,38 +162,11 @@ declares the selected recurrence, schedule, consumers and target.
 The PPPS/PSPS/PPSS signature grouping work, class-specific Rys variants,
 rejected candidates and source-matched numerical/resource/latency evidence
 are preserved in the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md).
+That note owns the per-case records for DSPS Rys3, uniform component warps,
+batched DSPP/DPSS Rys3, DPDP/DPDS Rys4 and DDPP/DDPS/DDDS Rys4 promotion, the
+768-AO Fock follow-up, and the measured `sm_120` comparisons.
 Old environment toggles, profile numbers and timings must not replace the
 current manifest/runtime when determining today's execution policy.
-
-The previous case-study headings remain for stable fragment links.
-
-### DSPS scalar Rys3 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### DPPS uniform component warps
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### PPPP uniform component warps
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DSPP and DPSS Rys3 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DPDP and DPDS Rys4 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DDPP, DDPS, and DDDS Rys4 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### 768-AO Fock follow-up for issue #52
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
 
 ## Architecture autotuning
 
