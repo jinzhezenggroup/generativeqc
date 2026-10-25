@@ -1,12 +1,12 @@
 # Native semilocal XC device boundary
 
 `dft/cuda_xc.hpp` supplies the ordinary-stream fixed-density LDA/PBE RKS/UKS
-component for #162. It consumes current device density matrices and returns
-device XC energy/electron totals, potential matrices and a numerical-error
-flag. `dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the
-registered method adapter exposes CPU/CUDA single-system and native prepared
-ragged energy execution. The public #203 method resource plan accounts for
-preparation and execution with one persistent ledger; see
+component. It consumes current device density matrices and returns device XC
+energy/electron totals, potential matrices and a numerical-error flag.
+`dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the registered
+method adapter exposes CPU/CUDA single-system and native prepared ragged energy
+execution. The public method resource plan accounts for preparation and
+execution with one persistent ledger; see
 [resource planning](../maintainer/resource_planning.md).
 
 ## Ownership and data movement
@@ -38,10 +38,13 @@ and count their synchronization boundaries. The surrounding method must also
 account for its density input, one-electron setup, J provider and final outputs.
 
 The geometry, basis, grid and functional are immutable within a plan. Changes
-require a new plan. The currently supported compositions are exactly
-LDA_X+LDA_C_PW and PBE_X+PBE_C, with the
-[versioned SCF point-domain policy](xc_scf_domain.md). No meta-GGA or force
-capability is implied by these interfaces.
+require a new plan. This device component itself currently supports exactly the
+LDA_X+LDA_C_PW and PBE_X+PBE_C compositions, with the
+[versioned SCF point-domain policy](xc_scf_domain.md). It is a fixed-density
+energy/potential consumer: neither a meta-GGA nor a force capability follows
+from these interfaces. Analytic-force promotion is a separate prepared-owner
+contract described in
+[Architecture decisions](architecture.md#executable-method-boundary).
 
 ## Numerical path
 
@@ -648,8 +651,10 @@ clearing seeds while frozen prevents later solves from creating replacements.
 The additive `generativeqc_batch_get_scf_diagnostic` query returns density-update and
 physical-commutator RMS values without changing the legacy result array stride.
 Unavailable and failed items report absence, including after a rejected replay.
-Python batch calls default to the method's supported observables, so KS defaults
-to energy and rejects forces. HF retains its energy-plus-force default.
+Python batch calls default to the context's advertised observables, so an
+energy-only KS context requests energy and rejects an explicit force request,
+while an admitted force context may request both. HF retains its
+energy-plus-force default.
 
 ## SCF local AO selection
 
@@ -741,12 +746,13 @@ forces. `tests/python/test_dft_scf.py` compares CPU/CUDA stable small endpoints
 against two independently converged PySCF guesses on the identical grid.
 `tests/python/test_dft_batch.py` separately exercises public ragged replay,
 geometry rebuilds, per-item failures, frozen/cleared/imported seeds, ABI
-diagnostics and method-specific derivative requirements. The combined batch
-and independent SCF modules pass all 45 cases on the CPU/CUDA build with a
-Slurm-allocated RTX 5090. Resource budget boundaries and ledger lifetime are
-separately covered by `tests/python/test_ks_resources.py`; the full workload
-evidence required by #162 remains a separate acceptance gate.
-The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
+diagnostics and method-specific derivative requirements. Resource budget
+boundaries and ledger lifetime are separately covered by
+`tests/python/test_ks_resources.py`. These are endpoint and lifecycle gates, not
+evidence of complete-endpoint workload or profitability; that evidence follows
+[Performance engineering](../maintainer/performance_engineering.md) and
+[Evidence retention](../maintainer/evidence_retention.md).
+The CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
 
 An admitted radial source survives fixed-geometry warm replay by default.

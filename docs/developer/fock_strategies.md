@@ -1,87 +1,92 @@
-# Fock provider dispatch audit
+# Fock provider dispatch and strategy selection
 
-Audit baseline: `3da58410bb02a903ea6341a7caac0afc9314355b` (after #239).
-The implementation progress below supersedes the baseline audit. Mixed
-provider SCF is executable, and `LDA_RKS` now consumes its CPU Coulomb-only
-path as an energy-only vertical slice. Broader RKS/UKS, gradients, batching and
-prepared CUDA remain outside that slice.
+This page owns how a Fock build request is resolved into actual integral
+sources, and how the resolved strategy is selected for CPU and CUDA. The
+mathematical `FockBuildSpec` contract, public `FockPlan` API, output semantics
+and density/coefficient conventions are owned by
+[the shared Fock construction contract](fock_build.md); this page covers
+dispatch, source selection and the exact-K scheduling policy.
 
-## Implementation progress after the audit
+## Resolution model
 
-The CPU provider integration now executes all exact/DF J/K combinations,
-independently absent terms and finite coefficients. `CpuFockProviderView` binds
-the existing immutable integral owners; `CpuFockPlanView` validates both sources
-before execution and shares one provider call when both terms use the same
-source. It introduces neither another integral cache nor another solver.
+Presence is not a coefficient. A term that is present with coefficient zero
+still requests its raw matrix, and an absent term performs no work. Coulomb and
+exchange are resolved independently, so a plan may request, for example, a
+fitted Coulomb term and an exact exchange term. `AUTO` never authorizes changing
+an exact Hamiltonian into a fitted one: the only way to obtain fitted
+mathematics is an explicit `density_fitted` term.
 
-CPU RHF/UHF direct and fitted entry points now use the same iteration and
-finalization code. The generic `run_cpu_fock_strategy` endpoint also accepts
-explicit mixed semantics. Fock, energy and first derivatives use one binding;
-the DF metric cutoff and complete spectrally truncated response are retained.
-The source owner's DF buffers remain included in CPU resource observations.
+| Boundary | Current responsibility |
+| --- | --- |
+| `FockBuildSpec` | Mathematical request: spin, derivative order, and independent Coulomb/exchange presence, coefficient, operator, range parameter and approximation |
+| `ResolvedFockBuild` | Validates the request and separates it from backend, schedule, screening and DF metric threshold |
+| `FockPlan` / `CpuFockProviderView` | Binds immutable CPU integral owners; shares one provider call when both terms use the same source |
+| `CudaFockProviderView` | Binds the same composition to CUDA direct and DF plan items, with typed output selection |
+| `CpuFockPlanView` | Validates both sources before execution |
+| `run_cpu_fock_strategy` / `run_fock_strategy` | Shared CPU iteration and finalization; accepts explicit mixed semantics |
 
-Single-item method and fleet dispatch now call `run_fock_strategy`. Standard
-CUDA HF still uses its established fused solver. CUDA DF raw services now
-accept a typed output selection for resident, streamed, tiled, batch, item and
-device-pointer execution. Unselected device outputs may be null and are never
-accessed; host outputs are empty. Plan scratch capacity remains accounted and
-available for subsequent selections.
+CPU RHF/UHF direct and fitted entry points use the same iteration and
+finalization code. Fock, energy and first derivatives use one binding; the DF
+metric cutoff and complete spectrally truncated response are retained. The
+source owner's DF buffers stay inside CPU resource observations.
 
-`CudaFockProviderView` now binds existing direct and DF plan items to the same
-`BasicFockPlanView` composition used by the CPU. The direct provider reuses the
-existing contracted-ERI value/Dual evaluator and retains metadata, AO matrices,
-and compact gradient storage without molecular ERI tensors. Bounds and computed
-outputs reject nonfinite results transactionally. Absent or zero-weight
-responses do not evaluate unused quadratic terms.
+Standard CUDA HF keeps its established fused solver. General CUDA requests that
+need independent terms select the independent path: CUDA one-electron
+generation, direct/DF J/K and matching two-electron response feed the shared
+host SCF iteration and finalization. The direct provider reuses the contracted-ERI
+value/Dual evaluator and retains metadata, AO matrices and compact gradient
+storage without molecular ERI tensors. Bounds and computed outputs reject
+nonfinite results transactionally, and absent or zero-weight responses do not
+evaluate unused quadratic terms.
 
-General CUDA requests select `CudaIndependent`: CUDA one-electron generation,
-direct/DF J/K and matching two-electron response feed the shared host SCF
-iteration/finalization code. Standard HF keeps its fused CUDA schedules. The
-DF derivative reuses the generated external-weight service and its full
-spectrally truncated metric response, accepting signed coefficients. It
-requires symmetric densities; all raw providers accept nonsymmetric inputs.
+CUDA DF raw services accept a typed output selection for resident, streamed,
+tiled, batch, item and device-pointer execution. Unselected device outputs may
+be null and are never accessed; host outputs are empty. Plan scratch capacity
+remains accounted and available for subsequent selections.
 
-Validation includes 15 CPU native suites, through-f CUDA direct comparisons
-and signed d/f responses, independent DF device layouts and source/result failure
-cases. The composition suite checks every exact/DF/absent pair, both spins,
-signed derivatives, resident/source-backed DF storage, distinct batch items,
-and SCF/replay/changed-geometry endpoints. Exact run logs and build provenance
-are retained in the untracked artifact directory.
-
-`PreparedFockPlan` now owns the shared views and existing sources. Independent
-CUDA single/fleet replays retain it per item, with exact immutable-input and
+`PreparedFockPlan` owns the shared views and the underlying sources. Independent
+CUDA single and fleet replays retain it per item with immutable-input and
 backend-variant compatibility checks and transactional replacement. CPU SCF
-preserves its transient ERI lifetime. Reuse tests cover unchanged requests,
-changed geometry/coefficient/auxiliary/cutoff/device identity and failed
-replacement, alongside the original spin/pair numerical endpoints.
+keeps its transient ERI lifetime. Compatibility covers unchanged requests and
+rejects changed geometry, coefficient, auxiliary basis, cutoff, device identity
+and failed replacement.
 
-The additive C `fock.h` and Python `FockPlan` expose independent choices,
-fixed-density values/responses, complete native SCF, explicit warm replay and
-requested/resolved/actual-source diagnostics. Mathematical identity remains
-separate from execution/source identity. `FixedDensityMeanField` connects
-native unit J and absent K to the executable semilocal XC integrator; LDA and
-PBE retain independent fixed-density fixture and energy-variation checks.
-See [the public contract](fock_build.md) for ownership and output semantics.
+The additive C API in `include/generativeqc/fock.h` and the Python `FockPlan`
+expose independent J/K choices, fixed-density values and responses, complete
+native SCF, explicit warm replay, and requested/resolved/actual-source
+diagnostics. Mathematical identity stays separate from execution/source
+identity.
 
-### Prepared exact-K task scheduling
+## Fixed-density semilocal coupling
+
+`FixedDensityMeanField` connects a native unit-Coulomb, absent-exchange request
+to the executable semilocal XC integrator. LDA and PBE keep independent
+fixed-density fixture and energy-variation checks. This is the fixed-density
+mean-field consumer, not DFT SCF; see
+[the shared Fock construction contract](fock_build.md#fixed-density-semilocal-consumer)
+for the request construction and the MethodIR exact-exchange lowering.
+
+## Exact-K task scheduling
 
 The generated raw exact-K owner freezes
-`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive|work` at preparation.
-Unset and empty select `work` by default. Explicit `fill` restores the previous
-bounded cross-chunk schedule; `incumbent` retains per-original-chunk execution
-for rollback and comparisons. The prepared `DirectExchangeSelection` freezes
-this axis together with the K lowering masks, so topology and launcher selection
-cannot disagree after later environment changes. With both controls unset,
-the qualified [Rys-task preference](direct_rys_tasks.md) takes priority for its
-covered classes with its own Work companion; incumbent work kernels handle the
-remaining eligible classes.
-`fill` holds
-accepted identities and contribution bounds across chunks in a bounded 2W
-arena, consumes full W-task batches, and flushes the final partial batch.
-Experimental `primitive` additionally stably groups the admitted lookahead
-window by cached ket primitive-pair count; the bra and angular class are fixed
-within that queue.
-The default `work` schedule instead retains eight bounded survivor queues per bra:
+`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive|work` at
+preparation. Unset and empty select `work` by default. Explicit `fill` restores
+the previous bounded cross-chunk schedule; `incumbent` retains per-original-chunk
+execution for rollback and comparisons. The prepared `DirectExchangeSelection`
+freezes this axis together with the K lowering masks, so topology and launcher
+selection cannot disagree after later environment changes.
+
+With both controls unset, the qualified [Rys-task preference](direct_rys_tasks.md)
+takes priority for its covered classes with its own Work companion; incumbent
+work kernels handle the remaining eligible classes.
+
+`fill` holds accepted identities and contribution bounds across chunks in a
+bounded 2W arena, consumes full W-task batches, and flushes the final partial
+batch. Experimental `primitive` additionally stably groups the admitted
+lookahead window by cached ket primitive-pair count; the bra and angular class
+are fixed within that queue.
+
+The default `work` schedule retains eight bounded survivor queues per bra:
 cached ket primitive-pair work has bins 1, 2–3, 4–7 and 8+, each split by
 whether both ket shells are contracted. Bra work and angular class are fixed,
 so this groups primitive-product work without reordering the screening domain.
@@ -91,138 +96,61 @@ promise a work-ratio bound for arbitrarily long custom contractions.
 Each queue has a 2W arena. New candidate chunks are scanned only while every
 queue has fewer than W pending tasks. Full expensive bins drain first; partial
 bins accumulate across original chunks and flush independently at the row tail.
-Storage is bounded by 16W identities/bounds per independently queued group,
-not by the quartet domain. Task-parallel Rys uses four independent warp groups
-with W=32 and 24,736 bytes of shared queue storage per CTA.
-Separate class-specialized work kernels keep this storage out of the incumbent,
-fill and primitive kernels. Whole-CTA, native and unsupported classes retain
-their existing workers. This includes high-angular generated classes, not only
+Storage is bounded by 16W identities/bounds per independently queued group, not
+by the quartet domain. Task-parallel Rys uses four independent warp groups with
+W=32 and 24,736 bytes of shared queue storage per CTA. Separate
+class-specialized work kernels keep this storage out of the incumbent, fill and
+primitive kernels. Whole-CTA, native and unsupported classes retain their
+existing workers, including high-angular generated classes beyond
 `psss`/`psps`. Task-parallel Rys has a separate Work companion sharing its
 quartet arithmetic; explicit component-Rys/block alternatives are unchanged.
 Unknown values fail at preparation. Change the setting before creating a new
 owner, not while replaying an existing one.
 
-The control affects covered packed/subgroup generated raw-K streams only. J,
-combined-HF preparation, other schedules and unsupported classes retain their
-existing selection. Recurrence selection remains independent. Screening scans
-the original Schwarz-ordered stream once; grouping never resorts unscreened
+The control affects covered packed/subgroup generated raw-K streams only.
+Coulomb, combined-HF preparation, other schedules and unsupported classes retain
+their existing selection. Recurrence selection remains independent. Screening
+scans the original Schwarz-ordered stream once; grouping never resorts unscreened
 inputs. Matrix semantics, precision policy, thresholds and nonsymmetric/spin
 contracts do not change, and no quartet-domain allocation is introduced.
 Rys-task retains its value producer and selects its warp-private Work companion
 for that schedule. Component-Rys and restricted-only block lowerings retain
 their own workers; incumbent work dispatch applies where no alternative is
-selected. UHF cannot use restricted block contraction and follows the
-frozen work/incumbent fallback instead. `fill` alone does not disable the
-automatic Rys-task preference; restoring the pre-promotion generated defaults
-requires both `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` and
+selected. UHF cannot use restricted block contraction and follows the frozen
+work/incumbent fallback instead. `fill` alone does not disable the automatic
+Rys-task preference; restoring the pre-promotion generated defaults requires
+both `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` and
 `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill`. Set the latter to `incumbent` for
-per-original-chunk execution instead. Neither rollback changes J or forces.
+per-original-chunk execution instead. Neither rollback changes Coulomb or forces.
 
-Primitive-work buckets are the default; `primitive` remains opt-in. Compare
-fixed-density matrices/work counts and complete cold/warm/moved energy-plus-force
-endpoints, including preparation and actual SCF trajectories. A sparse synthetic-density
-win is not a complete cold-performance claim. Rationale and development evidence
-are retained in the
-[queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md)
-and [previous fill-default decision](../../.agents/notes/implemented/performance/2026-10-07-direct-k-fill-default.md).
-The [work-bucket decision](../../.agents/notes/implemented/performance/2026-10-08-direct-k-work-buckets.md)
-records resource and qualification limits; the
-[work-default decision](../../.agents/notes/implemented/performance/2026-10-09-direct-k-work-default.md)
-records the accepted default and explicit fill rollback without claiming a stable
-cold speedup from unmatched SCF trajectories. The
-[task Work decision](../../.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md)
-records composition, independent warp ownership and joint qualification.
-For a complete PBE0 cold Nsight trace,
+Rationale and development evidence for these defaults are retained in the
+[queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md),
+the [fill-default decision](../../.agents/notes/implemented/performance/2026-10-07-direct-k-fill-default.md),
+the [work-bucket decision](../../.agents/notes/implemented/performance/2026-10-08-direct-k-work-buckets.md),
+the [work-default decision](../../.agents/notes/implemented/performance/2026-10-09-direct-k-work-default.md)
+and the [task Work decision](../../.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md).
+
+## Scope and rollback
+
+These selectors change scheduling only; they do not change the mathematical
+request. Unsupported range-separated operators remain explicit and fail before
+execution. New providers must extend this common boundary rather than introduce
+another method-specific selector or cache.
+
+## Validation
+
+Dispatch changes are accepted with fixed-density raw matrices at matched
+approximation, then complete CPU/CUDA energy-plus-force, replay,
+changed-geometry, ragged-batch and dispatch-overhead endpoints under matched
+final accuracy. Retention, source identity and publication rules follow
+[evidence retention](../maintainer/evidence_retention.md); the archived
+source-matched non-regression study is
+[benchmarks/results/fock-strategies](../../benchmarks/results/fock-strategies/README.md)
+with its rationale in the
+[strategy-comparison note](../../.agents/notes/implemented/performance/2026-10-09-fock-strategy-comparison.md).
+
+For a complete PBE0 cold trace,
 `benchmarks/pbe0_k_work_profile.py --trace trace.sqlite --endpoint cold.json --output classes.json`
-validates paired J-then-K class passes, includes native `dddd`, and reports K time
-separately from J and force work. Trace sums are intrusive device diagnostics,
-not clean endpoint timing or primitive-work counts.
-
-The [production evidence](../../benchmarks/results/fock-strategies/README.md)
-compares 40 complete endpoints per backend against the audit baseline. Energies
-and raw matrices are unchanged; maximum force differences are below 1e-14.
-Complete endpoint median ratios are 1.0077 on CPU and 1.0028 on CUDA. The
-retained raw/provider and alignment experiments explain and resolve a CPU DF
-code-layout regression without changing its arithmetic.
-
-The sections below preserve the baseline audit; they describe the coupling
-before these implementation changes.
-
-## Existing mathematical contract
-
-`src/scf/fock_build.hpp` already defines `FockBuildSpec`, independent Coulomb
-and exchange term specifications, spin conventions, operator/range parameters,
-approximation identity and derivative order. `ResolvedFockBuild` keeps the
-mathematical request separate from backend, schedule, screening and DF metric
-threshold. Absent terms are canonicalized; malformed parameters and unsupported
-range operators fail before execution.
-
-Restricted density includes double occupation. Unrestricted J consumes the
-total spin density and K consumes each matching-spin density. Raw J/K matrices
-are unscaled; assembly applies each requested coefficient once. Fixed-density
-two-electron energy/derivative assembly contains the additional one-half energy
-factor. One-electron, Pulay and nuclear terms belong to complete method assembly.
-
-The current independent consumer is `build_exact_direct_jk`: a CPU reference
-over an explicitly supplied dense chemists'-order ERI tensor. The dense tensor
-is an existing CPU reference representation, not a proposed production CUDA
-memory model. Its tests cover absent terms, arbitrary coefficients, spin
-conventions, fixed-density derivatives and preflight rejection.
-
-## Dispatch and ownership map
-
-| Boundary | Existing responsibility | Remaining coupling |
-| --- | --- | --- |
-| `methods/hf_method.cpp:resolve_hf_options` | Translate legacy method/DF options into one resolved request | Both terms inherit one approximation and one backend |
-| `HfPreparedSingle::execute` | Dispatch by resolved Fock schedule | CUDA DF residency is an execution schedule, not a second approximation flag |
-| `HfPreparedBatch` / `scf::FleetPlan` | Own compatible buckets, geometry and warm state | Resident CUDA DF retains its specialized GPU bucket and retry path |
-| `scf/rhf.cpp` | CPU iterations and final energy/force assembly | Direct/DF entry points remain separate; exact entry preflight requires standard complete HF |
-| `scf/cuda_rhf.cu` | Persistent direct-HF queues, generated/fallback kernels and solver state | Fused CUDA consumers require the standard coupled HF coefficients |
-| `scf/cuda/df_plan*`, `df_jk*`, `df_{coulomb,exchange}.cpp`, `df_*_scf.cpp` | Separate prepared metric ownership, bounded J/K, response and device SCF replay | Existing term selection and provider semantics remain in the public DF adapters |
-| `scf/fock_build.cpp` | Validate capabilities and mathematical/execution identity | Nonstandard CUDA terms and independently fitted terms are rejected |
-
-The public method ABI does not yet expose independent J/K provider choices or
-the resolved strategy diagnostics. Its existing combined DF enum is an explicit
-approximation choice: AUTO does not authorize changing an exact Hamiltonian to
-a fitted one.
-
-## Reusable DF primitives
-
-The CPU implementation already separates private `build_coulomb` and
-`build_exchange` contractions. Likewise its response implementation separates
-the Coulomb quadratic derivative from matching-spin exchange quadratic
-derivatives. Reuse the existing metric pseudoinverse and its spectrally
-truncated Frechet response; an independent J/K selection must not change the
-retained metric subspace or omit metric response.
-
-`cuda_density_fitting.hpp` exposes host-returning batched and item-level raw
-J/K execution, plus device-pointer variants on the plan's stream. The latter
-perform no mandatory D2H. Their implementation calls separate `build_coulomb`
-and `build_exchange` services, but currently requires every output pointer and
-executes all terms. Independent-term execution should reuse these services and
-skip unrequested work explicitly. The plan's retained and scratch allocations
-must remain visible to the existing resource accounting.
-
-The direct CUDA implementation exposes a fused HF Fock path and a diagnostic
-Fock-only iteration mode, not a general raw independent J/K provider interface.
-The diagnostic mode is not an interchangeable production provider and cannot
-be substituted for an independently validated raw consumer.
-
-## Acceptance work identified by the baseline audit
-
-1. Provide typed independent provider execution and coefficient-aware
-   assembly, retaining the established fused path for standard HF requests.
-2. Integrate exact and fitted combinations, their matching derivative
-   contributions, complete prepared identities and failure isolation.
-3. Expose requested/resolved semantics and backend/schedule diagnostics while
-   preserving existing public defaults and approximation authorization.
-4. Connect the available fixed-density XC consumer to the common J/K boundary.
-   The first CPU LDA RKS energy-only consumer is now connected; PBE, UKS,
-   hybrids, gradients, batching and prepared CUDA remain owned by #162/#165.
-5. Validate identical-approximation raw matrices before exact-versus-fitted
-   comparisons, then complete CPU/CUDA energy/force, replay, changed-geometry,
-   ragged-batch and dispatch-overhead checks under matched final accuracy.
-
-Unsupported range-separated operators remain explicit until #166 supplies
-validated values and derivatives. Future providers must extend this common
-boundary rather than introduce another method-specific selector or cache.
+validates paired Coulomb-then-K class passes, includes native `dddd`, and reports
+K time separately from Coulomb and force work. Trace sums are intrusive device
+diagnostics, not clean endpoint timing or primitive-work counts.

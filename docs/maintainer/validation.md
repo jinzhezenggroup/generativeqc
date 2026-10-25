@@ -4,17 +4,35 @@ Storage, publication, exceptions and external archives follow the [evidence rete
 
 This protocol supports integral, tensor, and correlated-method development
 without requiring a GPU to write or test CPU code. It adds fixtures and evidence
-registration. RHF/UHF remain the scientifically accepted production methods;
-LDA RKS has a public CPU energy-only vertical slice whose H2 and He matched-grid
-SCF references pass the `1e-8 Eh` endpoint gate. PBE RKS is exposed as a
-limited CPU energy-only slice, and its H2 matched-grid endpoint has an
-independent PySCF/Libxc record. LDA/PBE UKS are exposed as CPU energy-only
-slices with spin-resolved native regressions. Their H2- doublet and fully
-polarized H2+ matched-grid endpoints pass the `1e-8 Eh` energy and `1e-9`
-physical-residual gates. This does not establish broader PBE or DFT coverage.
-PySCF/libcint is used only by saved reference-generation
-scripts. Ordinary tests consume committed data and require neither PySCF nor a
-CUDA toolchain.
+registration. It does not itself declare which method, backend, basis, property,
+or resource context is currently qualified: that is an execution-context
+question answered by `Calculator.capabilities` for a fully resolved request and
+described in [Capability sources and interpretation](../reference/capabilities.md).
+The generated [public method table](../public_methods.md) lists every public
+selector identity; a listed selector is not a support matrix.
+
+What this page *does* fix is how acceptance evidence is produced and retained:
+
+- reference and regression fixtures are committed, so ordinary tests consume
+  recorded data and require neither PySCF nor a CUDA toolchain;
+- PySCF/libcint/Libxc appear only in saved reference-generation scripts and in
+  explicitly allocated GPU/CPU qualification jobs, never on a production path;
+- each acceptance claim names its source revision, exact numerical gates, and
+  the backend that actually executed it; and
+- a skipped device test is not evidence.
+
+## Current qualification surface
+
+Use these owners rather than a snapshot table in this procedure page:
+
+- [Capability sources](../reference/capabilities.md) — how discovery,
+  registry, and contextual admission relate.
+- [Methods and capability discovery](../user/methods.md) — public selector
+  entry points and how to query a concrete context.
+- [Performance engineering](performance_engineering.md) and
+  [Evidence retention](evidence_retention.md) — how complete-endpoint
+  measurements are qualified and stored.
+
 
 ## CUDA benchmark execution profiles
 
@@ -77,8 +95,9 @@ record all finite-difference steps.
 
 `generativeqc_dft_tests` directly exercises native `GridSpec v1` ordering,
 fixed-density LDA/PBE variational response, `lda-tail-v1` zero/tiny/invalid
-domains, strict PBE vacuum/interior rejection, and the finite default-grid
-`pbe-tail-v2-lda-fallback` path. Its PBE H2 case also checks energy, electron
+domains, strict PBE vacuum/interior rejection, and the
+[`semilocal-scaled-v1`](../developer/xc_scf_domain.md) production tail policy.
+Its PBE H2 case also checks energy, electron
 integral and AO potential elements against the hash-checked
 `tests/reference_data/xc_integration/h2.npz` PySCF/Libxc fixture.
 `generativeqc_dft_api_tests` exercises the exported CPU energy-only LDA/PBE RKS and
@@ -90,16 +109,15 @@ complete-polarization tails. The pinned small-system energies in that suite
 are implementation regressions; the independent PBE H2 endpoint is recorded
 separately. A separate PySCF/Libxc consumer runs LDA SCF on the same
 materialized grid for H2 and He, and PBE SCF on the H2 matched grid; these
-agree within the recorded `1e-8 Eh` threshold. The evidence is summarized in
-`build/issue-162-a/validation-summary.md` and is identified by SHA-256
-`f4f85324ef505576e7231c4ead2056f775a4fefc464e7765a0dcc5d92cc93cf9`.
-The PBE endpoint details and remote environment are recorded in
+agree within the recorded `1e-8 Eh` threshold. The PBE endpoint details, source
+identities and remote environment are recorded in
 `benchmarks/results/xc-integration-162/pbe-rks-endpoint-20260912.md`. These records
 establish only the small closed-shell endpoint cases. The independent CPU UKS
 record in `benchmarks/results/xc-integration-162/pr305-corrections-20260913.md`
 covers H2-, fully polarized H2+ and the OH doublet with LDA/PBE on the same
 GridSpec-v1 prescription. None of these records establish quadrature
-convergence, gradients, batching or GPU execution.
+convergence, gradients, batching or GPU execution. Such gradient and GPU
+claims are owned by the force and device pages, not by an energy fixture.
 
 Every existing native and Python test is retained, including its tolerances.
 The new small-fixture tolerances do not supersede stricter existing tests.

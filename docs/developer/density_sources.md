@@ -1,4 +1,4 @@
-# Current-density D/C feature sources (#235)
+# Current-density D/C feature sources
 
 `generativeqc_compiler.dft.DensitySource` provides a fixed-input CPU contract for
 choosing between the original density matrix D and compatible occupied or
@@ -311,9 +311,11 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 `ScfOptions::xc_density_route` is an internal explicit candidate override.
 `DensityMatrix` remains the default, including the public LDA/PBE calculation
 API. `OccupiedOrbitals` runs the same native RKS loop, Coulomb provider, DIIS,
-eigensolver and XC/potential assembly. PBE retains the existing
-`pbe-tail-v2-lda-fallback` model; this change does not promote a pure-PBE tail
-or change its domain. Native UKS and GPU SCF are not supplied by this adapter.
+eigensolver and XC/potential assembly. PBE uses the same
+[`semilocal-scaled-v1` point-domain policy](xc_scf_domain.md) as the
+`DensityMatrix` route; selecting this route changes only how the density
+features are produced, not the functional domain. Native UKS and GPU SCF do
+not accept the orbital route.
 
 A native run receives a unique basis/reference binding and advances both
 orbital and density generations only after an actual unmixed eigensolver

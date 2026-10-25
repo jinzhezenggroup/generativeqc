@@ -1,4 +1,4 @@
-# Bounded device DF replay (#205)
+# Bounded device DF replay
 
 Positive-budget CUDA DF plans retain transformed B when its complete value/SCF
 allowance fits, using bounded K scratch independently of B's full shape.

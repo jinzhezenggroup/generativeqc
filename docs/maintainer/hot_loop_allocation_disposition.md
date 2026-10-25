@@ -1,4 +1,4 @@
-# CPU hot-loop allocation disposition (#1630)
+# CPU hot-loop allocation disposition
 
 This audit is a **source-site inventory**, not a count of runtime allocations or
 an instruction to eliminate every allocation. Baseline: `master` commit

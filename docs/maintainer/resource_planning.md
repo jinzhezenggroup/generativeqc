@@ -351,20 +351,34 @@ matching the existing native batch contract. Response and correlated providers
 can implement `ResourceRequest`; these methods do not yet have execution
 adapters in this inventory.
 
-### Semilocal KS energies
+### Semilocal KS calculations
 
 `estimate_ks_resources(systems, method="pbe-rks", ...)` resolves the same
-energy-only LDA/PBE RKS/UKS controls as `Calculator.estimate_resources`. The CLI
-also accepts these four method names. CPU estimation requires no native library;
-CUDA estimation uses allocation-owned shape queries without constructing a
-context, quadrature, AO matrix, integral or eigensolver. Native KS inventory v1
-supports the ordinary-stream solver above 16 AOs and up to 64 DIIS entries,
-subject to checked native launch dimensions. It declares the current immutable
-GridSpec-v1 (48 radial, 16 polar, 32 azimuth by default), XC tile, functional/domain
-policy, basis/charge/spin, numerical controls, backend and CUDA binary identity.
+LDA/PBE RKS/UKS controls as `Calculator.estimate_resources`. The CLI accepts
+these four method names. CPU estimation requires no native library; CUDA
+estimation uses allocation-owned shape queries without constructing a context,
+quadrature, AO matrix, integral or eigensolver. Native KS inventory v1 supports
+the ordinary-stream solver above 16 AOs and up to 64 DIIS entries, subject to
+checked native launch dimensions. It declares the current immutable GridSpec-v1
+(48 radial, 16 polar, 32 azimuth by default), XC tile, functional/domain policy,
+basis/charge/spin, numerical controls, backend and CUDA binary identity.
 `ks_options=KsOptions(...)` uses the selected grid/radii/tile in both the
 estimator and native preparation; see [KS options](../user/ks_options.md).
 Geometry changes preserve the resource shape; model changes require a new plan.
+
+Property coverage differs by entry point, and the difference is deliberate:
+
+- `Calculator.estimate_resources(..., properties=(...))` plans the properties
+  that calculator context actually advertises. A
+  [direct all-electron CPU semilocal force](../user/dft_density_fitting.md)
+  context that requests `"forces"` reserves the transient force workspace floor
+  and the retained CUDA force owner; energy-only contexts do not.
+- The Python-free `generativeqc resources` dry run still reports unsupported for
+  `--forces` and for density-fitted KS, because its scalar v1 layout does not
+  enumerate the prepared force or fitted-provider storage. It fails closed
+  rather than presenting an energy envelope as a force plan.
+- Automatic (Libxc-inventoried) CUDA KS is energy-only in both entry points;
+  `include_forces` is rejected before planning.
 
 Incremental Direct-J/K is outside this inventory: its anchor/delta buffers and
 closure history have no qualified scalar v1 layout. The native `resources`

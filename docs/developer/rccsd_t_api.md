@@ -1,4 +1,4 @@
-# Composed RCCSD(T) energy + analytic-force API (#150 C / #155 C binding slice)
+# Composed RCCSD(T) energy and analytic-force API
 
 `tools.generativeqc_cc.ccsd_t_api` composes the independently validated RCCSD and
 standard perturbative-triples implementations for energy and now exposes a thin
