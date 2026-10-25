@@ -1512,6 +1512,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const char* requested_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
       const char* requested_dot = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
       const char* requested_scatter = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
+      const char* coulomb_control = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
+      const std::string_view coulomb_policy = coulomb_control ? coulomb_control : "auto";
+      if (coulomb_policy != "auto" && coulomb_policy != "panels" && coulomb_policy != "slices")
+        throw std::invalid_argument("unknown DF Coulomb response (use auto, panels or slices)");
       // Only the truly bounded range needs a different factor layout. Full
       // tensor and resident-C routes retain their already qualified selection.
       // Both UHF projections coexist; the reusable projection/weight buffer
@@ -1529,12 +1533,25 @@ generativeqc_status execute_cuda_df_hf_gradient(
         runtime::cuda_trace::trace_counter("response_occupied_storage_refused", 1);
         throw std::bad_alloc();
       }
+      // Select pure-J algebra before sizing optional tensors. Contracting D
+      // into raw charge requires only metric-vector solves, regardless of how
+      // much scratch fits. Letting a larger allowance select one fitted tensor
+      // first instead introduces O(Nao^2 Naux^2) work and makes medium sources
+      // slower than larger ones. Retained/occupied factors, exchange, truncated
+      // metrics and explicit panel/dot diagnostics keep their existing routes.
+      const bool raw_coulomb =
+          source && device_metric->full_rank && !borrowed && !owned_occupied && !whitened &&
+          !packed_pairs && coulomb_policy != "panels" &&
+          (!requested_algebra || std::string_view(requested_algebra) == "blas") &&
+          (!requested_dot || std::string_view(requested_dot) != "1") &&
+          std::all_of(terms.begin(), terms.end(),
+                      [](const auto& term) { return term.exchange_coefficient == 0; });
       // If two complete tensors do not fit, a streamed owner can still supply
       // one raw tensor once. Transform it in place and retain a smaller W panel.
       // This prevents both the unstable raw-Gram fallback and repeated source
       // generation for this capacity range without borrowing unowned memory.
       const bool single_fitted_tensor = device_metric->full_rank && !borrowed && !whitened &&
-                                        panel_capacity / 2 < a && panel_capacity > a;
+                                        !raw_coulomb && panel_capacity / 2 < a && panel_capacity > a;
       const auto capacity =
           owned_occupied
               ? std::min(std::size_t{64}, (factor_capacity - occupied_retained) / (n * n))
@@ -1789,10 +1806,6 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const std::string_view algebra = algebra_control ? algebra_control : "blas";
       if (algebra != "scalar" && algebra != "blas")
         throw std::invalid_argument("unknown DF response algebra (use scalar or blas)");
-      const char* coulomb_control = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
-      const std::string_view coulomb_policy = coulomb_control ? coulomb_control : "auto";
-      if (coulomb_policy != "auto" && coulomb_policy != "panels" && coulomb_policy != "slices")
-        throw std::invalid_argument("unknown DF Coulomb response (use auto, panels or slices)");
       if (borrowed && (algebra != "blas" || serial_dot || gradient_copies != 1))
         throw std::invalid_argument(
             "resident JK scratch requires BLAS response without serial/scatter probes");
@@ -1876,15 +1889,6 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.read_occupied_panels = &source_panel_reader;
       }
       std::function<void(std::size_t, std::size_t, double*)> read_fitted;
-      // A pure-J streamed source can contract D before its metric solve. Keep
-      // retained factors, exchange, truncated metrics and explicit panel/dot
-      // diagnostics on their existing independently qualified paths.
-      const bool raw_coulomb = source && device_metric->full_rank && !borrowed && !owned_occupied &&
-                               !whitened && !single_fitted_tensor && !packed_pairs &&
-                               coulomb_policy != "panels" && algebra == "blas" && !serial_dot &&
-                               std::all_of(terms.begin(), terms.end(), [](const auto& term) {
-                                 return term.exchange_coefficient == 0;
-                               });
       std::function<void(std::size_t, std::size_t, double*)> raw_coulomb_reader;
       std::function<void(const double*, double*)> raw_charge_reader;
       std::function<void(const double*, const double*, double)> raw_derivative_consumer;
