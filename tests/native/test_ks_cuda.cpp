@@ -1492,6 +1492,26 @@ void compare_rsh_chunk_history() {
 }
 
 void compare_wb97mv_nonlocal_chunk_history() {
+  // Chunk width normally also selects the VV10 initialization policy. Compare
+  // the same full-target algorithm, then qualify the default proposal policy
+  // separately against the independent CPU endpoint below.
+  struct SavedEnvironment {
+    const char* name;
+    bool present;
+    std::string value;
+    explicit SavedEnvironment(const char* key)
+        : name(key), present(std::getenv(key) != nullptr), value(present ? std::getenv(key) : "") {}
+    ~SavedEnvironment() {
+      if (present)
+        ::setenv(name, value.c_str(), 1);
+      else
+        ::unsetenv(name);
+    }
+  } saved_chunk("GENERATIVEQC_CUDA_KS_CHUNK"), saved_seed("GENERATIVEQC_VV10_NATIVE_SEED"),
+      saved_outer("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
+  require(::setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0", 1) == 0 &&
+              ::setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "0", 1) == 0,
+          "could not select identical full-target WB97M-V history policies");
   const auto system = hydrogens(2U, true);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 12, 4, 8, 3, 1e-12};
@@ -1544,7 +1564,8 @@ void compare_wb97mv_nonlocal_chunk_history() {
     const bool energy_change_equal =
         (std::isinf(left[i].energy_change) && std::isinf(right[i].energy_change)) ||
         std::abs(left[i].energy_change - right[i].energy_change) < 2e-11;
-    require(left[i].iteration == right[i].iteration && energy_change_equal &&
+    require(left[i].nonlocal_operator_scope == 0 && right[i].nonlocal_operator_scope == 0 &&
+                left[i].iteration == right[i].iteration && energy_change_equal &&
                 std::abs(left[i].components.total() - right[i].components.total()) < 2e-11 &&
                 std::abs(left[i].components.xc - right[i].components.xc) < 2e-11 &&
                 std::abs(left[i].components.exact_exchange - right[i].components.exact_exchange) <
@@ -1563,8 +1584,29 @@ void compare_wb97mv_nonlocal_chunk_history() {
               chunked.second.xc_host_d2h_bytes == 0 && chunked.second.xc_host_h2d_bytes == 0 &&
               chunked.second.xc_host_synchronizations == 0,
           "WB97M-V nonlocal chunk entered graph replay or host XC staging");
-  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
-          "could not restore CUDA WB97M-V nonlocal chunk qualification");
+  require(::unsetenv("GENERATIVEQC_VV10_NATIVE_SEED") == 0 &&
+              ::unsetenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED") == 0,
+          "could not select default WB97M-V initialization policy");
+  const auto initialized = solve("1");
+  const auto& initialized_history = initialized.first.dft_diagnostic.history;
+  require(std::any_of(initialized_history.begin(), initialized_history.end(),
+                      [](const auto& row) { return row.nonlocal_operator_scope == 1; }) &&
+              initialized_history.back().nonlocal_operator_scope == 0,
+          "default WB97M-V initialization did not finish with the full target");
+  const auto cpu_model = wb97mv_rsh_strategies(true, scf::FockBackend::Cpu);
+  const scf::PreparedFockPlan cpu(system, nullptr, cpu_model.primary);
+  const scf::PreparedFockPlan cpu_range(system, nullptr, cpu_model.correction);
+  auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
+                                              grid.point_count(), tile_points);
+  const auto reference = scf::run_wb97mv_rks(cpu, cpu_range, basis, grid, options, *cpu_nonlocal);
+  require(reference.converged, "WB97M-V chunk independent CPU reference did not converge");
+  for (const auto* result : {&ordinary.first, &chunked.first, &initialized.first})
+    require(std::abs(result->energy - reference.energy) < 2e-11 &&
+                std::abs(result->dft_diagnostic.components.xc -
+                         reference.dft_diagnostic.components.xc) < 2e-11 &&
+                std::abs(result->dft_diagnostic.components.exact_exchange -
+                         reference.dft_diagnostic.components.exact_exchange) < 1e-12,
+            "WB97M-V full-target or initialized endpoint differs from independent CPU");
 }
 
 /** OH exercises the stationary integer-occupation cycle from #305 on CUDA.
@@ -2704,6 +2746,11 @@ int main(int argc, char** argv) {
       run_control("pbe0_auto_local_ao_composition_case()",
                   [&] { pbe0_auto_local_ao_composition_case(); });
       std::cout << "Native CUDA precision census and independent CPU gates passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--wb97mv-chunk") {
+      run_control("compare_wb97mv_nonlocal_chunk_history()",
+                  [&] { compare_wb97mv_nonlocal_chunk_history(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--minao") {
