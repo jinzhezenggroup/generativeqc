@@ -8,7 +8,6 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
-
 from tools.cuda_schedule_trials import (
     BATCH_PATH,
     EMITTER_PATH,
@@ -685,3 +684,62 @@ def test_actual_repository_source_contracts() -> None:
     for path, text in result.items():
         ast.parse(text)
         assert inputs[path] == (root / path).read_bytes().decode("utf-8")
+
+
+@pytest.mark.parametrize(
+    "device,host", [(None, None), (1024, None), (None, 1024), (1024, 2048)]
+)
+@pytest.mark.parametrize("fitted", [False, True])
+def test_policy_caps_preserve_unrequested_reservation_and_composite(
+    sources, device, host, fitted
+):
+    from types import SimpleNamespace
+
+    call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
+    source = sources[BATCH_PATH].replace("512 << 20, 256 << 20", call)
+    sources[BATCH_PATH] = source
+    trial = CudaScheduleTrial(device_budget_mib=device, host_budget_mib=host)
+    changed = render_trial(sources, trial)
+    if device is None and host is None:
+        assert changed == {}
+    namespace = {
+        "basis": SimpleNamespace(natom=96),
+        "density_fitted": fitted,
+        "source": SimpleNamespace(hamiltonian="all-electron"),
+        "ordinary_cuda_force_limits": lambda atoms, density_fitted, hamiltonian: (
+            (1 << 30, 512 << 20) if density_fitted else (512 << 20, 256 << 20)
+        ),
+    }
+    exec(changed.get(BATCH_PATH, source), namespace)  # noqa: S102 - controlled fixture
+    owner = namespace["PreparedBatch"]()
+    assert owner._public_dft_cuda_force(1, None)[0] == (
+        "budget-auto",
+        None,
+        1 << 30,
+        2 << 30,
+    )
+    default = namespace["ordinary_cuda_force_limits"](96, fitted, "all-electron")
+    assert owner._public_dft_cuda_force(0, None)[0] == (
+        "fixed",
+        256,
+        default[0] if device is None else device << 20,
+        default[1] if host is None else host << 20,
+    )
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("basis.natom", "96"),
+        ("density_fitted=density_fitted", "density_fitted=True"),
+        ("hamiltonian=source.hamiltonian", "hamiltonian='all-electron'"),
+        ("ordinary_cuda_force_limits", "unknown_force_limits"),
+    ],
+)
+def test_policy_budget_call_drift_is_rejected(sources, old, new):
+    call = "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, hamiltonian=source.hamiltonian)"
+    sources[BATCH_PATH] = sources[BATCH_PATH].replace(
+        "512 << 20, 256 << 20", call.replace(old, new)
+    )
+    with pytest.raises(ValueError, match="ordinary budget expression changed"):
+        render_trial(sources, CudaScheduleTrial(device_budget_mib=1024))
