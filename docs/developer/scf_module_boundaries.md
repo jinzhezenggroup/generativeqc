@@ -377,24 +377,13 @@ also needs the appropriate CPU and allocated-device RHF/UHF direct/DF
 energy/force, prepared-batch, changed-geometry, resource/failure and
 independent-reference gates. Preserve production build identity and complete
 cold/incremental-build observations where compilation is part of the claim.
+A clean compilation is never evidence that the runtime suite passes; those are
+separate claims and must be reported separately.
 See [Validation](../maintainer/validation.md),
 [Performance engineering](../maintainer/performance_engineering.md), and
 [Evidence retention](../maintainer/evidence_retention.md).
 
-## Historical acceptance, without a stale project-status claim
-
-At its pinned 2026-09-22 source, the
-[production-acceptance audit](../../benchmarks/results/acceptance-closeout-20260922/README.md)
-recorded a clean Release/CUDA build and separately failed runtime tests.
-The #240 issue documents the reconciliation and split between completed
-structure and subsequent runtime bugs, including
-[charged DF-UHF final-state convergence #1041](https://github.com/jinzhezenggroup/generativeqc/issues/1041).
-Neither the historical failures nor their attempted repairs are a statement
-about all tests on today's `master`; check the current CI and the relevant issue.
-
-The [direct-native source-matched results](../../benchmarks/results/scf-direct-native-rtx5090/README.md)
-retain numerical comparisons, builds, incremental objects and matched timings.
-The [decomposition decision](../../.agents/notes/implemented/architecture/2026-09-18-direct-hf-host-control.md)
-explains why bucket/Graph lifetime is separate from numerical launch order.
-Do not copy old object-size tables or issue-by-issue progress into this
-current-state implementation map.
+Retained acceptance audits and matched builds live under
+`benchmarks/results/`; their rationale for staying out of this ownership map is
+recorded in
+[the SCF acceptance-history note](../../.agents/notes/implemented/architecture/2026-10-25-scf-acceptance-history-ownership.md).

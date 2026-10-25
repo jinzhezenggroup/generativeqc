@@ -130,7 +130,9 @@ if calc.capabilities.supported_second_order:
 
 The full Hessian is the raw analytic matrix. Unsupported second-order domains
 remain fail-closed; callers should use the contextual capability record rather
-than infer support from the method name alone. Implementation and response
+than infer support from the method name alone. The qualified domains, resource
+arguments, result shapes and solver strategies are documented in
+[Hessians and Hessian-vector products](hessians.md); implementation and response
 details belong in the [Hessian developer documentation](../developer/hessian.md).
 
 ## Repeated GFN2 calculations

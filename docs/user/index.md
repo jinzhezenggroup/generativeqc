@@ -45,6 +45,7 @@ libxc
 dft_density_fitting
 wb97mv_cuda
 r2scan3c
+hessians
 ```
 
 ## Basis and Hamiltonian
