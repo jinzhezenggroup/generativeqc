@@ -1238,6 +1238,32 @@
       ]
     },
     {
+      "id": "cc.shared-df-reference-source",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_SHARED_SOURCE"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/cc/df_source_cuda.cu",
+        "src/hf/df_reference.cpp",
+        "src/methods/rccsd_method.cpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Full-DF MP2/CCSD(T) shares the authenticated immutable DF-HF source and forward metric by default. Exact physical publication, both basis geometries, cutoff, device and source policy must match. Fresh compensated AO-to-MO projection remains mandatory. A strong response owner retains the reference; admission counts its lease once. Mismatch and explicit zero retain fresh construction.",
+      "revisit_condition": "Qualify complete independent energy/force endpoints before sharing ordinary SCF B/E, changing frames, other RI-MP2 builders or asynchronous consumers. Do not infer broad endpoint speedups from removed metric setup alone.",
+      "evidence": [
+        "docs/developer/df_ccsdt.md",
+        ".agents/notes/implemented/performance/2026-10-25-shared-df-reference-source.md",
+        "tests/native/df_shared_source_probe.cpp",
+        "tests/python/test_df_shared_source_cuda.py",
+        "tests/python/test_full_df_cbs_native.py",
+        "benchmarks/results/df-shared-source-20261025/README.md"
+      ]
+    },
+    {
       "id": "cc.diis-input-residual",
       "classification": "already-default",
       "controls": [

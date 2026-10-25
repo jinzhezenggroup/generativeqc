@@ -176,7 +176,7 @@ cc::Problem build_problem(
     const core::System* correlation_auxiliary = nullptr,
     cc::DFSourceResult* retained_df_response = nullptr,
     const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr,
-    bool df_mp2_mode = false) {
+    bool df_mp2_mode = false, std::shared_ptr<hf::DFReference> shared_reference = {}) {
   // A failed optional source may already have performed real work. Preserve
   // cumulative diagnostics, but validate the compiler schedule for this attempt.
   const auto initial_work = provider_work;
@@ -228,11 +228,11 @@ cc::Problem build_problem(
     const auto caller_bytes = posthf::checked_mul(caller_elements, sizeof(double));
     auto fitted = cc::build_df_source_cuda(
         system, *correlation_auxiliary, ref, options.max_bytes, 1e-10, device, caller_bytes,
-        retained_df_response != nullptr, correlation_policy, df_mp2_mode);
+        retained_df_response != nullptr, correlation_policy, df_mp2_mode, shared_reference);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
     if (retained_df_response) {
-      p.reference_retained_bytes =
-          posthf::checked_add(p.reference_retained_bytes, fitted.retained_source_bytes);
+      p.reference_retained_bytes = posthf::checked_add(
+          p.reference_retained_bytes, fitted.retained_source_bytes - fitted.shared_reference_bytes);
       *retained_df_response = std::move(fitted);
     }
     // Both caller systems and the split orbital spectrum remain live beside
@@ -492,10 +492,11 @@ RccsdNativeState execute_rccsd_prepared(
         if (retained_df >= source_options.max_bytes)
           throw std::length_error("RI-JK reference exhausts correlation source budget");
         source_options.max_bytes -= retained_df;
-        auto problem = build_problem(
-            system, source, *reference, source_options, cuda, execution.device_id(), provider_work,
-            provider_metrics, correlation_auxiliary,
-            retain_df_response ? &state.df_source : nullptr, correlation_policy, df_mp2_mode);
+        auto problem =
+            build_problem(system, source, *reference, source_options, cuda, execution.device_id(),
+                          provider_work, provider_metrics, correlation_auxiliary,
+                          retain_df_response ? &state.df_source : nullptr, correlation_policy,
+                          df_mp2_mode, fitted_reference);
         problem.reference_retained_bytes =
             posthf::checked_add(problem.reference_retained_bytes, retained_df);
         problem.provider_peak_bytes = posthf::checked_add(problem.provider_peak_bytes, retained_df);
