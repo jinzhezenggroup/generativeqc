@@ -32,7 +32,7 @@ The same final-state proof is consumed by prepared CUDA, Python snapshots,
 and complete forces; neither a descriptor method label nor an XC family name
 substitutes Direct derivatives for fitted Hamiltonian derivatives.
 
-This refactor aligns the source contract across #2412 and #2414.
+This source contract applies uniformly to the hybrid families it describes.
 GPU4PySCF comparisons at 3/12 atoms and later 48/96 atoms are still required
 before claiming new M06-2X DF force numerical qualification. No performance
 number or larger-domain support is inferred from source-only review.

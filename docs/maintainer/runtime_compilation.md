@@ -80,10 +80,10 @@ does not prove the installed package contains a valid matching artifact.
 Actual P loading additionally authenticates target architecture, plan/domain,
 precision, partition iterations, manifest/source identities and binary bytes.
 
-The issue's earlier `7522994` description of s/p/d r2SCAN-3c JIT and a generated
-WB97M-V final reduction must not be generalized to this inspected source.
-Use the current selectors above. No historical README latency is reclassified
-as a fresh empty-cache measurement by this inventory.
+Do not generalize an s/p/d r2SCAN-3c JIT scope or a generated WB97M-V final
+reduction claim to this inspected source; use the current selectors above. This
+inventory does not reclassify historical README latency as a fresh empty-cache
+measurement.
 
 ## CBS complete energy plus forces
 
@@ -207,10 +207,10 @@ Keep independent binary/static-data integrity and ABI tests; no permanent
 function-body hash, AST shape or exact internal compile-count test is needed
 to maintain this inventory.
 
-[Issue #2680](https://github.com/jinzhezenggroup/generativeqc/issues/2680)
-still requires source/binary-bound fresh-process empty/primed artifact **and**
-compiler-cache measurements, actual compile counts/time where available, and
-the corresponding independent accuracy gates. Those measurements must record
+Completing this inventory still requires fresh-process, source/binary-bound
+empty/primed artifact **and** compiler-cache measurements, actual compile
+counts/time where available, and the corresponding independent accuracy gates.
+Those measurements must record
 installed-wheel versus build-tree loading, actual selected routes, cache roots
 and overrides, private JIT slots, compiler facts and endpoint work. Retain
 UNAVAILABLE counters rather than filling them with zero. This inventory supplies

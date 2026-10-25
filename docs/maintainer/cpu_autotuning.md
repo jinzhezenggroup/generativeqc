@@ -1,8 +1,8 @@
 # CPU schedule autotuning
 
-Issue #471 adds a bounded CPU tuning layer on top of the compiler-owned
-Gaussian-integral DAG and the explicit CPU targets from #469/#470. It does not
-introduce a second integral recurrence or a CPU-model lookup table.
+GenerativeQC provides a bounded CPU tuning layer on top of the compiler-owned
+Gaussian-integral DAG and its explicit CPU targets. It does not introduce a
+second integral recurrence or a CPU-model lookup table.
 
 ## Search space
 
@@ -93,11 +93,11 @@ kernel.
 Use `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1` for the retained qualification
 so unrelated BLAS/OpenMP pools cannot silently change the comparison.
 
-## Retained #471 evidence
+## Retained PSSS selection evidence
 
-The reproducible artifact is:
-
-`benchmarks/results/issue471-cpu-autotune.json`
+The reproducible artifact is
+`benchmarks/results/issue471-cpu-autotune.json`; its reproducibility limits are
+recorded in the [benchmark results index](../../benchmarks/results/README.md).
 
 It uses the complete PSSS Cartesian shell with 192 contracted primitive records
 and an independent native dynamic-Jet value/derivative oracle from the fresh
@@ -123,11 +123,12 @@ row and 29,872 B for these AVX2 rows. Those recalculated estimates still fit the
 host's 32 KiB L1-data and 512 KiB L2 caches. This corrects resource accounting;
 it does not replace or claim to rerun the retained timing measurements.
 
-The complete-consumer result is intentionally different from the isolated
-#469 microkernel result. #469 measured about 1.90x raw AVX2 speedup on an FDPS
-component. In the #471 complete PSSS consumer, the strongest measured AVX2
-candidate improved only about 1.02%, below its roughly 3.04% measured noise gate, so the tuner
-**retained the generic scalar baseline**.
+The complete-consumer result deliberately differs from the isolated
+`benchmarks/results/issue469-cpu-simd.json` microkernel measurement, which showed
+about 1.90x raw AVX2 speedup on an FDPS component. In this complete PSSS
+consumer, the strongest measured AVX2 candidate improved only about 1.02%,
+below its roughly 3.04% measured noise gate, so the tuner **retained the generic
+scalar baseline**.
 
 This negative evidence is the desired behavior: source size, vector width, and
 microkernel throughput do not by themselves authorize production promotion.

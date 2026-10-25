@@ -117,7 +117,7 @@ Generated architecture/class manifests remain the separate lowering authority.
 The shell and packet rules generalize across AO/auxiliary ratios, non-water
 fixtures and CUDA targets without storing molecular or device identities. They
 do not replace the separate packed occupied-response layout selector. That
-remaining selector and wider profile qualification stay under #444/#445; no
+remaining selector and wider profile qualification stay separate work; no
 universal cross-device speedup is implied.
 
 Scientific correctness, independent reference energies/forces, sanitizer gates,

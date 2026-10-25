@@ -1,14 +1,18 @@
-# Fixed-density LDA/PBE XC integration (DFT03 first step)
+# Fixed-density LDA/PBE XC integration
 
-DFT03 introduced internal CPU tooling that integrates an explicit fixed
-density and assembles its AO potential. It reuses DFT01's native AO jets, grid
-tiles and density features, and DFT02's audited expressions. The common
+This page owns the fixed-density integration contract: given an explicit
+density and grid, evaluate semilocal XC and assemble its AO potential. It reuses
+the native AO jets, grid tiles and density features of
+[DFT grid and basis conventions](dft_grid.md), and the audited expressions of
+[XC expressions](xc_expressions.md). The common
 [contraction generator](xc_contractions.md) owns minimal point coefficients and
-assembly; LDA skips gradient/tau reductions and GGA skips tau. Issue
-[#162](https://github.com/jinzhezenggroup/generativeqc/issues/162) now also contains
-separate native `LDA_RKS` and `PBE_RKS` vertical slices. The fixed-density
-Python interface below remains the independent, more general LDA/PBE contract;
-it does not itself run SCF, gradients or prepared GPU XC.
+assembly; LDA skips gradient/tau reductions and GGA skips tau.
+
+The fixed-density Python interface below is the independent, more general
+LDA/PBE contract. It does not run SCF, produce nuclear gradients or prepare GPU
+XC. The native SCF execution path that composes these pieces with a Coulomb
+provider is described under
+[Native LDA/PBE RKS and UKS execution](#native-ldapbe-rks-and-uks-execution).
 
 ## Density, spin and energy conventions
 
@@ -121,9 +125,9 @@ O(N^2) density/potential matrices. Molecular partition scratch additionally
 scales as O(B*natom). Explicit grids are caller-owned O(npoint) input. This is
 point tiling, **not a global memory-budget guarantee**. Native AO's existing
 allocation guard remains in force; no second public memory-budget API or
-J/K scheduler is introduced. #203 must account for XC graph intermediates,
-matrix outputs, copies and allocator/BLAS overhead before a prepared method
-claims a composed memory bound.
+J/K scheduler is introduced. A prepared method claiming a composed memory
+bound must also account for XC graph intermediates, matrix outputs, copies and
+allocator/BLAS overhead.
 
 ## Native LDA/PBE RKS and UKS execution
 
@@ -145,11 +149,20 @@ returns `GENERATIVEQC_STATUS_NOT_CONVERGED` with diagnostics. The existing ABI
 commutator RMS, including after a nonconverged solve; Python and C++ name the
 separate physical value `physical_residual_rms`. Public UKS RMS values combine
 both spin matrices while the stricter internal gate uses their maximum.
-The adapter rejects invalid spin populations, forces, density fitting,
-auxiliary bases and prepared batches. CUDA SCF uses ordinary streams with
-resident density/J/F/XC matrices and scalar diagnostics; its host setup and
-optional final outputs are explicitly measured. Prepared owners retain only
-compatible last-good warm density and start fresh DIIS for each replay.
+The adapter rejects invalid spin populations, and fails closed on any backend,
+functional, basis, ECP, density-fitting or precision combination for which the
+resolved plan has no qualified provider. Prepared batches are supported for all
+admitted plans, with per-item status and failure isolation. CUDA SCF uses
+ordinary streams with resident density/J/F/XC matrices and scalar diagnostics;
+its host setup and optional final outputs are explicitly measured. Prepared
+owners retain only compatible last-good warm density and start fresh DIIS for
+each replay.
+
+Analytic forces are never a property of the method identity alone. The prepared
+owner reports them through its contextual capability record, so the same
+functional can be energy-only on one combination and force-capable on another.
+That record, not a functional-name list, is the authority; see
+[Architecture decisions](architecture.md#executable-method-boundary).
 
 The native `lda-tail-v1` contract evaluates the exact positive-density formula,
 uses the analytic zero-density energy/potential limit, and rejects negative or
@@ -160,9 +173,10 @@ finite without clipping or a density floor.
 Current He/H2 endpoint numbers are also covered by an independent PySCF/Libxc
 SCF consumer using the identical materialized `GridSpec v1` points and weights.
 Both cases pass the initial absolute energy target of `1e-8 Eh`; this endpoint
-acceptance is distinct from the already accepted fixed-density DFT03 fixtures.
-The run is summarized in `build/issue-162-a/validation-summary.md` with remote
-result SHA-256 `f4f85324ef505576e7231c4ead2056f775a4fefc464e7765a0dcc5d92cc93cf9`.
+acceptance is distinct from the accepted fixed-density contracts. The PBE
+endpoint, remote environment and source identities are recorded in
+`benchmarks/results/xc-integration-162/pbe-rks-endpoint-20260912.md`; the
+archive-level limits are stated in that directory's `README.md`.
 
 The native fixed-density layer now also contains an unpolarized PBE integrator
 and AO potential. It uses the same spatial grid and conventional AO density,
@@ -177,17 +191,26 @@ independent spin potentials. Tests cover energy and potential at low density,
 empty spins and both sides of the spin extension, as well as the full-matrix
 variational identity.
 
-The registry exposes CPU/CUDA energy-only LDA/PBE RKS and UKS with conventional J.
+The native SCF path uses one shared point evaluator for RKS and UKS, with LDA,
+PBE and r²SCAN physical consumers. The backend-neutral registry rows
+(`LDA_RKS`, `PBE_RKS`, `LDA_UKS`, `PBE_UKS`, `R2SCAN_RKS`, `R2SCAN_UKS`) declare
+energy only. Analytic forces are a separate Python execution-context promotion,
+described in [Architecture decisions](architecture.md#executable-method-boundary)
+and queryable through `Calculator.capabilities`; the
+[DF force interface](../user/dft_density_fitting.md) and
+[WB97M-V CUDA guide](../user/wb97mv_cuda.md) document the admitted force
+domains. Do not infer a force or density-fitting claim from an energy-only contract.
+
 Matched-grid tests cover H2, He and water (RKS), and H, Li and H2+ (UKS), each
 with two independent PySCF guesses. Native final physical residuals must pass
 `min(density_tolerance, 1e-9)`; energy stability alone is insufficient.
 Prepared ragged batches, public model options and composed resource planning
-are available. Complete workload evidence and component timing/transport
-diagnostics remain #162; forces remain #163 and density fitting is not advertised.
+are available; [Resource planning](../maintainer/resource_planning.md) owns the
+capacity inventory.
 
-## Fixed-density domain and remaining dependencies
+## Fixed-density domain
 
-The original fixed-density Python consumer retains DFT02's `interior-v1`
+The fixed-density Python consumer retains DFT02's `interior-v1`
 first-derivative domain: vacuum, extremely small density, complete polarization
 or other unsupported features raise `UnsupportedXC` with the failing tile
 offset. This is intentionally distinct from native `lda-tail-v1`; neither path
@@ -195,14 +218,12 @@ clips density or skips zero-weight points. An empty explicit grid returns the
 zero integral, not a converged quadrature. The small reference grids are fixed
 controlled inputs, so agreement does not establish quadrature convergence.
 
-Remaining #162 work includes complete component timing/transport diagnostics and
-permanent source-bound workload evidence under the shared #138 protocol.
-The independent closed-shell PBE H2 endpoint is recorded in
-`benchmarks/results/xc-integration-162/pbe-rks-endpoint-20260912.md`; this does not
-establish broader PBE coverage. #203 owns composed resource planning, and #163
-owns nuclear gradients. Broader methods should
-reuse the existing orthogonalization, provider and SCF infrastructure rather
-than wrap full SCF in the Python fixed-density tooling loop.
+The independent closed-shell PBE H2 fixed-density endpoint is recorded in
+`benchmarks/results/xc-integration-162/pbe-rks-endpoint-20260912.md`; it is a
+fixture-acceptance record for that composition, not broader PBE coverage.
+Broader methods should reuse the existing orthogonalization, provider and SCF
+infrastructure rather than wrap full SCF in the Python fixed-density tooling
+loop.
 
 ## CPU molecular VV10 pair execution
 
@@ -256,4 +277,4 @@ potentials and require the independent gates to reject them. Weight scaling,
 spin swaps, total/equal-spin equivalence, partial tiles, stale molecular grids,
 changed basis/rules, invalid domains and symmetry are additional regressions.
 The evidence runner records all matrix/energy errors and density finite
-differences using #138's evidence envelope; it does not claim SCF acceptance.
+differences using the shared evidence envelope; it does not claim SCF acceptance.

@@ -1,6 +1,6 @@
 # Array API frontend for TensorIR
 
-Issue #633 introduced a bounded symbolic array frontend owned by the compiler.
+A bounded symbolic array frontend is owned by the compiler.
 Normal array expressions are captured once and lowered to the existing TensorIR;
 TensorIR remains the scientific IR and keeps the stronger quantum-chemistry type
 system. The compiler owner remains `generativeqc_compiler.array_api`, while

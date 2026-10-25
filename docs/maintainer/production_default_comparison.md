@@ -2,9 +2,8 @@
 
 This is the standalone performance benchmark for **three actual user-facing
 modes**, not a numerical-alignment campaign. It does not change production
-settings or reinterpret historical matched-grid README results.
-This protocol was updated for merged PR #2626; old v2 timing receipts
-are rejected rather than reclassified as new level-3 default data.
+settings or reinterpret historical matched-grid README results. Old v2 timing
+receipts are rejected rather than reclassified as new level-3 default data.
 
 The only scientific inputs shared between all three arms are the molecule,
 charge/spin, functional, exact orbital basis and direct/non-DF calculation.
@@ -23,7 +22,7 @@ The *entire* public Fast call is timed, and its validation status, internal
 solve count, requested precision and selected controls are recorded. Calling
 Calculator(precision="auto") would **not** represent this Fast mode.
 
-After merged PR #2626, **all native KS methods**, including PBE0,
+**All native KS methods**, including PBE0,
 WB97M-V and r2SCAN-3c, resolve an omitted grid to native version-4,
 level-3 Treutler/Ahlrichs radial + Lebedev angular + NWChem pruning,
 with Treutler-adjusted Becke partitions. An omitted VV10 grid inherits
@@ -107,6 +106,3 @@ Gather individual method/atom comparisons into **the same single table**:
 This benchmark reports measured wall time, not a claim of identical
 numerical tolerances, identical force definitions or identical Fock work.
 The existing common-grid validation tool remains independent.
-
-Agent: ChatGPT
-Model: GPT-6

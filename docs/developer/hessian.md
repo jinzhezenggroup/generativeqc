@@ -1,21 +1,19 @@
-# Analytic HF Hessians and HVPs (issue #180)
+# Analytic HF Hessians and HVPs
 
-This is the conventional RHF second-derivative term map, provider
-boundary and bounded reference/HVP integration contract. Its
-derivation preceded the implementation; it is no longer accurate
-to describe this as a plan written before any assembly code exists.
-The structural umbrella [issue #180](https://github.com/jinzhezenggroup/generativeqc/issues/180)
-is closed, but public Hessian support remains specific to an
-admitted method, basis, backend and property.
+This is the conventional RHF second-derivative term map, provider boundary and
+bounded reference/HVP integration contract. Public Hessian support is specific
+to an admitted method, basis, backend and property; it is never implied by
+energy or first-force support.
 The [DFT Hessian/HVP guide](dft_hessian.md) separately owns the
 MethodIR source planning and qualified CPU LDA/PBE RKS execution.
 
 ## Current implementation status
 
-The native tools path now consumes a GenerativeQC RHF snapshot and generated
+The native tools path consumes a GenerativeQC RHF snapshot and generated
 first/second integral derivatives, with native J/K response. In addition to the
-tiny dense analytic reference, `rhf_hvp` composes #178's direct
-`weighted_hvp` consumers with one directional #179 CPHF solve and shell-local
+tiny dense analytic reference, `rhf_hvp` composes the direct
+[second-integral derivative](second_integral_derivatives.md) consumers with one
+directional [shared orbital-response](response.md) CPHF solve and shell-local
 first-integral relaxation contractions. It returns a complete conventional RHF
 `H @ v` without allocating the molecular Hessian or all-coordinate H1/S1
 tensors. PySCF remains confined to external comparison oracles.
@@ -24,11 +22,11 @@ The HVP keeps the existing `NativeRHFState` admission boundary (all-electron
 closed-shell conventional RHF, at most 12 Cartesian AOs/four atoms). Second
 integrals and the final relaxation contraction are currently CPU-generated.
 Directional H1/S1 and direct J/K may independently use their qualified CUDA
-providers. B2 additionally allows the iterative RHF response operator and
-Krylov vectors/orthogonalization to remain on that direct-J/K CUDA stream via
-response_execution="cuda-resident". Nuclear/metric RHS construction and
-final D/W reconstruction remain host-side, while the B3 second-integral HVP
-and relaxation contractions are still CPU consumers. The result is therefore
+providers. The iterative RHF response operator and Krylov
+vectors/orthogonalization may also remain on that direct-J/K CUDA stream via
+`response_execution="cuda-resident"`. Nuclear/metric RHS construction and
+final D/W reconstruction remain host-side, and the second-integral HVP and
+relaxation contractions are still CPU consumers. The result is therefore
 a mixed host/device HVP, not an all-device HVP. There is no RHF Calculator Hessian/HVP API or production-size global-memory
 claim for this bounded tools path. See
 [the matrix-free RHF HVP decision note](../../.agents/notes/implemented/numerics/2026-09-19-rhf-matrix-free-hvp.md).
@@ -51,9 +49,9 @@ public Calculator Hessian/HVP endpoint exists for CPU direct
 all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS;
 see [DFT Hessians](dft_hessian.md).
 
-Explicitly outside this slice, and left fail-closed rather than approximated:
+Explicitly outside this contract, and left fail-closed rather than approximated:
 
-- **DFT public execution beyond the qualified slice** — the Calculator endpoint
+- **DFT public execution beyond the qualified domain** — the Calculator endpoint
   is limited to CPU direct all-electron Cartesian strict-FP64 closed-shell
   LDA/PBE RKS; its raw matrix is never post-hoc symmetrized;
 - **one global end-to-end Hessian memory cap** is not claimed: dense output and
@@ -71,7 +69,7 @@ CUDA Calculator Hessian endpoint or a complete-endpoint speedup.
 The two upstream layers are needed here, and both stop short of a molecular
 Hessian. Keeping that boundary explicit is the point of this section.
 
-**#178 — second integral derivatives**
+**Second integral derivatives**
 (`python/generativeqc_compiler/integral/second_derivatives.py`,
 `docs/developer/second_integral_derivatives.md`)
 
@@ -89,25 +87,26 @@ The caller therefore owns, and must fold itself:
 - all signs and prefactors (the output name never changes a sign);
 - basis-representation conversion for spherical inputs.
 
-**#179 — shared orbital response**
+**Shared orbital response**
 (`tools/generativeqc_response/`, `docs/developer/response.md`)
 
 Supplies the matrix-free CPHF operator (`RHFResponseOperator`), a true-residual
 Krylov solver with multi-RHS strategies, and two independent oracles
 (`explicit_rhf_response_matrix`, `finite_rotation_jvp`). It constructs **no
 right-hand side**: `docs/developer/response.md` assigns nuclear-perturbation RHS
-construction to the caller. This work reuses that operator and does not add a
+construction to the caller. The Hessian path reuses that operator and adds no
 second response solver.
 
 The shared response layer now also has an explicit direct-CUDA J/K adapter,
 `CudaDirectJKBackend`; see [response backend boundaries](response.md#backend-boundary).
 It does not change this document's CPU-only molecular Hessian scope. Its
 AO/MO transforms and Krylov solve remain host-orchestrated, and nuclear
-directional RHS, complete HVP assembly and device-resident execution are
-separate #180 integration gates.
+directional RHS, complete HVP assembly and device-resident execution remain
+outside this bounded scope.
 
 
-**#141 / #144 — first derivatives**, used to build the response RHS:
+**First derivatives** (`docs/developer/one_electron_derivatives.md`), used to
+build the response RHS:
 
 - one-electron raw tensors, `build_one_electron_derivative_ir(..., weighted=False)`
   yields a `RawBlock` with layout `(center, xyz, *tensor_indices)`;
@@ -162,16 +161,17 @@ rather than only asserted here.
 | # | Term | Form | Supplier |
 |---|---|---|---|
 | 1 | Nuclear repulsion | `∂²E_nuc/∂R∂R'` | caller, closed form |
-| 2 | One-electron skeleton | `Tr[P ∂²h/∂R∂R']` | #178 `build_one_electron_second_ir`, families `overlap`/`kinetic`/`nuclear_attraction`, `weighted_hessian`, provider weight = `P` |
+| 2 | One-electron skeleton | `Tr[P ∂²h/∂R∂R']` | `build_one_electron_second_ir`, families `overlap`/`kinetic`/`nuclear_attraction`, `weighted_hessian`, provider weight = `P` |
 | 3 | Overlap (Pulay) skeleton | `-Tr[W ∂²S/∂R∂R']` | same provider, `weighted_hessian`, provider weight = `-W` (negated **energy-weighted density**) |
-| 4 | Two-electron skeleton | `Σ_{μνλσ} W2_μνλσ ∂²(μν|λσ)/∂R∂R'` with `W2_μνλσ = ½ P_μν P_λσ - ¼ P_μλ P_νσ` (no further factor; see the derivation above) | #178 `build_eri_second_ir`, `weighted_hessian`, provider weight = `W2` |
-| 5 | Nuclear-perturbation RHS | `b[i,a]` includes the frozen-P Fock derivative, overlap metric connection, and its induced density/Fock response (defined below) | caller: #141 raw `∂h/∂R` and `∂S/∂R`, #144 weighted ERI first derivatives, and the shared J/K backend |
-| 6 | Orbital response | solve `A u = -b` | #179 `RHFResponseOperator` + `solve_many` |
+| 4 | Two-electron skeleton | `Σ_{μνλσ} W2_μνλσ ∂²(μν|λσ)/∂R∂R'` with `W2_μνλσ = ½ P_μν P_λσ - ¼ P_μλ P_νσ` (no further factor; see the derivation above) | `build_eri_second_ir`, `weighted_hessian`, provider weight = `W2` |
+| 5 | Nuclear-perturbation RHS | `b[i,a]` includes the frozen-P Fock derivative, overlap metric connection, and its induced density/Fock response (defined below) | caller: raw `∂h/∂R` and `∂S/∂R`, weighted ERI first derivatives, and the shared J/K backend |
+| 6 | Orbital response | solve `A u = -b` | `RHFResponseOperator` + `solve_many` |
 | 7 | Relaxation contribution | `u` combined with first derivatives of h, S, and the ERIs | caller |
 
 Terms 2–4 are the "skeleton": they use the *second* derivatives of the
-integrals with the density frozen, and they are exactly the shape the #178
-provider emits. Terms 5–7 are the "relaxation": they exist because the
+integrals with the density frozen, and they are exactly the shape the
+[second-integral provider](second_integral_derivatives.md) emits. Terms 5–7 are
+the "relaxation": they exist because the
 coefficients depend on the geometry, and they are what `docs/developer/response.md` hands
 to its callers.
 
@@ -183,7 +183,7 @@ shows up as an isolated component error instead of a plausible-looking total.
 
 Nuclear displacements change the AO overlap. The frozen-density derivative
 `Cᵀ [h^R + G^R(P)] C` alone is therefore not the CPHF right-hand side.
-One explicit convention compatible with #179 is the symmetric metric gauge:
+One explicit convention, shared with the orbital-response layer, is the symmetric metric gauge:
 write `C^R = C[-½ S_R + X]`, where `S_R = Cᵀ (∂S/∂R) C`,
 `X[a,i] = x[i,a]`, and `X[i,a] = -x[i,a]`. With the MO occupation matrix
 `D = diag(2_occ, 0_virt)`, the known metric density response and RHS are
@@ -200,17 +200,19 @@ Here `G^R(P)` differentiates the integrals at fixed AO density, whereas
 The response operator supplies only the remaining rotation-induced density
 response. The relaxation assembly must also retain the known metric terms;
 neither the overlap second derivative in term 3 nor the rotation solution alone
-replaces them. A2 must check this complete RHS and metric contribution against
-displaced references before claiming an analytic Hessian.
+replaces them. The analytic assembly must check this complete RHS and metric
+contribution against displaced references before claiming an analytic Hessian.
 
 ## Conventions to pin down, and how
 
 Three layers meet here with independently chosen conventions, which is the
-highest-risk part of this work:
+highest-risk part of the analytic Hessian:
 
-- **#178** carries `output_sign` on the consumer and `sign` / `prefactor` on the
-  weight descriptor. The output name alone never changes a sign.
-- **#179** stores vectors in occupied-major/virtual-minor order `x[i,a]`.
+- The second-integral provider carries `output_sign` on the consumer and
+  `sign` / `prefactor` on the weight descriptor. The output name alone never
+  changes a sign.
+- The shared orbital-response layer stores vectors in occupied-major/virtual-minor
+  order `x[i,a]`.
   The linear solver receives `-b` for the `A x = -b` convention above; the
   sign is applied once at the caller boundary.
 - **W** above is the energy-weighted density in the same doubled-occupation
@@ -219,7 +221,8 @@ highest-risk part of this work:
 Two further conventions are fixed by position, not by symbol, and must be
 carried through assembly explicitly:
 
-- **Hessian axes.** #178 emits `(center_row, xyz_row, center_column, xyz_column)`
+- **Hessian axes.** The second-integral provider emits
+  `(center_row, xyz_row, center_column, xyz_column)`
   in requested mathematical-center order, *not* physical-atom order. The
   center→atom mapping (which also handles several mathematical centers sharing
   one atom) is applied through the caller's chain rule, and translation recovery
@@ -234,10 +237,10 @@ otherwise cancel against another.
 
 ## Nuclear response RHS
 
-The next A2 boundary is ``build_rhf_nuclear_rhs``. It consumes the MO forms
+The nuclear-RHS boundary is ``build_rhf_nuclear_rhs``. It consumes the MO forms
 of the frozen Fock derivative, overlap derivative, and the Fock response to
 the known metric density connection, then returns ``b[i, a]`` in the
-occupied-major/virtual-minor layout required by #179. The metric Fock input is
+occupied-major/virtual-minor layout required by the response solver. The metric Fock input is
 mandatory, and the caller passes ``-b.reshape(-1)`` to solve ``A x = -b``.
 ``metric_density_response_mo`` exposes the corresponding
 ``-1/2 (S_R D + D S_R)`` connection with closed-shell occupations.
@@ -249,7 +252,7 @@ inside a default.
 
 ## Frozen skeleton assembly
 
-The A2 assembly boundary is now represented by
+The frozen-skeleton assembly boundary is
 ``tools.generativeqc_hessian.assemble_frozen_skeleton``. It accepts the nuclear,
 one-electron, overlap/Pulay, and folded two-electron second-derivative
 components in the canonical ``(atom, xyz, atom, xyz)`` layout, validates that
@@ -264,13 +267,14 @@ analytic Hessian and are not substituted with zero arrays.
 
 ## Numerical oracle
 
-Step 2 supplies a finite-difference-of-analytic-gradient Hessian: central
+The numerical oracle supplies a finite-difference-of-analytic-gradient Hessian: central
 differences of the *analytic energy gradient* over nuclear coordinates, at
 several step sizes, with no best-step selection. It is clearly labelled a
 numerical Hessian and is an oracle and early utility — it does not constitute
 analytic Hessian support.
 
-It is independent of the assembly in step 4 in the useful direction: it depends
+It is independent of the analytic skeleton and relaxation assembly in the useful
+direction: it depends
 only on the analytic first derivatives, so an error shared between the skeleton
 and relaxation assembly cannot hide from it.
 
@@ -292,9 +296,8 @@ unsupported molecules, unconverged SCF references and failed response solves
 raise errors. It is imported explicitly; importing the Hessian weight/RHS
 helpers does not require PySCF.
 
-This reference does **not** complete slice-A step 4 or qualify the analytic
-provider chain. That integration must consume #178 generated second-integral
-blocks and #179's shared response operator/solver. The dense reference stays
+This reference does **not** supply the analytic provider chain. That integration must consume generated second-integral
+blocks and the shared response operator/solver. The dense reference stays
 independent so it can test that future implementation. The occupied CPHF block
 is fixed by the metric gauge, and its induced density contributes to the virtual
 response. `_first_order_mo1_e1_vir_only` implements the equivalent reduced
@@ -340,7 +343,7 @@ conventional unscreened RHF reference. The supported integral primitives cover
 s/p/d/f; end-to-end default tests qualify H2 and STO-3G water, while the 12-AO
 custom d-shell case is an explicitly requested slow test. This is not a public
 production-size Hessian, CUDA Hessian, DFT/DF/ECP/UHF Hessian, or molecular HVP
-capability. Those remain separate #180 acceptance items.
+capability. Those remain outside this bounded tools domain.
 
 ### State and derivative ownership
 
@@ -364,9 +367,9 @@ reference oracle. The chain is:
    motion and all basis-center motions are accumulated onto physical atoms.
    No molecular `3N * NAO^4` first-derivative tensor is retained.
 5. `build_rhf_nuclear_rhs` constructs the symmetric-gauge RHS, including the
-   known metric-density Fock term. #179 `RHFResponseOperator` / true-residual
+   known metric-density Fock term. `RHFResponseOperator` / true-residual
    GMRES uses `NativeJKBackend`, not the dense AO response oracle.
-6. The explicit second-derivative skeleton uses #178 generated providers.
+6. The explicit second-derivative skeleton uses generated second-integral providers.
    Two-electron energy weights are folded per shell quartet rather than stored
    as a molecular four-index tensor. Nuclear repulsion is closed-form.
    Relaxation evaluates every ordered atom/axis pair independently; raw symmetry
@@ -398,7 +401,7 @@ separate writable location. A C++ compiler is required for the generated kernels
 First-component records and component outputs have an explicit numeric budget.
 The complete tools integration still retains all coordinate H1/S1 and response
 vectors, the full molecular Hessian, and the existing tiny native SCF workspace.
-It does not claim #180's global memory-budgeted production assembly or a
+It does not claim a global memory-budgeted production assembly or a
 matrix-free molecular HVP. Python orchestration and cold compilation can be
 expensive; no performance advantage is asserted.
 
@@ -502,20 +505,21 @@ call recovery. Device qualification additionally runs
 J/K and all-coordinate/dense-input fallbacks and checks the CUDA-assisted
 response against independently reconverged density differences.
 
-The complete B3 conventional-RHF HVP now consumes exactly these directional
-density/energy-weighted-density responses. `rhf_hvp` uses #178
+The complete conventional-RHF HVP consumes exactly these directional
+density/energy-weighted-density responses. `rhf_hvp` uses
 `weighted_hvp` programs for the core, overlap/Pulay and two-electron skeleton,
 adds the direct nucleus-nucleus HVP, and contracts generated first derivatives
 against `D1(v)` / `W1(v)` for electronic relaxation. The result is raw
 `H @ v`; no post-hoc symmetry projection is applied. Bilinear symmetry,
-native dense #449 assembly parity, and independent three-step reconverged-gradient
+parity with the native dense assembly, and independent three-step
+reconverged-gradient
 checks are in `tests/python/test_hessian_hvp.py`. The native dense assembly
-shares #179's response solver, so parity alone is not an independent response
+shares the common response solver, so parity alone is not an independent response
 gate.
 
-B4 builds on that same HVP contract. rhf_hvp_many prepares several
-directional H1/S1 pairs, binds them to one shared RHF response operator and
-uses #179 solve_many with sequential, blocked or recycled strategy.
+Several directional H1/S1 pairs can be prepared at once. `rhf_hvp_many` binds
+them to one shared RHF response operator and
+uses `solve_many` with sequential, blocked or recycled strategy.
 The solver workspace is combined with a conservative retained numeric-storage
 bound; insufficient block budget fails before first-integral work.
 With `jk_backend="cuda", response_execution="cuda-resident"`, all three
@@ -550,10 +554,10 @@ and output-publication phases rather than hiding those lifetimes inside the solv
 workspace. The default block size is `min(4, 3*natoms)`, including single-atom
 states; callers can choose any explicit block size from one through 3*natoms.
 
-These B3/B4 paths remain within the declared small-system conventional-RHF tools
-domain. B2 closes the iterative response-residency slice: response vectors,
-orthogonalization, operator AO/MO transforms and direct J/K actions can stay on
-device under the existing #179 GMRES controller. The B1-CUDA relaxation slice
+These matrix-free HVP paths remain within the declared small-system
+conventional-RHF tools domain. The resident response path keeps response
+vectors, orthogonalization, operator AO/MO transforms and direct J/K actions on
+device under the existing GMRES controller. The CUDA relaxation backend
 adds an independently selectable generated CUDA first-integral contraction.
 With a host response, `relaxation_backend="cuda"` and an explicit
 `relaxation_compiler` upload solved D1/W1 and reference P0 once per direction.
@@ -566,7 +570,7 @@ generated S/T/V/four-center derivative contractions and download only the final
 `(natoms,3)` relaxation vector. CPU remains the default and no silent fallback
 is permitted.
 
-The #178 frozen-skeleton second-integral HVP consumer is independently
+The frozen-skeleton second-integral HVP consumer is independently
 selectable with `second_backend="cuda"` and an explicit `second_compiler`.
 It reuses the generated bounded second-derivative runtime: shell primitive and
 fixed-weight records are streamed to device storage and S/T/V/four-center second
@@ -585,21 +589,21 @@ downloaded once. The raw symmetry check still occurs on the published matrix and
 no post-hoc symmetrization is applied. CPU/host assembly remains the default and
 all CUDA providers/compilers are explicit; unsupported combinations fail closed.
 
-The installed semilocal RKS HVP/full-Hessian consumer now reuses the same #178
+The installed semilocal RKS HVP/full-Hessian consumer reuses the same
 CUDA second-derivative provider as an independently selectable mixed-backend
 stage. `second_backend="cuda"` requires an explicit `CudaCompilerAdapter`; the
 one-electron, Coulomb and overlap/Pulay fixed-weight second-integral HVP tiles
 execute on CUDA and only compact coordinate HVP tiles return to the host.
 The response-weight first-integral contractions, CPKS/XC mixed geometry,
-nuclear term and molecular assembly remain host-owned in this slice. Therefore
+nuclear term and molecular assembly remain host-owned here. Therefore
 this is **not** a complete CUDA DFT Hessian claim and `Calculator` CUDA Hessian
 capability remains off. CPU remains the default and CUDA selection never falls
 back to the CPU second-integral compiler.
 This is a **device-final-assembly** path, not a claim that every Hessian stage is
 device-resident. Directional H1/S1 are still published to host, nuclear-RHS and
 metric preparation remain host-owned, projected GMRES least-squares/scalars are
-host-controlled, and compatibility response publication is retained. What is now
-resident through final assembly is D1/W1 consumption for CUDA relaxation, #178
+host-controlled, and compatibility response publication is retained. Resident
+through final assembly is D1/W1 consumption for CUDA relaxation,
 compact second-integral HVP outputs, the nuclear HVP, the molecular HVP sum and,
 when requested, full-Hessian column assembly. Diagnostics separately report
 provider and accumulator storage; they are not a combined SCF/compiler/CUDA
@@ -649,7 +653,7 @@ matrix downloads. A matching CUDA Compute Sanitizer memcheck is an additional
 runtime gate; it is not a substitute for the numerical comparisons.
 
 `tests/python/test_hessian_second_cuda.py` qualifies the separately selectable
-#178 second-integral path. It compares core/Pulay/two-electron HVP components
+second-integral path. It compares core/Pulay/two-electron HVP components
 against the CPU generated provider, forbids construction of a CPU compiler in a
 CUDA-selected complete HVP, propagates the backend through multi-RHS/full-Hessian
 assembly, and checks that execution reports packed-record uploads and contracted

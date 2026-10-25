@@ -4,9 +4,9 @@
 existing scientific IRs. It describes how HF, Kohn-Sham DFT, and coupled-cluster
 methods are assembled without taking ownership of their equations or runtime.
 
-The first slice is intentionally representation-only. Constructing one of these
-graphs does not change any production execution path, select CUDA/CPU kernels,
-allocate workspace, or grant a method capability.
+`ElectronicMethodIR` is representation-only. Constructing one of these graphs
+does not change any production execution path, select CUDA/CPU kernels, allocate
+workspace, or grant a method capability.
 
 ## Layering
 
@@ -88,9 +88,9 @@ Inputs, outputs, states, and operators are canonicalized before hashing.
 while `manifest_identity` also includes the identifier. This lets aliases share
 compiler cache identity without losing provenance.
 
-## Non-goals of this slice
+## Non-goals
 
-This change does not:
+This layer does not:
 
 - replace the existing DFT `MethodIR`;
 - lower HF/KS production runtime through the compiler;
@@ -99,5 +99,5 @@ This change does not:
 - unify CUDA workspace ownership;
 - publish new energy, force, or Hessian capabilities.
 
-Those are subsequent lowering/integration steps. The purpose here is to establish
-one validated top-level contract before those execution paths converge.
+Those are separate lowering/integration steps. This layer establishes one
+validated top-level contract before those execution paths converge.

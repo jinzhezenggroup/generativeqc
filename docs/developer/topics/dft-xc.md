@@ -16,6 +16,7 @@ Molecular grids, XC expressions and contractions, functional integration, SCF se
 ../stationary_cuda_scheduling
 ../dft_d3
 ../xc_expressions
+../custom_xc_expressions
 ../xc_integration
 ../xc_contractions
 ../xc_native_cuda

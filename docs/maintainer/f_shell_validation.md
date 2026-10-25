@@ -1,8 +1,8 @@
 # Generated f-shell validation
 
-Issue [#135](https://github.com/jinzhezenggroup/generativeqc/issues/135) separates
-representation, release compilation, numerical validity, endpoint acceptance,
-and production selection for all 34 canonical f-containing classes.
+This protocol separates representation, release compilation, numerical
+validity, endpoint acceptance, and production selection for all 34 canonical
+f-containing classes.
 `tools/validate_f_shells.py` catalogs the common recurrence/schedule capabilities,
 exact registry indices, all consumers, source/IR hashes, generator ABI, and
 manifest selection. A manifest entry does not establish acceptance.

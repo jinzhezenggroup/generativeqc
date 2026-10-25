@@ -42,7 +42,7 @@ P and W updates are interleaved, so the fused CTA duration is not separate
 plain-versus-weighted elapsed time.
 Source-matched independent numerical checks and complete endpoints remain
 required before any provider or default-path claim. These receipts do not
-resolve the independent 768-AO tblite failure on #560/#1879.
+resolve the independent 768-AO tblite failure.
 
 The focused generator, provenance and host transaction tests are
 `test_gfn2_density_receipt_codegen.py`, `test_gfn2_cuda_provenance.py` and

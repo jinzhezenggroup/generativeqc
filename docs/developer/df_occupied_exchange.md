@@ -1,4 +1,4 @@
-# Occupied-factor RI-K contract (#284)
+# Occupied-factor RI-K contract
 
 The existing metric-orthonormalized tensor is
 `L[i,j,Q] = sum_P (ij|P) X[P,Q]`, with auxiliary-contiguous storage.

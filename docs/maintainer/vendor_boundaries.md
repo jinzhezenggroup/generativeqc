@@ -11,7 +11,7 @@ classifies each file explicitly:
 - `runtime_abi`: optional library ABI declarations and aliases.
 - `infrastructure`: bounded non-scientific scheduling primitives.
 - `diagnostic`: provenance or synthetic capability probes.
-- `migration`: existing method-local coupling tracked by #1890.
+- `migration`: existing method-local coupling with a retained migration owner.
 
 The DF SCF adapter in `src/scf/cuda/df_scf_library.hpp` is retained as a reusable
 matrix/eigensolver implementation. Its callers specify operands, strides,
@@ -70,7 +70,7 @@ consumer's former direct-vendor entry is retired.
 
 This is a mechanical retained-provider migration; canonical
 precision/provider co-selection and method-level diagnostic algebra switches
-are still separate #1889/#1890 work.
+remain separate work.
 
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation

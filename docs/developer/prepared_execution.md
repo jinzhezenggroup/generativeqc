@@ -48,7 +48,7 @@ not a parallel owner.
 
 ## Scientific binding and placement
 
-The gate's native owner/target binding is **not** a scientific identity, #929
+The gate's native owner/target binding is **not** a scientific identity,
 generation, consumption fence or borrowed-state lease. The immutable method
 controls, exact normalized source comparisons in `PreparedFockPlan::matches`,
 native HF/KS solve tokens and `NativeKsSnapshot.check_current` remain the proof.
@@ -60,7 +60,7 @@ A CPU/CUDA switch constructs a separately qualified native owner and rebinds
 executable, placement, buffers and context. Semantic model identity can survive
 that switch; device pointers and capture state cannot. CUDA capability refusal
 still propagates rather than silently running CPU scientific work labeled CUDA.
-Python artifact consumers retain their #459 artifact and guard identities.
+Python artifact consumers retain their existing artifact and guard identities.
 Stationary CUDA validates the original source/snapshot and refreshes failed or
 changed-geometry storage before entering its lease.
 
@@ -125,7 +125,7 @@ not zero. Native C++ owners also expose the gate's transition reason.
 
 ## Actual-path ownership inventory
 
-This inventory covers the #926/#934 prepared endpoint boundary. The shared gate
+This inventory covers the prepared endpoint boundary. The shared gate
 replaces duplicated transaction/publication bookkeeping, **not** the following
 legitimate scientific or backend-specific owners.
 

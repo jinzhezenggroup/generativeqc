@@ -41,7 +41,8 @@ the execution boundary.
 
 ## Conventional CPU UMP2 energy and analytic forces
 
-`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces from a converged, physically
+`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces
+from a converged, physically
 validated UHF reference. The initial public domain is all-electron, unscreened
 conventional Gaussian integrals on CPU with real FP64 arithmetic. The two spin
 occupations and orbital frames remain distinct, including for equal occupations.
@@ -96,6 +97,14 @@ checkpoint stores separate alpha and beta density blocks even for a singlet.
 `save_checkpoint()` and `load_checkpoint()` preserve that identity and require
 the restored batch to reconverge before returning an energy.
 
+## Restricted correlated methods
+
+Conventional `mp2`, `rccsd`, `rccsd(t)`/`ccsd(t)` and the CUDA density-fitted
+`df-rccsd(t)`/`df-ccsd(t)` selectors share one canonical RHF reference and
+publish native analytic forces in their admitted domains. Their selector table,
+batch shapes, memory controls and failure behavior are collected in
+[Restricted correlated methods](correlated_methods.md).
+
 ## Second-order derivatives
 
 The Python `Calculator` exposes analytic Cartesian Hessian-vector products and
@@ -130,7 +139,9 @@ if calc.capabilities.supported_second_order:
 
 The full Hessian is the raw analytic matrix. Unsupported second-order domains
 remain fail-closed; callers should use the contextual capability record rather
-than infer support from the method name alone. Implementation and response
+than infer support from the method name alone. The qualified domains, resource
+arguments, result shapes and solver strategies are documented in
+[Hessians and Hessian-vector products](hessians.md); implementation and response
 details belong in the [Hessian developer documentation](../developer/hessian.md).
 
 ## Repeated GFN2 calculations
@@ -147,7 +158,10 @@ also releases this storage. Separate calculators own separate workspaces.
 ## DFT forces
 
 Analytic DFT forces are requested through the ordinary property interface when
-the selected method/backend context advertises force support:
+the selected method/backend context advertises force support. Dispersion-corrected
+selectors are covered in [Dispersion corrections](dispersion.md) instead of
+being repeated here; the gates below apply to the electronic endpoint that a
+correction reuses.
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions

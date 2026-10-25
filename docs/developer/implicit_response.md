@@ -52,9 +52,10 @@ not establish a Hessian or second derivative of the solved state.
 
 ## Explicit execution adapters
 
-`tools.generativeqc_response.implicit.BoundImplicitState` reuses the existing #179
-GMRES implementation through `ResponseGMRES`, or an explicit callback with the
-same solution/status/residual/workspace contract. The callback receives an
+`tools.generativeqc_response.implicit.BoundImplicitState` reuses the existing
+GMRES implementation from the [shared orbital response](response.md) owner through
+`ResponseGMRES`, or an explicit callback with the same
+solution/status/residual/workspace contract. The callback receives an
 already-transposed, matrix-free Euclidean operator; it must not transpose it
 again. It publishes neither a partial adjoint nor source weights when convergence,
 true-residual, state or resource checks fail.
@@ -64,8 +65,8 @@ instead pass an existing qualified `RHFResponseOperator` through `response_opera
 `ResponseProblem` operators are admitted only after every additional kernel/provider
 publishes the same explicit logical resource contract. `ResponseTransposeBinding` then checks
 the exact operator identity, response layout, gauge, reference identity and the
-operator's declared logical host/device resources against the #465 plan before
-the first solve. A live `current_reference` callback is mandatory for this
+operator's declared logical host/device resources against the implicit plan
+before the first solve. A live `current_reference` callback is mandatory for this
 provider-bound path. The returned solution is independently rechecked by a fresh
 application of that same bound physical transpose action before generated source
 weights are evaluated. The generated residual/source graph remains authoritative;
@@ -103,13 +104,13 @@ assert result.parameter_cotangents["q"] == 0.25
 compiles/prepares the same generated stages through the existing TensorIR CUDA
 backend. All six providers share one resource admission, including normal
 library allowances; host capacity is reserved for the retained state, generated
-work and the #179 solver before native preparation. There is no silent CPU
+work and the Krylov solver before native preparation. There is no silent CPU
 scientific fallback. `bind()` reuses the admitted programs for a fresh state.
 
-**The #179 Krylov controller remains Python/host-controlled.** CUDA contractions
+**The Krylov controller remains Python/host-controlled.** CUDA contractions
 are real native execution, but each action uses the existing host/device staging
 boundary. Neither this adapter nor a successful CUDA test is a device-resident
-Krylov loop, a public force endpoint, or complete #193 production integration.
+Krylov loop or a public force endpoint.
 
 ## Resource scope and validation
 
@@ -125,8 +126,8 @@ Fast tests cover independent analytic/directional differences, nonsymmetric and
 weighted transpose identities, existing packed orbit weights, objective-VJP
 composition, stale state, false solver success, nonconvergence, resource rejection,
 data-only replay and nontrivial water MP2 Z-vector parity with the unchanged
-#293 oracle. The molecular parity test uses the RHS **after same-space canonical
-orbital relaxation**, not the earlier raw `energy_gradient`.
+gradient oracle. The molecular parity test uses the RHS **after same-space
+canonical orbital relaxation**, not the earlier raw `energy_gradient`.
 
 ```sh
 PYTHONPATH=python:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q \
@@ -144,13 +145,13 @@ added to ordinary CI.
 Method-level implicit-rule dispatch is available through StationaryProblem v2:
 a state that declares `implicit_operator_identity` is compiled automatically
 to an identity-bearing `ImplicitVJPPlan`; coupled state rows are rejected until
-they are represented as one explicit independent block. Native response-provider
-binding is now qualified by the response-operator path above, including strict
+they are represented as one explicit independent block. The response-operator
+path above qualifies native response-provider binding, including strict
 stale-state and simultaneous logical resource checks.
 
 Installed public runtime integration, production-scale force evidence and the
-complete #193 C2 assembly (including #466 metric response and upstream provider
-pullbacks) remain downstream work. The #293 gradient oracle and public MP2
-energy-only capability are unchanged. See the
+complete method-level force assembly (including metric response and upstream
+provider pullbacks) remain downstream work. The independent gradient oracle and
+public MP2 energy-only capability are unchanged. See the
 [decision note](../../.agents/notes/implemented/numerics/2026-09-19-implicit-response-primitive.md)
 for the ownership and sign/layout rationale.

@@ -1,7 +1,5 @@
 # Semiempirical product/derivative requirement contracts
 
-Issue: [#875](https://github.com/jinzhezenggroup/generativeqc/issues/875)
-
 The shared `SemiempiricalMethodIR` is an immutable scientific composition
 graph, **not** an SCC solver, compiler-target admission policy, runtime
 certificate, or proof that an analytic nuclear force is available.
@@ -95,6 +93,6 @@ PYTHONPATH=python python -m pytest -q \
   tests/python/test_semiempirical_product_requirements.py
 ```
 
-No CUDA device is needed because this work only adds immutable requirement
+No CUDA device is needed because this layer only adds immutable requirement
 extraction and CPU-side contract tests. Any future CUDA lowering or production
 device-route change must undergo its own validation.

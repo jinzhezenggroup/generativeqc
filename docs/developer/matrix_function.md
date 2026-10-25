@@ -111,7 +111,7 @@ The tests use tiny matrices: closed-form scalar/diagonal derivatives, an
 independent Kronecker/Sylvester solve, pseudoinverse closed forms and finite
 differences, full-Frobenius dot tests, repeated-eigenspace rotations,
 retained/discarded response, scale/rotation covariance, state/rank failures,
-and the independent #293 metric-response oracle. The production generated CUDA
+and the independent metric-response oracle. The production generated CUDA
 header carries both versioned `inverse-sqrt-frechet-v1` and
 `pseudoinverse-frechet-v1` rule identities; the explicit Slurm CUDA tier checks
 both entry points over exact FP64 scalar fixtures.

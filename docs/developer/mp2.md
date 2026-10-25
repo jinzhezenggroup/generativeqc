@@ -129,9 +129,9 @@ RI-MP2 forces or enlarge the native force domain available to CBS composition.
 
 ## Response and force contracts
 
-CPU RI-MP2 analytic forces complete C2 by composing the native MP2 adjoint and
+CPU RI-MP2 analytic forces compose the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
-the bounded #143 raw three-center/metric derivative consumers. No coordinate-major
+the bounded raw three-center/metric derivative consumers. No coordinate-major
 DF derivative tensor is materialized. CUDA RI-MP2 analytic forces remain unsupported: the public request fails explicitly before force publication and
 never returns RHF-only forces or silently delegates the RI response/derivative
 chain to the CPU. The C ABI publishes the energy, complete force array, and
@@ -210,8 +210,7 @@ Dense weights retain the original eightfold projection and staged layout.
 Second, third and shell-local buffers, ordered factorized callbacks and atom
 scatter remain unchanged. The production resource plan conservatively admits
 the legacy first buffer; this representation change supplies no measured
-endpoint telemetry and does not retire the remaining materializations in
-[#1626](https://github.com/jinzhezenggroup/generativeqc/issues/1626).
+endpoint telemetry and does not retire the remaining materializations.
 
 `tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
 translation unit with an independent direct tensor oracle, the explicit staged
@@ -363,7 +362,7 @@ TensorIR.
 
 `correlation_memory_budget_bytes` is an internal method numeric-capacity budget
 composing sequential reference and correlation phases (zero means 256 MiB).
-It is not a new global #203 planner, nor a process-RSS or free-VRAM guarantee.
+It is not a new global resource planner, nor a process-RSS or free-VRAM guarantee.
 The largest phase capacity is returned. For each warm-enabled batch item, both
 the last-good density/source coordinates and any candidate replacement remain
 charged throughout reference, correlation, and force execution. Their payload is
@@ -417,14 +416,14 @@ stages, and allocator overhead. It must not populate the complete endpoint field
 A zero
 `measured_endpoint_peak_bytes` means that endpoint allocation telemetry is
 unavailable; it is not a zero-memory observation or a copy of the plan. This
-slice currently reports that unavailable sentinel, so the measured-resource
+path currently reports that unavailable sentinel, so the measured-resource
 qualification gate remains unsatisfied. Once measured, numeric ownership must
 not exceed the simultaneous plan, which in turn must fit the configured numeric
 capacity. CUDA transfer counters disclose staging; they are
 not a claim that the full endpoint is device-resident. Older C callers receive
 the supported struct prefix selected by `struct_size`.
 
-## Qualification evidence and remaining issue scope
+## Qualification evidence and remaining scope
 
 Separate tests cover fixed identical-C/ERI OS and SS, explicit spin sums,
 permutations and rectangular tiles; native eight-loop AO→MO and independent RI
@@ -450,9 +449,9 @@ or acceptance gate is removed. CUDA qualification requires `--fd-workers 1`.
 
 Compilation or a skipped CUDA test is not endpoint qualification. CUDA
 evidence additionally includes real-device public single/batch execution and
-compute-sanitizer results. Issue #193 B2 covers conventional canonical RHF-MP2
-public forces. C2 promotes the already independently validated RI derivative
-mathematics to the bounded native/public CPU force endpoint, with ordinary-CI
+compute-sanitizer results. Conventional canonical RHF-MP2 public forces are
+delivered, and the already independently validated RI derivative mathematics is
+promoted to the bounded native/public CPU force endpoint, with ordinary-CI
 H2 and water fully re-solved finite-difference checks and distinct fitted
 response provenance. CUDA RI-MP2 forces remain an explicit unsupported backend
 capability and never return host, HF-only, or placeholder forces.
