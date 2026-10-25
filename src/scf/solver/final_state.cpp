@@ -234,13 +234,18 @@ FinalStateSelection select_final_state(
       }
       FinalStateDiagnostic diagnostic;
       auto validation_limits = limits;
-      validation_limits.allow_stationary_reuse = limits.allow_stationary_reuse && step == 0 &&
-                                                 frame == candidate && !force_rebuild &&
-                                                 !limits.require_canonicality;
+      validation_limits.allow_stationary_reuse =
+          (limits.allow_stationary_reuse ||
+           (limits.allow_projector_checked_reuse && compute_weighted_density)) &&
+          step == 0 && frame == candidate && !force_rebuild && !limits.require_canonicality;
       const bool valid = frame && validate_final_state(current, overlap, hcore, nuclear_energy,
                                                        density, physical, *frame, validation_limits,
                                                        diagnostic, result.detail, operations);
-      const bool stationary_reuse = valid && validation_limits.allow_stationary_reuse;
+      // Only the explicitly stationary route can omit the physical projector.
+      // The projector-checked route waives a redundant column-wise eigenframe
+      // check, while still proving the same returned occupied density below.
+      const bool stationary_reuse =
+          valid && validation_limits.allow_stationary_reuse && limits.allow_stationary_reuse;
       const auto materialize = [&] {
         if (std::any_of(physical.spins.begin(), physical.spins.end(),
                         [](const auto& f) { return f.empty(); })) {

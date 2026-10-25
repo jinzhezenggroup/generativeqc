@@ -15,6 +15,13 @@ executed controls, work and provenance. Qualification limited to sampled static
 geometries must say so. Default timings alone do not establish the broader
 accuracy-qualified production ranking or fastest-configuration claim below.
 
+For a performance-only figure, `benchmarks.readme_defaults_report
+--include-unqualified` displays every complete measured population, including
+default-grid or fitting accuracy failures. Keep the independent qualification
+results in the accompanying tables and receipts; this display option changes
+neither numerical gates nor their outcomes. Incomplete calls do not become
+complete latency populations.
+
 An accuracy-qualified HF/DFT headline comparison measures the cost of reaching a common
 scientific accuracy target with each engine's best qualified production
 configuration, not the cost of executing an artificially identical amount of

@@ -346,13 +346,20 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
+            "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
-        "core-a": ("test_cc_triples_tiles.py", "test_uccsd_t_lambda.py"),
+        "core-a": (
+            "test_cc_triples_tiles.py",
+            "test_uccsd_t_lambda.py",
+            "test_df_lambda_core_reuse.py",
+        ),
         "core-b": (
+            "test_correlation_convergence.py",
+            "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
             "test_df_triples_distinct_moments.py",
@@ -361,7 +368,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_occupied_triples.py",
         ),
         "core-c": (
-            "test_df_lambda_core_reuse.py",
             "test_direct_exchange_queue.py",
             "test_cc_canonical_denominators.py",
             "test_direct_order5_sources.py",
@@ -403,7 +409,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
-        "tests/python/test_bulk_aot_clangxx_closure.py": "core-a",
+        "tests/python/test_bulk_aot_clangxx_closure.py": "runtime-heavy",
         "tests/python/test_range_separated_df.py": "core-c",
         "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
@@ -412,7 +418,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
-        "tests/python/test_df_lambda_core_reuse.py": "core-c",
+        "tests/python/test_df_lambda_core_reuse.py": "core-a",
+        "tests/python/test_correlation_convergence.py": "core-b",
+        "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
     }
@@ -427,6 +435,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_ccsdt_cbs_zzz.py",
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
+            "test_correlation_convergence_next.py",
+            "test_cpu_semilocal_force_contract_next.py",
+            "test_df_lambda_core_reuse_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
             "test_direct_exchange_queue_next.py",

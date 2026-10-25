@@ -62,8 +62,8 @@ def restore(bundle: Path, output: Path) -> None:
         ):
             raise ValueError("duplicate, escaping or oversized publication entry")
         entries[name] = (entry, path)
-    if "scientific-environment.json.xz" not in entries:
-        raise ValueError("missing scientific environment entry")
+    if "provenance.json" not in entries:
+        raise ValueError("missing compact provenance entry")
     payloads = {}
     for entry, path in entries.values():
         if path.stat().st_size != entry["bytes"]:
@@ -75,7 +75,6 @@ def restore(bundle: Path, output: Path) -> None:
             "selected.json.xz",
             "diagnostics.json.xz",
             "cpu.json.xz",
-            "sdk.json.xz",
             "execution.json.xz",
             "protocols.json.xz",
         }:
@@ -100,16 +99,21 @@ def restore(bundle: Path, output: Path) -> None:
             ):
                 raise ValueError(f"retained member identity mismatch: {name}")
             payloads[name] = data
-    environment = decode_xz((bundle / "scientific-environment.json.xz").read_bytes())
+    # The numerical audit uses the selected receipts' source/SDK identities,
+    # not the thousands of paths in the original environment/source censuses.
+    # Their exact bytes are independently recoverable via the history manifest.
+    provenance = json.loads((bundle / "provenance.json").read_bytes())
+    source = provenance["source"]
+    verified = source["verification"]
     if (
-        digest(environment)
-        != "6da3a11b6ae0ace154745fd546895d13a8e7768f8a9f1193628d1d4d537680cd"
+        provenance["schema"] != "generativeqc.direct-phase-moved.provenance-summary.v1"
+        or source["revision"] != manifest["source"]["revision"]
+        or source["revision"] != provenance["sdk"]["production_source_revision"]
+        or verified["revision"] != source["revision"]
+        or verified["status"] != "PASS"
+        or verified["files"] != source["file_count"]
     ):
-        raise ValueError("environment manifest identity mismatch")
-    environment_name = "retrieved-final/scientific-environment.json"
-    if environment_name in payloads:
-        raise ValueError("duplicate scientific environment member")
-    payloads[environment_name] = environment
+        raise ValueError("compact provenance does not match the measured source")
     output.mkdir(parents=True, exist_ok=False)
     for name, data in payloads.items():
         path = output / name

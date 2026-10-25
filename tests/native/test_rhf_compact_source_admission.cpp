@@ -57,6 +57,8 @@ GeneratedCoulombPlan::~GeneratedCoulombPlan() = default;
 GeneratedExchangePlan::~GeneratedExchangePlan() = default;
 }  // namespace generativeqc::scf::cuda_execution
 namespace generativeqc::scf {
+// This compact-only probe must never construct a host-cache owner.
+DirectJkHostCache::~DirectJkHostCache() { std::abort(); }
 CudaDirectJkPlan::~CudaDirectJkPlan() {
   for (auto* allocation : allocations) runtime::resource_cuda_free(allocation);
 }

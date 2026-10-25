@@ -35,6 +35,7 @@
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -421,6 +422,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double range_warm_energy{std::numeric_limits<double>::infinity()};
   double range_warm_energy_correction{};
   std::string range_bucket_policy, range_capacity_policy, range_selection_policy;
+  std::string range_host_policy, range_host_mask_policy, range_host_tile_policy;
 
   static std::string range_policy_value(const char* key) {
     const auto* value = std::getenv(key);
@@ -443,6 +445,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
            range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == range_selection_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES") == range_host_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK") == range_host_mask_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES") == range_host_tile_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
            !runtime::active_device_resource_ledger;
   }
@@ -565,6 +570,28 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
+    // Operator-specific ceilings preserve independent full/LR controls. The
+    // cold strict source keeps GPU priority and leaves most job RAM available.
+    // Full-range values serve both J(total) and K(spin), with unchanged weights.
+    const auto* host_limit =
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"
+                                         : "GENERATIVEQC_KS_HOST_MAX_BYTES");
+    const auto automatic_host = has_exchange && source_cold_phase && !mixed_source && !host_limit
+                                    ? runtime::automatic_host_cache_bytes()
+                                    : 0;
+    const auto host = direct_jk_resident_bucket_policy(
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"
+                                         : "GENERATIVEQC_KS_HOST_BUCKET_MASK"),
+        host_limit, automatic_host);
+    const auto host_tile = direct_jk_resident_bucket_policy(
+        nullptr,
+        std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES"
+                                         : "GENERATIVEQC_KS_HOST_TILE_BYTES"),
+        256ULL << 20);
+    if (!host.valid || !host_tile.valid ||
+        (host.ceiling && (!host_tile.ceiling || host_tile.ceiling > (512ULL << 20) ||
+                          host_tile.ceiling % sizeof(double))))
+      throw std::invalid_argument("invalid KS host ERI cache capacity, bucket mask or tile size");
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
                                     provider.cuda_direct_source(), source_strategy.spec);
@@ -624,17 +651,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
-    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
-                                options.reference_memory_budget_bytes
-                                    ? options.reference_memory_budget_bytes
-                                    : std::numeric_limits<std::size_t>::max(),
-                                selection,
-                                has_range_correction ? "cuda_ks_range_resident_values_prepare"
-                                                     : "cuda_ks_resident_values_prepare",
-                                source_cold_phase, generic_fock, phase_source_screening,
-                                buckets.ceiling, false, auto_policy, buckets.mask, spins,
-                                (automatic_range || fitted_range_source) &&
-                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
+    check(phase_source->prepare(
+              device, {system}, options.max_iterations, direct_nbf, required,
+              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
+                                                    : std::numeric_limits<std::size_t>::max(),
+              selection,
+              has_range_correction ? "cuda_ks_range_resident_values_prepare"
+                                   : "cuda_ks_resident_values_prepare",
+              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
+              auto_policy, buckets.mask, spins,
+              (automatic_range || fitted_range_source ||
+               (has_exchange && host.ceiling && !mixed_source)) &&
+                  !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+              has_exchange && !mixed_source ? host.ceiling : 0, host.mask, host_tile.ceiling),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -656,6 +685,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_selection_policy = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES");
       range_bucket_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK");
       range_capacity_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES");
+      range_host_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES");
+      range_host_mask_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK");
+      range_host_tile_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES");
     }
     phase_device_bytes = phase_source->device_bytes();
     phase_host_bytes = phase_source->capacity_bytes() - phase_device_bytes;
@@ -725,10 +757,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                       has_exchange ? 1U : 0U);
       }
     }
-    const auto status = scf::enqueue_prepared_cuda_fock(
-        provider, alpha, beta, matrix, j, exchange,
-        has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, mixed, detail,
-        mixed ? mixed_coulomb_work_counter() : nullptr, mixed && pending_mixed_exchange);
+    const auto status = enqueue_fock(
+        alpha, beta, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
+        jk_error, mixed, detail, mixed ? mixed_coulomb_work_counter() : nullptr,
+        mixed && pending_mixed_exchange);
     return observe_value_dispatch(status, provider.strategy().spec.coulomb.present,
                                   has_exchange ? 1U : 0U);
   }
@@ -754,6 +786,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
                                              1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
+  }
+
+  /** The Direct source borrows this owner's frozen transform binding/handle
+   * only for the submission. It retains no pointer across owner destruction. */
+  generativeqc_status enqueue_fock(const double* alpha, const double* beta, double* coulomb,
+                                   double* alpha_exchange, double* beta_exchange, int* error,
+                                   bool mixed, std::string& detail,
+                                   std::uint64_t* mixed_work = nullptr,
+                                   bool mixed_exchange = false) {
+    const auto matrices = matrix_products.view(masked_matrix_output, elements);
+    return scf::enqueue_prepared_cuda_fock(provider, alpha, beta, matrix, coulomb, alpha_exchange,
+                                           beta_exchange, error, mixed, detail, mixed_work,
+                                           mixed_exchange, &matrices);
   }
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
@@ -1886,7 +1931,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
-      check(matrix_products.prepare(stream, static_cast<int>(n)),
+      check(matrix_products.prepare(stream, static_cast<int>(n), 1, static_cast<int>(spins),
+                                    static_cast<int>(fock_binding.direct_nbf)),
             "CUDA KS matrix provider preparation failed");
       if (matrix_products.library_enabled())
         resource.provider_device_bytes =
@@ -2532,8 +2578,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the ordinary primary/correction fallback supplies its own receipts.
       if (status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) observe_value_dispatch(status, true, 2);
       if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
-        status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
-                                                 nullptr, jk_error, false, detail);
+        status = enqueue_fock(density, nullptr, j, exchange, nullptr, jk_error, false, detail);
         observe_value_dispatch(status, true, 1);
         if (status == GENERATIVEQC_STATUS_SUCCESS)
           status = observe_value_dispatch(scf::enqueue_prepared_cuda_exchange_correction(
@@ -5094,6 +5139,10 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
   return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+}
+const tensor::CudaStructuredProductBinding* CudaKsPlan::structured_provider_diagnostic()
+    const noexcept {
+  return impl_->matrix_products.view().structured_binding_;
 }
 CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   auto out = impl_->movement;

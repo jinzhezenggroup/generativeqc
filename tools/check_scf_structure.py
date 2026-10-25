@@ -42,6 +42,9 @@ SOURCE_EXACT_ALLOWED = {
     "scf/cuda/scf_convergence_policy.cuh": ("scf/convergence_limits.hpp",),
     "scf/cuda/direct_md_j.hpp": ("scf/cuda/md_j_engine_contract.hpp",),
     "scf/cuda/direct_md_j.cu": ("scf/cuda/md_j_engine.cuh",),
+    # The host tier shares the lease's scalar bucket fitter, without importing
+    # a consumer, mutable source lease, or method-specific execution owner.
+    "scf/cuda/direct_jk.cpp": ("scf/cuda/direct_jk_source_policy.hpp",),
     # The immutable DF basis lease is exported only by its actual source owner;
     # it does not authorize dependencies on KS consumers or mutable plan state.
     "scf/cuda/df_source.cpp": ("scf/cuda_density_fitting_basis.hpp",),
@@ -261,6 +264,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     # not import a method driver or change the shared DIIS solve owner.
     "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
+    "runtime/cuda_component_trace.hpp",
     # Allocation-free small solve/acceptance policy shared with host Pulay;
     # the CUDA kernel still owns normalization, history and Fock transport.
     "solver/diis_affine.hpp",
@@ -345,6 +349,7 @@ CUDA_ALLOWED["cuda_compensated_atomic"] = ("runtime/compensated_output.hpp",)
 CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_jk",
     "direct_jk_plan",
+    "direct_jk_host_cache",
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
@@ -354,8 +359,10 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
+    "scf/cuda/direct_jk_host_cache.",
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",

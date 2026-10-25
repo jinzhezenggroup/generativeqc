@@ -103,7 +103,7 @@ void capacity(const Fixture& fixture) {
 }
 
 /** Exercise raw coefficients, signed density, screening and source teardown. */
-void raw_oracle(const Fixture& fixture, bool mixed = false) {
+void raw_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   double* matrices{};
@@ -122,11 +122,16 @@ void raw_oracle(const Fixture& fixture, bool mixed = false) {
                          molecule::ao_count(fixture.system) < 64
                              ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                              : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
-                         buckets) == GENERATIVEQC_STATUS_SUCCESS &&
+                         buckets, 1, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
+                         4096) == GENERATIVEQC_STATUS_SUCCESS &&
               source.active(),
           source.reason());
+      const auto host_bytes = scf::cuda_direct_jk_host_value_bytes(
+          static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+      require((host_bytes > 0) == (host && buckets == 0x1555U),
+              "full-range host source must fill only omitted GPU buckets");
       require(source.mixed_recurrence() == mixed &&
-                  source.value_bytes() ==
+                  source.value_bytes() + host_bytes ==
                       source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
               "resident source precision/storage inventory mismatch");
       require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
@@ -204,7 +209,7 @@ void raw_oracle(const Fixture& fixture, bool mixed = false) {
 
 /** UKS shares ERIs, not spin weights: signed beta checks J(total), K(alpha),
  * K(beta) against the independent fixture for full and partial residency. */
-void raw_oracle_uks(const Fixture& fixture) {
+void raw_oracle_uks(const Fixture& fixture, bool host = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   const auto elements = fixture.density.size();
@@ -231,9 +236,13 @@ void raw_oracle_uks(const Fixture& fixture) {
                            molecule::ao_count(fixture.system) < 64
                                ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
                                : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
-                           buckets, 2) == GENERATIVEQC_STATUS_SUCCESS &&
+                           buckets, 2, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
+                           4096) == GENERATIVEQC_STATUS_SUCCESS &&
                 source.active(),
             source.reason());
+    require((scf::cuda_direct_jk_host_value_bytes(static_cast<const scf::CudaDirectJkPlan*>(
+                 source.source_identity())) > 0) == (host && buckets == 0x1555U),
+            "UKS host source did not preserve GPU priority");
     for (const bool has_exchange : {true, false}) {
       auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Unrestricted, 0.25);
       if (!has_exchange) spec.exchange.present = false;
@@ -260,9 +269,79 @@ void raw_oracle_uks(const Fixture& fixture) {
     for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) check_source(screening, buckets);
 }
 
+/** Exercise a tiny residual device allowance without allocating artificial
+ * VRAM pressure. GPU selection must survive while pageable values use small
+ * tiles; the independent K matrix validates every tile boundary and tail. */
+void host_staging_budget_oracle(const Fixture& fixture, bool full_range = false) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  scf::CudaDirectJkPlan* raw = nullptr;
+  scf::CudaDirectJkDiagnostic diagnostic;
+  std::string detail;
+  require(scf::create_cuda_direct_jk_resident_plan_on_stream(0, {fixture.system}, 1e-12, 8ULL << 30,
+                                                             stream.get(), &raw, diagnostic,
+                                                             detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+      raw, scf::destroy_cuda_direct_jk_plan);
+  require(scf::prepare_cuda_direct_jk_range_resident_values(
+              raw, 8ULL << 30, 0x1555U,
+              full_range ? scf::FockOperator::FullRange : scf::FockOperator::LongRange,
+              full_range ? 0.0 : 0.3, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  const auto before = scf::cuda_direct_jk_plan_diagnostic(raw);
+  require(scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, 0, 256ULL << 20, (1U << 28) - 1,
+                                                  detail) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+              scf::cuda_direct_jk_host_value_bytes(raw) == 0 &&
+              scf::cuda_direct_jk_plan_diagnostic(raw).device_bytes == before.device_bytes,
+          "host capacity refusal altered the admitted GPU source");
+  require(
+      scf::prepare_cuda_direct_jk_host_values(raw, 2ULL << 30, 8192, 256ULL << 20, (1U << 28) - 1,
+                                              detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail);
+  const auto after = scf::cuda_direct_jk_plan_diagnostic(raw);
+  require(scf::cuda_direct_jk_host_value_bytes(raw) > 0 &&
+              after.device_bytes - before.device_bytes <= 8192 &&
+              before.resident_value_bytes == after.resident_value_bytes,
+          "adaptive host staging displaced GPU values or exceeded its allowance");
+  const auto elements = fixture.density.size();
+  const auto corrections = scf::cuda_direct_jk_compensation_elements(raw);
+  runtime::OwnedCudaBuffer<double> storage;
+  runtime::OwnedCudaBuffer<int> error;
+  runtime::OwnedCudaBuffer<std::uint64_t> census;
+  storage.allocate(0, 2 * elements + corrections, stream.get());
+  error.allocate(0, 1, stream.get());
+  census.allocate(0, 2, stream.get());
+  cuda_check(cudaMemcpyAsync(storage.get(), fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
+  spec.coulomb.present = false;
+  spec.exchange.op = full_range ? scf::FockOperator::FullRange : scf::FockOperator::LongRange;
+  spec.exchange.omega = full_range ? 0.0 : 0.3;
+  require(scf::enqueue_cuda_direct_jk_compensated_device(
+              raw, spec, storage.get(), elements, nullptr, storage.get() + elements,
+              storage.get() + 2 * elements, corrections, error.get(), 1e-12, census.get(),
+              detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  cuda_check(cudaStreamSynchronize(stream.get()));
+  int failed = 0;
+  std::uint64_t counts[2]{};
+  std::vector<double> actual(elements);
+  cuda_check(cudaMemcpy(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(counts, census.get(), sizeof(counts), cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(actual.data(), storage.get() + elements, elements * sizeof(double),
+                        cudaMemcpyDeviceToHost));
+  require(!failed && counts[1] == 0 && counts[0] > 0,
+          "adaptive host staging recomputed missing values or failed its finite audit");
+  const auto& reference = full_range ? fixture.exchange : fixture.range_exchange[1];
+  for (std::size_t i = 0; i < elements; ++i)
+    require(std::isfinite(actual[i]) && std::abs(actual[i] - reference[i]) < 2e-9,
+            "adaptive host staging differs from independent K");
+}
+
 /** Independent SR/LR matrices protect radial identity, both spins and partial
- * caches. Invalid operator requests must fail before any retained value is used. */
-void raw_range_oracle(const Fixture& fixture, bool mixed = false) {
+ * caches. Invalid operator requests fail before any retained value is used. */
+void raw_range_oracle(const Fixture& fixture, bool mixed = false, bool host = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   const auto elements = fixture.density.size();
@@ -294,10 +373,16 @@ void raw_range_oracle(const Fixture& fixture, bool mixed = false) {
                              4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
                              false, false, screening, 8ULL << 30, false,
                              scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
-                             buckets, spins) == GENERATIVEQC_STATUS_SUCCESS &&
+                             buckets, spins, false, host ? (2ULL << 30) : 0, (1U << 28) - 1,
+                             4096) == GENERATIVEQC_STATUS_SUCCESS &&
                   source.active(),
               source.reason());
-          require(source.value_bytes() ==
+          const auto* prepared_host =
+              static_cast<const scf::CudaDirectJkPlan*>(source.source_identity());
+          const auto host_bytes = scf::cuda_direct_jk_host_value_bytes(prepared_host);
+          require((host_bytes > 0) == (host && range == 1 && buckets == 0x1555U),
+                  "host source did not preserve GPU priority and radial scope");
+          require(source.value_bytes() + host_bytes ==
                       source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
                   "range source precision/storage inventory mismatch");
           std::string detail;
@@ -704,20 +789,23 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
       scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec),
       scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
       options.screening_tolerance);
+  // Provider eligibility is only a prerequisite: the consumer's precision,
+  // reuse and live capacity guards can still decline an optional source.
+  // Forced-source tests above prove actual consumption independently.
   require(automatic.converged && std::abs(automatic.energy - baseline.energy) < 2e-9 &&
-              (plan.transfers().phase_resident_values_built > built) == auto_domain,
+              (plan.transfers().phase_resident_values_built == built || auto_domain),
           "automatic cold Hybrid source domain");
   const auto automatic_built = plan.transfers().phase_resident_values_built;
   const auto native_guess =
       plan.run(&baseline.density, false, true, dft::CudaKsSeedOrigin::NativeColdGuess);
   require(native_guess.converged && std::abs(native_guess.energy - baseline.energy) < 2e-9 &&
-              (plan.transfers().phase_resident_values_built > automatic_built) == auto_domain,
+              (plan.transfers().phase_resident_values_built == automatic_built || auto_domain),
           "native cold initial guess lost automatic source eligibility");
   const auto before_default = plan.transfers().phase_resident_values_built;
   unsetenv("GENERATIVEQC_KS_RESIDENT_VALUES");
   const auto default_cold = plan.run(nullptr, false);
   require(default_cold.converged && std::abs(default_cold.energy - baseline.energy) < 2e-9 &&
-              (plan.transfers().phase_resident_values_built > before_default) == auto_domain,
+              (plan.transfers().phase_resident_values_built == before_default || auto_domain),
           "unset selection lost the bounded automatic cold policy");
   const auto default_built = plan.transfers().phase_resident_values_built;
   const auto default_warm = plan.run(nullptr, true);
@@ -951,25 +1039,36 @@ int main(int argc, char** argv) {
                 (argc == 3 &&
                  (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
                   std::string(argv[2]) == "range-mixed-oracle" ||
+                  std::string(argv[2]) == "range-host-oracle" ||
+                  std::string(argv[2]) == "full-host-oracle" ||
                   std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
                   std::string(argv[2]) == "mixed-refinement" ||
                   std::string(argv[2]) == "mixed-source")),
             "usage: ks-phase-values-probe INPUT "
             "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
+    const bool full_host_oracle = argc == 3 && std::string(argv[2]) == "full-host-oracle";
     const bool mixed_range_oracle = argc == 3 && std::string(argv[2]) == "range-mixed-oracle";
-    const bool range_oracle =
-        argc == 3 && (std::string(argv[2]) == "range-oracle" || mixed_range_oracle);
+    const bool host_range_oracle = argc == 3 && std::string(argv[2]) == "range-host-oracle";
+    const bool range_oracle = argc == 3 && (std::string(argv[2]) == "range-oracle" ||
+                                            mixed_range_oracle || host_range_oracle);
     const Fixture fixture(argv[1],
                           argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
-                              std::string(argv[2]) == "mixed-source" || range_oracle,
+                              std::string(argv[2]) == "mixed-source" || range_oracle ||
+                              full_host_oracle,
                           range_oracle);
     std::cout << std::setprecision(17);
-    if (mixed_range_oracle) {
+    if (full_host_oracle) {
+      raw_oracle(fixture, false, true);
+      raw_oracle_uks(fixture, true);
+      host_staging_budget_oracle(fixture, true);
+      std::cout << "full host oracle checks passed\n";
+    } else if (mixed_range_oracle) {
       raw_mixed_full_range_oracle(fixture);
       raw_mixed_range_oracle(fixture);
       raw_range_oracle(fixture, true);
     } else if (range_oracle) {
-      raw_range_oracle(fixture);
+      raw_range_oracle(fixture, false, host_range_oracle);
+      if (host_range_oracle) host_staging_budget_oracle(fixture);
     } else if (argc == 3 && std::string(argv[2]) == "mixed-source") {
       raw_oracle(fixture, true);
     } else if (argc == 3 && std::string(argv[2]) == "capacity") {

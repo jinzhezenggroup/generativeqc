@@ -52,7 +52,8 @@ class DirectJkSourceLease {
       double screening = 0.0, std::size_t value_ceiling = 8ULL << 30, bool own_outputs = true,
       DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
       std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1,
-      bool fit_buckets_to_capacity = false);
+      bool fit_buckets_to_capacity = false, std::size_t host_ceiling = 0,
+      std::uint32_t host_bucket_mask = (1U << 28) - 1, std::size_t host_tile_bytes = 256ULL << 20);
   bool active() const noexcept { return direct_ != nullptr; }
   bool mixed_recurrence() const noexcept { return mixed_recurrence_; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
@@ -62,7 +63,8 @@ class DirectJkSourceLease {
   /** Enqueue raw RKS/UKS J/K without applying scientific coefficients.
    * Preserve the caller's Schwarz threshold on each contraction. A null error
    * slot uses the lease's own slot. No allocation, upload or success-path fence
-   * occurs; caller outputs must outlive the final audit.
+   * occurs on device-only leases; opt-in host leases stage bounded tiles and
+   * fence pinned reuse, and require eager execution. Outputs outlive the audit.
    */
   generativeqc_status enqueue(FockBuildSpec spec, const double* density, double* coulomb,
                               double* exchange, int* numerical_error, double screening,
@@ -110,6 +112,7 @@ class DirectJkSourceLease {
   std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{}, source_value_count_{};
   std::size_t completed_values_{};
   double source_screening_{}, last_screening_{};
+  std::size_t host_value_bytes_{}, host_capacity_bytes_{};
   bool prepared_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};

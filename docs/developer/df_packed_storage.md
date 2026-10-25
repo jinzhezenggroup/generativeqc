@@ -13,13 +13,16 @@ The explicit `create_cuda_density_fitting_jk_plan_from_source` overload accepts
 `DfValueStorageOptions{DfPairStorage::SymmetricLower, rank_capacity}`. This route
 requires a retained physical integral source and complete AO rows. Physical CUDA
 SCF and composed Fock preparation accept the diagnostic selector
-`GENERATIVEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. In HF SCF, unset/`auto`
-keeps a fully resident dense owner when it fits; for a generated singleton RHF
-source it promotes to `packed-single` only when dense would stream and the single
-fitted owner fits the same value allowance. UHF, multi-item batches,
-general-density/composed Fock and arbitrary public-tensor callers remain dense
-unless packing is requested explicitly. The explicit native constructor does not
-consult this ambient selector.
+`GENERATIVEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. For a generated
+singleton RHF or explicitly method-authorized restricted Fock source, unset/`auto`
+selects `packed-single` when it turns streamed dense values into a resident owner
+within the same value allowance. It also selects that owner for resident dense
+source tensors of at least 1 GiB when the complete requested occupied projection
+fits: each symmetric pair is then generated and whitened once. Smaller resident
+sources keep the dense schedule. UHF, multi-item batches, unauthenticated
+general-density consumers and arbitrary public tensors retain their dense
+fallback. Explicit storage requests override automatic planning. The explicit
+native constructor does not consult this ambient selector.
 
 The physical selector runs before full host raw construction, including requests
 with a zero value budget. Prepared metadata, device plans, composed Fock variants
@@ -147,9 +150,9 @@ exclusions remain. A final U lease is
 published only if its full projection was retained;
 the full-rank restriction and single-consumer invalidation still apply.
 
-Explicit packed selection is retained for the measured warm/constrained domains;
-unset and `auto` remain dense because bounded response and geometry rebuild can
-regress substantially. The 384/1856 unequal case remains numerically unqualified.
+The two-owner `packed` representation remains explicitly selected. Automatic
+selection uses the fitted-only owner under the source, method, capacity and work
+conditions above; constrained plans retain bounded execution.
 The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records domain evidence, validation and conditions for revisiting selection.
 

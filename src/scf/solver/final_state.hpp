@@ -69,6 +69,12 @@ struct FinalStateLimits {
    * consistency. Absence preserves strict historical gates. This never
    * relaxes electron trace, idempotency or canonical diagonalization. */
   std::optional<double> stationarity_tolerance;
+  /** A retained force determinant may prove its occupied subspace with a
+   * fresh physical-Fock projector instead of requiring lagged DIIS columns
+   * to be canonical. Unlike stationary reuse this keeps the maximum/RMS
+   * fixed-point check. Only the original force candidate is eligible;
+   * energy-only, correction, forced rebuild and reference export stay canonical. */
+  bool allow_projector_checked_reuse{};
 };
 
 struct FinalStateDiagnostic {

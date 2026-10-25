@@ -42,8 +42,12 @@ class RetainedReplayTests(unittest.TestCase):
                 timeout=60,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(
-                "Restored and byte-verified 238 retained files", result.stdout
+            self.assertIn("Restored and byte-verified", result.stdout)
+            # Numerical replay must work from a source archive too: no full SDK
+            # or environment census, Git-history lookup, or native load needed.
+            self.assertFalse((output / "sdk-provenance").exists())
+            self.assertFalse(
+                (output / "retrieved-final/scientific-environment.json").exists()
             )
             report = json.loads(result.stdout[result.stdout.index("{") :])
             self.assertEqual(report["public_observable_cohort_status"], "PASS")

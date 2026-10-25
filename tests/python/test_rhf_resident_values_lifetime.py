@@ -166,6 +166,14 @@ std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan*) { retur
 std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*, std::uint32_t mask) {
   return !mask ? 0 : mask==(1U<<28)-1 ? 800 : 400;
 }
+// This owner may capture a CUDA graph. Its default-zero host ceiling must
+// preserve GPU-only ownership even though the shared source can stage RAM.
+generativeqc_status prepare_cuda_direct_jk_host_values(
+    CudaDirectJkPlan*, std::size_t, std::size_t, std::size_t, std::uint32_t, std::string&) {
+  throw std::logic_error("graph owner requested unsupported host staging");
+}
+std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan*) noexcept { return 0; }
+std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan*) noexcept { return 0; }
 generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
     std::size_t, std::size_t, std::size_t& bytes, std::string&) {
   ++layout_queries;

@@ -41,7 +41,8 @@ generativeqc_status DirectJkSourceLease::prepare(
     std::size_t direct_nbf, std::size_t required, std::size_t budget, const char* selection_value,
     const char* trace_name, bool cold_phase, bool generic_fock, double screening,
     std::size_t value_ceiling, bool own_outputs, DirectJkSourceAutoPolicy auto_policy,
-    std::uint32_t bucket_mask, unsigned spins, bool fit_buckets_to_capacity) {
+    std::uint32_t bucket_mask, unsigned spins, bool fit_buckets_to_capacity,
+    std::size_t host_ceiling, std::uint32_t host_bucket_mask, std::size_t host_tile_bytes) {
   using namespace posthf;
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
@@ -273,6 +274,48 @@ generativeqc_status DirectJkSourceLease::prepare(
   value_bytes_ = diagnostic.resident_value_bytes;
   value_count_ = diagnostic.resident_value_count;
   capacity_bytes_ = checked_add(overhead, value_bytes_);
+  // The existing GPU selection has priority. Host capacity is additional,
+  // explicitly bounded storage, including both pinned and device staging pairs.
+  if (host_ceiling && !mixed_recurrence_ &&
+      (source_operator_ == FockOperator::LongRange ||
+       source_operator_ == FockOperator::FullRange) &&
+      value_count_ < source_value_count_) {
+    const auto used = checked_add(required, capacity_bytes_);
+    const auto remaining = used < budget ? budget - used : 0;
+    const auto staging = checked_mul(2, host_tile_bytes);
+    error = cudaMemGetInfo(&available, &total);
+    if (error != cudaSuccess) return finish(cuda_status(error));
+    const auto device_available = available > (256ULL << 20) ? available - (256ULL << 20) : 0;
+    const auto host_allowance =
+        remaining > staging ? std::min(host_ceiling, remaining - staging) : 0;
+    if (host_allowance) {
+      status = prepare_cuda_direct_jk_host_values(direct_.get(), host_allowance, device_available,
+                                                  host_tile_bytes, host_bucket_mask, reason_);
+      if (optional_refusal(status)) {
+        // Roll back only the optional host tier. Do not discard a profitable
+        // GPU source or hide a driver/numerical error behind Direct fallback.
+        const auto pending = cudaGetLastError();
+        const auto drain = cudaStreamSynchronize(stream_);
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+          return finish(cuda_status(pending));
+        if (drain != cudaSuccess) return finish(cuda_status(drain));
+      } else if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        return finish(status);
+      }
+    }
+    host_value_bytes_ = cuda_direct_jk_host_value_bytes(direct_.get());
+    host_capacity_bytes_ = cuda_direct_jk_host_capacity_bytes(direct_.get());
+    value_count_ += host_value_bytes_ / sizeof(double);
+    capacity_bytes_ = checked_add(capacity_bytes_, host_capacity_bytes_);
+  }
+  runtime::df_progress::Scope::number("host_source_value_bytes", host_value_bytes_);
+  runtime::df_progress::Scope::number("host_source_capacity_bytes", host_capacity_bytes_);
+  runtime::df_progress::Scope::number("host_source_build_d2h_bytes", host_value_bytes_);
+
+  if (host_value_bytes_) {
+    reason_ = "admitted FP64 GPU/host values plus exact Direct buckets";
+    return finish(GENERATIVEQC_STATUS_SUCCESS, true);
+  }
   reason_ = mixed_recurrence_
                 ? (value_count_ == source_value_count_
                        ? "admitted phase-local canonical FP32 values with FP64 contraction"
@@ -300,6 +343,14 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
     detail = "resident source radial identity mismatch";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  runtime::df_progress::Scope action("cuda_eri_source_action", "cuda_enqueued");
+  runtime::df_progress::Scope::number("canonical_values", source_value_count_);
+  runtime::df_progress::Scope::number("gpu_cached_values",
+                                      value_count_ - host_value_bytes_ / sizeof(double));
+  runtime::df_progress::Scope::number("host_cached_values", host_value_bytes_ / sizeof(double));
+  runtime::df_progress::Scope::number("direct_values_at_source_threshold",
+                                      source_value_count_ - value_count_);
+  runtime::df_progress::Scope::number("host_h2d_bytes", host_value_bytes_);
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
   if (mixed_recurrence_ && (spec.spin != FockSpin::Restricted || beta || beta_exchange)) {
@@ -345,6 +396,9 @@ void DirectJkSourceLease::observe_completed(std::size_t physical_focks) const no
   runtime::df_progress::Scope::label("phase_resident_values_selection", selection_);
   runtime::df_progress::Scope::label("resident_value_admission", reason_.c_str());
   runtime::df_progress::Scope::number("phase_resident_value_bytes", value_bytes_);
+  runtime::df_progress::Scope::number("phase_host_value_bytes", host_value_bytes_);
+  runtime::df_progress::Scope::number("phase_host_h2d_bytes_per_action", host_value_bytes_);
+  runtime::df_progress::Scope::number("phase_host_capacity_bytes", host_capacity_bytes_);
   runtime::df_progress::Scope::number("phase_resident_values_built", value_count_);
   runtime::df_progress::Scope::number("phase_canonical_source_values", source_value_count_);
   runtime::df_progress::Scope::number("phase_direct_values_per_action",
