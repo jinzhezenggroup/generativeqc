@@ -32,6 +32,13 @@ then replaces it with L^-1 only after all retained panels are complete. The
 persistent metric reservation already covers this transferred slot. Error paths
 and destruction retain single ownership.
 
+Cholesky workspace queries and submission belong to the shared CUDA solver
+provider, borrowing the existing stream-bound handle without allocation or
+synchronization. The DF adapter retains bounded scratch admission, error
+translation and numerical fallback policy. This preserves the earlier retirement
+of method-owned raw cuSOLVER submissions; adding whitening does not reintroduce
+them. Triangular matrix solves remain in the existing DF matrix provider.
+
 Small-panel qualification also exposed an incumbent fitted-response capacity
 error: one AO slice was reserved, but the simultaneous B*C temporary was not.
 The response planner now reserves both during projection, independently of the

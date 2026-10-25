@@ -17,6 +17,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
+#include "solver/cuda/cholesky_provider.hpp"
 #include "solver/cuda/generalized_eigen.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
@@ -83,17 +84,17 @@ generativeqc_status scf_metric_cholesky(CudaDensityFittingJkPlan& plan, double* 
                                         void* scratch, std::size_t scratch_bytes, int* info,
                                         bool& admitted, std::string& detail) {
   admitted = false;
-  const auto handle = static_cast<cusolverDnHandle_t>(plan.eigen_handles.view().solver);
+  auto* const handle = plan.eigen_handles.view().solver;
   const auto n = static_cast<int>(plan.naux);
   int elements = 0;
-  auto status =
-      cusolverDnDpotrf_bufferSize(handle, CUBLAS_FILL_MODE_LOWER, n, matrix, n, &elements);
+  auto status = static_cast<cusolverStatus_t>(
+      eigen_provider::query_lower_cholesky(handle, n, matrix, elements));
   if (status != CUSOLVER_STATUS_SUCCESS)
     return solver_failure(status, "query DF metric Cholesky workspace", detail);
   if (elements < 0 || static_cast<std::size_t>(elements) > scratch_bytes / sizeof(double))
     return GENERATIVEQC_STATUS_SUCCESS;
-  status = cusolverDnDpotrf(handle, CUBLAS_FILL_MODE_LOWER, n, matrix, n,
-                            static_cast<double*>(scratch), elements, info);
+  status = static_cast<cusolverStatus_t>(eigen_provider::launch_lower_cholesky(
+      handle, n, matrix, static_cast<double*>(scratch), elements, info));
   if (status != CUSOLVER_STATUS_SUCCESS)
     return solver_failure(status, "factor DF metric Cholesky", detail);
   admitted = true;

@@ -79,6 +79,18 @@ verified sccache 0.16.0 before/after statistics and exact run commands are in
 `summary.json.xz`. CUDA 12.9.1/GCC 13.3, Release/sm120, one BLAS/OpenMP thread
 and scheduler-assigned GPU visibility were used. No cache was cleared.
 
+The PR follow-up moves unchanged potrf query/submission into the shared solver
+provider and adds official SDK-derived host ABI declarations. It also inherits
+master's automatic KS resource fix. This source is **not byte-identical** to the
+timing image above. [`provider-followup.json`](provider-followup.json) records
+the changed/added production inputs and the separately frozen
+`phase-four-provider-v2` rebuild. Slurm job 14415 passes the native DF/occupied
+oracles, 48 weighted finite differences and 108 independent metric adjoints.
+Fresh HF/PBE0 DF96 cold-plus-three-warm calls retain identical energies and
+forces within 5.91e-13 Eh/Bohr of the original campaign. Their cold times are
+19.1617/24.7602 seconds; these single follow-up rounds do not replace the
+three-round comparison. The host ABI tests pass 22 cases with one optional skip.
+
 Full archives, patches, builds, profiles and receipts remain in
 `n1:/data/jzzeng/cold-opt-20261025/`. `default-four-paired.py` and `build-wb.sh`
 there reproduce the campaign with a **new variant/output directory** under a
