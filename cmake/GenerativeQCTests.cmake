@@ -595,6 +595,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_hf_df_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
+  generativeqc_native_test(generativeqc_range_exchange_runtime_tests
+                       tests/native/test_range_exchange_runtime.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_dft_restricted_point_tests
