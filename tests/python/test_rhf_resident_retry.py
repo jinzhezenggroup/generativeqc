@@ -32,6 +32,20 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("host C++ compiler required")
+    source = _production_probe()
+    probe = tmp_path / "resident_retry.cpp"
+    probe.write_text(source + MAIN)
+    executable = tmp_path / "resident_retry"
+    compile_owner(compiler, tmp_path, [probe], executable)
+    result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=15, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "10 retry-controller checks passed" in result.stdout
+
+
+def _production_probe() -> str:
+    """Compile the actual admission/retry decisions with replaceable resource doubles."""
     direct = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     owner = (ROOT / "src/hf/rhf_frame_response.cu").read_text()
     header = (ROOT / "src/hf/rhf_frame_response.hpp").read_text()
@@ -68,23 +82,52 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
     allocation = owner[begin:exact_end] + owner[exact_end + len("\n    }") : end]
     policy = _definition(header, "std::size_t resident_jk_allowance(")
     wrapper = _definition(owner, "RHFFrameResponseResult rhf_frame_response_cuda(\n")
-    probe = tmp_path / "resident_retry.cpp"
-    probe.write_text(
+    return (
         PREFIX
         + "\n\n".join(definitions)
         + ATTEMPT_PREFIX.replace("RESOURCE_POLICY", policy)
         + allocation
         + ATTEMPT_SUFFIX
         + wrapper
-        + MAIN
     )
-    executable = tmp_path / "resident_retry"
+
+
+def test_host_refusal_and_late_failure_preserve_exact_retry(tmp_path: Path) -> None:
+    """Host refusal keeps GPU values; execution faults cannot masquerade as capacity."""
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("host C++ compiler required")
+    source = _production_probe().replace(
+        "size_t automatic_host_cache_bytes() { return 0; }",
+        "size_t automatic_host_cache_bytes() { return 64ULL << 20; }",
+    )
+    source = source.replace(
+        "Slots allocations;", "size_t host_bytes{}, host_capacity{}; Slots allocations;"
+    ).replace(
+        "{{{0, 2080, 2080, 2080, 2080, 2080, 2080, 2080}}}",
+        "{{{0, 2080, 2081, 2081, 2081, 2081, 2081, 2081}}}",
+    )
+    begin = source.index("// This existing suite isolates GPU-source retry behavior.")
+    end = source.index("\n}\ntemplate <class T>", begin)
+    source = source[:begin] + HOST_PROVIDER + source[end:]
+    source = source.replace(
+        "result.numeric_capacity_bytes = mandatory;",
+        "result.numeric_capacity_bytes = stats.numeric_capacity_bytes; "
+        "last_gpu = stats.resident_jk_bytes; last_host = stats.host_jk_bytes;",
+    )
+    probe = tmp_path / "host_retry.cpp"
+    probe.write_text(
+        "int host_mode{}, host_calls{}; unsigned long last_gpu{}, last_host{};\n"
+        + source
+        + HOST_MAIN
+    )
+    executable = tmp_path / "host_retry"
     compile_owner(compiler, tmp_path, [probe], executable)
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=15, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "10 retry-controller checks passed" in result.stdout
+    assert "host integration checks passed" in result.stdout
 
 
 PREFIX = r"""
@@ -144,6 +187,10 @@ cudaError_t cudaGetDevice(int* d) {
   *d = state.current;
   return cudaSuccess;
 }
+cudaError_t cudaMemGetInfo(size_t* available, size_t* total) {
+  *available = *total = 32ULL << 30;
+  return cudaSuccess;
+}
 cudaError_t cudaGetLastError() {
   auto e = state.pending;
   state.pending = cudaSuccess;
@@ -163,6 +210,7 @@ cudaError_t cudaMemcpyAsync(void* d, const void* s, size_t n, int, cudaStream_t)
 }
 namespace generativeqc {
 namespace runtime {
+size_t automatic_host_cache_bytes() { return 0; }
 template <class Value>
 size_t vector_bytes(const std::vector<Value>& values) {
   return values.capacity() * sizeof(Value);
@@ -303,11 +351,21 @@ size_t checked_mul(size_t a, size_t b) {
 size_t bytes(size_t n) { return checked_mul(n, sizeof(double)); }
 namespace scf {
 using ::prepare_cuda_direct_jk_resident_values;
+using ::cuda_direct_jk_resident_value_bytes;
+using ::cuda_direct_jk_selected_resident_value_bytes;
 namespace cuda_execution = generativeqc::scf::cuda_execution;
 using ::prepare_cuda_direct_jk_selected_resident_values;
 Diagnostic cuda_direct_jk_plan_diagnostic(CudaDirectJkPlan* p) { return p->diagnostic; }
 using ::cuda_direct_jk_linear_available;
 using ::cuda_direct_jk_compensation_elements;
+// This existing suite isolates GPU-source retry behavior. Host admission is
+// disabled; an accidental request must fail instead of silently changing it.
+generativeqc_status prepare_cuda_direct_jk_host_values(
+    CudaDirectJkPlan*, size_t, size_t, size_t, std::uint32_t, std::string&) {
+  throw std::logic_error("unexpected host staging in GPU retry isolation");
+}
+size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan*) { return 0; }
+size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan*) { return 0; }
 }
 template <class T>
 struct Buffer {
@@ -328,6 +386,7 @@ struct Event {
 };
 struct RHFFrameResponseOptions {
   std::optional<size_t> resident_jk_maximum_bytes;
+  size_t maximum_bytes{2ULL << 30};
   double orbital_screening_tolerance{};
   bool relax_orbitals{true};
   RESOURCE_POLICY
@@ -340,6 +399,8 @@ struct Reason {
 };
 struct Stats {
   double resident_jk_setup_seconds{}, applied_screening{}, requested_screening{};
+  double host_jk_setup_seconds{};
+  size_t host_jk_bytes{}, host_jk_capacity_bytes{};
   bool linear_screening_available{}, jk_timing_measured{};
   Reason resident_jk_reason;
   size_t resident_jk_bytes{}, resident_jk_values{}, direct_device_bytes{},
@@ -618,5 +679,68 @@ int main() {
   std::cout << passed
             << " retry-controller checks passed; exact production wrapper and Owner allocation "
                "prefix, host allocator emulation only\n";
+}
+"""
+
+
+HOST_PROVIDER = r"""
+generativeqc_status prepare_cuda_direct_jk_host_values(
+    CudaDirectJkPlan* plan, size_t allowance, size_t device, size_t tile,
+    std::uint32_t, std::string& detail) {
+  ++host_calls;
+  assert(plan->resident_values && allowance >= 4096 && device >= 2 * tile);
+  assert(tile > 0 && 4 * tile < allowance * 2);
+  detail = "injected host failure";
+  if (host_mode == 1) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  if (host_mode == 2) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (host_mode == 3) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  if (host_mode == 4) {
+    state.pending = cudaErrorLaunchFailure;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  if (host_mode == 5) {
+    state.sync = cudaErrorLaunchFailure;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  void* staging{};
+  cuda_resource_check(runtime::resource_cuda_malloc(&staging, 4096));
+  plan->allocations.push_back(staging);
+  plan->host_bytes = 2048;
+  plan->host_capacity = 4096;
+  if (host_mode == 6) state.limit = state.live + 64;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* p) { return p->host_bytes; }
+size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan* p) { return p->host_capacity; }
+"""
+
+HOST_MAIN = r"""
+int main() {
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK", "1", 1);
+  for (host_mode = 0; host_mode < 7; ++host_mode) {
+    state = {};
+    attempts = exact_attempts = host_calls = 0;
+    last_gpu = last_host = 0;
+    bool failed = false;
+    try {
+      auto result = rhf_frame_response_cuda(core::System{}, PhysicalReference{}, {}, {}, 0,
+                                            RHFFrameResponseOptions{}, nullptr);
+      assert(host_mode < 3 || host_mode == 6);
+      if (host_mode == 6) {
+        assert(result.resident_jk_discarded_attempt && attempts == 2 && exact_attempts == 1);
+        assert(!last_host && !last_gpu);
+        assert(result.numeric_capacity_bytes >= (512ULL << 20) + resident + 4096);
+      } else {
+        assert(!result.resident_jk_discarded_attempt && attempts == 1 && last_gpu == resident);
+        assert((last_host > 0) == (host_mode == 0));
+      }
+    } catch (const std::runtime_error&) {
+      failed = true;
+    }
+    assert(failed == (host_mode >= 3 && host_mode <= 5));
+    assert(!failed || attempts == 1);
+    assert(host_calls == 1 && !state.live && sizes.empty());
+  }
+  std::cout << "host integration checks passed\n";
 }
 """
