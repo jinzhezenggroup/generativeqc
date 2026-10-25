@@ -53,6 +53,11 @@ warm versus GPU4PySCF 32.383 / 14.81 s. It therefore did not establish cold
 parity. Final README publication uses a separate full #2786 default-only
 campaign, not these exploratory observations.
 
+The [retained endpoint campaign](../../../../benchmarks/results/r2scan-endpoints-20261025/README.md)
+contains the final default-only refresh, independent gates, source/build audit,
+complete work counts, regression logs and rejected/partial trial records. Its
+offline reproduction checks the figure bytes and the unchanged CBS figure.
+
 ## Rejected and unfinished experiments
 
 Force tile 2048 and XC tiles 1024–4096 regressed. Smaller force page widths,

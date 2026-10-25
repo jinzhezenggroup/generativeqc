@@ -66,8 +66,8 @@ bases, signed and changed inputs, diffuse tails, huge density scales, nonfinite
 fail-open behavior, Graph replay, exact-capacity refusal, derivative finite
 differences and rank-deficient fallback. The 96/120-atom original, replay,
 displaced and fresh-displaced complete endpoints pass independent GPU4PySCF
-energy/force gates. Source-matched receipts and reproduction commands belong in
-benchmarks/results/r2scan-endpoints-20261025/.
+energy/force gates. Source-matched receipts and reproduction commands are in the
+[retained endpoint campaign](../../../../benchmarks/results/r2scan-endpoints-20261025/README.md).
 
 An initial fixed primitive threshold was rejected: it did not bound aggregate
 omission or metric amplification. Artificially reducing the memory cap was
