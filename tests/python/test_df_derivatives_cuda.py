@@ -342,8 +342,14 @@ def test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps(
         )
 
 
-def test_metric_only_weight_response_moves_both_auxiliary_centers() -> None:
+@pytest.mark.parametrize("tile_elements", [0, 11])
+@pytest.mark.parametrize("pair_reuse", ["0", "1"])
+def test_metric_only_weight_response_moves_both_auxiliary_centers(
+    monkeypatch: typing.Any, tile_elements: int, pair_reuse: str
+) -> None:
+    """Full and split panels preserve arbitrary, nonsymmetric metric adjoints."""
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
+    monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", pair_reuse)
     oi, xi = fixture_inputs("spherical", False)
     o, x = calculator(oi), calculator(xi)
     atoms = [
@@ -354,10 +360,32 @@ def test_metric_only_weight_response_moves_both_auxiliary_centers() -> None:
     expected = np.einsum("axpq,pq->ax", dm, wm)
     assert np.max(np.abs(expected[2])) > 1e-5
     actual, _ = execute_df_gradient(
-        o, x, atoms, np.zeros_like(a), wm, maximum_tile_elements=11
+        o, x, atoms, np.zeros_like(a), wm, maximum_tile_elements=tile_elements
     )
     np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
     np.testing.assert_allclose(actual.sum(axis=0), 0, atol=2e-10)
+
+
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+def test_metric_pair_reuse_preserves_skew_and_one_sided_weights(
+    monkeypatch: typing.Any, representation: str
+) -> None:
+    """No implicit weight symmetry or doubled-diagonal convention is allowed."""
+    assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
+    monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", "1")
+    oi, xi = fixture_inputs(representation, False)
+    orbital, auxiliary = calculator(oi), calculator(xi)
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
+    a, metric, _, derivative = reference_df_matrices(oi, xi)
+    upper = np.triu(np.random.default_rng(992).normal(size=metric.shape), 1)
+    for weights in (upper, upper.T, upper - upper.T, np.diag(np.diag(metric))):
+        expected = np.einsum("axpq,pq->ax", derivative, weights)
+        actual, _ = execute_df_gradient(
+            orbital, auxiliary, atoms, np.zeros_like(a), weights
+        )
+        np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
 
 
 @pytest.mark.parametrize("null_a,null_m", [(True, False), (False, True), (True, True)])

@@ -1,10 +1,13 @@
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <type_traits>
 
 #include "generated_df_derivative_policy.cuh"
 #include "generated_df_derivative_schedule.cuh"
 #include "molecule/basis.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_subgroup.cuh"
 #include "scf/cuda/df_derivatives.cuh"
 namespace generativeqc::scf {
@@ -99,6 +102,35 @@ __global__ void derivative_tile(DfDerivativeBasisView o, DfDerivativeBasisView x
         o, x, positions, kind, range.index(begin + thread / lanes), weights[thread / lanes],
         gradient, thread % lanes, omega);
 }
+
+/** A complete metric panel owns both orientations of each auxiliary pair.
+ * M[P,Q] and M[Q,P] are the same scalar function of the physical centers.
+ * Evaluate its generated derivative once, then scatter each original weight
+ * separately. This accepts nonsymmetric weights and avoids overflowing their
+ * sum. Partial/strided panels and the ordered diagnostic keep dense traversal.
+ */
+template <std::size_t Terms>
+__global__ void metric_pair_derivatives(DfDerivativeBasisView x, const double* positions,
+                                        std::size_t pairs, const double* weights, double* gradient,
+                                        double omega) {
+  const auto thread = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
+  const auto pair = thread / lanes;
+  if (pair >= pairs) return;
+  auto first = static_cast<std::size_t>((sqrt(8.0 * double(pair) + 1) - 1) * .5);
+  while (first * (first + 1) / 2 > pair) --first;
+  while ((first + 1) * (first + 2) / 2 <= pair) ++first;
+  const auto second = pair - first * (first + 1) / 2;
+  const double forward = weights[first * x.nbf + second];
+  const double reverse = first == second ? 0.0 : weights[second * x.nbf + first];
+  if (forward == 0 && reverse == 0) return;
+  const products::Factor factors[2]{{x, static_cast<std::int64_t>(first)},
+                                    {x, static_cast<std::int64_t>(second)}};
+  const auto result = cooperative_contract<Terms, lanes>(factors, positions, thread % lanes, omega);
+  if (thread % lanes == 0) {
+    if (forward != 0) products::scatter(factors, result, forward, gradient);
+    if (reverse != 0) products::scatter(factors, result, reverse, gradient);
+  }
+}
 }  // namespace
 cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasisView x,
                                       const double* positions, unsigned kind,
@@ -138,8 +170,30 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasis
   if (auxiliary_g_only && (kind || schedule || gradient_copies != 1 || skip_sp_shells ||
                            expansion_terms != molecule::kMaximumAuxiliaryAoExpansionTerms))
     return cudaErrorInvalidValue;
+  // The panel must contain the entire contiguous row-major metric. In
+  // particular, count alone cannot license folding an offset/transposed view.
+  bool metric_pairs = kind == 1 && !schedule && gradient_copies == 1 && !begin && !range.offset &&
+                      count == elements && range.column_stride == 1 &&
+                      range.row_stride == range.row_length;
+  if (kind == 1) {
+    const char* selection = std::getenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS");
+    if (selection && std::strcmp(selection, "0") && std::strcmp(selection, "1"))
+      return cudaErrorInvalidValue;
+    if (selection && std::strcmp(selection, "0") == 0) metric_pairs = false;
+  }
+  const auto pairs = x.nbf * (x.nbf + 1) / 2;
+  if (kind == 1) {
+    runtime::cuda_trace::trace_counter("metric_derivative_dense_weights", count);
+    runtime::cuda_trace::trace_counter("metric_derivative_pair_tasks",
+                                       metric_pairs ? pairs : count);
+    runtime::cuda_trace::trace_counter("metric_derivative_folded_panels", metric_pairs ? 1 : 0);
+  }
   const auto launch = [&]<std::size_t Terms>() {
-    if (auxiliary_g_only)
+    if (metric_pairs)
+      metric_pair_derivatives<Terms>
+          <<<static_cast<unsigned>((pairs - 1) / elements_per_block + 1), threads, 0, stream>>>(
+              x, positions, pairs, weights, gradient, omega);
+    else if (auxiliary_g_only)
       derivative_tile<false, false, Terms, true><<<blocks, threads, 0, stream>>>(
           o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1, omega);
     else if (skip_sp_shells)
