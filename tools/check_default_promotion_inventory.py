@@ -809,6 +809,16 @@ def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_response_host_controls(root: Path) -> dict[str, str]:
+    """Track resource controls without prescribing admission implementation."""
+    relative = Path("src/hf/rhf_frame_response.cu")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"response-option:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_RHF_RESPONSE_HOST_[A-Z_]+)"', source)
+    }
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -832,6 +842,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_cc_options(root),
         _discover_cc_execution(root),
         _discover_response_options(root),
+        _discover_response_host_controls(root),
         _discover_df_rhf_preconvergence(root),
         _discover_rhf_phase_values_default(root),
     ):

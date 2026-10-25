@@ -102,6 +102,32 @@ Cached and uncached angular buckets form a disjoint complete source partition;
 positive-screening and independent final scalar audits still recompute their
 whole requested source. The additional packed host descriptors are charged
 before admitting optional values.
+For this eager exact frame owner, automatic admission now fits whole GPU
+buckets to the available device allowance and uses bounded pageable FP64 RAM
+for omitted buckets. GPU values retain priority. This applies to relaxed,
+unscreened responses admitted by the existing size/capacity policy; it does
+not alter the separate RHF-SCF graph or public prepared CPKS owners.
+`GENERATIVEQC_RHF_RESPONSE_HOST_MAX_BYTES=0` disables the RAM tier. Unset uses
+`min(32 GiB, one quarter of machine and enclosing cgroup headroom)`;
+unavailable headroom information disables automatic RAM admission.
+`GENERATIVEQC_RHF_RESPONSE_HOST_BUCKET_MASK` restricts the optional buckets.
+`GENERATIVEQC_RHF_RESPONSE_HOST_TILE_BYTES` bounds each of two staging slots
+(default 256 MiB, positive FP64-aligned, at most 512 MiB). Admission shrinks
+tiles to preserve room for values, checks free VRAM after reserving mandatory
+response storage, and charges values, two pinned tiles and two device tiles
+to the complete numeric budget. No RAM tier is created without an admitted
+GPU source; a completely resident GPU source allocates no host staging.
+
+Host allocation/capacity refusal preserves the admitted GPU values. A later
+required allocation failure discards both optional tiers before the existing
+single exact retry. Non-allocation execution faults still propagate. The
+independent final residual and nuclear derivative sources remain uncached.
+`host_jk_bytes`, `host_jk_capacity_bytes`, `host_jk_actions`,
+`host_jk_h2d_bytes` and `host_jk_setup_seconds` distinguish retained values,
+complete storage, actual replay, PCIe uploads and construction. Temporary disk
+is not enabled for this response owner: the separate long-range KS disk
+qualification does not establish a response crossover.
+
 The [resident-source decision](../../.agents/notes/implemented/performance/2026-10-05-exact-response-resident-source.md)
 retains the rationale, measured evidence and conditions for revisiting it.
 

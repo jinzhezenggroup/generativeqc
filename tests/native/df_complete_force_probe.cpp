@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <string_view>
 
 #include "methods/df_ccsdt_force.hpp"
 #include "posthf/raw_source.hpp"
@@ -76,6 +77,11 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
         !result.orbital.resident_jk_bytes)
       throw std::runtime_error(
           "resident complete-force qualification did not exercise source reuse");
+    // Validation must prove the consuming force endpoint used RAM, not just
+    // compare a numerically correct fallback which ignored the intended tier.
+    if (const auto* host = std::getenv("GENERATIVEQC_TEST_RHF_REQUIRE_HOST"))
+      if (forces && std::string_view(host) == "1" && !result.orbital.host_jk_actions)
+        throw std::runtime_error("complete-force qualification did not consume host ERIs");
     if (packed && !result.solver.packed_diis)
       throw std::runtime_error("packed history qualification did not exercise packed storage");
     const double scalars[]{result.energy,

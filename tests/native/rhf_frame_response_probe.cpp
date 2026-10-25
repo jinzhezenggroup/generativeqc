@@ -19,13 +19,13 @@
 #include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 
-extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
-                                        const double* const* inputs, bool blas, bool relax,
-                                        std::size_t budget, std::size_t max_iterations,
-                                        double screening, unsigned nuclear_schedule,
-                                        double* const* outputs, std::size_t* counts,
-                                        double* diagnostics, char* error,
-                                        std::size_t error_size) noexcept {
+static int frame_response_probe(void* opaque, std::size_t occupied, const double* const* inputs,
+                                bool blas, bool relax, std::size_t budget,
+                                std::size_t max_iterations, double screening,
+                                unsigned nuclear_schedule, double* const* outputs,
+                                std::size_t* counts, double* diagnostics, char* error,
+                                std::size_t error_size, std::size_t* cache_counts,
+                                double* phase_seconds) noexcept {
   using namespace generativeqc;
   try {
     const auto& raw = *static_cast<posthf::RawSource*>(opaque);
@@ -41,6 +41,8 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     hf::RHFFrameResponseOptions options;
     options.orbital_screening_tolerance = screening;
     options.profile_jk = true;
+    if (const auto* profile = std::getenv("GENERATIVEQC_TEST_RHF_PROFILE_JK"))
+      options.profile_jk = std::string_view(profile) != "0";
     if (const auto* materialized = std::getenv("GENERATIVEQC_TEST_RHF_MATERIALIZED_JK"))
       options.materialized_jk = std::string_view(materialized) != "0";
     if (const auto* resident = std::getenv("GENERATIVEQC_TEST_RHF_RESIDENT_JK_BYTES"))
@@ -112,11 +114,53 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     diagnostics[2] = result.reference_residual;
     diagnostics[3] = result.applied_screening;
     diagnostics[4] = result.screened_residual;
+    if (cache_counts) {
+      const std::size_t cache[]{
+          result.resident_jk_bytes, result.resident_jk_values,           result.resident_jk_actions,
+          result.host_jk_bytes,     result.host_jk_capacity_bytes,       result.host_jk_actions,
+          result.host_jk_h2d_bytes, result.resident_jk_discarded_attempt};
+      std::copy(std::begin(cache), std::end(cache), cache_counts);
+    }
+    if (phase_seconds) {
+      const double phases[]{result.setup_seconds,
+                            result.solve_seconds,
+                            result.independent_audit_seconds,
+                            result.one_electron_seconds,
+                            result.two_electron_seconds,
+                            result.resident_jk_setup_seconds,
+                            result.host_jk_setup_seconds,
+                            result.resident_jk_retry_seconds};
+      std::copy(std::begin(phases), std::end(phases), phase_seconds);
+    }
     return 0;
   } catch (const std::exception& failure) {
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
     return 1;
   }
+}
+
+// Keep the existing probe ABI while exposing cache consumption and phase times
+// to constrained-memory qualification. Both entry points run the same owner.
+extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
+                                        const double* const* inputs, bool blas, bool relax,
+                                        std::size_t budget, std::size_t max_iterations,
+                                        double screening, unsigned nuclear_schedule,
+                                        double* const* outputs, std::size_t* counts,
+                                        double* diagnostics, char* error,
+                                        std::size_t error_size) noexcept {
+  return frame_response_probe(opaque, occupied, inputs, blas, relax, budget, max_iterations,
+                              screening, nuclear_schedule, outputs, counts, diagnostics, error,
+                              error_size, nullptr, nullptr);
+}
+
+extern "C" int rhf_frame_response_cache_probe(
+    void* opaque, std::size_t occupied, const double* const* inputs, bool blas, bool relax,
+    std::size_t budget, std::size_t max_iterations, double screening, unsigned nuclear_schedule,
+    double* const* outputs, std::size_t* counts, double* diagnostics, char* error,
+    std::size_t error_size, std::size_t* cache_counts, double* phase_seconds) noexcept {
+  return frame_response_probe(opaque, occupied, inputs, blas, relax, budget, max_iterations,
+                              screening, nuclear_schedule, outputs, counts, diagnostics, error,
+                              error_size, cache_counts, phase_seconds);
 }
 
 // An independent provider seam for signed-density linearity, self-adjointness

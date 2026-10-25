@@ -44,7 +44,8 @@
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
       "python/generativeqc_compiler/tensor/ad_program.py",
-      "src/scf/fock_prepared.cpp"
+      "src/scf/fock_prepared.cpp",
+      "src/hf/rhf_frame_response.cu"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -2145,6 +2146,31 @@
         "tests/python/test_full_host_ks_cuda.py",
         "tests/python/test_range_resident_values_cuda.py",
         "benchmarks/results/host-full-eri-20261025/README.md"
+      ]
+    },
+    {
+      "id": "response.host-full-values",
+      "classification": "already-default",
+      "controls": [
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_MAX_BYTES",
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_BUCKET_MASK",
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_TILE_BYTES"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.cu",
+        "src/runtime/host_cache_budget.hpp"
+      ],
+      "rationale": "Eligible eager exact RHF frame responses retain GPU priority and automatically admit bounded FP64 RAM for omitted buckets. Machine/cgroup headroom, remaining complete numeric capacity and free VRAM constrain admission. Full GPU residency allocates no host tier; capacity refusal preserves GPU values and later mandatory OOM retries once without either tier. Independent final residual and derivative sources remain authoritative.",
+      "revisit_condition": "Qualify changes to source eligibility, staging, bucket selection and resource reserve against same-source complete consuming energy/force endpoints and independent scientific gates. This policy does not qualify RHF-SCF graphs, public prepared CPKS, screened Krylov actions or temporary disk.",
+      "evidence": [
+        "docs/developer/response.md",
+        "tests/python/test_rhf_host_response_cuda.py",
+        "tests/python/test_rhf_resident_retry.py",
+        ".agents/notes/implemented/performance/2026-10-25-rhf-response-host-eri.md",
+        "benchmarks/results/rhf-host-response-20261025/README.md"
       ]
     }
   ]

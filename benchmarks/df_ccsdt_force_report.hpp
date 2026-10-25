@@ -169,6 +169,11 @@ inline void write_df_ccsdt_force_report(std::ostream& output,
   work_field("resident_jk_actions", result.orbital.resident_jk_actions);
   work_field("resident_jk_value_reads", result.orbital.resident_jk_value_reads);
   work_field("resident_jk_setup_seconds", result.orbital.resident_jk_setup_seconds);
+  work_field("host_jk_bytes", result.orbital.host_jk_bytes);
+  work_field("host_jk_capacity_bytes", result.orbital.host_jk_capacity_bytes);
+  work_field("host_jk_actions", result.orbital.host_jk_actions);
+  work_field("host_jk_h2d_bytes", result.orbital.host_jk_h2d_bytes);
+  work_field("host_jk_setup_seconds", result.orbital.host_jk_setup_seconds);
   work_field("resident_jk_seconds", result.orbital.resident_jk_seconds);
   work_field("resident_jk_device_seconds", result.orbital.resident_jk_device_seconds);
   work_field("z_iterations", result.orbital.orbital_response.iterations);
