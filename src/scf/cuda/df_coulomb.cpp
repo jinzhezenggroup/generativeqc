@@ -87,8 +87,9 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
     if (error != cudaSuccess) return cuda_failure(error, "DF Hermite projection", detail);
     runtime::cuda_trace::trace_counter("coulomb_md_owner_bytes",
                                        plan.md_coulomb_resources.device_bytes);
-    // These count submitted complete unscreened traversals. Graph replay must
-    // be measured from executed kernels, not multiplied by host submissions.
+    // These are submitted unscreened upper bounds, not executed radial work.
+    // The owner emits separate executed counts in non-captured trace runs.
+    // Graph replay must not be inferred from host submission counts.
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_charge_passes", !raw_charge_ready);
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_projection_passes", 1);
     runtime::cuda_trace::trace_counter("coulomb_md_submitted_primitive_interactions",

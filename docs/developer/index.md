@@ -1,13 +1,15 @@
 # Developer Guide
 
-Understand or extend GenerativeQC by following the scientific and execution ownership boundaries. This is the home for current implementation contracts; historical decisions and experiments belong in `.agents/notes/`.
+The Developer Guide covers the implementation: scientific methods, compiler IR,
+integrals, derivatives and CPU/CUDA execution. Start with the build guide and
+architecture, or go directly to a subsystem below.
 
 ## Getting oriented
 
 1. [Build and CUDA configuration](build.md) — establish a development environment.
 2. [Architecture](architecture.md) — locate public method and runtime ownership.
-3. [Scientific compiler architecture](compiler_architecture.md) — understand generated programs and kernels.
-4. [Electronic-structure boundaries](electronic_structure_boundaries.md) and [provider selection](provider_selection_boundaries.md) — understand the separation of science and execution.
+3. [Scientific compiler architecture](compiler_architecture.md) — generated programs and kernels.
+4. [Electronic-structure boundaries](electronic_structure_boundaries.md) and [provider selection](provider_selection_boundaries.md) — method and backend responsibilities.
 
 ## Find a subsystem
 

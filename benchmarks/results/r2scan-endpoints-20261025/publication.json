@@ -1,0 +1,132 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "068d24de3956f02626bd0c46b595a16d3f6f23ce",
+    "dirty": false
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Complete default endpoint observations; all completed accuracy-failing and slower points remain visible. The bounded implementation passes independent regression gates; Direct r2SCAN-3c96 cold still trails this GPU4PySCF sample."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6481,
+      "sha256": "0d2f040f006d09ec3503793a0d638c1028992316bd50ac892644c200ed6aa438",
+      "role": "summary"
+    },
+    {
+      "path": "auxiliary-inputs.json.xz",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862",
+      "role": "input"
+    },
+    {
+      "path": "comparisons.json.xz",
+      "bytes": 1280,
+      "sha256": "b37f2fe739b32c4d973d7b520903ba06faa569422c7e1ddb935c7fa46f06f441",
+      "role": "summary"
+    },
+    {
+      "path": "conditions.md",
+      "bytes": 5497,
+      "sha256": "25352649ada4b6df190ae2187dc3dbd14efe92468d7c79e9b295986fd53e7e1f",
+      "role": "summary"
+    },
+    {
+      "path": "endpoint-validation.json.xz",
+      "bytes": 85120,
+      "sha256": "b24971f5fce7a7f2718c0dd7cd12bcca1a1015fa00ab3a9d62a1780df0f33432",
+      "role": "samples"
+    },
+    {
+      "path": "exploration-00.json.xz",
+      "bytes": 818152,
+      "sha256": "ce0d5e65cd5eb00f5c5b580dde29308b54d0db94413393182915599e4f384f19",
+      "role": "samples"
+    },
+    {
+      "path": "gpu4pyscf.json.xz",
+      "bytes": 188144,
+      "sha256": "2cb953f9ee814157be79a72bdf918a60e7368307132732a92fd6148fbf81e00f",
+      "role": "samples"
+    },
+    {
+      "path": "jobs.json.xz",
+      "bytes": 12820,
+      "sha256": "316f3a59af03d85dd3b4cd373d1aaae64bf474d1eb878fc28940438b768191d3",
+      "role": "reproduction"
+    },
+    {
+      "path": "oracles.json.xz",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+      "role": "input"
+    },
+    {
+      "path": "provenance.json.xz",
+      "bytes": 33852,
+      "sha256": "0d912c6783c8ee182e8883d6db8f632c4903c71ff11b11678bdc7fad6d6a3eb0",
+      "role": "summary"
+    },
+    {
+      "path": "qualification.json.xz",
+      "bytes": 22792,
+      "sha256": "fbb9ee11b10eda45854c68ddc7b2fb77bc20011f126dd86eeae54ab6c7adfd09",
+      "role": "summary"
+    },
+    {
+      "path": "reference-reuse.json",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac",
+      "role": "input"
+    },
+    {
+      "path": "regressions.json.xz",
+      "bytes": 70104,
+      "sha256": "217c8d811e54e08c3d87a29932c995736d4694e41d1d4ea6356a44d30826b058",
+      "role": "summary"
+    },
+    {
+      "path": "reproduce.py",
+      "bytes": 9025,
+      "sha256": "c5310d7f838de4c59cf9639911a709af0da04b2f9413330d30583b448ef34a8f",
+      "role": "reproduction"
+    },
+    {
+      "path": "standard.json.xz",
+      "bytes": 213956,
+      "sha256": "5b4df2126afaa42d00df6f320ae4e9e194673c5ea4f9763aabe9fa29d8da315e",
+      "role": "samples"
+    },
+    {
+      "path": "timings.md",
+      "bytes": 13907,
+      "sha256": "ce68acbd8548fe3ad1cfdf6784c9fe5717031e64197d36036bf41d3a660f7188",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json.xz",
+      "bytes": 2976,
+      "sha256": "e55d2d7150cd45e075a19d3923e2237ffb4ff9484e257f0ef10f20f40a8f1809",
+      "role": "evidence"
+    },
+    {
+      "path": "work.md",
+      "bytes": 10634,
+      "sha256": "52783d3a9ac144e92e1b08e7f4e2b0cdba7c6d4309140c0caae640abc7154bd1",
+      "role": "summary"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/r2scan-endpoints-20261025/reproduce.py",
+      "--output",
+      ".artifacts/r2scan-endpoints-replay",
+      "--verify"
+    ]
+  }
+}

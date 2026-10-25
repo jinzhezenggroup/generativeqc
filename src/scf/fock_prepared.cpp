@@ -367,7 +367,24 @@ struct PreparedFockPlan::Impl {
           strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
           strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
           !strategy.spec.exchange.present;
+      // A multi-GiB raw tensor pays complete three-center generation before
+      // the first J. The norm-bounded vector owner amortizes E instead. Restrict
+      // this work crossover to automatic pure-J sources whose complete Hermite
+      // inventory fits well below the raw tensor; explicit storage stays exact.
+      const long double raw_bytes = static_cast<long double>(data.raw.nbf) * (data.raw.nbf + 1) /
+                                    2 * data.raw.naux * sizeof(double);
+      bool prefer_md_streamed = false;
+#if GENERATIVEQC_HAS_CUDA
+      if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested &&
+          diagnostic.variant.df_pair_storage_request == DfPairStorageRequest::Automatic &&
+          strategy.screening_tolerance > 0 && raw_bytes >= (4ULL << 30)) {
+        const auto md_bytes = cuda_df_md_coulomb_reservation(system, *auxiliary, plan_budget);
+        prefer_md_streamed = md_bytes && static_cast<long double>(md_bytes) * 4 < raw_bytes;
+      }
+#endif
       const auto plan_values = [&](std::size_t n, std::size_t a, std::size_t fixed) {
+        if (prefer_md_streamed)
+          return plan_streamed_density_fitting_tiles(n, a, plan_budget, fixed);
         // Packed-raw is not an admitted borrowed-response consumer and does
         // not have the same optional-U budget fallback. Keep its old capacity.
         const auto request = diagnostic.variant.df_pair_storage_request;
@@ -446,9 +463,12 @@ struct PreparedFockPlan::Impl {
         const auto reserve = cuda_df_md_coulomb_reservation(system, *auxiliary, plan_budget);
         if (reserve && reserve < plan_budget) {
           try {
-            tiles = plan_requested_density_fitting_tiles(
-                diagnostic.variant.df_pair_storage_request, 1, nbf, naux, nbf, 0,
-                plan_budget - reserve, metadata_bytes, true, 0, true);
+            tiles = prefer_md_streamed
+                        ? plan_streamed_density_fitting_tiles(nbf, naux, plan_budget - reserve,
+                                                              metadata_bytes)
+                        : plan_requested_density_fitting_tiles(
+                              diagnostic.variant.df_pair_storage_request, 1, nbf, naux, nbf, 0,
+                              plan_budget - reserve, metadata_bytes, true, 0, true);
           } catch (const DensityFittingBudgetError&) {
             // The ordinary plan already fits. Optional owner storage must not
             // turn a supported low-memory calculation into a preparation error.
@@ -495,9 +515,10 @@ struct PreparedFockPlan::Impl {
       if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested) {
         // No additional allowance: installation receives only the resolved
         // value budget. Its optional host peak is bounded by that same cap.
-        checked(try_install_cuda_df_md_coulomb(raw_plan, system, *auxiliary, plan_budget,
-                                               plan_budget, diagnostic.fitted, detail),
-                detail);
+        checked(
+            try_install_cuda_df_md_coulomb(raw_plan, system, *auxiliary, plan_budget, plan_budget,
+                                           diagnostic.fitted, detail, strategy.screening_tolerance),
+            detail);
       }
 #endif
       // Packed pure-J does not consume the dense host reader. Freeze its policy

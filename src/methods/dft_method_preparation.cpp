@@ -505,12 +505,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   // and an explicit 1/on keeps the original native capability checks.
   if (!std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK") &&
       !std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")) {
+    const bool pure_coulomb =
+        !fock.exchange.present &&
+        (functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe) ||
+         functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan));
     options.incremental_direct_jk_auto =
-        backend == GENERATIVEQC_BACKEND_CUDA && cuda_matched_global_hybrid &&
-        fock.spin == scf::FockSpin::Restricted && fock.exchange.present &&
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        ((cuda_matched_global_hybrid && fock.exchange.present) || pure_coulomb) &&
+        fock.spin == scf::FockSpin::Restricted &&
         options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         options.precision_mode == GENERATIVEQC_PRECISION_FP64 && !execution_plan.range_exchange &&
-        !execution_plan.nonlocal_correlation && !execution_plan.d4_correction &&
+        !execution_plan.nonlocal_correlation && (pure_coulomb || !execution_plan.d4_correction) &&
         options.energy_tolerance == 1e-9 && options.density_tolerance == 1e-5 &&
         options.screening_tolerance == 1e-12 &&
         scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);

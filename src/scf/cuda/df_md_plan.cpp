@@ -29,7 +29,8 @@ std::size_t cuda_df_md_coulomb_reservation(const core::System& orbital,
 generativeqc_status try_install_cuda_df_md_coulomb(
     CudaDensityFittingJkPlan* plan, const core::System& orbital, const core::System& auxiliary,
     std::size_t device_budget, std::size_t host_budget,
-    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail) {
+    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail,
+    double screening_tolerance) {
   detail.clear();
   if (!plan || plan->md_coulomb || plan->persistent_scf_state || diagnostics.size() != 1 ||
       molecule::ao_count(orbital) != plan->nbf || molecule::ao_count(auxiliary) != plan->naux) {
@@ -67,7 +68,9 @@ generativeqc_status try_install_cuda_df_md_coulomb(
   cuda_execution::CudaDfMdResources resources;
   auto status = cuda_execution::create_cuda_df_md_owner(
       plan->device_id, plan->stream, orbital, auxiliary, device_budget - used_device,
-      host_budget - record.host_resident_bytes, &plan->md_coulomb, resources, detail);
+      host_budget - record.host_resident_bytes, &plan->md_coulomb, resources, detail,
+      {screening_tolerance > 0 ? std::min(1e-15, screening_tolerance * 1e-3) : 0,
+       plan->metric_eigenvectors, plan->metric_eigenvalues});
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
     detail = "DF Hermite fallback: " + detail;
     return GENERATIVEQC_STATUS_SUCCESS;

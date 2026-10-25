@@ -12,7 +12,7 @@ namespace generativeqc::scf::cuda_execution {
  * Off-diagonal shell pairs sum both orientations, preserving nonsymmetric D.
  * The matching projection below writes both J orientations without this factor.
  * This pass overwrites every Hermite density and clears the complete potential. */
-__global__ void df_md_precontract(DfMdView view, const double* input) {
+__global__ void df_md_precontract(DfMdView view, const double* input, bool screen = false) {
   const auto primitive = view.primitives[blockIdx.x];
   const auto hermites = df_md_count(primitive.first_angular + primitive.second_angular);
   bool active = false;
@@ -35,6 +35,31 @@ __global__ void df_md_precontract(DfMdView view, const double* input) {
   // never hidden. Every input replay overwrites the flag on the owning stream.
   const bool any_active = __syncthreads_or(active);
   if (threadIdx.x == 0) view.primitives[blockIdx.x].density_active = any_active;
+  if (view.prepare_norms && threadIdx.x == 0) {
+    double norm = 0;
+    const auto angular = primitive.first_angular + primitive.second_angular;
+    for (unsigned d = 0; d < hermites; ++d) {
+      const auto value = fabs(view.density[primitive.hermite_offset + d]);
+      if (value != 0)
+        norm =
+            __dadd_ru(norm, __dmul_ru(value, df_md_hermite_norm(primitive.exponent, angular, d)));
+    }
+    if (!isfinite(norm)) norm = INFINITY;
+    view.primitives[blockIdx.x].source_norm_bound = norm;
+    if (screen && view.source_norm_limit > 0 && norm <= view.source_norm_limit)
+      view.primitives[blockIdx.x].density_active = false;
+  }
+}
+
+/** Projection has no consumer of auxiliary Hermite potentials. Its first
+ * scalar can hold this outward-rounded current source norm until the next
+ * charge call clears it. This bound adds no uncharged device arena. */
+__global__ void df_md_source_norm_sum(DfMdView auxiliary) {
+  if (threadIdx.x || blockIdx.x) return;
+  double sum = 0;
+  for (std::size_t i = 0; i < auxiliary.count; ++i)
+    sum = __dadd_ru(sum, auxiliary.primitives[i].source_norm_bound);
+  auxiliary.potential[0] = isfinite(sum) ? sum : INFINITY;
 }
 
 /** Project one primitive's Hermite potential into a caller-cleared public
@@ -63,7 +88,7 @@ __global__ void df_md_project(DfMdView view, double* output) {
  * atomics and has a fixed source traversal. Angular source groups must be
  * launched sequentially on the owning stream. Padding lanes are initialized
  * and participate in every barrier/shuffle; no partial warp uses stale roots.
- * The prepared owner admits this unscreened path within its qualified default
+ * The prepared owner admits this bounded primal path within its qualified default
  * domain; df_md_plan owns the capacity and angular fallback decisions. */
 template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Response = false>
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
@@ -86,10 +111,17 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
   const auto target_view = Charge ? auxiliary : pairs;
   const auto source_view = Charge ? pairs : auxiliary;
   const auto target = target_view.primitives[(Charge ? auxiliary_begin : pair_begin) + blockIdx.x];
+  if constexpr (!Charge && !Response) {
+    // Uniform CTA refusal; response always traverses the complete domain.
+    const auto bound = __dmul_ru(target.component_norm_bound, auxiliary.potential[0]);
+    if (pairs.projection_error_per_primitive > 0 && isfinite(bound) &&
+        bound <= pairs.projection_error_per_primitive)
+      return;
+  }
   const auto begin = Charge ? pair_begin : auxiliary_begin;
-  // The prepared list removes only exactly zero *current Hermite densities*.
-  // This is also valid when the auxiliary target is raised for response; the
-  // derivative of the orbital source still uses the complete projection path.
+  // Primal charge removes current sources within its cumulative allowance.
+  // Response refreshes the list without norm screening, retaining every
+  // nonzero density before either raised-target contraction.
   const auto count = Charge && pairs.active_counts ? pairs.active_counts[PairAngular]
                      : Charge                      ? pair_count
                                                    : auxiliary_count;

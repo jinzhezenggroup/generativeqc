@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/df_md_j.cuh"
 #include "scf/cuda/df_md_layout.hpp"
@@ -55,6 +56,63 @@ struct CudaDfMdOwner {
 };
 
 namespace {
+
+/** Count actual radial source/target products from this replay's state. This
+ * diagnostic runs only outside capture and after the public output is ready.
+ * The primal pair potential is then dead until the next replay overwrites it,
+ * so one existing scalar holds the count without persistent telemetry storage. */
+template <bool Charge>
+__global__ void count_radial_work(DfMdView pair, DfMdView auxiliary) {
+  __shared__ unsigned long long pairs[256], auxiliaries[256];
+  unsigned long long p = 0, a = 0;
+  for (std::size_t i = threadIdx.x; i < pair.count; i += blockDim.x) {
+    const auto primitive = pair.primitives[i];
+    if constexpr (Charge) {
+      p += primitive.density_active;
+    } else {
+      const auto bound = __dmul_ru(primitive.component_norm_bound, auxiliary.potential[0]);
+      p += !(pair.projection_error_per_primitive > 0 && isfinite(bound) &&
+             bound <= pair.projection_error_per_primitive);
+    }
+  }
+  for (std::size_t i = threadIdx.x; i < auxiliary.count; i += blockDim.x)
+    a += Charge || auxiliary.primitives[i].density_active;
+  pairs[threadIdx.x] = p;
+  auxiliaries[threadIdx.x] = a;
+  __syncthreads();
+  for (unsigned step = 128; step; step /= 2) {
+    if (threadIdx.x < step) {
+      pairs[threadIdx.x] += pairs[threadIdx.x + step];
+      auxiliaries[threadIdx.x] += auxiliaries[threadIdx.x + step];
+    }
+    __syncthreads();
+  }
+  if (!threadIdx.x)
+    *reinterpret_cast<unsigned long long*>(pair.potential) = pairs[0] * auxiliaries[0];
+}
+
+template <bool Charge>
+cudaError_t trace_radial_work(CudaDfMdOwner& owner) {
+  if (!std::getenv("GENERATIVEQC_DF_TRACE")) return cudaSuccess;
+  cudaStreamCaptureStatus capture{};
+  auto status = cudaStreamIsCapturing(owner.stream, &capture);
+  if (status != cudaSuccess || capture != cudaStreamCaptureStatusNone) return status;
+  count_radial_work<Charge><<<1, 256, 0, owner.stream>>>(owner.pair, owner.auxiliary);
+  status = cudaPeekAtLastError();
+  unsigned long long work = 0;
+  if (status == cudaSuccess)
+    status = cudaMemcpyAsync(&work, owner.pair.potential, sizeof(work), cudaMemcpyDeviceToHost,
+                             owner.stream);
+  // Keep the stack destination alive even if the asynchronous copy reports an
+  // error after submission; draining the borrowed stream owns that lifetime.
+  const auto drained = cudaStreamSynchronize(owner.stream);
+  if (status != cudaSuccess) return status;
+  if (drained != cudaSuccess) return drained;
+  runtime::cuda_trace::trace_counter(
+      Charge ? "coulomb_md_executed_charge_radials" : "coulomb_md_executed_projection_radials",
+      work);
+  return cudaSuccess;
+}
 /** Compact the current exact-nonzero source domain in stable angular order.
  * No tolerance, norm estimate or frozen-density assumption enters this list.
  * Precontraction marks NaNs/infinities active, including NaN * zero, so removing
@@ -81,6 +139,65 @@ __global__ void compact_density_sources(DfMdView pair) {
     __syncthreads();
   }
   if (threadIdx.x == 0) pair.active_counts[blockIdx.x] = retained;
+}
+
+/** Bound omitted charge after the *stored* full-rank spectral metric.
+ * Let B bound every contracted AO-pair Coulomb norm, C every auxiliary AO norm,
+ * and K=||Q||_F^2/min(lambda). Then |delta J_ij| <= B*naux*C^2*K*S,
+ * where S is the sum of discarded current Hermite-density source norms.
+ * Each AO belongs to one shell; the largest shell primitive multiplicity turns
+ * a maximum primitive-component norm into a contracted bound, including signs.
+ * Positive arithmetic rounds outward; invalid factors fail open. The extra
+ * factor four is conservative slack, not a certificate for unrelated FP64
+ * evaluation roundoff, which is qualified independently from omission.
+ * Setup borrows one otherwise dead potential scalar; no arena is added. */
+__global__ void certify_charge_limit(DfMdView pair, DfMdView auxiliary, CudaDfMdScreening screening,
+                                     double pair_multiplicity, double auxiliary_multiplicity) {
+  __shared__ double qnorm[256], pnorm[256], anorm[256], lambda[256];
+  const unsigned t = threadIdx.x;
+  double q = 0, p = 0, a = 0, l = INFINITY;
+  for (std::size_t i = t; i < auxiliary.nbf * auxiliary.nbf; i += blockDim.x) {
+    const double x = screening.eigenvectors[i];
+    q = isfinite(x) ? __dadd_ru(q, __dmul_ru(x, x)) : INFINITY;
+  }
+  for (std::size_t i = t; i < pair.count; i += blockDim.x) {
+    const double x = pair.primitives[i].component_norm_bound;
+    p = isfinite(x) ? fmax(p, x) : INFINITY;
+  }
+  for (std::size_t i = t; i < auxiliary.count; i += blockDim.x) {
+    const double x = auxiliary.primitives[i].component_norm_bound;
+    a = isfinite(x) ? fmax(a, x) : INFINITY;
+  }
+  for (std::size_t i = t; i < auxiliary.nbf; i += blockDim.x) {
+    const double x = screening.eigenvalues[i];
+    l = fmin(l, isfinite(x) && x > 0 ? x : 0);
+  }
+  qnorm[t] = q;
+  pnorm[t] = p;
+  anorm[t] = a;
+  lambda[t] = l;
+  __syncthreads();
+  for (unsigned step = 128; step; step /= 2) {
+    if (t < step) {
+      qnorm[t] = __dadd_ru(qnorm[t], qnorm[t + step]);
+      pnorm[t] = fmax(pnorm[t], pnorm[t + step]);
+      anorm[t] = fmax(anorm[t], anorm[t + step]);
+      lambda[t] = fmin(lambda[t], lambda[t + step]);
+    }
+    __syncthreads();
+  }
+  if (!t) {
+    const double B = __dmul_ru(pnorm[0], pair_multiplicity);
+    const double C = __dmul_ru(anorm[0], auxiliary_multiplicity);
+    double amplification = __dmul_ru(B, __dmul_ru(C, C));
+    amplification = __dmul_ru(amplification, double(auxiliary.nbf));
+    amplification = __dmul_ru(amplification, __ddiv_ru(qnorm[0], lambda[0]));
+    amplification = __dmul_ru(amplification, __dmul_ru(4.0, double(pair.count)));
+    // Half the final-J allowance belongs to charge; projection owns the rest.
+    pair.potential[0] = amplification > 0 && isfinite(amplification) && lambda[0] > 0
+                            ? __ddiv_rd(__dmul_rd(0.5, screening.max_j_error), amplification)
+                            : 0;
+  }
 }
 
 /** Freeze the override at owner creation, including graph replay. An absent
@@ -207,7 +324,7 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
                                             const core::System& auxiliary,
                                             std::size_t device_budget, std::size_t host_budget,
                                             CudaDfMdOwner** owner, CudaDfMdResources& resources,
-                                            std::string& detail) {
+                                            std::string& detail, CudaDfMdScreening screening) {
   resources = {};
   detail.clear();
   if (!owner) {
@@ -258,6 +375,9 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     // Layouts outlive the candidate, so failure destruction drains their uploads
     // before any pageable host metadata can be released by stack unwinding.
     auto candidate = std::make_unique<CudaDfMdOwner>();
+    candidate->pair.prepare_norms = candidate->auxiliary.prepare_norms =
+        screening.max_j_error > 0 && std::isfinite(screening.max_j_error) &&
+        screening.eigenvectors && screening.eigenvalues;
     candidate->charge_splits = requested_charge_splits();
     candidate->device = device;
     candidate->stream = stream;
@@ -285,6 +405,25 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
       error = cudaMemcpyAsync(candidate->pair.active_offsets, candidate->pair_offsets.data(),
                               8 * sizeof(std::size_t), cudaMemcpyHostToDevice, stream);
     }
+    if (error == cudaSuccess && candidate->pair.prepare_norms) {
+      std::size_t pair_length = 0, auxiliary_length = 0;
+      for (const auto& shell : orbital.shells)
+        pair_length = std::max(pair_length, shell.primitives.size());
+      for (const auto& shell : auxiliary.shells)
+        auxiliary_length = std::max(auxiliary_length, shell.primitives.size());
+      // Layout admission bounds these counts well below exact FP64 integers.
+      certify_charge_limit<<<1, 256, 0, stream>>>(candidate->pair, candidate->auxiliary, screening,
+                                                  double(pair_length * pair_length),
+                                                  double(auxiliary_length));
+      error = cudaPeekAtLastError();
+      if (error == cudaSuccess)
+        error = cudaMemcpyAsync(&candidate->pair.source_norm_limit, candidate->pair.potential,
+                                sizeof(double), cudaMemcpyDeviceToHost, stream);
+      // A downward-rounded split below is independent of metric conditioning:
+      // every skipped target is bounded against the current auxiliary source.
+      candidate->pair.projection_error_per_primitive =
+          std::nextafter((0.5 * screening.max_j_error) / double(candidate->pair.count), 0.0);
+    }
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
     if (error != cudaSuccess) return fail(error, detail);
     candidate->resources = {device_bytes,
@@ -293,7 +432,10 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
                             pair_layout.primitives.size(),
                             aux_layout.primitives.size(),
                             pair_layout.aos.size(),
-                            aux_layout.aos.size()};
+                            aux_layout.aos.size(),
+                            candidate->pair.prepare_norms ? screening.max_j_error : 0,
+                            candidate->pair.source_norm_limit,
+                            candidate->pair.projection_error_per_primitive};
     resources = candidate->resources;
     *owner = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -317,7 +459,7 @@ void destroy_cuda_df_md_owner(CudaDfMdOwner* owner) noexcept { delete owner; }
 cudaError_t cuda_df_md_charge(CudaDfMdOwner* owner, const double* density, double* charge) {
   auto status = validate_replay(owner, density, charge);
   if (status != cudaSuccess) return status;
-  df_md_precontract<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density);
+  df_md_precontract<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density, true);
   compact_density_sources<<<7, 128, 0, owner->stream>>>(owner->pair);
   status = cudaPeekAtLastError();
   if (status != cudaSuccess) return status;
@@ -329,13 +471,16 @@ cudaError_t cuda_df_md_charge(CudaDfMdOwner* owner, const double* density, doubl
   status = cudaMemsetAsync(charge, 0, owner->resources.naux * sizeof(double), owner->stream);
   if (status != cudaSuccess) return status;
   df_md_project<<<owner->auxiliary.count, 128, 0, owner->stream>>>(owner->auxiliary, charge);
-  return cudaPeekAtLastError();
+  status = cudaPeekAtLastError();
+  return status == cudaSuccess ? trace_radial_work<true>(*owner) : status;
 }
 
 cudaError_t cuda_df_md_project(CudaDfMdOwner* owner, const double* potential, double* coulomb) {
   auto status = validate_replay(owner, potential, coulomb);
   if (status != cudaSuccess) return status;
   df_md_precontract<<<owner->auxiliary.count, 128, 0, owner->stream>>>(owner->auxiliary, potential);
+  if (owner->pair.projection_error_per_primitive > 0)
+    df_md_source_norm_sum<<<1, 1, 0, owner->stream>>>(owner->auxiliary);
   status = cudaPeekAtLastError();
   if (status != cudaSuccess) return status;
   status = cudaMemsetAsync(owner->pair.potential, 0, owner->pair_hermites * sizeof(double),
@@ -347,7 +492,8 @@ cudaError_t cuda_df_md_project(CudaDfMdOwner* owner, const double* potential, do
   status = cudaMemsetAsync(coulomb, 0, n * n * sizeof(double), owner->stream);
   if (status != cudaSuccess) return status;
   df_md_project<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, coulomb);
-  return cudaPeekAtLastError();
+  status = cudaPeekAtLastError();
+  return status == cudaSuccess ? trace_radial_work<false>(*owner) : status;
 }
 
 cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double* density,

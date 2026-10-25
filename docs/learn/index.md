@@ -1,8 +1,7 @@
 # Learn quantum chemistry with GenerativeQC
 
-This path teaches the **minimum quantum chemistry needed to use GenerativeQC correctly**. It is not intended to replace a quantum-chemistry textbook.
-
-Read in order:
+These short introductions cover the concepts used in the examples.
+Read them in order or pick a topic:
 
 1. [Quantum chemistry in ten minutes](quantum-chemistry-in-10-minutes.md)
 2. [Molecules, charge, and spin](molecules-charge-spin.md)

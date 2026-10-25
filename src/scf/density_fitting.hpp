@@ -301,6 +301,14 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t memory_budget_bytes, std::size_t fixed_device_bytes = 0,
     bool generated_source = false, std::size_t automatic_rhf_rank = 0);
 
+/** Bounded generated singleton panels for a method-owned vector Coulomb plan.
+ * This explicit work preference keeps the full positive caller allowance; it
+ * does not simulate memory pressure or reserve an unused resident raw tensor.
+ * Metric, generic fallback panels and SCF scratch remain fully charged. */
+[[nodiscard]] DensityFittingTilePlan plan_streamed_density_fitting_tiles(
+    std::size_t nbf, std::size_t naux, std::size_t memory_budget_bytes,
+    std::size_t fixed_device_bytes = 0);
+
 /** Explicit packed resident plan with bounded dense fallback panels.
  * Retaining raw A is the default; the single-factor experiment regenerates
  * source slices for force response instead of retaining a second full tensor.

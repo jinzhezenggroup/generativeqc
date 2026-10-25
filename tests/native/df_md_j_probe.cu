@@ -119,6 +119,18 @@ int main(int argc, char** argv) {
   try {
     const auto orbital = read_system(), auxiliary = read_system();
     DeviceOwner owner;
+    CudaDfMdScreening screening;
+    if (const auto* budget = std::getenv("GENERATIVEQC_TEST_DF_MD_SCREEN_BUDGET")) {
+      const auto count = molecule::ao_count(auxiliary);
+      std::vector<double> q(count * count, 0.0), eigenvalues(count, 1.0);
+      const auto* scale = std::getenv("GENERATIVEQC_TEST_DF_MD_METRIC_SCALE");
+      const double lambda = scale ? std::strtod(scale, nullptr) : 1.0;
+      for (std::size_t i = 0; i < count; ++i) {
+        q[i * count + i] = 1.25;  // Stored factors need not be exactly orthogonal.
+        eigenvalues[i] = lambda;
+      }
+      screening = {std::strtod(budget, nullptr), owner.upload(q), owner.upload(eigenvalues)};
+    }
     CudaDfMdOwner* raw = nullptr;
     CudaDfMdResources resources;
     std::string detail;
@@ -133,14 +145,14 @@ int main(int argc, char** argv) {
         raw)
       throw std::runtime_error("mismatched source geometry was admitted");
     auto status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                          &raw, resources, detail);
+                                          &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     const auto admitted_bytes = resources.device_bytes;
     destroy_cuda_df_md_owner(raw);
     raw = nullptr;
     LedgerScope ledger(admitted_bytes - 1);
     status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                     &raw, resources, detail);
+                                     &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY || raw || ledger.ledger->live ||
         !ledger.ledger->allocations || !ledger.ledger->rejected) {
       destroy_cuda_df_md_owner(raw);
@@ -148,7 +160,7 @@ int main(int argc, char** argv) {
     }
     ledger.ledger->limit = admitted_bytes;
     status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
-                                     &raw, resources, detail);
+                                     &raw, resources, detail, screening);
     if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     std::unique_ptr<CudaDfMdOwner, decltype(&destroy_cuda_df_md_owner)> prepared(
         raw, destroy_cuda_df_md_owner);
@@ -256,7 +268,11 @@ int main(int argc, char** argv) {
     std::cout << "public_aos=" << n << " auxiliary_aos=" << a
               << " orbital_primitive_pairs=" << resources.orbital_primitives
               << " auxiliary_primitives=" << resources.auxiliary_primitives
-              << " owner_device_bytes=" << resources.device_bytes << '\n';
+              << " owner_device_bytes=" << resources.device_bytes
+              << " max_j_omission=" << resources.max_j_omission
+              << " source_norm_limit=" << resources.source_norm_limit
+              << " projection_error_per_primitive=" << resources.projection_error_per_primitive
+              << '\n';
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
