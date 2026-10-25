@@ -311,15 +311,21 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
 
 
 @pytest.mark.parametrize(
-    "variable",
+    "variable,choices",
     [
-        "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
-        "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
+        ("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION", ("0", "1")),
+        ("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING", ("0", "1")),
+        ("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", ("0", "1")),
+        (
+            "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",
+            ("cooperative", "ordered"),
+        ),
     ],
 )
 def test_direct_execution_selection_changes_resource_identity(
     monkeypatch: typing.Any,
     variable: str,
+    choices: tuple[str, str],
 ) -> None:
     """Prepared/restarted owners must retain the actual proof-execution policy."""
     from types import SimpleNamespace
@@ -327,9 +333,9 @@ def test_direct_execution_selection_changes_resource_identity(
     library = SimpleNamespace()
     monkeypatch.delenv(variable, raising=False)
     automatic = estimate_hf_resources([H2], backend="cuda", library=library)
-    monkeypatch.setenv(variable, "0")
+    monkeypatch.setenv(variable, choices[0])
     reference = estimate_hf_resources([H2], backend="cuda", library=library)
-    monkeypatch.setenv(variable, "1")
+    monkeypatch.setenv(variable, choices[1])
     resident = estimate_hf_resources([H2], backend="cuda", library=library)
     assert len({automatic.identity, reference.identity, resident.identity}) == 3
 
