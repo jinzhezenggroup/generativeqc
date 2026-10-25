@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # Shared unrestricted triples tile graph
 
 `generativeqc_compiler.cc.uccsd_triples.build_tile_program` lowers one canonical

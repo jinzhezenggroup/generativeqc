@@ -326,7 +326,7 @@ python -m unittest discover -s tests/python -p test_replay_allocation_audit.py -
 ```
 
 Fixtures are not runtime evidence, even where they exercise the runtime-labelled
-branch. No new runtime hook or real CUDA receipt is supplied by this slice.
-Remaining #1630 gates include complete source-matched production capture,
+branch. No new runtime hook or real CUDA receipt is supplied by this analysis.
+Remaining acceptance gates include complete source-matched production capture,
 reviewed CUDA zero-allocation execution, and a measured iteration-to-preparation
 allocation reduction with independent numerical validation.

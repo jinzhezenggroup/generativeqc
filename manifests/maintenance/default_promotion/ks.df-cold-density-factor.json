@@ -1,0 +1,23 @@
+{
+  "id": "ks.df-cold-density-factor",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_KS_COLD_FACTOR"
+  ],
+  "owner_issues": [
+    2474
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/dft/cuda_ks_cold_factor_policy.hpp",
+    "src/scf/df_density_seed_policy.hpp"
+  ],
+  "rationale": "At 384 or more AOs, native strict-FP64 restricted fitted-exchange cold seeds may use an algebraic factor only after exact occupied rank, finite spectrum and full two-triangle density reconstruction proofs. Existing device scratch and optional accounted O(n) host spectrum keep bounded dense fallback. No canonical, warm-orbital or stationary projection provenance is granted. Explicit 0 disables; explicit 1 permits smaller experiments without relaxing work or scientific gates. Imported and full-rank ensemble seeds retain dense first K.",
+  "revisit_condition": "Require independent matrix and complete energy/force endpoint qualification for broader rank, spin, precision or provider domains. Preserve failure cleanup, resource accounting and dense fallback.",
+  "evidence": [
+    "note:.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md",
+    "benchmarks:benchmarks/results/dft-cold-stage1-20261023/README.md",
+    "tests/native/ks_cold_factor_cases.hpp",
+    "tests/python/test_df_density_seed_policy.py"
+  ]
+}

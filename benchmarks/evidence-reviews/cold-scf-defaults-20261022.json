@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cold-scf-defaults-20261022",
+  "owner": "Default CUDA SCF convergence and final-state acceptance",
+  "reason": "Source-bound targeted endpoints, independent same-model energy/force oracles, unchanged dense-reference failures, original failed test logs, strict compatibility results and native boundary checks. Complete vectors and reconstruction provenance are retained; no historical timing is relabeled and existing size caps are unchanged.",
+  "review_document": "benchmarks/results/cold-scf-defaults-20261022/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cold-scf-defaults-20261022/evidence.json.xz",
+      "family": "cold-scf-defaults-20261022",
+      "classification": "required-compact-accepted-evidence",
+      "role": "default-solver-qualification-with-retained-model-error-failures",
+      "bytes": 148780,
+      "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
+    }
+  ]
+}

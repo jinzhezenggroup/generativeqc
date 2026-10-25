@@ -157,6 +157,6 @@ python tools/generate_integral_ir_examples.py --output manifests/integral_ir_exa
 python -m pytest tests/python/test_integral_contracts.py -q
 ```
 
-These contracts provide independent synthetic acceptance tests while the shared
-numerical evidence protocol in #138 is developed. They make no numerical or
+These contracts provide independent synthetic acceptance tests; the shared
+numerical evidence protocol applies separately. They make no numerical or
 performance claim for new operator kernels.

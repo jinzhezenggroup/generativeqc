@@ -1,0 +1,22 @@
+{
+  "id": "hf.one-electron-mapping-overrides",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING",
+    "hf-runtime:GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/one_electron_gradient_bridge.cu"
+  ],
+  "rationale": "Generated one-electron execution is production-owned; these mapping variables preserve measured/reproduction schedule overrides rather than a second scientific implementation. Prepared KS Hcore now honors the existing cooperative default with implicit triangular AO addressing after a new five-pair 48/96-atom warm/moved-warm qualification; overlap-only Pulay and explicit noncooperative schedules retain component lanes. Historical failed promotion populations remain retained.",
+  "revisit_condition": "Retire overrides when retained evidence no longer requires forced mappings and the automatic compiler-owned path remains independently auditable.",
+  "evidence": [
+    "issue:#1598",
+    "note:.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md",
+    "benchmarks:benchmarks/results/dft-cold-stage1-20261023/README.md"
+  ]
+}

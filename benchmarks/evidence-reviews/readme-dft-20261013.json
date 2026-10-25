@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-dft-20261013",
+  "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
+  "reason": "Retain unchanged Direct/DF numerical summaries required by current README compositions. The complete superseded 15-file report, original manifest, source reconstruction and ancillary receipts are recoverable from merged commit 449cd63ccfbdb298c97b78f3c2d85edff0041310 via the hash/size-pinned snapshot, fully restored and verified before retirement. No live samples, gates, source identities or repository budget are changed.",
+  "review_document": "benchmarks/results/readme-dft-20261013/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 298072,
+      "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 428796,
+      "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
+    }
+  ]
+}

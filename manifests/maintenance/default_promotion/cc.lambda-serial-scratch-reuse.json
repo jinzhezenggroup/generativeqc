@@ -1,0 +1,30 @@
+{
+  "id": "cc.lambda-serial-scratch-reuse",
+  "classification": "needs-qualification",
+  "controls": [
+    "cc-option:lambda.serial_scratch_reuse"
+  ],
+  "owner_issues": [
+    933,
+    1401
+  ],
+  "sources": [
+    "src/cc/lambda_response.hpp",
+    "src/cc/lambda_response_cuda.cu",
+    "src/cc/df_lambda_cuda.cu",
+    "docs/developer/iteration_reuse.md"
+  ],
+  "rationale": "The standalone Lambda owner option remains default-off and shares sequential expanded, staged, matrix and audit scratch on one stream while pinned inputs, cuts, seeds, outputs and invariant frontiers remain disjoint. It is independent of both mixed-precision controls and the narrower default matrix/audit lease sharing. The complete native DF molecular-force owner now explicitly requests this layout by default after source-matched complete-endpoint memory and numerical qualification; this does not promote the standalone Lambda default or claim a Lambda speedup.",
+  "revisit_condition": "Broaden the standalone default only with source-matched complete-endpoint A/B gates for its consumers, full capacity and peak accounting, real-device lifetime/refusal validation and unchanged scientific work and publication gates; preserve an explicit bounded layout fallback.",
+  "evidence": [
+    "pr:#2269",
+    ".agents/notes/implemented/performance/2026-10-11-memory-aware-native-arena-candidates.md",
+    ".agents/notes/implemented/performance/2026-10-12-df-force-response-defaults.md",
+    "benchmarks/results/df-response-defaults-20261012/README.md",
+    "tests/python/test_df_lambda_serial_scratch.py",
+    "tests/python/test_df_lambda_mixed_scratch_composition.py",
+    "issue:#933",
+    "issue:#1401",
+    ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+  ]
+}

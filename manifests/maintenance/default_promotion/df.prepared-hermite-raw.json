@@ -1,0 +1,25 @@
+{
+  "id": "df.prepared-hermite-raw",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING"
+  ],
+  "owner_issues": [
+    2609
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/df_source.cpp",
+    "src/scf/cuda/df_md_raw.cu",
+    "src/scf/fock_prepared.cpp",
+    "src/scf/rhf.cpp"
+  ],
+  "rationale": "Automatic mapping prepares reusable normalized Hermite E only for a fresh single-system resident packed source within the unchanged planner remainder and a 256-MiB optional cap. Packed raw tiles retain strict FP64, every ordered primitive product, auxiliary g, public component conventions and factor-ordered whitening. Explicit mappings/math, batches and insufficient capacity retain the generic source. No grids, convergence thresholds, screening or force response change.",
+  "revisit_condition": "Preserve independent raw/energy/force gates, resource refusal and lifetime tests, and complete cold/warm endpoint work counts. Requalify other residency/batch domains. Do not trade fitted/occupied owners or larger panel work for E storage; retain the demonstrated host validation loop alignment across link changes.",
+  "evidence": [
+    "tests/python/test_df_md_raw_cuda.py",
+    "tests/python/test_df_md_raw_endpoint_cuda.py",
+    "docs/developer/df_packed_storage.md",
+    "note:.agents/notes/implemented/performance/2026-10-22-prepared-hermite-raw-df.md"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "ks.host-lr-values",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES",
+    "ks-runtime:GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES",
+    "ks-runtime:GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"
+  ],
+  "owner_issues": [
+    2744
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/runtime/host_cache_budget.hpp"
+  ],
+  "rationale": "Admitted cold strict LR sources preserve GPU buckets and back omitted ERIs with pageable FP64 RAM by default. Automatic ceiling is min(32 GiB, one quarter of MemAvailable and cgroup-ancestor headroom); unknown capacity and optional allocation refusal retain exact Direct. Explicit zero disables. Full GPU residency, strict numerical gates, complete numeric admission and bounded device staging remain authoritative.",
+  "revisit_condition": "Retain complete endpoint and work evidence when changing RAM reserve, bucket selection, source eligibility or staging. Initial 96/108-atom observations are not a universal crossover model. Temporary-disk backing and full-range consumers require separate qualification.",
+  "evidence": [
+    "docs/developer/xc_native_cuda.md",
+    ".agents/notes/implemented/performance/2026-10-25-default-host-eri-capacity.md",
+    "benchmarks/results/host-lr-eri-20261025/README.md",
+    "tests/python/test_host_cache_budget.py",
+    "tests/python/test_range_resident_ks_cuda.py",
+    "benchmarks/results/host-lr-eri-20261025/DEFAULT.md"
+  ]
+}

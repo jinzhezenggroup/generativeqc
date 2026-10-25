@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "xc-spatial-bisection-20261023",
+  "owner": "Explicit spatial bisection complete energy and force endpoints",
+  "reason": "Lossless all-repeat numerical vectors, paired and moved endpoints, authenticated source delta and compiler/cache/device validation. Historical endpoint receipts compact losslessly; caps unchanged.",
+  "review_document": "benchmarks/results/xc-spatial-bisection-20261023/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",
+      "family": "xc-spatial-bisection-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 501368,
+      "sha256": "b9a165ea339ae5a3cfe7af3836a6ec6651b7c1eabd2d6ce68454c4dec6983750"
+    }
+  ]
+}

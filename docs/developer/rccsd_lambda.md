@@ -182,7 +182,7 @@ The existing generated RHS and transpose act in dense Frobenius coordinates.
 The thin block adapter uses the existing `PackedLayout` maps and passes
 `sqrt(W) * lambda_p` to the shared solver, preserving all doubles orbit weights.
 `checked_transpose_solve` and `ResponseGMRES` are shared with the generic
-implicit-VJP adapter; the #179 GMRES implementation is unchanged. The CC
+implicit-VJP adapter; the shared GMRES implementation is unchanged. The CC
 consumer does **not** flatten redundant T2 into an `ImplicitSolveSpec`, build a
 dense mapping matrix, differentiate iterations, or implement another solver.
 
@@ -237,12 +237,12 @@ Jacobian solves and multi-step Lagrangian stationarity differences, include
 native HF -> CC -> Lambda endpoints with changed geometry and a determinant
 reference, and exercise stale/corrupt states, immutable outputs, false solver
 success, true nonconvergence and resource rejection. Dense Jacobians are
-strictly test-only. Generated CUDA Lambda execution and resident repeated-action ownership were
-completed by #641/#654 under #152. The correlation-only input weights below
-complete the block-streamed fixed-orbital portion of that issue. Physical RDM
+strictly test-only. Generated CUDA Lambda execution and resident repeated-action
+ownership are delivered. The correlation-only input weights below
+complete the block-streamed fixed-orbital portion. Physical RDM
 conventions and orbital/Z-vector/nuclear response remain separate boundaries;
-public/native RCCSD force ownership is tracked by #153. No force capability or
-higher derivative is enabled by this module alone.
+public/native RCCSD force ownership lives outside this module. No force
+capability or higher derivative is enabled by this module alone.
 
 See the [bound-state decision](../../.agents/notes/implemented/numerics/2026-09-19-bound-ccsd-lambda.md)
 for why this consumer shares the generic checked-solve boundary rather than
@@ -260,7 +260,8 @@ CC-state, equation, sign and execution conventions, copies the amplitudes into
 immutable arrays and **freshly re-evaluates both physical Lambda equations**.
 A successful status or fabricated zero-residual diagnostic is not sufficient.
 Weight generation neither calls a CC/adjoint solver nor differentiates its
-iterations. It uses the same shared and expanded primal DAGs with #151 VJPs.
+iterations. It uses the same shared and expanded primal DAGs with the shared
+TensorIR derivative programs.
 
 ```python
 from tools.generativeqc_cc import BoundCCSDResponse
@@ -355,7 +356,7 @@ GENERATIVEQC_LIBRARY=/path/to/current/cpu/libgenerativeqc.so python -m pytest -q
 
 The method-level `StationaryProblem` still requires independently parameterized
 state blocks; redundant dense T2 is not silently admitted into it. This consumer
-reuses the existing symmetry-qualified equations and #151 derivative machinery,
+reuses the existing symmetry-qualified equations and shared derivative machinery,
 not a second scientific algebra. See the
 [input-weight boundary decision](../../.agents/notes/implemented/numerics/2026-09-19-ccsd-fixed-orbital-weights.md)
 for the ownership choice and conditions for migration to generic composition.

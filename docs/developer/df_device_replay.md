@@ -1,4 +1,4 @@
-# Bounded device DF replay (#205)
+# Bounded device DF replay
 
 Positive-budget CUDA DF plans retain transformed B when its complete value/SCF
 allowance fits, using bounded K scratch independently of B's full shape.
@@ -7,7 +7,7 @@ Otherwise J/K regenerate public-basis three-center tiles on device or replay
 two-electron HF force response uses separately bounded generation in both cases. The
 mathematical provider remains `density_fitted`; execution placement does not
 change its fitting basis, metric cutoff, energy normalization or force sign.
-The one-electron and overlap/Pulay consumer remains owned by #141.
+The one-electron and overlap/Pulay consumer remains a separate owned route.
 
 ## Transfer and lifetime ledger
 
@@ -128,7 +128,7 @@ The sp8 source response owns 8,240/12,336 device bytes for RHF and
 9,520/13,616 for UHF at auxiliary caps 3/7. It retains 1,168 host bytes,
 compared with 7,568–11,792 bytes in the compatibility resident adapter.
 Those resident inputs avoid value regeneration, so their shorter component
-latencies are not a like-for-like comparison of this change's speed. The
+latencies do not compare like-for-like with the regeneration path. The
 complete profiled batch-3 HF median is 133.88 ms, including profiler overhead;
 this is an execution record, not a speedup claim.
 
@@ -150,7 +150,9 @@ neighbors, and measured global resource caps. All 16 native CPU tests and
 106 selected Python CPU checks pass; the three native CUDA DF/provider tests
 also pass.
 
-The workload/device-aware zero-budget policy and its replay invariants are documented in the [#598 resource-policy decision](../../.agents/notes/implemented/performance/2026-09-20-df-resource-policy.md).
+The workload/device-aware zero-budget policy and its replay invariants are
+documented in the
+[DF resource-policy decision](../../.agents/notes/implemented/performance/2026-09-20-df-resource-policy.md).
 
 The resident-source/full-panel boundary and live-memory ceiling are covered by
 `test_df_resident_source_reuse_cuda.py` and `test_df_preparation_budget.py`.

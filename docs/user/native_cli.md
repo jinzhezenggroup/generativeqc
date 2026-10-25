@@ -509,10 +509,15 @@ and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
 the Python [application precision policy](application_precision.md) separately
 selects budget-qualified FP32 arithmetic.
 
-CUDA DF DFT forces, ECP, remaining d/f-shell force contexts, ωB97M-V and correction-bearing
-MethodIR forces are **not** enabled by this native CUDA path. CPU B3LYP UKS
-also remains unqualified. Unsupported `--forces` requests fail before execution
-rather than publishing incomplete gradients. Run
+CUDA DF DFT forces, ECP, remaining d/f-shell and correction-bearing MethodIR
+contexts are **not** enabled by this native CUDA CLI path, and CPU B3LYP UKS
+also remains unqualified. This is a statement about the native C force actions
+that the CLI can invoke; it is not a statement that the physics is unavailable.
+WB97M-V and other Python-composed stationary endpoints reach analytic forces
+through the execution-context layer documented in
+[WB97M-V CUDA energy and forces](wb97mv_cuda.md) and
+[density-fitted DFT](../user/dft_density_fitting.md). Unsupported `--forces`
+requests fail before execution rather than publishing incomplete gradients. Run
 `python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
 under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
 finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
@@ -524,7 +529,7 @@ native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
 whitelist in Python. Native CUDA and other Direct DFT batch forces
-remain work under #2151.
+remain separate work.
 See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation
@@ -603,15 +608,19 @@ reserve/headroom use exact integer rounding. Zero caps permit no allocation.
 `--diis-history 0` resolves to the native default of eight history vectors for
 both execution and planning; it does not disable DIIS or erase its capacities.
 
-Inventories cover CPU RHF/UHF including DF, CPU energy-only LDA/PBE RKS/UKS,
+Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE RKS/UKS energy plans,
 small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
 and conventional CUDA KS energy arenas. ECP workspace uses the same generated
 two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
 auxiliary-size and other provider admission limits remain fail-closed.
-Unqualified correlated/tau-dependent/other inventories return JSON
-`status: unsupported` and exit 2; budget failures return `infeasible` and exit 2;
-feasible plans exit 0. Output includes phase capacities, fleet peaks, resident
-storage, effective limits, controls, topology/source identities and exclusions.
+Unqualified correlated, tau-dependent, force, density-fitted KS and other
+inventories return JSON `status: unsupported` and exit 2; budget failures return
+`infeasible` and exit 2; feasible plans exit 0. The Python
+`Calculator.estimate_resources` estimator is the entry point that plans a
+qualified force context, because its per-context capability record knows which
+workspace the force consumer reserves. Output includes phase capacities, fleet
+peaks, resident storage, effective limits, controls, topology/source identities
+and exclusions.
 `scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
 checkpoint, process-RSS cap or free-memory guarantee.
 

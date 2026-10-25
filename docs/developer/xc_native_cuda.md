@@ -1,12 +1,12 @@
 # Native semilocal XC device boundary
 
 `dft/cuda_xc.hpp` supplies the ordinary-stream fixed-density LDA/PBE RKS/UKS
-component for #162. It consumes current device density matrices and returns
-device XC energy/electron totals, potential matrices and a numerical-error
-flag. `dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the
-registered method adapter exposes CPU/CUDA single-system and native prepared
-ragged energy execution. The public #203 method resource plan accounts for
-preparation and execution with one persistent ledger; see
+component. It consumes current device density matrices and returns device XC
+energy/electron totals, potential matrices and a numerical-error flag.
+`dft/cuda_ks.hpp` composes it into native ordinary-stream SCF; the registered
+method adapter exposes CPU/CUDA single-system and native prepared ragged energy
+execution. The public method resource plan accounts for preparation and
+execution with one persistent ledger; see
 [resource planning](../maintainer/resource_planning.md).
 
 ## Ownership and data movement
@@ -38,10 +38,13 @@ and count their synchronization boundaries. The surrounding method must also
 account for its density input, one-electron setup, J provider and final outputs.
 
 The geometry, basis, grid and functional are immutable within a plan. Changes
-require a new plan. The currently supported compositions are exactly
-LDA_X+LDA_C_PW and PBE_X+PBE_C, with the
-[versioned SCF point-domain policy](xc_scf_domain.md). No meta-GGA or force
-capability is implied by these interfaces.
+require a new plan. This device component itself currently supports exactly the
+LDA_X+LDA_C_PW and PBE_X+PBE_C compositions, with the
+[versioned SCF point-domain policy](xc_scf_domain.md). It is a fixed-density
+energy/potential consumer: neither a meta-GGA nor a force capability follows
+from these interfaces. Analytic-force promotion is a separate prepared-owner
+contract described in
+[Architecture decisions](architecture.md#executable-method-boundary).
 
 ## Numerical path
 
@@ -400,7 +403,7 @@ kernel and its retained fallback for multi-tile automatic execution. The
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
 qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
-ablations belong to the independent #2072 arm.
+ablations belong to a separate source-specialization arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped
@@ -490,18 +493,18 @@ neither a scientific-code retirement nor a performance advantage is claimed.
 
 ## Direct J connection
 
-`scf/cuda_direct_jk_device.hpp` exposes the #202 provider's ordinary stream and
+`scf/cuda_direct_jk_device.hpp` exposes the direct-J/K provider's ordinary stream and
 an enqueue operation over caller-owned device density/J/K arrays. It reuses
 the existing operator validation and contracted-ERI kernel, with device finite
 checks and no success-path staging or synchronization. This lets a method use
 one stream for matrix production, J and XC without inheriting the HF graph
 layout. `CudaKsPlan` uses this seam directly, with an exact state arena charged
-through the #203 device ledger. It reuses the existing matrix, DIIS, eigensolver
+through the shared device ledger. It reuses the existing matrix, DIIS, eigensolver
 and density kernels, keeps current physical Fock and proposal state separate,
 and reads one scalar diagnostic record per iteration. Convergence returns the
 current evaluated density; only converged states replace the resident warm
-cache. An energy-only public call omits final matrix export. Full #203 public
-planning remains separate integration work.
+cache. An energy-only public call omits final matrix export. Full public planning
+of this seam remains separate integration work.
 
 Strict-FP64 restricted resident VV10 solves use bounded native initialization
 before the ordinary physical target tail. The initializer first solves a
@@ -677,8 +680,10 @@ clearing seeds while frozen prevents later solves from creating replacements.
 The additive `generativeqc_batch_get_scf_diagnostic` query returns density-update and
 physical-commutator RMS values without changing the legacy result array stride.
 Unavailable and failed items report absence, including after a rejected replay.
-Python batch calls default to the method's supported observables, so KS defaults
-to energy and rejects forces. HF retains its energy-plus-force default.
+Python batch calls default to the context's advertised observables, so an
+energy-only KS context requests energy and rejects an explicit force request,
+while an admitted force context may request both. HF retains its
+energy-plus-force default.
 
 ## SCF local AO selection
 
@@ -752,7 +757,7 @@ before promotion, counting discovery in setup rather than amortizing it away.
 ## Validation
 
 `generativeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
-full-matrix integration, the independent #214 H2 fixture, spin-resolved finite
+full-matrix integration, the independent H2 fixture, spin-resolved finite
 differences, empty spin/vacuum tails, partial tiles and Cartesian/spherical f
 shells. It checks a density changed by a device kernel without re-upload,
 generation rejection, same-shape stale grid rejection, independent-stream
@@ -770,12 +775,13 @@ forces. `tests/python/test_dft_scf.py` compares CPU/CUDA stable small endpoints
 against two independently converged PySCF guesses on the identical grid.
 `tests/python/test_dft_batch.py` separately exercises public ragged replay,
 geometry rebuilds, per-item failures, frozen/cleared/imported seeds, ABI
-diagnostics and method-specific derivative requirements. The combined batch
-and independent SCF modules pass all 45 cases on the CPU/CUDA build with a
-Slurm-allocated RTX 5090. Resource budget boundaries and ledger lifetime are
-separately covered by `tests/python/test_ks_resources.py`; the full workload
-evidence required by #162 remains a separate acceptance gate.
-The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
+diagnostics and method-specific derivative requirements. Resource budget
+boundaries and ledger lifetime are separately covered by
+`tests/python/test_ks_resources.py`. These are endpoint and lifecycle gates, not
+evidence of complete-endpoint workload or profitability; that evidence follows
+[Performance engineering](../maintainer/performance_engineering.md) and
+[Evidence retention](../maintainer/evidence_retention.md).
+The CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
 
 An admitted radial source survives fixed-geometry warm replay by default.

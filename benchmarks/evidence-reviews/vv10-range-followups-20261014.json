@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "vv10-range-followups-20261014",
+  "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
+  "reason": "Lossless complete raw JSON, all endpoint force vectors and independent references retain automatic 4 GiB populations, partial 96-atom timeouts and rejected convergence experiments. No experiment becomes a default observation; no sample/deadline/gate or storage-limit change. Detailed source inventories use shared lossless storage.",
+  "review_document": "benchmarks/results/vv10-range-followups-20261014/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/vv10-range-followups-20261014/campaigns.json.xz",
+      "family": "vv10-range-followups-20261014",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact source-bound endpoint records, reference force vectors and final failure outcomes",
+      "bytes": 244288,
+      "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
+    }
+  ]
+}

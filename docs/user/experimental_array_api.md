@@ -315,7 +315,7 @@ multiple zero factors without a comparison-selector opt-in or division by an
 input. Native execution is limited here to the existing materializing CPU FP64
 contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
 explicitly rejected. Higher derivatives, scientific endpoints and performance
-are outside this slice. Standard eager `prod` behavior is unchanged.
+are outside this contract. Standard eager `prod` behavior is unchanged.
 
 The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
 
@@ -342,7 +342,7 @@ constant inputs. This is the existing real-arithmetic AD convention, without a
 claim about classical derivatives of floating-point rounding. Opt-in native
 execution uses only the existing CPU FP64 contract. Public CUDA compile/lower,
 execution and AD entries reject this unqualified operation. Native FP32, higher
-derivatives, molecular endpoints and performance are outside this slice.
+derivatives, molecular endpoints and performance are outside this contract.
 
 The comparison target is [Array API 2025.12 var](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.var.html);
 this finite captured subset does not implement its full IEEE special cases.
@@ -449,8 +449,8 @@ not through a silent fallback. For methods with qualified analytic forces,
 `xp.value_and_grad` reuses the existing first-order native-source AD path.
 
 This does **not** allow an arbitrary new formula in \(\rho,\sigma,\tau\)
-to run self-consistently. That separate compiler/SCF work is tracked in
-[XC expression-to-SCF #2330](https://github.com/jinzhezenggroup/generativeqc/issues/2330).
+to run self-consistently. That separate compiler/SCF work is described in the
+[custom XC expression contract](../developer/custom_xc_expressions.md).
 
 ### Diagnose small-endpoint overhead
 
@@ -938,7 +938,7 @@ Scientific index domains, representations and symmetry annotations are not
 admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
 tests support external fixed Boolean masks in finite generic real graphs, and
 comparison selectors with the explicit `allow_comparison_where=True` option;
-see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs).
 `xp.grad` and `xp.value_and_grad` accept `allow_external_mask_where=True`
 for first-order fixed external-mask gradients on generic finite FP64 arrays
 with `backend="reference"` or the default native CPU backend. Select only real

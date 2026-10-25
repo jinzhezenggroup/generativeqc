@@ -1,0 +1,29 @@
+{
+  "id": "dft.rys-task-k-default",
+  "classification": "already-default",
+  "controls": [
+    "dft-policy:rys-task-k-default",
+    "dft-policy:GENERATIVEQC_DIRECT_K_FOCK_LOWERING",
+    "dft-policy:GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "src/scf/cuda/direct_fock_lowering.hpp",
+    "python/generativeqc_compiler/integral/production_rys_tasks.py",
+    "python/generativeqc_compiler/integral/production_profile.py",
+    "python/generativeqc_compiler/integral/production_shell_classes.json",
+    "python/generativeqc_compiler/integral/production_registry.py"
+  ],
+  "rationale": "Compiled non-portable profiles prefer psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K when their target resources support the schedule; portable and unsupported profiles retain incumbent recurrence with the independently selected work/fill schedule. An explicit exact-tuned manifest override replaces the shared class set, including an empty opt-out; absent overrides and compatible/non-tuned profiles use the shared default. Overrides never transfer across compatibility and unsupported explicit classes are rejected. Historical performance evidence was collected on sm_120 and does not imply equal gains elsewhere. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Lowering incumbent disables task preference; also select task fill to roll back both promotions. A separately identified joint campaign qualifies task Work companions with independent matrices/sanitizers, complete cold E+F mean/median gains against both standalone policies and retained actual Fock counts. Historical separate promotions and rejected cohorts remain independently labeled rather than relabeled as joint qualification.",
+  "revisit_condition": "Changes to mathematical coverage, queue ownership or parallel granularity require renewed source-identified numerical, sanitizer and work-count qualification. A new compiled architecture requires a target-specific compile/resource smoke test and representative endpoint timing before performance claims, not wholesale duplication of scientific reference tests. Keep historical measurements and valid negative cohorts distinct.",
+  "evidence": [
+    "benchmarks/results/rys-task-default-20261008/README.md",
+    "benchmarks/results/rys-task-master-20261008/README.md",
+    "docs/developer/direct_rys_tasks.md",
+    "benchmarks/results/unified-k-work-20261009/README.md",
+    ".agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md",
+    ".agents/notes/implemented/performance/2026-10-08-rys-task-k-default.md"
+  ]
+}

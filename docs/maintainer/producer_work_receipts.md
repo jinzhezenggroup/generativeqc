@@ -132,8 +132,7 @@ installed-binary authentication, universal runtime-domain coverage, or latency
 improvement. Existing native trace counters remain diagnostic submission
 records; their incomplete completion/coverage/source proofs stay explicit.
 Those limits constrain future runtime claims, rather than adding unstated
-scientific or GPU requirements to the audit contract of
-[#1628](https://github.com/jinzhezenggroup/generativeqc/issues/1628).
+scientific or GPU requirements to the audit contract.
 
 No native scheduling, scientific equation, memory policy or automatic cache
 insertion is changed by this audit. Materialization representation selection

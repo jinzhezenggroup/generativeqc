@@ -60,7 +60,7 @@ are invalidated before imported seeds can execute.
 | --- | --- | --- |
 | `exact_restart` | Same scientific model, ordered nuclei, geometry and numerical controls | Accepted by default; target SCF still runs |
 | `warm_start_compatible` | Same scientific model and AO topology, changed geometry or numerical controls | Requires `allow_warm=True` |
-| `transport_required` | Different orbital basis or AO representation | Rejected; orbital/basis transport belongs to #189/#190 |
+| `transport_required` | Different orbital basis or AO representation | Rejected; orbital/basis transport is a separate capability |
 | `incompatible` | Different nuclei/order, method, core treatment, electron/spin counts, auxiliary model/provider, or absent state | Rejected |
 
 Basis compatibility uses actual normalized mathematical identities, not aliases

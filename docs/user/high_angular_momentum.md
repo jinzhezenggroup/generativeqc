@@ -70,7 +70,7 @@ closed before code emission.
   existing S/T/V/DF cases. This is resource and numerical qualification for the
   opt-in scalar route, not a complete CUDA molecular endpoint or production
   promotion.
-  The final synchronized PR candidate `af5313627c178ab4a1cd791093dff8dc6e5f6c92`
+  The later candidate head `af5313627c178ab4a1cd791093dff8dc6e5f6c92`
   could not be re-executed on a GPU because current qz 4090/H200 notebook
   requests were unschedulable under the available node-memory/priority
   constraints. The measured `1c551ddb` implementation and final candidate are

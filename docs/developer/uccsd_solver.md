@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # Canonical UCCSD solver and provider boundary
 
 `tools.generativeqc_cc.PreparedUCCSD` supplies an internal conventional,

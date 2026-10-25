@@ -60,8 +60,8 @@ retained center geometry and the executor's actual-device sm_120 checks.
 This is an execution-policy change, not a new partition formula or a pruning
 rule; the grid, screening thresholds and arithmetic policies are unchanged.
 Mixed geometry retains its existing executor. Composite/nonlocal owners already
-use the generic phase policy; this change does not expand their scientific
-admission or enable pruning defaults for additional functionals.
+use the generic phase policy; their scientific admission and pruning defaults
+are unchanged.
 
 The pair panels are optional storage charged to the published **cached**
 stationary capacity, alongside the retained center cache. They do not enlarge

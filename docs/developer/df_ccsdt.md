@@ -1,9 +1,9 @@
 # DF-CCSD(T) same-Hamiltonian definition and factorized path
 
-Status: the #157 factorized energy route and the #158 native/public force route
-are implemented. The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes
-CUDA/FP64 energy and analytic forces for the conventional-RHF +
-correlation-only-DF variant. Prepared batches remain unsupported.
+The factorized energy route and the native/public force route are implemented.
+The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes CUDA/FP64 energy and
+analytic forces for the conventional-RHF + correlation-only-DF variant.
+Prepared batches remain unsupported.
 
 ## First supported method definition
 
@@ -172,7 +172,7 @@ approximation from the correlation-integral approximation:
 - correlation Hamiltonian: density-fitted two-electron integrals only;
 - DF metric: the existing square-symmetric thresholded inverse square root;
 - precision: FP64;
-- frozen orbitals: unsupported in this slice;
+- frozen orbitals: unsupported;
 - triples: standard canonical noniterative (T), with no local/truncated-triples
   approximation.
 
@@ -184,7 +184,7 @@ in the contract identity instead of allowing two differently defined DF
 Hamiltonians to share a cache/result identity.
 
 Changing the correlation Hamiltonian does **not** recompute or replace the
-conventional RHF Fock matrix. This is intentional: the first #157 variant is
+conventional RHF Fock matrix. This is intentional: this variant is
 “conventional RHF reference + correlation-only DF”.
 
 ## Dense same-Hamiltonian oracle
@@ -211,7 +211,7 @@ implementations of the **same Hamiltonian**, rather than a comparison of DF
 against conventional four-center integrals.
 
 An orthogonal rotation of the retained auxiliary B axis leaves `g_DF` and the
-physical RCCSD(T) energy invariant. The slice-A tests exercise that gauge
+physical RCCSD(T) energy invariant. The dense-oracle tests exercise that gauge
 invariance explicitly.
 
 ## Memory scope
@@ -219,13 +219,14 @@ invariance explicitly.
 The dense oracle is intentionally small-system-only. Before reconstruction it
 preflights a numeric budget that includes the caller-owned B tensor, the
 immutable owned B copy, the dense four-index result, and a conservative
-full-sized contraction temporary. The production slices must not rely on this
+full-sized contraction temporary. Production paths must not rely on this
 `NMO^4` allocation.
 
 The existing `DFProvider` remains responsible for bounded construction of B.
-Slice B retains `B_ov` and `B_vv`, charges both arrays against the provider
-budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`, and
-`oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never requested.
+The factorized solver retains `B_ov` and `B_vv`, charges both arrays against the
+provider budget, and retains only the smaller `ovov`, `ovvo`, `oovv`, `ovoo`,
+and `oooo` four-index blocks. The full `ovvv` and `vvvv` arrays are never
+requested.
 
 Every conventional singles/doubles term containing `ovvv` or `vvvv` is removed
 from the DF TensorIR feed and evaluated by an exact auxiliary-index reduction.
@@ -251,18 +252,18 @@ up pair storage, expanded replay, tiles, or the matrix provider. Releasing works
 drains its stream and invalidates earlier prepared binding generations. Larger
 explicit force tiles do not inherit energy-only timing qualification.
 
-The first Slice-C endpoint now evaluates standard canonical (T) directly from
-the same retained `B_ov`/`B_vv` data model. For
+The canonical `(T)` energy endpoint evaluates standard non-iterative triples
+directly from the same retained `B_ov`/`B_vv` data model. For
 `vvov[a,b,i,f] = sum_Q B_ov[Q,i,a] B_vv[Q,f,b]`, W1 reduces Q directly
 into the occupied-space W tensor. It therefore forms neither a complete
 `ovvv` tensor nor full T3. H2/H2O same-Hamiltonian tests compare the composed
 factorized energy with the dense oracle, and an independent random-factor test
 compares the factorized (T) correction with the audited dense triples equations.
 
-### C2a executable energy facade
+### Source-level executable energy facade
 
-The source-level `df_rccsd_t_energy` facade now composes the already validated
-pieces without changing their scientific ownership:
+The source-level `df_rccsd_t_energy` facade composes the validated pieces
+without changing their scientific ownership:
 
 1. run a conventional unscreened CPU RHF export with no DF metric supplied;
 2. build and validate the auxiliary metric factor;
@@ -276,13 +277,13 @@ set is exactly `{"energy"}`. A force request fails before source validation or
 solver work, so the conventional RCCSD(T) force capability cannot be inherited
 accidentally.
 
-C2a is deliberately not a native Calculator registration. It uses the existing
+This facade is deliberately not a native Calculator registration. It uses the existing
 native RHF snapshot-export bridge and retains that bridge's <=12-AO validation
 boundary. Production public energy and forces are owned separately by the native
 DfRccsdt provider, which preserves the same conventional-RHF +
 correlation-only-DF method definition.
 
-C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
+The public `df-rccsd(t)` / `df-ccsd(t)` selector is a distinct registered method. It is
 CUDA/FP64, requires an explicit auxiliary basis and keeps the reference
 conventional RHF while passing that auxiliary only to the correlation
 Hamiltonian. The method selector is intrinsically DF: the Python Calculator
@@ -546,7 +547,7 @@ native consumer against its matching header; the public C/Python ABI is unchange
 The default-promotion inventory audits the strict-FP64 admission as
 `cc-execution:df-triples-distinct-moments`, separately from SolverOptions.
 
-#1764 now has an explicit compiler-owned first precision candidate:
+A compiler-owned first precision candidate now exists:
 `w_fp32_candidate_program` lowers only the two reduction-heavy W contractions
 inside each occupied moment to FP32 storage/compute/accumulation. The surrounding
 W sum, V algebra, denominator checks, energy epilogue, reductions and published
@@ -699,18 +700,18 @@ The internal validation helpers live in
 - `run_dense_df_ccsdt_oracle` evaluates the trusted RCCSD/(T) equations;
 - `df_fitting_error` reports DF-versus-exact integral error separately.
 
-Slice B additionally exposes the internal `solve_df_ccsd` / `PreparedDFCCSD`
-validation path. C2a adds `df_rccsd_t_method_capabilities` and
-`df_rccsd_t_energy` as the executable energy-only source facade. The latter
+The internal `solve_df_ccsd` / `PreparedDFCCSD` validation path is also
+exposed. `df_rccsd_t_method_capabilities` and `df_rccsd_t_energy` form the
+executable energy-only source facade. The latter
 requires a live `NativeSource` with an explicit auxiliary basis and records the
 conventional-reference/correlation-DF split in every successful result. It does
 not register a Calculator method.
 
-## Non-goals after slice B
+## Non-goals
 
 - no production full-`NMO^4` DF integral storage;
-- no prepared-batch DF-CCSD(T) public owner in C2b;
-- the C2a source-level validation facade remains energy-only; public native
+- no prepared-batch DF-CCSD(T) public owner;
+- the source-level validation facade remains energy-only; public native
   DF-CCSD(T) analytic forces use the separate complete owner documented in
   [df_ccsdt_gradient.md](df_ccsdt_gradient.md);
 - no frozen-core, open-shell, ECP, local, or DLPNO variant.

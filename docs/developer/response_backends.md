@@ -112,10 +112,10 @@ raw J and K are returned without core-Hamiltonian contamination or additional
 RHF factors. There is no CPU integral fallback or substitution of a DF operator.
 
 The default `CudaDirectJKBackend` path remains host-orchestrated around CUDA
-J/K contractions. B2 adds an opt-in `CudaResidentRHFResponse` owner for exact
+J/K contractions. An opt-in `CudaResidentRHFResponse` owner supports exact
 conventional RHF. It borrows the same prepared direct-J/K source and CUDA
 stream, retains C/orbital energies, Krylov vectors, AO response density/Fock
-scratch and AO/MO transform scratch on device, and uses the existing #179 GMRES
+scratch and AO/MO transform scratch on device, and uses the shared GMRES
 control flow rather than a second solver. Vector copy/AXPY/dot/norm and
 orthogonalization execute through cuBLAS; the direct J/K action is the existing
 device-to-device provider seam.

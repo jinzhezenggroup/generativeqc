@@ -393,7 +393,7 @@ admission. A compiler-cache launcher is required on a cache miss; artifact hits
 do not require compilation. `compile_capabilities` lowers/inspects without
 probing a compiler or creating cache artifacts. Its `compilable` result proves
 lowerability within requested bounds, not installed toolchains or validated
-science. Tensor/AD `capabilities()` describes the implemented slice; it never
+science. Tensor/AD `capabilities()` describes the implemented contract; it never
 promotes an arbitrary graph into a built-in method/property domain.
 
 (python-array-values)=
@@ -742,7 +742,7 @@ share live owners or mutable compilation/cache state.
 
 CPU and explicitly named CUDA first-order providers are separate entry points.
 The topology currently admits Cartesian shells through f for this bounded
-RKS derivative slice; broader value-integral support is irrelevant here.
+RKS derivative domain; broader value-integral support is irrelevant here.
 Second-order options and the complete public molecular HVP remain independently
 admitted, including the CPU-only second-order restriction. Generated-provider
 availability is not end-to-end method/derivative qualification. Compiler cache

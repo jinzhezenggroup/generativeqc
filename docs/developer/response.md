@@ -41,7 +41,7 @@ and selected operator backends execute native J/K. This split
 lets downstream property, Hessian, and correlated-gradient code reuse one
 scientific owner without making installed runtime code depend on repository
 `tools.*`.
-This slice is partial: the RHF response layer and the direct-CPU UHF response
+This boundary is partial: the RHF response layer and the direct-CPU UHF response
 layer (including `export_uhf`), host-orchestrated spin CUDA exact/DF J/K, and
 native CPU/CUDA LDA/PBE RKS/UKS CPKS handoffs are delivered. Exact-RHF resident
 scalar, blocked and recycled multi-RHS execution share the same solver and are
@@ -443,7 +443,7 @@ admitted by this CPU cutover.
 
 The [production-path inventory](../../manifests/maintenance/electronic_structure_production_paths.json)
 records response/force/HVP owners, bindings and evidence stages separately.
-Its coverage remains a pilot, not completion of #932/#934 or a capability table.
+Its coverage remains a pilot, not a complete capability table.
 Default CC Lambda, RHF frame Z and generic/multi-RHS CPKS compatibility adapters
 still have host-vector Krylov/orbital seams. The installed native RKS object's
 single-RHS `solve`/`solve_resident` endpoint now executes orbital transforms and
@@ -513,7 +513,7 @@ prepared-lifetime acceptance. These fixtures do not establish prepared reuse.
 ## CPKS boundary
 
 `generativeqc.response_xc.FixedDensityXCDerivativeKernel` evaluates the
-audited semilocal feature Hessian from #161 and contracts it with the exact
+audited semilocal feature Hessian and contracts it with the exact
 first-order density-feature response.
 `generativeqc.response_operator.CPKSResponseOperator` adds that kernel to the
 J/K response action. The tools modules re-export the same objects; they do not
@@ -607,7 +607,7 @@ The installed GMRES and spin-resolved scientific equations remain shared.
 
 ## Downstream consumers
 
-The #153 tools endpoint `BoundCCSDGradient` builds the CC-specific orbital RHS
+The tools endpoint `BoundCCSDGradient` builds the CC-specific orbital RHS
 and weights, binds the converged RHF reference to `RHFResponseOperator`, and
 calls `checked_transpose_solve` through `ResponseGMRES`. The callback delegates
 to this package's GMRES. A separately generated physical orbital matrix checks
@@ -618,7 +618,7 @@ and explicit Z-vector nonconvergence. The CC-specific weight/source ownership
 remains in the correlated-gradient consumer; no SCF/DIIS iteration tape is part
 of this contract.
 
-The #180 `solve_rhf_nuclear_perturbations` consumer prepares ordered nuclear and
+The `solve_rhf_nuclear_perturbations` consumer prepares ordered nuclear and
 metric RHS columns, calls `solve_many` with final basis publication disabled,
 and reconstructs the occupied-orbital/density responses. `rhf_hvp_many` and
 `rhf_hessian` use that same boundary for bounded blocks. Their opt-in exact-RHF
@@ -646,10 +646,3 @@ for teardown, independent device tests and failure publication.
 
 See the [screened-response accelerator contract](response_backends.md#combining-screened-response-with-optional-accelerators)
 for provisional solve, exact residual and bounded retry rules.
-
-```{toctree}
-:hidden:
-:maxdepth: 1
-
-response_backends
-```

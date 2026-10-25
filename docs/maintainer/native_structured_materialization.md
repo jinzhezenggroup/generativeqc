@@ -116,8 +116,8 @@ reports the rank-four `result.two_electron.assign(fourth_power(n), 0.0)` as
 member with several exact sectors and later mutation. No automatic N^4
 representation rewrite is authorized.
 
-The full PR source-audit JSON now includes an additive
-`production_boundaries` array. For
+The full source-audit JSON includes an additive `production_boundaries` array.
+For
 `src/posthf/mp2_gradient.cpp`, the `mp2-representation-boundary.v1`
 census binds the actual source SHA-256 and checks eight specific, same-file
 free-function and source-expression anchors: checked extent helpers, canonical
@@ -128,7 +128,7 @@ diagnostic retains the observed `fourth_power(n)` expression with unknown certif
 growth degree: helper anchors alone are not a proof of their full arithmetic.
 `INCOMPLETE` makes changed or missing anchors explicit. Neither status
 proves the selected public endpoint, consumer ABI/lifetime, complete
-scientific write support, or runtime allocation bytes. The linked #1574
+scientific write support, or runtime allocation bytes. The linked
 implementation remains a separate performance decision.
 
 CI publishes `native-structured-materialization.json` and

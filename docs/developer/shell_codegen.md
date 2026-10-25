@@ -22,7 +22,7 @@ mathematical compiler with lane-local quartet ownership. Prepared target
 metadata defaults to nine qualified `sm_120` classes; other classes/profiles
 retain the incumbent and explicit experiments remain independently selectable.
 
-`python/generativeqc_compiler/integral/ir.py` is now strictly mathematical, while
+`python/generativeqc_compiler/integral/ir.py` is strictly mathematical;
 `cuda_target.py` and `cuda_schedule.py` own NVIDIA execution policy:
 
 - `IntegralIR` describes two-, three-, or four-shell operators, explicit
@@ -66,7 +66,7 @@ zero through six and provides four schedule families:
 | `component_lanes` | one Cartesian component per lane | supported; selected by the target manifest |
 | `tiled_components` | a bounded component slice per block | emitted and benchmarked |
 
-Tiled lowering removes the former 1024-component limit. For example, `dddd`
+Tiled lowering removes the 1024-component limit. For example, `dddd`
 has 1296 Cartesian quartets and defaults to a 64-component tile; `fddd` has
 2160. State packing, Coulomb indices, Wick multiplicities, and f-component
 axis tables widen automatically for these classes.
@@ -85,17 +85,16 @@ and reconstruct the remaining center.
 Rys root eligibility in the mathematical IR is derived from the required
 value/derivative order rather than shell-name allowlists. Backend and production
 promotion constraints remain separate. The `psps` and `ppss` production rows
-now lower through the common Rys2 thread-task compiler for force and the common
-packed-task compiler for Fock; the former embedded `low_order_force.py` CUDA
-source and its CLI/production compatibility branches have been removed. Other
-measured specialized fallbacks remain until their common candidates pass the
-same correctness, resource, and endpoint gates.
+lower through the common Rys2 thread-task compiler for force and the common
+packed-task compiler for Fock. No embedded `low_order_force.py` CUDA source or
+matching CLI/production compatibility branch remains. Other measured
+specialized fallbacks survive until their common candidates pass the same
+correctness, resource, and endpoint gates.
 
-The generic `cuda_emitter` surface now delegates to the backend-named
+The generic `cuda_emitter` surface delegates to the backend-named
 `cuda_lowering` implementation. `dppp_dispatch` is a narrow compatibility
-adapter for the original DPPP specialization and resident-PPPS APIs, so adding
-or tuning a generic shell no longer introduces a dependency on a historical
-shell-class module.
+adapter for the DPPP specialization and resident-PPPS APIs, so adding or tuning
+a generic shell introduces no dependency on a shell-class module.
 
 Scalar thread-task force lowering follows the same structural boundary.  Its
 component-scoped subset/Wick helpers are sized from `ShellClassSpec` and route
@@ -162,38 +161,11 @@ declares the selected recurrence, schedule, consumers and target.
 The PPPS/PSPS/PPSS signature grouping work, class-specific Rys variants,
 rejected candidates and source-matched numerical/resource/latency evidence
 are preserved in the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md).
+That note owns the per-case records for DSPS Rys3, uniform component warps,
+batched DSPP/DPSS Rys3, DPDP/DPDS Rys4 and DDPP/DDPS/DDDS Rys4 promotion, the
+768-AO Fock follow-up, and the measured `sm_120` comparisons.
 Old environment toggles, profile numbers and timings must not replace the
 current manifest/runtime when determining today's execution policy.
-
-The previous case-study headings remain for stable fragment links.
-
-### DSPS scalar Rys3 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### DPPS uniform component warps
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### PPPP uniform component warps
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DSPP and DPSS Rys3 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DPDP and DPDS Rys4 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### Batched DDPP, DDPS, and DDDS Rys4 promotion
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
-
-### 768-AO Fock follow-up for issue #52
-
-See the [historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md) for the full source-era case record.
 
 ## Architecture autotuning
 
@@ -364,11 +336,11 @@ for target, profile in sorted(json.loads(p.read_text())["architectures"].items()
 PY
 ```
 
-The `ssss` force mathematics is now compiler-owned in production. Runtime still
-keeps the standalone AOT `ssss` force row out of the materialized force queue:
-the generated force-only weighted expression executes inside the already
-qualified bounded/packed scheduler, avoiding a second task stream. The former
-handwritten ssss derivative body and its runtime A/B selector have been deleted.
+The `ssss` force mathematics is compiler-owned in production. Runtime keeps the
+standalone AOT `ssss` force row out of the materialized force queue: the
+generated force-only weighted expression executes inside the qualified
+bounded/packed scheduler, avoiding a second task stream. No handwritten `ssss`
+derivative body or runtime A/B selector remains.
 
 The generated registry records profile identity, target compute capability,
 class index, consumer mask, block size, and component tile. Every profile uses
@@ -496,11 +468,11 @@ python -m pytest tests/python/test_codegen.py -q -s
 
 ## Remaining work
 
-The former per-shell candidate queue is frozen in the
-[historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md). Discover current gaps from
-the production manifest and workload profile. New class promotions
-require independent scientific comparison, resource/spill limits and
-complete molecular Fock/force endpoint gates. Higher-order nuclear
+Discover current gaps from the production manifest and workload profile; the
+per-shell candidate history is frozen in the
+[historical scheduling evidence](../../.agents/notes/implemented/performance/2026-10-09-shell-codegen-schedule-provenance.md).
+New class promotions require independent scientific comparison, resource/spill
+limits and complete molecular Fock/force endpoint gates. Higher-order nuclear
 derivatives require their own tensor result ABI and Hessian qualification.
-Use the [maintainer roadmap](../maintainer/roadmap.md) and current issues
-for priorities rather than copying the old issue-specific queue.
+Use the [maintainer roadmap](../maintainer/roadmap.md) for priorities rather
+than copying a fixed issue queue.

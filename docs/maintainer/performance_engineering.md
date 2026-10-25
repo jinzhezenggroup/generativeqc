@@ -290,7 +290,9 @@ Every mixed-precision path must expose its actual precision provenance, retain a
 strict-FP64 route for the same scientific equation, and pass independent
 numerical gates with margin on difficult cases. Tensor-core or SGEMM utilization
 is implementation evidence; complete-endpoint speedup plus numerical acceptance
-is the promotion criterion.
+is the promotion criterion. [Application precision
+qualification](application_precision_qualification.md) owns the Fast-specific
+runners, timing scope and evidence rules.
 
 ### Reduce expensive solver/operator applications
 
@@ -542,9 +544,9 @@ sites. All six current MP2 entries remain `retained-pending-evidence`: bounded
 storage, a dense callback span, or a factorized alternative does not prove that
 fusion is unsafe or slower. The dense first stage has a source-known production
 RCCSD(T) caller in `src/cc/rccsdt_force.cpp`; its retention gap concerns safe and
-profitable replacement, not whether that call exists. The gate enforces review bookkeeping only; issue
-#1626 remains open for independent numerical, work/resource and complete-endpoint
-performance evidence. Historical RCCSD(T) retirements are discussed in the
+profitable replacement, not whether that call exists. The gate enforces review
+bookkeeping only; independent numerical, work/resource and complete-endpoint
+performance evidence remains outstanding. Historical RCCSD(T) retirements are discussed in the
 [decision note](../../.agents/notes/implemented/performance/2026-10-09-materialization-candidate-review.md).
 
 ## Prefer source-driven reuse
@@ -612,8 +614,8 @@ complete endpoint rather than only an isolated kernel.
 
 ## Historical rationale
 
-The DF-response work-amplification cliff fixed by PR #373 motivated several of
-these rules. Its exact panel counts, GEMM/transfer amplification, benchmark
+The DF-response work-amplification cliff fixed by an earlier change motivated
+several of these rules. Its exact panel counts, GEMM/transfer amplification, benchmark
 conditions, rejected alternatives, and revisit criteria are preserved in the
 [DF-response work-amplification note](../../.agents/notes/implemented/performance/2026-09-15-df-response-work-amplification.md).
 This document intentionally keeps the current policy rather than the migration
@@ -700,12 +702,18 @@ Before promoting a new default or auto-selection policy:
    identity preconditions do not hold.
 8. Prefer complete endpoint evidence over isolated kernel speedups.
 
-The authoritative
+The stable
 [`default_promotion_inventory.json`](../../manifests/maintenance/default_promotion_inventory.json)
-distinguishes measured `negative-evidence`, a final `retained-opt-in` decision,
+points at separately owned `manifests/maintenance/default_promotion/<id>.json`
+policy records. The inventory validator combines all records in memory, scans
+real production controls, and rejects missing, stale or duplicate registrations.
+Do not commit an aggregated policy list: each qualification changes only its
+own entry, reducing parallel-PR merge collisions.
+
+The assembled inventory distinguishes measured `negative-evidence`, a final `retained-opt-in` decision,
 and continuing `needs-qualification` research. Public precision defaults to
 FP64 and AUTO remains explicit; TensorIR tuning winners require explicit selection, and
 TensorIR Graph replay remains explicit. These decisions do not change existing
 qualified method defaults or fulfill separate positive product-delivery gates.
-Continuing qualification needs a domain owner beyond the completed policy review
-#1598. See the [decision and evidence boundaries](../../.agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md).
+Continuing qualification needs a domain owner beyond the completed policy
+review. See the [decision and evidence boundaries](../../.agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md).

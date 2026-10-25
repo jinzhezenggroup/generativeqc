@@ -987,6 +987,52 @@ def validate_inventory(
     return errors
 
 
+def expand_inventory_shards(
+    payload: dict[str, Any], *, root: Path = ROOT
+) -> tuple[dict[str, Any], list[str]]:
+    """Load version-two policy fragments into the original validated model.
+
+    The stable root declaration is never rewritten when a policy is added.
+    Existing callers of validate_inventory still see the same v1 entries list.
+    """
+    if payload.get("schema_version") != 2:
+        return payload, []
+    if "entries" in payload:
+        return payload, ["sharded inventory must not embed mutable entries"]
+    directory = payload.get("entries_dir")
+    if (
+        not isinstance(directory, str)
+        or not directory.startswith("manifests/maintenance/")
+        or Path(directory).is_absolute()
+        or ".." in Path(directory).parts
+    ):
+        return payload, ["invalid default-promotion entry directory"]
+    entry_dir = root / directory
+    if not entry_dir.is_dir() or entry_dir.is_symlink():
+        return payload, [f"missing or unsafe default-promotion directory: {directory}"]
+    entries: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for path in sorted(entry_dir.iterdir()):
+        if path.is_symlink() or not path.is_file() or path.suffix != ".json":
+            errors.append(f"unexpected default-promotion shard: {path.name}")
+            continue
+        try:
+            entry = json.loads(path.read_text())
+        except (OSError, ValueError, UnicodeError) as error:
+            errors.append(f"invalid default-promotion shard {path.name}: {error}")
+            continue
+        if not isinstance(entry, dict) or entry.get("id") != path.stem:
+            errors.append(f"default-promotion shard id differs from {path.name}")
+            continue
+        entries.append(entry)
+    if not entries:
+        errors.append("default-promotion entry directory is empty")
+    assembled = {key: value for key, value in payload.items() if key != "entries_dir"}
+    assembled["schema_version"] = SCHEMA_VERSION
+    assembled["entries"] = entries
+    return assembled, errors
+
+
 def load_and_validate(
     inventory: Path = DEFAULT_INVENTORY,
     *,
@@ -998,7 +1044,8 @@ def load_and_validate(
         return {}, [f"cannot load {inventory}: {exc}"]
     if not isinstance(payload, dict):
         return {}, ["inventory root must be an object"]
-    return payload, validate_inventory(payload, root=root)
+    payload, errors = expand_inventory_shards(payload, root=root)
+    return payload, [*errors, *validate_inventory(payload, root=root)]
 
 
 def main(argv: list[str] | None = None) -> int:

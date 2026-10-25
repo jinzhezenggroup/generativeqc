@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "df-charge-partitions-20261024",
+  "owner": "bounded automatic SM 12.0 DF charge-source partitions",
+  "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
+  "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "family": "df-charge-partitions-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
+      "bytes": 392256,
+      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
+    }
+  ]
+}
