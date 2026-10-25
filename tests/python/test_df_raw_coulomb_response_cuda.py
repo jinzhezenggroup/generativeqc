@@ -274,7 +274,7 @@ def test_raw_coulomb_geometry_rebuild(monkeypatch: Any, tmp_path: Path) -> None:
         calculator.clear_cache()
 
 
-@pytest.mark.parametrize("tensor_allowance", (0.5, 1.5, 2.5))
+@pytest.mark.parametrize("tensor_allowance", (0.8, 1.5, 2.5))
 def test_raw_coulomb_work_is_bounded_across_response_capacities(
     tensor_allowance: float, monkeypatch: Any, tmp_path: Path
 ) -> None:
@@ -305,14 +305,16 @@ def test_raw_coulomb_work_is_bounded_across_response_capacities(
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
     monkeypatch.setenv("GENERATIVEQC_DF_RAW_COULOMB", "1")
     monkeypatch.setenv("GENERATIVEQC_DF_COULOMB_RESPONSE", "auto")
-    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
     trace = tmp_path / "capacity-response.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     monkeypatch.setattr(
         endpoint,
         "Calculator",
         lambda **options: Calculator(
-            **options, density_fitting_memory_budget_bytes=256 << 20
+            # The public allowance also covers value and source owners. The
+            # response receives roughly one third after their fixed charges.
+            **options,
+            density_fitting_memory_budget_bytes=3 * budget,
         ),
     )
     endpoint.check_endpoint("pbe-rks", "PBE", False, case)

@@ -1551,7 +1551,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // This prevents both the unstable raw-Gram fallback and repeated source
       // generation for this capacity range without borrowing unowned memory.
       const bool single_fitted_tensor = device_metric->full_rank && !borrowed && !whitened &&
-                                        !raw_coulomb && panel_capacity / 2 < a && panel_capacity > a;
+                                        !raw_coulomb && panel_capacity / 2 < a &&
+                                        panel_capacity > a;
       const auto capacity =
           owned_occupied
               ? std::min(std::size_t{64}, (factor_capacity - occupied_retained) / (n * n))

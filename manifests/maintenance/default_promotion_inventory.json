@@ -616,12 +616,14 @@
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "Unset/auto behavior for these DF selectors is resolved by existing qualified production policies; explicit values retain diagnostic, reproduction, or forced-comparison routes.",
+      "rationale": "Unset/auto behavior for these DF selectors is resolved by existing qualified production policies; explicit values retain diagnostic, reproduction, or forced-comparison routes. Full-rank raw-source pure-J response selects charge-first algebra before optional tensor sizing, so intermediate scratch capacity cannot introduce full inverse-factor work; exchange, truncated metrics and explicit panel/dot routes remain separate.",
       "revisit_condition": "Revisit per selector when its automatic guard or evidence identity changes; do not infer that every explicit override is itself production-qualified.",
       "evidence": [
         "docs:docs/developer/df_tuning.md",
         "docs:docs/developer/df_occupied_cuda.md",
-        "issue:#1598"
+        "issue:#1598",
+        "note:.agents/notes/implemented/performance/2026-10-25-coulomb-response-capacity.md",
+        "benchmarks:benchmarks/results/df-response-capacity-20261025/README.md"
       ]
     },
     {

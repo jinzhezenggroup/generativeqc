@@ -228,11 +228,10 @@ def test_jk_scratch_rejects_partial_source_plan(monkeypatch: typing.Any) -> None
         with monkeypatch.context() as bounded:
             bounded.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto")
             expected = batch.execute(strict=True).items[0]
-        # generated_df_hf_gradient converts the adapter's INVALID_ARGUMENT to
-        # runtime_error; RHF finalization maps that to NUMERICAL_FAILURE, which
-        # the batch API renders here. Establish a working source plan first so
-        # this assertion cannot pass from a preparation failure.
-        with pytest.raises(RuntimeError, match="numerical failure"):
+        # Finalization preserves the adapter's INVALID_ARGUMENT status. First
+        # establish a working source plan so a preparation failure cannot
+        # masquerade as rejection of the incompatible scratch borrow.
+        with pytest.raises(RuntimeError, match="invalid argument"):
             batch.execute(strict=True)
         monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto")
         actual = batch.execute(strict=True).items[0]
@@ -267,9 +266,9 @@ def test_jk_scratch_rejects_incompatible_controls_and_recovers(
         batch.execute(strict=True)
         with monkeypatch.context() as rejected:
             rejected.setenv(control, value)
-            # The force callback throws runtime_error even for INVALID_ARGUMENT;
-            # batch finalization therefore exposes NUMERICAL_FAILURE here.
-            with pytest.raises(RuntimeError, match="numerical failure"):
+            # Invalid controls retain their argument-error category through
+            # finalization; the following replay still checks stream cleanup.
+            with pytest.raises(RuntimeError, match="invalid argument"):
                 batch.execute(strict=True)
         # The storage selector supplies BLAS by default, without requiring an
         # additional environment variable even outside the promoted shape.

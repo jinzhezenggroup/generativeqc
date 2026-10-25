@@ -256,6 +256,11 @@ the fitted representation. Raw owners reject exchange requests. No second
 tensor, host reference preparation or larger memory allowance is introduced.
 The force bridge borrows the authenticated packed `A` and contracts the current
 density directly, retaining the ordinary metric and integral derivatives.
+For a full-rank pure-J raw source, the bridge selects this charge-first response
+before allocating auxiliary panels. Extra scratch capacity cannot select a
+complete fitted tensor in place of the metric-vector solve. Exchange, retained
+fitted/occupied factors, truncated metrics and explicit panel/dot diagnostics
+retain their separate response algorithms.
 
 CUDA value plans retain their original device metric eigenvectors, eigenvalues,
 and inverse square root for analytic force response. Both generated-source and
