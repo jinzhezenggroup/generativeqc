@@ -671,6 +671,7 @@ class PreparedBatch:
             StationaryMeanField,
         )
 
+        from ._cuda_force_resources import ordinary_cuda_force_limits
         from ._dft_gradient import StationaryKsState
         from ._force_active_ao import (
             QUALIFIED_FORCE_ACTIVE_AO_PROFILES,
@@ -712,14 +713,24 @@ class PreparedBatch:
                 source = state._source
                 composite_force = requires_composite_stationary_cuda(state)
                 target = self._stationary_cuda_target()
+                profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
+                density_fitted = (
+                    bool(getattr(source, "density_fitted", False))
+                    if profiles_present
+                    else calculator._density_fitting_mode
+                    != _native.DENSITY_FITTING_NONE
+                )
                 if composite_force:
                     max_device_bytes, max_host_bytes = 1 << 30, 2 << 30
                 else:
-                    max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
+                    max_device_bytes, max_host_bytes = ordinary_cuda_force_limits(
+                        basis.natom,
+                        density_fitted=density_fitted,
+                        hamiltonian=source.hamiltonian,
+                    )
                 tile_policy = "budget-auto" if tile_points is None else "fixed"
                 policy_tile_points = tile_points
 
-                profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
                 resident_provider = getattr(source, "cuda_resident_grid", None)
                 resident_grid_available = callable(resident_provider)
                 if (
@@ -728,12 +739,6 @@ class PreparedBatch:
                     and resident_grid_available
                 ):
                     resident_grid_available = resident_provider() is not None
-                density_fitted = (
-                    bool(getattr(source, "density_fitted", False))
-                    if profiles_present
-                    else calculator._density_fitting_mode
-                    != _native.DENSITY_FITTING_NONE
-                )
                 workload = ForceActiveAoWorkload(
                     architecture=target.architecture,
                     device_name=getattr(self, "_stationary_cuda_device_name", None),

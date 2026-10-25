@@ -27,6 +27,7 @@ from generativeqc_compiler.common.resources import (
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
+from ._cuda_force_resources import CUDA_FORCE_DEVICE_CAP, CUDA_FORCE_HOST_CAP
 from ._snapshot_grid_cache import SNAPSHOT_GRID_CACHE_BYTES
 from .basis import BasisSet
 from .basis_capabilities import require_basis
@@ -42,7 +43,7 @@ from .resources_hf import (
 from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
-_CUDA_FORCE_HOST_CAP = 256 << 20
+_CUDA_FORCE_HOST_CAP = CUDA_FORCE_HOST_CAP
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
     "provider_allowance",
@@ -1357,7 +1358,7 @@ def ks_resource_request(
                 estimates.append(
                     ResourceEstimate(
                         "serialized generated KS force device staging cap",
-                        512 << 20,
+                        CUDA_FORCE_DEVICE_CAP,
                         f"device:{device_id}",
                         first_phase,
                         last_phase,
