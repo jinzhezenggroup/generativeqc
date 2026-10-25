@@ -154,7 +154,7 @@ std::size_t sum(std::size_t left, std::size_t right) {
 std::size_t product(std::size_t left, std::size_t right) {
   return runtime::size_mul(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1; };
+struct Layout { bool mixed_density_contraction; std::size_t jets = 4, work_jets = 1, nao = 128, npoint = 1024; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 namespace cuda_xc_detail {
 bool mixed_matrix_contractions_supported(const Layout&) {
