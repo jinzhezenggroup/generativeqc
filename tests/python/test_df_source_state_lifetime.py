@@ -33,6 +33,7 @@ STUBS = r"""
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
 int current_device = 1, owner_device = 0, allocations = 0, queries = 0, selections = 0;
@@ -305,6 +306,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         if field in array_fields
         else "::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;\n"
         if field == "eigen_handles"
+        else "std::vector<double> host_raw_three_center;\n"
+        if field == "host_raw_three_center"
         else f"void* {field}{{}};\n"
         for field in fields
     )

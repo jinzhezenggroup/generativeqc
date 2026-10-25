@@ -20,6 +20,8 @@
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
@@ -1491,6 +1493,26 @@ void compare_rsh_chunk_history() {
           "could not restore CUDA RSH chunk qualification");
 }
 
+void automatic_empty_spin_admission() {
+  // Bypassing the public method facade must not bypass its scientific domain.
+  const auto entry = dft::generated::automatic_libxc_entry("MGGA_C_TPSS");
+  require(entry && dft::generated::automatic_cuda_point_entry(entry.functional_code),
+          "automatic empty-spin control requires the static TPSS CUDA provider");
+  const auto system = hydrogens(2U, false);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, {1, 12, 4, 8, 3, 1e-12});
+  const scf::PreparedFockPlan gpu(system, nullptr, strategy(false, scf::FockBackend::Cuda), 0);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  bool rejected = false;
+  try {
+    dft::CudaKsPlan plan(gpu, basis, grid, options, entry.functional_code, 64);
+  } catch (const std::invalid_argument& error) {
+    rejected = std::string(error.what()).find("empty-spin") != std::string::npos;
+  }
+  require(rejected, "direct CUDA KS owner admitted an unqualified empty-spin Fock");
+}
+
 void compare_wb97mv_nonlocal_chunk_history() {
   // Chunk width normally also selects the VV10 initialization policy. Compare
   // the same full-target algorithm, then qualify the default proposal policy
@@ -2751,6 +2773,10 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--wb97mv-chunk") {
       run_control("compare_wb97mv_nonlocal_chunk_history()",
                   [&] { compare_wb97mv_nonlocal_chunk_history(); });
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--automatic-empty-spin") {
+      run_control("automatic_empty_spin_admission()", [&] { automatic_empty_spin_admission(); });
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--minao") {

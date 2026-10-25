@@ -235,11 +235,17 @@ def emit_automatic_cuda_descriptor(provider: AutomaticCudaPointProvider) -> str:
     """Emit immutable library-owned identities and executable, not public, facts."""
     point = provider.point
     code = automatic_functional_code(point.name)
+    restricted_identity = (
+        f'"{provider.restricted.expression_identity}"'
+        if provider.restricted.spin == "unpolarized"
+        else "nullptr"
+    )
     return f"""
 namespace {provider.namespace} {{
 const CudaXcPointProgram program{{
     "{point.name}", "{provider.expression_identity}", "{provider.source_identity}",
     0x{code:x}U, {point.ingredient_mask}U, {point.domain_version}U,
-    {provider.feature_terms}, &launch, &launch_batch, {{}}}};
+    {provider.feature_terms}, &launch, &launch_batch, {{}},
+    "{point.expression_identity}", {restricted_identity}}};
 }}
 """

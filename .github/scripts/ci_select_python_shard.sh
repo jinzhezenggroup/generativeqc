@@ -477,7 +477,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
         test_targets+=("${path}")
         selected_core["${path}"]=1
       fi
-    done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)
+    done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | LC_ALL=C sort)
     if (( ${#test_targets[@]} == 0 )); then
       echo "::error::core shard selected no tests"
       exit 2

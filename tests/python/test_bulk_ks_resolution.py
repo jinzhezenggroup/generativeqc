@@ -68,7 +68,7 @@ def test_blacklist_is_negative_only_empty_and_immutable() -> None:
         LIBXC_SEMILOCAL_BLACKLIST["GGA_X_APBE"] = "do not allow"  # type: ignore[index]
 
 
-def test_bulk_ks_rejects_non_cpu_backend_before_lookup(
+def test_bulk_ks_rejects_unsupported_backend_before_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -77,8 +77,24 @@ def test_bulk_ks_rejects_non_cpu_backend_before_lookup(
         lambda *args, **kwargs: pytest.fail("capability lookup must stay inactive"),
     )
 
-    with pytest.raises(UnsupportedMethod, match="supports CPU only"):
-        bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    with pytest.raises(UnsupportedMethod, match="supports CPU and CUDA only"):
+        bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="metal")
+
+
+@pytest.mark.parametrize("name", ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_bulk_ks_backend_resolution_preserves_the_same_semantic_plan(
+    name: str, spin: str
+) -> None:
+    cpu = bulk_ks.resolve_bulk_ks(name, spin=spin, backend="cpu")
+    cuda = bulk_ks.resolve_bulk_ks(name, spin=spin, backend="cuda")
+
+    assert cuda.method.identity == cpu.method.identity
+    assert cuda.plan.identity == cpu.plan.identity
+    assert cuda.required_ingredients == cpu.required_ingredients
+    assert cuda.to_payload()["backend"] == "cuda"
+    assert cuda.public_dft and cuda.admission == cpu.admission
+    assert cuda.compiled_cpu_binding_identity is None
 
 
 def test_bulk_ks_rejects_unsupported_ingredient_structurally(

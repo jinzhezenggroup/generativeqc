@@ -385,7 +385,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   bool graph_replay = state->graph_replay;
   // Host-backed streamed tiles require pageable copies and fences, while a
   // source-backed plan generates every tile on-device and remains capture-safe.
-  if (!graph_replay && !state->graph_capture_rejected &&
+  if (!graph_replay && !state->graph_capture_rejected && plan->host_raw_three_center.empty() &&
       (!plan->streamed || plan->integral_source != nullptr)) {
     // A previous capture may have produced a graph but failed during
     // instantiation/upload. Reset both handles before replacing them.

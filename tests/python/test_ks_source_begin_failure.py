@@ -90,6 +90,7 @@ struct Owner {
   std::uint64_t owner = 1, solve_epoch = 1;
   std::uint64_t warm_density_generation{}, warm_factor_generation{};
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
+  const void* automatic_program{};
   bool device_nonlocal{}, device_chunk_mode{};
   bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
   int *nonlocal_domain_error{}, *nonlocal_pair_error{};

@@ -2150,6 +2150,31 @@
       ]
     },
     {
+      "id": "scf.host-raw-panels",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_HOST_MAX_BYTES"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/scf/cuda/df_host_panels.hpp",
+        "src/scf/cuda/df_plan.cpp",
+        "src/scf/rhf.cpp",
+        "src/scf/fock_prepared.cpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Eligible single-system generated streamed HF plans retain an auxiliary-complete prefix of raw FP64 A within their host value allowance and automatic machine/cgroup headroom. Existing GPU B, packed pure-J, MD Coulomb, batch and imported-tensor paths retain priority. Repeated K panels avoid recurrence while whitening and current-density/orbital work remain device computations. Admitted pageable sources use eager SCF; optional host allocation refusal retains generated graphs. Geometry and requested host policy invalidate reuse.",
+      "revisit_condition": "Qualify total cold/warm/moved E+F and actual source work before widening batch/domain support, replacing efficient GPU residency, admitting fitted host B, graph staging or disk. Compare cache benefit against lost graph replay with process initialization controlled.",
+      "evidence": [
+        "docs/developer/df_streamed_panels.md",
+        "tests/python/test_df_host_panels_cuda.py",
+        "tests/python/test_df_streamed_auto_cuda.py",
+        "benchmarks/results/df-host-panels-20261025/README.md"
+      ]
+    },
+    {
       "id": "ks.host-full-values",
       "classification": "already-default",
       "controls": [

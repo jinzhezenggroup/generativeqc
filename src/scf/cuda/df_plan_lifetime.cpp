@@ -31,6 +31,8 @@ std::uint64_t next_factor_basis_identity() noexcept {
 
 void release(CudaDensityFittingJkPlan& plan) noexcept {
   if (plan.device_id >= 0) (void)cudaSetDevice(plan.device_id);
+  // Async pageable uploads must finish before their immutable backing dies.
+  if (!plan.host_raw_three_center.empty() && plan.stream) (void)cudaStreamSynchronize(plan.stream);
   destroy_persistent_scf_state(plan.persistent_scf_state);
   destroy_ordinary_eigensystem(plan.ordinary_eigensystem);
   destroy_final_validation(plan.final_validation);
