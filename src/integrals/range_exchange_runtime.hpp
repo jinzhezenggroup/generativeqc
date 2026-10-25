@@ -23,8 +23,8 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
                            std::uint64_t* visits) {
   using namespace generativeqc::scf::cuda_execution;
   if (!packed || !indices || !weights || !output || !visits || !natom ||
-      natom > std::numeric_limits<std::size_t>::max() / 3 || !nao || !nprimitive ||
-      !count || count > 4096 || (independent_slots && count != 1))
+      natom > std::numeric_limits<std::size_t>::max() / 3 || !nao || !nprimitive || !count ||
+      count > 4096 || (independent_slots && count != 1))
     return 1;
   const double* primitives = packed + 3 * natom;
   const double* aos = primitives + 2 * nprimitive;

@@ -233,7 +233,8 @@ std::vector<double> cpu_stationary_range_correction(const PreparedFockPlan& targ
       correction.backend != FockBackend::Cpu || correction.spec.coulomb.present ||
       correction.spec.spin != primary.spec.spin || !term.present ||
       term.op != FockOperator::LongRange || term.approximation != FockApproximation::Exact ||
-      !std::isfinite(term.coefficient) || density.size() != matrix || (uks ? beta_density.size() != matrix : !beta_density.empty()) ||
+      !std::isfinite(term.coefficient) || density.size() != matrix ||
+      (uks ? beta_density.size() != matrix : !beta_density.empty()) ||
       !cpu_stationary_direct_force_work_admitted(target.system(), true, 0, 1))
     throw std::invalid_argument("native CPU range force exceeds its operator/work domain");
   constexpr std::size_t tile = 256;
@@ -242,9 +243,9 @@ std::vector<double> cpu_stationary_range_correction(const PreparedFockPlan& targ
   indices.reserve(4 * tile);
   weights.reserve(tile);
   // The generated range derivative holds another O(natom) transactional vector.
-  const auto bytes = runtime::size_add(
-      runtime::vector_capacities(basis.packed, indices, weights, result, partial),
-      runtime::size_mul(nc, sizeof(double)));
+  const auto bytes =
+      runtime::size_add(runtime::vector_capacities(basis.packed, indices, weights, result, partial),
+                        runtime::size_mul(nc, sizeof(double)));
   if (bytes > maximum_bytes) throw std::bad_alloc();
   runtime::sample_cpu_capacity(bytes);
   auto submit = [&] {
