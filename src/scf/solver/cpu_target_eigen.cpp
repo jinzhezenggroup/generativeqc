@@ -26,9 +26,11 @@ std::size_t cpu_target_eigen_workspace_bytes(std::size_t n) {
   return std::max(3 * matrix_bytes + vectors_bytes, 4 * matrix_bytes + n * value_bytes);
 }
 
-reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
-                                        const reference::Matrix* overlap,
-                                        const reference::Matrix* orthogonalizer, std::size_t n) {
+namespace {
+reference::EigenResult cpu_target_eigen_impl(const reference::Matrix& matrix,
+                                             const reference::Matrix* overlap,
+                                             const reference::Matrix* orthogonalizer, std::size_t n,
+                                             const tensor::CpuLinalgPlan& plan) {
   (void)cpu_target_eigen_workspace_bytes(n);  // Check all products before allocation.
   const auto valid = [n](const auto& values) {
     return values.size() == n * n &&
@@ -37,8 +39,6 @@ reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
   if (!valid(matrix) || bool(overlap) != bool(orthogonalizer) ||
       (overlap && (!valid(*overlap) || !valid(*orthogonalizer))))
     throw std::invalid_argument("CPU target eigen inputs require matching finite F/S/X matrices");
-  constexpr tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::scalar,
-                                       tensor::CpuLinalgThreadOwnership::task_parallel, 1};
   namespace shared = ::generativeqc::solver;
   const shared::GeneralizedEigenDomain domain{n, 1, 1, shared::GeneralizedEigenLayout::row_major};
   const auto basis = orthogonalizer ? shared::GeneralizedEigenBasis::canonical_x
@@ -62,7 +62,9 @@ reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
             basis, shared::cpu::GeneralizedEigenLowering{domain, matrices, plan}) != 0)
       throw std::invalid_argument("CPU target eigen reduction binding is invalid");
   }
-  auto frame = tensor::cpu_symmetric_eigen(std::move(transformed), n, plan, 1e-14);
+  auto frame =
+      tensor::cpu_symmetric_eigen(std::move(transformed), n, plan,
+                                  plan.provider == tensor::CpuLinalgProvider::scalar ? 1e-14 : 0.0);
   if (orthogonalizer) {
     reference::Matrix coefficients(n * n);
     const shared::GeneralizedEigenMatrices matrices{
@@ -78,5 +80,40 @@ reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
   if (!validate_eigen_frame(matrix, overlap, frame.values, frame.vectors, n, diagnostic, detail))
     throw std::runtime_error(detail);
   return {std::move(frame.values), std::move(frame.vectors)};
+}
+}  // namespace
+
+reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
+                                        const reference::Matrix* overlap,
+                                        const reference::Matrix* orthogonalizer, std::size_t n) {
+  return cpu_target_eigen_impl(
+      matrix, overlap, orthogonalizer, n,
+      {tensor::CpuLinalgProvider::scalar, tensor::CpuLinalgThreadOwnership::task_parallel, 1});
+}
+
+reference::EigenResult cpu_preliminary_eigen(const reference::Matrix& matrix,
+                                             const reference::Matrix* overlap,
+                                             const reference::Matrix* orthogonalizer,
+                                             std::size_t n) {
+  // Provider resolution precedes execution; an unavailable LAPACK/thread-control
+  // provider keeps the incumbent scalar owner. Numerical failures never switch
+  // providers, and the original F/S residual gates validate either result.
+  const auto provider = tensor::resolve_cpu_linalg_provider({}, true);
+  return cpu_target_eigen_impl(matrix, overlap, orthogonalizer, n,
+                               {provider, tensor::CpuLinalgThreadOwnership::task_parallel, 1});
+}
+reference::Matrix cpu_preliminary_density(const reference::Matrix& coefficients, std::size_t n,
+                                          std::size_t occupied) {
+  (void)cpu_target_eigen_workspace_bytes(n);
+  if (!occupied || occupied > n || coefficients.size() != n * occupied)
+    throw std::invalid_argument("preliminary density requires n-by-occupied coefficients");
+  reference::Matrix density(n * n, 0.0);
+  // D = 2 Cocc Cocc^T. Publish both triangles so the strict seed symmetry
+  // gate stays independent of the provider's one-triangle storage contract.
+  tensor::cpu_syrk('L', 'N', n, occupied, coefficients.data(), density.data(), 2.0);
+  for (std::size_t row = 0; row < n; ++row)
+    for (std::size_t column = 0; column < row; ++column)
+      density[column * n + row] = density[row * n + column];
+  return density;
 }
 }  // namespace generativeqc::scf::solver

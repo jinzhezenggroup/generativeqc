@@ -20,6 +20,9 @@ struct CudaHfSeedWorkspace {
   double* eigenvalues{};
   int* solver_info{};
   const std::uint8_t* active{};
+  // Optional third idle DIIS matrix, disjoint from matrix/scratch. Null keeps
+  // host products when the owner has insufficient retained history capacity.
+  double* product{};
 };
 
 /** Build only cold Hückel seeds against the GPU target's actual overlap.

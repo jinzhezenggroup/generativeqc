@@ -3,6 +3,8 @@
 using cublasHandle_t = void*;
 using cublasStatus_t = int;
 using cublasOperation_t = int;
+enum cublasSideMode_t { CUBLAS_SIDE_LEFT = 0, CUBLAS_SIDE_RIGHT = 1 };
+enum cublasDiagType_t { CUBLAS_DIAG_NON_UNIT = 0, CUBLAS_DIAG_UNIT = 1 };
 #include "../shared_eigen_provider/cusolverDn.h"
 constexpr int CUBLAS_STATUS_SUCCESS = 0, CUBLAS_STATUS_ALLOC_FAILED = 3;
 constexpr int CUBLAS_OP_N = 0, CUBLAS_OP_T = 1;
@@ -23,3 +25,6 @@ cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t, cublasOperation_t, cubl
                                          int, int, const double*, const double*, int, long long,
                                          const double*, int, long long, const double*, double*, int,
                                          long long, int);
+cublasStatus_t cublasDtrsmBatched(cublasHandle_t, cublasSideMode_t, cublasFillMode_t,
+                                  cublasOperation_t, cublasDiagType_t, int, int, const double*,
+                                  const double* const*, int, double* const*, int, int);
