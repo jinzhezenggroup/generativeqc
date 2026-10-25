@@ -14,14 +14,13 @@ every execution context the Python layer admits.
 **Python execution-context capability.** After the method, backend, basis, grid,
 precision, density-fitting mode, ECP and spin choices are resolved,
 `Calculator.capabilities` may advertise properties the carrier does not. It
-promotes analytic forces for the specific contexts listed below and rejects
-everything else. Both layers still defer per-system geometry, electron-count,
-convergence and resource admission to preparation and execution. See
+promotes analytic forces only for admitted contexts; the examples below are not
+an exhaustive support matrix. Both layers still defer per-system geometry,
+electron-count, convergence and resource admission to preparation and execution. See
 [Capability sources and interpretation](../reference/capabilities.md) for the
 general rule.
 
-Force promotion covers these contexts; anything outside them raises rather than
-silently degrading:
+Examples of force promotion include:
 
 - CPU all-electron s/p/d semilocal calculations in a bounded dense-export
   domain. Its explicit limits are at most 16 AOs (64 for fitted plans without
@@ -29,6 +28,10 @@ silently degrading:
   points, plus the stationary consumer's work and byte budgets. These are this
   consumer's domain limits, not a limit on RKS energy calculations.
 - CPU ECP semilocal calculations whose basis is s/p/d.
+- CUDA semilocal calculations admitted by their basis and composition checks.
+- Bounded CPU composed all-electron calculations, including admitted hybrid and
+  nonlocal-correlation plans; their source and basis checks remain authoritative.
+- CPU and CUDA density-fitted plans admitted by the corresponding force provider.
 - CUDA global hybrids in the qualified PBE0/B3LYP-style force routes.
 - CUDA nonlocal-correlation and mixed density-fitted domains admitted by their
   own basis and composition checks. This is how, for example, compiler-resolved
@@ -44,9 +47,12 @@ carry their own endpoint gates. Compiler-resolved DFT names such as WB97M-V reus
 stable native DFT carriers rather than adding a method-specific C ABI scientific
 driver.
 
-Energy remains the default wherever force promotion is bounded: request
-`properties=("energy", "forces")` explicitly. The `frozenset` returned by
-`Calculator._default_properties` records that choice per context.
+Defaults are context-specific. Direct all-electron CPU semilocal calculations
+keep an energy-only default; other admitted DFT contexts use their supported
+property set. Request `properties=("energy", "forces")` explicitly when forces
+are required, or `properties=("energy",)` to avoid requesting them. The
+`frozenset` returned by `Calculator._default_properties` records that choice per
+context.
 
 
 ## Method execution boundary

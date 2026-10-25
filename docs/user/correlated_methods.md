@@ -122,7 +122,8 @@ amplitude reuse is never implied by matching dimensions.
 `singlepoint_components` shares one RHF reference among a group:
 
 ```python
-group = calc.singlepoint_components(
+components_calc = Calculator(method="rccsd(t)", basis="sto-3g", device="cpu")
+group = components_calc.singlepoint_components(
     atoms, companions=("rhf", "mp2"), properties=("energy", "forces")
 )
 ```

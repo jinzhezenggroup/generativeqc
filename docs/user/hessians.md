@@ -71,12 +71,14 @@ exposing one global cap:
 | Argument | Bounds |
 | --- | --- |
 | `integral_budget_bytes` | generated second-order integral work |
-| `grid_budget_bytes` | numeric AO/grid/nonlocal-pair workspace |
-| `max_nonlocal_pairs` | ordered VV10 pairs per response action |
+| `grid_budget_bytes` | WB97M-V only: numeric AO/grid/nonlocal-pair workspace |
+| `max_nonlocal_pairs` | WB97M-V only: ordered VV10 pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |
 
-A budget that cannot hold its declared work raises before publication. Response
-and provider diagnostics are reported separately and are not a combined
+The LDA/PBE endpoints do not consume `grid_budget_bytes` or
+`max_nonlocal_pairs`; do not use these arguments as a grid-memory cap for those
+methods. An applicable budget that cannot hold its declared work raises before
+publication. Response and provider diagnostics are reported separately and are not a combined
 process-RSS or GPU-memory measurement; see
 [Resource planning](../maintainer/resource_planning.md) for how those capacity
 records relate to actual allocation.

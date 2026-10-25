@@ -371,8 +371,9 @@ Property coverage differs by entry point, and the difference is deliberate:
 - `Calculator.estimate_resources(..., properties=(...))` plans the properties
   that calculator context actually advertises. A
   [direct all-electron CPU semilocal force](../user/dft_density_fitting.md)
-  context that requests `"forces"` reserves the transient force workspace floor
-  and the retained CUDA force owner; energy-only contexts do not.
+  context that requests `"forces"` reserves the transient CPU force workspace
+  floor. The retained CUDA force owner is a separate CUDA-backend reservation;
+  it is not part of the CPU plan.
 - The Python-free `generativeqc resources` dry run still reports unsupported for
   `--forces` and for density-fitted KS, because its scalar v1 layout does not
   enumerate the prepared force or fitted-provider storage. It fails closed
