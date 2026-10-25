@@ -1,0 +1,33 @@
+{
+  "base_revision": "98531471e79d5ce31119ec8224adf5c1e5e989e2",
+  "measured_change_sha256": "9bc7e18f94ce9167835a2bb8db7a6f65ce0e264fa3f5aaf04577096cb856c759",
+  "source_files": {
+    "src/scf/cuda/hf_initial_guess.cpp": "563ba8011fd8a4293fb2ccb4619d63104b0962ecdac19f643fef6bfae6f77610",
+    "src/scf/cuda/hf_initial_guess.hpp": "e7014bc901422fb0962edd5dfb60d4e1c548bfd0cfecd7e90c89883e1c92c85e",
+    "src/scf/cuda/matrix_library.cpp": "22923390bbbdb7687aa051481d06faa5293e92832a7b2c1b937c8f7ba3fd625c",
+    "src/scf/cuda/matrix_library.hpp": "5b2c1996ccc56d74a357f82811ebff282948c86bd93a7f6eb077952ed05dcce5",
+    "src/scf/cuda_rhf.cpp": "cf03140e3d0ae5ec6df0daf468941c338c2920292b313b890fe0eb47ebce7acf",
+    "src/scf/initial_guess/eigen_operation.hpp": "495164e5b4bc7e90287986b6fb1c7751b2a853f721daf35d07a5e724ae3d45dc",
+    "src/scf/initial_guess/huckel.cpp": "6a0258d95df4c90cbf640f51cf9c744f3dca5b01c4e05c50e49ac0d067905dc5",
+    "src/scf/preliminary_guess.cpp": "b462cc624c7d8db0b933439d2f0a6d08f0fd71aea7380000d3b3c1d5e8cb4029",
+    "src/scf/preliminary_guess.hpp": "b4bdbeeba84d12caaa6977463ebc71642bb497c9f9d956c1ac280fdfa8490c41",
+    "src/scf/solver/cpu_target_eigen.cpp": "d6964d0fa8bf16f10748a1fc7c79334a3a4fec615ec49aaa481b73b881856202",
+    "src/scf/solver/cpu_target_eigen.hpp": "88b35a1aee8045313a5aafbbda1c17a302fac52488013d841bdf112ae07ec756",
+    "src/scf/solver/eigen_frame.cpp": "32f585771c1f1fcf41751aa2884a1858bf014511e96857a6657b01f14538db04",
+    "src/scf/solver/eigen_frame.hpp": "ab95ae09cd6afb08516b70e483d54c39c2f1f2046ede2f929effc694d4317e1d",
+    "src/scf/solver/proposal_control.cpp": "5c0489c637512cea311e559b644c38adc8c53362829e55e3d5da66e73b09505f",
+    "src/scf/solver/proposal_control.hpp": "995549e6d7b321a07ffa63293ff219f2dc3a10abe71c62e7065696f7eaaaf0c1",
+    "src/scf/solver/validation_products.hpp": "29d45f7b1baa39c2acbecba34ba48d10fbb29544f1ed2e3bb1149531ecc7971f",
+    "tests/native/test_eigen_frame.cpp": "a2437cf83d63ba81d07b56c78cff8320c8906b36a468f70d5b91c8f52c271b99",
+    "tools/check_scf_structure.py": "de9ed0b792e08f4099e59b33117561faf3fd2e7a6f05355039496b4f11826d1f"
+  },
+  "compiler_cache": "sccache 0.16.0",
+  "scope": "Complete default FP64 HF energy plus analytic force, without experimental cold screening.",
+  "remote_root": "n1:/data/jzzeng/gpu4-parity-research-20261025",
+  "immutable_variants": [
+    "hf-seed-control",
+    "hf-seed-final"
+  ],
+  "qualification": "Original and displaced geometry use independent GPU4PySCF references. No oracle seed enters native execution.",
+  "prior_implementation_receipts": "hf-seed-production build/resources/memory receipts precede the SCF adapter boundary refactor. Final timings, tests, moved checks and memory checks use hf-seed-final; both exact-byte refusal and original negative graph-capture API errors remain retained."
+}

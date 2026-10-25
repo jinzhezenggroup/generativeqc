@@ -3279,7 +3279,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     // DIIS count advances; borrow them without allocating another GPU owner.
     prepare_hf_cuda_initial_densities(
         plan, host, systems, options,
-        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active},
+        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active,
+         diis_history >= 2 ? fock_history + matrix_size : nullptr},
         *seed_diagnostics);
     // A native cold guess has no previous-energy baseline, so it cannot pass
     // the first convergence check. That iteration accepts its new density and

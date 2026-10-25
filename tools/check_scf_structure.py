@@ -293,6 +293,8 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/launch_geometry.",
     "tensor/cuda_matrix_product.hpp",
     "tensor/cuda_structured_product.hpp",
+    # Unmasked seed validation also borrows this adapter's prepared provider.
+    "tensor/cuda_square_linalg.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.
@@ -775,6 +777,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
 CUDA_MODULES["cuda_hf_initial_guess"] = ("hf_initial_guess",)
 CUDA_ALLOWED["cuda_hf_initial_guess"] = (
     "scf/cuda/hf_initial_guess.hpp",
+    "scf/cuda/matrix_library.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/eigensolver.hpp",
     "scf/preliminary_guess.hpp",
