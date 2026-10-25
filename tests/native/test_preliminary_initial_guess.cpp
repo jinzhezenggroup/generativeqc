@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -572,8 +574,42 @@ void check_huckel_automatic_policy() {
           "Huckel invalid request overwrote output");
 }
 
+void check_sdk_diagnostic_lifetime() {
+  // The public C++ adapter must distinguish no execution from a recorded
+  // bounded fallback, and its copied diagnostic must survive owner teardown.
+  std::optional<generativeqc_initial_guess_diagnostic> saved;
+  {
+    generativeqc_context_descriptor context_descriptor{};
+    context_descriptor.struct_size = sizeof(context_descriptor);
+    context_descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    context_descriptor.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+    generativeqc::Context context(context_descriptor);
+    const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+    generativeqc::System system(context, atoms, "sto-3g");
+    auto method = generativeqc::default_method_descriptor("rhf");
+    method.precision_mode = GENERATIVEQC_PRECISION_FP64;
+    generativeqc_initial_guess_options guess{};
+    guess.struct_size = sizeof(guess);
+    guess.abi_version = GENERATIVEQC_ABI_VERSION;
+    guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    guess.maximum_numeric_bytes = 1;
+    method.initial_guess = &guess;
+    generativeqc::Calculation original(context, system, method);
+    require(!original.initial_guess_diagnostic(), "unexecuted SDK owner invented a diagnostic");
+    generativeqc::Calculation moved(std::move(original));
+    const auto result = moved.execute();
+    require(std::abs(result.energy - (-1.1167143251757508)) < 1e-8,
+            "bounded SDK fallback changed independent H2 energy");
+    saved = moved.initial_guess_diagnostic();
+  }
+  require(saved && saved->outcome == 4 && saved->preliminary_fock_builds == 0 &&
+              saved->preparation_numeric_capacity > 1,
+          "copied SDK diagnostic lost bounded fallback or owner lifetime");
+}
+
 int main() {
   try {
+    check_sdk_diagnostic_lifetime();
     check_automatic_policy();
     check_huckel_automatic_policy();
     check();
