@@ -902,6 +902,9 @@ def test_worker_retains_actual_precision_and_closes_owner(
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(sys, "path", list(sys.path))
+    # The worker normally owns a child process. Its in-process stand-in must
+    # not leave the fake library or scientific selectors in later tests.
+    monkeypatch.setattr(os, "environ", dict(os.environ))
     monkeypatch.setattr(
         collector.subprocess, "check_output", lambda *args, **kwargs: "synthetic-head"
     )

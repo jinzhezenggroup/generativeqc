@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/host_cache_budget.hpp"
+#include "scf/cuda/df_host_panels.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_plan_setup.hpp"
 #include "scf/df_exchange_policy.hpp"
@@ -135,6 +137,7 @@ bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* pla
          (!resident || std::strcmp(resident, "auto") == 0 || std::strcmp(resident, "full") == 0 ||
           std::strcmp(resident, "flat") == 0 || std::strcmp(resident, "legacy") == 0) &&
          (!diis || std::strcmp(diis, "auto") == 0 || std::strcmp(diis, "serial") == 0) &&
+         cuda_density_fitting_host_policy_matches(plan) &&
          plan->resident_exchange_enabled == df_resident_exchange_requested() &&
          plan->triangular_exchange == df_triangular_exchange_requested() &&
          plan->flat_dense_exchange == df_flat_dense_exchange_requested() &&
@@ -153,6 +156,93 @@ bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan* plan, 
                                           double relative_threshold) noexcept {
   return plan && item < plan->batch_size && plan->nbf == nbf && plan->naux == naux &&
          plan->metric_relative_threshold == relative_threshold;
+}
+
+bool cuda_density_fitting_host_policy_matches(const CudaDensityFittingJkPlan* plan) noexcept {
+  std::size_t limit;
+  bool automatic;
+  return plan && host_panel_policy(limit, automatic) && limit == plan->host_panel_policy_limit &&
+         automatic == plan->host_panel_automatic;
+}
+
+generativeqc_status prepare_cuda_density_fitting_host_panels(
+    CudaDensityFittingJkPlan* plan, std::size_t host_budget,
+    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail) {
+  std::size_t requested;
+  bool automatic;
+  if (!plan || !host_panel_policy(requested, automatic)) {
+    detail = "invalid generated DF host cache byte ceiling";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  // This API is setup-only. A populated source can never be rebound or resized
+  // while queued consumers borrow its pageable backing.
+  if (!plan->host_raw_three_center.empty()) {
+    if (requested == plan->host_panel_policy_limit && automatic == plan->host_panel_automatic &&
+        diagnostics.size() == 1 && diagnostics.front().peak_host_bytes <= host_budget)
+      return GENERATIVEQC_STATUS_SUCCESS;
+    detail = "cannot change an admitted DF host source policy";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  plan->host_panel_policy_limit = requested;
+  plan->host_panel_automatic = automatic;
+  if (!plan->streamed || !plan->integral_source || plan->batch_size != 1 ||
+      plan->persistent_scf_state || plan->md_coulomb || diagnostics.size() != 1 || !host_budget)
+    return GENERATIVEQC_STATUS_SUCCESS;
+  const auto available = automatic ? runtime::automatic_host_cache_bytes() : requested;
+  const auto existing = diagnostics.front().peak_host_bytes;
+  std::size_t row_bytes;
+  if (existing >= host_budget || !checked_bytes(plan->naux, row_bytes) || !row_bytes)
+    return GENERATIVEQC_STATUS_SUCCESS;
+  // Complete auxiliary rows allow bounded prefix admission even when neither
+  // memory tier can retain the full tensor. A straddling consumer regenerates
+  // only its uncached pair suffix, without changing metric/contraction order.
+  const auto cached_pairs =
+      std::min(plan->matrix_elements, std::min(host_budget - existing, available) / row_bytes);
+  if (!cached_pairs) return GENERATIVEQC_STATUS_SUCCESS;
+  const auto elements = cached_pairs * plan->naux;
+  const auto bytes = elements * sizeof(double);
+  std::vector<double> values;
+  try {
+    values.resize(elements);
+  } catch (const std::bad_alloc&) {
+    return GENERATIVEQC_STATUS_SUCCESS;  // Optional RAM never displaces the source.
+  }
+  const auto capacity = vector_capacity_bytes(values);
+  if (capacity > host_budget - existing || capacity > available) return GENERATIVEQC_STATUS_SUCCESS;
+  struct Drain {
+    cudaStream_t stream;
+    ~Drain() { (void)cudaStreamSynchronize(stream); }
+  } drain{plan->stream};
+  const auto tile_capacity = plan->row_tile * plan->nbf * plan->auxiliary_tile;
+  const auto pair_tile = std::min(plan->matrix_elements, plan->row_tile * plan->nbf);
+  for (std::size_t first = 0; first < cached_pairs; first += pair_tile) {
+    const auto pairs = std::min(pair_tile, cached_pairs - first);
+    const auto auxiliary_tile = std::min(plan->naux, tile_capacity / pairs);
+    for (std::size_t begin = 0; begin < plan->naux; begin += auxiliary_tile) {
+      const auto count = std::min(auxiliary_tile, plan->naux - begin);
+      const auto status = generate_cuda_density_fitting_raw_tile(
+          plan->integral_source, 0, first, pairs, begin, count, -1, plan->stream,
+          plan->exchange_intermediate, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      auto error =
+          cudaMemcpy2DAsync(values.data() + first * plan->naux + begin, plan->naux * sizeof(double),
+                            plan->exchange_intermediate, count * sizeof(double),
+                            count * sizeof(double), pairs, cudaMemcpyDeviceToHost, plan->stream);
+      if (error == cudaSuccess) error = cudaStreamSynchronize(plan->stream);
+      if (error != cudaSuccess)
+        return cuda_failure(error, "prepare immutable DF host panels", detail);
+    }
+  }
+  if (!finite_values(values)) {
+    detail = "nonfinite generated DF host source";
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+  plan->host_raw_three_center = std::move(values);
+  diagnostics.front().host_resident_bytes += capacity;
+  diagnostics.front().peak_host_bytes += capacity;
+  diagnostics.front().host_raw_factor_bytes = capacity;
+  runtime::cuda_trace::trace_counter("host_raw_source_setup_bytes", bytes);
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 }  // namespace generativeqc::scf

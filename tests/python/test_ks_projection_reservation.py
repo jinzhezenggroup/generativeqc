@@ -91,11 +91,19 @@ struct Capture::Impl {
   bool external_integrals{};
   FockPreparationDiagnostic diagnostic;
   CudaDirectJkPlan* cuda_exact = nullptr;
+  std::shared_ptr<CudaDensityFittingJkPlan> cuda_df;
 """
     unit += prepared[initializer_start:initializer_end]
     unit += "(void)aux; (void)retained_direct_derivative_order;\n"
     unit += prepared[validation_start:validation_end]
     unit += "diagnostic.strategy = strategy; }\n};\n"
+    # These reservation probes never publish a CUDA owner. Preserve the real
+    # matches() branch while keeping device policy queries outside this fixture.
+    unit += r"""
+bool cuda_density_fitting_host_policy_matches(const CudaDensityFittingJkPlan*) noexcept {
+  std::abort();
+}
+"""
     unit += definition(prepared, "PreparedFockPlan::PreparedFockPlan(").replace(
         "PreparedFockPlan::PreparedFockPlan(", "Capture::Capture("
     )

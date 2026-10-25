@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "runtime/cuda_component_trace.hpp"
+#include "scf/cuda/df_host_panels.hpp"
 #include "scf/cuda/df_metric_kernels.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
@@ -40,7 +41,7 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
   // both routes evaluate each source integral once for this Q; fusion avoids
   // naux singleton launches without sacrificing any possible raw-panel reuse.
   // A short output tail alone must never select repeated fused recurrences.
-  if (!eigen_basis && auxiliaries == 1 && raw_tile == 1) {
+  if (!eigen_basis && auxiliaries == 1 && raw_tile == 1 && plan.host_raw_three_center.empty()) {
     runtime::cuda_trace::trace_counter("fused_metric_panel_productions", 1);
     // Logical (pair,Q,P) work, not an assertion about instruction count or
     // elapsed-time amplification. Capture counters describe construction only.
@@ -51,13 +52,10 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
         plan.inverse_square_roots + system * plan.naux * plan.naux,
         reinterpret_cast<void*>(plan.stream), output, detail);
   }
-  runtime::cuda_trace::trace_counter("raw_panel_source_auxiliary_evaluations", pairs * plan.naux);
   runtime::cuda_trace::TraceRegion transform("transformed_three_center_generation", plan.stream);
   for (std::size_t begin = 0; begin < plan.naux; begin += raw_tile) {
     const auto count = std::min(raw_tile, plan.naux - begin);
-    auto status = generate_cuda_density_fitting_raw_tile(
-        plan.integral_source, system, pair_begin, pairs, begin, count, -1,
-        reinterpret_cast<void*>(plan.stream), scratch, detail);
+    auto status = raw_panel(plan, system, pair_begin, pairs, begin, count, scratch, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     // Accumulate Q^T A before scaling weak eigendirections. Raw splitting
     // changes only the reduction order, never the number of source integrals.
