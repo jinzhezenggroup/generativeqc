@@ -27,6 +27,15 @@ if TYPE_CHECKING:
     from typing import Any
 
 
+def _use_cpu_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate the clean compiler environment in both Python and native code."""
+    for name in tuple(os.environ):
+        if name not in collector.CPU_ENVIRONMENT:
+            monkeypatch.delenv(name)
+    for name, value in collector.CPU_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+
+
 @pytest.fixture
 def fake_nvcc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
     root = tmp_path / "cuda"
@@ -463,8 +472,7 @@ def test_real_nvcc_object_store_and_opaque_input(
         return result
 
     monkeypatch.setattr(compiler_cache, "run_compiler", observed_run)
-    old_environment = dict(os.environ)
-    monkeypatch.setattr(os, "environ", dict(collector.CPU_ENVIRONMENT))
+    _use_cpu_environment(monkeypatch)
     obj = tmp_path / "point.o"
     depfile = tmp_path / "point.d"
     rows = []
@@ -567,7 +575,6 @@ def test_real_nvcc_object_store_and_opaque_input(
     (tmp_path / "nvcc-object-receipt.json").write_text(
         json.dumps(receipt, indent=2) + "\n", encoding="utf-8"
     )
-    monkeypatch.setattr(os, "environ", old_environment)
 
 
 def test_real_nvcc_cacheable_replay_and_salt(
@@ -605,7 +612,7 @@ def test_real_nvcc_cacheable_replay_and_salt(
         return result
 
     monkeypatch.setattr(compiler_cache, "run_compiler", observed_run)
-    monkeypatch.setattr(os, "environ", dict(collector.CPU_ENVIRONMENT))
+    _use_cpu_environment(monkeypatch)
     rows = []
     for content in ("snapshot A\n", "snapshot A\n", "snapshot B\n"):
         config.write_text(content, encoding="utf-8")
