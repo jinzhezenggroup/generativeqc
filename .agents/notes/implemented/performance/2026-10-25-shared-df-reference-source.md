@@ -54,3 +54,9 @@ to 1.2798 seconds; CCSD(T)/def2-SVP from 0.8099 to 0.8033 seconds. Both arms
 retain identical compensated source/transform work. Sharing is useful for
 eliminating duplicate ownership and metric setup; it is not evidence that
 ordinary SCF factors can replace compensated correlation factors.
+
+Final integration qualification at `b221c5d3e` repeats all twelve GPU cases and
+the expanded identity/backend-refusal memcheck with zero errors. Cold medians
+are 1.2860 -> 1.2795 s for MP2 and 0.8104 -> 0.8040 s for CCSD(T). Reference,
+CCSD, Lambda and orbital-response iterations match between arms. This confirms
+the small setup benefit after the independent HF endpoint changes in #2765.
