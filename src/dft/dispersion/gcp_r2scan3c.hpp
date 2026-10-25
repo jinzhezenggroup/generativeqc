@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "dft/dispersion/gcp_r2scan3c_data.hpp"
 #include "generated_method_parameters.hpp"
@@ -148,17 +149,20 @@ inline bool overlap(double r, int shell_a, int shell_b, double za, double zb, do
   double f0 = 0.0, f1 = 0.0;
   for (int t = 0; t < terms; ++t) {
     f0 += wt[t] * av[pa[t]] * bv[qb[t]];
-    f1 -= wt[t] * (ha * av[pa[t] + 1] * bv[qb[t]] + hb * av[pa[t]] * bv[qb[t] + 1]);
+    if (ds) f1 -= wt[t] * (ha * av[pa[t] + 1] * bv[qb[t]] + hb * av[pa[t]] * bv[qb[t] + 1]);
   }
   *s = cnorm * std::pow(r, m) * f0;
-  *ds = cnorm * (static_cast<double>(m) * std::pow(r, m - 1) * f0 + std::pow(r, m) * f1);
-  return std::isfinite(*s) && std::isfinite(*ds) && *s > 0.0;
+  if (ds) *ds = cnorm * (static_cast<double>(m) * std::pow(r, m - 1) * f0 + std::pow(r, m) * f1);
+  return std::isfinite(*s) && (!ds || std::isfinite(*ds)) && *s > 0.0;
 }
 }  // namespace gcp_detail
 
+/** A null gradient selects the same energy without derivative arithmetic or
+ * scratch gradient storage. Gradient calls retain the audited analytic formula. */
 inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const double* xyz,
                                        const GCPParameters& p, double* energy, double* gradient) {
-  if (n < 0 || (n > 0 && (!z || !xyz || !gradient)) || !energy || gradient == xyz) {
+  if (n < 0 || n > std::numeric_limits<int>::max() / 3 || (n > 0 && (!z || !xyz)) || !energy ||
+      (gradient && gradient == xyz)) {
     return GCPStatus::invalid_argument;
   }
   if (!(std::isfinite(p.sigma) && p.sigma > 0.0 && std::isfinite(p.alpha) && p.alpha > 0.0 &&
@@ -167,7 +171,7 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
     return GCPStatus::invalid_argument;
   }
   *energy = 0.0;
-  for (int k = 0; k < 3 * n; ++k) gradient[k] = 0.0;
+  if (gradient) std::fill(gradient, gradient + 3 * n, 0.0);
   for (int i = 0; i < n; ++i) {
     if (!::generativeqc::generated::method_parameters::r2scan3cGcpSupportsAtomicNumber(z[i]))
       return GCPStatus::unsupported_element;
@@ -188,7 +192,8 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
       if (!(r2 > 0.0) || !std::isfinite(r2)) return GCPStatus::coincident_atoms;
       const double r = std::sqrt(r2);
       double s = 0.0, ds = 0.0;
-      if (!gcp_detail::overlap(r, ei.shell, ej.shell, ei.slater, ej.slater, &s, &ds)) {
+      if (!gcp_detail::overlap(r, ei.shell, ej.shell, ei.slater, ej.slater, &s,
+                               gradient ? &ds : nullptr)) {
         return GCPStatus::numerical_failure;
       }
       const double bsse = std::exp(-p.alpha * std::pow(r, p.beta)) / std::sqrt(s);
@@ -198,19 +203,21 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
       const double x = r / r0;
       const double damp_power = p.damping_scale * std::pow(x, p.damping_exponent);
       const double damp = 1.0 - 1.0 / (1.0 + damp_power);
-      const double ddamp = p.damping_scale * p.damping_exponent *
-                           std::pow(x, p.damping_exponent - 1.0) / r0 /
-                           std::pow(1.0 + damp_power, 2);
       const double xi = ei.xv >= 0.5 ? 1.0 / std::sqrt(ei.xv) : 0.0;
       const double xj = ej.xv >= 0.5 ? 1.0 / std::sqrt(ej.xv) : 0.0;
       const double pref = p.sigma * (ei.emiss * xj + ej.emiss * xi);
       const double pair = pref * bsse * damp;
+      if (!std::isfinite(pair)) return GCPStatus::numerical_failure;
+      *energy += pair;
+      if (!gradient) continue;
+      const double ddamp = p.damping_scale * p.damping_exponent *
+                           std::pow(x, p.damping_exponent - 1.0) / r0 /
+                           std::pow(1.0 + damp_power, 2);
       const double dbsse = bsse * (-p.alpha * p.beta * std::pow(r, p.beta - 1.0) - 0.5 * ds / s);
       const double dedr = pref * (dbsse * damp + bsse * ddamp);
-      if (!(std::isfinite(pair) && std::isfinite(dedr))) {
+      if (!std::isfinite(dedr)) {
         return GCPStatus::numerical_failure;
       }
-      *energy += pair;
       for (int k = 0; k < 3; ++k) {
         const double g = dedr * v[k] / r;
         gradient[3 * i + k] += g;

@@ -6,6 +6,10 @@
 #include <limits>
 
 #include "api/ks_dispersion.hpp"
+#include "methods/method.hpp"
+#include "molecule/basis.hpp"
+#include "molecule/basis_geometry_identity.hpp"
+#include "molecule/basis_template.hpp"
 #include "native_method_catalog.hpp"
 
 namespace generativeqc::methods::named_ks {
@@ -35,6 +39,41 @@ void electronic_options(const Method& entry, generativeqc_ks_options& candidate)
   candidate.nonlocal_b = entry.nonlocal.b;
   candidate.nonlocal_c = entry.nonlocal.c;
   candidate.nonlocal_coefficient = entry.nonlocal.coefficient;
+}
+
+void validate_bound_basis(const Method& method, const core::System& system) {
+  if (!method.bound_basis) return;
+  if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL || !system.ecp_terms.empty() ||
+      std::any_of(system.atoms.begin(), system.atoms.end(),
+                  [](const auto& atom) { return atom.ecp_core != 0; }))
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "named composite requires its exact spherical all-electron basis");
+  std::vector<generativeqc_atom> atoms;
+  atoms.reserve(system.atoms.size());
+  for (const auto& atom : system.atoms)
+    atoms.push_back({atom.atomic_number, atom.position[0], atom.position[1], atom.position[2]});
+  const auto expanded =
+      molecule::expand_basis_template(*method.bound_basis, atoms, GENERATIVEQC_BASIS_SPHERICAL);
+  core::System reference;
+  reference.atoms = system.atoms;
+  reference.charge = system.charge;
+  reference.multiplicity = system.multiplicity;
+  reference.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  for (const auto& shell : expanded.shells) {
+    core::Shell target{shell.atom_index, shell.angular_momentum, {}};
+    for (std::size_t index = shell.primitive_offset;
+         index < shell.primitive_offset + shell.primitive_count; ++index) {
+      const auto& primitive = expanded.primitives[index];
+      target.primitives.push_back({primitive.exponent, primitive.coefficient});
+    }
+    reference.shells.push_back(std::move(target));
+  }
+  std::string detail;
+  const auto status = molecule::validate_and_normalize(reference, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw MethodError(status, detail);
+  if (!molecule::BasisGeometryIdentity(reference).matches(system))
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "orbital basis differs from the named method's defining snapshot");
 }
 
 }  // namespace generativeqc::methods::named_ks

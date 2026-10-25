@@ -899,6 +899,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::System::System-named-ks": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "9f9c7299ffd93d0d3068722de5d4383ac0d861dd3199a4b3f8c8a7b14b6c04a6",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::System::atom_count": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -2754,6 +2769,22 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "967dedde3cb69b184171cf3232649892335206a92c4815f72252c19ae1f627aa",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_system_create_named_ks_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "8bcb53252193c008223676b30ec1d6b8e050d6545875393c9127a5df94027a95",
       "required_facets": [
         "behavior",
         "errors",

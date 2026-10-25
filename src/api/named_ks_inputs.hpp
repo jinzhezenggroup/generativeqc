@@ -10,6 +10,24 @@
 
 namespace generativeqc::api {
 
+/** Resolve exact native program identity before constructing any owner. */
+inline const methods::named_ks::Method& named_ks_program(
+    const generativeqc_named_ks_descriptor& named, generativeqc_backend backend) {
+  if (!valid_descriptor(&named))
+    throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
+                               "named KS descriptor ABI mismatch");
+  if (!named.name || !*named.name)
+    throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                               "a named KS selector is required");
+  const auto* program = methods::named_ks::find_method(named.name);
+  if (!program || !(backend == GENERATIVEQC_BACKEND_CUDA ? program->cuda : program->cpu))
+    throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                               "named KS program is unavailable on this backend");
+  if (named.identity && program->identity != named.identity)
+    throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "named KS identity mismatch");
+  return *program;
+}
+
 /** Synchronous named-program transport. Scientific arrays borrow immutable
  * library storage; execution controls retain their existing size-tagged ABI.
  * No pointer in this temporary survives the native prepared owner's copy. */
@@ -25,18 +43,8 @@ struct NamedKsInputs {
       throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                                  "unknown named method controls ABI");
     std::memcpy(&method, &input, input.struct_size);
-    if (!valid_descriptor(&named))
-      throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
-                                 "named KS descriptor ABI mismatch");
-    if (!named.name || !*named.name)
-      throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                                 "a named KS selector is required");
-    program = methods::named_ks::find_method(named.name);
-    if (!program || !(backend == GENERATIVEQC_BACKEND_CUDA ? program->cuda : program->cpu))
-      throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                                 "named KS program is unavailable on this backend");
-    if ((named.identity && program->identity != named.identity) ||
-        method.base.method != program->carrier)
+    program = &named_ks_program(named, backend);
+    if (method.base.method != program->carrier)
       throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                                  "named KS identity or spin carrier mismatch");
     auto& ks = storage.base.base;

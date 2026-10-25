@@ -60,6 +60,7 @@ class Row:
     range_omega: float = 0.0
     nonlocal_correlation: tuple[int, float, float, float] = (0, 0.0, 0.0, 0.0)
     dispersion: tuple[float | int, ...] = (0,) + (0.0,) * 16
+    bound_basis: bool = False
 
 
 def _match_curated(plan: Any) -> Any:
@@ -94,7 +95,27 @@ def _match_split(plan: Any) -> bool:
     )
 
 
+def _canonical_r2scan3c(plan: Any) -> bool:
+    """Only the full pinned basis/D4/gCP graph may select its native owner."""
+    canonical = resolve_method("R2SCAN-3c", spin=plan.method.spin)
+    return (
+        plan.method.basis == canonical.basis
+        and plan.method.primitives == canonical.primitives
+    )
+
+
 def _admit(plan: Any) -> tuple[bool, bool, str, str]:
+    if _canonical_r2scan3c(plan):
+        record = _match_curated(plan)
+        # gCP currently has a CPU production owner. Do not introduce implicit
+        # host work into a CUDA named endpoint; its explicit compatibility
+        # consumer remains available until a complete backend is qualified.
+        return (
+            True,
+            False,
+            str(record["scf_domain"]),
+            "bound D4/gCP composition requires CPU",
+        )
     if plan.method.basis is not None:
         return (
             False,
@@ -175,11 +196,13 @@ def _row(identifier: str, spin: str) -> Row:
     range_omega = 0.0
     nonlocal_correlation = (0, 0.0, 0.0, 0.0)
     dispersion = (0,) + (0.0,) * 16
+    bound_basis = False
     try:
         method = resolve_method(identifier, spin=spin)
         source = method.identifier
         plan = compile_ks_execution_plan(method)
         cpu, cuda, domain, reason = _admit(plan)
+        bound_basis = _canonical_r2scan3c(plan)
         # Evaluate provenance only on valid representations. Generated Libxc
         # inventories may contain legal metadata combinations without a
         # serializable native XC point domain. Those remain visible, disabled.
@@ -208,7 +231,11 @@ def _row(identifier: str, spin: str) -> Row:
                 )
             if plan.post_scf:
                 spec = plan.post_scf[0].specification
-                if isinstance(spec, D4Spec) and spec.profile != "standard":
+                if (
+                    isinstance(spec, D4Spec)
+                    and spec.profile != "standard"
+                    and not bound_basis
+                ):
                     raise NotImplementedError(
                         "named D4 requires the standard EEQ profile"
                     )
@@ -262,6 +289,7 @@ def _row(identifier: str, spin: str) -> Row:
         range_omega=range_omega,
         nonlocal_correlation=nonlocal_correlation,
         dispersion=dispersion,
+        bound_basis=bound_basis,
     )
 
 
@@ -311,6 +339,76 @@ def _q(value: str) -> str:
     return json.dumps(value, ensure_ascii=True)
 
 
+def _bound_basis_cpp() -> list[str]:
+    """Compile the existing audited snapshot, without another basis registry.
+
+    The native template retains source shell/column order and raw decimal
+    values. Its normalization is shared with every ordinary system constructor.
+    """
+    from generativeqc.basis import load_basis
+    from generativeqc_compiler.method.basis_binding import validate_basis_snapshot
+
+    binding = resolve_method("R2SCAN-3c").basis
+    basis = validate_basis_snapshot(
+        binding,
+        load_basis(ROOT / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"),
+    )
+    elements, shells, exponents, coefficients = [], [], [], []
+    for element in basis.elements:
+        start = len(shells)
+        for shell in element.shells:
+            exponent_start = len(exponents)
+            coefficient_start = len(coefficients)
+            exponents.extend(float(value) for value in shell.exponents)
+            for column in shell.coefficients:
+                coefficients.extend(float(value) for value in column)
+            shells.append(
+                (
+                    shell.angular_momentum,
+                    exponent_start,
+                    len(shell.exponents),
+                    coefficient_start,
+                    len(shell.coefficients),
+                )
+            )
+        elements.append((element.atomic_number, 0, start, len(shells) - start, 0, 0))
+    lines = [
+        f"inline constexpr char kBoundBasisName[] = {_q(binding.name)};",
+        f"inline constexpr char kBoundBasisIdentity[] = {_q(binding.basis_identity)};",
+    ]
+    for name, kind, records in (
+        ("Elements", "generativeqc_basis_element_template_v1", elements),
+        ("Shells", "generativeqc_basis_shell_template_v1", shells),
+        ("Exponents", "double", exponents),
+        ("Coefficients", "double", coefficients),
+    ):
+        lines.append(
+            f"inline constexpr std::array<{kind}, {len(records)}> kBoundBasis{name}{{{{"
+        )
+        lines.extend(
+            "    "
+            + (
+                "{" + ", ".join(map(str, record)) + "}"
+                if isinstance(record, tuple)
+                else repr(record)
+            )
+            + ","
+            for record in records
+        )
+        lines.append("}};")
+    lines.extend(
+        [
+            "inline constexpr generativeqc_basis_template_descriptor_v1 kBoundBasis{",
+            "    sizeof(generativeqc_basis_template_descriptor_v1), GENERATIVEQC_ABI_VERSION,",
+            "    kBoundBasisElements.data(), kBoundBasisElements.size(),",
+            "    kBoundBasisShells.data(), kBoundBasisShells.size(),",
+            "    kBoundBasisExponents.data(), kBoundBasisExponents.size(),",
+            "    kBoundBasisCoefficients.data(), kBoundBasisCoefficients.size(), nullptr, 0};",
+        ]
+    )
+    return lines
+
+
 def render(items: tuple[Row, ...]) -> str:
     components: list[tuple[str, float]] = []
     exchanges: list[tuple[int, float, float, float]] = []
@@ -343,7 +441,13 @@ def render(items: tuple[Row, ...]) -> str:
             _q(row.reason),
             repr(row.range_omega),
             "{" + ", ".join(repr(value) for value in row.nonlocal_correlation) + "}",
-            "{" + ", ".join(repr(value) for value in row.dispersion) + "}",
+            "{"
+            + ", ".join(repr(value) for value in row.dispersion)
+            + (", 1" if row.bound_basis else ", 0")
+            + "}",
+            "&kBoundBasis" if row.bound_basis else "nullptr",
+            "kBoundBasisName" if row.bound_basis else '""',
+            "kBoundBasisIdentity" if row.bound_basis else '""',
         )
         rows_cpp.append("    {" + ", ".join(fields) + "},")
     output = [
@@ -356,6 +460,7 @@ def render(items: tuple[Row, ...]) -> str:
         '#include "methods/named_ks_catalog.hpp"',
         "",
         "namespace generativeqc::methods::named_ks::generated {",
+        *_bound_basis_cpp(),
         f"inline constexpr std::array<generativeqc_ks_semilocal_component, {len(components)}> kComponents{{{{",
     ]
     output.extend(

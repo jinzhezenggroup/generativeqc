@@ -55,6 +55,13 @@ struct DispersionResult {
   double two_body_energy{}, atm_energy{};
   std::vector<double> gradient, charges;
   const char* variant{};
+  struct Composite {
+    double energy{}, gcp_energy{};
+    std::vector<double> gradient, gcp_gradient;
+  };
+  // Complete geometry-only result and its gCP component, when present.
+  // The original fields remain the independently inspectable D3/D4 result.
+  std::optional<Composite> composite;
 };
 
 /** Common calculation result. Method-specific retained state stays in the plan. */

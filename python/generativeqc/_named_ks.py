@@ -14,6 +14,21 @@ import numpy as np
 from . import _native
 
 
+class CompositeCorrectionResult(ct.Structure):
+    """Borrowed output buffers for the native complete correction receipt."""
+
+    _fields_ = [
+        ("struct_size", ct.c_uint32),
+        ("abi_version", ct.c_uint32),
+        ("energy", ct.c_double),
+        ("gcp_energy", ct.c_double),
+        ("gradient", ct.POINTER(ct.c_double)),
+        ("gradient_count", ct.c_uint64),
+        ("gcp_gradient", ct.POINTER(ct.c_double)),
+        ("gcp_gradient_count", ct.c_uint64),
+    ]
+
+
 def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None:
     """Discover an exact full graph; missing symbols/catalog entries retain compatibility."""
     query = getattr(library, "generativeqc_ks_catalog_name_v1", None)
@@ -26,6 +41,60 @@ def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None
         library, query(graph.identity.encode("ascii"), backend, ct.byref(selected))
     )
     return selected.value
+
+
+def create_named_system(
+    library: Any,
+    context: Any,
+    atoms: Any,
+    charge: int,
+    multiplicity: int,
+    name: bytes,
+    graph: Any,
+) -> Any:
+    """Let the native catalog materialize the method's defining orbital template.
+
+    Callers validate scalar widths and the exact offline basis snapshot first.
+    A selected native refusal propagates without retrying Python expansion.
+    """
+    atom_array = (_native.AtomDescriptor * len(atoms))(
+        *(_native.AtomDescriptor(atom.atomic_number, *atom.position) for atom in atoms)
+    )
+    descriptor = _native.SystemDescriptor(
+        ct.sizeof(_native.SystemDescriptor),
+        _native.ABI_VERSION,
+        atom_array,
+        len(atoms),
+        None,
+        0,
+        None,
+        0,
+        charge,
+        multiplicity,
+        _native.BASIS_SPHERICAL,
+    )
+    named = _native.NamedKsDescriptor(
+        ct.sizeof(_native.NamedKsDescriptor),
+        _native.ABI_VERSION,
+        name,
+        graph.identity.encode("ascii"),
+        0,
+    )
+    create = library.generativeqc_system_create_named_ks_v1
+    create.argtypes = [
+        ct.c_void_p,
+        ct.POINTER(_native.SystemDescriptor),
+        ct.POINTER(_native.NamedKsDescriptor),
+        ct.POINTER(ct.c_void_p),
+    ]
+    create.restype = ct.c_int
+    system = ct.c_void_p()
+    _native.check(
+        library,
+        create(context, ct.byref(descriptor), ct.byref(named), ct.byref(system)),
+        context=context,
+    )
+    return system
 
 
 def prepare_named_batch(
@@ -75,7 +144,11 @@ class NativeKsDispersion:
     """Borrow correction receipts from a live KS batch; owns no numerical plan."""
 
     def __init__(self, batch: Any, graph: Any) -> None:
-        from generativeqc_compiler.method import D4Spec, DispersionCorrectionPrimitive
+        from generativeqc_compiler.method import (
+            D4Spec,
+            DispersionCorrectionPrimitive,
+            GeometricCounterpoisePrimitive,
+        )
 
         self.batch, self.graph = batch, graph
         self.spec = next(
@@ -84,6 +157,14 @@ class NativeKsDispersion:
             if isinstance(node, DispersionCorrectionPrimitive)
         )
         self.d4 = isinstance(self.spec, D4Spec)
+        self.gcp = next(
+            (
+                node
+                for node in graph.primitives
+                if isinstance(node, GeometricCounterpoisePrimitive)
+            ),
+            None,
+        )
         self.library = batch._library
 
     def _identity(self, suffix: str) -> str:
@@ -101,7 +182,11 @@ class NativeKsDispersion:
         Only those force consumers still assemble outside the native endpoint;
         their correction energy must never be added to the already complete energy.
         """
-        from .dispersion import D3CorrectionBatch, D4CorrectionBatch
+        from .dispersion import (
+            D3CorrectionBatch,
+            D4CorrectionBatch,
+            R2SCAN3CCorrectionBatch,
+        )
 
         systems = []
         for index, atoms in enumerate(self.batch._systems):
@@ -111,7 +196,13 @@ class NativeKsDispersion:
             )
             systems.append((*item, self.batch._charges[index]) if self.d4 else item)
         calculator = self.batch._calculator
-        owner = D4CorrectionBatch if self.d4 else D3CorrectionBatch
+        owner = (
+            R2SCAN3CCorrectionBatch
+            if self.gcp
+            else D4CorrectionBatch
+            if self.d4
+            else D3CorrectionBatch
+        )
         return owner(
             self.graph,
             systems,
@@ -146,7 +237,7 @@ class NativeKsDispersion:
         )
         backend = self.batch._calculator._device_name
         if self.d4:
-            return D4CorrectionResult(
+            result = D4CorrectionResult(
                 0,
                 native.energy,
                 native.two_body_energy,
@@ -155,6 +246,9 @@ class NativeKsDispersion:
                 charges,
                 backend,
                 "success",
+            )
+            return (
+                self._composite_result(index, gradients, result) if self.gcp else result
             )
         query = self.library.generativeqc_ks_batch_dispersion_variant_v1
         query.argtypes, query.restype = [ct.c_void_p, ct.c_uint32], ct.c_char_p
@@ -171,6 +265,49 @@ class NativeKsDispersion:
             variant.decode("ascii"),
             self._identity("provider_identity"),
             self._identity("scheduler_identity"),
+        )
+
+    def _gcp_identities(self) -> tuple[str, str]:
+        """Present component provenance without constructing a correction owner."""
+        from generativeqc_compiler.common.provenance import canonical_hash
+
+        query = self.library.generativeqc_r2scan3c_gcp_provider_identity
+        query.argtypes, query.restype = [], ct.c_char_p
+        return query().decode("ascii"), canonical_hash(self.gcp.semantic_payload())
+
+    def _composite_result(self, index: int, gradients: bool, d4: Any) -> Any:
+        """Copy the already combined result and gCP term, with no Python arithmetic."""
+        from .dispersion import GCPCorrectionResult, R2SCAN3CCorrectionResult
+
+        atoms = self.batch._atom_counts[index]
+        total = np.empty((atoms, 3)) if gradients else None
+        gcp = np.empty((atoms, 3)) if gradients else None
+        pointer = ct.POINTER(ct.c_double)
+        output = CompositeCorrectionResult(
+            ct.sizeof(CompositeCorrectionResult),
+            _native.ABI_VERSION,
+            0,
+            0,
+            total.ctypes.data_as(pointer) if gradients else None,
+            3 * atoms if gradients else 0,
+            gcp.ctypes.data_as(pointer) if gradients else None,
+            3 * atoms if gradients else 0,
+        )
+        query = self.library.generativeqc_ks_batch_composite_correction_result_v1
+        query.argtypes, query.restype = (
+            [ct.c_void_p, ct.c_uint32, ct.POINTER(type(output))],
+            ct.c_int,
+        )
+        _native.check(
+            self.library,
+            query(self.batch._batch, index, ct.byref(output)),
+            context=self.batch._context,
+        )
+        component = GCPCorrectionResult(
+            0, output.gcp_energy, gcp, "cpu", "success", *self._gcp_identities()
+        )
+        return R2SCAN3CCorrectionResult(
+            0, output.energy, total, "cpu", "success", d4, component
         )
 
     def diagnostic(self) -> Any:
@@ -247,7 +384,7 @@ class NativeKsDispersion:
             {name: sum(getattr(item, name) for item in records) for name in counters}
         )
         values.update(
-            profile="standard",
+            profile=self.spec.profile,
             atm_enabled=bool(self.spec.s9),
             charge_parameter_sha256=self._identity("charge_parameter_sha256"),
             derivative_identity=self._identity("derivative_identity"),
@@ -263,8 +400,15 @@ class NativeKsDispersion:
                 "derivative": values["derivative_identity"],
             }
         )
-        return D4RuntimeDiagnostic(
+        result = D4RuntimeDiagnostic(
             **values,
             peak_host_bytes=values["plan_host_bytes"] + values["execution_host_bytes"],
             peak_device_bytes=values["device_bytes"],
         )
+        if self.gcp:
+            from .dispersion import R2SCAN3CRuntimeDiagnostic
+
+            return R2SCAN3CRuntimeDiagnostic(
+                self.graph.identity, result, "cpu", *self._gcp_identities()
+            )
+        return result

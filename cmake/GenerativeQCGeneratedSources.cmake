@@ -22,6 +22,8 @@ function(generativeqc_register_named_ks_catalog target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     DEPENDS ${_generativeqc_named_ks_inputs}
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/basis.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     COMMENT "Generating the shared MethodIR-owned native KS catalog")
 endfunction()

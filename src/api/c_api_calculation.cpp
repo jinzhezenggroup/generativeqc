@@ -11,6 +11,7 @@
 #include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/method.hpp"
+#include "molecule/basis_template.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "scf/initial_guess/automatic_policy.hpp"
 
@@ -143,6 +144,7 @@ static generativeqc_status prepare_calculation(generativeqc_context* context,
     if (named) {
       named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
+      generativeqc::methods::named_ks::validate_bound_basis(*named_inputs->program, system->data);
     }
 
     if (!generativeqc::api::valid_system_roles(*system, *descriptor,
@@ -180,6 +182,38 @@ generativeqc_status generativeqc_calculation_prepare_named_ks_v1(
   if (calculation) *calculation = nullptr;
   if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return prepare_calculation(context, system, descriptor, calculation, name);
+}
+
+generativeqc_status generativeqc_system_create_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* input,
+    const generativeqc_named_ks_descriptor* named, generativeqc_system** system) {
+  if (system) *system = nullptr;
+  if (!context || !input || !named || !system) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(input)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!input->atoms || !input->atom_count || input->shells || input->shell_count ||
+      input->primitives || input->primitive_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(context->mutex);
+  try {
+    const auto& program =
+        generativeqc::api::named_ks_program(*named, context->state.executed_backend);
+    if (!program.bound_basis)
+      throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                               "named method does not define an orbital basis");
+    const auto expanded = generativeqc::molecule::expand_basis_template(
+        *program.bound_basis, std::span(input->atoms, input->atom_count),
+        GENERATIVEQC_BASIS_SPHERICAL);
+    auto descriptor = *input;
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.shells = expanded.shells.data();
+    descriptor.shell_count = expanded.shells.size();
+    descriptor.primitives = expanded.primitives.data();
+    descriptor.primitive_count = expanded.primitives.size();
+    descriptor.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+    return generativeqc_system_create(context, &descriptor, system);
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
 }
 
 void generativeqc_calculation_destroy(generativeqc_calculation* calculation) {

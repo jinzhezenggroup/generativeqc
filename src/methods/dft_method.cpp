@@ -19,6 +19,7 @@
 #include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
+#include "dft/dispersion/gcp_r2scan3c.hpp"
 #include "dft/grid.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -2116,6 +2117,37 @@ class KsPreparedState final : public KsSingleOwnerPort {
     result.dispersion = DispersionResult{
         components[0], d4_ ? components[1] : 0.0, std::move(gradients), std::move(charges),
         d3_ ? dft::dispersion::d3_variant_identity(d3_->parameters()) : "d4-bj-eeq-v1"};
+    if (execution_plan_.dispersion.composite_profile == 1) {
+      DispersionResult::Composite combined;
+      std::vector<std::int32_t> numbers;
+      numbers.reserve(system_.atoms.size());
+      for (const auto& atom : system_.atoms) numbers.push_back(atom.atomic_number);
+      if (want_gradient) combined.gcp_gradient.resize(coordinates.size());
+      const auto gcp_status = dft::dispersion::evaluate_r2scan3c_gcp(
+          static_cast<int>(numbers.size()), numbers.data(), coordinates.data(),
+          dft::dispersion::r2scan3c_gcp_parameters(), &combined.gcp_energy,
+          want_gradient ? combined.gcp_gradient.data() : nullptr);
+      if (gcp_status != dft::dispersion::GCPStatus::success ||
+          !std::isfinite(combined.gcp_energy) ||
+          !std::all_of(combined.gcp_gradient.begin(), combined.gcp_gradient.end(),
+                       [](double x) { return std::isfinite(x); }))
+        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "native r2SCAN-3c gCP failed");
+      result.energy += combined.gcp_energy;
+      combined.energy = components[0] + components[1] + combined.gcp_energy;
+      combined.gradient = result.dispersion->gradient;
+      for (std::size_t index = 0; index < result.forces.size(); ++index) {
+        result.forces[index] -= combined.gcp_gradient[index];
+        combined.gradient[index] += combined.gcp_gradient[index];
+      }
+      if (!std::isfinite(result.energy) || !std::isfinite(combined.energy) ||
+          !std::all_of(result.forces.begin(), result.forces.end(),
+                       [](double x) { return std::isfinite(x); }) ||
+          !std::all_of(combined.gradient.begin(), combined.gradient.end(),
+                       [](double x) { return std::isfinite(x); }))
+        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                          "nonfinite complete native r2SCAN-3c correction");
+      result.dispersion->composite = std::move(combined);
+    }
   }
 
   generativeqc_status dispersion_diagnostic(generativeqc_d3_runtime_diagnostic* d3,
@@ -2138,7 +2170,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
     }
     if (d4 && d4_) {
       copy_resources(*d4, d4_->resources());
-      d4->profile = GENERATIVEQC_D4_PROFILE_STANDARD_EEQ;
+      d4->profile = execution_plan_.dispersion.composite_profile == 1
+                        ? GENERATIVEQC_D4_PROFILE_R2SCAN3C_EEQ
+                        : GENERATIVEQC_D4_PROFILE_STANDARD_EEQ;
       d4->worker_blocks = d4_->resources().worker_blocks;
       d4->workspace_slots = d4_->resources().workspace_slots;
       d4->atm_enabled = d4_->parameters().s9 != 0;
@@ -2370,13 +2404,27 @@ class KsPreparedState final : public KsSingleOwnerPort {
     }
     generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
+    auto maximum_bytes = execution_plan_.dispersion.kind
+                             ? execution_plan_.dispersion_maximum_bytes
+                             : 256ull * 1024ull * 1024ull;
+    if (execution_plan_.dispersion.composite_profile == 1) {
+      // Reserve the complete gCP receipt even for an energy-only execution, so
+      // later force requests cannot exceed the admitted correction budget.
+      // D4's diagnostic reports its remaining component budget independently.
+      const auto extra_bytes = system_.atoms.size() *
+                               (sizeof(std::int32_t) + 6ull * sizeof(double));
+      if (maximum_bytes <= extra_bytes)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "native r2SCAN-3c correction exceeds maximum_bytes");
+      maximum_bytes -= extra_bytes;
+    }
     d4_ = dft::dispersion::D4Plan::prepare(
         backend_, device, std::move(offsets), std::move(atomic_numbers),
         std::vector<double>{static_cast<double>(system_.charge)}, std::move(coordinates),
-        parameters, dft::dispersion::D4EEQProfile::standard,
-        execution_plan_.dispersion.kind ? execution_plan_.dispersion_maximum_bytes
-                                        : 256ull * 1024ull * 1024ull,
-        detail, status);
+        parameters,
+        execution_plan_.dispersion.composite_profile == 1 ? dft::dispersion::D4EEQProfile::r2scan3c
+                                                          : dft::dispersion::D4EEQProfile::standard,
+        maximum_bytes, detail, status);
     if (!d4_)
       throw MethodError(status,
                         detail.empty() ? "PBE-D4 production plan preparation failed" : detail);

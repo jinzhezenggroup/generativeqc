@@ -79,7 +79,9 @@ class NativeMethodirProjectionTests(unittest.TestCase):
             self.assertTrue(table[name].cpu)
             self.assertNotEqual(table[name].dispersion[0], 0)
         self.assertFalse(table["r2scan-3c-rks"].cuda)
-        self.assertIn("correction", table["r2scan-3c-rks"].reason)
+        self.assertTrue(table["r2scan-3c-rks"].cpu)
+        self.assertTrue(table["r2scan-3c-rks"].bound_basis)
+        self.assertIn("gCP", table["r2scan-3c-rks"].reason)
 
     def test_render_is_deterministic_and_complete(self) -> None:
         catalog = rows()

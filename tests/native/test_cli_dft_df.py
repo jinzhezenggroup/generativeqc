@@ -103,6 +103,70 @@ class NativeDftDfCliTests(unittest.TestCase):
                 self.assertNotEqual(refused.returncode, 0)
                 self.assertEqual(refused.stdout, "")
 
+    def test_bound_r2scan3c_native_basis_and_complete_energy(self) -> None:
+        # Independent PySCF/Libxc + dftd4 4.3 + audited gCP reference;
+        # exact spherical def2-mTZVPP H2, product grid 8 x 4 x 8.
+        for spin, energy in (
+            ("rks", -1.1741390564619811),
+            ("uks", -0.5709191317293616),
+        ):
+            flags = ("--charge", "1", "--multiplicity", "2") if spin == "uks" else ()
+            command = [
+                str(CLI),
+                "run",
+                str(MOLECULE),
+                "--method",
+                f"r2scan-3c-{spin}",
+                "--backend",
+                "cpu",
+                "--units",
+                "bohr",
+                *self.SMALL_GRID,
+                "--energy-tolerance",
+                "1e-12",
+                "--density-tolerance",
+                "1e-10",
+                *flags,
+                "--json",
+            ]
+
+            def invoke(
+                extra: tuple[str, ...], command: list[str] = command
+            ) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [*command, *extra],
+                    text=True,
+                    capture_output=True,
+                    env={
+                        **os.environ,
+                        "PATH": "/no-python-runtime",
+                        "GENERATIVEQC_PROFILE": "off",
+                    },
+                    timeout=60,
+                    check=False,
+                )
+
+            for basis in ((), ("--basis", "def2-mTZVPP")):
+                result = invoke(basis)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data = json.loads(result.stdout)
+                self.assertAlmostEqual(data["energy_hartree"], energy, delta=2e-8)
+                self.assertEqual(data["basis"], "def2-mTZVPP")
+                self.assertEqual(data["representation"], "spherical")
+                self.assertEqual(
+                    data["basis_identity"],
+                    "af55e4a3e21efd9d813231d5c5b043429ebc6ca3878d2cb08802b97920719996",
+                )
+            for rejected in (
+                ("--basis", "sto-3g"),
+                ("--representation", "cartesian"),
+                ("--dispersion-memory-bytes", "1"),
+                ("--forces",),
+            ):
+                result = invoke(rejected)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+
     def call_named(self, method: str, *flags: str) -> subprocess.CompletedProcess[str]:
         return self.call_xyz(MOLECULE, method, *flags)
 
@@ -157,7 +221,9 @@ class NativeDftDfCliTests(unittest.TestCase):
         self.assertTrue(data["wb97m-v-rks"]["cuda"])
         for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
             self.assertTrue(data[name]["cpu"])
-        self.assertIn("correction", data["r2scan-3c-rks"]["reason"])
+        self.assertTrue(data["r2scan-3c-rks"]["cpu"])
+        self.assertFalse(data["r2scan-3c-rks"]["cuda"])
+        self.assertIn("gCP", data["r2scan-3c-rks"]["reason"])
 
     def test_generated_pbe0_and_b3lyp_energy(self) -> None:
         pbe0 = self.call_named("PBE0-RKS", "--backend", "cpu")
@@ -214,7 +280,6 @@ class NativeDftDfCliTests(unittest.TestCase):
             ("pbe-rks", ("--grid-radial-points", "64"), "require a generated"),
             ("b3lyp-rks", ("--grid-polar-points", "0"), "must be positive"),
             ("m06-2x-rks", (), "no qualified native lowerer"),
-            ("r2scan-3c-rks", (), "correction"),
             ("r2scan0-rks", (), "no qualified native semilocal"),
             ("invented-ks-rks", (), "unknown native or compiler"),
         ):

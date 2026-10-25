@@ -20,6 +20,34 @@
 
 extern "C" {
 
+generativeqc_status generativeqc_ks_batch_composite_correction_result_v1(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_ks_composite_correction_result_v1* out) {
+  if (!batch || !out || index >= batch->dispersion.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  if (batch->plan->execution_lifecycle().state() !=
+          generativeqc::runtime::CompiledExecutionState::Warm ||
+      !batch->dispersion[index] || !batch->dispersion[index]->composite)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const auto& result = *batch->dispersion[index]->composite;
+  const auto count = 3ull * batch->atom_counts[index];
+  if ((!out->gradient && out->gradient_count) || (!out->gcp_gradient && out->gcp_gradient_count) ||
+      (out->gradient && out->gradient_count != count) ||
+      (out->gcp_gradient && out->gcp_gradient_count != count))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if ((out->gradient && result.gradient.size() != count) ||
+      (out->gcp_gradient && result.gcp_gradient.size() != count))
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (out->gradient) std::copy(result.gradient.begin(), result.gradient.end(), out->gradient);
+  if (out->gcp_gradient)
+    std::copy(result.gcp_gradient.begin(), result.gcp_gradient.end(), out->gcp_gradient);
+  out->energy = result.energy;
+  out->gcp_energy = result.gcp_energy;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_ks_batch_dispersion_result_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_d4_batch_item_result_descriptor* out) {
@@ -136,6 +164,9 @@ static generativeqc_status prepare_batch(generativeqc_context* context,
     atom_counts.reserve(system_count);
     for (std::uint32_t i = 0; i < system_count; ++i) {
       if (systems[i] == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      if (named_inputs)
+        generativeqc::methods::named_ks::validate_bound_basis(*named_inputs->program,
+                                                              systems[i]->data);
       if (!generativeqc::api::valid_system_roles(*systems[i], *descriptor,
                                                  context->state.executed_backend)) {
         context->last_detail =

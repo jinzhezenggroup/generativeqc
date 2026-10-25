@@ -726,6 +726,16 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " + why);
     }
   }
+  if (options.composition && options.composition->bound_basis) {
+    if (options.representation_explicit && options.representation != GENERATIVEQC_BASIS_SPHERICAL)
+      throw UsageError("the method's defining basis requires spherical representation");
+    if (!options.basis_explicit ||
+        lower(options.basis_name) == lower(std::string(options.composition->basis_name))) {
+      options.basis_program = options.composition;
+      options.basis_name = std::string(options.composition->basis_name);
+      options.representation = GENERATIVEQC_BASIS_SPHERICAL;
+    }
+  }
   return options;
 }
 
@@ -740,7 +750,7 @@ int run(RunOptions options) {
   generativeqc::Context context(context_descriptor);
 
   generativeqc::cli::NativeBasisData basis;
-  if (!is_gfn2(options)) {
+  if (!is_gfn2(options) && !options.basis_program) {
     try {
       basis = generativeqc::cli::expand_basis_input(
           options.basis_name, atoms,
@@ -750,6 +760,7 @@ int run(RunOptions options) {
       throw UsageError(error.what());
     }
   }
+  if (options.basis_program) basis.identity = options.basis_program->basis_identity;
   const auto* shells = is_gfn2(options) ? nullptr : basis.shells.data();
   const auto* primitives = is_gfn2(options) ? nullptr : basis.primitives.data();
   const std::uint32_t shell_count =
@@ -769,7 +780,8 @@ int run(RunOptions options) {
       options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system =
-      basis.ecp_terms.empty()
+      options.basis_program ? generativeqc::cli::create_method_basis_system(context, atoms, options)
+      : basis.ecp_terms.empty()
           ? generativeqc::System(context, system_descriptor)
           : generativeqc::System(context, system_descriptor, basis.core_electrons, basis.ecp_terms);
 

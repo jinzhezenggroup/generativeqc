@@ -2698,6 +2698,22 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
 
+/** @native-contract generativeqc_system_create_named_ks_v1
+ * @behavior Create a system with the immutable orbital basis defining a named composite.
+ * @inputs context/input/name/output are required with current ABI headers. input supplies
+ * atoms, charge and multiplicity; shell/primitive pointers and counts must be zero. The
+ * method supplies representation. name follows exact named-program identity admission.
+ * @outputs Clears the output on entry; success publishes a normalized owned system.
+ * @lifetime Copies atoms and compiled basis data. The ordinary system destroy API applies.
+ * @errors Unbound or unavailable programs return NOT_IMPLEMENTED. Invalid atom/basis domains,
+ * ABI, allocation and system validation retain the ordinary system-construction statuses.
+ * @execution Synchronous native template expansion and normalization; no files or Python.
+ * @units Coordinates in Bohr, charge in electron-charge units.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* input,
+    const generativeqc_named_ks_descriptor* name, generativeqc_system** system);
+
 /** @native-contract generativeqc_calculation_prepare_named_ks_v1
  * @behavior Prepare a complete compiled KS program, including its dispersion terms.
  * @inputs context/system/descriptor/name/output are required. Both descriptors need ABI
@@ -2708,7 +2724,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
  * @outputs Clears the output slot on entry and publishes an owned calculation on success.
  * @lifetime Copies all inputs; context must outlive the returned calculation.
  * @errors Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
- * return INVALID_ARGUMENT. Usual preparation ABI, capacity and numerical gates apply.
+ * and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
+ * actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
  * @execution Synchronous native preparation, without Python, SCF or reference engines.
  * @units Energy in Hartree, coordinates in Bohr, capacities in bytes.
  */

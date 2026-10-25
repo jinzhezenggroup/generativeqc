@@ -2,8 +2,9 @@
 
 GenerativeQC exposes canonical r2SCAN-3c through the Python selectors
 "r2scan-3c", "r2scan-3c-rks", and "r2scan-3c-uks". These names resolve to the
-same inspectable R2SCAN-3c MethodIR used by the compiler; they do not add a
-second native scientific driver or a separate native method ID.
+same inspectable R2SCAN-3c MethodIR used by the compiler. The C/C++ named
+preparation API and CLI also expose complete CPU energies, using a compiled
+projection of that graph without adding a separate native method ID.
 
 The canonical method binds four defining pieces: r2SCAN electronic structure,
 the pinned spherical H-Ar def2-mTZVPP basis, the r2SCAN-3c D4(BJ)-EEQ-ATM
@@ -39,11 +40,23 @@ geometry, translation and an independent reference) is in
 CI without a scheduler-allocated CUDA device does not establish CUDA
 performance or force qualification.
 
+For an exact canonical FP64 graph without a global ResourcePlan, CPU energy
+execution uses the native KS owner: it materializes the method's compiled basis,
+checks actual normalized basis data, runs the r²SCAN-3c D4 profile and gCP, and
+publishes component receipts. Python presents those receipts without correction
+arithmetic. Energy-only execution omits correction gradient work. Offline Python
+basis metadata remains available independently of the native library.
+
+The named CLI/C++ program currently admits energy only on CPU. Existing Python
+DF forces, CUDA, explicit custom graphs, older libraries and global ResourcePlan
+consumers retain their established compatibility routes; no new electronic
+force or implicit CUDA-to-CPU gCP route is promoted by the named endpoint.
+
 Production total energy is assembled once as E_r2SCAN + E_D4 + E_gCP.
 Where forces are admitted, the corresponding force is
-F_r2SCAN - dE_D4/dR - dE_gCP/dR. Prepared replay keeps the correction owner
-separate and supports changed coordinates without silently applying either
-correction twice.
+F_r2SCAN - dE_D4/dR - dE_gCP/dR. Prepared replay supports changed coordinates without applying either correction
+twice. The native CPU energy route retains both corrections inside the KS owner;
+compatibility force/CUDA routes retain their explicit separate correction owner.
 
 The method remains fail-closed outside H-Ar, for a changed defining basis, or
 when a requested backend/property combination has not been qualified.

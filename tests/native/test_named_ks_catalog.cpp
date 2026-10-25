@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -12,6 +13,7 @@
 #include "generativeqc/ks.hpp"
 #include "methods/application_precision.hpp"
 #include "methods/named_ks_catalog.hpp"
+#include "molecule/basis_template.hpp"
 
 extern "C" generativeqc_status generativeqc_ks_catalog_plan_v1(const char*, std::size_t,
                                                                const char*, std::size_t,
@@ -302,10 +304,132 @@ void test_named_preparation_failures_and_lifetime() {
       std::abs(nonlocal->execute(GENERATIVEQC_PROPERTY_ENERGY).energy + 1.150312466420175) < 2e-8,
       "named preparation lost its borrowed nonlocal-grid controls");
 }
+
+void test_bound_basis_and_system_factory() {
+  generativeqc::Context context({sizeof(generativeqc_context_descriptor), GENERATIVEQC_ABI_VERSION,
+                                 0, GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+  const auto* entry = generativeqc::methods::named_ks::find_method("r2scan-3c-rks");
+  require(entry && entry->bound_basis && entry->cpu, "canonical bound basis is unavailable");
+  generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION, "r2scan-3c-rks",
+                                         nullptr, 256ull << 20};
+  generativeqc_system_descriptor descriptor{sizeof(descriptor),
+                                            GENERATIVEQC_ABI_VERSION,
+                                            atoms.data(),
+                                            2,
+                                            nullptr,
+                                            0,
+                                            nullptr,
+                                            0,
+                                            0,
+                                            1,
+                                            GENERATIVEQC_BASIS_SPHERICAL};
+  const auto refused_factory = [&](const auto& input, const auto& program) {
+    auto* result = reinterpret_cast<generativeqc_system*>(1);
+    require(generativeqc_system_create_named_ks_v1(context.get(), &input, &program, &result) != 0 &&
+                !result,
+            "invalid named basis factory published a system");
+  };
+  auto wrong = named;
+  wrong.identity = "wrong-identity";
+  refused_factory(descriptor, wrong);
+  wrong = named;
+  wrong.name = "pbe-rks";
+  refused_factory(descriptor, wrong);
+  auto invalid = descriptor;
+  invalid.abi_version += 1;
+  refused_factory(invalid, named);
+  const generativeqc_atom potassium{19, 0, 0, 0};
+  invalid = descriptor;
+  invalid.atoms = &potassium;
+  invalid.atom_count = 1;
+  refused_factory(invalid, named);
+
+  auto expanded = generativeqc::molecule::expand_basis_template(*entry->bound_basis, atoms,
+                                                                GENERATIVEQC_BASIS_SPHERICAL);
+  descriptor.shells = expanded.shells.data();
+  descriptor.shell_count = expanded.shells.size();
+  descriptor.primitives = expanded.primitives.data();
+  descriptor.primitive_count = expanded.primitives.size();
+  refused_factory(descriptor, named);  // Callers cannot override the bound basis.
+
+  auto method = generativeqc::default_method_descriptor("pbe-rks");
+  auto grid = controls();
+  grid.grid_version = 1;
+  grid.radial_points = 8;
+  grid.angular_polar = 4;
+  grid.angular_azimuth = 8;
+  method.ks_options = &grid;
+  const auto rejected_basis = [&](const generativeqc::System& system) {
+    auto* result = reinterpret_cast<generativeqc_calculation*>(1);
+    auto* batch = reinterpret_cast<generativeqc_batch*>(1);
+    const generativeqc_system* systems[]{system.get()};
+    require(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
+                                                         &named, &result) != 0 &&
+                !result,
+            "named single accepted a changed basis");
+    require(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
+                                                   &batch) != 0 &&
+                !batch,
+            "named batch accepted a changed basis");
+  };
+  std::unique_ptr<generativeqc::Calculation> factory_calculation;
+  std::unique_ptr<generativeqc::Calculation> explicit_calculation;
+  {
+    generativeqc::System factory(context, atoms, named);
+    generativeqc::System explicit_basis(context, descriptor);
+    factory_calculation =
+        std::make_unique<generativeqc::Calculation>(context, factory, method, named);
+    explicit_calculation =
+        std::make_unique<generativeqc::Calculation>(context, explicit_basis, method, named);
+    generativeqc::System unrelated(context, atoms, "sto-3g");
+    rejected_basis(unrelated);
+    descriptor.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+    generativeqc::System cartesian(context, descriptor);
+    rejected_basis(cartesian);
+    descriptor.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+    expanded.primitives.front().exponent *= 1.001;
+    generativeqc::System changed(context, descriptor);
+    rejected_basis(changed);
+  }
+  expanded = {};
+  named = {};
+  grid = {};
+  method = {};
+  const auto actual = factory_calculation->execute(GENERATIVEQC_PROPERTY_ENERGY);
+  const auto expected = explicit_calculation->execute(GENERATIVEQC_PROPERTY_ENERGY);
+  require(std::isfinite(actual.energy) && std::abs(actual.energy - expected.energy) < 1e-12,
+          "method-owned and explicit bound basis differ after input destruction");
+}
+
+void dump_bound_basis() {
+  const auto* entry = generativeqc::methods::named_ks::find_method("r2scan-3c-rks");
+  std::cout << std::setprecision(17);
+  for (int z = 1; z <= 18; ++z) {
+    const std::array<generativeqc_atom, 1> atom{{{z, 0, 0, 0}}};
+    const auto expanded = generativeqc::molecule::expand_basis_template(
+        *entry->bound_basis, atom, GENERATIVEQC_BASIS_SPHERICAL);
+    for (const auto& shell : expanded.shells) {
+      std::cout << z << " " << shell.angular_momentum;
+      for (std::size_t k = shell.primitive_offset;
+           k < shell.primitive_offset + shell.primitive_count; ++k) {
+        const auto& p = expanded.primitives[k];
+        std::cout << " " << p.exponent << " " << p.coefficient;
+      }
+      std::cout << "\n";
+    }
+  }
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char**) {
   try {
+    if (argc > 1) {
+      dump_bound_basis();
+      return 0;
+    }
+    test_bound_basis_and_system_factory();
     test_complete_catalog();
     test_identity_and_transaction_boundaries();
     test_borrowed_controls_and_extension_aliases();

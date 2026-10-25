@@ -467,13 +467,23 @@ advertise forces only when their prepared electronic context qualifies. The
 resource dry-run currently rejects these complete compositions because its
 inventory does not include their additional owners.
 
-**Representation is not execution qualification.** The generated catalog still
-rejects missing operators or bound basis/gCP compositions, including r²SCAN-3c;
-it does not substitute a partial energy. WB97M-V energy admission does not add
-native CLI analytic forces. Exact backend/basis/property preparation remains
-authoritative. The CLI tests independently compare small-grid WB97M-V energies
-with PySCF and correction-bearing forces with reconverged energy differences;
-these are CPU implementation checks, not grid-convergence or CUDA qualification.
+Canonical `r2scan-3c-rks` and `r2scan-3c-uks` run complete CPU energies with the
+method-owned spherical H–Ar `def2-mTZVPP` basis, special D4-EEQ profile and gCP.
+Omit `--basis` or name `def2-mTZVPP`; the C API expands its compiled snapshot.
+Explicit local basis files are accepted only when their actual normalized data
+match that snapshot. A different basis or Cartesian representation fails.
+
+```bash
+generativeqc run molecule.xyz --method r2scan-3c-rks --backend cpu --json
+```
+
+Native r²SCAN-3c CUDA and analytic forces remain unavailable; the Python
+[capability contract](r2scan3c.md) retains its existing explicit compatibility
+consumers. WB97M-V energy admission likewise does not add native CLI forces.
+Exact backend/basis/property preparation remains authoritative. Independent
+small-grid PySCF/correction references and reconverged energy differences check
+implementation parity, not grid convergence. Real-device named CLI qualification
+runs `tests/native/test_cli_cuda_named.py` inside a finite Slurm GPU allocation.
 
 ### Context-qualified native DFT analytic forces
 

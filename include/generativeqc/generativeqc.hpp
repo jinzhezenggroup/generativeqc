@@ -294,6 +294,34 @@ class Context {
  */
 class System {
  public:
+  /** @native-contract generativeqc::System::System-named-ks
+   * @behavior Create a system using a named composite's exact defining orbital basis.
+   * @inputs context is live; atoms are in the method's admitted element domain. name selects
+   * a complete basis-bound program. Charge and multiplicity have their ordinary semantics.
+   * @lifetime Copies all inputs and owns the system handle.
+   * @errors Throws Error for unavailable/basis-unbound methods or failed native validation.
+   * @execution Synchronous C API expansion and normalization without Python or file access.
+   * @units Coordinates in Bohr, charge in electron-charge units.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms,
+         const generativeqc_named_ks_descriptor& name, std::int32_t charge = 0,
+         std::uint32_t multiplicity = 1) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid named-system dimensions");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    const auto status =
+        generativeqc_system_create_named_ks_v1(context.get(), &descriptor, &name, &handle_);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context.get()));
+  }
+
   /** @native-contract generativeqc::System::System
    * @behavior Construct and own a prepared native system.
    * @inputs Supply a live Context and initialized generativeqc_system_descriptor. C descriptor

@@ -140,6 +140,7 @@ std::vector<Stage> build_stages(const RunOptions& target) {
       stage.inputs.basis_name =
           target.preopt_basis_name.empty() ? target.basis_name : target.preopt_basis_name;
       stage.inputs.basis_explicit = !target.preopt_basis_name.empty();
+      if (stage.inputs.basis_explicit) stage.inputs.basis_program = nullptr;
       stage.inputs.density_fitting = GENERATIVEQC_DENSITY_FITTING_NONE;
       stage.inputs.density_fitting_explicit = false;
       stage.inputs.auxiliary_basis_explicit = false;
@@ -222,7 +223,7 @@ class Objective {
         context_(generativeqc_context_descriptor{sizeof(generativeqc_context_descriptor),
                                                  GENERATIVEQC_ABI_VERSION, inputs_.device_id,
                                                  inputs_.backend}) {
-    if (!is_xtb(inputs_)) {
+    if (!is_xtb(inputs_) && !inputs_.basis_program) {
       orbital_ = expand_basis_input(
           inputs_.basis_name, atoms_,
           inputs_.representation_explicit ? std::optional(inputs_.representation) : std::nullopt);
@@ -249,7 +250,9 @@ class Objective {
     const auto system_descriptor =
         make_system_descriptor(orbital_, is_xtb(inputs_), inputs_.representation);
     System system =
-        orbital_.ecp_terms.empty()
+        !is_xtb(inputs_) && inputs_.basis_program
+            ? create_method_basis_system(context_, atoms_, inputs_)
+        : orbital_.ecp_terms.empty()
             ? System(context_, system_descriptor)
             : System(context_, system_descriptor, orbital_.core_electrons, orbital_.ecp_terms);
     std::optional<System> aux;

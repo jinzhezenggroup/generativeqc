@@ -30,9 +30,8 @@ bool near(double a, double b, double tol) { return std::abs(a - b) <= tol; }
 
 double energy_of(const std::array<double, 48>& xyz) {
   double energy = 0.0;
-  std::array<double, 48> gradient{};
-  const auto status = evaluate_r2scan3c_gcp(16, kZ.data(), xyz.data(), r2scan3c_gcp_parameters(),
-                                            &energy, gradient.data());
+  const auto status =
+      evaluate_r2scan3c_gcp(16, kZ.data(), xyz.data(), r2scan3c_gcp_parameters(), &energy, nullptr);
   return status == GCPStatus::success ? energy : NAN;
 }
 }  // namespace
@@ -43,7 +42,7 @@ int main() {
   const auto status = evaluate_r2scan3c_gcp(16, kZ.data(), kXyz.data(), r2scan3c_gcp_parameters(),
                                             &energy, gradient.data());
   if (status != GCPStatus::success) return 1;
-  if (!near(energy, 0.0113040952, 5.0e-8)) return 2;
+  if (!near(energy, 0.0113040952, 5.0e-8) || energy_of(kXyz) != energy) return 2;
 
   for (int axis = 0; axis < 3; ++axis) {
     double total = 0.0;

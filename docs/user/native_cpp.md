@@ -42,6 +42,25 @@ budget bounds all retained correction owners; batches conservatively divide it
 equally among systems. No Python interpreter, reference engine or runtime compiler
 participates in this endpoint.
 
+For a method with a defining basis, use the named system constructor first:
+
+```cpp
+generativeqc_named_ks_descriptor named{
+    sizeof(named), GENERATIVEQC_ABI_VERSION, "r2scan-3c-rks", nullptr, 256ull << 20};
+generativeqc::System system(context, atoms, named);
+generativeqc::Calculation calculation(context, system, controls, named);
+```
+
+Its C equivalent is `generativeqc_system_create_named_ks_v1`. The system descriptor
+supplies atoms, charge and multiplicity with empty shell/primitive arrays; the
+method owns representation and basis data. Named calculation/batch preparation
+also verifies the actual normalized orbital basis, including systems created
+through other APIs. A matching name/checksum alone cannot bypass this check.
+Currently r²SCAN-3c supplies the pinned H–Ar spherical def2-mTZVPP template and
+complete CPU energy (r²SCAN + special-profile D4 + gCP). The correction budget
+reserves gCP output storage before admitting D4. Native forces and CUDA remain
+unqualified for this complete named program.
+
 ## Explicit PBE0 energy in C++
 
 ```cpp

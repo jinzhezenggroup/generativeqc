@@ -67,6 +67,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
+- [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
@@ -154,6 +155,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Context::Context-move](#native-cpp-generativeqc-context-context-move)
 - [generativeqc::Context::get](#native-cpp-generativeqc-context-get)
 - [generativeqc::System](#native-cpp-generativeqc-system)
+- [generativeqc::System::System-named-ks](#native-cpp-generativeqc-system-system-named-ks)
 - [generativeqc::System::System](#native-cpp-generativeqc-system-system)
 - [generativeqc::System::System-bundled](#native-cpp-generativeqc-system-system-bundled)
 - [generativeqc::System::System-basis-template](#native-cpp-generativeqc-system-system-basis-template)
@@ -1733,6 +1735,32 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 **Units.** Method energy tolerances use Hartree; geometries use Bohr. Resource limits are bytes,
 and convergence residuals retain the method-specific descriptor meanings.
 
+(native-c-generativeqc-system-create-named-ks-v1)=
+## generativeqc_system_create_named_ks_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_named_ks_v1 ( generativeqc_context * context , const generativeqc_system_descriptor * input , const generativeqc_named_ks_descriptor * name , generativeqc_system * * system ) ;
+```
+
+**Behavior.** Create a system with the immutable orbital basis defining a named composite.
+
+**Inputs.** context/input/name/output are required with current ABI headers. input supplies
+atoms, charge and multiplicity; shell/primitive pointers and counts must be zero. The
+method supplies representation. name follows exact named-program identity admission.
+
+**Outputs.** Clears the output on entry; success publishes a normalized owned system.
+
+**Lifetime.** Copies atoms and compiled basis data. The ordinary system destroy API applies.
+
+**Errors.** Unbound or unavailable programs return NOT_IMPLEMENTED. Invalid atom/basis domains,
+ABI, allocation and system validation retain the ordinary system-construction statuses.
+
+**Execution.** Synchronous native template expansion and normalization; no files or Python.
+
+**Units.** Coordinates in Bohr, charge in electron-charge units.
+
 (native-c-generativeqc-calculation-prepare-named-ks-v1)=
 ## generativeqc_calculation_prepare_named_ks_v1
 
@@ -1755,7 +1783,8 @@ device-fused XC and a 256 MiB nonlocal budget.
 **Lifetime.** Copies all inputs; context must outlive the returned calculation.
 
 **Errors.** Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
-return INVALID_ARGUMENT. Usual preparation ABI, capacity and numerical gates apply.
+and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
+actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
 
 **Execution.** Synchronous native preparation, without Python, SCF or reference engines.
 
@@ -4149,6 +4178,28 @@ exceptions. Destruction and the move constructor are nonthrowing.
 
 **Execution.** Serialize operations and lifetime changes involving the same object/context. RAII
 does not provide independent thread-safe execution.
+
+(native-cpp-generativeqc-system-system-named-ks)=
+## generativeqc::System::System-named-ks
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+System ( Context & context , std :: span < const generativeqc_atom > atoms , const generativeqc_named_ks_descriptor & name , std :: int32_t charge = 0 , std :: uint32_t multiplicity = 1 )
+```
+
+**Behavior.** Create a system using a named composite's exact defining orbital basis.
+
+**Inputs.** context is live; atoms are in the method's admitted element domain. name selects
+a complete basis-bound program. Charge and multiplicity have their ordinary semantics.
+
+**Lifetime.** Copies all inputs and owns the system handle.
+
+**Errors.** Throws Error for unavailable/basis-unbound methods or failed native validation.
+
+**Execution.** Synchronous C API expansion and normalization without Python or file access.
+
+**Units.** Coordinates in Bohr, charge in electron-charge units.
 
 (native-cpp-generativeqc-system-system)=
 ## generativeqc::System::System

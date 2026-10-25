@@ -1,6 +1,7 @@
 """Shared native catalog programs, immutable identities and explicit routes."""
 
 import ctypes
+import os
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -28,17 +29,27 @@ from tools.generate_cli_method_catalog import rows
         "B3LYP-D4(BJ-EEQ-ATM)",
     ],
 )
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_complete_native_composition_owns_correction_and_result_lifetime(
     library: Any,
     name: str,
+    device: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import numpy as np
     from generativeqc import dispersion
 
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a Slurm-allocated CUDA device")
+        assert os.environ.get("SLURM_JOB_ID"), (
+            "CUDA qualification must run through srun"
+        )
     graph = resolve_method(name)
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-    calculator = Calculator(method=graph, ks_options=KsOptions(grid=GridSpec(8, 4, 8)))
+    calculator = Calculator(
+        method=graph, device=device, ks_options=KsOptions(grid=GridSpec(8, 4, 8))
+    )
 
     def forbidden(*_args: Any, **_kwargs: Any) -> None:
         pytest.fail("complete native program delegated correction execution to Python")

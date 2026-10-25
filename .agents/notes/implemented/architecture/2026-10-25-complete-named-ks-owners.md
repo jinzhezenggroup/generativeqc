@@ -110,3 +110,37 @@ require complete endpoint qualification on an available permitted GPU node.
 - `tests/native/test_named_ks_catalog.cpp`
 - `tests/native/test_cli_dft_df.py`
 - `tests/python/test_native_ks_catalog.py`
+
+## Subsequent extension
+
+[Native basis-bound r²SCAN-3c](2026-10-25-native-bound-r2scan3c.md) extends this
+owner to CPU r²SCAN-3c energies, with a compiled defining basis and gCP. Its
+explicit CPU force/CUDA compatibility boundaries remain separate.
+
+## Real-device qualification added with the bound-basis extension
+
+The same final implementation was built on n1 with CUDA 12.9.86, architecture
+sm_120 and verified sccache 0.16.0 (CXX/CUDA launch commands and before/after cache
+statistics retained). Source was transferred from the PR commit plus a checked
+SHA-256 overlay; numerical sources were verified before the incremental build.
+Slurm job 14205 used `main`, `gpu:5090:1`, a finite 20-minute limit and its assigned
+`CUDA_VISIBLE_DEVICES=2`. The device was RTX 5090, driver 580.95.05. No device
+visibility override or unscheduled GPU execution was used.
+
+`tests/native/test_cli_cuda_named.py` passed complete WB97M-V RKS/UKS energies,
+five D3/D4 CLI force endpoints at two finite-difference steps, and D3-ATM/D4 water
+comparisons. Largest independent WB97M-V energy error was 5.50e-10 Hartree;
+largest CPU/CUDA water force discrepancy was 2.43e-11 Hartree/Bohr; largest
+corrected H2 finite-difference discrepancy was 4.78e-8 Hartree/Bohr (gate 2e-5).
+The five CUDA cases of `test_complete_native_composition_owns_correction_and_result_lifetime`
+also passed, as did all ten existing energy/force/translation/finite-difference
+CLI endpoints in `test_cli_cuda_stationary.py`. These are correctness gates for
+the tested domains, not complete-grid convergence or performance claims.
+
+Raw local qualification logs are retained under the ignored
+`.artifacts/native-cli/n1/` directory. Reproduce inside a scheduler allocation:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
+  python tests/native/test_cli_cuda_named.py build/native-ks-catalog/generativeqc
+```
