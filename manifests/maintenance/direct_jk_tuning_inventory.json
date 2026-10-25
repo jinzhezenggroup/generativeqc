@@ -60,14 +60,6 @@
       ]
     },
     {
-      "name": "generated-task-capacity-ceiling",
-      "source": "src/scf/cuda/rhf_policy.hpp",
-      "owner": "DirectJkBoundedStreamingTaskProfile",
-      "required_tokens": [
-        "maximum_task_capacity{8U * 1024U * 1024U}"
-      ]
-    },
-    {
       "name": "fixed-topology-arena-ceiling",
       "source": "src/scf/cuda/rhf_policy.hpp",
       "owner": "DirectJkFixedTopologyTaskProfile / target resource policy",
