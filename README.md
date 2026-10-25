@@ -126,8 +126,8 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090**
 
-With default settings, GenerativeQC outperforms GPU4PySCF in **57/64** measured warm cases.
-For 96-atom Direct ωB97M-V, the measured warm speedup is **4.11×**.
+With default settings, GenerativeQC outperforms GPU4PySCF in **64/64** measured warm cases.
+For 96-atom Direct ωB97M-V, the measured warm speedup is **4.18×**.
 
 ![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
@@ -137,7 +137,7 @@ Default XC/VV10 grids, native SCF policies and full grid-response forces;
 all complete performance points are shown, including accuracy failures.
 Cold includes setup; warm is the median of three frozen-density calls.
 Independent energy/force accuracy results remain in the detailed tables.
-See [measurements and conditions](benchmarks/results/df-dft48-work-20261025/README.md)
+See [measurements and conditions](benchmarks/results/r2scan-endpoints-20261025/README.md)
 for accuracy checks and detailed comparisons.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**

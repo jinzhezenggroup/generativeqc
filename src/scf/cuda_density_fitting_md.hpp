@@ -37,6 +37,7 @@ std::size_t cuda_df_md_coulomb_reservation(const core::System& orbital,
 generativeqc_status try_install_cuda_df_md_coulomb(
     CudaDensityFittingJkPlan* plan, const core::System& orbital, const core::System& auxiliary,
     std::size_t device_budget, std::size_t host_budget,
-    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail);
+    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail,
+    double screening_tolerance = 0);
 
 }  // namespace generativeqc::scf

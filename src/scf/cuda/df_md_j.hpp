@@ -30,6 +30,7 @@ struct DfMdPrimitive {
   Vec3<double> first{}, second{};
   double exponent{};
   Vec3<double> product{};
+  double component_norm_bound{}, source_norm_bound{};
 };
 
 /** Borrowed prepared primitive interval. An auxiliary view uses a unit first
@@ -43,6 +44,10 @@ struct DfMdView {
   double *transforms{}, *density{}, *potential{}, *response_potential{};
   std::size_t count{}, nbf{};
   bool auxiliary{};
+  // Bounds are frozen only after certification against the actual metric.
+  // Zero keeps the complete domain. Response calls never consume these limits.
+  bool prepare_norms{};
+  double source_norm_limit{}, projection_error_per_primitive{};
   /** Optional exact-zero source compaction, refreshed after each density
    * precontraction. Null preserves dense traversal for transform-only views.
    * Angular offsets are immutable; counts and indices belong to this stream. */

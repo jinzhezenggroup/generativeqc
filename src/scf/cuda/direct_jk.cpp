@@ -701,15 +701,53 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     plan->derivative = scratch(gradient_bytes);
     plan->numerical_failure = reinterpret_cast<int*>(scratch(sizeof(int)));
     direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    std::vector<std::int32_t> bounds_order;
+    const auto* order_choice = std::getenv("GENERATIVEQC_DIRECT_ORDERED_SCHWARZ");
+    if ((!order_choice || std::strcmp(order_choice, "0") != 0) &&
+        !runtime::active_device_resource_ledger) {
+      try {
+        bounds_order.resize(systems.size() * host.nbf);
+        for (std::size_t item = 0; item < systems.size(); ++item) {
+          auto begin = bounds_order.begin() + item * host.nbf;
+          for (std::size_t ao = 0; ao < host.nbf; ++ao) begin[ao] = ao;
+          const auto signature = [&](std::int32_t ao) {
+            const auto index = item * host.nbf + ao;
+            const auto shell = host.ao_shells[index];
+            return std::array<std::int64_t, 4>{
+                host.shell_angular[shell],
+                host.shell_primitive_offsets[shell + 1] - host.shell_primitive_offsets[shell],
+                host.ao_term_counts[index], ao};
+          };
+          // Neighboring lanes should have comparable primitive/expansion work.
+          // Only output ownership is permuted: every oriented (ij|ij) keeps
+          // its original evaluator and summation order, including signed AOs.
+          std::sort(begin, begin + host.nbf,
+                    [&](auto a, auto b) { return signature(a) < signature(b); });
+        }
+      } catch (const std::bad_alloc&) {
+        bounds_order.clear();  // Optional host scheduling cannot refuse a plan.
+      }
+    }
+    // The density is uninitialized until replay. Borrow its first B*N int32
+    // slots for this preparation-only permutation; B*N^2 doubles always fit.
+    // The existing synchronization below ends both host and device borrowing.
+    DirectJkDownloadFence bounds_fence{plan->stream};
+    const auto* device_order =
+        bounds_order.empty() ? nullptr : reinterpret_cast<std::int32_t*>(plan->density);
+    if (device_order)
+      direct_jk_check(cudaMemcpyAsync(const_cast<std::int32_t*>(device_order), bounds_order.data(),
+                                      bounds_order.size() * sizeof(std::int32_t),
+                                      cudaMemcpyHostToDevice, plan->stream));
     const auto blocks =
         static_cast<unsigned>((elements + kIndependentJkThreads - 1) / kIndependentJkThreads);
     launch_independent_jk_bounds_kernel(blocks, kIndependentJkThreads, 0, plan->stream, plan->batch,
-                                        plan->bounds, plan->numerical_failure);
+                                        plan->bounds, plan->numerical_failure, false, device_order);
     direct_jk_check(cudaGetLastError());
     int numerical_failure = 0;
     direct_jk_check(cudaMemcpyAsync(&numerical_failure, plan->numerical_failure, sizeof(int),
                                     cudaMemcpyDeviceToHost, plan->stream));
     direct_jk_check(cudaStreamSynchronize(plan->stream));
+    bounds_fence.complete();
     if (numerical_failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite direct J/K Schwarz bound"};
@@ -1304,7 +1342,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     // Include those temporary capacities even though this provider uploads only AO data.
     info.direct_nbf = host.direct_nbf;
     info.host_preparation_bytes =
-        info.host_bytes + sizeof(host) + span_host_preparation_bytes +
+        info.host_bytes + sizeof(host) + sizeof(bounds_order) +
+        runtime::vector_bytes(bounds_order) + span_host_preparation_bytes +
         canonical_host_preparation_bytes +
         runtime::vector_capacities(
             host.atom_offsets, host.atom_systems, host.atomic_numbers, host.positions,

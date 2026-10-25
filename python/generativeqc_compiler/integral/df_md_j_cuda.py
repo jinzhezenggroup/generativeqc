@@ -22,7 +22,11 @@ admission. Emission alone does not register or qualify a production backend.
 
 from __future__ import annotations
 
-from .md_j_engine_cuda import _hermite_states, emit_md_radial_function
+from .md_j_engine_cuda import (
+    _emit_primitive_norms,
+    _hermite_states,
+    emit_md_radial_function,
+)
 
 MAXIMUM_PAIR_ANGULAR = 7
 MAXIMUM_AUXILIARY_ANGULAR = 5
@@ -76,7 +80,15 @@ static __device__ __constant__ const signed char kDfMdAuxiliarySigns[{len(signs)
 }};
 """
     return (
-        _PREAMBLE + emit_md_radial_function(11, "df_md_radial") + tables + _CONTRACTIONS
+        _PREAMBLE
+        + emit_md_radial_function(11, "df_md_radial")
+        + tables
+        + _CONTRACTIONS
+        + "\nnamespace generativeqc::scf::cuda_execution {\n"
+        + _emit_primitive_norms(6)
+        .replace("kMdPrimitive", "kDfMdPrimitive")
+        .replace("md_engine_hermite_norm", "df_md_hermite_norm")
+        + "\n}  // namespace generativeqc::scf::cuda_execution\n"
     )
 
 

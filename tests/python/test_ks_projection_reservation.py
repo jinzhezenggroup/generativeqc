@@ -117,6 +117,10 @@ DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reserva
     DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget,
     bool automatic = false, ResolvedFockBuild strategy = {}) {
   const auto reserved_rank = reservation.restricted_rank;
+  // Mirror the production raw-source dimensions used by its storage estimate.
+  // CUDA owner admission stays outside this host-only reservation fixture.
+  struct RawShape { std::size_t nbf, naux; };
+  struct SourceShape { RawShape raw; } data{{n, a}};
   FockPreparationDiagnostic diagnostic;
   diagnostic.variant.df_pair_storage_request =
       automatic ? DfPairStorageRequest::Automatic :

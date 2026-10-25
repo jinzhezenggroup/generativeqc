@@ -270,6 +270,17 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
   if (ledger) assert(ledger->live==0);
   active_device_resource_ledger.reset();
 }
+extern "C" void large_capacity(std::size_t limit,std::uint64_t* result) {
+  auto layout=dft::cuda_xc_layout_shape(96,4000,1088,1078336,1,false,256);
+  layout.jets=4; layout.work_jets=4; layout.feature_terms=5;
+  std::vector<void*> allocations;
+  std::size_t selected=1;
+  allocation_limit=limit;
+  result[0]=prepare_optional(allocations,&layout,&selected);
+  result[1]=selected;
+  for(auto* arena:allocations) assert(runtime::resource_cuda_free(arena)==cudaSuccess);
+  allocation_limit=~std::size_t{0};
+}
 """
     )
     # Compile the allocation owner and quadrature retention block unchanged.
@@ -738,6 +749,34 @@ def test_point_capacity_scales_with_live_panels_and_preserves_bounded_fallback(
     if jets == 1:
         assert automatic == incumbent
     assert capacity(32 << 20) == incumbent
+    assert capacity(1) == (0, 1)
+    monkeypatch.setenv(CONTROLS[1], "0")
+    assert capacity() == (0, 1)
+
+
+def test_large_meta_gga_point_batches_keep_explicit_caps_and_allocation_fallback(
+    native_probe: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The larger default is optional, with explicit and actual-allocation bounds."""
+    native_probe.large_capacity.argtypes = [
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    for name in CONTROLS:
+        monkeypatch.delenv(name, raising=False)
+
+    def capacity(limit: int = ctypes.c_size_t(-1).value) -> tuple[int, int]:
+        result = (ctypes.c_uint64 * 2)()
+        native_probe.large_capacity(limit, result)
+        return result[0], result[1]
+
+    automatic = capacity()
+    assert 32 < automatic[1] <= 64 and automatic[0] <= 1 << 30
+    monkeypatch.setenv(CONTROLS[1], str(128 << 20))
+    bounded = capacity()
+    assert bounded[0] <= 128 << 20 and 1 < bounded[1] < automatic[1]
+    monkeypatch.delenv(CONTROLS[1])
+    assert capacity(32 << 20)[0] <= 32 << 20
     assert capacity(1) == (0, 1)
     monkeypatch.setenv(CONTROLS[1], "0")
     assert capacity() == (0, 1)

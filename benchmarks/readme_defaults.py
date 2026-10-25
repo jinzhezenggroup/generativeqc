@@ -300,6 +300,9 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
                     "converged": True,
                     "iterations": item.iterations,
                     "fock_builds": item.fock_builds,
+                    # Preserve anchor/delta/closure work alongside the total;
+                    # equal SCF iteration counts need not imply equal J work.
+                    "incremental_direct_jk": item.incremental_direct_jk,
                     "warm_start_used": item.warm_start_used,
                     "warm_start_fallback": item.warm_start_fallback,
                     "energy_change": item.energy_change,

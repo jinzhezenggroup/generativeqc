@@ -180,7 +180,7 @@ def emit_md_j_engine_header() -> str:
     )
 
 
-def _emit_primitive_norms() -> str:
+def _emit_primitive_norms(maximum_angular: int = 4) -> str:
     r"""Emit Coulomb norms for the *represented* Hermite Gaussian functions.
 
     For Lambda_t = d_P^t exp(-p |r-P|^2), evaluating the existing Coulomb
@@ -195,12 +195,15 @@ def _emit_primitive_norms() -> str:
     open; a zero coefficient is the only structural-zero shortcut.
     Runtime ownership and the cumulative omission allowance stay native.
     """
-    states = [state for l in range(5) for state in _hermite_states(l)]
+    if not 0 <= maximum_angular <= 6:
+        raise ValueError("Hermite norm table supports angular orders through six")
+    states = [state for l in range(maximum_angular + 1) for state in _hermite_states(l)]
     degrees = ", ".join(str(sum(state)) for state in states)
     factors = ", ".join(
         str(prod(prod(range(1, 2 * n, 2)) for n in state)) for state in states
     )
-    return r"""
+    return (
+        r"""
 #if defined(__CUDACC__)
 static __device__ __constant__ unsigned char kMdPrimitiveDegrees[70] = {@DEGREES@};
 static __device__ __constant__ unsigned short kMdPrimitiveFactors[70] = {@FACTORS@};
@@ -220,7 +223,10 @@ __device__ inline double md_engine_hermite_norm(double p, unsigned angular, unsi
   return isfinite(square) ? __dsqrt_ru(square) : INFINITY;
 }
 #endif
-""".replace("@DEGREES@", degrees).replace("@FACTORS@", factors)
+""".replace("@DEGREES@", degrees)
+        .replace("@FACTORS@", factors)
+        .replace("[70]", f"[{len(states)}]")
+    )
 
 
 _PREAMBLE = r"""/*

@@ -3449,6 +3449,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         return layout, work
 
     requested_tile_points = tile_points
+    from . import _cuda_force_resources
     from ._cuda_force_resources import DF_FORCE_DEVICE_CAP, DF_FORCE_HOST_CAP
 
     # Large fitted grids need both a larger AO tile and the phased Becke cache.
@@ -3469,6 +3470,18 @@ def _complete_rks_cuda_gradient_diagnostic(
             and max_host_bytes >= DF_FORCE_HOST_CAP
             else 256
         )
+    if (
+        not large_fitted
+        and not ecp
+        and na >= _cuda_force_resources.DIRECT_FORCE_MIN_ATOMS
+        and callable(getattr(state._source, "cuda_integral_derivatives", None))
+        and max_device_bytes >= DF_FORCE_DEVICE_CAP
+        and max_host_bytes >= DF_FORCE_HOST_CAP
+    ):
+        # Large Direct owners can otherwise fall to 256 points when the
+        # original host cap cannot hold both AO staging and phased geometry.
+        # The shared dry search retains smaller tiles on any capacity refusal.
+        preferred_tile_points = 1024
     layout, grid_work, ao_capacity_fallback = _plan_stationary_optional_ao_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,

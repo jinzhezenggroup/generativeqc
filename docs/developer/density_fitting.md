@@ -86,6 +86,28 @@ applies the shared public-basis transform. Raw derivative APIs use the same
 generated center definitions as weighted HF response. CUDA generation failures
 propagate instead of silently selecting CPU integral evaluation.
 
+## Large pure-Coulomb work policy
+
+Automatic restricted pure-J preparation can prefer streamed Hermite contraction
+when packed raw values occupy at least 4 GiB and four times the optional Hermite
+reserve is smaller. This uses the original complete resource budget; explicit
+storage requests retain their meaning. Optional-owner or full-rank metric
+refusal retains the complete generic streamed provider.
+
+The admitted full-rank Hermite value owner bounds cumulative primal omission
+with a final-J allowance of `min(1e-15, screening_tolerance * 1e-3)`. Half covers
+charge after amplification by the stored spectral metric; half covers projection
+against the current auxiliary source norm. Source bounds refresh on every replay,
+including Graph execution. Invalid/nonfinite bounds retain work. Derivatives
+refresh exact-nonzero sources and do not apply these primal norm omissions.
+This omission allowance does not replace independent FP64 and endpoint error gates.
+
+`GENERATIVEQC_DF_TRACE` reports executed charge/projection radial products for
+non-captured calls separately from submitted unscreened upper bounds. Diagnostic
+synchronizations are excluded from clean endpoint timings. The
+[decision and numerical rationale](../../.agents/notes/implemented/performance/2026-10-25-large-pure-j-df-work.md)
+documents metric amplification, capacity ownership and rejected alternatives.
+
 ## Execution notes and acceptance boundary
 
 - CUDA two-/three-center integral evaluation kernels are packed across

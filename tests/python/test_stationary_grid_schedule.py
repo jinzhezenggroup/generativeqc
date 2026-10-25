@@ -107,7 +107,7 @@ def test_large_df_force_reservation_admits_full_tile_and_pair_cache(
     "atoms,fitted,hamiltonian",
     [
         (24, True, "all-electron"),
-        (96, False, "all-electron"),
+        (48, False, "all-electron"),
         (96, True, "scalar-semilocal-ecp"),
     ],
 )
@@ -120,6 +120,44 @@ def test_other_force_owners_keep_existing_reservations(
     assert ordinary_cuda_force_limits(
         atoms, density_fitted=fitted, hamiltonian=hamiltonian
     ) == (512 << 20, 256 << 20)
+
+
+@pytest.mark.parametrize("atoms,aos", [(96, 768), (96, 1088), (120, 1360)])
+def test_large_direct_force_reservation_admits_full_tile_and_pair_cache(
+    atoms: int, aos: int
+) -> None:
+    """The larger direct cap covers the complete indexed and native owners."""
+    from generativeqc._cuda_force_resources import ordinary_cuda_force_limits
+
+    device, host = ordinary_cuda_force_limits(
+        atoms, density_fitted=False, hamiltonian="all-electron"
+    )
+    layout, _, _ = runtime._plan_stationary_optional_ao_schedule(
+        grid_points=atoms * 24576,
+        tile_points=None,
+        preferred_tile_points=1024,
+        requested_maps=True,
+        admit=lambda points, indexed: (
+            _ordinary(
+                atoms,
+                aos=aos,
+                tile_points=points,
+                max_device_bytes=device,
+                max_host_bytes=host,
+                reserve_active_ao=indexed,
+                features_only=True,
+            ),
+            None,
+        ),
+    )
+    assert layout.host_bound <= host
+    assert layout.source_resources.phased_becke_bytes > 0
+    assert (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + layout.native_geometry_reserve
+        <= device
+    )
 
 
 def test_feature_only_force_keeps_indexed_maps_under_existing_caps() -> None:

@@ -70,6 +70,8 @@ def _evaluate(
     exponent_scale: float = 1.0,
     translation: float = 0.0,
     primitive_lengths: tuple[int, int, int] = (2, 3, 2),
+    separation_scale: float = 1.0,
+    density_scale: float = 1.0,
 ) -> dict[str, Any]:
     from pyscf import lib
 
@@ -82,6 +84,7 @@ def _evaluate(
         variant=variant,
         primitive_lengths=primitive_lengths,
         exponent_scale=exponent_scale,
+        separation_scale=separation_scale,
     )
     for r in fixture.inputs["coordinates"]:
         for axis in range(3):
@@ -103,7 +106,9 @@ def _evaluate(
             )
         raw[loc[i] : loc[i + 1], loc[j] : loc[j + 1], :] = block
     rng = np.random.default_rng(2917)
-    density = rng.normal(size=(n, n))  # Deliberately nonsymmetric and indefinite.
+    density = density_scale * rng.normal(
+        size=(n, n)
+    )  # Deliberately nonsymmetric and indefinite.
     potential = rng.normal(size=a)
     lines = []
     for shells in (fixture.inputs["shells"][:2], fixture.inputs["shells"][2:]):
@@ -292,3 +297,38 @@ def test_geometry_and_exponent_ranges(
             translation,
         ),
     )
+
+
+@pytest.mark.parametrize("angular", ((0, 0, 0), (2, 1, 3), (3, 3, 4)))
+@pytest.mark.parametrize("metric_scale", (1.0, 1e-12, 0.0))
+@pytest.mark.parametrize("density_scale", (1.0, 1e100))
+def test_metric_bounded_sources_preserve_independent_products_and_replay(
+    df_md_probe: Path,
+    tmp_path: Path,
+    monkeypatch: Any,
+    angular: tuple[int, int, int],
+    metric_scale: float,
+    density_scale: float,
+) -> None:
+    """Current signed inputs, diffuse tails, graph resets and singular fail-open.
+
+    The probe also sends NaN/Inf after graph replay and validates resource
+    refusal/cleanup. A zero eigenvalue must disable charge omission; it does
+    not affect projection's independent current-source bound.
+    """
+    if density_scale == 1.0:
+        monkeypatch.setenv("GENERATIVEQC_TEST_DF_MD_DERIVATIVE", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_DF_MD_SCREEN_BUDGET", "1e-15")
+    monkeypatch.setenv("GENERATIVEQC_TEST_DF_MD_METRIC_SCALE", str(metric_scale))
+    result = _evaluate(
+        df_md_probe,
+        tmp_path,
+        angular,
+        True,
+        separation_scale=10.0,
+        density_scale=density_scale,
+    )
+    fields = dict(field.split("=", 1) for field in result["native_inventory"].split())
+    assert float(fields["max_j_omission"]) == 1e-15
+    assert float(fields["projection_error_per_primitive"]) > 0
+    assert (float(fields["source_norm_limit"]) > 0) == (metric_scale > 0)
