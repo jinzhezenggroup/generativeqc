@@ -1,0 +1,26 @@
+{
+  "id": "public.precision-auto",
+  "classification": "negative-evidence",
+  "controls": [
+    "public-policy:precision-auto"
+  ],
+  "owner_issues": [
+    375,
+    528,
+    1189
+  ],
+  "sources": [
+    "python/generativeqc/calculator.py"
+  ],
+  "rationale": "The default-promotion decision is to retain strict FP64 and require explicit precision=auto. Source-bound DFT warmup evidence includes five alternating small-water cold/warm/changed E+force pairs that lose to FP64 and four repaired larger cold single-pair screens with FP64/AUTO ratios 0.6385, 0.7430, 0.7159 and 0.8156. Returned repaired endpoints meet their recorded numerical gates and execute mixed J, but neither those screens nor historical HF evidence qualify a general default. Large screens are not repeated promotion trials and their distinct cold guesses prevent attributing every iteration difference to arithmetic. This is a scoped negative default decision, not DFT-MP-v1 completion, a claim about every mixed workload, or a new measurement on current master.",
+  "revisit_condition": "The narrower precision owners may propose a source-identified guard only after repeatable complete cold/warm/moved endpoint benefit, observed mixed and strict work, all refinement/retry costs and unchanged independent scientific gates. #1189 still requires its frozen per-method 1.20x product result; this negative policy decision does not close or weaken that target.",
+  "evidence": [
+    "issue:#375",
+    "issue:#528",
+    "issue:#1189",
+    "issue:#1598",
+    "benchmarks/results/dft-mixed-warmup-20261012/README.md",
+    "benchmarks/results/dft-mixed-warmup-20261012/fix-summary.json.xz",
+    ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+  ]
+}

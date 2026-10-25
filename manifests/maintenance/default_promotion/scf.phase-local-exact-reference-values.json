@@ -1,0 +1,30 @@
+{
+  "id": "scf.phase-local-exact-reference-values",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "src/scf/cuda/reference_eri_policy.hpp",
+    "src/scf/cuda/direct_jk_source_policy.hpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/scf/cuda/rhf_resident_values.cpp",
+    "src/scf/cuda_rhf.cpp"
+  ],
+  "rationale": "Unset/auto retains the existing fresh single restricted unscreened physical-reference domain: uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs, iteration limit at least eight, 8-GiB value ceiling. Ordinary restricted FP64 cold solves additionally admit through-d screened domains with 64 or more public AOs and at most 128 Cartesian AOs, iteration limit at least eight and a 512-MiB value ceiling. These require a fresh single-system bucket, internal guess and no active public resource ledger. Other ordinary sizes refuse before provider cloning/sorting. Complete numeric admission and free-device reserve retain exact fallback. Phase graphs retire before values; warm/reused buckets retain ordinary graphs. Final derivative metadata is explicitly produced from the selected final density. Explicit 0 restores the streamed schedule and 1 remains subject to scientific/resource gates. The static domain guard is not a universal profitability model.",
+  "revisit_condition": "Broaden either cold/domain heuristic only with source-matched complete cold/warm/moved E+F comparisons and independent gates, including quickly converged fresh seeds, larger sizes and constrained resources. Forced larger ordinary domains currently regress despite fitting memory. Preserve final physical Fock/census audits, derivative density identity, compensated FP64 arithmetic and bounded lifetime; never pool forced exploratory populations with actual default-auto qualification.",
+  "evidence": [
+    "docs/developer/scf_module_boundaries.md",
+    ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
+    "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
+    "tests/python/test_rhf_reference_cache_policy.py",
+    "tests/python/test_rhf_resident_values_lifetime.py",
+    "tests/python/test_rhf_phase_resident_values_cuda.py",
+    ".agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md",
+    "benchmarks/results/direct-cold-resident-20261023/README.md",
+    "tests/python/test_rhf_ordinary_resident_cuda.py"
+  ]
+}

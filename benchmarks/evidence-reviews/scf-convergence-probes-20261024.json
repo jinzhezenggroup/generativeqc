@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "scf-convergence-probes-20261024",
+  "owner": "SCF/DFT convergence and complete-endpoint diagnosis",
+  "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
+  "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/scf-convergence-probes-20261024/evidence.json.xz",
+      "family": "scf-convergence-probes-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
+      "bytes": 472836,
+      "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
+    }
+  ]
+}

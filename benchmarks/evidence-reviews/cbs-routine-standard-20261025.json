@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cbs-routine-standard-20261025",
+  "owner": "CBS routine default convergence qualification",
+  "reason": "One lossless compressed population retains 13 physical-basis native/oracle cases, two complete Cartesian finite-difference stencils, all failed candidates and branch diagnostics, fourteen default QM7 endpoints covering C1–C7 and original cross-revision controls. Full observables, semantic work and negative trials remain together; no storage cap is increased. The publication manifest and offline verifier bind the accepted numerical scope.",
+  "review_document": "benchmarks/results/cbs-routine-standard-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cbs-routine-standard-20261025/records.json.xz",
+      "family": "cbs-routine-standard-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-observables-independent-oracles-work-and-negative-trials",
+      "bytes": 339296,
+      "sha256": "5eaac46759bc3893485c7f57c5cf4fcbf00c556f47aa3dfe20fc3bb58929dc0d"
+    }
+  ]
+}

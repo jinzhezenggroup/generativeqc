@@ -1,0 +1,28 @@
+{
+  "id": "tensor.schedule-opt-ins",
+  "classification": "retained-opt-in",
+  "controls": [
+    "tensor-schedule:views",
+    "tensor-schedule:fuse",
+    "tensor-schedule:recompute",
+    "tensor-schedule:inplace_donation",
+    "tensor-schedule:layouts"
+  ],
+  "owner_issues": [
+    508,
+    509
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/cuda_plan.py"
+  ],
+  "rationale": "Final policy: retain explicit bounded tuning and caller-selected schedules. Ordinary plan_cuda uses BASELINE_SCHEDULE and does not load historical tuning winners. Qualified tuning returns a concrete plan/artifact and complete evidence for its exact workload, source and device; that is not a global automatic dispatcher. Positive retained layout/schedule results remain valid on their original identities. Views, fusion, recomputation, donation and layout selection are not enabled globally; direct GEMM and existing compiler legality transformations retain their separately qualified defaults.",
+  "revisit_condition": "Reopen automatic winner loading only for a complete production consumer that binds source/device/workload/artifact identity, charges preparation and cache costs, and deterministically retains the baseline on every miss or stale receipt. Keep explicit tuning available independently.",
+  "evidence": [
+    "issue:#508",
+    "issue:#509",
+    "issue:#1598",
+    "docs/developer/tensor_cuda.md",
+    "benchmarks/results/tensor-resource-scheduler-508/README.md",
+    ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+  ]
+}

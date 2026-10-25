@@ -1,0 +1,18 @@
+{
+  "id": "response.bounded-symmetric-polarization",
+  "classification": "already-default",
+  "controls": [
+    "response-option:symmetric_polarization"
+  ],
+  "owner_issues": [
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp"
+  ],
+  "rationale": "Symmetric two-pass polarization remains the bounded default fallback when the retained-shell cross derivative is disabled or unavailable. Explicitly disabling both controls preserves the legacy three-pass validation schedule.",
+  "revisit_condition": "Retain independent cross-weight and complete-force parity before changing fallback polarization or its numerical reduction order.",
+  "evidence": [
+    "tests/python/test_rhf_frame_response_cuda.py"
+  ]
+}

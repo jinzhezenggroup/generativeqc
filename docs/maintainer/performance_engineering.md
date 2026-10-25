@@ -700,9 +700,15 @@ Before promoting a new default or auto-selection policy:
    identity preconditions do not hold.
 8. Prefer complete endpoint evidence over isolated kernel speedups.
 
-The authoritative
+The stable
 [`default_promotion_inventory.json`](../../manifests/maintenance/default_promotion_inventory.json)
-distinguishes measured `negative-evidence`, a final `retained-opt-in` decision,
+points at separately owned `manifests/maintenance/default_promotion/<id>.json`
+policy records. The inventory validator combines all records in memory, scans
+real production controls, and rejects missing, stale or duplicate registrations.
+Do not commit an aggregated policy list: each qualification changes only its
+own entry, reducing parallel-PR merge collisions.
+
+The assembled inventory distinguishes measured `negative-evidence`, a final `retained-opt-in` decision,
 and continuing `needs-qualification` research. Public precision defaults to
 FP64 and AUTO remains explicit; TensorIR tuning winners require explicit selection, and
 TensorIR Graph replay remains explicit. These decisions do not change existing

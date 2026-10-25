@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "wb97mv-hessian-dispatch-20261017",
+  "owner": "bounded native CUDA WB97M-V Hessian dispatch qualification",
+  "reason": "Lossless complete paired matrices, fresh-process phase timings, semantic work, sampled-device memory, old/new controls, larger native-only runs, and canceled/failed harness attempts are retained. Numerical acceptance only: dimer Hessian-only latency remains slower than GPU4PySCF, grids are not chemically converged, and mixed GPU placements are explicit. Historical evidence is compressed without changing decoded bytes; no storage-budget increase or broad performance promotion.",
+  "review_document": "benchmarks/results/wb97mv-hessian-dispatch-20261017/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/wb97mv-hessian-dispatch-20261017/samples.json.xz",
+      "family": "wb97mv-hessian-dispatch-20261017",
+      "bytes": 177452,
+      "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
+    }
+  ]
+}

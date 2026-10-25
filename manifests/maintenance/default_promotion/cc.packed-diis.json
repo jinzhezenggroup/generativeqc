@@ -1,0 +1,22 @@
+{
+  "id": "cc.packed-diis",
+  "classification": "guarded-promotion-candidate",
+  "controls": [
+    "cc-option:packed_diis"
+  ],
+  "owner_issues": [
+    1902
+  ],
+  "sources": [
+    "src/cc/solver.hpp",
+    "docs/developer/rccsd_gpu.md",
+    ".agents/notes/implemented/performance/2026-10-05-rccsd-packed-diis.md"
+  ],
+  "rationale": "Restricted DIIS packing preserves the CC equations and materially lowers history capacity, but changes FP64 projection/summation order and has no demonstrated complete wall-time benefit. Its retained value is capacity admission, not latency.",
+  "revisit_condition": "Normal latency execution should keep full histories. Automatic packing may be promoted only as an identity-checked resource-budget fallback that proves the full-history route would exceed the admitted budget and preserves the existing symmetry, replay and numerical gates.",
+  "evidence": [
+    "issue:#1902",
+    "pr:#1927",
+    "note:.agents/notes/implemented/performance/2026-10-05-rccsd-packed-diis.md"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "hf.conservative-fp32-block-screening",
+  "classification": "retained-opt-in",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/direct_coarse_screening.cuh",
+    "src/scf/cuda/direct_coulomb.cpp"
+  ],
+  "rationale": "Default-off prepared FP32 intervals certify either outcome; only uncertain candidates read original FP64 block metadata. Existing reductions populate charged owner-local caches. Shell density storage, exact screening, ERI and contractions remain FP64. Scalar INT8 and integer Tensor Core outer-product experiments are standalone benchmarks, not production modes; microbenchmark wins do not qualify molecular endpoints.",
+  "revisit_condition": "Promote only with source-matched complete cold/warm/moved endpoint gains and independent numerical and task-set gates. Preserve preparation, memory, replay identity and geometry/spin-density cache ownership qualification. A compact shell-density ABI or production integer scheduler needs separate endpoint evidence.",
+  "evidence": [
+    "note:.agents/notes/implemented/performance/2026-10-23-prepared-block-screening.md",
+    "tests:tests/native/test_direct_coarse_screening_cuda.cu",
+    "tests:tests/python/test_hf_resources.py",
+    "docs:docs/developer/fock_build.md"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "occupied-xc-cold-20261023",
+  "owner": "Current-source occupied-XC cold endpoint integration",
+  "reason": "Lossless bundle retains all 168 complete native calls in separate paired, pilot, diagnostic and moved cohorts, independent reference vectors, exact source inventory delta, upstream import patch, package/cache/build/test provenance, original runners and initial failed integration assertions. No cap change or timing-population mixing.",
+  "review_document": "benchmarks/results/occupied-xc-cold-20261023/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-cold-20261023/receipts.json.xz",
+      "family": "occupied-xc-cold-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-receipts",
+      "bytes": 346752,
+      "sha256": "99cc6488b3ec7de6f9186f566ea89980d77b88dc23c70a92a2fa4d5ab4516bba"
+    }
+  ]
+}

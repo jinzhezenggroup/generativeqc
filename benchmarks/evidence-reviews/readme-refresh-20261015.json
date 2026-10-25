@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-refresh-20261015",
+  "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
+  "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
+  "review_document": "benchmarks/results/readme-refresh-20261015/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
+      "family": "readme-refresh-20261015",
+      "bytes": 176084,
+      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "response.retained-shell-bilinear-derivative",
+  "classification": "already-default",
+  "controls": [
+    "response-option:bilinear_derivative"
+  ],
+  "owner_issues": [
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp",
+    "src/scf/cuda/direct_jk.cpp",
+    "docs/developer/df_ccsdt_gradient.md"
+  ],
+  "rationale": "The default requests one retained-shell P:G'(D) traversal using the compiler-owned product rule without losing shell/component reuse. Admission requires one unscreened derivative item, the generated shell force lease and numerical audit storage. Missing admission preserves bounded symmetric two-pass polarization; canonical residency alone never selects the slower historical generic experiment. Explicit opt-out and legacy validation schedules remain available.",
+  "revisit_condition": "Retain source-matched complete-endpoint, independent force/residual and real-device lifetime gates for changes to the shell schedule or its admission. Do not automatically promote the unchanged generic canonical traversal, whose retained historical endpoint regressed.",
+  "evidence": [
+    "issue:#1972",
+    ".agents/notes/implemented/performance/2026-10-12-rhf-shell-bilinear-default.md",
+    "tests/python/test_rhf_frame_response_cuda.py",
+    "tests/python/test_direct_shell_derivative_host_lifetime.py",
+    "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
+  ]
+}

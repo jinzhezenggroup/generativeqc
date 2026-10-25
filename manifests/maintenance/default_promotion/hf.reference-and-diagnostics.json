@@ -1,0 +1,25 @@
+{
+  "id": "hf.reference-and-diagnostics",
+  "classification": "diagnostic-test-only",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_FINAL_FOCK_REBUILD",
+    "hf-runtime:GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE",
+    "hf-runtime:GENERATIVEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC",
+    "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC",
+    "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC",
+    "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC",
+    "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE",
+    "hf-runtime:GENERATIVEQC_DIRECT_TILE_VALIDATION"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "These controls force reference, tracing, validation, profiling, or qualification behavior. They are audit surfaces rather than candidates for automatic product policy.",
+  "revisit_condition": "Remove individual controls when their diagnostic or reproducibility role disappears; do not promote them merely because the underlying optimized path becomes default.",
+  "evidence": [
+    "issue:#1598"
+  ]
+}

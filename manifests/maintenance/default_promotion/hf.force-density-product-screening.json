@@ -1,0 +1,20 @@
+{
+  "id": "hf.force-density-product-screening",
+  "classification": "negative-evidence",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING"
+  ],
+  "owner_issues": [
+    406
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "Force density-product screening has correctness coverage but retained endpoint evidence did not justify enabling it automatically.",
+  "revisit_condition": "Reconsider only with new complete force-endpoint evidence that crosses the shared performance gate under unchanged force accuracy and screening semantics.",
+  "evidence": [
+    "issue:#406",
+    "pr:#410",
+    "issue:#1598"
+  ]
+}

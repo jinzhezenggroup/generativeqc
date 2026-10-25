@@ -1,0 +1,18 @@
+{
+  "id": "response.stationary-orbital-relaxation",
+  "classification": "scientific-choice",
+  "controls": [
+    "response-option:relax_orbitals"
+  ],
+  "owner_issues": [
+    1972
+  ],
+  "sources": [
+    "src/hf/rhf_frame_response.hpp"
+  ],
+  "rationale": "Orbital relaxation is required for stationary molecular forces. Explicitly disabling it exposes fixed-frame nuclear and metric weights for validation, not a faster scientifically interchangeable molecular-force method.",
+  "revisit_condition": "Preserve the distinction between stationary forces and fixed-frame validation; do not promote an omitted physical response as a performance optimization.",
+  "evidence": [
+    "tests/python/test_rhf_frame_response_cuda.py"
+  ]
+}
