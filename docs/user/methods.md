@@ -41,7 +41,8 @@ the execution boundary.
 
 ## Conventional CPU UMP2 energy and analytic forces
 
-`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces from a converged, physically
+`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces
+from a converged, physically
 validated UHF reference. The initial public domain is all-electron, unscreened
 conventional Gaussian integrals on CPU with real FP64 arithmetic. The two spin
 occupations and orbital frames remain distinct, including for equal occupations.
@@ -95,6 +96,14 @@ proposal for a fresh UHF solve, not a substitute for final-state validation.
 checkpoint stores separate alpha and beta density blocks even for a singlet.
 `save_checkpoint()` and `load_checkpoint()` preserve that identity and require
 the restored batch to reconverge before returning an energy.
+
+## Restricted correlated methods
+
+Conventional `mp2`, `rccsd`, `rccsd(t)`/`ccsd(t)` and the CUDA density-fitted
+`df-rccsd(t)`/`df-ccsd(t)` selectors share one canonical RHF reference and
+publish native analytic forces in their admitted domains. Their selector table,
+batch shapes, memory controls and failure behavior are collected in
+[Restricted correlated methods](correlated_methods.md).
 
 ## Second-order derivatives
 

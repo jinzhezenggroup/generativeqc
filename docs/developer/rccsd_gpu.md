@@ -5,7 +5,7 @@ adds no second CC equation source. Shared native reference/provider and resident
 TensorIR interfaces are coordinated with the CPU pages, so both backends consume
 one equation identity.
 
-## A: fixed-amplitude equations
+## Fixed-amplitude equations
 
 `tools.generativeqc_cc.cuda.PreparedRCCSDResidual` compiles the complete energy,
 R1 and R2 DAG with the shared TensorIR planner and executor. `trace=True` retains
@@ -142,7 +142,7 @@ Packing is forwarded unchanged through both complete attempts of the bounded
 resource retry. If an attempt is discarded, its DIIS capacity, conversion,
 metric-work, and packing-call totals are unavailable and reported as null.
 
-## B: resident single-system solver
+## Resident single-system solver
 
 `tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` binds the shared
 primary iteration plan to the resident TensorIR ABI. The physical
@@ -258,10 +258,10 @@ standalone supplied-problem defaults remain unbatched. This selector does not
 change Lambda, orbital-response equations or their independent audits. Work
 counters include the actual batched graph, packing and fused ordered accumulation.
 
-The internal energy facade accepts `backend="cuda-resident"`. It remains
+The internal energy facade accepts `backend="cuda-resident"` and remains
 energy-only. The production native owner is additionally exposed through
-`GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`; force requests remain
-unsupported. `PreparedResidentCCSD` itself
+`GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`, which is documented
+below. `PreparedResidentCCSD` itself
 stays open after convergence. Its immutable `owner_identity` binds the
 reference/integrals/equations/artifact/device; a separate
 `solved_state_identity` additionally hashes the replay-qualified final T1/T2.
@@ -289,13 +289,14 @@ setup, explicit nonconvergence and resident zero-DIIS execution. H2O agrees with
 its pinned amplitudes to about 6.5e-12 max absolute error and its pinned total
 energy to about 2.9e-13 Eh.
 
-## C: native/public promotion
+## Native and public endpoint
 
 Restricted closed-shell CCSD is a native method and does not reuse the reserved
 `GENERATIVEQC_METHOD_RCCSD_T` identifier. `GENERATIVEQC_METHOD_RCCSD=12`
-is an additive method id; all earlier values remain unchanged. The registry reports
-energy only and prepared-batch support. A force buffer/request therefore fails
-explicitly instead of returning an HF derivative under a CC label.
+is an additive method id; all earlier values remain unchanged. The registry
+declares energy plus analytic forces and prepared-batch support. Force buffers
+are opt-in: an omitted property request stays energy-only, and a released force
+buffer never carries an HF derivative under a CC label.
 
 `src/methods/rccsd_method.cpp` owns the public HF -> conventional MO blocks ->
 RCCSD lifecycle. It accepts only all-electron closed-shell RHF, FP64, unscreened
@@ -365,7 +366,7 @@ result. Older diagnostic callers continue to receive only the prefix they sized.
 The production path is correctness/resource qualified, not a performance
 leadership claim. Direct producer-to-consumer HF/AO2MO device leases and validated
 cross-geometry orbital/amplitude transport remain future optimizations rather than
-requirements for the declared energy-only capability.
+requirements for the currently declared capability.
 
 The end-point qualification matrix and exact reproduction commands are recorded
 in [`benchmarks/results/rccsd-149-c`](../../benchmarks/results/rccsd-149-c/README.md).

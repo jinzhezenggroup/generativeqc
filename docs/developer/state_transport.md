@@ -49,7 +49,7 @@ reference change rather than treating it as a four-index rotation.
 | --- | --- | --- |
 | `identity` | Same complete endpoint and identity frame | Yes |
 | `exact_orbital_rotation` | Full-rank square occupied and virtual maps are independently orthogonal and cross-block mixing is below the gate | Yes |
-| `projected_warm_start` | A basis/frame change preserves occupied rank but is not a complete isometry | No; classification only in slice A |
+| `projected_warm_start` | A basis/frame change preserves occupied rank but is not a complete isometry | No; classification only |
 | `incompatible` | Identity mismatch, occupied-rank loss, occupied-virtual mixing, stale same-ID frame, or same-basis nonunitary map | No |
 
 An otherwise exact block map must also transform the occupied and virtual

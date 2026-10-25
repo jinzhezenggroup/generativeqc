@@ -211,7 +211,7 @@ implementations of the **same Hamiltonian**, rather than a comparison of DF
 against conventional four-center integrals.
 
 An orthogonal rotation of the retained auxiliary B axis leaves `g_DF` and the
-physical RCCSD(T) energy invariant. The slice-A tests exercise that gauge
+physical RCCSD(T) energy invariant. The dense-oracle tests exercise that gauge
 invariance explicitly.
 
 ## Memory scope
@@ -259,7 +259,7 @@ into the occupied-space W tensor. It therefore forms neither a complete
 factorized energy with the dense oracle, and an independent random-factor test
 compares the factorized (T) correction with the audited dense triples equations.
 
-### C2a executable energy facade
+### Source-level executable energy facade
 
 The source-level `df_rccsd_t_energy` facade now composes the already validated
 pieces without changing their scientific ownership:
@@ -276,13 +276,13 @@ set is exactly `{"energy"}`. A force request fails before source validation or
 solver work, so the conventional RCCSD(T) force capability cannot be inherited
 accidentally.
 
-C2a is deliberately not a native Calculator registration. It uses the existing
+This facade is deliberately not a native Calculator registration. It uses the existing
 native RHF snapshot-export bridge and retains that bridge's <=12-AO validation
 boundary. Production public energy and forces are owned separately by the native
 DfRccsdt provider, which preserves the same conventional-RHF +
 correlation-only-DF method definition.
 
-C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
+The public `df-rccsd(t)` / `df-ccsd(t)` selector is a distinct registered method. It is
 CUDA/FP64, requires an explicit auxiliary basis and keeps the reference
 conventional RHF while passing that auxiliary only to the correlation
 Hamiltonian. The method selector is intrinsically DF: the Python Calculator
@@ -699,18 +699,18 @@ The internal validation helpers live in
 - `run_dense_df_ccsdt_oracle` evaluates the trusted RCCSD/(T) equations;
 - `df_fitting_error` reports DF-versus-exact integral error separately.
 
-Slice B additionally exposes the internal `solve_df_ccsd` / `PreparedDFCCSD`
-validation path. C2a adds `df_rccsd_t_method_capabilities` and
-`df_rccsd_t_energy` as the executable energy-only source facade. The latter
+The internal `solve_df_ccsd` / `PreparedDFCCSD` validation path is also
+exposed. `df_rccsd_t_method_capabilities` and `df_rccsd_t_energy` form the
+executable energy-only source facade. The latter
 requires a live `NativeSource` with an explicit auxiliary basis and records the
 conventional-reference/correlation-DF split in every successful result. It does
 not register a Calculator method.
 
-## Non-goals after slice B
+## Non-goals
 
 - no production full-`NMO^4` DF integral storage;
-- no prepared-batch DF-CCSD(T) public owner in C2b;
-- the C2a source-level validation facade remains energy-only; public native
+- no prepared-batch DF-CCSD(T) public owner;
+- the source-level validation facade remains energy-only; public native
   DF-CCSD(T) analytic forces use the separate complete owner documented in
   [df_ccsdt_gradient.md](df_ccsdt_gradient.md);
 - no frozen-core, open-shell, ECP, local, or DLPNO variant.

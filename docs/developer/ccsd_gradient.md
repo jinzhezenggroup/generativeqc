@@ -274,7 +274,7 @@ for ownership and migration conditions.
 
 ### Measured CUDA derivative evidence (node3, 2026-09-19)
 
-The current C-slice was exercised with CUDA 12.9.86 on an NVIDIA GeForce RTX
+The current CUDA derivative consumers were exercised with CUDA 12.9.86 on an NVIDIA GeForce RTX
 5090 (sm_120), driver 580.95.05. This is real-device qualification of the final
 derivative consumers; it is not a resident-GPU qualification of the preceding
 RHF/CC/Lambda/Z chain.

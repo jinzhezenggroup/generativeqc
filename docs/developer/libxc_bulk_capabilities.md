@@ -384,7 +384,7 @@ disjoint and reconstruct the same selected inventory.
 The catalog command is evidence collection, not publication or admission.
 `--require-all-pass` turns any non-pass selected registration into a nonzero
 command result; without it, negative results are retained for diagnosis and
-later B2 aggregation.
+later aggregation.
 
 The canonical `tests/data/xc/r2scan-tail-reference.json` fixture has
 machine-readable status `pass` for the compiled CPU FP64 production entry point,

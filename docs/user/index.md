@@ -25,6 +25,7 @@ methods
 :caption: Run and reuse calculations
 
 geometry_optimization
+correlated_methods
 unrestricted_cc
 batched_hf
 checkpoint

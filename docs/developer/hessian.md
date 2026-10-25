@@ -22,11 +22,11 @@ The HVP keeps the existing `NativeRHFState` admission boundary (all-electron
 closed-shell conventional RHF, at most 12 Cartesian AOs/four atoms). Second
 integrals and the final relaxation contraction are currently CPU-generated.
 Directional H1/S1 and direct J/K may independently use their qualified CUDA
-providers. B2 additionally allows the iterative RHF response operator and
-Krylov vectors/orthogonalization to remain on that direct-J/K CUDA stream via
-response_execution="cuda-resident". Nuclear/metric RHS construction and
-final D/W reconstruction remain host-side, while the B3 second-integral HVP
-and relaxation contractions are still CPU consumers. The result is therefore
+providers. The iterative RHF response operator and Krylov
+vectors/orthogonalization may also remain on that direct-J/K CUDA stream via
+`response_execution="cuda-resident"`. Nuclear/metric RHS construction and
+final D/W reconstruction remain host-side, and the second-integral HVP and
+relaxation contractions are still CPU consumers. The result is therefore
 a mixed host/device HVP, not an all-device HVP. There is no RHF Calculator Hessian/HVP API or production-size global-memory
 claim for this bounded tools path. See
 [the matrix-free RHF HVP decision note](../../.agents/notes/implemented/numerics/2026-09-19-rhf-matrix-free-hvp.md).
@@ -295,8 +295,7 @@ unsupported molecules, unconverged SCF references and failed response solves
 raise errors. It is imported explicitly; importing the Hessian weight/RHS
 helpers does not require PySCF.
 
-This reference does **not** complete slice-A step 4 or qualify the analytic
-provider chain. That integration must consume generated second-integral
+This reference does **not** supply the analytic provider chain. That integration must consume generated second-integral
 blocks and the shared response operator/solver. The dense reference stays
 independent so it can test that future implementation. The occupied CPHF block
 is fixed by the metric gauge, and its induced density contributes to the virtual
@@ -517,8 +516,8 @@ checks are in `tests/python/test_hessian_hvp.py`. The native dense assembly
 shares the common response solver, so parity alone is not an independent response
 gate.
 
-B4 builds on that same HVP contract. rhf_hvp_many prepares several
-directional H1/S1 pairs, binds them to one shared RHF response operator and
+Several directional H1/S1 pairs can be prepared at once. `rhf_hvp_many` binds
+them to one shared RHF response operator and
 uses `solve_many` with sequential, blocked or recycled strategy.
 The solver workspace is combined with a conservative retained numeric-storage
 bound; insufficient block budget fails before first-integral work.
@@ -554,9 +553,9 @@ and output-publication phases rather than hiding those lifetimes inside the solv
 workspace. The default block size is `min(4, 3*natoms)`, including single-atom
 states; callers can choose any explicit block size from one through 3*natoms.
 
-These B3/B4 paths remain within the declared small-system conventional-RHF tools
-domain. B2 closes the iterative response-residency slice: response vectors,
-orthogonalization, operator AO/MO transforms and direct J/K actions can stay on
+These matrix-free HVP paths remain within the declared small-system
+conventional-RHF tools domain. The resident response path keeps response
+vectors, orthogonalization, operator AO/MO transforms and direct J/K actions on
 device under the existing GMRES controller. The CUDA relaxation backend
 adds an independently selectable generated CUDA first-integral contraction.
 With a host response, `relaxation_backend="cuda"` and an explicit

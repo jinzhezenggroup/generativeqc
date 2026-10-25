@@ -160,7 +160,7 @@ references additionally reuse H2, water and LiH from the shared reference
 fixtures with identical C,
 integrals and Hamiltonian. Native provider tests check those values and run
 fresh GenerativeQC RHF into the fixed-amplitude facade. The latter is a bridge smoke
-check, not the converged HF→CCSD endpoint required by slice C.
+check, not the converged HF→CCSD endpoint published by the native method.
 
 Run from the repository root with `PYTHONPATH=.:python`:
 

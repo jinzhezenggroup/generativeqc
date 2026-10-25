@@ -41,7 +41,7 @@ validated RHF snapshot
 
 The CPU route uses the audited tiled reference. The production GPU composition
 uses `backend="cuda-resident"`: the RCCSD stage is the
-[resident solver](rccsd_gpu.md#b-resident-single-system-solver) and the triples
+[resident solver](rccsd_gpu.md#resident-single-system-solver) and the triples
 stage is the [generated bounded-tile executor](rccsd_t.md#bounded-cuda-tiles).
 The older host-staged `backend="cuda"` RCCSD helper is deliberately not promoted
 by this facade. CUDA requires an explicit `CudaCompilerAdapter` and a
@@ -258,7 +258,7 @@ PYTHONPATH=python:. python -m pytest tests/python/test_ccsd_t_api.py \
 ```
 
 Real-device numerical and memory evidence for the two GPU stages remains in the
-[RCCSD resident](rccsd_gpu.md#b-resident-single-system-solver) and
+[RCCSD resident](rccsd_gpu.md#resident-single-system-solver) and
 [bounded triples-tile](rccsd_t.md#bounded-cuda-tiles) qualification pages.
 A composed CUDA run uses those exact owners and records both identities in the
 endpoint result; it does not reinterpret either qualification as a new
