@@ -867,3 +867,57 @@ def test_incremental_default_rejects_retained_output_before_gpu_work(
         ks_incremental_default.main()
     assert error.value.code == 2
     assert original.read_text() == "original evidence"
+
+
+@pytest.mark.parametrize("engine", ["native", "reference"])
+@pytest.mark.parametrize("alias", [False, True])
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_cbs_convergence_rejects_retained_output_before_science(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    engine: str,
+    alias: bool,
+    existing_output: bool,
+) -> None:
+    from benchmarks import _retention, cbs_convergence
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    previous = retained / "existing.json"
+    previous.write_text("preserved reviewed evidence", encoding="utf-8")
+    target = previous if existing_output else retained / "new/result.json"
+    if alias:
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+        target = destination / target.relative_to(retained)
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"generativeqc", "cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("retained output reached native/GPU/oracle import")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cbs_convergence",
+            engine,
+            "--output",
+            str(target),
+            "--source-patch",
+            "unused",
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        cbs_convergence.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert previous.read_text(encoding="utf-8") == "preserved reviewed evidence"
+    assert not (retained / "new").exists()

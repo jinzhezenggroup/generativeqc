@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "r2scan3c-final-validation-20261015",
+  "owner": "r2SCAN-3c Direct/DF resident final-validation qualification",
+  "reason": "Retain all 192 complete comparison calls, full-precision numerical arrays, independent cold/moved geometry references, paired timings and SCF work, failures and exact source/binary bindings. The 2%/MAD label is descriptive, not enablement; work-confounded Direct/96 cold/moved samples stay visible. No raw profiler stream, binary or policy-cap increase is introduced.",
+  "review_document": "benchmarks/results/r2scan3c-final-validation-20261015/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
+      "family": "r2scan3c-final-validation-20261015",
+      "bytes": 185084,
+      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    }
+  ]
+}

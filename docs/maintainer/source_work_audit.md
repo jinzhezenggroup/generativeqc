@@ -74,7 +74,7 @@ zero-transfer guarantee when no finding is returned.
 
 ## Reviewed hot-loop findings
 
-The [#1630 CPU allocation disposition](hot_loop_allocation_disposition.md)
+The [CPU allocation disposition](hot_loop_allocation_disposition.md)
 records the complete frozen 32-site Python inventory, the eligible reuse
 changes, and eight necessary per-owner/empty-output allocation sites. This
 review does not suppress any of the static findings or replace runtime
@@ -114,6 +114,6 @@ bounds retain their bound interpretation and do not gain exact cardinality or a
 storage recommendation. The original certificates remain in each finding.
 
 Runtime-counter, prepared-replay assertions and broader automatic materialization
-policy selection remain separate work. In particular, visibility of #1574's MP2
+policy selection remain separate work. In particular, visibility of the MP2
 source roles does not prove aggregate write support, consumer ABI compatibility,
 selected runtime routing, or a performance gain.

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "exact-integral-response-20261014",
+  "owner": "bounded exact-density two-electron response qualification",
+  "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
+  "review_document": "benchmarks/results/exact-integral-response-20261014/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
+    }
+  ]
+}

@@ -66,7 +66,7 @@ independent PySCF SCF plus analytic grid-response gradients first verify that a
 energy and force error together with their deterministic point-count cost. The
 PBE gate also retains the historical 48×16×32 candidate as a negative cost/accuracy
 control; the promoted 54×16×32 profile adds radial resolution without the prior
-18×36 angular-work expansion. See the [#596 grid-policy decision](../../.agents/notes/implemented/architecture/2026-09-20-production-grid-policy.md).
+18×36 angular-work expansion. See the [grid-policy decision](../../.agents/notes/implemented/architecture/2026-09-20-production-grid-policy.md).
 
 `MolecularGrid` retains radial/angular topology and streams bounded tiles. It
 computes normalized ownership using log products. Coincident atoms share
@@ -162,7 +162,7 @@ points. Separate refinement tests integrate known Gaussian/Slater functions
 and molecular densities approaching `Tr(DS)`. No weight or density
 renormalization conceals quadrature error.
 
-## Generated moving-grid response (#163 B1)
+## Generated moving-grid response
 
 `generativeqc_compiler.xc.grid_response.grid_response_tiles(grid, center_motion,
 tile_points=...)` is a **CPU diagnostic/consumer building block**, not a complete
@@ -180,7 +180,7 @@ CUDA lowering and full KS assembly are not supplied by this interface.
 
 Each response tile carries its source grid identity, displacement identity and
 pair-branch identity, plus immutable `point_motion` and `weight_motion`. These
-contract separately with the #163-A XC geometry partials. They do not prove that
+contract separately with the XC geometry partials. They do not prove that
 an SCF state is current, and must not be relabelled as a complete stationary KS
 force. The method consumer still owns the A-stage state gates and the remaining
 one-electron/Hartree/Pulay/nuclear assembly.
@@ -202,12 +202,13 @@ performance or authorize any public DFT force capability.
 
 Rationale: [generated Becke response note](../../.agents/notes/implemented/numerics/2026-09-19-generated-becke-grid-response.md).
 
-### Mixed moving-grid response (#180)
+### Mixed moving-grid response
 
-The Hessian slice reuses the same scalar graph rather than differentiating the
-first-response implementation numerically. `grid_mixed_response_program`
-generates the primal, two independent JVPs and their mixed derivative for norm,
-ratio, Becke switch and log primitives. `partition_mixed_response` composes
+The Hessian mixed-response path reuses the same scalar graph rather than
+differentiating the first-response implementation numerically.
+`grid_mixed_response_program` generates the primal, two independent JVPs and
+their mixed derivative for norm, ratio, Becke switch and log primitives.
+`partition_mixed_response` composes
 those roots through the normalized Becke product and keeps exact-zero factors
 explicit: zero-, one- and two-zero product branches each use their correct mixed
 limit. Left/right interchange is checked directly.
@@ -218,9 +219,10 @@ center, so point mixed motion is identically zero; no dense
 coordinate-by-grid-by-coordinate tensor is formed. Independent tests compare
 the mixed result with the finite difference of the existing analytic first
 response on rebuilt molecular grids. This supplies the grid/partition geometric
-primitive required by #180; it does not by itself publish a molecular DFT HVP.
+primitive required by a molecular DFT Hessian; it does not by itself publish the
+HVP.
 
-### Semilocal XC Hessian bilinear (#180)
+### Semilocal XC Hessian bilinear
 
 For LDA/GGA, `ContractionProgram(..., "geometry").mixed_geometry_directional`
 combines the AO geometric JVPs with the existing generated XC feature gradient
@@ -233,7 +235,7 @@ feature derivative is required.
 The routine returns the four separately auditable contributions from mixed
 measure motion, the two measure-feature cross terms and the feature-mixed term.
 It owns neither the CPKS solve nor molecular-grid motion policy: those remain
-method-level #180 responsibilities. Meta-GGA is fail-closed here because its
+method-level responsibilities. Meta-GGA is fail-closed here because its
 density response has not been qualified.
 
 ## AO derivative conventions
@@ -341,7 +343,7 @@ supplied occupied/fractionally occupied orbitals without constructing D.
 Fixtures also check the Laplacian contraction using second AO derivatives.
 The [current-density source contract](density_sources.md) adds checked D/C
 provenance, ragged/empty spin channels, local AO restrictions and output pruning
-for CPU fixed-input consumers (#235 A).
+for CPU fixed-input consumers.
 
 ## Prepared execution and budgets
 
@@ -503,7 +505,7 @@ wrapper does not claim a fused GPU batch launch.
 ## Validation and reproduction
 
 The [current-density source contract](density_sources.md) adds bounded GPU
-D/C routes and an explicit GPU-density/CPU-XC E/V adapter (#235 A/B), including
+D/C routes and an explicit GPU-density/CPU-XC E/V adapter, including
 source stamps, availability fallback and composed numeric resource budgets.
 
 `tools/generate_grid_references.py` pins PySCF 2.14.0, with exact geometries,

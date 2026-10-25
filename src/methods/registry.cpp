@@ -186,6 +186,11 @@ void validate_option_family(const MethodDefinition& definition,
                             const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend) {
   const auto budget = detail::application_precision_budget(descriptor);
+  const auto preconvergence = detail::correlation_preconvergence(descriptor);
+  if (preconvergence != core::DfPreconvergence::Legacy &&
+      (descriptor.method != GENERATIVEQC_METHOD_DF_RCCSD_T || backend != GENERATIVEQC_BACKEND_CUDA))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "explicit correlated preconvergence requires CUDA DF-CCSD(T)");
   const auto family = definition.provider.domain.family;
   const bool correlated_convergence = descriptor.method == GENERATIVEQC_METHOD_MP2 ||
                                       descriptor.method == GENERATIVEQC_METHOD_RCCSD ||

@@ -1,0 +1,21 @@
+{
+  "id": "initial.huckel-auto",
+  "classification": "already-default",
+  "controls": [
+    "initial-guess:huckel-auto"
+  ],
+  "owner_issues": [
+    192,
+    2052
+  ],
+  "sources": [
+    "python/generativeqc/calculator.py",
+    "python/generativeqc/initial_guess.py",
+    ".agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+  ],
+  "rationale": "Native Modified Huckel is the user-authorized FP64 all-electron restricted H-Ar CPU/CUDA HF/KS default, including DF. Positive additive target-domain capability bits prevent old libraries from advertising unimplemented CUDA RHF/DF integrations. Exact atomic preparation does not change the target approximation. Budget limits, strict independent numerical gates, warm precedence and one ordinary Hcore retry remain mandatory. Measured benefits are workload-specific, not a universal speedup claim.",
+  "revisit_condition": "Revisit on root/state or complete-endpoint regressions. Unsupported spin, ECP, elements, precision and resource-planner domains remain unchanged; preserve explicit None rollback and independent DF numerical validation.",
+  "evidence": [
+    "note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+  ]
+}

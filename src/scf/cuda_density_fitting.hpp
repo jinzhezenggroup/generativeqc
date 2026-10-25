@@ -196,6 +196,10 @@ bool cuda_density_fitting_integral_source_matches(const CudaDensityFittingIntegr
                                                   int device_id, std::size_t batch_size,
                                                   std::size_t nbf, std::size_t naux) noexcept;
 
+/** Compare the frozen generated arithmetic, scheduling and radial policy. */
+bool cuda_density_fitting_integral_source_policy_matches(
+    const CudaDensityFittingIntegralSource*, const cuda_execution::CudaDfSourcePolicy&) noexcept;
+
 /** Compare immutable per-item source geometry and basis by value before response. */
 bool cuda_density_fitting_integral_source_geometry_matches(
     const CudaDensityFittingIntegralSource* source, std::size_t system, const core::System& orbital,
@@ -318,6 +322,16 @@ bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan* plan, 
                                           std::size_t nbf, std::size_t naux,
                                           double relative_threshold) noexcept;
 
+/** Admit immutable generated raw panels within a separate host value allowance.
+ * Existing GPU-resident values and imported tensors retain their schedule.
+ * Optional host allocation refusal succeeds without a cache. Diagnostics charge
+ * the complete retained payload before any consuming SCF is started. */
+generativeqc_status prepare_cuda_density_fitting_host_panels(
+    CudaDensityFittingJkPlan* plan, std::size_t host_budget,
+    std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics, std::string& detail);
+/** Resource-policy changes invalidate a prepared host source, including refusal. */
+bool cuda_density_fitting_host_policy_matches(const CudaDensityFittingJkPlan* plan) noexcept;
+
 /** Scalar state returned by the device-resident DF SCF loop. */
 struct CudaDensityFittingDeviceScfItem {
   generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
@@ -364,6 +378,8 @@ struct CudaDensityFittingMetricDiagnostic {
   /** Persistent representation/capacity, distinct from derivative weight packing. */
   DfPairStorage pair_storage{DfPairStorage::Dense};
   std::size_t stored_factor_bytes{}, raw_factor_bytes{}, contraction_scratch_bytes{};
+  /** Generated pageable raw A, distinct from resident GPU factors. */
+  std::size_t host_raw_factor_bytes{};
   std::size_t occupied_rank_capacity{};
   /** Default-admitted tensor-free pure-J owner (false = fallback/rollback);
    * its buffers are included in totals above. */

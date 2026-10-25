@@ -1,0 +1,29 @@
+{
+  "id": "dft.md-j-reference-engine",
+  "classification": "already-default",
+  "controls": [
+    "dft-policy:GENERATIVEQC_MD_J_ENGINE"
+  ],
+  "owner_issues": [
+    2609
+  ],
+  "sources": [
+    "src/scf/cuda/direct_jk.cpp",
+    "src/scf/cuda/md_j_engine.cuh",
+    "python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+  ],
+  "rationale": "Unset/primitive selects complete primitive Hermite J with independent conservative Coulomb norms, current-density active prefixes and a cumulative per-entry screening allowance. Explicit reference/incumbent retain exact public-AO-mask compatibility. Hierarchy refusal retains incumbent MD and base-storage refusal retains normal J. Independent oracle, changed-density graph, sanitizer, resource rollback and complete 96-atom r2SCAN-3c/PBE0 E/F qualification support the guarded default; the public ledger, K, mixed and derivative boundaries remain.",
+  "revisit_condition": "Renew source-matched independent numerical, resource/lifecycle and full endpoint qualification before broadening basis, ledger, precision or multiple-independent-density domains. Preserve explicit exact-mask rollback and report semantic work counts with endpoint timing.",
+  "evidence": [
+    "docs/developer/md_j_engine.md",
+    "tests/python/test_md_j_engine_math.py",
+    "tests/python/test_md_j_engine_contract.py",
+    "tests/python/test_md_j_engine_reference.py",
+    "tests/python/test_md_j_engine_runtime.py",
+    "tests/python/test_md_j_engine_cuda.py",
+    "tests/python/test_md_j_resources.py",
+    "benchmarks/md_j_engine_acceptance.py",
+    "tests/python/test_md_j_primitive_cuda.py",
+    "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
+  ]
+}

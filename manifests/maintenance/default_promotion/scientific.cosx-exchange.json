@@ -1,0 +1,20 @@
+{
+  "id": "scientific.cosx-exchange",
+  "classification": "scientific-choice",
+  "controls": [
+    "public-model:cosx-exchange"
+  ],
+  "owner_issues": [
+    246
+  ],
+  "sources": [
+    "src/scf/fock_build.hpp",
+    "docs/reference/cosx_reference.md"
+  ],
+  "rationale": "Seminumerical COSX changes the exchange approximation and carries an explicit quadrature/model-error identity. It is not an interchangeable execution provider for exact exchange and therefore must not be selected merely from a performance crossover.",
+  "revisit_condition": "Keep COSX explicit in the mathematical Fock request. Automatic provider selection may choose only among implementations of the already selected COSX model, never between exact exchange and COSX.",
+  "evidence": [
+    "issue:#246",
+    "docs:docs/reference/cosx_reference.md"
+  ]
+}

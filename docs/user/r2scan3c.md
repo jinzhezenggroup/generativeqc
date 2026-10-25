@@ -36,7 +36,7 @@ atom/AO/primitive ceilings no longer determine force availability.
 Real-device qualification for the canonical DF endpoint (including changed
 geometry, translation and an independent reference) is in
 `tests/python/test_r2scan3c_execution.py` and the source-matched
-`benchmarks/run_readme_dft_benchmarks.sh` harness from #2401. CPU or ordinary
+`benchmarks/run_readme_dft_benchmarks.sh` harness. CPU or ordinary
 CI without a scheduler-allocated CUDA device does not establish CUDA
 performance or force qualification.
 

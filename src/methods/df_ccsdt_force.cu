@@ -10,6 +10,7 @@
 #include "cc/phase_observation.hpp"
 #include "integrals/electron_interaction_source.hpp"
 #include "methods/df_ccsdt_force.hpp"
+#include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "posthf/capacity.hpp"
 #include "runtime/cuda_resources.cuh"
@@ -926,16 +927,27 @@ DFCCSDTResult run_df_ccsdt_native(
   result.total_seconds = elapsed(started);
   return finish(std::move(result));
 }
-DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& execution,
-                                              const core::System& system,
-                                              const core::System& auxiliary,
-                                              const generativeqc_method_descriptor& descriptor,
-                                              bool forces, DFCorrelationDemand demand,
-                                              core::CorrelationConvergence convergence) {
-  // Fast requests the existing bounded FP32 auxiliary warmup by default.
+DFCCSDTResult run_df_correlation_group_native(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor, bool forces, DFCorrelationDemand demand,
+    core::CorrelationConvergence convergence, core::DfPreconvergence preconvergence) {
+  // The execution request does not alter any CC/Lambda/response stopping gate.
+  // Legacy callers retain their relaxed-only bounded FP32 auxiliary warmup.
   // Switch well before the selected physical residual threshold; only the
   // subsequent FP64 epoch and independent replay can publish convergence.
-  const bool mixed = convergence.relaxed() && !demand.mp2;
+  // Strict mixed warmup costs a fresh FP64 iteration/history. Lambda's shared
+  // transpose contractions amortize that work earlier than energy-only CCSD.
+  // Small strict endpoints retain FP64; explicit Mixed remains an ablation.
+  const auto n = molecule::ao_count(system);
+  const std::size_t o = system.electron_count > 0 ? system.electron_count / 2 : 0;
+  const auto v = n > o ? n - o : 0;
+  const bool automatic_shape =
+      forces ? o >= 9 && v >= 48 : cc::default_df_ccsd_mixed_precision(o, v);
+  const bool mixed =
+      !demand.mp2 && (preconvergence == core::DfPreconvergence::Mixed ||
+                      (preconvergence == core::DfPreconvergence::Legacy && convergence.relaxed()) ||
+                      (preconvergence == core::DfPreconvergence::Automatic &&
+                       (convergence.relaxed() || automatic_shape)));
   const bool lambda_mixed = mixed && forces;
   // The experimental Lambda owner halves the requested cap for its shared
   // FP32 scratch epoch. Compensate here to preserve the ordinary Q32 ceiling

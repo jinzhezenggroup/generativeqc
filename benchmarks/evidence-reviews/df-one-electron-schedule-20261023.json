@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "df-one-electron-schedule-20261023",
+  "owner": "DF one-electron schedule endpoint qualification",
+  "reason": "Lossless bundle retains all 128 complete calls in separate controlled-pair, pilot, profile and moved cohorts, including negative timing evidence, numerical vectors, source delta, package/cache/build/test provenance and exact runners. All storage limits remain unchanged.",
+  "review_document": "benchmarks/results/df-one-electron-schedule-20261023/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/df-one-electron-schedule-20261023/receipts.json.xz",
+      "family": "df-one-electron-schedule-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-receipts",
+      "bytes": 233924,
+      "sha256": "be54fa76b30095bbe60be3c5e44079b7a04b7c5ca54d41a38006cfdac78b9542"
+    }
+  ]
+}

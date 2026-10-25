@@ -87,7 +87,7 @@ increasing-column FMA chain and zero-on-invalid publication with a sticky error.
 The library candidate performs a batched contraction and one in-place combined
 weight/finite publication pass, without a separate numeric buffer. The canonical
 request binds the existing two-node TensorIR region and all three external inputs.
-Production SCF/force endpoint qualification remains under #1884.
+Production SCF/force endpoint qualification remains separate work.
 
 The enclosing `PreparedCosxFockPlan` passes the remaining admitted device
 envelope to the shared exchange owner after charging Coulomb residency and
@@ -321,7 +321,7 @@ The owner requires a build artifact digest, exact host capacity and an externall
 qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
-release does not zero this charge. This native slice has no production profile.
+release does not zero this charge. This native path has no production profile.
 The reservation is charged before the first module-loading call and survives
 failed preparation as well as successful-plan release. The enclosing context/build
 owner must retain it after the local binding is destroyed. Loading failures
@@ -495,8 +495,8 @@ DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
 candidate; the current adapter rejects them. DFT, triples precision, other provider
-families and complete endpoint qualification remain in
-#1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+families and complete endpoint qualification remain separate work. No new
+scientific precision domain is enabled.
 
 Conventional RCCSD iteration also emits typed prepared contractions for directly
 representable unbatched and leading-batch layouts. Non-contraction nodes reuse

@@ -3,8 +3,8 @@
 `tools/audit_residency_receipts.py` consumes declared transfer and synchronization
 evidence for one CUDA endpoint. It does not measure CUDA operations. The native
 `cuda_component_trace` JSONL and KS transport diagnostics remain the owners of
-their existing measurements. The `#1668` source-work scanner remains an advisory
-static inventory; neither its sites nor GPU-related filenames prove residency.
+their existing measurements. The advisory source-work scanner remains a static
+inventory; neither its sites nor GPU-related filenames prove residency.
 
 ## Contract
 
@@ -212,9 +212,10 @@ native library. A platform label or Boolean bypass is not an allocation proof.
 Copy the reviewed receipt to the same project shared path without changing its
 bytes. Add `--qz-receipt /absolute/path/allocation.json` and the independently
 retained `--qz-receipt-sha256 <digest printed by snapshot>` to **both** `--pin`
-and `--capture` above. The prepared contract schema is now
-`generativeqc.cupti-prepared.v2`; old contracts must be pinned again. The receipt
-must be no older than two hours at pinning and completion. Its hash, API IDs,
+and `--capture` above. The prepared contract schema is
+`generativeqc.cupti-prepared.v2`; contracts from an earlier schema must be
+pinned again. The receipt must be no older than two hours at pinning and
+completion. Its hash, API IDs,
 visibility, CUDA runtime/driver versions, and the presence/value of
 `CUBLAS_WORKSPACE_CONFIG` and `CUDA_DEVICE_ORDER` are checked again after capture.
 Any special workspace configuration must be explicitly applied to the actual

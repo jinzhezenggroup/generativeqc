@@ -804,7 +804,7 @@ def _fitted_geometry_policy_contract(
 
     The frozen census estimates Direct providers. Its existing resource equations
     and explicit tile size remain valid only while the new bounded reserve and
-    automatic 256-point preference stay guarded by the fitted-provider contract.
+    cap-gated tile preference stay guarded by the fitted-provider contract.
     Keep these semantic checks in addition to the complete owner fingerprints.
     """
     _require_ast_fragments(
@@ -830,10 +830,16 @@ def _fitted_geometry_policy_contract(
         endpoint,
         (
             (
-                "preferred_tile_points = (256 if na >= _AUTO_PHASED_BECKE_MIN_ATOMS "
+                "large_fitted = (na >= _AUTO_PHASED_BECKE_MIN_ATOMS "
                 "and bool(getattr(state._source, 'density_fitted', False)) "
-                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)) "
-                "else 512)"
+                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)))"
+            ),
+            "from ._cuda_force_resources import DF_FORCE_DEVICE_CAP, DF_FORCE_HOST_CAP",
+            "preferred_tile_points = 512",
+            (
+                "if large_fitted:\n"
+                "    preferred_tile_points = (1024 if max_device_bytes >= DF_FORCE_DEVICE_CAP "
+                "and max_host_bytes >= DF_FORCE_HOST_CAP else 256)"
             ),
             (
                 "if (use_fitted_integrals and "

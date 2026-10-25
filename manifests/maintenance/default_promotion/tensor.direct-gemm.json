@@ -1,0 +1,20 @@
+{
+  "id": "tensor.direct-gemm",
+  "classification": "already-default",
+  "controls": [
+    "tensor-schedule:direct_gemm"
+  ],
+  "owner_issues": [
+    508
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/cuda_plan.py"
+  ],
+  "rationale": "TensorSchedule defaults direct_gemm to true, and ordinary plan_cuda uses that BASELINE_SCHEDULE. Existing layout and GEMM legality checks select direct execution when supported; direct_gemm=false retains the explicit packed comparison path.",
+  "revisit_condition": "Revisit when direct-GEMM legality, layout eligibility, or baseline policy changes; preserve the explicit packed opt-out and do not treat the already-default dimension as an unqualified opt-in.",
+  "evidence": [
+    "issue:#508",
+    "source:python/generativeqc_compiler/tensor/cuda_plan.py",
+    "docs:docs/developer/tensor_cuda.md"
+  ]
+}

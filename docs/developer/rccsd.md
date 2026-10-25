@@ -15,10 +15,10 @@ facade.
 ## Mathematical contract
 
 All electrons participate in a real, conventional Coulomb Hamiltonian with a
-closed-shell RHF reference. The provider facade accepts #147's validated
+closed-shell RHF reference. The provider facade accepts a validated
 canonical `ReferenceSnapshot` and CPU `ConventionalProvider`. It rejects a
 different reference identity, DF and GPU providers. Frozen core, open shell,
-complex orbitals and missing virtuals remain rejected by #147. Equations keep
+complex orbitals and missing virtuals remain rejected. Equations keep
 every Fock block, including off-diagonal oo, vv and ov elements: arbitrary-F
 equation tests intentionally do not pretend to be converged RHF snapshots.
 
@@ -70,7 +70,7 @@ E_total = E_ref + E_corr
 5 named energy contractions
 E01–E05 and 30 named singles contractions S01–S30, each with exact integer
 coefficients, explicit Einstein indices and operand names. `build_program`
-lowers that unshared inventory to #145 TensorIR, retaining all individual terms
+lowers that unshared inventory to `TensorIR`, retaining all individual terms
 and the following diagnostic sums:
 
 | Output group | Contributions |
@@ -108,7 +108,7 @@ never imports PySCF or calls an external amplitude update/solver.
 
 ## Independent coordinates and adjoint conventions
 
-`amplitude_layouts(o,v)` reuses #145 `PackedLayout`. Singles use C-order
+`amplitude_layouts(o,v)` reuses the shared `PackedLayout`. Singles use C-order
 `(i,a)`. Doubles use C-order `(i,j,a,b)`; each orbit of `(i,j,a,b)->(j,i,b,a)`
 stores its first flat representative, with weight 1 at fixed points and 2
 otherwise. Concatenated independent vectors are `[pack(t1), pack(t2)]`.
@@ -126,8 +126,9 @@ components `weight[u]*lambda[u]` when lambda denotes this metric's vector.
 These are coordinate conventions, not an implicit spin-orbital Lambda
 normalization. Lambda implementations must explicitly map their dual
 projectors to this residual and metric. A plain unweighted packed dot product
-cannot substitute for the dense contraction. Slice A defines no T2 projector
-or Lambda solver and makes no derivative-validation claim.
+cannot substitute for the dense contraction. This coordinate/metric contract
+defines no T2 projector or Lambda solver and makes no derivative-validation
+claim.
 
 In particular the physical excitation-state overlap is a different metric:
 `<Phi|T(x)^dagger T(y)|Phi> = 2 sum x1*y1 + sum x2*(2*y2-y2_ijba)`.
@@ -156,10 +157,11 @@ contributions and exchange factors from the actual DAG.
 
 Random cases include unequal occupied/virtual dimensions, nonzero singles,
 pair-symmetric doubles and eightfold symmetric signed ERIs. Fixed PySCF
-references additionally reuse H2, water and LiH from #147 with identical C,
+references additionally reuse H2, water and LiH from the shared reference
+fixtures with identical C,
 integrals and Hamiltonian. Native provider tests check those values and run
 fresh GenerativeQC RHF into the fixed-amplitude facade. The latter is a bridge smoke
-check, not the converged HF→CCSD endpoint required by slice C.
+check, not the converged HF→CCSD endpoint published by the native method.
 
 Run from the repository root with `PYTHONPATH=.:python`:
 

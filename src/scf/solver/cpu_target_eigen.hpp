@@ -17,4 +17,19 @@ std::size_t cpu_target_eigen_workspace_bytes(std::size_t n);
 reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
                                         const reference::Matrix* overlap,
                                         const reference::Matrix* orthogonalizer, std::size_t n);
+/** One-thread molecular preliminary solve with the available native LAPACK
+ * provider and the same physical-frame acceptance gates. Atomic model solves
+ * remain on cpu_target_eigen. The caller's preliminary numeric envelope covers
+ * returned/working matrices and LAPACKE's row-major transpose plus dsyevd work;
+ * no reference-oracle, extra molecular Fock owner or provider retry is used. */
+reference::EigenResult cpu_preliminary_eigen(const reference::Matrix& matrix,
+                                             const reference::Matrix* overlap,
+                                             const reference::Matrix* orthogonalizer,
+                                             std::size_t n);
+
+/** Recover a closed-shell preliminary density from row-major n-by-occupied
+ * coefficients. The production rank-k adapter owns provider selection and
+ * returns both triangles for the caller's independent physical admission. */
+reference::Matrix cpu_preliminary_density(const reference::Matrix& coefficients, std::size_t n,
+                                          std::size_t occupied);
 }  // namespace generativeqc::scf::solver

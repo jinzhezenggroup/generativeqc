@@ -48,7 +48,7 @@ void resolve_automatic_preliminary_guess(const core::System& system,
 std::optional<std::vector<double>> prepare_huckel_initial_density(
     const core::System& system, const integrals::IntegralData& target,
     const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
-    const EigenOperation& eigen);
+    const EigenOperation& eigen, const MatrixProductOperation& products = {});
 
 /** Strict same-basis admission. No symmetry/trace repair or metric transport.
  * Ownership moves only after the raw candidate passes the existing ensemble gate. */

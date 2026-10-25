@@ -11,6 +11,7 @@
 #include "scf/cuda/launch_geometry.hpp"
 #include "scf/cuda/runtime_support.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
+#include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -167,6 +168,18 @@ generativeqc_status commit_masked_output(MatrixLibraryResources resources, int b
 }
 
 }  // namespace
+
+generativeqc_status launch_validation_product(MatrixLibraryResources resources, int nbf,
+                                              const double* left, bool transpose_left,
+                                              const double* right, bool transpose_right,
+                                              double* output) {
+  if (!resources.blas_ || nbf <= 0 || !left || !right || !output)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  // Reverse operands to interpret row-major storage on the column-major
+  // provider: (op(A) op(B))^T = op(B^T) op(A^T).
+  return blas_status(tensor::cuda::square_panel_product(
+      resources.blas_, nbf, nbf, right, transpose_right, left, transpose_left, output));
+}
 
 generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
                                           const double* left, bool transpose_left,

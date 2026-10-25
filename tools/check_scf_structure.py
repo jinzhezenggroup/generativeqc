@@ -163,6 +163,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
     "df_jk",
     "df_jk_internal",
     "df_generated_tiles",
+    "df_host_panels",
     "df_coulomb",
     "df_exchange",
     "df_occupied_exchange",
@@ -292,6 +293,8 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/launch_geometry.",
     "tensor/cuda_matrix_product.hpp",
     "tensor/cuda_structured_product.hpp",
+    # Unmasked seed validation also borrows this adapter's prepared provider.
+    "tensor/cuda_square_linalg.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.
@@ -683,6 +686,8 @@ CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
     "molecule/basis.hpp",
     "posthf/capacity.hpp",
     "runtime/df_progress_trace.hpp",
+    # Optional staging admission reads host/job capacity without owning math.
+    "runtime/host_cache_budget.hpp",
     "runtime/resource_cuda.cuh",
     "scf/cuda/direct_jk_source_lease.",
     "scf/cuda/direct_jk_source_policy.hpp",
@@ -774,6 +779,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
 CUDA_MODULES["cuda_hf_initial_guess"] = ("hf_initial_guess",)
 CUDA_ALLOWED["cuda_hf_initial_guess"] = (
     "scf/cuda/hf_initial_guess.hpp",
+    "scf/cuda/matrix_library.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/eigensolver.hpp",
     "scf/preliminary_guess.hpp",

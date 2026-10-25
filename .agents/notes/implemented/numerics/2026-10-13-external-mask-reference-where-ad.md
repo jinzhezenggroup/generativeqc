@@ -75,7 +75,7 @@ and error/identity/resource contracts.
 ## References
 
 - Refs #2137 and #2111; both parent scopes remain open.
-- [Current derivative contract](../../../../docs/developer/tensor_ir.md#derivative-programs-151)
+- [Current derivative contract](../../../../docs/developer/tensor_ir.md#derivative-programs)
 
 ## Follow-up: explicit primal comparison selectors
 

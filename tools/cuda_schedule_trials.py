@@ -226,15 +226,29 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
 
     edits: list[tuple[ast.expr, str]] = []
     budget = tuple_assignment(["max_device_bytes", "max_host_bytes"])
-    if not isinstance(budget.value, ast.Tuple) or len(budget.value.elts) != 2:
+    requested_caps = (trial.device_budget_mib, trial.host_budget_mib)
+    policy_call = ast.parse(
+        "ordinary_cuda_force_limits(basis.natom, density_fitted=density_fitted, "
+        "hamiltonian=source.hamiltonian)",
+        mode="eval",
+    ).body
+    if ast.dump(budget.value) == ast.dump(policy_call):
+        # Diagnostic overrides replace only the requested ordinary reservation.
+        # The other cap still comes from the production DF/Direct/ECP policy;
+        # the composite branch and policy module remain untouched.
+        if any(value is not None for value in requested_caps):
+            call = ast.unparse(budget.value)
+            values = [
+                str(value << 20) if value is not None else f"{call}[{index}]"
+                for index, value in enumerate(requested_caps)
+            ]
+            edits.append((budget.value, f"({', '.join(values)})"))
+    elif isinstance(budget.value, ast.Tuple) and len(budget.value.elts) == 2:
+        for node, requested in zip(budget.value.elts, requested_caps, strict=True):
+            if requested is not None:
+                edits.append((node, str(requested << 20)))
+    else:
         raise ValueError("ordinary budget expression changed")
-    for node, requested in zip(
-        budget.value.elts,
-        (trial.device_budget_mib, trial.host_budget_mib),
-        strict=True,
-    ):
-        if requested is not None:
-            edits.append((node, str(requested << 20)))
     if trial.grid_tile_points is not None:
         policy_names = {"tile_policy", "policy_tile_points"}
         stores = [

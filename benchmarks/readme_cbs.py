@@ -146,6 +146,7 @@ def native_call(
     budget: int,
     hf_reference: str = "exact",
     policy: str = "standard",
+    preconvergence: str = "auto",
 ) -> dict:
     """Measure all native basis groups and their response, not a sum of subphases."""
     from generativeqc import CBSBasis, CCSDTCBSCalculator
@@ -156,6 +157,7 @@ def native_call(
         (CBSBasis(orbital[0], 2), CBSBasis(orbital[1], 3)),
         auxiliary_bases=auxiliary,
         policy=policy,
+        preconvergence=preconvergence,
         device="cuda",
         calculator_options={"correlation_memory_budget_bytes": budget},
         **options,
@@ -243,6 +245,9 @@ def main() -> None:
     parser.add_argument("--budget-mib", type=int, default=65536)
     parser.add_argument("--hf-reference", choices=("exact", "df"), default="exact")
     parser.add_argument("--policy", choices=("standard", "fast"), default="standard")
+    parser.add_argument(
+        "--preconvergence", choices=("auto", "fp64", "mixed"), default="auto"
+    )
     parser.add_argument("--samples", type=int, default=1)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)
@@ -251,7 +256,9 @@ def main() -> None:
         parser.error("positive sample count and budget required")
     if args.engine == "native" and not os.environ.get("SLURM_JOB_ID"):
         parser.error("real GPU endpoints must run through srun")
-    if args.engine == "reference" and args.policy != "standard":
+    if args.engine == "reference" and (
+        args.policy != "standard" or args.preconvergence != "auto"
+    ):
         parser.error("independent references always retain strict convergence")
     atoms = geometry(args.qm7, args.carbon)
     protocol, orbital, auxiliary = setup(
@@ -261,6 +268,7 @@ def main() -> None:
         "schema": SCHEMA,
         "engine": args.engine,
         "policy": args.policy,
+        "preconvergence": args.preconvergence,
         "protocol": protocol,
         "source_revision": args.source_revision,
         "driver_sha256": digest(Path(__file__)),
@@ -306,6 +314,7 @@ def main() -> None:
                     args.budget_mib << 20,
                     args.hf_reference,
                     args.policy,
+                    args.preconvergence,
                 )
                 payload["samples"].append(record)
                 checkpoint(args.output, payload)

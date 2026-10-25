@@ -44,7 +44,7 @@ and failure status.
   on the device, with a host-orchestrated fallback for provider limitations.
   CUDA finalization constructs bounded raw-value response weights and contracts
   the shared generated center derivatives on the persistent plan stream.
-  One-electron/overlap Pulay response uses the separate #141 generated consumer.
+  One-electron/overlap Pulay response uses its own generated consumer.
   CUDA response failures propagate; independent CPU response serves CPU callers.
 - A persistent homogeneous CUDA J/K plan performs device-side metric
   eigendecomposition and inverse-square-root construction, cuBLAS three-center
@@ -54,7 +54,8 @@ and failure status.
   for raw panels and writes all transformed Q into retained B; retaining B no
   longer requires three full-tensor contraction buffers. Positive-budget plans
   use at most 128 contraction auxiliaries when B is retained, shrinking Q further
-  when needed. Plans that cannot retain B regenerate public-basis tiles on device.
+  when needed. Plans that cannot retain B regenerate public-basis tiles or replay
+  admitted [raw host panels](df_streamed_panels.md) before device whitening.
   Both routes retain the metric factors and eigensystem. The native
   compatibility API also supports explicitly host-backed input tensors.
 - A deterministic planner for batch, AO-pair, auxiliary, and occupied-orbital
@@ -87,7 +88,7 @@ propagate instead of silently selecting CPU integral evaluation.
 
 ## Execution notes and acceptance boundary
 
-- CUDA two-/three-center integral evaluation kernels are now packed across
+- CUDA two-/three-center integral evaluation kernels are packed across
   homogeneous fleet buckets, including coordinate-major derivative output;
   one-electron generation is exposed through the same batch boundary but still
   dispatches validated per-system launches internally.
@@ -96,11 +97,12 @@ propagate instead of silently selecting CPU integral evaluation.
   convergence masks are refreshed in place, while geometry changes invalidate
   only the affected bucket's geometry-dependent plan.  Streamed plans retain
   bounded AO-pair/auxiliary tiles and use persistent workspaces. Source-backed
-  J/K regeneration launches on the owning stream without host tensor transfers.
+  J/K regeneration launches on the owning stream. Plans with admitted raw host
+  backing instead use eager uploads and retain the same device contractions.
 - Generated weighted RI-J/K analytic-force response supports RHF and UHF,
   including metric pseudoinverse and auxiliary response terms. Positive-budget
   source plans construct those weights on device and report metadata/density
-  uploads separately from tensor transfers. The #141 one-electron and Pulay
+  uploads separately from tensor transfers. The one-electron and Pulay
   consumer retains the CPU oracle's variational weighted-density convention.
 - `benchmarks/real_molecule_gate.py --density-fitting cuda` runs a separate
   DF acceptance matrix for 96-, 192-, and 384-AO workloads.  It records the

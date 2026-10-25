@@ -134,6 +134,16 @@ separate from the frozen all-electron timing campaign. Rebuilt CPU CTest remains
 120/120, and the public budget/replay/failure tests and resource transport gates
 exercise the follow-up.
 
+Integration with master `40c31f7bd` adopts the sharded evidence index and current
+documentation layout. Its newly admitted automatic CUDA semilocal energy
+programs remain a separate energy-only domain. The upstream derivative-retention
+exclusion must therefore test the CUDA backend explicitly: applying it to every
+automatic program silently removed CPU DF Hcore/Pulay and metric sources.
+Six new LDA/GGA/meta-GGA RKS/UKS DF cases reproduce that merge regression and
+pass two-step complete-energy finite differences after narrowing the condition.
+The frozen timing record remains tied to its original versions; integration
+checks are additional numerical/build evidence, not replacement timing samples.
+
 ## Rejected alternatives and invariants
 
 Copying Python force equations into native code would create another scientific

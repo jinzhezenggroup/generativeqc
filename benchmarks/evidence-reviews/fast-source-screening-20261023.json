@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "fast-source-screening-20261023",
+  "owner": "Fast hybrid proposal source screening",
+  "reason": "All 180 complete endpoint observables, independent references, paired timing and semantic work, source/binary identities and bounded fallback qualification. Exploratory, invalid-build and untouched-baseline records remain separate; full profiler/build streams remain in ignored storage.",
+  "review_document": "benchmarks/results/fast-source-screening-20261023/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/fast-source-screening-20261023/qualification.json.xz",
+      "family": "fast-source-screening-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-bound-endpoint-observables-and-paired-qualification",
+      "bytes": 284472,
+      "sha256": "d58ebd738bc48dc50d7d5dfd7174832c7664c03957190c56d062420ba97c6e25"
+    }
+  ]
+}

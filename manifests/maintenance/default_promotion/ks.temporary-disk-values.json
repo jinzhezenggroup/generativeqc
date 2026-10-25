@@ -1,0 +1,29 @@
+{
+  "id": "ks.temporary-disk-values",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_DISK_MAX_BYTES",
+    "ks-runtime:GENERATIVEQC_KS_DISK_BUCKET_MASK",
+    "ks-runtime:GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES",
+    "ks-runtime:GENERATIVEQC_KS_RANGE_DISK_BUCKET_MASK",
+    "ks-runtime:GENERATIVEQC_ERI_TMPDIR"
+  ],
+  "owner_issues": [
+    2744
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp",
+    "src/scf/cuda/direct_jk_source_lease.cpp",
+    "src/runtime/temporary_cache_file.hpp"
+  ],
+  "rationale": "Cold strict LR KS sources automatically spill buckets omitted from GPU and RAM into unlinked local temporary files. Full-range replay is explicit-only: the source-matched NVMe endpoint is slower than recurrence. GPU/RAM retain priority. Local free-space reserve, real file preallocation and complete numeric/device staging bounds precede construction. Automatic LR limit is at most 64 GiB and a quarter of local free space; explicit zero disables. RAM filesystems and common network filesystems are refused. Setup I/O refusal retains exact Direct; replay I/O failures cannot publish partial matrices.",
+  "revisit_condition": "Retain source-matched complete E+F, physical/logical I/O and work evidence when changing default spill, filesystem admission, streaming tiles or cost selection. This is ephemeral storage, not cross-geometry or persistent SSD reuse.",
+  "evidence": [
+    "docs/developer/xc_native_cuda.md",
+    ".agents/notes/implemented/performance/2026-10-25-temporary-eri-spill.md",
+    "tests/python/test_temporary_cache_file.py",
+    "tests/python/test_range_resident_values_cuda.py",
+    "tests/python/test_full_host_ks_cuda.py",
+    "benchmarks/results/disk-eri-20261025/README.md"
+  ]
+}

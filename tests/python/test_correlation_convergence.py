@@ -84,6 +84,116 @@ def test_missing_native_convergence_capability_fails_before_execution(
         )
 
 
+@pytest.mark.parametrize("version", (None, 0, 2))
+@pytest.mark.parametrize("selection", ("auto", "fp64", "mixed"))
+def test_preconvergence_transport_compatibility(
+    monkeypatch: pytest.MonkeyPatch,
+    version: int | None,
+    selection: str,
+) -> None:
+    """Older libraries keep auto's legacy schedule; explicit requests fail closed."""
+    library = _native.load_library(device="cpu", device_id=0)
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    monkeypatch.setattr(
+        library,
+        "generativeqc_correlation_execution_version_v1",
+        None if version is None else lambda: version,
+        raising=False,
+    )
+    options = {
+        "method": "df-ccsd(t)",
+        "basis": "sto-3g",
+        "auxiliary_basis": "def2-svp",
+        "density_fitting": "cuda",
+        "device": "cuda",
+        "_correlation_preconvergence": selection,
+    }
+    if selection != "auto":
+        with pytest.raises(NotImplementedError, match="preconvergence transport"):
+            Calculator(**options)
+    else:
+        owner = Calculator(**options)
+        assert owner._correlation_preconvergence is None
+        assert (
+            owner._correlation_preconvergence_fallback
+            == "native_execution_transport_unavailable"
+        )
+        assert owner._method_descriptor().struct_size == ctypes.sizeof(
+            _native.MethodDescriptor
+        )
+        owner.clear_cache()
+
+
+@pytest.mark.parametrize("selection,selector", (("fp64", 1), ("mixed", 2)))
+@pytest.mark.parametrize("budget", (None, BUDGET))
+def test_independent_execution_descriptor_lifetime(
+    monkeypatch: pytest.MonkeyPatch,
+    selection: str,
+    selector: int,
+    budget: TargetErrorBudget | None,
+) -> None:
+    """The native prefix retains the independent extension and its exact allowance."""
+    import gc
+
+    library = _native.load_library(device="cpu", device_id=0)
+    assert library.generativeqc_correlation_execution_version_v1() == 1
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    owner = Calculator(
+        method="df-ccsd(t)",
+        basis="sto-3g",
+        auxiliary_basis="def2-svp",
+        density_fitting="cuda",
+        device="cuda",
+        _correlation_preconvergence=selection,
+        _correlation_convergence_budget=budget,
+    )
+    descriptor = owner._method_descriptor()
+    owner.clear_cache()
+    del owner
+    gc.collect()
+    assert descriptor.struct_size == ctypes.sizeof(
+        _native.CorrelationExecutionMethodDescriptor
+    )
+    extension = ctypes.cast(
+        ctypes.byref(descriptor),
+        ctypes.POINTER(_native.CorrelationExecutionMethodDescriptor),
+    ).contents
+    assert extension.df_preconvergence == selector and extension.reserved == 0
+    assert extension.application_energy_budget == (budget.energy_abs if budget else 0)
+    assert extension.application_max_force_budget == (
+        budget.force_max_abs if budget else 0
+    )
+
+
+def test_native_execution_selector_rejects_unsupported_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native admission rejects an execution extension independently of Python."""
+    owner = Calculator(method="rhf", basis="sto-3g")
+    original = owner._method_descriptor
+
+    def descriptor(*args: object, **kwargs: object) -> _native.MethodDescriptor:
+        prefix = original(*args, **kwargs)
+        extended = _native.CorrelationExecutionMethodDescriptor()
+        ctypes.memmove(
+            ctypes.byref(extended), ctypes.byref(prefix), ctypes.sizeof(prefix)
+        )
+        extended.struct_size = ctypes.sizeof(extended)
+        extended.df_preconvergence = 2
+        result = _native.MethodDescriptor.from_buffer(extended)
+        result._extension_owner = extended
+        # memmove copies pointer values, not ctypes' nested keepalive owners.
+        result._prefix_owner = prefix
+        return result
+
+    monkeypatch.setattr(owner, "_method_descriptor", descriptor)
+    try:
+        with pytest.raises(RuntimeError, match="requires CUDA DF-CCSD"):
+            owner.singlepoint(ATOMS, properties=("energy",))
+    finally:
+        owner.clear_cache()
+
+
 def test_native_budget_descriptor_and_batch_boundary() -> None:
     """The legacy ABI stays strict and a batch cannot silently lose allowances."""
     owner = Calculator(
@@ -109,8 +219,10 @@ def test_native_budget_descriptor_and_batch_boundary() -> None:
 
 
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
-def test_fast_composite_and_components_against_independent_water_oracle(
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+def test_routine_composite_and_components_against_independent_water_oracle(
     device: str,
+    policy: str,
 ) -> None:
     """Gate nonzero triples and all force components against pinned PySCF data."""
     if device == "cuda":
@@ -124,7 +236,7 @@ def test_fast_composite_and_components_against_independent_water_oracle(
             for key, cardinal in (("low_basis", 2), ("high_basis", 3))
         ),
         device=device,
-        policy="fast",
+        policy=policy,
     )
     result = workflow.singlepoint(reference["atoms"])
     oracle = reference["reference"]

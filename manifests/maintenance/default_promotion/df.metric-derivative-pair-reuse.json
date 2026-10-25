@@ -1,0 +1,24 @@
+{
+  "id": "df.metric-derivative-pair-reuse",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/df_derivatives.cu"
+  ],
+  "rationale": "Complete contiguous metric weight panels with cooperative mapping and one gradient sink evaluate each unordered auxiliary pair derivative once, then scatter both original weights separately. This accepts nonsymmetric weights without doubled diagonals or an overflowing weight sum, keeps the generated recurrence and dense storage, and halves derivative task work. Partial/offset/strided/serial/distributed-sink inputs retain the bounded traversal. Explicit 0 rolls back; unset/1 admits eligible panels; invalid controls reject. Repeated PBE48/96 and r2SCAN-3c96 complete endpoints and independent weighted, moved, property and range/g-shell gates qualify this exact reuse.",
+  "revisit_condition": "Extend to partial panels only with bounded ownership of both orientations; retain arbitrary weights, generated scientific ownership, finite resource limits, public error recovery and explicit rollback. Further endpoint work should target grid geometry and three-center derivatives using causal work counts.",
+  "evidence": [
+    "docs/developer/df_derivatives.md",
+    "tests/python/test_df_derivatives_cuda.py",
+    "tests/python/test_df_native_g_derivatives.py",
+    "tests/python/test_range_separated_df.py",
+    ".agents/notes/implemented/performance/2026-10-25-df-metric-pair-derivatives.md",
+    "benchmarks/results/df-metric-pairs-20261025/README.md"
+  ]
+}

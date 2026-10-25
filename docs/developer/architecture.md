@@ -2,21 +2,58 @@
 
 ## Executable method boundary
 
-RHF and UHF expose CPU/CUDA energies and analytic nuclear forces. The
-backend-neutral `LDA_RKS`, `PBE_RKS`, `LDA_UKS`, and `PBE_UKS` registry
-rows remain energy-only, while a qualified CPU all-electron s/p/d execution
-context promotes analytic forces through the shared stationary-gradient owner.
-These all-electron CPU semilocal calculations retain energy-only defaults;
-request `properties=("energy", "forces")` explicitly for the bounded force path.
-Its existing admission limits include 16 AOs, eight atoms, 128 primitives and
-one million grid points, plus the stationary consumer's work and byte budgets.
-RKS is closed-shell; UKS uses independent
-alpha/beta densities with total-density J and validated integer spin
-occupations. LDA uses `GridSpec v1` and versioned unpolarized/polarized tails;
-PBE uses exact interior expressions plus explicit versioned production-tail
-policies. Small RKS and UKS matched-grid references pass the recorded `1e-8 Eh`
-energy gates. Compiler-resolved DFT names such as WB97M-V reuse stable native
-DFT carriers rather than adding a method-specific C ABI scientific driver.
+Capability is layered, and the layers answer different questions. Reading only
+one of them produces the wrong impression of what is currently supported, so
+this section states the split explicitly.
+
+**Native capability carrier.** The backend-neutral `LDA_RKS`, `PBE_RKS`,
+`LDA_UKS`, `PBE_UKS`, `R2SCAN_RKS` and `R2SCAN_UKS` registry rows declare energy
+only. That declaration is intentionally conservative and does not enumerate
+every execution context the Python layer admits.
+
+**Python execution-context capability.** After the method, backend, basis, grid,
+precision, density-fitting mode, ECP and spin choices are resolved,
+`Calculator.capabilities` may advertise properties the carrier does not. It
+promotes analytic forces only for admitted contexts; the examples below are not
+an exhaustive support matrix. Both layers still defer per-system geometry,
+electron-count, convergence and resource admission to preparation and execution. See
+[Capability sources and interpretation](../reference/capabilities.md) for the
+general rule.
+
+Examples of force promotion include:
+
+- CPU all-electron s/p/d semilocal calculations in a bounded dense-export
+  domain. Its explicit limits are at most 16 AOs (64 for fitted plans without
+  ECP terms), eight atoms, 128 primitives, 128 ECP terms and one million grid
+  points, plus the stationary consumer's work and byte budgets. These are this
+  consumer's domain limits, not a limit on RKS energy calculations.
+- CPU ECP semilocal calculations whose basis is s/p/d.
+- CUDA semilocal calculations admitted by their basis and composition checks.
+- Bounded CPU composed all-electron calculations, including admitted hybrid and
+  nonlocal-correlation plans; their source and basis checks remain authoritative.
+- CPU and CUDA density-fitted plans admitted by the corresponding force provider.
+- CUDA global hybrids in the qualified PBE0/B3LYP-style force routes.
+- CUDA nonlocal-correlation and mixed density-fitted domains admitted by their
+  own basis and composition checks. This is how, for example, compiler-resolved
+  WB97M-V RKS/UKS reaches analytic forces while its native carrier row stays
+  energy-only.
+
+RKS is closed-shell; UKS uses independent alpha/beta densities with total-density
+Coulomb and validated integer spin occupations. LDA uses `GridSpec v1` and
+versioned unpolarized/polarized tails; PBE uses exact interior expressions plus
+explicit versioned production-tail policies. Small RKS and UKS matched-grid
+references pass recorded `1e-8 Eh` energy gates, and the promoted force paths
+carry their own endpoint gates. Compiler-resolved DFT names such as WB97M-V reuse
+stable native DFT carriers rather than adding a method-specific C ABI scientific
+driver.
+
+Defaults are context-specific. Direct all-electron CPU semilocal calculations
+keep an energy-only default; other admitted DFT contexts use their supported
+property set. Request `properties=("energy", "forces")` explicitly when forces
+are required, or `properties=("energy",)` to avoid requesting them. The
+`frozenset` returned by `Calculator._default_properties` records that choice per
+context.
+
 
 ## Method execution boundary
 
@@ -96,17 +133,10 @@ and the execution lifecycle remain method-neutral.
 
 The ABI registry reports method family, executable properties, and batch support.
 Unimplemented identifiers remain discoverable without inflating executable
-properties. Native DFT carrier metadata remains backend-neutral and conservative.
-Python ``method_capabilities()`` reflects that registry view.
-
-``Calculator.capabilities`` is the second, execution-context layer: after the
-backend, basis, precision, density-fitting mode, and composed MethodIR endpoint
-are fixed, it may expose an independently qualified property that is not a
-native C action. ``PreparedBatch.capabilities`` mirrors the same record. Thus
-CUDA WB97M-V RKS/UKS can advertise analytic forces through the public Python
-calculator while the native carrier manifest remains energy-only. This split is
-intentional and regression-tested; it must not be used to infer forces for an
-unqualified backend/basis/method combination.
+properties. Python ``method_capabilities()`` reflects that registry view only;
+the separate execution-context layer that may add a property beyond it is
+described under [Executable method boundary](#executable-method-boundary) and
+in [capability sources](../reference/capabilities.md).
 
 The source-level Python/native call-path inventory lives in
 [`manifests/maintenance/python_native_runtime_ownership.json`](../../manifests/maintenance/python_native_runtime_ownership.json).

@@ -1,0 +1,153 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent same-branch physical-basis energies/full forces, relative energies and physical residuals pass declared gates. Failed candidates are retained. Timing observations make no formal statistical promotion claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 9139,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c3c318a0d4a7fadd4a919622e8d395af90caf6c39c14ffd1f5a444c03ba4bf3e"
+    },
+    {
+      "bytes": 1336,
+      "path": "build-candidate.sh",
+      "role": "reproduction",
+      "sha256": "1debd0b86784081f29fa348e77a34f7ea3e10afced7d37e4ede67710aa9cefc9"
+    },
+    {
+      "bytes": 53564,
+      "path": "candidate.patch.xz",
+      "role": "source-patch",
+      "sha256": "a8fbfe29e09887e8fecbc89fbb512b6e7844d14a6f0d07fcda7167e6984752b2"
+    },
+    {
+      "bytes": 57152,
+      "path": "candidate2.patch.xz",
+      "role": "source-patch",
+      "sha256": "33c3bdfc8579ada0ffbc32605609ddc7d2018db07417deeff6c3f4247ccaf5a4"
+    },
+    {
+      "bytes": 59348,
+      "path": "candidate3.patch.xz",
+      "role": "source-patch",
+      "sha256": "430307a464f824bbd88375fe921790fc3b150d92c562ddd528d307aa73cbb043"
+    },
+    {
+      "bytes": 59508,
+      "path": "candidate4.patch.xz",
+      "role": "source-patch",
+      "sha256": "0c5501170226489c1cacc4ba551baf59ca113a73badec45ac6f30abba012a401"
+    },
+    {
+      "bytes": 60332,
+      "path": "candidate5.patch.xz",
+      "role": "source-patch",
+      "sha256": "ce7c9dcf88a3bf364c1f6a1aff1521344a501e5753e6fe7c0121c11aa46ea8e2"
+    },
+    {
+      "bytes": 34636,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "9ddf885c895abcc3810a90b104958bcdd500ecbf2adb585114b875b2cbb88aa6"
+    },
+    {
+      "bytes": 734,
+      "path": "execute.sh",
+      "role": "reproduction",
+      "sha256": "a06fa2bd94e489be9e359e43a958d0418e0b99a49348c43bbfe626e978c18056"
+    },
+    {
+      "bytes": 4812,
+      "path": "experiment.py",
+      "role": "reproduction",
+      "sha256": "d9f8050c0b80ac35dacf04e170bb4e1fec675f96c92c1e00771482355acb0775"
+    },
+    {
+      "bytes": 784,
+      "path": "hydrogen-controls.py.xz",
+      "role": "reproduction",
+      "sha256": "33a65a606e267610d9188ef6bef0372f903ea4ba53c901fadaa5f1263d03c7cf"
+    },
+    {
+      "bytes": 784,
+      "path": "nitrogen-controls.py.xz",
+      "role": "reproduction",
+      "sha256": "8eb15b514f05bb3eeb9bb0b94a981ce8ac7636259e7cd14676377e6599016724"
+    },
+    {
+      "bytes": 4796,
+      "path": "oracle-driver.py.xz",
+      "role": "reproduction",
+      "sha256": "3c15a33b47abac3b26d98d97ecfc326a57f625ab03aa08731fe4d6b3422edc05"
+    },
+    {
+      "bytes": 42244,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "be58adfc942badb507f61bbc55f1e223bb41c46e09c61ed2e8a272e9c659c847"
+    },
+    {
+      "bytes": 339296,
+      "path": "records.json.xz",
+      "role": "samples",
+      "sha256": "5eaac46759bc3893485c7f57c5cf4fcbf00c556f47aa3dfe20fc3bb58929dc0d"
+    },
+    {
+      "bytes": 836,
+      "path": "reference-cc-root.py.xz",
+      "role": "reproduction",
+      "sha256": "878beed61f7c4ff2d0c953e856a59996c7496d6a96135ec20f08eaf104dcf1a0"
+    },
+    {
+      "bytes": 920,
+      "path": "reference-newton.py.xz",
+      "role": "reproduction",
+      "sha256": "6c60d491787786bc6b1ee7286307b0f124eab386c4b2194128b7bf52c0c25149"
+    },
+    {
+      "bytes": 704,
+      "path": "reference-roots.py.xz",
+      "role": "reproduction",
+      "sha256": "dcb72bbe090f210fa038c621e6f58064507345066cd950d9ddace9e2a52d6df8"
+    },
+    {
+      "bytes": 2653,
+      "path": "refusal-probes.py",
+      "role": "reproduction",
+      "sha256": "6af745f87683a1e42f34c4c7c4af4844ed56d3745b1dee4bccea7115e25570e0"
+    },
+    {
+      "bytes": 2917,
+      "path": "render.py",
+      "role": "reproduction",
+      "sha256": "922cd696e9a0a20d3c9bbc13aceeedd43462a2ec470d5f56ee2933980c541407"
+    },
+    {
+      "bytes": 40980,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "c99425866fc8e73bf0c949c21cc920e49e1285478d538b975a7933d568d32f4b"
+    },
+    {
+      "bytes": 20244,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "dceddb8b5b4dae31af2ad3870af689d6f4f928298e37da083cc2d0b7b944d797"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-routine-standard-20261025/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "98531471e79d5ce31119ec8224adf5c1e5e989e2"
+  }
+}

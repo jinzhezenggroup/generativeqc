@@ -1,0 +1,32 @@
+{
+  "id": "dft.spatial-spd-force-reuse",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
+    "dft-policy:spatial-spd-force-auto"
+  ],
+  "owner_issues": [
+    1598,
+    2416
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "python/generativeqc_compiler/integral/direct_pair_gradient_cuda.py",
+    "src/dft/cuda_spd_force_policy.hpp",
+    "src/methods/dft_method.cpp",
+    "src/scf/cuda/direct_spd_force_schedule.hpp",
+    "src/scf/cuda/direct_coulomb.cpp",
+    "src/scf/cuda/direct_force_class_domains.cu"
+  ],
+  "rationale": "Unset/empty selects relative-response order-six reuse and guarded pure-J density-first order-six/seven contraction for the existing strict-FP64 restricted exact-direct full-range domain with at least 384 AOs. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal exclusions and optional resources remain guarded. Independent D4/gCP geometry terms are allowed for pure J; hybrids with D4 remain excluded. Earlier spatial-reuse qualification remains historical; the relative/density promotion has separate source-matched 48/96-atom complete-endpoint, independent-oracle and actual-work evidence. Nonzero exchange, seeds, partial masks and unsafe reorderings keep component contraction. Explicit spatial-reuse/1 retains the previous control, relative-reuse omits density contraction, and 0/unknown values retain the incumbent; no selector bypasses scientific/resource guards.",
+  "revisit_condition": "Qualify further source/model variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety; track the independent low-memory shell-lease fallback and publication of source-matched raw benchmark artifacts under #2416.",
+  "evidence": [
+    "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
+    "note:.agents/notes/implemented/performance/2026-10-13-pure-j-spatial-default.md",
+    "note:.agents/notes/implemented/performance/2026-10-17-direct-force-default-promotion.md",
+    "docs:docs/user/ks_options.md",
+    "benchmarks:benchmarks/results/pbe0-spd-spatial-reuse-20261011/validation.json.gz",
+    "tests:tests/python/test_pbe0_spatial_force_policy.py",
+    "tests:tests/python/test_direct_spatial_coulomb_cache.py"
+  ]
+}

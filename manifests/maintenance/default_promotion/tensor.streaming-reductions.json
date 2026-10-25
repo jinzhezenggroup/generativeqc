@@ -1,0 +1,22 @@
+{
+  "id": "tensor.streaming-reductions",
+  "classification": "negative-evidence",
+  "controls": [
+    "tensor-schedule:stream_reductions",
+    "tensor-schedule:streamed_gemm_reduction"
+  ],
+  "owner_issues": [
+    783
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/cuda_plan.py"
+  ],
+  "rationale": "Both streaming schedules remain explicit memory-oriented alternatives. Retained RTX 5090 and H100 complete-endpoint evidence shows substantial runtime regressions against the deterministic baseline despite smaller arenas; the generated-reduction variant is still about 10.4x and 27.0x slower on the retained H100 workloads. Neither schedule belongs in default search.",
+  "revisit_condition": "Reconsider only after a new bounded cooperative/persistent lowering shares producer work and passes independent numerical, resource, and complete-endpoint gates on an identified workload domain; lower memory or launch counts alone do not justify promotion.",
+  "evidence": [
+    "issue:#783",
+    "pr:#845",
+    "benchmarks:benchmarks/results/tensor-streaming-783/generated-reduction-h100-4x8.json",
+    "benchmarks:benchmarks/results/tensor-streaming-783/generated-reduction-h100-8x16.json"
+  ]
+}

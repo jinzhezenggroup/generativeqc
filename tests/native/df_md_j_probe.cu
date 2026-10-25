@@ -2,9 +2,11 @@
 // kernels consume the basis; no reference integral enters their preparation.
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -225,6 +227,23 @@ int main(int argc, char** argv) {
         output.write(reinterpret_cast<const char*>(current_gradient.data()),
                      gradient_elements * sizeof(double));
       if (!output) throw std::runtime_error("cannot write probe output");
+    }
+    // Exact-zero compaction must not turn an invalid current source into a
+    // finite result for an otherwise zero density. IEEE NaN * zero is
+    // deliberately active; the list is rebuilt by the captured charge call.
+    for (const double invalid :
+         {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+      std::vector<double> invalid_density(n * n, 0.0), invalid_charge(a);
+      invalid_density[n - 1] = invalid;
+      check(cudaMemcpyAsync(d, invalid_density.data(), n * n * sizeof(double),
+                            cudaMemcpyHostToDevice, owner.stream));
+      check(cudaGraphLaunch(graph.executable, owner.stream));
+      check(cudaMemcpyAsync(invalid_charge.data(), rho, a * sizeof(double), cudaMemcpyDeviceToHost,
+                            owner.stream));
+      check(cudaStreamSynchronize(owner.stream));
+      if (std::all_of(invalid_charge.begin(), invalid_charge.end(),
+                      [](double value) { return std::isfinite(value); }))
+        throw std::runtime_error("source compaction hid a nonfinite density");
     }
     if (ledger.ledger->allocations != allocations_before_replay)
       throw std::runtime_error("charge/J replay allocated native device storage");

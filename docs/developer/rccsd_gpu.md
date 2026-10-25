@@ -1,26 +1,23 @@
 # GPU RCCSD implementation and acceptance
 
-This slice builds on the merged **PR #215** and its audited #148 A/B/C
-implementation. The historical GPU evidence used CPU commit
-`5f31c4289db59853e4f64a942a51b4cccc68a3cd`. That CPU implementation supplies
-the physical equations; #149 does not introduce a second CC equation source.
-Historical evidence preserves its original source identities; the active code
-integrates current master. Shared native reference/provider and resident
-TensorIR interfaces are coordinated with #193.
+The GPU implementation solves the same physical equations as the CPU solver and
+adds no second CC equation source. Shared native reference/provider and resident
+TensorIR interfaces are coordinated with the CPU pages, so both backends consume
+one equation identity.
 
-## A: fixed-amplitude equations
+## Fixed-amplitude equations
 
-`tools.generativeqc_cc.cuda.PreparedRCCSDResidual` compiles the complete #148
-energy/R1/R2 DAG with the #146 planner and executor. `trace=True` retains every
-live node as an output, with unchanged node definitions. The resulting longer
-lifetimes and host output storage are charged by the same planner. It is an
-audit mode, not a solver benchmark.
+`tools.generativeqc_cc.cuda.PreparedRCCSDResidual` compiles the complete energy,
+R1 and R2 DAG with the shared TensorIR planner and executor. `trace=True` retains
+every live node as an output, with unchanged node definitions. The resulting
+longer lifetimes and host output storage are charged by the same planner. It is
+an audit mode, not a solver benchmark.
 
-The runner uses the exact nonzero amplitudes and Fock/MO integrals from the
-checked #148 reference file. Every GPU node is compared to the CPU interpreter;
+The runner uses exact nonzero amplitudes and Fock/MO integrals from the checked
+reference fixtures. Every GPU node is compared to the CPU interpreter;
 named physical residuals, energy, and intermediates are additionally compared
 to the pinned independent reference. Per-element tolerances remain
-`atol=1e-11, rtol=1e-10`, with the #138 absolute energy/residual limits
+`atol=1e-11, rtol=1e-10`, with the CC absolute energy/residual limits
 `1e-8/1e-9`. Normal and minimum feasible numeric budgets are exercised, and
 one byte below the minimum must fail before CUDA allocation.
 
@@ -28,7 +25,7 @@ one byte below the minimum must fail before CUDA allocation.
 export PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 python -m tools.validate_cc_cuda --architecture sm_90 \
   --nvcc /usr/local/cuda/bin/nvcc --cache build/tensor-cuda-cache \
-  --output build/cc149-reproduction
+  --output build/cc-cuda-reproduction
 GENERATIVEQC_CC_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_90 \
   GENERATIVEQC_NVCC=/usr/local/cuda/bin/nvcc python -m pytest \
   tests/python/test_cc_cuda.py tests/python/test_cc_cuda_state.py -q
@@ -40,22 +37,22 @@ assigned validation window. Each record contains the generated-library hash,
 source identities, plan/lifetimes/budget, device/toolchain identity, raw repeat
 and section-profile measurements, numerical errors, and transfer accounting.
 Section profiling synchronizes operations and is not a performance ranking.
-Module/context/allocator overhead follows #146's explicitly excluded scope;
+Module/context/allocator overhead follows the planner's explicitly excluded
+scope;
 the device-memory delta is reported separately from numeric buffer capacity.
 
 The fixed-amplitude API uploads all feeds and downloads all outputs on each
 call. It must **not** be used as a host-driven CC iteration or advertised as
 GPU-resident solving. It registers no public RCCSD method.
 
-## Boundary inherited from the pre-resident slices
+## Why the fixed-amplitude owner is not the production solver
 
-The fixed-amplitude and host-staged solvers established equation identity,
-reference validation, memory planning and replay, but they deliberately did
-not satisfy #149 B: T/R and integral inputs crossed the host boundary on each
-evaluation. The resident implementation below is the replacement for that
-historical limitation. The remaining open requirements after B are native
-method registration, homogeneous prepared batches and full public/API evidence;
-those are tracked under C.
+The fixed-amplitude and host-staged owners established equation identity,
+reference validation, memory planning and replay, but they cross the host
+boundary on each evaluation: T/R and integral inputs are re-uploaded. The
+resident implementation below replaces that staging. Native method
+registration, homogeneous prepared batches and complete public/API evidence are
+delivered by the sections below rather than by this audit owner.
 
 `gpu_state.iteration_program` remains the single damped-Jacobi TensorIR owner,
 `AmplitudeSnapshot` still forbids shape-only reuse across reference changes, and
@@ -145,17 +142,17 @@ Packing is forwarded unchanged through both complete attempts of the bounded
 resource retry. If an attempt is discarded, its DIIS capacity, conversion,
 metric-work, and packing-call totals are unavailable and reported as null.
 
-## B: resident single-system solver
+## Resident single-system solver
 
-`tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing
-#149 primary iteration plan to the #420 resident TensorIR ABI. The physical
-energy/R1/R2 equations and damped Jacobi proposal remain generated from #148;
-no second CC residual implementation is introduced.
+`tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` binds the shared
+primary iteration plan to the resident TensorIR ABI. The physical
+energy/R1/R2 equations and damped Jacobi proposal remain generated from the
+single CC equation source; no second CC residual implementation is introduced.
 
 The primary owner uploads Fock/integral blocks, denominators and initial T1/T2
 once. Across iterations it retains current/trial amplitudes, physical residuals,
 DIIS vectors/errors, Gram/system scratch and reduction buffers inside the exact
-#146 reservation. The resident post-run action computes R1/R2 max norms on the
+TensorIR reservation. The resident post-run action computes R1/R2 max norms on the
 same stream. Host control reads only the correlation energy and two residual
 maxima; physical residual tensors feed GPU DIIS directly and are never staged to
 the host. `src/cc/cuda_state.cuh` supplies the shared Gram solve support plus
@@ -261,10 +258,10 @@ standalone supplied-problem defaults remain unbatched. This selector does not
 change Lambda, orbital-response equations or their independent audits. Work
 counters include the actual batched graph, packing and fused ordered accumulation.
 
-The internal energy facade accepts `backend="cuda-resident"`. It remains
-energy-only. Slice C now additionally exposes the production native owner through
-`GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`; force requests remain
-unsupported. `PreparedResidentCCSD` itself
+The internal energy facade accepts `backend="cuda-resident"` and remains
+energy-only. The production native owner is additionally exposed through
+`GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`, which is documented
+below. `PreparedResidentCCSD` itself
 stays open after convergence. Its immutable `owner_identity` binds the
 reference/integrals/equations/artifact/device; a separate
 `solved_state_identity` additionally hashes the replay-qualified final T1/T2.
@@ -292,19 +289,20 @@ setup, explicit nonconvergence and resident zero-DIIS execution. H2O agrees with
 its pinned amplitudes to about 6.5e-12 max absolute error and its pinned total
 energy to about 2.9e-13 Eh.
 
-## C: native/public promotion
+## Native and public endpoint
 
-Slice C promotes restricted closed-shell CCSD as a genuine native method without
-reusing the reserved `GENERATIVEQC_METHOD_RCCSD_T` identifier. `GENERATIVEQC_METHOD_RCCSD=12`
-is an additive method id; all earlier values remain unchanged. The registry reports
-energy only and prepared-batch support. A force buffer/request therefore fails
-explicitly instead of returning an HF derivative under a CC label.
+Restricted closed-shell CCSD is a native method and does not reuse the reserved
+`GENERATIVEQC_METHOD_RCCSD_T` identifier. `GENERATIVEQC_METHOD_RCCSD=12`
+is an additive method id; all earlier values remain unchanged. The registry
+declares energy plus analytic forces and prepared-batch support. Force buffers
+are opt-in: an omitted property request stays energy-only, and a released force
+buffer never carries an HF derivative under a CC label.
 
 `src/methods/rccsd_method.cpp` owns the public HF -> conventional MO blocks ->
 RCCSD lifecycle. It accepts only all-electron closed-shell RHF, FP64, unscreened
 conventional integrals, no frozen core and no density fitting. The physical CC
 energy/residual and independent expanded replay are generated at build time from
-the same #148 TensorIR. The generated topology is extent-independent: occupied
+the same TensorIR equations. The generated topology is extent-independent: occupied
 and virtual dimensions are runtime values rather than a finite molecular shape
 whitelist.
 
@@ -368,18 +366,18 @@ result. Older diagnostic callers continue to receive only the prefix they sized.
 The production path is correctness/resource qualified, not a performance
 leadership claim. Direct producer-to-consumer HF/AO2MO device leases and validated
 cross-geometry orbital/amplitude transport remain future optimizations rather than
-requirements for the declared energy-only capability.
+requirements for the currently declared capability.
 
-The final #149 C endpoint matrix and exact reproduction commands are recorded in
-[`benchmarks/results/rccsd-149-c`](../../benchmarks/results/rccsd-149-c/README.md).
+The end-point qualification matrix and exact reproduction commands are recorded
+in [`benchmarks/results/rccsd-149-c`](../../benchmarks/results/rccsd-149-c/README.md).
 The committed CPU and RTX 5090 records cover `(nocc,nvir)=(1,1)` and `(5,2)` at
 64/128/256 MiB with the same source identity; the 64 MiB CUDA rows are explicit
 pre-allocation budget rejections while the two larger budgets converge.
 
-### Ordinary-stream comparison on the same H2O endpoint
+### Ordinary-stream and resident transfer comparison
 
-With cached compilation artifacts, both the existing ordinary-stream GPU solver
-and the resident solver converged in 15 current iterations to the same pinned
+With cached compilation artifacts, both the ordinary-stream GPU solver
+and the resident solver converge in 15 current iterations to the same pinned
 energy (2.84e-13 Eh absolute difference) and amplitudes (about 6.5e-12 maximum
 absolute difference from the retained reference). The scientific control law is
 therefore not changed to obtain residency.
@@ -392,10 +390,10 @@ The resident owner instead reports 11,920 B of initial large H2D, zero
 per-iteration large H2D/D2H, 524 B of scalar control D2H, and one 880 B final
 amplitude download. The resident ABI itself additionally returns 4 B per run.
 
-Cached wall times in this one observation were 1.09 s ordinary and 0.73 s
-resident, but this PR does **not** promote a speedup: compilation is excluded,
-fixtures are tiny, CUDA context/module state is shared with the process, and no
-representative molecular benchmark matrix has been qualified yet.
+Cached wall times in that observation were 1.09 s ordinary and 0.73 s resident.
+That comparison is retained as transfer/ownership evidence, not a speedup claim:
+compilation is excluded, fixtures are tiny, CUDA context/module state is shared
+with the process, and no representative molecular benchmark matrix is qualified.
 
 ### Reuse and isolation
 
@@ -410,5 +408,5 @@ identity-bearing warm snapshot together with raw T arrays is also rejected.
 Two independently prepared owners may coexist on one device. The RTX 5090 test
 keeps H2 and H2O owners alive simultaneously, verifies distinct resident-state
 identities, and converges both without cross-state contamination. These tests
-establish single-system owner reuse/context isolation; they are not the
-homogeneous native prepared batch required by #149 C.
+establish single-system owner reuse and context isolation; homogeneous prepared
+batches are covered separately below.

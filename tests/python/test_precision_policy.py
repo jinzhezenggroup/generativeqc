@@ -172,6 +172,15 @@ def test_standard_executes_once_without_inventing_budget_evidence(
     np.testing.assert_array_equal(output.forces, native.forces)
 
 
+def test_tight_is_a_cbs_only_preset(backend: SimpleNamespace) -> None:
+    """CBS's strict escape must not silently change the HF/DFT profile contract."""
+    policy = PrecisionPolicy("Tight")
+    assert policy.to_dict() == {"profile": "tight", "target": None}
+    with pytest.raises(NotImplementedError, match="specific to CCSDTCBSCalculator"):
+        PrecisionCalculator(policy=policy)
+    assert not backend.instances
+
+
 @pytest.mark.parametrize("profile", ("standard", "fp64"))
 def test_standard_explicit_target_retains_the_complete_budget_audit(
     backend: SimpleNamespace, profile: str

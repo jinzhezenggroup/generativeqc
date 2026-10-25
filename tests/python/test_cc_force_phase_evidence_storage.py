@@ -129,7 +129,7 @@ def test_force_phase_receipt_preserves_original_bytes_and_readers(name: str) -> 
         hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()
         == row["original_git_blob"]
     )
-    assert packed == gzip.compress(raw, compresslevel=9, mtime=0)
+    # SHA256 pins the stored gzip bytes; recompression varies by Python version.
     with gzip.open(path, "rb") as stream:
         assert stream.read() == raw
     if name.endswith(".json"):

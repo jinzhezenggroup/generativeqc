@@ -466,6 +466,21 @@ bool cuda_density_fitting_integral_source_matches(const CudaDensityFittingIntegr
          implementation->public_nbf == nbf && implementation->public_naux == naux;
 }
 
+bool cuda_density_fitting_integral_source_policy_matches(
+    const CudaDensityFittingIntegralSource* source,
+    const cuda_execution::CudaDfSourcePolicy& policy) noexcept {
+  if (!source || !source->implementation) return false;
+  const auto& owner =
+      *static_cast<const CudaDensityFittingIntegralSourceImpl*>(source->implementation);
+  return owner.value_math == policy.value_math &&
+         owner.batch.df_range_omega == policy.range_omega &&
+         owner.automatic_value_mapping == (policy.requested_value_mapping == 3U) &&
+         owner.value_mapping ==
+             resolve_cuda_df_source_value_mapping(policy.requested_value_mapping, true) &&
+         owner.raw_value_mapping ==
+             resolve_cuda_df_source_value_mapping(policy.requested_value_mapping, false);
+}
+
 bool cuda_density_fitting_integral_source_geometry_matches(
     const CudaDensityFittingIntegralSource* source, std::size_t system, const core::System& orbital,
     const core::System& auxiliary) noexcept {

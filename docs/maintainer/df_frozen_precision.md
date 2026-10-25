@@ -1,8 +1,8 @@
 # Frozen DF factor precision qualification
 
-Issue [#1840](https://github.com/jinzhezenggroup/generativeqc/issues/1840)
-qualifies the saved ethane230 frame, with 230 spherical orbital AOs, 488
-auxiliaries and 9 occupied orbitals, using aug-cc-pVTZ / aug-cc-pVTZ-RI.
+This protocol qualifies the saved ethane230 frame, with 230 spherical orbital
+AOs, 488 auxiliaries and 9 occupied orbitals, using aug-cc-pVTZ /
+aug-cc-pVTZ-RI.
 The acceptance rule is unchanged:
 
 ```text

@@ -1,9 +1,11 @@
 # DFT-MP-v1 acceptance contract
 
-Issue #1185 owns the frozen inputs and acceptance tooling. Issue #1191 is the
-product index; only a reviewed #1190 PASS on one upstream-merged production
-revision can complete that index. The checked-in manifest does not report a
-scientific result. Every capability starts `not-run` until real evidence exists.
+`tools/dft_mp_v1/manifest.json` freezes the inputs and acceptance tooling, and
+carries the tracker identifiers its validator checks (`source_issue`,
+`product_issue`, `final_acceptance_issue`). The contract is complete only after a
+reviewed source-matched `PASS` for one upstream-merged production revision; the
+checked-in manifest does not itself report a scientific result. Every capability
+starts `not-run` until real evidence exists.
 
 ## Immutable input and row inventory
 
@@ -47,9 +49,10 @@ mixed receipts must report the same numeric control and SCF targets.
 
 Changing a case, source, mathematical model, basis, grid, mandatory row or
 acceptance gate requires a new contract version and hash. Record the reason,
-affected gates and migration mapping in the issue and PR. A change may replace
+affected gates and migration mapping in the change proposal. A change may replace
 an infeasible implementation detail with an equivalent reviewed contract, but
-cannot silently weaken the numerical gates or the single-revision #1190 gate.
+cannot silently weaken the numerical gates or the single-revision final-acceptance
+gate.
 
 ## Reproduce and collect
 
@@ -70,8 +73,8 @@ this exact frozen manifest, and matches the hashed installed library, prebuilt
 scientific artifact and build record. It also freezes the RTX 5090 UUID,
 driver/toolchain/profile, operating-conditions hash and bounded watchdog; it hashes the
 adapter file and freezes its exact argv. It refuses to overwrite an existing plan. This preflight is not a
-scientific result and does not make incomplete #1186/#1187/#1189 capability or the
-#1303 precision-work provenance gap pass.
+scientific result and does not make the separate FP64-energy, hybrid and
+precision-work-provenance gaps pass.
 
 `generate_inputs.py` is a read-only audit by default. RDKit-derived geometry
 reconstruction is qualified only for the platform, Python ABI and exact RDKit
@@ -130,7 +133,8 @@ including losses and timeouts. The declared 20 GiB simultaneous memory budget
 is part of this first RTX 5090/sm_120 contract; a different allocation must be
 versioned before measurement.
 
-`--final` additionally requires the #1190 reviewed raw receipt. It resolves
+`--final` additionally requires the reviewed raw receipt for the single
+source-matched production revision. It resolves
 `refs/heads/master` from the explicit official URL
 `https://github.com/jinzhezenggroup/generativeqc.git`, fetches that immutable OID
 without updating local remotes or `FETCH_HEAD`, and checks that the exact
@@ -140,6 +144,6 @@ The build record must bind that source to the installed binary and AOT artifact.
 An adapter can still lie in JSON or a build record can be forged; human review
 and independent reproduction of retained raw evidence remain mandatory. A
 schema-only or mocked runner test is never scientific acceptance.
-The installed-production adapter and runnable final campaign plan are owned
-by #1190, consuming the public endpoints from #1186/#1187/#1189. This package
+The installed-production adapter and runnable final campaign plan are separate
+deliverables consuming the public FP64-energy and hybrid endpoints. This package
 provides the frozen orchestration and validation contract they must satisfy.

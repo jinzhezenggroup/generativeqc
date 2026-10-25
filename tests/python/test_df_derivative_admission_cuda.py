@@ -63,8 +63,8 @@ def test_qualified_lowering_without_ao_shape_admission(
 ) -> None:
     """Exercise panel/group/packet consumers against independent full forces.
 
-    The practical basis includes auxiliary f shells, which must retain the
-    manifest's unqualified-class fallback. OH is an open-shell, non-water
+    The practical basis includes auxiliary f shells; each class follows the
+    current manifest's qualification or fallback. OH is an open-shell, non-water
     control. The explicit shell consumer isolates lowering admission from
     the separately qualified automatic consumer/packet selection policy.
     """
@@ -157,5 +157,3 @@ def test_qualified_lowering_without_ao_shape_admission(
                         and choices.get(key.split("_")[1]) == "rys"
                     )
                     assert value == int(expected_rys), key
-            if model == "practical96":
-                assert counters["shell_003_rys_selected"] == 0

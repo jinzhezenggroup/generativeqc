@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "disk-eri-20261025",
+  "owner": "#2766 bounded temporary-file ERI qualification",
+  "reason": "Compact original complete E+F receipts preserve profitable LR and slower full-range disk results, physical versus logical I/O, source/build inventories, independent gates, GPU/sanitizer and final default-policy validation, plus setup and missing-consumption failures. Large binary and raw journals remain untracked.",
+  "review_document": "benchmarks/results/disk-eri-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/disk-eri-20261025/measurements.json.xz",
+      "family": "disk-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "temporary-spill-endpoints-physical-io-default-policy-and-negative-control",
+      "bytes": 240916,
+      "sha256": "568478688c01fab26526a6dd6b5dffbabad0bdd04a687754b5c12a7fae55cdd1"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ _SHIM = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "core/correlation_execution.hpp"
 #include "runtime/execution_precision.hpp"
 #include "cc/solver.hpp"
 #include "cc/phase_observation.hpp"
@@ -86,13 +87,19 @@ struct Scope {
 }  // namespace runtime
 namespace core {
 using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
+using DfPreconvergence = generativeqc::core::DfPreconvergence;
 struct Atom {
   int position{}, atomic_number{};
 };
 struct System {
   std::vector<Atom> atoms;
+  int electron_count{};
 };
 }  // namespace core
+namespace molecule {
+// Resource-only fixture: no orbital population or automatic mixed admission.
+std::size_t ao_count(const core::System&) { return 0; }
+}  // namespace molecule
 namespace hf {
 struct RHFFrameResponseOptions {
   Cache* recycling{};
@@ -407,7 +414,8 @@ int main() {
     failure = 0;
     descriptor.limit = 100;
     const auto result = run_df_correlation_group_native(
-        execution, system, auxiliary, descriptor, forces, expected_demand, {});
+        execution, system, auxiliary, descriptor, forces, expected_demand, {},
+        core::DfPreconvergence::Legacy);
     assert(calls == 1 && drains == 1 && late_calls == 1 && live == 0 && clears == 0);
     assert(preparations == 1 && result.primal.reference_seconds == (fitted ? 0.0 : 0.125) &&
            !result.recycling_discarded_primal_attempt);

@@ -1,4 +1,4 @@
-# CPU hot-loop allocation disposition (#1630)
+# CPU hot-loop allocation disposition
 
 This audit is a **source-site inventory**, not a count of runtime allocations or
 an instruction to eliminate every allocation. Baseline: `master` commit
@@ -6,6 +6,11 @@ an instruction to eliminate every allocation. Baseline: `master` commit
 `python.loop-host-allocation` findings in the retained advisory work-audit
 artifact. Method/identity changes require a new audit; these counts are not
 portable benchmark measurements.
+
+The table below records the disposition of those baseline sites only. Files and
+loops have changed since, so re-run `python tools/audit_native_work.py
+--summary-only` for the current inventory rather than reading these rows as a
+live finding count.
 
 ## Owner and resolution
 
@@ -24,10 +29,10 @@ portable benchmark measurements.
 | `tensor.autodiff._vjp_einsum` | 1 | One maximum-operand all-ones backing with shape views |
 | `xc.contractions._geometry` | 2 | Reuse spin-contraction workspace and one directional AO panel |
 | `xc.reference.exchange_reference` | 3 | Share LDA unit/zero coefficient buffers between spin components |
-| **This consolidated PR** | **20** | Source-level hoists and owned-buffer replacements; endpoint performance not yet claimed |
-| `dft.nonlocal_integration.geometry` | 3 | Separate production fix in PR #2127, awaiting merge/qualification |
-| `rks_hessian_directional.native_rks_xc_hvp_components` | 1 | Separate production fix in PR #2130, awaiting merge/qualification |
-| **Already open independent PRs** | **4** | Must be checked against the eventual combined master, never added as a performance estimate |
+| **Consolidated source-level pass** | **20** | Source-level hoists and owned-buffer replacements; endpoint performance not yet claimed |
+| `dft.nonlocal_integration.geometry` | 3 | Bounded nonlocal geometry AO-response scratch reused; endpoint performance not yet claimed |
+| `rks_hessian_directional.native_rks_xc_hvp_components` | 1 | XC HVP directional impulse backing reused; endpoint performance not yet claimed |
+| **Delivered separately** | **4** | Landed as independent changes; evaluate against one combined revision rather than adding the two halves as a performance estimate |
 
 Eight original findings are **not fixable by simply hoisting scratch**:
 
@@ -52,5 +57,6 @@ independent endpoint tests remain mandatory. The static inventory is never
 runtime peak memory, requested allocation bytes, or full CPU/CUDA owner
 coverage. The runtime verification contract in
 [replay_allocation_receipts.md](replay_allocation_receipts.md) remains necessary
-to close all of #1630's acceptance criteria. Do not close #1630 from this
-source-only work, or claim a wall-time speedup without a matched experiment.
+to satisfy the full acceptance criteria. This source-only work does not
+complete the runtime-verification contract, and it is not a wall-time speedup
+claim without a matched experiment.

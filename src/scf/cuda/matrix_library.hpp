@@ -93,6 +93,15 @@ generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int 
                                           const double* right, const std::uint8_t* active,
                                           double* output, double scale = 1.0);
 
+/** Queue one row-major FP64 validation product using an already selected
+ * provider. The caller owns disjoint nbf-square input/output storage, copies
+ * and synchronization. No allocation, provider switch or mask is introduced;
+ * a missing provider is an error, so host fallback must be chosen beforehand. */
+generativeqc_status launch_validation_product(MatrixLibraryResources resources, int nbf,
+                                              const double* left, bool transpose_left,
+                                              const double* right, bool transpose_right,
+                                              double* output);
+
 generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
                                                int spin_count, int nbf, const double* left,
                                                bool left_is_spin, bool transpose_left,

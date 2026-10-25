@@ -1,0 +1,117 @@
+{
+  "schema": "generativeqc.h100-direct-cost-scopes.v1",
+  "jobs": {
+    "2732-pilot-v1": {
+      "process_walls_seconds": [
+        141.99322190321982
+      ],
+      "serial_process_wall_sum_seconds": 141.99322190321982,
+      "max_process_wall_seconds": 141.99322190321982,
+      "supervisor_wall_seconds": 183.71924729365855,
+      "bootstrap": {
+        "scope": "isolated pre-site full identity only",
+        "pid": 38,
+        "seconds": 50.114685646258295,
+        "activation_sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+        "static_receipt_sha256": "dd992a45551066ad4034965f7842213f797592914edd4690fe9123642f8718de"
+      },
+      "actual_billing": "UNAVAILABLE",
+      "GPU_busy": "UNAVAILABLE",
+      "scope": "original clocks overlap; not additive and not scientific endpoint timers"
+    },
+    "2732-pilot-v2": {
+      "process_walls_seconds": [
+        106.7023302889429,
+        77.09088669996709,
+        63.219919324852526
+      ],
+      "serial_process_wall_sum_seconds": 247.01313631376252,
+      "max_process_wall_seconds": 106.7023302889429,
+      "supervisor_wall_seconds": 314.2965047750622,
+      "bootstrap": {
+        "scope": "isolated pre-site full identity only",
+        "pid": 38,
+        "seconds": 61.36024704994634,
+        "activation_sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+        "static_receipt_sha256": "c2f3d01f58b295ecf65024c455fb2f1241a6f7fd64030fe86de578d901b099f5"
+      },
+      "actual_billing": "UNAVAILABLE",
+      "GPU_busy": "UNAVAILABLE",
+      "scope": "original clocks overlap; not additive and not scientific endpoint timers"
+    },
+    "2732-formal48-run": {
+      "process_walls_seconds": [
+        105.93451058899518,
+        77.31272324500605,
+        42.05842387699522,
+        77.60794421599712,
+        40.61677113396581,
+        104.12884754996048,
+        41.189311677997466,
+        104.2429840209661,
+        78.74776739504887
+      ],
+      "serial_process_wall_sum_seconds": 671.8392837049323,
+      "max_process_wall_seconds": 105.93451058899518,
+      "supervisor_wall_seconds": 728.138264890993,
+      "bootstrap": {
+        "scope": "isolated pre-site full identity only",
+        "pid": 38,
+        "seconds": 49.97884108603466,
+        "activation_sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+        "static_receipt_sha256": "3ebbb4d1d0dffafd895dd4848cb7576d46d2a4a1d96db42271a9917a49e5a164"
+      },
+      "actual_billing": "UNAVAILABLE",
+      "GPU_busy": "UNAVAILABLE",
+      "scope": "original clocks overlap; not additive and not scientific endpoint timers"
+    },
+    "2732-pilot96-run": {
+      "process_walls_seconds": [
+        344.73680418077856,
+        241.15334777440876,
+        94.46856077387929
+      ],
+      "serial_process_wall_sum_seconds": 680.3587127290666,
+      "max_process_wall_seconds": 344.73680418077856,
+      "supervisor_wall_seconds": 748.0930495085195,
+      "bootstrap": {
+        "scope": "isolated pre-site full identity only",
+        "pid": 39,
+        "seconds": 52.337812285870314,
+        "activation_sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+        "static_receipt_sha256": "57ab8b9160c9108b1513020555318a6c5c05ae9d1bbe63242838d02008f5b31a"
+      },
+      "actual_billing": "UNAVAILABLE",
+      "GPU_busy": "UNAVAILABLE",
+      "scope": "original clocks overlap; not additive and not scientific endpoint timers"
+    },
+    "2732-formal96-run": {
+      "process_walls_seconds": [
+        344.0732096154243,
+        240.7135622035712,
+        89.8930628914386,
+        240.22239763941616,
+        88.33689755108207,
+        342.4278913522139,
+        91.6665590647608,
+        343.1695739533752,
+        240.62113635148853
+      ],
+      "serial_process_wall_sum_seconds": 2021.1242906227708,
+      "max_process_wall_seconds": 344.0732096154243,
+      "supervisor_wall_seconds": 2091.642920928076,
+      "bootstrap": {
+        "scope": "isolated pre-site full identity only",
+        "pid": 39,
+        "seconds": 58.312948578968644,
+        "activation_sha256": "f788e97155d31786a79d719b33ecded54a7e87a39ed452720c12f88bcfba21ee",
+        "static_receipt_sha256": "2069a6c90c172e70662d1ec4e0b0be10f6b3da6b736a16864cd13fa988c5e348"
+      },
+      "actual_billing": "UNAVAILABLE",
+      "GPU_busy": "UNAVAILABLE",
+      "scope": "original clocks overlap; not additive and not scientific endpoint timers"
+    }
+  },
+  "cache_scope": "original worker snapshots and Root seed/physical receipts retained; not hit counts or complete terminal storage",
+  "note": "created-to-finished platform intervals are not runtime billing"
+}

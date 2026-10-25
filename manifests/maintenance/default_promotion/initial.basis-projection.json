@@ -1,0 +1,23 @@
+{
+  "id": "initial.basis-projection",
+  "classification": "scientific-choice",
+  "controls": [
+    "initial-guess:basis-projection"
+  ],
+  "owner_issues": [
+    189,
+    192
+  ],
+  "sources": [
+    "python/generativeqc/progressive.py",
+    "docs/user/basis_projection.md"
+  ],
+  "rationale": "Cross-basis projection explicitly introduces a source calculation and transports an occupied subspace into the target metric. The target Hamiltonian is rebuilt, but the seed can alter the SCF basin and complete retained evidence does not show a universal workflow speedup.",
+  "revisit_condition": "Do not enable projection implicitly from a target Calculator. A declared progressive workflow may choose it only with an explicit source model, metric/rank validation, target-state verification and cold fallback.",
+  "evidence": [
+    "pr:#229",
+    "issue:#189",
+    "issue:#192",
+    "docs:docs/user/basis_projection.md"
+  ]
+}

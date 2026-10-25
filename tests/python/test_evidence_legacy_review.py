@@ -17,6 +17,7 @@ from tools.generativeqc_validation.retention import (
 )
 from tools.generativeqc_validation.retention_review import (
     campaign_inventory,
+    expand_legacy_large_review,
     large_legacy_review_errors,
 )
 from tools.restore_retained_evidence import _records
@@ -214,3 +215,62 @@ def test_checked_in_results_have_no_execution_flow_streams() -> None:
         for path in blobs
         if path.startswith(RESULT_ROOT) and path.lower().endswith(endings)
     ]
+
+
+def sharded_review_blobs() -> tuple[dict, dict[str, bytes], str]:
+    """Produce v2 shards from an independently accepted v1 fixture."""
+    _, previous, blobs = checked_blobs()
+    family = "legacy"
+    directory = "benchmarks/evidence-reviews"
+    shard_path = f"{directory}/{family}.json"
+    shard = {
+        "schema": "generativeqc.legacy-large-evidence-family.v1",
+        "family": family,
+        **previous["families"][family],
+        "files": previous["files"],
+    }
+    blobs[shard_path] = json.dumps(shard).encode()
+    index = {
+        "schema": "generativeqc.legacy-large-evidence-index.v2",
+        "threshold_bytes": previous["threshold_bytes"],
+        "directory": directory,
+        "scope": previous["scope"],
+    }
+    blobs[REVIEW_PATH] = json.dumps(index).encode()
+    return index, blobs, shard_path
+
+
+def test_sharded_review_matches_legacy_and_retains_exact_gates() -> None:
+    _, previous, _ = checked_blobs()
+    index, blobs, _ = sharded_review_blobs()
+    expanded, errors = expand_legacy_large_review(blobs, index)
+    assert not errors
+    assert expanded["families"] == previous["families"]
+    assert expanded["files"] == previous["files"]
+    assert large_legacy_review_errors(blobs, index, 8) == []
+    assert check(blobs, policy(8)) == []
+
+
+@pytest.mark.parametrize(
+    "damage",
+    ["missing", "wrong-family", "bad-hash", "malformed", "unexpected-file"],
+)
+def test_sharded_review_fails_closed_on_missing_or_corrupt_family(
+    damage: str,
+) -> None:
+    index, blobs, path = sharded_review_blobs()
+    shard = json.loads(blobs[path])
+    if damage == "missing":
+        del blobs[path]
+    elif damage == "wrong-family":
+        shard["family"] = "wrong"
+    elif damage == "bad-hash":
+        shard["files"][0]["sha256"] = "0" * 64
+    elif damage == "malformed":
+        blobs[path] = b"{broken json"
+    elif damage == "unexpected-file":
+        blobs["benchmarks/evidence-reviews/README.txt"] = b"unreviewed"
+    if damage in {"wrong-family", "bad-hash"}:
+        blobs[path] = json.dumps(shard).encode()
+    assert large_legacy_review_errors(blobs, index, 8)
+    assert check(blobs, policy(8))

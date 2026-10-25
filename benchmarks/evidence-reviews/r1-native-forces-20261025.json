@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "r1-native-forces-20261025",
+  "owner": "#2227 R1 native force completion",
+  "reason": "Complete public E/F arrays, raw endpoint times and semantic SCF work for both paired orders preserve cross-version numerical and non-regression checks. The two new MN15 DF endpoints remain explicitly without a parent comparator. This compact scientific sample set excludes profiler streams and remains below all file and change budgets.",
+  "review_document": "benchmarks/results/r1-native-forces-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/r1-native-forces-20261025/samples.json.gz",
+      "family": "r1-native-forces-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-precision paired cold/warm/moved E/F and SCF work samples with frozen source identities",
+      "bytes": 852442,
+      "sha256": "8e4bc68eae5c91ad57f9d1a47bac7fee467aed5793d5674a7deddb4f945dd81f"
+    }
+  ]
+}

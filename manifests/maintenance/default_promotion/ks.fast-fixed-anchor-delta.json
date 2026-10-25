@@ -1,0 +1,26 @@
+{
+  "id": "ks.fast-fixed-anchor-delta",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_KS_FAST_ANCHOR_DELTA"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp"
+  ],
+  "rationale": "Unset admits fixed FP64 J/K/range-K anchors at 192 or more AOs for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves, without a fixed upper AO limit. Shared budget-Fock admission also has no fixed AO or atom-count ceiling; native dimensions, actual resources and all other scientific conditions remain checked. Explicit 1 opts in smaller scientifically eligible owners; 0 disables. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged, then retired at a pressured force handoff without revoking D/W/XC or the final token; later solves use ordinary Fast. Numerical acceptance thresholds are unchanged. Historical measurements do not qualify every newly admitted larger shape.",
+  "revisit_condition": "Require profitable complete-endpoint evidence before lowering the 192-AO automatic floor: retained water-12 observations are adverse. Removing count ceilings is not a new large-size accuracy or speed qualification. Record independent large-system energy/force gates and actual work/resource failures separately. Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger anchor domains independently; preserve strict full-target audits, explicit rollback and force-phase optional-memory fallback.",
+  "evidence": [
+    "docs/user/application_precision.md",
+    ".agents/notes/implemented/performance/2026-10-18-fast-fixed-anchor-delta.md",
+    ".agents/notes/implemented/performance/2026-10-18-fast-anchor-force-handoff-and-size-gate.md",
+    ".agents/notes/implemented/performance/2026-10-19-fast-fock-size-cap-removal.md",
+    "benchmarks/results/wb97mv-anchor-delta-20261018/README.md",
+    "benchmarks/results/fast-anchor-default-20261018/README.md",
+    "benchmarks/results/fast-anchor-domain-20261019/README.md",
+    "tests/python/test_fast_anchor_delta_controller.py",
+    "tests/native/test_ks_cuda.cpp"
+  ]
+}

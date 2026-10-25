@@ -1,35 +1,32 @@
-# Composed RCCSD(T) energy + analytic-force API (#150 C / #155 C binding slice)
+# Composed RCCSD(T) energy and analytic-force API
 
 `tools.generativeqc_cc.ccsd_t_api` composes the independently validated RCCSD and
-standard perturbative-triples implementations for energy and now exposes a thin
-analytic-force binding over the complete #746 RCCSD(T) gradient owner. It does
-not introduce another CC, Lambda, Z-vector, or nuclear-derivative equation stack.
+standard perturbative-triples implementations for energy, and exposes a thin
+analytic-force binding over the complete
+[RCCSD(T) analytic-gradient owner](rccsd_t.md#complete-analytic-gradient-validation-boundary).
+It does not introduce another CC, Lambda, Z-vector, or nuclear-derivative
+equation stack.
 
-The supported scientific model is the same one fixed by #150: real canonical
-closed-shell RHF, all electrons active, conventional four-center integrals and
-standard noniterative `(T)`. Frozen-core, open-shell, ECP and alternative
-triples approximations are not silently substituted.
+The supported scientific model is real canonical closed-shell RHF, all electrons
+active, conventional four-center integrals and standard noniterative `(T)`.
+Frozen-core, open-shell, ECP and alternative triples approximations are not
+silently substituted.
 
 ## Execution contract
 
 `rccsd_t_method_capabilities("rccsd(t)")` reports the internal Python
 composition's `energy` and `forces`; `"ccsd(t)"` is an alias.
-`native_public=False` still describes that internal force facade. Separately,
-the public native registry exposes qualified conventional small-system
-`RCCSD(T)` energy and analytic forces on CPU and CUDA through
-`GENERATIVEQC_METHOD_RCCSD_T` / `Calculator("ccsd(t)")`. Homogeneous prepared
-batches follow the selected backend capability. The CUDA force route executes the
-runtime-indexed standard-(T) VJP, generated corrected-Lambda RHS/J^T actions and
-fixed-orbital parameter VJPs on CUDA, then routes Hamiltonian/Fock pullbacks and
-the orbital JVP through one reusable CUDA response owner. Lambda GMRES and the
-physical Z-vector Krylov control flow remain host-owned. The final conventional
-nuclear-derivative contraction also runs on CUDA.
+`native_public=False` marks that record as describing this internal facade rather
+than the native/public force implementation. The separate public
+`GENERATIVEQC_METHOD_RCCSD_T` registration and its CPU/CUDA execution domains are
+documented in [RCCSD(T) energy and gradients](rccsd_t.md). Homogeneous prepared
+batches follow the selected backend capability.
 
 `rccsd_t_energy(...)` remains energy-only and rejects `compute_forces=True`.
-`rccsd_t_force(source, ...)` delegates directly to the qualified #746 endpoint,
-which constructs one coherent fresh RHF -> RCCSD -> corrected-Lambda -> total-Z
--> derivative-consumer chain. It never reuses an unrelated energy state merely
-because its dimensions match.
+`rccsd_t_force(source, ...)` delegates directly to the qualified
+complete-gradient endpoint, which constructs one coherent fresh RHF -> RCCSD ->
+corrected-Lambda -> total-Z -> derivative-consumer chain. It never reuses an
+unrelated energy state merely because its dimensions match.
 
 `rccsd_t_energy(snapshot, provider, backend=...)` runs
 
@@ -43,13 +40,15 @@ validated RHF snapshot
 ```
 
 The CPU route uses the audited tiled reference. The production GPU composition
-uses `backend="cuda-resident"`: the RCCSD stage is the #555 resident solver and
-the triples stage is the #448 generated bounded-tile executor. The older
-host-staged `backend="cuda"` RCCSD helper is deliberately not promoted by this
-facade. CUDA requires an explicit `CudaCompilerAdapter` and a `pathlib.Path`
-compilation cache. Invalid requests fail before the RCCSD solve; CUDA errors
-never silently select CPU execution. `options=SolverOptions(...)`, raw `t1/t2`
-or an identity-bearing `warm_start` are forwarded to the RCCSD facade.
+uses `backend="cuda-resident"`: the RCCSD stage is the
+[resident solver](rccsd_gpu.md#resident-single-system-solver) and the triples
+stage is the [generated bounded-tile executor](rccsd_t.md#bounded-cuda-tiles).
+The older host-staged `backend="cuda"` RCCSD helper is deliberately not promoted
+by this facade. CUDA requires an explicit `CudaCompilerAdapter` and a
+`pathlib.Path` compilation cache. Invalid requests fail before the RCCSD solve;
+CUDA errors never silently select CPU execution. `options=SolverOptions(...)`,
+raw `t1/t2` or an identity-bearing `warm_start` are forwarded to the RCCSD
+facade.
 
 The borrowed conventional CPU integral provider and validated RHF snapshot
 are the existing RCCSD preparation contract, including for resident execution.
@@ -142,8 +141,8 @@ when a full CCSD replay artifact is needed.
 
 ## Homogeneous prepared batches
 
-`PreparedRCCSDTBatch` and `rccsd_t_batch_energy` provide the #150 C batch-state
-contract at the internal post-HF facade. All items must have the same
+`PreparedRCCSDTBatch` and `rccsd_t_batch_energy` provide the homogeneous
+batch-state contract at the internal post-HF facade. All items must have the same
 `(nocc, nvir)` shape, checked before any provider read or solver execution.
 Empty input is valid and returns `shape=None, items=()`. Invalid global execution
 settings and force requests are rejected even for empty batches.
@@ -167,17 +166,18 @@ homogeneous `(nocc,nvir)` groups; it owns each item independently and does not
 reuse amplitudes across changed geometries.
 
 `PreparedRCCSDTForceBatch` and `rccsd_t_batch_forces` provide the matching
-#155 binding for analytic forces. Force batches are homogeneous in `(nocc, nvir)`,
+binding for analytic forces. Force batches are homogeneous in `(nocc, nvir)`,
 execute each source with a fresh complete-gradient owner, preserve input order,
 detach successful force arrays, and isolate item failures. No amplitude, Lambda,
 Krylov, or device state is shared between items.
 
 ## Public native boundary
 
-`GENERATIVEQC_METHOD_RCCSD_T` is now active for the qualified native **CPU energy**
-path. `Calculator("rccsd(t)")` and its `"ccsd(t)"` alias execute a native owner
-that reuses the existing native RCCSD solve, retains the exact canonical orbital
-energies from that reference, and evaluates standard `(T)` with a C++ header
+`GENERATIVEQC_METHOD_RCCSD_T` declares native energy and analytic forces for the
+conventional closed-shell domain. The native **CPU energy** owner used by
+`Calculator("rccsd(t)")` and its `"ccsd(t)"` alias reuses the existing native
+RCCSD solve, retains the exact canonical orbital energies from that reference,
+and evaluates standard `(T)` with a C++ header
 generated from the audited `tools/generativeqc_cc/triples.py` inventory. The generator
 AST-reads only the literal scientific inventory and recomputes the same canonical
 inventory hash, so build-time code generation has no NumPy/PySCF runtime
@@ -223,21 +223,23 @@ conventional nuclear derivative is executed by the CUDA consumer.
 capacity, transfer bytes, pages and actual kernel-launch count alongside its
 completed phase time. The public device peak includes this serialized owner.
 
-The internal #746 CPU force chain now executes its generated Lambda, parameter-
-response, `(T)` VJP, raw-Hamiltonian, canonicalization and AO back-transform
-TensorIR through the common #772 `NativeTensorProgram` backend. One bound CC
-lifecycle owns a `NativeCCTensorExecutor` and caches compiled artifacts by exact
-program identity; no response equation is copied into handwritten C++. The
-generic backend keeps its 4096-node default. The qualified CC response owner
-explicitly requests an 8192-node ceiling so the NH3 final triples-response tile
-(5258 nodes) is admitted without widening unrelated TensorIR consumers.
+The internal CPU force chain executes its generated Lambda, parameter-response,
+`(T)` VJP, raw-Hamiltonian, canonicalization and AO back-transform TensorIR
+through the common native `NativeTensorProgram` backend described in
+[compiled stationary CPU consumers](stationary_native_consumers.md#ownership-and-supported-lowering).
+One bound CC lifecycle owns a `NativeCCTensorExecutor` and caches compiled
+artifacts by exact program identity; no response equation is copied into
+handwritten C++. The generic backend keeps its 4096-node default. The qualified
+CC response owner explicitly requests an 8192-node ceiling so the NH3 final
+triples-response tile (5258 nodes) is admitted without widening unrelated
+TensorIR consumers.
 
-The public C++ method-owner lifecycle now publishes this complete force on CPU.
-For the CUDA domain it also dispatches corrected-Lambda generated actions and the
+The public C++ method-owner lifecycle publishes this complete force on CPU. For
+the CUDA domain it also dispatches corrected-Lambda generated actions and the
 final conventional nuclear derivative to CUDA. The remaining host response
-stages continue to reuse the same audited generated equations. The fully
-CUDA-resident response stack from #1215-#1225 remains the staged integration
-target; this slice does not claim that endpoint residency is complete.
+stages continue to reuse the same audited generated equations. The
+fully CUDA-resident response stack remains a staged integration target; this
+endpoint does not claim that residency is complete.
 
 ## Validation
 
@@ -256,17 +258,12 @@ PYTHONPATH=python:. python -m pytest tests/python/test_ccsd_t_api.py \
 ```
 
 Real-device numerical and memory evidence for the two GPU stages remains in the
-retained #555 RCCSD resident evidence and #448 triples-tile evidence. A composed
-CUDA run uses those exact owners and records both identities in the endpoint
-result; it does not reinterpret either benchmark as a new performance claim.
+[RCCSD resident](rccsd_gpu.md#resident-single-system-solver) and
+[bounded triples-tile](rccsd_t.md#bounded-cuda-tiles) qualification pages.
+A composed CUDA run uses those exact owners and records both identities in the
+endpoint result; it does not reinterpret either qualification as a new
+performance claim.
 The endpoint tests cover CUDA admission/dispatch with a test double and do not
 claim new composed GPU numerical qualification. Every real-GPU test or benchmark
 must run through Slurm on `main`, with `--gres=gpu:5090:1` and a finite `--time`,
 preserving scheduler-assigned device visibility.
-
----
-
-Implementation attribution:
-
-Agent: ChatGPT
-Model: GPT-5.6 Sol

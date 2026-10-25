@@ -1,0 +1,23 @@
+{
+  "id": "ks.df-warm-factor-replay",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR"
+  ],
+  "owner_issues": [
+    2474
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp"
+  ],
+  "rationale": "Unset or 1 permits exact density-generating AO-factor reuse only for strict-FP64 restricted DF seeds with the existing complete projection certificate and matching owner, source, device, stream, shape, rank, epoch and generation. U is rebuilt through the shared provider. Explicit 0, invalid values and ineligible seeds retain dense first K; no numeric storage or scientific gate is added or relaxed.",
+  "revisit_condition": "Qualify new precision, spin, metric, provider-capacity or lifetime domains independently. Preserve explicit rollback, exact density reconstruction and bounded fallbacks; retained 96-atom wins are not universal timing claims.",
+  "evidence": [
+    "docs/developer/ks_df_warm_seed.md",
+    ".agents/notes/implemented/performance/2026-10-15-ks-df-warm-factor-default.md",
+    "benchmarks/results/ks-df-warm-factor-20261015/publication.json",
+    "tests/python/test_ks_warm_factor.py",
+    "tests/native/test_ks_cuda.cpp",
+    "issue:#2474"
+  ]
+}

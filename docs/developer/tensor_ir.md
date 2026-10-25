@@ -1,30 +1,30 @@
 # TensorIR: typed equations and a CPU reference interpreter
 
-`python/generativeqc_compiler/tensor/` implements the CG08 foundation in issue #145. It describes
-real tensor equations, validates them before execution, and replays them with
-NumPy on CPU. It includes independent loop references for a matrix product, a
-spin-orbital MP2-like energy fragment, one virtual Fock contribution to a CC-like
-residual, and a restricted spatial pair-symmetrized update. These fragments do
-not implement a complete MP2 or CCSD method.
+`python/generativeqc_compiler/tensor/` describes real tensor equations,
+validates them before execution, and replays them with NumPy on CPU. It includes
+independent loop references for a matrix product, a spin-orbital MP2-like energy
+fragment, one virtual Fock contribution to a CC-like residual, and a restricted
+spatial pair-symmetrized update. These fragments do not implement a complete MP2
+or CCSD method.
 
 `IntegralIR` owns integral operators, shell/center identities, nuclear
 derivatives, and bounded integral providers. `TensorIR` owns tensor index
 populations and algebra over supplied arrays. Neither inherits from the other;
 TensorIR does not import `ShellClassSpec` or require CUDA. Physical strides,
 device placement and contraction planning live in the separate
-[prepared FP64 CUDA executor](tensor_cuda.md) (#146). #151 now adds primitive
-JVP/VJP rules and demand-driven derivative programs; the generated programs
-reuse that executor. The table below describes the original CG08 boundary;
-the CUDA document records the subsequent execution capabilities.
+[prepared FP64 CUDA executor](tensor_cuda.md). Primitive JVP/VJP rules and
+demand-driven derivative programs are part of the same algebra; the generated
+programs reuse that executor. The table below describes the CPU interpreter and
+host-side contract boundary.
 
-| Stage | CG08 capability |
+| Stage | Capability |
 | --- | --- |
 | Mathematical representation and legality | Implemented for the primitives below |
 | CPU interpretation and debug intermediates | Implemented and checked against explicit loops |
 | JSON replay and logical equation hashing | Implemented, versioned, fail closed |
-| Generated source | Stable node-name/type/primitive contract only; no source emitter |
-| CUDA compilation and GPU numerical validation | Not implemented by this issue |
-| Complete molecular method/endpoint/production selection | Not implemented by these fragments |
+| Generated source | Stable node-name/type/primitive contract |
+| CUDA compilation and GPU numerical validation | Owned by [the CUDA executor](tensor_cuda.md) |
+| Complete molecular method/endpoint/production selection | Owned by the method and execution pages |
 
 ## Types and index conventions
 
@@ -152,8 +152,9 @@ RSS. CUDA allocation planning has its own explicit [budget scope](tensor_cuda.md
 
 ### Precision scheduling
 
-Issue #528 adds `PrecisionDirective(storage_dtype, compute_dtype,
-accumulation_dtype)` and `lower_precision`. The directive is a scheduling
+`PrecisionDirective(storage_dtype, compute_dtype,
+accumulation_dtype)` and `lower_precision` express precision as an explicit
+schedule axis. The directive is a scheduling
 request, while the lowered program remains an ordinary typed TensorIR DAG whose
 precision changes are visible as `cast` nodes. `describe_precision` produces a
 stable `PrecisionSchedule` identity containing every live floating value's
@@ -212,7 +213,7 @@ programs apply the weighted transpose when a packed parameter is requested with
 `packed=...`. `to_payload`/`from_payload` preserve and verify the complete map
 and metric.
 
-## Derivative programs (#151)
+## Derivative programs
 
 `python/generativeqc_compiler/tensor/autodiff.py` provides a CPU reference for
 JVP (`jvp`) and matrix-free VJP (`vjp`) with an adjoint dot test (`dot_test`). It
@@ -292,7 +293,7 @@ backend-independent TensorIR `Program` DAGs:
   Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
-  CUDA, portable/scalar and HVP are outside this slice. The public scalar
+  CUDA, portable/scalar and HVP are outside this contract. The public scalar
   `grad`/`value_and_grad` wrappers, selected-argument `vjp` and fixed-mask `jvp`
   expose the same explicit opt-in on reference/CPU; see the [Array API contract](../user/experimental_array_api.md).
   Combined primal/derivative graphs use the generated execution inputs, preserving
@@ -509,7 +510,7 @@ python tools/tensor_ad_examples.py --mode compile \
 ```
 
 The runner uses the existing `generativeqc.validation` schema and controlled FP64
-`atol=1e-11, rtol=1e-10` gates from #138. It checks original execution, JSON
+`atol=1e-11, rtol=1e-10` gates. It checks original execution, JSON
 replay, each rewrite, and optimized replay against independent loops. Exported
 examples include actual inputs, reference values, the program, packing map,
 versions, and seed. Evidence records include equation/IR/source hashes,
@@ -521,7 +522,7 @@ pass or present logical byte accounting as measured allocation/peak memory.
 The [archived CG08 CPU records](../../benchmarks/results/cg08/README.md) report a
 maximum absolute loop-reference error of `3.469446951953614e-18` and identical
 equation/input hashes across two generations from the clean implementation
-commit. The #151 CUDA records in
+commit. The derivative-program CUDA records in
 [`benchmarks/results/tensor-ad-151`](../../benchmarks/results/tensor-ad-151/README.md)
 record JVP/VJP numerical, dot-test, recomputation, plan and device-delta
 evidence; they explicitly leave production promotion `not-run`.

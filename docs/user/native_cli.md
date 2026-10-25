@@ -605,15 +605,19 @@ reserve/headroom use exact integer rounding. Zero caps permit no allocation.
 `--diis-history 0` resolves to the native default of eight history vectors for
 both execution and planning; it does not disable DIIS or erase its capacities.
 
-Inventories cover CPU RHF/UHF including DF, CPU energy-only LDA/PBE RKS/UKS,
+Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE RKS/UKS energy plans,
 small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
 and conventional CUDA KS energy arenas. ECP workspace uses the same generated
 two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
 auxiliary-size and other provider admission limits remain fail-closed.
-Unqualified correlated/tau-dependent/other inventories return JSON
-`status: unsupported` and exit 2; budget failures return `infeasible` and exit 2;
-feasible plans exit 0. Output includes phase capacities, fleet peaks, resident
-storage, effective limits, controls, topology/source identities and exclusions.
+Unqualified correlated, tau-dependent, force, density-fitted KS and other
+inventories return JSON `status: unsupported` and exit 2; budget failures return
+`infeasible` and exit 2; feasible plans exit 0. The Python
+`Calculator.estimate_resources` estimator is the entry point that plans a
+qualified force context, because its per-context capability record knows which
+workspace the force consumer reserves. Output includes phase capacities, fleet
+peaks, resident storage, effective limits, controls, topology/source identities
+and exclusions.
 `scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
 checkpoint, process-RSS cap or free-memory guarantee.
 

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "dft/xc_capabilities.hpp"
 
@@ -35,6 +36,20 @@ struct CudaXcPointProgram {
   CudaXcPointLauncher launch{};
   CudaXcPointBatchLauncher launch_batch{};
   CudaXcFastPathCapabilities fast_paths{};
+  // The aggregate expression identity binds both CUDA spin layouts. CPU
+  // descriptors expose individual identities, so compare like contracts at
+  // admission instead of comparing the aggregate hash with its polarized part.
+  // Restricted is separate only for the explicit total-density LDA program.
+  const char* polarized_expression_identity{};
+  const char* restricted_expression_identity{};
+
+  bool matches_cpu_science(std::string_view polarized, std::string_view restricted, unsigned mask,
+                           unsigned version) const noexcept {
+    return expression_identity && *expression_identity && polarized_expression_identity &&
+           !polarized.empty() && polarized == polarized_expression_identity &&
+           restricted == (restricted_expression_identity ? restricted_expression_identity : "") &&
+           mask == ingredient_mask && version == domain_version;
+  }
 };
 
 }  // namespace generativeqc::dft

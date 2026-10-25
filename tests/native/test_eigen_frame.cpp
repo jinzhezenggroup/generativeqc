@@ -182,12 +182,72 @@ void dense_analytic_frame() {
   require(validate_eigen_frame(f, &s, shifted, c, n, diagnostic, detail, false),
           "metric-only admission unexpectedly required canonical eigenvalues");
 }
+void scaled_norms_and_borrowed_products() {
+  using namespace generativeqc::scf;
+  using namespace generativeqc::scf::solver;
+  EigenFrameDiagnostic diagnostic;
+  std::string detail;
+  const Matrix identity{1, 0, 0, 1};
+  // Long-double analytic residuals cover values whose squares overflow or
+  // underflow FP64. No production eigensolver supplies the expected answer.
+  for (double scale : {1e-290, 1e-150, 1.0, 1e150}) {
+    const Matrix f{scale, 0, 0, 2 * scale};
+    const Matrix values{scale * (1 + 1e-10), 2 * scale};
+    require(!validate_eigen_frame(f, nullptr, values, identity, 2, diagnostic, detail),
+            "scaled residual gate accepted an inaccurate analytic frame");
+    const long double residual = std::abs(static_cast<long double>(f[0]) - values[0]);
+    const long double denominator =
+        std::hypot(static_cast<long double>(f[0]), f[3]) * std::sqrt(2.0L) +
+        std::hypot(static_cast<long double>(values[0]), values[1]);
+    const double expected = residual / denominator;
+    require(std::abs(diagnostic.scaled_eigen_residual - expected) <= expected * 1e-12,
+            "scaled residual disagrees with long-double analytic oracle");
+  }
+  const Matrix f{2, 0, 0, 3}, values{2, 3};
+  const initial_guess::MatrixProductOperation borrowed = [](const Matrix& a, const Matrix& b,
+                                                            std::size_t n, bool ta, bool tb) {
+    return reference::multiply(ta ? reference::transpose(a, n) : a,
+                               tb ? reference::transpose(b, n) : b, n);
+  };
+  require(validate_eigen_frame(f, nullptr, values, identity, 2, diagnostic, detail, true, borrowed),
+          "borrowed product rejected an analytic frame");
+  const initial_guess::MatrixProductOperation nonfinite = [](const Matrix&, const Matrix&,
+                                                             std::size_t n, bool, bool) {
+    return Matrix(n * n, std::numeric_limits<double>::infinity());
+  };
+  require(
+      !validate_eigen_frame(f, nullptr, values, identity, 2, diagnostic, detail, true, nonfinite),
+      "borrowed nonfinite products passed physical gates");
+  const initial_guess::MatrixProductOperation truncated =
+      [](const Matrix&, const Matrix&, std::size_t, bool, bool) { return Matrix{}; };
+  bool rejected = false;
+  try {
+    (void)validate_eigen_frame(f, nullptr, values, identity, 2, diagnostic, detail, true,
+                               truncated);
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected, "truncated borrowed output was accepted or retried");
+  const initial_guess::MatrixProductOperation unavailable = [](const Matrix&, const Matrix&,
+                                                               std::size_t, bool, bool) -> Matrix {
+    throw std::bad_alloc();
+  };
+  rejected = false;
+  try {
+    (void)validate_eigen_frame(f, nullptr, values, identity, 2, diagnostic, detail, true,
+                               unavailable);
+  } catch (const std::bad_alloc&) {
+    rejected = true;
+  }
+  require(rejected, "borrowed allocation failure was swallowed or retried");
+}
 }  // namespace
 int main() {
   try {
     checked_frames();
     ordered_pairs();
     dense_analytic_frame();
+    scaled_norms_and_borrowed_products();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

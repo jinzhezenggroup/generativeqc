@@ -47,7 +47,9 @@ def workflow(cbs_device: str, cbs_case: dict) -> CCSDTCBSCalculator:
     low = load_basis(REFERENCES / cbs_case["low_basis"])
     high = load_basis(REFERENCES / cbs_case["high_basis"])
     assert [low.identity, high.identity] == cbs_case["basis_identities"]
-    return CCSDTCBSCalculator((CBSBasis(low, 2), CBSBasis(high, 3)), device=cbs_device)
+    return CCSDTCBSCalculator(
+        (CBSBasis(low, 2), CBSBasis(high, 3)), device=cbs_device, policy="tight"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -314,9 +316,10 @@ def test_tiny_native_budget_rejects_and_independent_workflow_recovers(
         CCSDTCBSCalculator(
             bases,
             device=cbs_device,
+            policy="tight",
             calculator_options={"correlation_memory_budget_bytes": 1024},
         ).singlepoint(record["atoms"])
-    result = CCSDTCBSCalculator(bases, device=cbs_device).singlepoint(
+    result = CCSDTCBSCalculator(bases, device=cbs_device, policy="tight").singlepoint(
         record["atoms"], properties=("energy",)
     )
     assert result.energy == pytest.approx(record["reference"]["energy"], abs=1e-9)

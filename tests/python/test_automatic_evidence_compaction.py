@@ -835,3 +835,74 @@ def test_historical_reproduction_envelope_keeps_exact_original_storage_links(
     before = _snapshot(repository)
     _automatic(repository, manifest_path)
     assert _snapshot(repository) == before
+
+
+def _use_sharded_review(root: Path) -> None:
+    """Convert the small publication fixture without changing evidence bytes."""
+    previous = json.loads((root / REVIEW).read_bytes())
+    directory = root / "benchmarks/evidence-reviews"
+    directory.mkdir(parents=True)
+    for family, metadata in previous["families"].items():
+        shard = {
+            "schema": "generativeqc.legacy-large-evidence-family.v1",
+            "family": family,
+            **metadata,
+            "files": [
+                entry for entry in previous["files"] if entry["family"] == family
+            ],
+        }
+        (directory / f"{family}.json").write_bytes(_json(shard))
+    (root / REVIEW).write_bytes(
+        _json(
+            {
+                "schema": "generativeqc.legacy-large-evidence-index.v2",
+                "directory": "benchmarks/evidence-reviews",
+                "threshold_bytes": previous["threshold_bytes"],
+                "scope": "fixture",
+            }
+        )
+    )
+
+
+def test_sharded_compaction_rewrites_only_the_owning_review(
+    repository: Path,
+) -> None:
+    first = _bundle(repository, name="first")
+    _bundle(repository, name="second")
+    _use_sharded_review(repository)
+    _stage(repository)
+    index_before = (repository / REVIEW).read_bytes()
+    sibling = repository / "benchmarks/evidence-reviews/second.json"
+    sibling_before = sibling.read_bytes()
+    owner = repository / "benchmarks/evidence-reviews/first.json"
+    original_owner = owner.read_bytes()
+    staged = _index(repository)
+
+    with pytest.raises(SystemExit, match="(?i)(re.?stage|stage the|git add)"):
+        _automatic(repository, first)
+
+    assert (repository / REVIEW).read_bytes() == index_before
+    assert sibling.read_bytes() == sibling_before
+    assert owner.read_bytes() != original_owner
+    assert _index(repository) == staged
+    _stage(repository)
+    saved = _snapshot(repository)
+    _automatic(repository, first)
+    assert _snapshot(repository) == saved
+
+
+def test_sharded_compaction_refuses_stale_owner_receipt(
+    repository: Path,
+) -> None:
+    first = _bundle(repository)
+    _use_sharded_review(repository)
+    owner = repository / "benchmarks/evidence-reviews/campaign.json"
+    record = json.loads(owner.read_bytes())
+    record["files"][0]["sha256"] = "0" * 64
+    owner.write_bytes(_json(record))
+    _stage(repository)
+    before, staged = _snapshot(repository), _index(repository)
+    with pytest.raises(ValueError, match="stale legacy review identity"):
+        _automatic(repository, first)
+    assert _snapshot(repository) == before
+    assert _index(repository) == staged

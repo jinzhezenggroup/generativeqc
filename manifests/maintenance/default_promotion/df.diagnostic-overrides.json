@@ -1,0 +1,24 @@
+{
+  "id": "df.diagnostic-overrides",
+  "classification": "diagnostic-test-only",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS",
+    "hf-runtime:GENERATIVEQC_DF_VALUE_STORAGE",
+    "hf-runtime:GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION",
+    "hf-runtime:GENERATIVEQC_DF_SEED_VERIFY",
+    "hf-runtime:GENERATIVEQC_DF_RAW_REUSE"
+  ],
+  "owner_issues": [
+    409,
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "These selectors expose reference validation, fixed block-size/storage ablations, verification, or raw-source reuse controls and are not standalone automatic-promotion targets.",
+  "revisit_condition": "Retire them when the corresponding retained evidence or debugging workflow no longer needs a forced comparison path.",
+  "evidence": [
+    "issue:#409",
+    "issue:#1598"
+  ]
+}

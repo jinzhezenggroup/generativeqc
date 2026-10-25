@@ -55,5 +55,5 @@ transformed logical production plus retained bytes. Later resident J/K records
 contain no tile generation. Capture counters describe construction and must
 not be interpreted as replay execution counts.
 
-This is the resident slice of #282. Streamed traversal optimization, complete
+This covers the resident path only. Streamed traversal optimization, complete
 96/192-AO batch evidence and occupied-factor RI-K are separate work.

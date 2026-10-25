@@ -500,6 +500,11 @@ struct PreparedFockPlan::Impl {
                 detail);
       }
 #endif
+      // Packed pure-J does not consume the dense host reader. Freeze its policy
+      // without allocating an unused full A or displacing its generated schedule.
+      checked(prepare_cuda_density_fitting_host_panels(
+                  raw_plan, coulomb_only_packing ? 0 : plan_budget, diagnostic.fitted, detail),
+              detail);
       if (!diagnostic.fitted.empty()) {
         for (auto& item : diagnostic.fitted) {
           item.resolved_value_budget_bytes = resolved.value_bytes;
@@ -762,6 +767,8 @@ bool PreparedFockPlan::matches(
        (!impl_->cuda_exact ||
         impl_->diagnostic.direct.derivative_order < minimum_direct_derivative_order)) ||
       minimum_fitted_derivative_order > impl_->retained_fitted_derivative_order)
+    return false;
+  if (impl_->cuda_df && !cuda_density_fitting_host_policy_matches(impl_->cuda_df.get()))
     return false;
   if (impl_->diagnostic.strategy != strategy || !same_system(impl_->orbital, orbital)) return false;
   try {
