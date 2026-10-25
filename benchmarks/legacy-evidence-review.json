@@ -254,6 +254,11 @@
       "owner": "#2762 full-range KS host ERI qualification",
       "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
       "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
+    },
+    "h100-direct-wb97mv-20261024": {
+      "owner": "#2732 bounded Direct WB97M-V water48/96 H100 evidence",
+      "reason": "Lossless original scientific/control/source histories with explicit generated-binary inventory-only limits. Formal72/18process gates separate from diagnostic26 including failed2+NOT_RUN10; source-matched portable-sm90, not hardware-only or wholeparent acceptance.",
+      "review_document": "benchmarks/results/h100-direct-wb97mv-20261024/README.md"
     }
   },
   "files": [
@@ -904,6 +909,30 @@
       "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
       "bytes": 176688,
       "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz",
+      "bytes": 943896,
+      "sha256": "23c4014d2456e159b04cd9666d1af57476ef56fa2f8361bbc3b201d702e623a2",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v2.json.xz",
+      "bytes": 173416,
+      "sha256": "625b256ae227563a025240f3a14983a9163692b64b8be7a45f175a29ace4a180",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v3.json.xz",
+      "bytes": 188864,
+      "sha256": "56c313ef7c43ee6da05bd6051567c07cf6b712521e859e481d94938f6dcb026b",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
