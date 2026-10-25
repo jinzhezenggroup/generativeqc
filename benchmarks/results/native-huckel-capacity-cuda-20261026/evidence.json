@@ -1,0 +1,241 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json.gz",
+      "sha256": "341ec934f91e25d07810467a0c981f92c3dd45565f1ba82fda4ca396e0937662"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "energies": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        2520
+      ]
+    },
+    "forces": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        1008,
+        2,
+        3
+      ]
+    },
+    "installed_energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9095836023552692e-14,
+      "max_scaled_error": 1.9095836023552692e-06,
+      "passed": true,
+      "rms_error": 1.807343620813687e-14,
+      "rtol": 0,
+      "shape": [
+        52
+      ]
+    },
+    "installed_forces": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.176836406102666e-14,
+      "max_scaled_error": 1.176836406102666e-08,
+      "passed": true,
+      "rms_error": 6.523331977481159e-15,
+      "rtol": 0,
+      "shape": [
+        52,
+        2,
+        3
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Both core Release products and required packaged stationary CUDA artifacts built with verified sccache; cold compile cost is not measured.",
+    "seconds": null
+  },
+  "device": {
+    "backend": "cuda",
+    "gpu": "NVIDIA GeForce RTX 5090 (Slurm gres gpu:5090:1)",
+    "host": "n1 / node1",
+    "jobs": [
+      14395,
+      14403
+    ],
+    "visibility": "0"
+  },
+  "hardware": {
+    "host": "node1",
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "No scientific equation changes; existing RHF/PBE production owners and independent oracle tests retain their identities in the measured source revision.",
+    "ir": "This changes metadata resource ownership; no new scientific IR is introduced."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "25ec892bdafe9f02c39064ea101a1a64b31da8c904a9722aaec41d7a6a5e1571",
+    "source": "71f00ef9e83739d03e1e8f15fb6a31d526a1e83d68b7d402dfd5e64ad3e016f4"
+  },
+  "inputs_hash": "3ec37de44fc33a3fe02e6ea98b5548ffbb9d19dc7f41e5ae12d9fd39b06f2a9b",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Per-sample planned peaks match exactly in samples; this campaign does not measure whole-endpoint simultaneous live allocations or provider/RSS overhead."
+  },
+  "performance": {
+    "reason": "All scoped <=1.05 CUDA endpoint gates pass; complete performance promotion still requires whole-endpoint allocation, compilation-cost and independent iteration-residual evidence.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "device": "cuda",
+    "failed_runner_history": [
+      "14382: two successful core builds, 155 tests passed, six missing packaged stationary-artifact failures; no source correction was needed.",
+      "14395: full GPU tests/memcheck/timings passed, 24 installed SDK outputs completed; CLI invocation incorrectly specified auxiliary basis for Direct and exited 2.",
+      "14403: corrected Direct CLI invocation omits auxiliary basis; four CLI outputs and all 28 CUDA reference comparisons passed. Original outputs and binaries retained."
+    ],
+    "inputs": {
+      "cases": [
+        "rhf-h2-energy-force",
+        "pbe-h2-energy",
+        "pbe-h2-energy-force",
+        "pbe-ragged-energy"
+      ],
+      "grid": [
+        12,
+        4,
+        8
+      ],
+      "h2": [
+        [
+          "H",
+          [
+            0,
+            0,
+            -0.7
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            0,
+            0.7
+          ]
+        ]
+      ],
+      "moved_first_atom_dx_bohr": 0.013,
+      "water": [
+        [
+          "O",
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            -1.43,
+            1.11
+          ]
+        ],
+        [
+          "H",
+          [
+            0,
+            1.43,
+            1.11
+          ]
+        ]
+      ]
+    },
+    "installed_scope": "Direct/DF RHF H2 E/F at base and moved geometry; default/exact/one-byte-below preparation numeric cap, repeated SDK executions; PATH=/nonexistent",
+    "native_library_hashes": {
+      "cuda-ABBA-0-A.json": "3abcc8c765171babd5c78c4f683ad162299a5c7a71f7a176a0d7ff9d32312648",
+      "cuda-ABBA-1-B.json": "56d9fd4d92ee06f14419342d5196cfc0244c3e90c34bbb1f9a452a8ab70fb28d",
+      "cuda-ABBA-2-B.json": "56d9fd4d92ee06f14419342d5196cfc0244c3e90c34bbb1f9a452a8ab70fb28d",
+      "cuda-ABBA-3-A.json": "3abcc8c765171babd5c78c4f683ad162299a5c7a71f7a176a0d7ff9d32312648",
+      "cuda-BAAB-0-B.json": "56d9fd4d92ee06f14419342d5196cfc0244c3e90c34bbb1f9a452a8ab70fb28d",
+      "cuda-BAAB-1-A.json": "3abcc8c765171babd5c78c4f683ad162299a5c7a71f7a176a0d7ff9d32312648",
+      "cuda-BAAB-2-A.json": "3abcc8c765171babd5c78c4f683ad162299a5c7a71f7a176a0d7ff9d32312648",
+      "cuda-BAAB-3-B.json": "56d9fd4d92ee06f14419342d5196cfc0244c3e90c34bbb1f9a452a8ab70fb28d"
+    },
+    "orders": [
+      "ABBA",
+      "BAAB"
+    ],
+    "ratio_gate": 1.05,
+    "runner": "benchmarks/native_resource_composition.py",
+    "samples_per_block": 21,
+    "scalar_api_unknown_fock_counts": "retained as null; no fabricated operation census",
+    "scope": "construction+prepare+cold+warm+moved+closure",
+    "source_dirty_at_measurement": false,
+    "warmups": 3
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "cuda_pytest_passed": 161,
+      "memcheck_errors": 0,
+      "memcheck_oracle_cases": 6,
+      "native_preliminary_contracts": 1,
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "case_order_gates": 8,
+      "complete_endpoint_samples": 672,
+      "maximum_median_ratio": 0.9259865350168824,
+      "published_items": 2520,
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "scope": "Exact complete CUDA endpoint E/F/work parity; 52 installed CPU/CUDA E/F publications against independent PySCF 2.14.0 with explicit contractions and full DF auxiliary response. Existing atomic/DF oracle tests also passed.",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353",
+      "status": "pass"
+    }
+  },
+  "subject": "Native Huckel capacity: CUDA endpoints and installed SDK/CLI qualification",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "architectures": "120",
+    "cache": "sccache 0.16.0",
+    "cmake_build_type": "Release",
+    "cpu_linalg": "scalar",
+    "cuda": "12.9.1",
+    "fast_compile": false,
+    "python": "3.13.9",
+    "threads": 1
+  }
+}
