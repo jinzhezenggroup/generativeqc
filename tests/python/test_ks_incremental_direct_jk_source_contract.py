@@ -99,7 +99,8 @@ struct Provider {
 };
 struct Options { double density_tolerance; };
 int main() {
-  for (bool budget_fock : {false, true})
+  for (bool automatic_program : {false, true})
+   for (bool budget_fock : {false, true})
     for (bool budget_stationarity : {false, true})
       for (double tolerance : {1e-6, std::nextafter(1e-4, 0.0), 1e-4,
                                std::nextafter(1e-4, 1.0), 1e-3})
@@ -112,7 +113,7 @@ int main() {
 """
         + gate
         + """
-              bool expected = incremental_direct_jk || spins == 2 || ecp;
+              bool expected = automatic_program || incremental_direct_jk || spins == 2 || ecp;
               if (budget_fock && (!budget_stationarity || tolerance < 1e-4))
                 expected = true;
               assert(strict_final_closure == expected);

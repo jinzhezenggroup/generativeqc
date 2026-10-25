@@ -920,7 +920,12 @@ def test_worker_retains_actual_precision_and_closes_owner(
         geometry=0,
         nonce="synthetic-worker",
     )
-    observed = collector.worker(args)
+    # The real worker owns a fresh process; isolate its environment in this host test.
+    environment = dict(os.environ)
+    with monkeypatch.context() as worker_process:
+        worker_process.setattr(os, "environ", dict(environment))
+        observed = collector.worker(args)
+    assert dict(os.environ) == environment
     assert observed["precision"] is precision
     assert observed["native_ks_diagnostic"] is receipt["native_ks_diagnostic"]
     assert observed["initial_guess"] is None and observed["restart_origin"] == "cold"

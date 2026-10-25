@@ -89,7 +89,11 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
 /** The method's global ledger supplies the budget. Size the common direct
  * source explicitly so its standalone default cap is not a second KS limit. */
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
-                                    generativeqc_backend backend) noexcept {
+                                    generativeqc_backend backend,
+                                    const NativeKsExecutionPlan& plan) noexcept {
+  // Automatic CUDA KS is energy-only. Do not retain unqualified derivative
+  // sources outside its exact J-only resource inventory.
+  if (plan.automatic_program) return 0;
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda) {
     const auto exact = [](const scf::FockTermSpec& term) {
@@ -430,14 +434,18 @@ class KsPreparedState final : public KsSingleOwnerPort {
         backend_(backend),
         fock_(system_, auxiliary ? &*auxiliary : nullptr, *options_.resolved_fock_build, device,
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
-                  ? ks_provider_bytes(
-                        system_, backend,
-                        ks_direct_derivative_order(*options_.resolved_fock_build, backend))
+                  ? ks_provider_bytes(system_, backend,
+                                      ks_direct_derivative_order(*options_.resolved_fock_build,
+                                                                 backend, execution_plan_))
                   : ks_fitted_provider_budget(options_, execution_plan_, false),
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
-                  ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
+                  ? ks_direct_derivative_order(*options_.resolved_fock_build, backend,
+                                               execution_plan_)
                   : 0U,
-              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U,
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+                      execution_plan_.automatic_program
+                  ? 0U
+                  : 1U,
               ks_fitted_projection_reservation(system_, execution_plan_,
                                                *options_.resolved_fock_build)),
         basis_(system_),
@@ -3084,7 +3092,7 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
   for (const auto& system : systems) {
-    validate_ks_spin_state(execution_plan, system);
+    validate_ks_spin_state(execution_plan, system, context.requested_backend);
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
         execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
         (!system.ecp_terms.empty() ||
