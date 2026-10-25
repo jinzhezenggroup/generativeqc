@@ -637,7 +637,7 @@ def cpu_stationary_all_electron_force_eligible(
     } == {"short-range", "long-range"}
     # This is a candidate capability only. The native prepared owner still
     # authenticates the actual basis, integral work bound and final-state token.
-    exchange, correlation, exact = ks_coefficients(method_ir)
+    exchange, correlation, exact = ks_coefficients(electronic_method_ir(method_ir))
     native_profile = (
         not plan.nonlocal_correlation
         and not any(term.operator != "full-range" for term in plan.exchange)
