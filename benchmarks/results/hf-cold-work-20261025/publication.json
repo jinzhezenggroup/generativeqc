@@ -1,0 +1,107 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Measured fixes remove redundant work with numerical regression coverage; existing fitting failures and remaining slower points preclude a universal qualified-performance claim.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7457,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "5cbb5eb288c1c171741e8b0660aaf0008f0eef053e9624fa684469d11ed26b3f"
+    },
+    {
+      "bytes": 4913,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "4350189b1483c24f5f1613bcb100e315d352bc12620f99c8bb6a76733c3cc2ec"
+    },
+    {
+      "bytes": 7304,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "8ddb545451a5cd55797b36f3c1be6b811054979afe3c21bc817b24b6543831bf"
+    },
+    {
+      "bytes": 219828,
+      "path": "receipts.json.xz",
+      "role": "samples",
+      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
+    },
+    {
+      "bytes": 25132,
+      "path": "oracles.json.xz",
+      "role": "input",
+      "sha256": "01ffa60cf4206c98a78bb46aef3c76bda074019304b83bc2685da5f3cd532243"
+    },
+    {
+      "bytes": 1600,
+      "path": "reference-reuse.json.xz",
+      "role": "input",
+      "sha256": "9fd4df4b7ecc1977271d184439a189d88be0a9348ba361d58cef04666a33972c"
+    },
+    {
+      "bytes": 3072,
+      "path": "auxiliary-inputs.json.xz",
+      "role": "input",
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "bytes": 20964,
+      "path": "assessment.json.xz",
+      "role": "summary",
+      "sha256": "2554a6f7b302c82034d99cb3c3fa382032a94c8e7222590c5213712bc38e6edb"
+    },
+    {
+      "bytes": 16948,
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "sha256": "895896b9a8c27e0e3556f1880e7a0f4e17848916661755985d975875528ebc42"
+    },
+    {
+      "bytes": 4684,
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "sha256": "2a1a52f98be5b41773f823f66fd730e695c599861ec7f4b4c078293b53679582"
+    },
+    {
+      "bytes": 7040,
+      "path": "execution.json.xz",
+      "role": "reproduction",
+      "sha256": "e1173283634a97979973f529886bf478d17c7749153cc6f8bd746df35863710c"
+    },
+    {
+      "bytes": 20812,
+      "path": "ablations.json.xz",
+      "role": "samples",
+      "sha256": "4510252e4aabf9d5139797da27e088b05efa34495beb6d8b3c80ad44fea1a290"
+    },
+    {
+      "bytes": 32216,
+      "path": "profiles.json.xz",
+      "role": "summary",
+      "sha256": "e94ba2b525ede2befc4c4f8659650186e939268e2c4efaa3f0d9e73b988bbce2"
+    },
+    {
+      "bytes": 6436,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "7f249325c745e86730598a62a69c702a6641668d5834aeb91c07dd659054f9fe"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/hf-cold-work-20261025/reproduce.py",
+      "--output",
+      ".artifacts/hf-cold-work-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "1a971cfc508c666f09ee8490039e74b6843c54f0"
+  }
+}
