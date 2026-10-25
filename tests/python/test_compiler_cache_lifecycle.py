@@ -95,6 +95,43 @@ def _assert_workers_stopped(root: Path, count: int) -> None:
         assert worker["endpoint"] != str(root / "shared.sock")
 
 
+def _assert_cancelled_worker_stopped(
+    cancelled: dict[str, Any], survivor: dict[str, Any]
+) -> None:
+    # Reaping the group leader does not make grandchild exit synchronous.
+    # Keep the independent invocation alive throughout the bounded observation.
+    deadline = time.monotonic() + 2
+    while True:
+        assert all(_running(survivor[key]) for key in ("server", "child"))
+        if not any(_running(cancelled[key]) for key in ("server", "child")):
+            break
+        assert time.monotonic() < deadline, cancelled
+        time.sleep(0.01)
+
+
+def test_one_worker_check_waits_for_asynchronous_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = [{"server": 1, "child": 2}, {"server": 3, "child": 4}]
+    live = [{1, 2, 3, 4}, {3, 4}]
+    monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live[0])
+    monkeypatch.setattr(time, "sleep", lambda _: live.pop(0))
+    _assert_cancelled_worker_stopped(workers[0], workers[1])
+    assert live == [{3, 4}]
+
+
+@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set(), {1, 2}])
+def test_one_worker_check_rejects_missing_or_leaked_workers(
+    monkeypatch: pytest.MonkeyPatch, live: set[int]
+) -> None:
+    workers = [{"server": 1, "child": 2}, {"server": 3, "child": 4}]
+    clock = iter([0.0, 3.0])
+    monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live)
+    monkeypatch.setattr(time, "monotonic", lambda: next(clock))
+    with pytest.raises(AssertionError):
+        _assert_cancelled_worker_stopped(workers[0], workers[1])
+
+
 @pytest.mark.parametrize("startup_delay", [0, 0.6])
 @pytest.mark.parametrize(
     "command,code", [("success", 0), ("failure", 17), ("timeout", 124)]
@@ -212,19 +249,10 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
                 ]
                 assert len(workers) == 2
                 by_endpoint = {worker["endpoint"]: worker for worker in workers}
-                cancelled = by_endpoint[endpoints["timeout"]]
-                survivor = by_endpoint[endpoints["slow"]]
-                # Group cancellation reaps its direct child, but a killed
-                # grandchild may not have reached its terminal state yet.
-                # Use the same finite observation window as final cleanup,
-                # checking the other invocation's identity throughout.
-                deadline = time.monotonic() + 2
-                while True:
-                    assert all(_running(survivor[key]) for key in ("server", "child"))
-                    if not any(_running(cancelled[key]) for key in ("server", "child")):
-                        break
-                    assert time.monotonic() < deadline, cancelled
-                    time.sleep(0.01)
+                _assert_cancelled_worker_stopped(
+                    by_endpoint[endpoints["timeout"]], by_endpoint[endpoints["slow"]]
+                )
+                assert not successful.done()
             finally:
                 (cache_workers / "release-success").touch()
             assert successful.result().returncode == 0
