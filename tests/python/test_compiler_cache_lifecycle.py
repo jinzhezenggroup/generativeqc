@@ -175,6 +175,7 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
     monkeypatch.setenv("QC_TEST_STARTUP_DELAY", str(startup_delay))
     ready = Barrier(2, timeout=10)
     original = compiler_cache.run_compiler
+    endpoints: dict[str, str] = {}
 
     def synchronized_clients(
         argv: list[str], timeout: float, **kwargs: Any
@@ -183,6 +184,7 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
             # Both private servers and recorded children must exist before the
             # cancellation. Do not assume Python startup fits in 0.2 seconds.
             started = time.monotonic()
+            endpoints[argv[-1]] = kwargs["environment"]["SCCACHE_SERVER_UDS"]
             ready.wait()
             timeout = max(0.0, timeout - (time.monotonic() - started))
         if argv[-1] == "timeout":
@@ -209,8 +211,20 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
                     for path in cache_workers.glob("gqc-scc-*.json")
                 ]
                 assert len(workers) == 2
-                for key in ("server", "child"):
-                    assert sum(_running(worker[key]) for worker in workers) == 1
+                by_endpoint = {worker["endpoint"]: worker for worker in workers}
+                cancelled = by_endpoint[endpoints["timeout"]]
+                survivor = by_endpoint[endpoints["slow"]]
+                # Group cancellation reaps its direct child, but a killed
+                # grandchild may not have reached its terminal state yet.
+                # Use the same finite observation window as final cleanup,
+                # checking the other invocation's identity throughout.
+                deadline = time.monotonic() + 2
+                while True:
+                    assert all(_running(survivor[key]) for key in ("server", "child"))
+                    if not any(_running(cancelled[key]) for key in ("server", "child")):
+                        break
+                    assert time.monotonic() < deadline, cancelled
+                    time.sleep(0.01)
             finally:
                 (cache_workers / "release-success").touch()
             assert successful.result().returncode == 0
