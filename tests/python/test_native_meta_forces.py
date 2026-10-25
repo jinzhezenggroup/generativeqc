@@ -171,13 +171,24 @@ def test_cuda_nonlocal_capacity_matches_prepared_grids() -> None:
         ]
         query.restype = ct.c_int
         status = query(ct.byref(descriptor), shape, 7, output, 9)
-        if secondary != GridSpec(10, 4, 8):
-            # Ragged counts require element topology; the larger product grid
-            # exceeds the qualified complete-force work envelope.
+        if secondary == GridSpec.treutler(0):
+            # Ragged element-specific grids require prepared topology; large
+            # rectangular point grids instead use the checked shape polynomial.
             assert status == _native.STATUS_NOT_IMPLEMENTED
             assert list(output) == [991] * 9
             continue
         assert status == _native.STATUS_SUCCESS
+        if secondary == GridSpec(160, 4, 8):
+            assert 2 * 160 * 4 * 8 > 8192
+        else:
+            # Old 8-atom/64-AO admission is not a real executor capacity bound.
+            wide = (ct.c_uint64 * 7)(12, 96, 192, 12 * 8 * 4 * 8, 1, 0, 0)
+            wide_capacity = (ct.c_uint64 * 9)(*[991] * 9)
+            assert (
+                query(ct.byref(descriptor), wide, 7, wide_capacity, 9)
+                == _native.STATUS_SUCCESS
+            )
+            assert list(wide_capacity) != [991] * 9
         prepared_query = library.generativeqc_ks_batch_stationary_cuda_capacity_v1
         prepared_query.argtypes = [
             ct.c_void_p,
