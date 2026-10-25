@@ -755,10 +755,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                       has_exchange ? 1U : 0U);
       }
     }
-    const auto status = scf::enqueue_prepared_cuda_fock(
-        provider, alpha, beta, matrix, j, exchange,
-        has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, mixed, detail,
-        mixed ? mixed_coulomb_work_counter() : nullptr, mixed && pending_mixed_exchange);
+    const auto status = enqueue_fock(
+        alpha, beta, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
+        jk_error, mixed, detail, mixed ? mixed_coulomb_work_counter() : nullptr,
+        mixed && pending_mixed_exchange);
     return observe_value_dispatch(status, provider.strategy().spec.coulomb.present,
                                   has_exchange ? 1U : 0U);
   }
@@ -784,6 +784,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
                                              1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
+  }
+
+  /** The Direct source borrows this owner's frozen transform binding/handle
+   * only for the submission. It retains no pointer across owner destruction. */
+  generativeqc_status enqueue_fock(const double* alpha, const double* beta, double* coulomb,
+                                   double* alpha_exchange, double* beta_exchange, int* error,
+                                   bool mixed, std::string& detail,
+                                   std::uint64_t* mixed_work = nullptr,
+                                   bool mixed_exchange = false) {
+    const auto matrices = matrix_products.view(masked_matrix_output, elements);
+    return scf::enqueue_prepared_cuda_fock(provider, alpha, beta, matrix, coulomb, alpha_exchange,
+                                           beta_exchange, error, mixed, detail, mixed_work,
+                                           mixed_exchange, &matrices);
   }
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
@@ -1890,7 +1903,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
-      check(matrix_products.prepare(stream, static_cast<int>(n)),
+      check(matrix_products.prepare(stream, static_cast<int>(n), 1, static_cast<int>(spins),
+                                    static_cast<int>(fock_binding.direct_nbf)),
             "CUDA KS matrix provider preparation failed");
       if (matrix_products.library_enabled())
         resource.provider_device_bytes =
@@ -2538,8 +2552,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the ordinary primary/correction fallback supplies its own receipts.
       if (status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) observe_value_dispatch(status, true, 2);
       if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
-        status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
-                                                 nullptr, jk_error, false, detail);
+        status = enqueue_fock(density, nullptr, j, exchange, nullptr, jk_error, false, detail);
         observe_value_dispatch(status, true, 1);
         if (status == GENERATIVEQC_STATUS_SUCCESS)
           status = observe_value_dispatch(scf::enqueue_prepared_cuda_exchange_correction(
@@ -5099,6 +5112,10 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
   return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+}
+const tensor::CudaStructuredProductBinding* CudaKsPlan::structured_provider_diagnostic()
+    const noexcept {
+  return impl_->matrix_products.view().structured_binding_;
 }
 CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   auto out = impl_->movement;

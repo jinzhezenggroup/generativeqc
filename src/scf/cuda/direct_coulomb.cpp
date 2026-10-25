@@ -25,6 +25,7 @@
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/queue_plan.hpp"
+#include "scf/cuda/structured_matrix.hpp"
 #include "scf/cuda_direct_jk.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -134,6 +135,25 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     transform = &expanded_transform;
   }
   const auto pairs = host.shell_pair_first.size();
+  std::vector<std::int32_t> projection_spans;
+  std::size_t projection_span_elements = 0;
+  for (bool public_rows : {true, false}) {
+    const auto dimension = public_rows ? host.nbf : host.direct_nbf;
+    const auto target_dimension = public_rows ? host.direct_nbf : host.nbf;
+    const auto& ao_shells = public_rows ? host.ao_shells : host.direct_ao_shells;
+    const auto& shell_offsets = public_rows ? host.shell_direct_ao_offsets : host.shell_ao_offsets;
+    for (std::size_t item = 0; item < batch; ++item)
+      for (std::size_t ao = 0; ao < dimension; ++ao) {
+        const auto shell = ao_shells[item * dimension + ao];
+        const auto begin = shell_offsets[shell] - item * target_dimension;
+        const auto end = shell_offsets[shell + 1U] - item * target_dimension;
+        if (begin >= end || end > target_dimension)
+          throw std::logic_error("invalid generated J projection span");
+        projection_spans.push_back(static_cast<std::int32_t>(begin));
+        projection_spans.push_back(static_cast<std::int32_t>(end));
+        projection_span_elements += end - begin;
+      }
+  }
   const auto primitive_pairs = static_cast<std::size_t>(host.shell_pair_primitive_offsets.back());
   const auto classes = detail::kDirectQuartetShellClassCount;
   constexpr std::size_t pair_classes = detail::kDirectShellPairClassCount;
@@ -157,6 +177,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   COULOMB_METADATA(COUNT);
 #undef COUNT
   charge(rectangular, sizeof(double));  // C is also present for identity transforms.
+  charge(projection_spans.size(), sizeof(std::int32_t));
   charge(order.size() + offsets.size(), sizeof(std::uint32_t));
   charge(primitive_pairs, sizeof(PrimitivePairData));
   charge(cartesian, 4 * sizeof(double));  // Density, J, J correction and Cartesian Schwarz.
@@ -226,6 +247,10 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
 #undef COULOMB_METADATA
     plan->batch.ao_to_direct_transform =
         static_cast<const double*>(allocate(transform->size(), sizeof(double), transform->data()));
+    plan->projection_spans = static_cast<const std::int32_t*>(
+        allocate(projection_spans.size(), sizeof(std::int32_t), projection_spans.data()));
+    plan->projection_span_elements = projection_span_elements;
+    plan->projection_dense_elements = product(2, rectangular);
     auto* primitive_cache =
         static_cast<PrimitivePairData*>(allocate(primitive_pairs, sizeof(PrimitivePairData)));
     plan->batch.shell_primitive_pairs = primitive_cache;
@@ -309,8 +334,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     check(cudaStreamSynchronize(stream));
     if (plan->device_bytes != required) throw std::logic_error("generated J inventory drift");
     plan->host_preparation_bytes =
-        sizeof(*plan) +
-        runtime::vector_capacities(plan->allocations, order, offsets, bounds, expanded_transform);
+        sizeof(*plan) + runtime::vector_capacities(plan->allocations, order, offsets, bounds,
+                                                   expanded_transform, projection_spans);
     if (bounded_schedule)
       plan->host_preparation_bytes = runtime::size_add(
           plan->host_preparation_bytes,
@@ -592,7 +617,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
 namespace {
 
 cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool unrestricted,
-                                               const double* alpha, const double* beta) {
+                                               const double* alpha, const double* beta,
+                                               const MatrixLibraryResources* matrices = nullptr) {
   if (alpha == nullptr || (unrestricted ? beta == nullptr : beta != nullptr))
     return cudaErrorInvalidValue;
   auto& shared = *p.shared;
@@ -618,14 +644,30 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
     }
   }
 
-  launch_transform_density_to_direct_right_kernel(
-      blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-      p.public_spin, shared.active, p.density_temporary);
-  launch_transform_density_to_direct_left_kernel(
-      blocks(product(spin_count, cartesian)), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-      p.density_temporary, shared.active, p.direct_spin);
+  if (matrices) {
+    const auto capacity = product(spin_count, cartesian);
+    const auto* spans = shared.projection_spans;
+    // The K output plane is dead until the shell contraction begins.
+    auto status = launch_structured_basis(
+        *matrices, tensor::StructuredOperation::DensityRight, b.batch_size, spin_count, b.nbf,
+        b.direct_nbf, b.ao_to_direct_transform, p.public_spin, nullptr, shared.active,
+        p.density_temporary, p.direct_exchange, capacity, spans);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = launch_structured_basis(
+          *matrices, tensor::StructuredOperation::DensityLeft, b.batch_size, spin_count, b.nbf,
+          b.direct_nbf, b.ao_to_direct_transform, p.density_temporary, nullptr, shared.active,
+          p.direct_spin, p.direct_exchange, capacity, shared.projection_spans);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorUnknown;
+  } else {
+    launch_transform_density_to_direct_right_kernel(
+        blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
+        static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+        p.public_spin, shared.active, p.density_temporary, shared.projection_spans);
+    launch_transform_density_to_direct_left_kernel(
+        blocks(product(spin_count, cartesian)), 128, 0, shared.stream, b.batch_size,
+        static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+        p.density_temporary, shared.active, p.direct_spin, shared.projection_spans);
+  }
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
@@ -642,13 +684,16 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 }
 
 cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
-                                             const double* beta);
-cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb);
+                                             const double* beta,
+                                             const MatrixLibraryResources* matrices = nullptr);
+cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb,
+                                      const MatrixLibraryResources* matrices = nullptr);
 
 cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool unrestricted,
                                                 double* alpha_exchange, double* beta_exchange,
                                                 DirectCoulombRange range, double omega,
-                                                double proposal_screening = -1.0) {
+                                                double proposal_screening = -1.0,
+                                                const MatrixLibraryResources* matrices = nullptr) {
   const bool full_range = range == DirectCoulombRange::Full;
   cudaError_t error = cudaSuccess;
   auto& shared = *p.shared;
@@ -719,14 +764,30 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
     if (error != cudaSuccess) return error;
   }
 
-  launch_transform_direct_fock_left_kernel(
-      blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-      p.direct_exchange, shared.active, p.fock_temporary);
-  launch_transform_direct_fock_right_kernel(
-      blocks(product(spin_count, matrix)), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-      p.fock_temporary, shared.zero, shared.active, p.public_exchange);
+  if (matrices) {
+    const auto capacity = product(spin_count, cartesian);
+    // The spin density is dead after K and rebuilt before every later value
+    // or derivative submission; screening reductions remain in separate planes.
+    auto status = launch_structured_basis(
+        *matrices, tensor::StructuredOperation::FockLeft, b.batch_size, spin_count, b.nbf,
+        b.direct_nbf, b.ao_to_direct_transform, p.direct_exchange, nullptr, shared.active,
+        p.fock_temporary, p.direct_spin, capacity, shared.projection_spans);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = launch_structured_basis(
+          *matrices, tensor::StructuredOperation::FockRight, b.batch_size, spin_count, b.nbf,
+          b.direct_nbf, b.ao_to_direct_transform, p.fock_temporary, shared.zero, shared.active,
+          p.public_exchange, p.direct_spin, capacity, shared.projection_spans);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorUnknown;
+  } else {
+    launch_transform_direct_fock_left_kernel(
+        blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
+        static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+        p.direct_exchange, shared.active, p.fock_temporary, shared.projection_spans);
+    launch_transform_direct_fock_right_kernel(
+        blocks(product(spin_count, matrix)), 128, 0, shared.stream, b.batch_size,
+        static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+        p.fock_temporary, shared.zero, shared.active, p.public_exchange, shared.projection_spans);
+  }
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
@@ -749,9 +810,10 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
 
 cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool unrestricted,
                                                const double* alpha, const double* beta,
-                                               double* coulomb) {
+                                               double* coulomb,
+                                               const MatrixLibraryResources* matrices = nullptr) {
   auto& shared = *p.shared;
-  auto error = enqueue_generated_coulomb_direct(shared, alpha, beta);
+  auto error = enqueue_generated_coulomb_direct(shared, alpha, beta, matrices);
   if (error != cudaSuccess) return error;
   if (p.bounded_value_capability) {
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
@@ -766,7 +828,7 @@ cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool un
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }
-  return project_generated_coulomb(shared, coulomb);
+  return project_generated_coulomb(shared, coulomb, matrices);
 }
 
 }  // namespace
@@ -775,7 +837,8 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
                                        DirectCoulombRange range, double omega,
-                                       double proposal_screening) {
+                                       double proposal_screening,
+                                       const MatrixLibraryResources* matrices) {
   const bool full_range = range == DirectCoulombRange::Full;
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       (!full_range && !p.bounded_value_capability))
@@ -790,13 +853,18 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask",
                                      full_range ? p.selection.rys_fock_mask : 0);
+  runtime::cuda_trace::trace_counter("transform_public_dimension", p.shared->batch.nbf);
+  runtime::cuda_trace::trace_counter("transform_direct_dimension", p.shared->batch.direct_nbf);
+  runtime::cuda_trace::trace_counter("transform_span_elements", p.shared->projection_span_elements);
+  runtime::cuda_trace::trace_counter("transform_dense_elements",
+                                     p.shared->projection_dense_elements);
   if (proposal_screening != -1.0 && (!full_range || !std::isfinite(proposal_screening) ||
                                      proposal_screening < p.shared->screening))
     return cudaErrorInvalidValue;
-  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta, matrices);
   return error == cudaSuccess
              ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
-                                                   range, omega, proposal_screening)
+                                                   range, omega, proposal_screening, matrices)
              : error;
 }
 
@@ -1107,7 +1175,8 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
 namespace {
 
 cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
-                                             const double* beta) {
+                                             const double* beta,
+                                             const MatrixLibraryResources* matrices) {
   auto b = p.batch;
   // J reduces the summed density into its own FP64 metadata. The optional
   // cache belongs to K's spin-aware reduction: overwriting it here would mix
@@ -1126,12 +1195,27 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
                                             p.total_density);
     density = p.total_density;
   }
-  launch_transform_density_to_direct_right_kernel(blocks(rectangle), 128, 0, p.stream, b.batch_size,
-                                                  1, b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-                                                  density, p.active, p.temporary);
-  launch_transform_density_to_direct_left_kernel(blocks(cartesian), 128, 0, p.stream, b.batch_size,
-                                                 1, b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-                                                 p.temporary, p.active, p.density);
+  if (matrices) {
+    // J is dead until contraction. Borrow its Cartesian plane for both masked
+    // stages instead of allocating another basis-transform workspace.
+    auto status =
+        launch_structured_basis(*matrices, tensor::StructuredOperation::DensityRight, b.batch_size,
+                                1, b.nbf, b.direct_nbf, b.ao_to_direct_transform, density, nullptr,
+                                p.active, p.temporary, p.coulomb, cartesian, p.projection_spans);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = launch_structured_basis(*matrices, tensor::StructuredOperation::DensityLeft,
+                                       b.batch_size, 1, b.nbf, b.direct_nbf,
+                                       b.ao_to_direct_transform, p.temporary, nullptr, p.active,
+                                       p.density, p.coulomb, cartesian, p.projection_spans);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorUnknown;
+  } else {
+    launch_transform_density_to_direct_right_kernel(
+        blocks(rectangle), 128, 0, p.stream, b.batch_size, 1, b.nbf, b.direct_nbf,
+        b.ao_to_direct_transform, density, p.active, p.temporary, p.projection_spans);
+    launch_transform_density_to_direct_left_kernel(
+        blocks(cartesian), 128, 0, p.stream, b.batch_size, 1, b.nbf, b.direct_nbf,
+        b.ao_to_direct_transform, p.temporary, p.active, p.density, p.projection_spans);
+  }
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
@@ -1177,7 +1261,8 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   return cudaGetLastError();
 }
 
-cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) {
+cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb,
+                                      const MatrixLibraryResources* matrices) {
   if (coulomb == nullptr) return cudaErrorInvalidValue;
   const auto b = p.batch;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
@@ -1191,30 +1276,51 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) 
                               cartesian);
   const auto error = cudaGetLastError();
   if (error != cudaSuccess) return error;
+  if (matrices) {
+    // The transformed density and its screening reductions are dead after J.
+    // Every value/derivative invocation reconstructs them before reuse.
+    const auto capacity = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
+    auto status =
+        launch_structured_basis(*matrices, tensor::StructuredOperation::FockLeft, b.batch_size, 1,
+                                b.nbf, b.direct_nbf, b.ao_to_direct_transform, p.coulomb, nullptr,
+                                p.active, p.temporary, p.density, capacity, p.projection_spans);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = launch_structured_basis(*matrices, tensor::StructuredOperation::FockRight,
+                                       b.batch_size, 1, b.nbf, b.direct_nbf,
+                                       b.ao_to_direct_transform, p.temporary, p.zero, p.active,
+                                       coulomb, p.density, capacity, p.projection_spans);
+    return status == GENERATIVEQC_STATUS_SUCCESS ? cudaSuccess : cudaErrorUnknown;
+  }
   launch_transform_direct_fock_left_kernel(blocks(rectangle), 128, 0, p.stream, b.batch_size, 1,
                                            b.nbf, b.direct_nbf, b.ao_to_direct_transform, p.coulomb,
-                                           p.active, p.temporary);
-  launch_transform_direct_fock_right_kernel(blocks(matrix), 128, 0, p.stream, b.batch_size, 1,
-                                            b.nbf, b.direct_nbf, b.ao_to_direct_transform,
-                                            p.temporary, p.zero, p.active, coulomb);
+                                           p.active, p.temporary, p.projection_spans);
+  launch_transform_direct_fock_right_kernel(
+      blocks(matrix), 128, 0, p.stream, b.batch_size, 1, b.nbf, b.direct_nbf,
+      b.ao_to_direct_transform, p.temporary, p.zero, p.active, coulomb, p.projection_spans);
   return cudaGetLastError();
 }
 
 }  // namespace
 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
-                                      const double* beta, double* coulomb) {
+                                      const double* beta, double* coulomb,
+                                      const MatrixLibraryResources* matrices) {
   if (!p.value_capability) return cudaErrorNotSupported;
   runtime::cuda_trace::TraceOperation trace("direct_j", p.stream,
                                             {static_cast<std::size_t>(p.batch.batch_size),
                                              static_cast<std::size_t>(p.batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.rys_fock_mask);
-  auto error = enqueue_generated_coulomb_direct(p, density, beta);
-  return error == cudaSuccess ? project_generated_coulomb(p, coulomb) : error;
+  runtime::cuda_trace::trace_counter("transform_public_dimension", p.batch.nbf);
+  runtime::cuda_trace::trace_counter("transform_direct_dimension", p.batch.direct_nbf);
+  runtime::cuda_trace::trace_counter("transform_span_elements", p.projection_span_elements);
+  runtime::cuda_trace::trace_counter("transform_dense_elements", p.projection_dense_elements);
+  auto error = enqueue_generated_coulomb_direct(p, density, beta, matrices);
+  return error == cudaSuccess ? project_generated_coulomb(p, coulomb, matrices) : error;
 }
 
 cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricted,
-                                      const double* alpha, const double* beta, double* coulomb) {
+                                      const double* alpha, const double* beta, double* coulomb,
+                                      const MatrixLibraryResources* matrices) {
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       coulomb == nullptr)
     return cudaErrorNotSupported;
@@ -1223,9 +1329,14 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
       {static_cast<std::size_t>(p.shared->batch.batch_size),
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.shared->rys_fock_mask);
-  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  runtime::cuda_trace::trace_counter("transform_public_dimension", p.shared->batch.nbf);
+  runtime::cuda_trace::trace_counter("transform_direct_dimension", p.shared->batch.direct_nbf);
+  runtime::cuda_trace::trace_counter("transform_span_elements", p.shared->projection_span_elements);
+  runtime::cuda_trace::trace_counter("transform_dense_elements",
+                                     p.shared->projection_dense_elements);
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta, matrices);
   return error == cudaSuccess
-             ? enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb)
+             ? enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb, matrices)
              : error;
 }
 

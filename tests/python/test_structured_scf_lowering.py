@@ -107,3 +107,11 @@ def test_emission_is_deterministic_and_shared_owners_do_not_submit_blas() -> Non
     assert "launch_structured_basis(" in hf
     assert "cublasDsyrk(" not in hf + ks
     assert "cublasDgemm(" not in hf + ks
+
+
+def test_cold_hf_resolves_basis_scratch_after_preparing_its_binding() -> None:
+    """An empty cold binding must not null a span already charged by the arena."""
+    source = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+    assert source.index("resources.structured_binding_.emplace(") < source.index(
+        "auto basis_matrix_scratch ="
+    )

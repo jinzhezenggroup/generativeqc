@@ -264,6 +264,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     # not import a method driver or change the shared DIIS solve owner.
     "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
+    "runtime/cuda_component_trace.hpp",
     # Allocation-free small solve/acceptance policy shared with host Pulay;
     # the CUDA kernel still owns normalization, history and Fock transport.
     "solver/diis_affine.hpp",
@@ -361,6 +362,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_jk_host_cache.",
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
