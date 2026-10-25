@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import time
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,7 @@ def main() -> None:
     parser.add_argument("--case", default="water-tetramer-def2-svp-spherical")
     parser.add_argument("--budget-mib", type=int, default=20)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--trace-only", action="store_true")
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -122,6 +124,10 @@ def main() -> None:
                         flush=True,
                     )
                 if traced:
+                    diagnostics = [
+                        d.to_dict()
+                        for d in batch.last_density_fitting_metric_diagnostics()
+                    ]
                     break
         if traced:
             records = [json.loads(line) for line in trace.read_text().splitlines()]
@@ -141,23 +147,26 @@ def main() -> None:
                     "storage": storage,
                     "counters": counts,
                     "trace": trace.name,
+                    "df_diagnostics": diagnostics,
+                    "execution_records": dict(Counter(r["execution"] for r in records)),
                 }
             )
         args.output.write_text(json.dumps(payload, indent=2) + "\n")
 
     # Warm ordinary process/library initialization in every compared policy.
-    for policy, storage in (
-        ("0", "dense"),
-        ("auto", "dense"),
-        ("0", "auto"),
-        ("auto", "auto"),
-    ):
-        execute(policy, storage, -1)
-    for repeat in range(args.repeats):
-        for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
-            execute(policy, "dense", repeat)
-        for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
-            execute(policy, "auto", repeat)
+    if not args.trace_only:
+        for policy, storage in (
+            ("0", "dense"),
+            ("auto", "dense"),
+            ("0", "auto"),
+            ("auto", "auto"),
+        ):
+            execute(policy, storage, -1)
+        for repeat in range(args.repeats):
+            for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
+                execute(policy, "dense", repeat)
+            for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
+                execute(policy, "auto", repeat)
     for policy, storage in (
         ("0", "dense"),
         ("auto", "dense"),

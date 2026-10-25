@@ -50,3 +50,14 @@ Performance qualification must include the cost of losing graph replay, raw
 construction, final response, and cold/warm/moved geometries. Removing recurrence
 alone is not sufficient evidence to promote a broader policy. Full GPU and
 capacity-refusal controls accompany the source-backed tests.
+
+## Qualification
+
+[Source-bound endpoint evidence](../../../../benchmarks/results/df-host-panels-20261025/README.md)
+qualifies complete RHF cold/warm/moved E+F and independent UHF E+F. At 192 AO
+and a natural 64 MiB DF allowance, an 80.53% raw prefix cuts median cold E+F
+from 8.0221 to 5.6391 seconds (29.7%); all arms have 18 SCF iterations and 19
+Focks. At 96 AO/20 MiB, the natural packed full-GPU path remains much faster
+than dense streamed+RAM and stays selected. 38 GPU tests and five memcheck
+cases pass. Baseline trace counters include graph construction, so only the
+complete semantic counts and eager RAM traffic are reported as executed work.
