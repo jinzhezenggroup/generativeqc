@@ -703,8 +703,7 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
   const bool force_eligible = plan->supported_properties() & GENERATIVEQC_PROPERTY_FORCES;
   if (force_eligible) {
     const auto force_result = plan->execute(true);
-    require(force_result.convergence.converged &&
-                std::abs(force_result.energy - oracle) < 2e-10 &&
+    require(force_result.convergence.converged && std::abs(force_result.energy - oracle) < 2e-10 &&
                 force_result.forces.size() == 3 * system.atoms.size() &&
                 std::all_of(force_result.forces.begin(), force_result.forces.end(),
                             [](double value) { return std::isfinite(value); }),

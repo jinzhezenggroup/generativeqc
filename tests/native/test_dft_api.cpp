@@ -1101,7 +1101,7 @@ int main() {
     forces.fill(1234.0);
     require(generativeqc_calculation_execute(calculation, &result) ==
                 (r2scan_force_eligible ? GENERATIVEQC_STATUS_SUCCESS
-                                      : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+                                       : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
             "r2SCAN RKS force execution disagrees with its prepared capability");
     if (r2scan_force_eligible) {
       require(result.converged && std::abs(result.energy - r2scan_rks_energy) < 2e-12 &&
@@ -1112,9 +1112,9 @@ int main() {
         require(std::abs(forces[axis] + forces[3 + axis]) < 2e-5,
                 "native r2SCAN RKS forces violate translation invariance");
     } else {
-      require(std::all_of(forces.begin(), forces.end(),
-                          [](double value) { return value == 1234.0; }),
-              "unqualified r2SCAN RKS context published partial forces");
+      require(
+          std::all_of(forces.begin(), forces.end(), [](double value) { return value == 1234.0; }),
+          "unqualified r2SCAN RKS context published partial forces");
     }
     generativeqc_calculation_destroy(calculation);
 
