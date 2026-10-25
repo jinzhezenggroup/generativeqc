@@ -120,7 +120,7 @@ def test_one_worker_check_waits_for_asynchronous_exit(
     assert live == [{3, 4}]
 
 
-@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set(), {1, 2}])
+@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set(), {1, 2}, {1, 4}, {2, 3}])
 def test_one_worker_check_rejects_missing_or_leaked_workers(
     monkeypatch: pytest.MonkeyPatch, live: set[int]
 ) -> None:
