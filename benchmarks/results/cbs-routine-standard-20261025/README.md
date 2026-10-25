@@ -8,14 +8,17 @@ The default uses the former routine composite allowance, with two retained safeg
 
 Full DF / RI-JK, all-electron cc-pVDZ/cc-pVTZ MP2 extrapolation plus a cc-pVDZ DF-CCSD(T)−MP2 correction, with matching JKFIT auxiliaries. QM7 representatives use the pinned dataset and exact basis identities in the records. Every call constructs a fresh owner and returns host energy plus analytic forces. Basis snapshots are prepared outside timing; process/CUDA startup is separately retained. No reference density or oracle amplitudes enter production.
 
-One Slurm RTX 5090 allocation, one math thread, 32 GiB numeric budget. Medians and ranges describe two calls per case, not a confidence interval or a speedup comparison. Numeric capacities do not measure peak VRAM. Only the default is displayed; internal stricter controls remain in raw validation records.
+Three Slurm RTX 5090 allocations use the same binary and source, one math thread, and a 32 GiB numeric budget. C1/C2/C4/C6, C3/C5, and C7 retain separate job/card/startup identities; all seven sizes have fresh measurements. Medians and ranges describe two calls per case, not a confidence interval or a speedup comparison. Numeric capacities do not measure peak VRAM. Only the default is displayed; internal stricter controls remain in raw validation records.
 
 | QM7 case | Complete E+F median (s) | Two-call range (s) |
 | --- | ---: | ---: |
 | C1 | 3.202 | 3.200–3.204 |
 | C2 | 8.452 | 8.444–8.460 |
+| C3 | 24.370 | 24.355–24.385 |
 | C4 | 66.647 | 66.597–66.697 |
+| C5 | 171.999 | 171.977–172.020 |
 | C6 | 465.540 | 465.394–465.686 |
+| C7 | 1022.191 | 1021.967–1022.414 |
 
 Semantic work below is from the first repeat; both complete receipts, all group times, capacities and native counters are retained. Lambda counts exclude the separate independent transpose audit.
 
@@ -23,8 +26,11 @@ Semantic work below is from the first repeat; both complete receipts, all group 
 | --- | ---: | ---: | ---: | ---: |
 | C1 | 12 | 6 | 10 + 6 | 3.992e-10 |
 | C2 | 13 | 6 | 11 + 6 | 1.461e-09 |
+| C3 | 13 | 6 | 11 + 7 | 3.758e-09 |
 | C4 | 13 | 6 | 12 + 7 | 7.949e-09 |
+| C5 | 13 | 6 | 12 + 7 | 1.074e-08 |
 | C6 | 13 | 6 | 12 + 7 | 1.343e-08 |
+| C7 | 13 | 6 | 12 + 8 | 1.517e-08 |
 
 ## Independent numerical qualification
 
@@ -48,7 +54,7 @@ Independent PySCF references reconverge every Cartesian displacement at `1e-4` a
 | correlation-df/water-stretched | 1.456e-08 | 1.458e-08 |
 | correlation-df/ammonium | 1.002e-10 | 3.352e-08 |
 
-The offline verifier passes 1549 observable gates, including energy-only parity, all component energies/forces, native strict controls, relative energies, oracle locality and stability, and final physical residual replay. In the 13-case independent cohort, maximum default composite energy/force errors are 1.46e-8 Eh / 1.45e-7 Eh/Bohr.
+The offline verifier passes 1621 observable gates, including energy-only parity, all component energies/forces, native strict controls, relative energies, oracle locality and stability, and final physical residual replay. In the 13-case independent cohort, maximum default composite energy/force errors are 1.46e-8 Eh / 1.45e-7 Eh/Bohr.
 
 QM7 C2 additionally reuses the earlier campaign’s independent PySCF component energies and two-step directional forces after verifying identical geometry, basis and Hamiltonian inputs. All QM7 sizes are compared numerically with the retained strict FP64 endpoints. Those cross-revision controls are not independent full-force errors or timing baselines; no speed ratio is inferred from them.
 
@@ -74,4 +80,4 @@ python benchmarks/results/cbs-routine-standard-20261025/render.py \
 
 Candidate patches reconstruct dirty source on the named base. Candidate3 built the final native library with verified sccache 0.16.0, CUDA 12.9/SM120; candidates4/5 change Python convergence controls without changing any native-source hash. The final candidate5 patch contains the accepted benchmark driver. The earlier matched-reference run used candidate4 plus the exact compressed `oracle-driver.py.xz` overlay. Reference-only diagnostic scripts and all negative trials are retained. Later README/rendering/evidence changes do not change production sources.
 
-Use the retained build/execute scripts as recorded environment examples, adapting checkout/toolchain paths. Run all real-device work through finite `srun` allocations, preserving Slurm visibility. `benchmarks.cbs_convergence` collects the 13-case populations; `experiment.py` collects fresh default QM7 calls. The N2 independent branch uses `--reference-guess 1e --reference-cc-solver krylov`. Cache statistics, binary/source hashes, allocation and test receipts are in `provenance.json.xz`; full local logs/binaries remain in ignored artifacts and the scheduled worker checkout.
+Use the retained build/execute scripts as recorded environment examples, adapting checkout/toolchain paths. Run all real-device work through finite `srun` allocations, preserving Slurm visibility. `benchmarks.cbs_convergence` collects the 13-case populations; `experiment.py --carbons 1 2 3 4 5 6 7` collects the complete fresh default QM7 series (also supply the required patch/base/output arguments). The N2 independent branch uses `--reference-guess 1e --reference-cc-solver krylov`. Cache statistics, binary/source hashes, allocation and test receipts are in `provenance.json.xz`; full local logs/binaries remain in ignored artifacts and the scheduled worker checkout.

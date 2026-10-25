@@ -310,11 +310,10 @@ def verify(payload: dict) -> dict:
     )
     report["case_count"] = len(native_cases)
     require(report["case_count"] == 13, "qualification population changed")
-    if "qm7" in payload:
-        verify_timings(payload, report)
-        report["passed"] = report["passed"] and all(
-            e["passed"] for e in report["errors"].values()
-        )
+    verify_timings(payload, report)
+    report["passed"] = report["passed"] and all(
+        e["passed"] for e in report["errors"].values()
+    )
     return report
 
 
@@ -325,19 +324,37 @@ def verify_timings(payload: dict, report: dict) -> None:
     never same-build speed comparisons. C2 also retains independent PySCF
     energies and two-step directional forces from the earlier campaign.
     """
-    measured, controls, oracle = (
-        payload["qm7"],
-        payload["qm7_controls"],
-        payload["qm7_reference"],
-    )
-    require(measured["status"] == "completed", "incomplete QM7 endpoint")
+    controls, oracle = payload["qm7_controls"], payload["qm7_reference"]
+    measured, allocations = {"samples": [], "protocols": {}}, {}
+    native = payload["native"]["native-final5"]
+    # Supplementary sizes keep their original job/card/startup receipts.
+    # A curve may span cards of the same model; it is not one paired trial.
+    for run in payload["qm7_runs"].values():
+        require(run["status"] == "completed", "incomplete QM7 endpoint")
+        require(
+            run["library_sha256"] == native["library_sha256"]
+            and run["source_artifact_sha256"] == native["source_patch_sha256"],
+            "QM7 source/library drift",
+        )
+        require(
+            not measured["protocols"].keys() & run["protocols"].keys(),
+            "duplicate QM7 population",
+        )
+        measured["samples"].extend(run["samples"])
+        measured["protocols"].update(run["protocols"])
+        allocations.update(
+            {
+                carbon: {"slurm_job_id": run["slurm_job_id"], "gpu": run["gpu"]}
+                for carbon in run["protocols"]
+            }
+        )
     keys = [(r["carbon"], r["repeat"]) for r in measured["samples"]]
     require(
-        len(keys) == 8 and set(keys) == {(c, i) for c in (1, 2, 4, 6) for i in (0, 1)},
+        len(keys) == 14 and set(keys) == {(c, i) for c in range(1, 8) for i in (0, 1)},
         "incomplete QM7 population",
     )
     report["qm7_standard_timings"], report["qm7_work"] = [], []
-    for carbon in (1, 2, 4, 6):
+    for carbon in range(1, 8):
         control = controls[str(carbon)]
         protocol = measured["protocols"][str(carbon)]
         require(protocol == control["protocol"], "QM7 control input mismatch")
@@ -345,7 +362,12 @@ def verify_timings(payload: dict, report: dict) -> None:
         seconds = [r["complete_seconds"] for r in rows]
         require(all(np.isfinite(t) and t > 0 for t in seconds), "invalid endpoint time")
         report["qm7_standard_timings"].append(
-            {"carbon": carbon, "seconds": seconds, "median": median(seconds)}
+            {
+                "carbon": carbon,
+                "seconds": seconds,
+                "median": median(seconds),
+                **allocations[str(carbon)],
+            }
         )
         for row in rows:
             prefix = f"qm7/C{carbon}/{row['repeat']}"

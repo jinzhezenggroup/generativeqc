@@ -15,16 +15,18 @@ certificate. The [public guide](../../../../docs/user/ccsdt_cbs.md) owns the
 complete effective controls and compatibility behavior.
 
 All CBS profiles retain a reference-density ceiling of `1e-11` and a CCSD
-physical-residual ceiling of `1e-7`, including Fast. Fast remains an equivalent routine default and its existing custom
-budget interface is preserved. Tight retains the former strict stopping
-limits; FP64 retains those limits and the original all-FP64 schedule.
+physical-residual ceiling of `1e-7`, including Fast. Fast remains an equivalent
+routine default and its existing custom budget interface is preserved. Tight
+retains the former strict stopping limits; FP64 retains those limits and the
+original all-FP64 schedule.
 Standalone CCSD(T) and HF/DFT convergence defaults are unchanged.
 
 The independent preconvergence selector remains available for all fitted
 profiles. Final CCSD and Lambda solves, independent residual/transpose checks,
 triples and force response remain FP64. The shape gates previously assigned
 to strict Standard now apply to Tight. No still-looser Fast tier is invented
-to produce a second benchmark curve. The homepage displays Standard only.
+to produce a second benchmark curve. The homepage displays default settings
+without profile labels.
 
 This implements the [default assessment](../../proposed/2026-10-25-cbs-routine-convergence.md)
 and supersedes the profile naming in the earlier
@@ -97,6 +99,13 @@ and nitrogen stretch, dimer binding and the diffuse-basis shift. Native
 energy-only results, repeated fresh owners, strict controls and physical
 residual replays are retained. Initial failures and source/binary identities
 are retained separately rather than removed from the campaign.
+
+The homepage curve covers every QM7 alkane representative from C1 through C7,
+with two fresh complete energy/force calls per size on the final measured source.
+Supplementary C3/C5 and C7 allocations retain their own GPU/job/startup identities.
+Every size is compared numerically with an original strict endpoint; C2 also
+retains an independent directional-force reference. These historical controls
+are not paired timing baselines or independent full-force accuracy evidence.
 
 These gates qualify numerical convergence on the declared branch and cohort.
 They do not establish single-reference model accuracy for dissociation,

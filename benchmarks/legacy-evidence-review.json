@@ -1,5 +1,10 @@
 {
   "families": {
+    "cbs-routine-standard-20261025": {
+      "owner": "CBS routine default convergence qualification",
+      "reason": "One lossless compressed population retains 13 physical-basis native/oracle cases, two complete Cartesian finite-difference stencils, all failed candidates and branch diagnostics, fourteen default QM7 endpoints covering C1\u2013C7 and original cross-revision controls. Full observables, semantic work and negative trials remain together; no storage cap is increased. The publication manifest and offline verifier bind the accepted numerical scope.",
+      "review_document": "benchmarks/results/cbs-routine-standard-20261025/README.md"
+    },
     "h100-paper-environment-20261024": {
       "owner": "#2726 H100 environment/setup source inventory",
       "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
@@ -259,14 +264,17 @@
       "owner": "#2732 bounded Direct WB97M-V water48/96 H100 evidence",
       "reason": "Lossless original scientific/control/source histories with explicit generated-binary inventory-only limits. Formal72/18process gates separate from diagnostic26 including failed2+NOT_RUN10; source-matched portable-sm90, not hardware-only or wholeparent acceptance.",
       "review_document": "benchmarks/results/h100-direct-wb97mv-20261024/README.md"
-    },
-    "cbs-routine-standard-20261025": {
-      "owner": "CBS routine default convergence qualification",
-      "reason": "One lossless compressed population retains 13 physical-basis native/oracle cases, two complete Cartesian finite-difference stencils, all failed candidates and branch diagnostics, eight default QM7 endpoints and original cross-revision controls. Full observables, semantic work and negative trials remain together; no storage cap is increased. The publication manifest and offline verifier bind the accepted numerical scope.",
-      "review_document": "benchmarks/results/cbs-routine-standard-20261025/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/cbs-routine-standard-20261025/records.json.xz",
+      "family": "cbs-routine-standard-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-observables-independent-oracles-work-and-negative-trials",
+      "bytes": 339296,
+      "sha256": "5eaac46759bc3893485c7f57c5cf4fcbf00c556f47aa3dfe20fc3bb58929dc0d"
+    },
     {
       "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
       "family": "h100-paper-environment-20261024",
@@ -938,14 +946,6 @@
       "family": "h100-direct-wb97mv-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
-    },
-    {
-      "path": "benchmarks/results/cbs-routine-standard-20261025/records.json.xz",
-      "family": "cbs-routine-standard-20261025",
-      "classification": "required-compact-accepted-evidence",
-      "role": "full-observables-independent-oracles-work-and-negative-trials",
-      "bytes": 247104,
-      "sha256": "45ad42d2d08de771561f7b03a1ba23431ce42605f2af7da1c63605caaac4802d"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

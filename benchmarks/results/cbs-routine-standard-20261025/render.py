@@ -18,9 +18,11 @@ def main() -> None:
     args = parser.parse_args()
     payload = json.loads(
         lzma.decompress((args.directory / "records.json.xz").read_bytes())
-    )["qm7"]
-    if payload["status"] != "completed" or any(
-        r["policy"] != "standard" for r in payload["samples"]
+    )
+    runs = list(payload["qm7_runs"].values())
+    samples = [row for run in runs for row in run["samples"]]
+    if any(run["status"] != "completed" for run in runs) or any(
+        r["policy"] != "standard" for r in samples
     ):
         raise ValueError("only complete Standard endpoints can be plotted")
     import matplotlib
@@ -36,10 +38,9 @@ def main() -> None:
         }
     )
     figure, axis = plt.subplots(figsize=(10, 4.8))
-    carbons = (1, 2, 4, 6)
+    carbons = tuple(range(1, 8))
     populations = [
-        [r["complete_seconds"] for r in payload["samples"] if r["carbon"] == c]
-        for c in carbons
+        [r["complete_seconds"] for r in samples if r["carbon"] == c] for c in carbons
     ]
     if any(len(p) != 2 for p in populations):
         raise ValueError("expected two fresh calls per population")
@@ -59,7 +60,7 @@ def main() -> None:
         )
     axis.set(
         yscale="log",
-        xlim=(0.6, 6.4),
+        xlim=(0.6, 7.4),
         xticks=carbons,
         xlabel="QM7 alkane representative (carbon count)",
         ylabel="Complete E+F wall time / s",

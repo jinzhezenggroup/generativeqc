@@ -147,8 +147,9 @@ for accuracy checks and detailed comparisons.
 MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
 DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
 gradients are fitted consistently**, with matching JKFIT auxiliaries and all
-electrons. Each point is the median of two fresh complete energy+force calls;
-process/CUDA startup is retained separately. Basis snapshots are outside timing.
+electrons. The curve covers C1–C7; each point is the median of two fresh complete
+energy+force calls. Process/CUDA startup is retained separately. Basis snapshots
+are outside timing.
 
 The [measurements, work counts and independent validation](benchmarks/results/cbs-routine-standard-20261025/README.md)
 retain every sample, source identity and failed candidate. Validation covers
