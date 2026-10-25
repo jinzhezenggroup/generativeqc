@@ -2404,15 +2404,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
     }
     generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
-    auto maximum_bytes = execution_plan_.dispersion.kind
-                             ? execution_plan_.dispersion_maximum_bytes
-                             : 256ull * 1024ull * 1024ull;
+    auto maximum_bytes = execution_plan_.dispersion.kind ? execution_plan_.dispersion_maximum_bytes
+                                                         : 256ull * 1024ull * 1024ull;
     if (execution_plan_.dispersion.composite_profile == 1) {
       // Reserve the complete gCP receipt even for an energy-only execution, so
       // later force requests cannot exceed the admitted correction budget.
       // D4's diagnostic reports its remaining component budget independently.
-      const auto extra_bytes = system_.atoms.size() *
-                               (sizeof(std::int32_t) + 6ull * sizeof(double));
+      const auto extra_bytes =
+          system_.atoms.size() * (sizeof(std::int32_t) + 6ull * sizeof(double));
       if (maximum_bytes <= extra_bytes)
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                           "native r2SCAN-3c correction exceeds maximum_bytes");
