@@ -15,6 +15,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_density_fitting_md.hpp"
+#include "scf/df_fock_capacity.hpp"
 #include "scf/explicit_integral_backend.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
@@ -120,6 +121,46 @@ bool same_system(const core::System& a, const core::System& b) noexcept {
   return true;
 }
 }  // namespace
+
+PreparedFockDeviceCapacity prepared_fock_device_capacity(
+    const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
+    std::size_t device_budget_bytes, std::size_t exact_device_bytes,
+    unsigned retained_fitted_derivative_order,
+    FockOccupiedProjectionReservation projection_reservation) {
+  validate_resolved_fock_build(strategy);
+  for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange})
+    if (term->present && term->approximation != FockApproximation::Exact &&
+        term->approximation != FockApproximation::DensityFitted)
+      throw std::invalid_argument("CUDA Fock capacity requires Direct or DF providers");
+  const bool has_df = needs(strategy.spec, FockApproximation::DensityFitted);
+  const bool has_exact = needs(strategy.spec, FockApproximation::Exact);
+  if (strategy.backend != FockBackend::Cuda || retained_fitted_derivative_order > 1 ||
+      (retained_fitted_derivative_order && !has_df) || (has_exact != (exact_device_bytes != 0)))
+    throw std::invalid_argument("invalid prepared CUDA Fock capacity request");
+  if (!has_df) {
+    const auto cap = device_budget_bytes ? device_budget_bytes : kDefaultDeviceBudget;
+    const auto bytes = std::min(exact_device_bytes, cap);
+    return {bytes, bytes};
+  }
+  const auto& aux = auxiliary ? *auxiliary : orbital;
+  const DfBudgetWorkload workload{
+      molecule::ao_count(orbital),
+      molecule::ao_count(aux),
+      orbital.atoms.size(),
+      1,
+      0,
+      strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0};
+  const bool coulomb_only_packing =
+      strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+      !strategy.spec.exchange.present;
+  const auto capacity = df_fock_device_capacity(
+      workload, device_budget_bytes, exact_device_bytes, df_source_bytes(orbital, aux),
+      projection_reservation.restricted_rank, coulomb_only_packing,
+      requested_df_pair_storage_request() == DfPairStorageRequest::Automatic);
+  return {capacity.retained_response_bytes,
+          std::max(capacity.retained_response_bytes, capacity.source_setup_bytes)};
+}
 
 struct PreparedFockPlan::Impl {
   core::System orbital;

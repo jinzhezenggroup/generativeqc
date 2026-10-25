@@ -57,3 +57,27 @@ migration check is not a permanent source fingerprint or required-CI gate.
 - `src/scf/df_preparation_budget.hpp`
 - `src/scf/density_fitting.cpp`
 - `tests/python/test_df_preparation_budget.py`
+
+## Prepared Fock phase composition
+
+The additive `prepared_fock_device_capacity` query now composes those leaves
+with the native source-metadata bound. For mixed Direct/DF, base resolution
+already includes Direct, but resident promotion acts on the DF subbudget.
+Therefore its ceiling must add the retained Direct bound back. Positive caps
+remain shared caps and must not receive that extra charge a second time.
+
+Initial source construction holds the uploaded metadata and auxiliary metric
+before the value owner exists. Even a tiny explicit DF cap may fail only after
+this setup, so clipping this phase to the value/response cap would undercount
+an unsuccessful preparation. The KS fleet's additional Fock setup input composes
+this phase with other retained items, provider allowances and lazy force owners;
+its default zero preserves the existing v1 transport and Direct-only behavior.
+The query deliberately excludes one-electron/ECP, SCF/XC and opaque providers.
+It does not activate promises or optional XC admission.
+
+New executable native tests compare these bounds to independently resolved
+base/subbudget/promotion records across explicit and automatic caps, live and
+unavailable probes, exact-provider sizes and rank-zero/occupied owners. They
+also cover source-metric overflow, topology-only queries without CUDA, serialized
+fleet setup and transactional overflow. Existing source-allocation doubles
+continue to check that the shared metadata bound covers actual uploaded records.
