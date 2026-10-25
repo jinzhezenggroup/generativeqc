@@ -7,9 +7,12 @@ Date: 2026-10-25
 
 Generated streamed K can revisit the same three-center integrals across AO-row
 and whitened-auxiliary panels, then repeat that traversal at each SCF density.
-Retain complete raw A in pageable FP64 RAM when the existing host value budget
-and automatic machine/cgroup headroom both admit it. The current implementation
-requires the complete array; refusal retains the existing bounded generator.
+Retain an auxiliary-complete prefix of raw A in pageable FP64 RAM within the
+existing host value budget and automatic machine/cgroup headroom. A consumer
+crossing the cached pair boundary copies the prefix and generates the suffix.
+Refusal retains the existing bounded generator. Requiring the entire tensor
+was rejected: at many natural capacity boundaries the full dense host A cannot
+fit this cap, even though a useful prefix could remove recurring K work.
 Setup borrows existing device K scratch, evaluates through the same CUDA source,
 downloads rectangles, checks finiteness, then publishes one immutable owner.
 

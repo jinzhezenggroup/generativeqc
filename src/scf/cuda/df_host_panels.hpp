@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <charconv>
 #include <cstdlib>
 #include <limits>
@@ -30,24 +31,30 @@ inline bool host_panel_policy(std::size_t& limit, bool& automatic) noexcept {
 inline generativeqc_status raw_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
                                      std::size_t first, std::size_t pairs, std::size_t begin,
                                      std::size_t count, double* output, std::string& detail) {
-  if (!plan.host_raw_three_center.empty() && system == 0 && pairs && count &&
-      first < plan.matrix_elements && pairs <= plan.matrix_elements - first && begin < plan.naux &&
-      count <= plan.naux - begin) {
+  const auto cached_pairs = plan.naux ? plan.host_raw_three_center.size() / plan.naux : 0;
+  if (system == 0 && pairs && count && first < cached_pairs && first < plan.matrix_elements &&
+      pairs <= plan.matrix_elements - first && begin < plan.naux && count <= plan.naux - begin) {
     cudaStreamCaptureStatus capture{};
     auto error = cudaStreamIsCapturing(plan.stream, &capture);
     if (error != cudaSuccess) return cuda_failure(error, "inspect host DF replay", detail);
     if (capture == cudaStreamCaptureStatusNone) {
+      // Split only the pair axis: every copied/generated rectangle keeps the
+      // caller's contiguous auxiliary width and the original contraction order.
+      const auto copied = std::min(pairs, cached_pairs - first);
       error = cudaMemcpy2DAsync(output, count * sizeof(double),
                                 plan.host_raw_three_center.data() + first * plan.naux + begin,
-                                plan.naux * sizeof(double), count * sizeof(double), pairs,
+                                plan.naux * sizeof(double), count * sizeof(double), copied,
                                 cudaMemcpyHostToDevice, plan.stream);
       if (error != cudaSuccess) return cuda_failure(error, "replay host DF raw panel", detail);
-      plan.host_panel_h2d_bytes += pairs * count * sizeof(double);
+      plan.host_panel_h2d_bytes += copied * count * sizeof(double);
       ++plan.host_panel_hits;
       runtime::cuda_trace::trace_counter("host_raw_panel_h2d_bytes",
-                                         pairs * count * sizeof(double));
+                                         copied * count * sizeof(double));
       runtime::cuda_trace::trace_counter("host_raw_panel_hits", 1);
-      return GENERATIVEQC_STATUS_SUCCESS;
+      first += copied;
+      pairs -= copied;
+      output += copied * count;
+      if (!pairs) return GENERATIVEQC_STATUS_SUCCESS;
     }
   }
   runtime::cuda_trace::trace_counter("raw_panel_source_auxiliary_evaluations", pairs * count);

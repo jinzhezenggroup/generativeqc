@@ -190,10 +190,17 @@ generativeqc_status prepare_cuda_density_fitting_host_panels(
     return GENERATIVEQC_STATUS_SUCCESS;
   const auto available = automatic ? runtime::automatic_host_cache_bytes() : requested;
   const auto existing = diagnostics.front().peak_host_bytes;
-  std::size_t elements, bytes;
-  if (existing >= host_budget || !checked_multiply(plan->matrix_elements, plan->naux, elements) ||
-      !checked_bytes(elements, bytes) || bytes > host_budget - existing || bytes > available)
+  std::size_t row_bytes;
+  if (existing >= host_budget || !checked_bytes(plan->naux, row_bytes) || !row_bytes)
     return GENERATIVEQC_STATUS_SUCCESS;
+  // Complete auxiliary rows allow bounded prefix admission even when neither
+  // memory tier can retain the full tensor. A straddling consumer regenerates
+  // only its uncached pair suffix, without changing metric/contraction order.
+  const auto cached_pairs =
+      std::min(plan->matrix_elements, std::min(host_budget - existing, available) / row_bytes);
+  if (!cached_pairs) return GENERATIVEQC_STATUS_SUCCESS;
+  const auto elements = cached_pairs * plan->naux;
+  const auto bytes = elements * sizeof(double);
   std::vector<double> values;
   try {
     values.resize(elements);
@@ -208,8 +215,8 @@ generativeqc_status prepare_cuda_density_fitting_host_panels(
   } drain{plan->stream};
   const auto tile_capacity = plan->row_tile * plan->nbf * plan->auxiliary_tile;
   const auto pair_tile = std::min(plan->matrix_elements, plan->row_tile * plan->nbf);
-  for (std::size_t first = 0; first < plan->matrix_elements; first += pair_tile) {
-    const auto pairs = std::min(pair_tile, plan->matrix_elements - first);
+  for (std::size_t first = 0; first < cached_pairs; first += pair_tile) {
+    const auto pairs = std::min(pair_tile, cached_pairs - first);
     const auto auxiliary_tile = std::min(plan->naux, tile_capacity / pairs);
     for (std::size_t begin = 0; begin < plan->naux; begin += auxiliary_tile) {
       const auto count = std::min(auxiliary_tile, plan->naux - begin);

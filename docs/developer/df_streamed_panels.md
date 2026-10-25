@@ -14,18 +14,19 @@ is unchanged, so the existing metric-rank policy still defines the operator.
 
 ## Automatic raw host panels
 
-Single-system generated streamed HF plans can retain the complete FP64 raw
-`A[pair,P]` on the host when it fits both the existing host value allowance and
+Single-system generated streamed HF plans can retain complete auxiliary rows of FP64 raw
+`A[pair,P]` on the host within both the existing host value allowance and
 available-job-RAM policy. Unset `GENERATIVEQC_DF_HOST_MAX_BYTES` permits up to
 min(32 GiB, one quarter of machine and enclosing cgroup headroom); explicit zero
 disables backing. Unknown automatic headroom, insufficient capacity and host
-allocation failure preserve regeneration. The host budget includes prior plan
+allocation failure preserve regeneration. A partial prefix is allowed; consumers
+that cross its pair boundary copy the prefix and regenerate only the suffix. The host budget includes prior plan
 setup peaks and the complete actual vector capacity. Full GPU-resident plans,
-imported tensors, batches and the dedicated MD Coulomb owner retain their paths.
+imported tensors, batches, packed pure-J and the dedicated MD Coulomb owner retain their paths.
 
 Setup generates A through the existing CUDA provider into borrowed K scratch,
 downloads bounded rectangles and audits finiteness before publication. Repeated
-dense and occupied K then upload requested rectangles from that immutable array;
+dense and occupied K then upload requested rectangles from that immutable prefix;
 metric whitening and current-orbital projections still execute on device. Dense
 J can use the same reader; packed J retains its existing generated source.
 `host_raw_factor_bytes` reports the additional payload; traces distinguish

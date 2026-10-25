@@ -146,13 +146,24 @@ def main() -> None:
         args.output.write_text(json.dumps(payload, indent=2) + "\n")
 
     # Warm ordinary process/library initialization in every compared policy.
-    for policy, storage in (("0", "dense"), ("auto", "dense"), ("auto", "auto")):
+    for policy, storage in (
+        ("0", "dense"),
+        ("auto", "dense"),
+        ("0", "auto"),
+        ("auto", "auto"),
+    ):
         execute(policy, storage, -1)
     for repeat in range(args.repeats):
         for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
             execute(policy, "dense", repeat)
-        execute("auto", "auto", repeat)
-    for policy, storage in (("0", "dense"), ("auto", "dense"), ("auto", "auto")):
+        for policy in ("0", "auto") if repeat % 2 == 0 else ("auto", "0"):
+            execute(policy, "auto", repeat)
+    for policy, storage in (
+        ("0", "dense"),
+        ("auto", "dense"),
+        ("0", "auto"),
+        ("auto", "auto"),
+    ):
         execute(policy, storage, 0, traced=True)
     cached = next(
         r for r in payload["work"] if r["storage"] == "dense" and r["policy"] == "auto"

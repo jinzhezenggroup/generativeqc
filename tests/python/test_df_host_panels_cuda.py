@@ -33,7 +33,9 @@ def host_fixture(tmp_path_factory: typing.Any) -> tuple[Path, Path]:
 @pytest.mark.parametrize(
     "pairs,auxiliary,retained", [(3552, 13, False), (9216, 5, True)]
 )
-@pytest.mark.parametrize("host_limit", [None, "0", "1", str((1 << 64) - 1)])
+@pytest.mark.parametrize(
+    "host_limit", [None, "0", "1", str(1 << 20), str((1 << 64) - 1)]
+)
 def test_host_panels_match_independent_jk_and_preserve_gpu_priority(
     host_fixture: tuple[Path, Path],
     pairs: int,
@@ -42,7 +44,7 @@ def test_host_panels_match_independent_jk_and_preserve_gpu_priority(
     host_limit: str | None,
     tmp_path: Path,
 ) -> None:
-    """Repeated dense/occupied actions reuse A only when the complete host source fits."""
+    """Repeated dense/occupied actions reuse A with bounded full/partial host source."""
     binary, fixture = host_fixture
     trace, arrays = tmp_path / "trace.jsonl", tmp_path / "arrays.bin"
     env = dict(
@@ -76,8 +78,13 @@ def test_host_panels_match_independent_jk_and_preserve_gpu_priority(
         for line in result.stdout.splitlines()
         if json.loads(line)["operation"] == "setup"
     )
-    cached = host_limit in (None, str((1 << 64) - 1)) and not retained
-    assert setup["host_raw_factor_bytes"] == (96**3 * 8 if cached else 0)
+    cached = host_limit not in ("0", "1") and not retained
+    expected_bytes = (
+        min(96**3 * 8, int(host_limit) // (96 * 8) * (96 * 8))
+        if host_limit
+        else 96**3 * 8
+    )
+    assert setup["host_raw_factor_bytes"] == (expected_bytes if cached else 0)
     actual = np.fromfile(arrays).reshape(4, 96, 96)
     with np.load(fixture / "reference.npz") as reference:
         for values, key in zip(actual, ["density", "j", "k", "k"], strict=True):
@@ -88,7 +95,9 @@ def test_host_panels_match_independent_jk_and_preserve_gpu_priority(
         assert bool(counters.get("host_raw_panel_hits", 0)) == cached
         if cached:
             assert counters["host_raw_panel_h2d_bytes"] > 0
-            assert counters.get("raw_panel_source_auxiliary_evaluations", 0) == 0
+            assert bool(counters.get("raw_panel_source_auxiliary_evaluations", 0)) == (
+                host_limit == str(1 << 20)
+            )
 
 
 @pytest.mark.parametrize("limit", ["bad", "-1", str(1 << 65)])
