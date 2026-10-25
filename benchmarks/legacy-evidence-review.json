@@ -1,5 +1,10 @@
 {
   "families": {
+    "cbs-routine-standard-20261025": {
+      "owner": "CBS routine default convergence qualification",
+      "reason": "One lossless compressed population retains 13 physical-basis native/oracle cases, two complete Cartesian finite-difference stencils, all failed candidates and branch diagnostics, fourteen default QM7 endpoints covering C1\u2013C7 and original cross-revision controls. Full observables, semantic work and negative trials remain together; no storage cap is increased. The publication manifest and offline verifier bind the accepted numerical scope.",
+      "review_document": "benchmarks/results/cbs-routine-standard-20261025/README.md"
+    },
     "h100-paper-environment-20261024": {
       "owner": "#2726 H100 environment/setup source inventory",
       "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
@@ -17,7 +22,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "readme-dft-20261013": {
@@ -31,7 +36,7 @@
       "review_document": "benchmarks/results/occupied-xc-cold-20261023/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -235,15 +240,35 @@
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
       "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
     },
+    "hf-cold-work-20261025": {
+      "owner": "HF cold final-state work and resident DF source qualification",
+      "reason": "Lossless full-precision receipts retain all 75 populations and 300 complete cold/warm calls across baseline, candidate and fresh GPU4, including failed independent fitting gates and every exposed precision solve. Shared compression avoids repeating provenance; source-matched ablations, independent references and executable replay remain in the compact publication. No numerical acceptance or storage cap is changed.",
+      "review_document": "benchmarks/results/hf-cold-work-20261025/README.md"
+    },
     "readme-final-20261024": {
       "owner": "README complete HF/DFT endpoint comparison",
       "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
       "review_document": "benchmarks/results/readme-final-20261024/README.md"
     },
+    "df-dft48-work-20261025": {
+      "owner": "DF force work admission and complete HF/DFT README refresh",
+      "reason": "All 192 fresh populations retain their 768 full-precision E/F calls, settings, semantic work and exact source/binary identity. Existing independent accuracy failures remain visible. Separate clean controls, small/intermediate-size negative ablations, moved geometry and resolved qualification setup failures remain reproducible without increasing retention budgets.",
+      "review_document": "benchmarks/results/df-dft48-work-20261025/README.md"
+    },
     "host-full-eri-20261025": {
       "owner": "#2762 full-range KS host ERI qualification",
       "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
       "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
+    },
+    "h100-direct-wb97mv-20261024": {
+      "owner": "#2732 bounded Direct WB97M-V water48/96 H100 evidence",
+      "reason": "Lossless original scientific/control/source histories with explicit generated-binary inventory-only limits. Formal72/18process gates separate from diagnostic26 including failed2+NOT_RUN10; source-matched portable-sm90, not hardware-only or wholeparent acceptance.",
+      "review_document": "benchmarks/results/h100-direct-wb97mv-20261024/README.md"
+    },
+    "df-metric-pairs-20261025": {
+      "owner": "Bounded auxiliary metric derivative pair reuse",
+      "reason": "Lossless full receipts retain all 36 alternating cold/three-warm energy-and-force populations, semantic work and immutable source/binary identities. Shared compression keeps the complete vectors together; every independent gate, failed baseline assertion, rerun and exploratory refusal remains in the capsule within unchanged file and change budgets.",
+      "review_document": "benchmarks/results/df-metric-pairs-20261025/README.md"
     },
     "disk-eri-20261025": {
       "owner": "#2766 bounded temporary-file ERI qualification",
@@ -252,6 +277,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/cbs-routine-standard-20261025/records.json.xz",
+      "family": "cbs-routine-standard-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-observables-independent-oracles-work-and-negative-trials",
+      "bytes": 339296,
+      "sha256": "5eaac46759bc3893485c7f57c5cf4fcbf00c556f47aa3dfe20fc3bb58929dc0d"
+    },
     {
       "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
       "family": "h100-paper-environment-20261024",
@@ -861,12 +894,76 @@
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
     },
     {
+      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
+      "family": "hf-cold-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
+      "bytes": 219828,
+      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
+    },
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/standard.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 211680,
+      "sha256": "4f3b17851b64585f6b00d63e5e2b0812e93f99c2159316b6dc3e794b0d21b266"
+    },
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/fast.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 239116,
+      "sha256": "6cdfa043521e11ec7e51f599e08c4c9b488669fa4399c6811b6ec43f50ab8dbc"
+    },
+    {
+      "path": "benchmarks/results/df-dft48-work-20261025/gpu4pyscf.json.xz",
+      "family": "df-dft48-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched cold/three-warm E/F observations, controls and provenance; numerical failures are retained",
+      "bytes": 188260,
+      "sha256": "97d542336545cb727c1649bf390e715ec644549e184a480a64f497003a034075"
+    },
+    {
       "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
       "family": "host-full-eri-20261025",
       "classification": "required-compact-accepted-evidence",
       "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
       "bytes": 176688,
       "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/terminal-evidence.json.xz",
+      "bytes": 943896,
+      "sha256": "23c4014d2456e159b04cd9666d1af57476ef56fa2f8361bbc3b201d702e623a2",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v2.json.xz",
+      "bytes": 173416,
+      "sha256": "625b256ae227563a025240f3a14983a9163692b64b8be7a45f175a29ace4a180",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v3.json.xz",
+      "bytes": 188864,
+      "sha256": "56c313ef7c43ee6da05bd6051567c07cf6b712521e859e481d94938f6dcb026b",
+      "family": "h100-direct-wb97mv-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Storage classification only: exact immutable HOST/terminal history including FAIL/NOT_RUN; original E/F/source/control bytes; not whole2732, purehardware or parent acceptance"
+    },
+    {
+      "path": "benchmarks/results/df-metric-pairs-20261025/endpoints.json.xz",
+      "family": "df-metric-pairs-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 36 alternating complete cold/three-warm E/F populations with work and immutable source/binary identities; no completed sample omitted.",
+      "bytes": 159984,
+      "sha256": "d58f401b4acfbe2893b7a859230da73cd7d062afbd7d6574b7dad78736d24f4c"
     },
     {
       "path": "benchmarks/results/disk-eri-20261025/measurements.json.xz",

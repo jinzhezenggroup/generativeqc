@@ -37,13 +37,11 @@ generativeqc_status build_streamed_projected_exchange(
   const auto project = [&](std::size_t begin, std::size_t count, double* target,
                            bool charge) -> generativeqc_status {
     const auto raw_tile = std::min(a, capacity / (count * n));
-    trace_counter("raw_panel_source_auxiliary_evaluations", count * n * a);
-    trace_counter("streamed_occupied_raw_generation_rows", count);
+    if (plan.host_raw_three_center.empty())
+      trace_counter("streamed_occupied_raw_generation_rows", count);
     for (std::size_t p = 0; p < a; p += raw_tile) {
       const auto q = std::min(raw_tile, a - p);
-      const auto status = generate_cuda_density_fitting_raw_tile(
-          plan.integral_source, system, begin * n, count * n, p, q, -1,
-          reinterpret_cast<void*>(plan.stream), raw, detail);
+      const auto status = raw_panel(plan, system, begin * n, count * n, p, q, raw, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       if (charge) {
         launch_accumulate_streamed_auxiliary_density_kernel(

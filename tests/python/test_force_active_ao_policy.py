@@ -58,10 +58,10 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
     ) == (
         "ordinary-direct-active-ao-cost-v3",
         "cuda-resident-preao-native-csr-v1",
-        "fitted-exact-jet-bitmask-v1",
+        "fitted-exact-jet-bitmask-v2",
         "ordinary-direct-active-ao-cost-v3-budget-auto",
         "cuda-resident-preao-native-csr-v1-budget-auto",
-        "fitted-exact-jet-bitmask-v1-budget-auto",
+        "fitted-exact-jet-bitmask-v2-budget-auto",
     )
 
     below_crossover = resolve_force_active_ao_policy(_workload())
@@ -91,7 +91,7 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
     "updates",
     [
         {"composition": "composite", "grid_points": 1_179_648},
-        {"density_fitted": True, "grid_points": 1_000_000},
+        {"density_fitted": True, "grid_points": 100_000},
         {"tile_points": 128, "grid_points": 1_179_648},
         {"max_device_bytes": (512 << 20) - 1, "grid_points": 1_179_648},
         {"max_host_bytes": (256 << 20) - 1, "grid_points": 1_179_648},
@@ -116,6 +116,37 @@ def test_qualified_default_selects_native_csr() -> None:
     assert decision.max_active_fraction == 0.8
 
 
+@pytest.mark.parametrize("tile_policy", ["fixed", "budget-auto"])
+def test_fitted_bitmask_has_its_own_continuous_work_crossover(tile_policy: str) -> None:
+    """Native discovery must not inherit the sampled producer's higher cost."""
+    profile = next(
+        p
+        for p in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+        if p.density_fitted and p.tile_policy == tile_policy
+    )
+    boundary = profile.min_dense_point_ao_square_work
+    sampled = next(
+        p for p in QUALIFIED_FORCE_ACTIVE_AO_PROFILES if p.producer == "sampled-jets"
+    )
+    assert boundary < sampled.min_dense_point_ao_square_work
+    # Equivalent work with different atom/AO/grid shapes must make the same
+    # decision. These are selector inputs, not molecular benchmark fixtures.
+    for atoms, aos in ((17, 128), (61, 256)):
+        points = (boundary + aos * aos - 1) // (aos * aos)
+        workload = _workload(
+            atoms=atoms,
+            aos=aos,
+            grid_points=points,
+            density_fitted=True,
+            tile_policy=tile_policy,
+            tile_points=256 if tile_policy == "fixed" else None,
+        )
+        assert resolve_force_active_ao_policy(workload).selected
+        assert not resolve_force_active_ao_policy(
+            replace(workload, grid_points=points - 1)
+        ).selected
+
+
 @pytest.mark.parametrize("derivative_order", [1, 2])
 @pytest.mark.parametrize("spin_blocks", [1, 2])
 @pytest.mark.parametrize("tile_policy", ["fixed", "budget-auto"])
@@ -137,13 +168,13 @@ def test_fitted_force_qualifies_exact_jets_without_relaxing_cutoff(
     assert decision.cutoff == 1e-16
     assert decision.cache_bytes == 64 << 20
     assert decision.max_active_fraction == 0.8
-    assert decision.profile_id == "fitted-exact-jet-bitmask-v1" + (
+    assert decision.profile_id == "fitted-exact-jet-bitmask-v2" + (
         "-budget-auto" if tile_policy == "budget-auto" else ""
     )
     for miss in (
         replace(workload, composition="composite"),
         replace(workload, resident_grid=False),
-        replace(workload, grid_points=1_000_000),
+        replace(workload, grid_points=100_000),
         replace(workload, max_device_bytes=(512 << 20) - 1),
         replace(workload, max_host_bytes=(256 << 20) - 1),
     ):
@@ -171,7 +202,7 @@ def test_automatic_tiles_preserve_producer_and_guards_without_product_whitelists
     )
     assert selected.max_active_fraction == incumbent.max_active_fraction
     for miss in (
-        replace(automatic, density_fitted=True, grid_points=1_000_000),
+        replace(automatic, density_fitted=True, grid_points=100_000),
         replace(automatic, resident_grid=False),
         replace(automatic, max_device_bytes=(512 << 20) - 1),
         replace(automatic, max_host_bytes=(256 << 20) - 1),
@@ -184,7 +215,7 @@ def test_automatic_tiles_preserve_producer_and_guards_without_product_whitelists
     [
         {"composition": "composite"},
         {"architecture": "cpu"},
-        {"density_fitted": True, "grid_points": 1_000_000},
+        {"density_fitted": True, "grid_points": 100_000},
         {"resident_grid": False},
         {"tile_points": 128},
         {"max_device_bytes": (512 << 20) - 1},

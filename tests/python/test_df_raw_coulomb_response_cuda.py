@@ -272,3 +272,58 @@ def test_raw_coulomb_geometry_rebuild(monkeypatch: Any, tmp_path: Path) -> None:
                 )
     finally:
         calculator.clear_cache()
+
+
+@pytest.mark.parametrize("tensor_allowance", (0.8, 1.5, 2.5))
+def test_raw_coulomb_work_is_bounded_across_response_capacities(
+    tensor_allowance: float, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """More scratch must not turn a charge solve into a full tensor fit.
+
+    Exercise allowances below one, between one and two, and above two dense
+    AO-pair/auxiliary tensors. The independent molecular oracle includes all
+    auxiliary and grid response, while semantic counters bound unnecessary
+    inverse-factor work without prescribing a panel size or launch count.
+    """
+    import test_scf_df_auxiliary_g_cuda as endpoint
+    from generativeqc import Calculator
+    from pyscf import df, gto
+
+    from benchmarks._cases import benchmark_cases
+
+    case = "water-tetramer-def2-svp-spherical"
+    molecule = gto.M(
+        atom=benchmark_cases()[case].atoms, unit="Bohr", basis="def2-svp", verbose=0
+    )
+    n = molecule.nao_nr()
+    a = df.addons.make_auxmol(molecule).nao_nr()
+    fixed_bytes = (4 * a * a + 4 * n * n + 2 * a) * 8
+    # One MiB covers basis/shell metadata and output; the tensor-scale margins
+    # keep each case away from allocation-rounding boundaries.
+    budget = fixed_bytes + int(tensor_allowance * n * n * a * 8) + (1 << 20)
+    monkeypatch.setenv("GENERATIVEQC_DF_MD_COULOMB", "0")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_RAW_COULOMB", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_COULOMB_RESPONSE", "auto")
+    trace = tmp_path / "capacity-response.jsonl"
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+    monkeypatch.setattr(
+        endpoint,
+        "Calculator",
+        lambda **options: Calculator(
+            # The public allowance also covers value and source owners. The
+            # response receives roughly one third after their fixed charges.
+            **options,
+            density_fitting_memory_budget_bytes=3 * budget,
+        ),
+    )
+    endpoint.check_endpoint("pbe-rks", "PBE", False, case)
+    records = [json.loads(line) for line in trace.read_text().splitlines()]
+    responses = [row for row in records if row["operation"] == "force_response"]
+    assert responses
+    for row in responses:
+        counts = row["counters"]
+        assert counts.get("response_resident_raw_charge_values", 0) > 0
+        assert counts.get("response_raw_coulomb_factor_flops", 0) <= 4 * a * a
+        assert not counts.get("response_inverse_applied_factor_flops", 0)
+        assert not counts.get("raw_packed_unpacked_elements", 0)

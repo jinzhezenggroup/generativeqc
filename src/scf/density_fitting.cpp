@@ -1361,13 +1361,24 @@ DensityFittingTilePlan plan_requested_density_fitting_tiles(
 
   try {
     auto dense_plan = dense();
-    if (dense_plan.stores_full_three_center) return dense_plan;
+    // Above a GiB of dense source values, retaining both AO pair orders pays
+    // substantial generation/whitening traffic even when capacity permits it.
+    // Use the existing symmetric physical-source owner for this work crossover,
+    // provided it also retains the requested occupied projection. Small resident
+    // owners keep their lower-overhead dense schedule; explicit policies and
+    // the original streamed-to-resident capacity crossover remain unchanged.
+    constexpr long double resident_packing_bytes = 1024.0L * 1024 * 1024;
+    const bool large_resident_source =
+        static_cast<long double>(nbf) * nbf * naux * sizeof(double) >= resident_packing_bytes;
+    if (dense_plan.stores_full_three_center && !large_resident_source) return dense_plan;
     try {
       auto packed_plan = packed(false);
-      // Automatic packing is a capacity crossover, not a memory-only preference:
-      // promote only when it converts a streamed dense plan into one persistent
-      // fitted value owner under the exact same value allowance.
-      if (packed_plan.stores_full_three_center) return packed_plan;
+      // Never lose a complete occupied response lease just to save value bytes.
+      // A capacity fallback may still choose its established bounded panels.
+      if (packed_plan.stores_full_three_center &&
+          (!dense_plan.stores_full_three_center ||
+           packed_plan.value_storage.rank_capacity >= packed_rank_capacity))
+        return packed_plan;
     } catch (const DensityFittingBudgetError&) {
       // The bounded dense/source plan remains the safe executable fallback.
     }

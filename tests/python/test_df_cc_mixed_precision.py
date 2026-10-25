@@ -198,29 +198,44 @@ def test_requested_warmup_rejects_invalid_switch_target(
     reason="requires finite Slurm GPU allocation",
 )
 @pytest.mark.parametrize("symmetric", [True, False])
+@pytest.mark.parametrize("occupied,occupied_pairs", [(1, False), (3, False), (3, True)])
 def test_strict_pair_boundary_preserves_supplied_state_contract(
-    solver_probe: tuple[Path, bool], symmetric: bool
+    solver_probe: tuple[Path, bool],
+    symmetric: bool,
+    occupied: int,
+    occupied_pairs: bool,
 ) -> None:
-    """Warm-start projection must not repair an asymmetric supplied guess."""
+    """Physical symmetry is independent of optional spectator-pair contractions.
+
+    Even the one-occupied/dense schedules need the mixed handoff projection;
+    supplied asymmetric guesses must remain outside that projection contract.
+    """
     if not solver_probe[1]:
         pytest.skip("CUDA-only candidate")
-    _, _, arrays = _case(3, 7, 14)
+    _, _, arrays = _case(occupied, 7, 14)
     if not symmetric:
-        arrays["t2"][0, 1, 0, 1] = np.nextafter(arrays["t2"][0, 1, 0, 1], 1.0)
+        arrays["t2"][0, occupied - 1, 0, 1] = np.nextafter(
+            arrays["t2"][0, occupied - 1, 0, 1], 1.0
+        )
     strict, one, two = _run(
         solver_probe, arrays, packed_diis=True, occupied_pairs=False
     )
     mixed, actual_one, actual_two = _run(
-        solver_probe, arrays, packed_diis=True, mixed_precision=True
+        solver_probe,
+        arrays,
+        packed_diis=True,
+        mixed_precision=True,
+        occupied_pairs=occupied_pairs,
     )
     assert strict["status"] == mixed["status"] == 0
     assert mixed["mixed_pair_projection_calls"] == int(symmetric)
     if symmetric:
-        assert mixed["packed_diis"] == 1
-        assert mixed["pair_evaluations"] > 0
+        if occupied_pairs:
+            assert mixed["packed_diis"] == 1
+            assert mixed["pair_evaluations"] > 0
         assert mixed["mixed_pair_projection_bytes"] == 2 * arrays["t2"].nbytes
     else:
-        assert mixed["pair_initial_symmetry_refused"] == 1
+        assert mixed["pair_initial_symmetry_refused"] == int(occupied_pairs)
     np.testing.assert_allclose(mixed["energy"], strict["energy"], atol=2e-11, rtol=0)
     np.testing.assert_allclose(actual_one, one, atol=2e-10, rtol=0)
     np.testing.assert_allclose(actual_two, two, atol=2e-10, rtol=0)

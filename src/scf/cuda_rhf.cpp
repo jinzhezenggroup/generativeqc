@@ -773,9 +773,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);
   const bool requested_incremental_diis_gram =
-      diis_history >= 2 && incremental_diis_gram_requested();
+      hf_incremental_diis_gram_requested(host.nbf, diis_history, unrestricted ? 2 : 1);
   const bool requested_ordered_diis_gram =
-      requested_incremental_diis_gram && ordered_incremental_diis_gram_requested();
+      requested_incremental_diis_gram && hf_ordered_diis_gram_requested();
   const bool requested_fp32_block_screening = direct_fp32_block_screening_requested();
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -916,7 +916,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                      inactive_eigensolver_profiling, bounded_fock_class_timing,
                      requested_bounded_direct_streaming, requested_mixed_precision_fock,
                      requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram,
-                     use_cublas, tensor::CudaStructuredProductBinding::production_library_qualified,
+                     use_cublas, tensor::CudaStructuredProductBinding::basis_workspace_required(),
                      requested_fp32_block_screening)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
@@ -1359,11 +1359,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto direct_fock = arena_pointer<double>(resources.arena_, layout.direct_fock);
   auto direct_transform_temporary =
       arena_pointer<double>(resources.arena_, layout.direct_transform_temporary);
-  auto basis_matrix_scratch =
-      resources.blas_ && transformed_direct &&
-              tensor::CudaStructuredProductBinding::production_library_qualified
-          ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
-          : nullptr;
   auto shell_pair_bounds = arena_pointer<double>(resources.arena_, layout.shell_pair_bounds);
   auto shell_pair_density_bounds =
       arena_pointer<ShellPairDensityBounds>(resources.arena_, layout.shell_pair_density_bounds);
@@ -2030,6 +2025,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       return outputs;
     }
   }
+  // First setup creates the immutable binding after arena allocation. Resolve
+  // its charged publication span only now, not from an empty optional binding.
+  auto basis_matrix_scratch =
+      resources.structured_binding_ && transformed_direct &&
+              resources.structured_binding_->basis_workspace_enabled()
+          ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
+          : nullptr;
   if (options.export_physical_reference) {
     // Account for the actual eigensolver workspace before considering optional
     // residency. Cache-eligible references keep their matrix-direct arena so
@@ -3277,7 +3279,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     // DIIS count advances; borrow them without allocating another GPU owner.
     prepare_hf_cuda_initial_densities(
         plan, host, systems, options,
-        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active},
+        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active,
+         diis_history >= 2 ? fock_history + matrix_size : nullptr},
         *seed_diagnostics);
     // A native cold guess has no previous-energy baseline, so it cannot pass
     // the first convergence check. That iteration accepts its new density and

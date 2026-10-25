@@ -153,6 +153,18 @@ exactly once in the existing one-electron/Pulay, raw three-center, auxiliary
 metric and nuclear response. Energy-only selection constructs no W and invokes
 no derivative consumer. CPU finalization preserves its independent sequence.
 
+Ordinary CUDA DF-RHF force selection may also retain the original compact-SCF
+determinant after a fresh physical-Fock projector proves the occupied subspace.
+The retained DIIS orbital columns need not separately diagonalize that Fock.
+Unlike stationary UHF reuse, this RHF route always retains both maximum and RMS
+physical-projector defect checks, alongside the current commutator,
+reconstruction, orthogonality, trace and idempotency checks. Failed probes feed
+the bounded canonical correction using the already solved physical frame.
+Energy-only requests, forced rebuilding, reference export and correction steps
+keep their canonical frame checks. The ordinary all-electron Standard RHF owner
+uses its qualified stationarity ceiling (at most 1e-5); tighter controls retain
+the strict ceiling. This choice changes neither precision nor acceptance limits.
+
 Physical-reference export additionally requires maximum reconstructed-D drift
 and absolute `C^T F C - diag(epsilon)` error at most 1e-8. These optional gates
 are part of selection, so their failure enters correction. The accepted full

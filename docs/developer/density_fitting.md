@@ -54,7 +54,8 @@ and failure status.
   for raw panels and writes all transformed Q into retained B; retaining B no
   longer requires three full-tensor contraction buffers. Positive-budget plans
   use at most 128 contraction auxiliaries when B is retained, shrinking Q further
-  when needed. Plans that cannot retain B regenerate public-basis tiles on device.
+  when needed. Plans that cannot retain B regenerate public-basis tiles or replay
+  admitted [raw host panels](df_streamed_panels.md) before device whitening.
   Both routes retain the metric factors and eigensystem. The native
   compatibility API also supports explicitly host-backed input tensors.
 - A deterministic planner for batch, AO-pair, auxiliary, and occupied-orbital
@@ -96,7 +97,8 @@ propagate instead of silently selecting CPU integral evaluation.
   convergence masks are refreshed in place, while geometry changes invalidate
   only the affected bucket's geometry-dependent plan.  Streamed plans retain
   bounded AO-pair/auxiliary tiles and use persistent workspaces. Source-backed
-  J/K regeneration launches on the owning stream without host tensor transfers.
+  J/K regeneration launches on the owning stream. Plans with admitted raw host
+  backing instead use eager uploads and retain the same device contractions.
 - Generated weighted RI-J/K analytic-force response supports RHF and UHF,
   including metric pseudoinverse and auxiliary response terms. Positive-budget
   source plans construct those weights on device and report metadata/density
@@ -256,6 +258,11 @@ the fitted representation. Raw owners reject exchange requests. No second
 tensor, host reference preparation or larger memory allowance is introduced.
 The force bridge borrows the authenticated packed `A` and contracts the current
 density directly, retaining the ordinary metric and integral derivatives.
+For a full-rank pure-J raw source, the bridge selects this charge-first response
+before allocating auxiliary panels. Extra scratch capacity cannot select a
+complete fitted tensor in place of the metric-vector solve. Exchange, retained
+fitted/occupied factors, truncated metrics and explicit panel/dot diagnostics
+retain their separate response algorithms.
 
 CUDA value plans retain their original device metric eigenvectors, eigenvalues,
 and inverse square root for analytic force response. Both generated-source and

@@ -163,6 +163,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
     "df_jk",
     "df_jk_internal",
     "df_generated_tiles",
+    "df_host_panels",
     "df_coulomb",
     "df_exchange",
     "df_occupied_exchange",
@@ -264,6 +265,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     # not import a method driver or change the shared DIIS solve owner.
     "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
+    "runtime/cuda_component_trace.hpp",
     # Allocation-free small solve/acceptance policy shared with host Pulay;
     # the CUDA kernel still owns normalization, history and Fock transport.
     "solver/diis_affine.hpp",
@@ -291,6 +293,8 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/launch_geometry.",
     "tensor/cuda_matrix_product.hpp",
     "tensor/cuda_structured_product.hpp",
+    # Unmasked seed validation also borrows this adapter's prepared provider.
+    "tensor/cuda_square_linalg.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.
@@ -361,6 +365,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_jk_host_cache.",
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
@@ -774,6 +779,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
 CUDA_MODULES["cuda_hf_initial_guess"] = ("hf_initial_guess",)
 CUDA_ALLOWED["cuda_hf_initial_guess"] = (
     "scf/cuda/hf_initial_guess.hpp",
+    "scf/cuda/matrix_library.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/eigensolver.hpp",
     "scf/preliminary_guess.hpp",

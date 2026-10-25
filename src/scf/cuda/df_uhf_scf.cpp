@@ -397,7 +397,7 @@ generativeqc_status run_cuda_density_fitting_uhf_device_scf(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
   bool graph_replay = state->graph_replay;
-  if (!graph_replay && !state->graph_capture_rejected &&
+  if (!graph_replay && !state->graph_capture_rejected && plan->host_raw_three_center.empty() &&
       (!plan->streamed || plan->integral_source != nullptr)) {
     iteration_graph.reset();
     cuda_error = cudaStreamSynchronize(plan->stream);

@@ -8,12 +8,19 @@
 #include "cc/reference_input.hpp"
 #include "dft/ks_final_state.hpp"
 #include "dft/semilocal_family.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
+
+#if GENERATIVEQC_HAS_CUDA
+#include "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp"
+#endif
 
 namespace {
 using namespace generativeqc;
 using namespace generativeqc::dft;
 using namespace generativeqc::scf;
+namespace solver = generativeqc::scf::solver;
 using reference::Matrix;
 
 void require(bool value, const char* detail) {
@@ -292,6 +299,112 @@ void analytic_rks_and_uks() {
     cpu_uks.sync();
     require(cpu_uks.validate(true, &state), "CPU UKS final-state proof rejected");
     require(state.weighted_density.size() == 2, "CPU UKS lost a spin W block");
+  }
+}
+
+void automatic_empty_spin_identity() {
+  // A nonorthogonal, exactly solvable two-orbital state isolates model
+  // admission from SCF convergence. Validate the same zero-spin shape under
+  // the incumbent CPU contract, then require CUDA to reject its unqualified
+  // physical-birth semantics even when handed otherwise valid detached data.
+  const auto entry = generated::automatic_libxc_entry("MGGA_C_TPSS");
+  require(static_cast<bool>(entry), "automatic TPSS CPU registry is unavailable");
+  for (const unsigned empty : {0U, 1U, 2U}) {
+    Fixture uks;
+    uks.id.model.functional = entry.functional_code;
+    uks.id.model.scf_domain_version = entry.program->domain_version;
+    uks.id.model.spins = 2;
+    uks.id.determinant.model = ks_fock(FockSpin::Unrestricted);
+    uks.id.determinant.occupied = {empty == 0 ? 0U : 1U, empty == 1 ? 0U : 1U};
+    uks.physical.density = {{empty == 0 ? 0.0 : .5, 0, 0, 0}, {empty == 1 ? 0.0 : .5, 0, 0, 0}};
+    uks.physical.fock.push_back(uks.physical.fock[0]);
+    uks.candidate.spins.push_back(uks.candidate.spins[0]);
+    auto cpu = uks;
+    cpu.id.determinant.model = resolve_fock_build(cpu.id.determinant.model.spec, FockBackend::Cpu);
+    cpu.id.model.device = -1;
+    cpu.sync();
+    require(cpu.validate(), "empty-spin admission repair changed the CPU work-domain contract");
+#if GENERATIVEQC_HAS_CUDA
+    if (generated::automatic_cuda_point_entry(entry.functional_code)) {
+      uks.sync();
+      require(uks.validate() == (empty == 2),
+              "detached automatic CUDA state bypassed its empty-spin admission boundary");
+    }
+#endif
+  }
+}
+
+void cuda_range_exchange_identity() {
+  // Analytic nonorthogonal densities/orbitals exercise the complete final-state
+  // proof independently of SCF. Only provider identity changes across cases.
+  for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+    for (const auto primary : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+      for (const double short_range : {0.0, 0.2}) {
+        Fixture state;
+        auto spec = make_rsh_primary_fock_spec(spin, short_range);
+        spec.exchange.present = short_range != 0.0;
+        spec.coulomb.approximation = spec.exchange.approximation = primary;
+        state.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 1e-12);
+        state.id.model.functional = semilocal_family_code(SemilocalFamily::Pbe);
+        state.id.model.range_correction = resolve_fock_build(
+            make_rsh_correction_fock_spec(spin, short_range, 1.0, 0.3), FockBackend::Cuda, 1e-12);
+        if (spin == FockSpin::Unrestricted) {
+          state.id.determinant.occupied = {1, 0};
+          state.id.model.spins = 2;
+          state.physical.density = {{.5, 0, 0, 0}, {0, 0, 0, 0}};
+          state.physical.fock.push_back(state.physical.fock[0]);
+          state.candidate.spins.push_back(state.candidate.spins[0]);
+        }
+        state.sync();
+        state.limits.require_canonicality = true;
+        VerifiedKsFinalState retained;
+        require(state.validate(true, &retained),
+                "CUDA RSH matched primary/exact LR state rejected");
+        require(retained.identity == state.id &&
+                    retained.weighted_density.size() == state.id.model.spins,
+                "CUDA RSH proof lost its provider identities or spin weights");
+
+        const std::vector<std::function<void(Fixture&)>> invalid = {
+            [](auto& a) { a.id.model.range_correction->backend = FockBackend::Cpu; },
+            [](auto& a) {
+              a.id.model.range_correction->spec.spin =
+                  a.id.determinant.model.spec.spin == FockSpin::Restricted ? FockSpin::Unrestricted
+                                                                           : FockSpin::Restricted;
+            },
+            [](auto& a) { a.id.model.range_correction->spec.derivative_order = 1; },
+            [](auto& a) { a.id.model.range_correction->spec.coulomb.present = true; },
+            [](auto& a) { a.id.model.range_correction->spec.exchange.present = false; },
+            [](auto& a) {
+              a.id.model.range_correction->spec.exchange.approximation =
+                  FockApproximation::DensityFitted;
+            },
+            [](auto& a) {
+              a.id.model.range_correction->spec.exchange.op = FockOperator::FullRange;
+            },
+            [](auto& a) { a.id.model.range_correction->spec.exchange.omega = 0.0; },
+            [](auto& a) { a.id.model.range_correction->screening_tolerance = 1e-10; },
+            [](auto& a) { a.id.model.semilocal_exchange_scale = 0.75; },
+            [](auto& a) { a.physical.reported_energy += 1e-5; },
+        };
+        for (const auto& mutate : invalid) {
+          auto bad = state;
+          mutate(bad);
+          bad.sync();
+          require(!bad.validate(), "CUDA RSH accepted an incompatible provider or physical state");
+        }
+        if (spec.exchange.present) {
+          auto mismatch = state;
+          auto incompatible = spec;
+          incompatible.exchange.approximation = primary == FockApproximation::Exact
+                                                    ? FockApproximation::DensityFitted
+                                                    : FockApproximation::Exact;
+          mismatch.id.determinant.model =
+              resolve_fock_build(incompatible, FockBackend::Cuda, 1e-12);
+          mismatch.sync();
+          require(!mismatch.validate(), "CUDA RSH accepted mismatched primary J/K approximations");
+        }
+      }
+    }
   }
 }
 
@@ -583,6 +696,8 @@ int main() {
     resident_evidence_contract();
     backend_product_policy();
     analytic_rks_and_uks();
+    automatic_empty_spin_identity();
+    cuda_range_exchange_identity();
     cuda_global_hybrid_identity();
 #if GENERATIVEQC_HAS_CUDA
     cuda_split_hybrid_identity();

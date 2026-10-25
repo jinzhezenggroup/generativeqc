@@ -165,3 +165,10 @@ a lower-order map, new composition domain, or extra resident provider requires
 new independent numerical and complete-owner admission gates. Remaining point
 evaluation, Becke phases and non-force preparation/SCF costs require separate
 profiling; reduced AO projection work alone does not establish GPU4PySCF parity.
+
+## Crossover follow-up
+
+The [2026-10-25 qualification](2026-10-25-df-force-bitmask-crossover.md)
+separates native bitmask discovery from the sampled producer's cost crossover.
+It preserves this note's AO-jet predicate, complete grid, occupancy/resource
+guards and geometry lifetime; the earlier timing cohort remains historical.

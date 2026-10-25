@@ -124,13 +124,18 @@ cudaError_t RhfIterationGraphs::launch(cudaGraph_t graph, cudaGraphExec_t execut
 }
 
 cudaError_t RhfIterationGraphs::launch_iteration(cudaStream_t stream) const noexcept {
-  return launch(iteration_graph_, iteration_graph_exec_, iteration_generation_,
-                runtime::ResidencyGraphRole::hf_iteration, stream);
+  const auto error = launch(iteration_graph_, iteration_graph_exec_, iteration_generation_,
+                            runtime::ResidencyGraphRole::hf_iteration, stream);
+  if (error == cudaSuccess) ++iteration_launches_;
+  return error;
 }
 
 cudaError_t RhfIterationGraphs::launch_post_eigensolver(cudaStream_t stream) const noexcept {
-  return launch(post_eigensolver_graph_, post_eigensolver_graph_exec_, post_eigensolver_generation_,
-                runtime::ResidencyGraphRole::hf_post_eigensolver, stream);
+  const auto error =
+      launch(post_eigensolver_graph_, post_eigensolver_graph_exec_, post_eigensolver_generation_,
+             runtime::ResidencyGraphRole::hf_post_eigensolver, stream);
+  if (error == cudaSuccess) ++post_eigensolver_launches_;
+  return error;
 }
 
 }  // namespace generativeqc::scf::cuda_execution

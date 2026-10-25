@@ -2,7 +2,8 @@
 
 Positive-budget CUDA DF plans retain transformed B when its complete value/SCF
 allowance fits, using bounded K scratch independently of B's full shape.
-Otherwise J/K regenerate public-basis three-center tiles on device. The complete
+Otherwise J/K regenerate public-basis three-center tiles on device or replay
+[automatically admitted raw host panels](df_streamed_panels.md). The complete
 two-electron HF force response uses separately bounded generation in both cases. The
 mathematical provider remains `density_fitted`; execution placement does not
 change its fitting basis, metric cutoff, energy normalization or force sign.
@@ -14,13 +15,13 @@ The one-electron and overlap/Pulay consumer remains owned by #141.
 | --- | --- | --- | --- |
 | Raw metric M | Generated on device; returned to host once, then uploaded for cuSOLVER | No transfer | No transfer |
 | Metric eigensystem Q, eigenvalues and X=M^(-1/2) | Produced by cuSOLVER; device ownership transfers from setup to the plan | X remains resident | Borrows the same Q, eigenvalues and X; no host metric reverse contraction |
-| Raw A[mu,nu,P] | Source retains topology and public transforms; retained-B setup borrows K scratch and generates each raw value once | None for retained B; otherwise regenerated in bounded panels | Regenerated on device one AO matrix per auxiliary function |
+| Raw A[mu,nu,P] | Source retains topology and public transforms; retained-B setup borrows K scratch and generates each raw value once | None for retained B; otherwise bounded regeneration or admitted pageable A uploads | Regenerated on device one AO matrix per auxiliary function |
 | Transformed B | Optional full retained tensor, separate from bounded K scratch; otherwise bounded generated panels | Retained B is gathered by Q; generated panels are consumed on the same stream | Not needed by the response |
 | RI-J charge and RI-K transforms | Plan-owned device buffers | No tensor transfer | Independent response scratch |
 | HF densities | Device SCF state is retained; host entry points explicitly upload their inputs | Device SCF entry points have no density transfer; existing host numerical recovery transfers AO matrices | Current finalization uploads one RHF or three UHF density terms; separately counted |
 | A/M response weights | Not retained | Not used | Computed and consumed on device; no weight upload or raw-value download |
 | Basis metadata / positions | Source uploads on rebuild | Retained | Compact derivative metadata is uploaded per force call |
-| Graph / solver state | Owned by the plan and invalidated on geometry/policy changes | Existing stream/graph rules and scalar convergence/status reads | Same owning stream; no new graph-owned storage |
+| Graph / solver state | Owned by the plan and invalidated on geometry/policy changes | Graph for capture-safe device sources; eager iteration for admitted host A; scalar convergence/status reads | Same owning stream; no new graph-owned storage |
 | Final gradient | None | None | Only `3*Natom` doubles downloaded by the DF response |
 
 The native host-value compatibility API still supports resident B and

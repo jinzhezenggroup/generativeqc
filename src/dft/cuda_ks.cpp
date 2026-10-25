@@ -28,6 +28,7 @@
 #include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
@@ -399,6 +400,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   nlc::Vv10DensityDomain nonlocal_domain{nlc::Vv10DensityDomain::StrictPositive};
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
+  const CudaXcPointProgram* automatic_program{};
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
@@ -786,10 +788,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                       has_exchange ? 1U : 0U);
       }
     }
-    const auto status = scf::enqueue_prepared_cuda_fock(
-        provider, alpha, beta, matrix, j, exchange,
-        has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, mixed, detail,
-        mixed ? mixed_coulomb_work_counter() : nullptr, mixed && pending_mixed_exchange);
+    const auto status = enqueue_fock(
+        alpha, beta, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
+        jk_error, mixed, detail, mixed ? mixed_coulomb_work_counter() : nullptr,
+        mixed && pending_mixed_exchange);
     return observe_value_dispatch(status, provider.strategy().spec.coulomb.present,
                                   has_exchange ? 1U : 0U);
   }
@@ -815,6 +817,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
                                              1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
+  }
+
+  /** The Direct source borrows this owner's frozen transform binding/handle
+   * only for the submission. It retains no pointer across owner destruction. */
+  generativeqc_status enqueue_fock(const double* alpha, const double* beta, double* coulomb,
+                                   double* alpha_exchange, double* beta_exchange, int* error,
+                                   bool mixed, std::string& detail,
+                                   std::uint64_t* mixed_work = nullptr,
+                                   bool mixed_exchange = false) {
+    const auto matrices = matrix_products.view(masked_matrix_output, elements);
+    return scf::enqueue_prepared_cuda_fock(provider, alpha, beta, matrix, coulomb, alpha_exchange,
+                                           beta_exchange, error, mixed, detail, mixed_work,
+                                           mixed_exchange, &matrices);
   }
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
@@ -1428,13 +1443,30 @@ struct CudaKsPlan::Impl : KsStateStorage {
         range_correction(range ? std::optional<scf::ResolvedFockBuild>(*range) : std::nullopt),
         nonlocal_correlation(nonlocal),
         nonlocal_domain(domain) {
-    if (!curated_cuda_ks_functional(functional) && !generated::split_hybrid_registered(functional))
+    automatic_program = generated::automatic_cuda_point_entry(functional);
+    if (!curated_cuda_ks_functional(functional) &&
+        !generated::split_hybrid_registered(functional) && !automatic_program)
       throw std::invalid_argument("CUDA KS functional has no qualified device implementation");
     const auto& strategy = provider.strategy();
     scf::validate_resolved_fock_build(strategy);
     has_exchange = strategy.spec.exchange.present;
     exchange_coefficient = has_exchange ? strategy.spec.exchange.coefficient : 0.0;
     has_range_correction = range_correction.has_value();
+    // Automatic science shares the ordinary owner, not curated execution
+    // qualifications. Refuse policies that could stage XC on the host or
+    // inherit unrelated exchange, precision and derivative capabilities.
+    if (automatic_program &&
+        (has_exchange || has_range_correction || nonlocal_correlation ||
+         options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
+         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) !=
+             GENERATIVEQC_PRECISION_FP64 ||
+         options.semilocal_exchange_scale != 1.0 || options.semilocal_correlation_scale != 1.0 ||
+         !provider.system().ecp_terms.empty() ||
+         std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; })))
+      throw std::invalid_argument(
+          "automatic CUDA KS requires strict-FP64 device-fused all-electron pure semilocal "
+          "execution");
     if (has_range_correction) {
       scf::validate_resolved_fock_build(*range_correction);
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
@@ -1531,6 +1563,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!provider.system().electron_count || occupations[0] > n || occupations[1] > n ||
         (spins == 1 && (occupations[0] != occupations[1] || provider.system().multiplicity != 1)))
       throw std::invalid_argument("CUDA KS occupations do not match the spin/orbital space");
+    // Direct native construction must enforce the public admission boundary as
+    // well. Raw Libxc work coefficients cannot certify empty-spin birth Fock.
+    if (automatic_program && spins == 2 && (!occupations[0] || !occupations[1]))
+      throw std::invalid_argument(
+          "automatic CUDA KS has no empty-spin physical-birth derivative qualification; "
+          "both spin occupations must be nonzero");
     // A valid overlap does not imply finite physical data: unlike two equal
     // H centers, coincident O/H centers can retain a nonsingular AO metric
     // while nuclear repulsion is infinite. Fail before staging a cold seed.
@@ -1732,6 +1770,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       incremental_direct_jk_policy.effective_rebuild_interval = 1;
     }
     incremental_direct_jk = incremental_direct_jk_policy.active;
+    if (automatic_program && incremental_direct_jk_policy.requested)
+      throw std::invalid_argument("automatic CUDA KS has no incremental Direct-J qualification");
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
@@ -1863,8 +1903,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto diagnostic_iterations =
         precision_schedule.any_lower_precision()
             ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
-            : (incremental_direct_jk ? sum(options.max_iterations, kMaximumFinalCorrections)
-                                     : options.max_iterations);
+            : (incremental_direct_jk || automatic_program
+                   ? sum(options.max_iterations, kMaximumFinalCorrections)
+                   : options.max_iterations);
     output.dft_diagnostic.history.reserve(diagnostic_iterations);
     final_validation_diagnostic.determinant.eigenframes.reserve(spins);
     // Optional O(n) spectrum storage is the only extra capacity used by cold
@@ -1921,7 +1962,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
-      check(matrix_products.prepare(stream, static_cast<int>(n)),
+      check(matrix_products.prepare(stream, static_cast<int>(n), 1, static_cast<int>(spins),
+                                    static_cast<int>(fock_binding.direct_nbf)),
             "CUDA KS matrix provider preparation failed");
       if (matrix_products.library_enabled())
         resource.provider_device_bytes =
@@ -2329,10 +2371,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.dft_diagnostic.tile_points = xc_layout.tile_points;
     output.dft_diagnostic.ao_order = xc_layout.jets == 1 ? 0 : 1;
     // Scientific domain identity follows the functional, including B3LYP v2.
-    output.dft_diagnostic.scf_domain_version =
-        generated::split_hybrid_registered(functional)
-            ? 4U
-            : semilocal_family_domain_version(semilocal_family_from_code(functional));
+    output.dft_diagnostic.scf_domain_version = point_domain_version();
     output.initial_density_used = input != nullptr || use_warm;
     output.incremental_direct_jk.requested = incremental_direct_jk_policy.requested;
     output.incremental_direct_jk.active = incremental_direct_jk;
@@ -2417,6 +2456,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const bool resident_nonlocal_chunk =
           rsh_chunk && device_nonlocal && nonlocal_correlation != nullptr;
       device_chunk_mode =
+          !automatic_program &&
           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
           !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
           !precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1 &&
@@ -2569,8 +2609,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the ordinary primary/correction fallback supplies its own receipts.
       if (status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) observe_value_dispatch(status, true, 2);
       if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
-        status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
-                                                 nullptr, jk_error, false, detail);
+        status = enqueue_fock(density, nullptr, j, exchange, nullptr, jk_error, false, detail);
         observe_value_dispatch(status, true, 1);
         if (status == GENERATIVEQC_STATUS_SUCCESS)
           status = observe_value_dispatch(scf::enqueue_prepared_cuda_exchange_correction(
@@ -3838,9 +3877,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // after those budget gates pass; explicit strict callers retain closure.
     const bool budget_final_validation =
         budget_fock && budget_stationarity && options.density_tolerance >= 1e-4;
-    const bool strict_final_closure = (budget_fock && !budget_final_validation) ||
-                                      incremental_direct_jk || spins == 2 ||
-                                      !provider.system().ecp_terms.empty();
+    const bool strict_final_closure =
+        automatic_program || (budget_fock && !budget_final_validation) || incremental_direct_jk ||
+        spins == 2 || !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
     // Inner residuals only control how soon to refresh the expensive operator;
     // they are never publication gates. Early fixed-point problems need not be
@@ -4060,6 +4099,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return is_active;
   }
 
+  /** Domain follows the bound scientific program, not its transport family. */
+  std::uint32_t point_domain_version() const {
+    if (automatic_program) return automatic_program->domain_version;
+    return generated::split_hybrid_registered(functional)
+               ? 4U
+               : semilocal_family_domain_version(semilocal_family_from_code(functional));
+  }
+
   KsFinalStateIdentity final_identity() const {
     KsFinalStateIdentity identity;
     identity.determinant.factor = {owner, 1, final_generation, final_generation};
@@ -4067,16 +4114,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     identity.determinant.model = provider.strategy();
     identity.determinant.occupied = {occupations[0]};
     if (spins == 2) identity.determinant.occupied.push_back(occupations[1]);
-    identity.model = {1,
-                      generated::split_hybrid_registered(functional)
-                          ? 4U
-                          : semilocal_family_domain_version(semilocal_family_from_code(functional)),
-                      grid_spec,
-                      xc_layout.tile_points,
-                      functional,
-                      spins,
-                      device,
-                      owner};
+    identity.model = {
+        1,    point_domain_version(), grid_spec, xc_layout.tile_points, functional, spins, device,
+        owner};
     if (range_correction) identity.model.range_correction = *range_correction;
     if (nonlocal_correlation) {
       identity.model.nonlocal_correlation = nonlocal_correlation->parameters();
@@ -5130,6 +5170,10 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
   return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+}
+const tensor::CudaStructuredProductBinding* CudaKsPlan::structured_provider_diagnostic()
+    const noexcept {
+  return impl_->matrix_products.view().structured_binding_;
 }
 CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   auto out = impl_->movement;

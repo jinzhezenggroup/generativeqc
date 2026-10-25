@@ -10,6 +10,7 @@
 #include "integrals/s_integrals.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/solver/eigen_frame.hpp"
@@ -23,8 +24,37 @@ void check_copy(cudaError_t status) {
     throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
 }
 
+reference::Matrix seed_product(CudaRhfBucketPlan& plan, const CudaHfSeedWorkspace& workspace,
+                               const reference::Matrix& a, const reference::Matrix& b,
+                               std::size_t n, bool ta, bool tb) {
+  if (n != plan.nbf || a.size() != n * n || b.size() != n * n || !workspace.product)
+    throw std::invalid_argument("CUDA seed product dimension or workspace changed");
+  reference::Matrix output(n * n);
+  const auto stream = plan.resources.stream_;
+  try {
+    check_copy(cudaMemcpyAsync(workspace.matrix, a.data(), a.size() * sizeof(double),
+                               cudaMemcpyHostToDevice, stream));
+    check_copy(cudaMemcpyAsync(workspace.scratch, b.data(), b.size() * sizeof(double),
+                               cudaMemcpyHostToDevice, stream));
+    const auto status = cuda_execution::launch_validation_product(
+        plan.resources.matrix_view(), static_cast<int>(n), workspace.matrix, ta, workspace.scratch,
+        tb, workspace.product);
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw generativeqc::Error(status, "CUDA seed product failed");
+    check_copy(cudaMemcpyAsync(output.data(), workspace.product, output.size() * sizeof(double),
+                               cudaMemcpyDeviceToHost, stream));
+    check_copy(cudaStreamSynchronize(stream));
+  } catch (...) {
+    (void)cudaStreamSynchronize(stream);
+    throw;
+  }
+  return output;
+}
+
 reference::EigenResult seed_eigen(CudaRhfBucketPlan& plan, const CudaHfSeedWorkspace& workspace,
-                                  const reference::Matrix& input, std::size_t dimension) {
+                                  const reference::Matrix& input, std::size_t dimension,
+                                  const initial_guess::MatrixProductOperation& products) {
   if (dimension != plan.nbf || input.size() != dimension * dimension)
     throw std::invalid_argument("CUDA HF seed eigen dimension changed");
   reference::EigenResult frame;
@@ -69,7 +99,7 @@ reference::EigenResult seed_eigen(CudaRhfBucketPlan& plan, const CudaHfSeedWorks
   diagnostic.solver_info = info;
   std::string detail;
   if (!solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, dimension,
-                                    diagnostic, detail))
+                                    diagnostic, detail, true, products))
     throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, detail);
   return frame;
 }
@@ -87,11 +117,16 @@ void prepare_hf_cuda_initial_densities(
   const auto& policy = *options.preliminary_guess;
   const auto stream = plan.resources.stream_;
   const auto matrix_size = host.nbf * host.nbf;
+  initial_guess::MatrixProductOperation products;
+  if (workspace.product && plan.resources.blas_ && host.nbf >= 512)
+    products = [&](const auto& a, const auto& b, auto n, bool ta, bool tb) {
+      return seed_product(plan, workspace, a, b, n, ta, tb);
+    };
   const initial_guess::EigenOperation eigen = [&](const auto& matrix, const auto* overlap,
                                                   const auto* orthogonalizer, auto dimension) {
     if (overlap || orthogonalizer)
       throw std::invalid_argument("CUDA HF seed eigen operation accepts symmetric solves only");
-    return seed_eigen(plan, workspace, matrix, dimension);
+    return seed_eigen(plan, workspace, matrix, dimension, products);
   };
   for (std::size_t index = 0; index < systems.size(); ++index) {
     auto& diagnostic = diagnostics[index];
@@ -119,7 +154,7 @@ void prepare_hf_cuda_initial_densities(
                                      matrix_size * sizeof(double), cudaMemcpyDeviceToHost, stream));
           check_copy(cudaStreamSynchronize(stream));
           candidate = initial_guess::prepare_huckel_initial_density(systems[index], target, policy,
-                                                                    diagnostic, eigen);
+                                                                    diagnostic, eigen, products);
         } catch (...) {
           (void)cudaStreamSynchronize(stream);
           throw;

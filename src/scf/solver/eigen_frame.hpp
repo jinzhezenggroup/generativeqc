@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "scf/initial_guess/eigen_operation.hpp"
+
 namespace generativeqc::scf::solver {
 /** Backend-neutral evidence for one real symmetric/generalized eigenframe. */
 struct EigenFrameDiagnostic {
@@ -33,5 +35,6 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
                           const std::vector<double>& eigenvalues,
                           const std::vector<double>& coefficients, std::size_t n,
                           EigenFrameDiagnostic& diagnostic, std::string& detail,
-                          bool require_eigen_residual = true);
+                          bool require_eigen_residual = true,
+                          const initial_guess::MatrixProductOperation& products = {});
 }  // namespace generativeqc::scf::solver

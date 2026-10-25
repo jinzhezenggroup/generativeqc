@@ -316,6 +316,13 @@ bool incremental_diis_gram_requested();
  * incumbent reducer; ordered retains the serial FP64 accumulation order. */
 bool ordered_incremental_diis_gram_requested();
 
+/** Restricted HF admits the ordered Gram cache when large residual vectors
+ * amortize its pending-row launch. Resource queries and execution must agree;
+ * explicit shared selectors retain their diagnostic/rollback semantics. */
+bool hf_incremental_diis_gram_requested(std::size_t aos, std::size_t history, std::size_t spins);
+/** Resolve only after HF cache admission, and retain the result in the plan. */
+bool hf_ordered_diis_gram_requested();
+
 }  // namespace generativeqc::scf::cuda_execution
 
 #endif

@@ -739,6 +739,14 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
       device_candidate && !reference_validation && !options.export_physical_reference &&
           identity.model.spec.spin == FockSpin::Unrestricted};
+  // A converged RHF frame can differ from the current canonical gauge while
+  // spanning the same occupied space. Authenticate that retained determinant
+  // with F[D], reconstruction, trace/idempotency and the fresh physical
+  // projector before authorizing W and the matching occupied-response lease.
+  // Detached/reference and corrected states retain canonical finalization.
+  limits.allow_projector_checked_reuse = device_candidate && !reference_validation &&
+                                         !options.export_physical_reference &&
+                                         identity.model.spec.spin == FockSpin::Restricted;
   if (!options.export_physical_reference && qualified_standard_owner &&
       identity.model.spec.spin == FockSpin::Restricted &&
       standard_scf_convergence_requested(options.energy_tolerance, options.density_tolerance))
@@ -1470,6 +1478,11 @@ void reserve_cuda_df_diis(CudaDensityFittingJkPlan* plan, std::size_t nbf,
     if (budget && diagnostic.peak_device_bytes > budget) throw std::bad_alloc();
   }
   set_cuda_density_fitting_scf_diis_history(plan, options.diis_history);
+  std::string cache_detail;
+  const auto cache_status =
+      prepare_cuda_density_fitting_host_panels(plan, budget, diagnostics, cache_detail);
+  if (cache_status != GENERATIVEQC_STATUS_SUCCESS)
+    throw generativeqc::Error(cache_status, cache_detail);
 }
 
 /** Diagnostic fixed-point ablation keeps the same planned memory reservation.

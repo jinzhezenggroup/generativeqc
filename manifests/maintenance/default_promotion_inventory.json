@@ -44,11 +44,62 @@
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
       "python/generativeqc_compiler/tensor/ad_program.py",
-      "src/scf/fock_prepared.cpp"
+      "src/scf/fock_prepared.cpp",
+      "src/hf/rhf_frame_response.cu"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
+    {
+      "id": "df.metric-derivative-pair-reuse",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/df_derivatives.cu"
+      ],
+      "rationale": "Complete contiguous metric weight panels with cooperative mapping and one gradient sink evaluate each unordered auxiliary pair derivative once, then scatter both original weights separately. This accepts nonsymmetric weights without doubled diagonals or an overflowing weight sum, keeps the generated recurrence and dense storage, and halves derivative task work. Partial/offset/strided/serial/distributed-sink inputs retain the bounded traversal. Explicit 0 rolls back; unset/1 admits eligible panels; invalid controls reject. Repeated PBE48/96 and r2SCAN-3c96 complete endpoints and independent weighted, moved, property and range/g-shell gates qualify this exact reuse.",
+      "revisit_condition": "Extend to partial panels only with bounded ownership of both orientations; retain arbitrary weights, generated scientific ownership, finite resource limits, public error recovery and explicit rollback. Further endpoint work should target grid geometry and three-center derivatives using causal work counts.",
+      "evidence": [
+        "docs/developer/df_derivatives.md",
+        "tests/python/test_df_derivatives_cuda.py",
+        "tests/python/test_df_native_g_derivatives.py",
+        "tests/python/test_range_separated_df.py",
+        ".agents/notes/implemented/performance/2026-10-25-df-metric-pair-derivatives.md",
+        "benchmarks/results/df-metric-pairs-20261025/README.md"
+      ]
+    },
+    {
+      "id": "scf.ordered-hf-diis-gram",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM",
+        "hf-runtime:GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/scf_diis_kernels.cu",
+        "src/scf/cuda/rhf_bucket.cpp",
+        "src/scf/cuda_rhf.cpp"
+      ],
+      "rationale": "Restricted HF automatically reuses the separately charged physical-slot Gram cache at >=512 AOs with history capacity >=2, using the existing scalar-order FP64 reducer. Resource admission, cached-plan invalidation and execution share the guard. Smaller/unrestricted owners retain serial defaults. Explicit 0 rolls back; explicit 1 keeps cooperative or explicitly selected ordered diagnostics. Three alternating complete HF48/96 endpoint rounds and independent original/moved/property/rollback gates qualify the scoped cold gain without changing Fock work, tolerances, arithmetic order or cache size.",
+      "revisit_condition": "Qualify complete endpoints and independent original/moved forces before widening spin or size admission or changing reduction order. Preserve inactive-control semantics, reset/cache ownership and explicit rollback. The remaining HF96 cold gap is dominated by full Fock work, not Gram reuse.",
+      "evidence": [
+        "docs/developer/array_api_frontend.md",
+        "tests/python/test_ordered_diis_endpoint_contract.py",
+        "tests/native/test_cuda_diis_cached_gram.cpp",
+        ".agents/notes/implemented/performance/2026-10-25-restricted-hf-ordered-gram.md",
+        "benchmarks/results/hf-ordered-gram-20261025/README.md"
+      ]
+    },
     {
       "id": "scf.partial-phase-local-values",
       "classification": "needs-qualification",
@@ -616,12 +667,14 @@
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "Unset/auto behavior for these DF selectors is resolved by existing qualified production policies; explicit values retain diagnostic, reproduction, or forced-comparison routes.",
+      "rationale": "Unset/auto behavior for these DF selectors is resolved by existing qualified production policies; explicit values retain diagnostic, reproduction, or forced-comparison routes. Full-rank raw-source pure-J response selects charge-first algebra before optional tensor sizing, so intermediate scratch capacity cannot introduce full inverse-factor work; exchange, truncated metrics and explicit panel/dot routes remain separate.",
       "revisit_condition": "Revisit per selector when its automatic guard or evidence identity changes; do not infer that every explicit override is itself production-qualified.",
       "evidence": [
         "docs:docs/developer/df_tuning.md",
         "docs:docs/developer/df_occupied_cuda.md",
-        "issue:#1598"
+        "issue:#1598",
+        "note:.agents/notes/implemented/performance/2026-10-25-coulomb-response-capacity.md",
+        "benchmarks:benchmarks/results/df-response-capacity-20261025/README.md"
       ]
     },
     {
@@ -991,7 +1044,7 @@
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
       "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
-      "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
+      "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Ordinary DF already uses the independently qualified native AO-jet bitmask producer at its own 2**35 dense-work crossover. Broaden to composite execution or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
         "issue:#1598",
@@ -999,7 +1052,8 @@
         "pr:#1934",
         "benchmarks:benchmarks/results/pbe0-public-force-policy-20261005/README.md",
         "benchmarks:benchmarks/results/pbe0-force-followups-20261005/README.md",
-        "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
+        "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md",
+        "note:.agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md"
       ]
     },
     {
@@ -1181,6 +1235,32 @@
         "issue:#926",
         "issue:#1598",
         "note:.agents/notes/implemented/architecture/2026-10-06-shared-iteration-invariants.md"
+      ]
+    },
+    {
+      "id": "cc.shared-df-reference-source",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_SHARED_SOURCE"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/cc/df_source_cuda.cu",
+        "src/hf/df_reference.cpp",
+        "src/methods/rccsd_method.cpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Full-DF MP2/CCSD(T) shares the authenticated immutable DF-HF source and forward metric by default. Exact physical publication, both basis geometries, cutoff, device and source policy must match. Fresh compensated AO-to-MO projection remains mandatory. A strong response owner retains the reference; admission counts its lease once. Mismatch and explicit zero retain fresh construction.",
+      "revisit_condition": "Qualify complete independent energy/force endpoints before sharing ordinary SCF B/E, changing frames, other RI-MP2 builders or asynchronous consumers. Do not infer broad endpoint speedups from removed metric setup alone.",
+      "evidence": [
+        "docs/developer/df_ccsdt.md",
+        ".agents/notes/implemented/performance/2026-10-25-shared-df-reference-source.md",
+        "tests/native/df_shared_source_probe.cpp",
+        "tests/python/test_df_shared_source_cuda.py",
+        "tests/python/test_full_df_cbs_native.py",
+        "benchmarks/results/df-shared-source-20261025/README.md"
       ]
     },
     {
@@ -2151,6 +2231,31 @@
       ]
     },
     {
+      "id": "scf.host-raw-panels",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_HOST_MAX_BYTES"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/scf/cuda/df_host_panels.hpp",
+        "src/scf/cuda/df_plan.cpp",
+        "src/scf/rhf.cpp",
+        "src/scf/fock_prepared.cpp",
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Eligible single-system generated streamed HF plans retain an auxiliary-complete prefix of raw FP64 A within their host value allowance and automatic machine/cgroup headroom. Existing GPU B, packed pure-J, MD Coulomb, batch and imported-tensor paths retain priority. Repeated K panels avoid recurrence while whitening and current-density/orbital work remain device computations. Admitted pageable sources use eager SCF; optional host allocation refusal retains generated graphs. Geometry and requested host policy invalidate reuse.",
+      "revisit_condition": "Qualify total cold/warm/moved E+F and actual source work before widening batch/domain support, replacing efficient GPU residency, admitting fitted host B, graph staging or disk. Compare cache benefit against lost graph replay with process initialization controlled.",
+      "evidence": [
+        "docs/developer/df_streamed_panels.md",
+        "tests/python/test_df_host_panels_cuda.py",
+        "tests/python/test_df_streamed_auto_cuda.py",
+        "benchmarks/results/df-host-panels-20261025/README.md"
+      ]
+    },
+    {
       "id": "ks.host-full-values",
       "classification": "already-default",
       "controls": [
@@ -2174,6 +2279,31 @@
         "tests/python/test_full_host_ks_cuda.py",
         "tests/python/test_range_resident_values_cuda.py",
         "benchmarks/results/host-full-eri-20261025/README.md"
+      ]
+    },
+    {
+      "id": "response.host-full-values",
+      "classification": "already-default",
+      "controls": [
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_MAX_BYTES",
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_BUCKET_MASK",
+        "response-option:GENERATIVEQC_RHF_RESPONSE_HOST_TILE_BYTES"
+      ],
+      "owner_issues": [
+        2744
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.cu",
+        "src/runtime/host_cache_budget.hpp"
+      ],
+      "rationale": "Eligible eager exact RHF frame responses retain GPU priority and automatically admit bounded FP64 RAM for omitted buckets. Machine/cgroup headroom, remaining complete numeric capacity and free VRAM constrain admission. Full GPU residency allocates no host tier; capacity refusal preserves GPU values and later mandatory OOM retries once without either tier. Independent final residual and derivative sources remain authoritative.",
+      "revisit_condition": "Qualify changes to source eligibility, staging, bucket selection and resource reserve against same-source complete consuming energy/force endpoints and independent scientific gates. This policy does not qualify RHF-SCF graphs, public prepared CPKS, screened Krylov actions or temporary disk.",
+      "evidence": [
+        "docs/developer/response.md",
+        "tests/python/test_rhf_host_response_cuda.py",
+        "tests/python/test_rhf_resident_retry.py",
+        ".agents/notes/implemented/performance/2026-10-25-rhf-response-host-eri.md",
+        "benchmarks/results/rhf-host-response-20261025/README.md"
       ]
     }
   ]

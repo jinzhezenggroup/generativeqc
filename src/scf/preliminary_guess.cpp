@@ -172,7 +172,7 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
 std::optional<std::vector<double>> prepare_huckel_initial_density(
     const core::System& system, const integrals::IntegralData& target,
     const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
-    const EigenOperation& eigen) {
+    const EigenOperation& eigen, const MatrixProductOperation& products) {
   validate_preliminary_options(policy);
   if (policy.kind != PreliminaryKind::Huckel)
     throw std::invalid_argument("Huckel preparation requires its explicit provider kind");
@@ -183,7 +183,7 @@ std::optional<std::vector<double>> prepare_huckel_initial_density(
   }
   auto candidate = huckel_density(system, target, policy, diagnostic);
   solver::validate_seed(target.overlap, candidate.density, target.nbf,
-                        {static_cast<unsigned>(system.electron_count)}, 2.0, eigen);
+                        {static_cast<unsigned>(system.electron_count)}, 2.0, eigen, products);
   diagnostic.outcome = PreliminaryOutcome::Used;
   return std::move(candidate.density);
 }

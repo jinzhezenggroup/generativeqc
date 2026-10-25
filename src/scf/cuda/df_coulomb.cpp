@@ -11,6 +11,7 @@
 
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "scf/cuda/df_host_panels.hpp"
 #include "scf/cuda/df_jk_internal.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/df_metric_kernels.hpp"
@@ -168,9 +169,8 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
           return generate_cuda_density_fitting_packed_raw_tile(
               plan.integral_source, system, first, pairs, begin, count,
               reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-        return generate_cuda_density_fitting_raw_tile(
-            plan.integral_source, system, first, pairs, begin, count, -1,
-            reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+        return raw_panel(plan, system, first, pairs, begin, count, plan.auxiliary_tile_values,
+                         detail);
       };
       runtime::cuda_trace::trace_counter("streamed_coulomb_pairs", pair_count);
       runtime::cuda_trace::trace_counter("streamed_coulomb_packed", packed_pairs);
