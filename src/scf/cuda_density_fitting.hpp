@@ -180,6 +180,10 @@ bool cuda_density_fitting_integral_source_matches(const CudaDensityFittingIntegr
                                                   int device_id, std::size_t batch_size,
                                                   std::size_t nbf, std::size_t naux) noexcept;
 
+/** Compare the frozen generated arithmetic, scheduling and radial policy. */
+bool cuda_density_fitting_integral_source_policy_matches(
+    const CudaDensityFittingIntegralSource*, const cuda_execution::CudaDfSourcePolicy&) noexcept;
+
 /** Compare immutable per-item source geometry and basis by value before response. */
 bool cuda_density_fitting_integral_source_geometry_matches(
     const CudaDensityFittingIntegralSource* source, std::size_t system, const core::System& orbital,

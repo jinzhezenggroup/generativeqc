@@ -709,3 +709,17 @@ not register a Calculator method.
   DF-CCSD(T) analytic forces use the separate complete owner documented in
   [df_ccsdt_gradient.md](df_ccsdt_gradient.md);
 - no frozen-core, open-shell, ECP, local, or DLPNO variant.
+
+## Shared full-DF reference source
+
+Full-DF MP2/CCSD(T) automatically reuses its retained DF-HF integral source and
+forward metric eigensystem when exact geometry, both bases, physical reference,
+device, cutoff and generated source policy match. Correlation still generates
+compensated raw high/low expansions and its own MO factors. Exact-RHF plus DF
+correlation and mismatches keep the independent source builder.
+
+The retained response owns a strong reference through its final stream use.
+Resource admission charges the shared reference lease once and all new transform
+storage separately. `GENERATIVEQC_DF_SHARED_SOURCE=0` restores independent
+construction for diagnosis; the default needs no opt-in. Progress traces report
+`shared_reference_bytes`, `source_constructions` and `metric_factorizations`.
