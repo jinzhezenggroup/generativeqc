@@ -79,6 +79,44 @@ void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept {
   plan.blas = nullptr;
 }
 
+generativeqc_status scf_metric_cholesky(CudaDensityFittingJkPlan& plan, double* matrix,
+                                        void* scratch, std::size_t scratch_bytes, int* info,
+                                        bool& admitted, std::string& detail) {
+  admitted = false;
+  const auto handle = static_cast<cusolverDnHandle_t>(plan.eigen_handles.view().solver);
+  const auto n = static_cast<int>(plan.naux);
+  int elements = 0;
+  auto status =
+      cusolverDnDpotrf_bufferSize(handle, CUBLAS_FILL_MODE_LOWER, n, matrix, n, &elements);
+  if (status != CUSOLVER_STATUS_SUCCESS)
+    return solver_failure(status, "query DF metric Cholesky workspace", detail);
+  if (elements < 0 || static_cast<std::size_t>(elements) > scratch_bytes / sizeof(double))
+    return GENERATIVEQC_STATUS_SUCCESS;
+  status = cusolverDnDpotrf(handle, CUBLAS_FILL_MODE_LOWER, n, matrix, n,
+                            static_cast<double*>(scratch), elements, info);
+  if (status != CUSOLVER_STATUS_SUCCESS)
+    return solver_failure(status, "factor DF metric Cholesky", detail);
+  admitted = true;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status scf_metric_lower_solve(CudaDensityFittingJkPlan& plan, std::size_t columns,
+                                           const double* lower, double* values,
+                                           std::string& detail) {
+  if (!columns || columns > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    detail = "invalid DF metric triangular solve extent";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto n = static_cast<int>(plan.naux);
+  const double one = 1.0;
+  const auto status =
+      cublasDtrsm(plan.blas, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
+                  CUBLAS_DIAG_NON_UNIT, n, static_cast<int>(columns), &one, lower, n, values, n);
+  return status == CUBLAS_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
+             : blas_failure(status, "solve DF metric lower factor", detail);
+}
+
 generativeqc_status scf_occupied_gram(CudaDensityFittingJkPlan& plan, std::size_t columns,
                                       std::size_t reduction, double weight, const double* factor,
                                       double* output, bool lower_triangle, bool& wrote_lower,

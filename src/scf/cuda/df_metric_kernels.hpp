@@ -7,6 +7,9 @@
 
 namespace generativeqc::scf::cuda_df {
 
+/** Initialize a column-major identity in already admitted setup scratch. */
+void launch_metric_identity(cudaStream_t stream, std::size_t dimension, double* matrix);
+
 /** Launch on the caller's stream, compacting the logical work domain when legal. */
 void launch_symmetrize_metrics_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                       cudaStream_t stream, std::size_t dimension, double* metrics);

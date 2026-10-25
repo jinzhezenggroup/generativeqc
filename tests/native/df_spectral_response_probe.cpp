@@ -35,12 +35,15 @@ struct Storage {
 };
 }  // namespace
 
-extern "C" int df_spectral_response_probe(
-    std::size_t n, std::size_t a, std::size_t terms, std::size_t tile, std::size_t rank,
-    unsigned mode, bool spectral, const double* forward, const double* densities,
-    const double* coefficients, const double* coulomb, const double* exchange,
-    const double* eigenvectors, const double* eigenvalues, const double* symmetric_root,
-    double* bar_a, double* bar_m, char* message, std::size_t message_size) noexcept {
+extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::size_t terms,
+                                          std::size_t tile, std::size_t rank, unsigned mode,
+                                          bool spectral, const double* forward,
+                                          const double* densities, const double* coefficients,
+                                          const double* coulomb, const double* exchange,
+                                          const double* eigenvectors, const double* eigenvalues,
+                                          const double* symmetric_root, const double* explicit_root,
+                                          double* bar_a, double* bar_m, char* message,
+                                          std::size_t message_size) noexcept {
   using namespace generativeqc;
   try {
     if (!n || !a || !terms || !tile || tile > a || n > 16 || a > 64 || terms > 3 || !rank ||
@@ -61,7 +64,15 @@ extern "C" int df_spectral_response_probe(
                                        true,
                                        1};
     const scf::CudaDfWhitenedTensorView fitted{
-        owner.allocate(pairs * a, forward), n, a, pairs, true, 1, metric, spectral};
+        owner.allocate(pairs * a, forward),
+        n,
+        a,
+        pairs,
+        true,
+        1,
+        metric,
+        spectral,
+        explicit_root ? owner.allocate(a * a, explicit_root) : nullptr};
     std::vector<scf::DensityFittingDensityResponse> response;
     for (std::size_t t = 0; t < terms; ++t)
       response.push_back({{densities + t * matrix, matrix}, coulomb[t], exchange[t]});

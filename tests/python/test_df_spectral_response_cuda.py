@@ -50,7 +50,7 @@ def spectral_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
     call.argtypes = (
         [ct.c_size_t] * 5
         + [ct.c_uint, ct.c_bool]
-        + [dp] * 10
+        + [dp] * 11
         + [ct.c_void_p, ct.c_size_t]
     )
     call.restype = ct.c_int
@@ -64,14 +64,14 @@ def spectral_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
     ((0, "auto"), (1, "auto"), (1, "spectral"), (2, "auto")),
     ids=("coulomb", "occupied-root", "occupied-factor-order", "final-reuse"),
 )
-@pytest.mark.parametrize("spectral", (False, True), ids=("symmetric", "spectral"))
+@pytest.mark.parametrize("gauge", ("symmetric", "spectral", "explicit"))
 def test_rotated_metric_physical_adjoints(
     spectral_probe: Any,
     condition: float,
     tile: int,
     mode: int,
     policy: str,
-    spectral: bool,
+    gauge: str,
     monkeypatch: Any,
 ) -> None:
     """Long-double independent J/K adjoints, signed terms and ragged panels.
@@ -90,7 +90,17 @@ def test_rotated_metric_physical_adjoints(
     e = rng.normal(size=(n, n, a))
     e = (e + e.transpose(1, 0, 2)) / 2
     root = (q / np.sqrt(eigenvalues)) @ q.T
+    spectral = gauge == "spectral"
     forward = e if spectral else e @ q.T
+    explicit_root = None
+    if gauge == "explicit":
+        # Independently rotate the forward auxiliary gauge. The oracle below
+        # still uses the original eigenfactors; it does not consume this W.
+        rotation = np.linalg.qr(rng.normal(size=(a, a)))[0]
+        forward = e @ rotation
+        explicit_root = np.ascontiguousarray(
+            ((rotation.T / np.sqrt(eigenvalues)) @ q.T).T
+        )
     packed = np.ascontiguousarray(forward[np.tril_indices(n)])
     c = rng.normal(size=(terms, n, rank))
     density = 2 * np.einsum("tmi,tni->tmn", c, c)
@@ -125,7 +135,10 @@ def test_rotated_metric_physical_adjoints(
         rank,
         mode,
         spectral,
-        *(x.ctypes.data_as(dp) for x in (*arrays, bar_a, bar_m)),
+        *(x.ctypes.data_as(dp) for x in arrays),
+        explicit_root.ctypes.data_as(dp) if explicit_root is not None else None,
+        bar_a.ctypes.data_as(dp),
+        bar_m.ctypes.data_as(dp),
         error,
         len(error),
     )

@@ -1499,6 +1499,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const auto panel_capacity =
           static_cast<std::size_t>((available / sizeof(double) - fixed_elements) / (1.0L * n * n));
       std::size_t occupied_retained = 0, occupied_largest = 0, occupied_coefficients = 0;
+      std::size_t occupied_max_rank = 0;
       if (occupied)
         for (std::size_t t = 0; t < terms.size(); ++t) {
           const auto rank = occupied->factors[t].rank;
@@ -1506,7 +1507,13 @@ generativeqc_status execute_cuda_df_hf_gradient(
           occupied_retained += a * rank * rank;
           occupied_largest = std::max(occupied_largest, a * rank * rank);
           occupied_coefficients += n * rank;
+          occupied_max_rank = std::max(occupied_max_rank, rank);
         }
+      // Fitted B projection needs one unpacked AO slice and B*C simultaneously.
+      // A one-Q force tile alone is too small even when the factor/metric fits;
+      // reserve this phase independently of the subsequent derivative panel.
+      const auto occupied_scratch =
+          std::max(occupied_largest, n * n + (whitened ? n * occupied_max_rank : 0));
       const auto factor_capacity =
           static_cast<std::size_t>(available / sizeof(double) - fixed_elements);
       const char* requested_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
@@ -1523,7 +1530,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const bool owned_occupied =
           !whitened_response && occupied && (whitened || panel_capacity <= a) &&
           occupied_retained <= factor_capacity &&
-          std::max(occupied_largest, n * n) <= factor_capacity - occupied_retained &&
+          occupied_scratch <= factor_capacity - occupied_retained &&
           (!requested_algebra || std::string_view(requested_algebra) == "blas") &&
           (!requested_dot || std::string_view(requested_dot) != "1") &&
           (!requested_scatter || !*requested_scatter);
@@ -1586,7 +1593,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                        : block,
                    whitened_response) +
                (single_fitted_tensor ? (a - block) * n * n : 0) +
-               (owned_occupied ? occupied_retained + std::max(occupied_largest, block * n * n) : 0);
+               (owned_occupied ? occupied_retained + std::max(occupied_scratch, block * n * n) : 0);
       };
       double* workspace = nullptr;
       // Free bytes are advisory: allocation granularity, fragmentation or a
@@ -1629,7 +1636,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.exchange_response = owned_buffers.staging_weights + occupied_retained;
         owned_buffers.raw_auxiliary_major = workspace + 4 * a * a + 2 * n * n;
         owned_buffers.staging_elements = occupied_retained;
-        owned_buffers.exchange_elements = std::max(occupied_largest, tile * n * n);
+        owned_buffers.exchange_elements = std::max(occupied_scratch, tile * n * n);
         owned_buffers.raw_elements = n * n;
         owned_buffers.occupied_factors = occupied->factors;
         owned_buffers.occupied_response = true;
@@ -1968,7 +1975,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
         read_fitted = [&, root_ready = false](std::size_t begin, std::size_t count,
                                               double* values) mutable {
           const double* fitted_response_root = device_metric->inverse_square_root;
-          if (whitened->spectral_basis) {
+          if (whitened->factor_response_root) {
+            fitted_response_root = whitened->factor_response_root;
+          } else if (whitened->spectral_basis) {
             // Full-rank panel response never writes the first metric interval.
             // Prepare R there on the first actual read: pure-J response uses
             // its vector-only map and need not prepare this unused panel map.

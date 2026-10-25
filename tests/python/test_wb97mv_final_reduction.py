@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -19,12 +18,12 @@ class FakePlan:
     def __init__(self) -> None:
         self.coverage = None
 
-    def reduction_program(self, *, atoms: int, sources: object = None) -> object:
+    def validate_source_coverage(self, *, sources: object = None) -> tuple[str, ...]:
         names = tuple(sources)
         if set(names) != set(self.source_names):
             raise ValueError("incomplete source coverage")
-        self.coverage = (atoms, names)
-        return SimpleNamespace()
+        self.coverage = names
+        return self.source_names
 
 
 def test_canonical_host_sum_preserves_compiler_coverage_gate() -> None:
@@ -36,7 +35,7 @@ def test_canonical_host_sum_preserves_compiler_coverage_gate() -> None:
     }
     actual = _canonical_gradient_sum(plan, components, 2)
     np.testing.assert_array_equal(actual, np.full((2, 3), 6.0))
-    assert plan.coverage == (2, ("c", "a", "b"))
+    assert plan.coverage == ("c", "a", "b")
 
 
 @pytest.mark.parametrize(

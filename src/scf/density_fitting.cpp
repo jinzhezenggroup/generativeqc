@@ -544,6 +544,9 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
   const bool resident =
       retain_three_center || (auxiliary_tile == naux && ao_pair_tile == nbf * nbf);
   // Setup transfers two metric matrices and the spectrum to the value owner.
+  // The pre-existing extra metric reservation also covers an optional inverse
+  // Cholesky factor retained by a full-rank single-packed owner. Moving its
+  // setup slot to the live set cannot exceed this conservative phase bound.
   // The remaining scaled metric, scales and metric solver workspace die before
   // any lazy SCF/final-state allocation can be requested. Account for their
   // disjoint lifetimes rather than spending the same budget on both phases.
@@ -583,8 +586,8 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
       one_electron_doubles * sizeof(double);
   const long double bytes =
       static_cast<long double>(fixed_device_bytes) +
-      static_cast<long double>(batch_size) * sizeof(int) +  // metric solver status
-      static_cast<long double>(metric_bytes) * batch_size +
+      static_cast<long double>(batch_size) * sizeof(int) +   // metric solver status
+      static_cast<long double>(metric_bytes) * batch_size +  // optional retained factor root
       (retained_metric_doubles + contraction_doubles) * sizeof(double) +
       std::max(setup_doubles * sizeof(double) + setup_workspace_bytes, scf_bytes);
   if (bytes > static_cast<long double>(std::numeric_limits<std::size_t>::max())) {
