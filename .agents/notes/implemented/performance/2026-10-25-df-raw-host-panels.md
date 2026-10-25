@@ -61,3 +61,9 @@ Focks. At 96 AO/20 MiB, the natural packed full-GPU path remains much faster
 than dense streamed+RAM and stays selected. 38 GPU tests and five memcheck
 cases pass. Baseline trace counters include graph construction, so only the
 complete semantic counts and eager RAM traffic are reported as executed work.
+
+After integrating #2765, qualification at `f88f5ac5e` repeats all 38 tests and
+five memcheck cases without errors. Natural 192-AO cold E+F is 8.0253 -> 5.6393 s
+(29.7%); warm is 1.9324 -> 1.6596 s and moved is 7.2477 -> 5.1328 s. The same
+80.53% raw prefix and identical SCF/Fock counts confirm composition with the
+current HF endpoint policy.

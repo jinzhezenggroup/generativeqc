@@ -1,9 +1,9 @@
 # Bounded DF host-panel qualification
 
-Measured source `0fab1aa77`; CUDA library SHA-256
-`a4c6ad3298791c805bdd69cc48a38f21fd98f2f6784c83d956172ec4cfe35574`.
-NVIDIA RTX PRO 6000 Blackwell, n2, finite Slurm jobs 3575 (tests/timing) and
-3576 (separate traced work/retained-capacity receipts). CUDA 12.9, FP64,
+Measured source `f88f5ac5e`; CUDA library SHA-256
+`f0976f2b42da626bf1a2f669f7e5850397fd52995781a2c854ac261dc029d315`.
+NVIDIA RTX PRO 6000 Blackwell, n2, finite Slurm job 3577 (tests/timing and
+separate traced work/retained-capacity receipts). CUDA 12.9, FP64,
 ccache 4.5.1 for native compilation and sccache 0.16.0 for runtime JIT.
 The standalone probe and Python loader resolved the same final library.
 
@@ -22,20 +22,20 @@ The budget is the public complete DF value/response allowance, not GPU size.
 
 | Workload / policy | Host disabled: cold / warm / moved | Automatic RAM: cold / warm / moved |
 |---|---:|---:|
-| 96 AO tetramer, 20 MiB, forced dense streamed | 1.3014 / 0.4331 / 1.2315 | 0.8596 / 0.3811 / 0.8175 |
-| 96 AO tetramer, 20 MiB, natural full GPU | 0.1901 / 0.1092 / 0.1784 | 0.1910 / 0.1089 / 0.1777 |
-| 192 AO octamer, 64 MiB, forced dense streamed | 8.0248 / 1.9317 / 7.2458 | 5.6336 / 1.6609 / 5.1232 |
-| 192 AO octamer, 64 MiB, natural streamed | 8.0221 / 1.9311 / 7.2461 | 5.6391 / 1.6605 / 5.1289 |
+| 96 AO tetramer, 20 MiB, forced dense streamed | 1.3012 / 0.4331 / 1.2322 | 0.8586 / 0.3811 / 0.8180 |
+| 96 AO tetramer, 20 MiB, natural full GPU | 0.1906 / 0.1091 / 0.1784 | 0.1909 / 0.1092 / 0.1783 |
+| 192 AO octamer, 64 MiB, forced dense streamed | 8.0239 / 1.9301 / 7.2473 | 5.6388 / 1.6587 / 5.1255 |
+| 192 AO octamer, 64 MiB, natural streamed | 8.0253 / 1.9324 / 7.2477 | 5.6393 / 1.6596 / 5.1328 |
 
-Natural 192-AO cold improves **29.7%**, warm 14.0%, moved 29.2%. Cold ranges
-are 8.0209–8.0262 s disabled and 5.6342–5.6391 s automatic. The 96-AO natural
+Natural 192-AO cold improves **29.7%**, warm 14.1%, moved 29.2%. Cold ranges
+are 8.0248–8.0279 s disabled and 5.6349–5.6400 s automatic. The 96-AO natural
 full-GPU path remains faster than the dense fallback and is never displaced.
 These two workloads establish bounded local qualification, not universal gains.
 
 All arms retain identical SCF/Fock counts: tetramer cold 16/17, warm 2/3,
 moved 15/16; octamer cold 18/19, warm 2/3, moved 16/17. Independent PySCF
 energy/force gates are 1e-9 Ha and 1e-8 Ha/Bohr. Maximum observed errors are
-5.23e-12 Ha and 4.09e-12 Ha/Bohr. References are computed outside native clocks.
+5.23e-12 Ha and 4.08e-12 Ha/Bohr. References are computed outside native clocks.
 
 ## Capacity and data movement
 
@@ -66,11 +66,16 @@ verified compiler cache:
 
 ```bash
 python -m benchmarks.df_host_panels --budget-mib 20 --repeats 3 \
-  --source-sha 0fab1aa77 --output .artifacts/tetramer20.json
+  --source-sha f88f5ac5e --output .artifacts/tetramer20.json
 python -m benchmarks.df_host_panels --case water-octamer-s4-def2-svp-spherical \
-  --budget-mib 64 --repeats 3 --source-sha 0fab1aa77 \
+  --budget-mib 64 --repeats 3 --source-sha f88f5ac5e \
   --output .artifacts/octamer64.json
 ```
 
 `--trace-only` retains the capacity/work receipts without timing repeats.
 The evidence-only driver extension does not change native code or binary.
+
+Final integration includes #2765; all 38 GPU tests and five memcheck cases pass
+on the source and library named above. The earlier parent measurements remain
+in Git history. The independent capacity/graph scheduling changes compose
+without changing the measured SCF/Fock counts.
