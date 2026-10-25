@@ -1,10 +1,6 @@
-# Methods and capability discovery
+# Methods and supported calculations
 
-GenerativeQC exposes public method selectors through several coordinated sources:
-stable native ABI registrations, compiler-discovered DFT selectors, public
-composite methods, and automatically imported Libxc semilocal MethodIR entries.
-
-Use the Python-free runtime discovery commands for the native selector set:
+List the available method names with the native CLI:
 
 ```bash
 generativeqc methods
@@ -12,156 +8,91 @@ generativeqc methods --libxc --json
 generativeqc methods --compositions --json
 ```
 
-The [public method catalog](../public_methods.md) presents the broader selector
-inventory generated from its authoritative sources. Do not treat a handwritten
-list in another page as a support matrix.
+The first command lists native methods; `--libxc` includes imported semilocal
+functionals, and `--compositions` lists compiler-generated compositions.
+The [method table](../public_methods.md) is generated from the method registry.
 
-## How to interpret a listed method
-
-A listed selector means that GenerativeQC can identify that public method. It does
-**not** mean that every backend, basis, spin state, precision, density-fitting
-mode, ECP, grid, batch shape, or requested property is qualified.
-
-After those execution choices are fixed, `Calculator.capabilities` is the
-authoritative public view for that calculation context. Prepared batches expose
-the corresponding contextual capability record. Unsupported combinations fail
-closed rather than silently changing the requested method, backend, or property.
-Per-system geometry, electron-count, convergence, and resource checks still apply
-during preparation and execution.
-
-For the ownership of each capability source and why GenerativeQC does not maintain
-a second handwritten CPU/GPU matrix, see
-[Capability sources and interpretation](../reference/capabilities.md).
-
-`generativeqc methods` reports the stable C/C++ ABI/provider registry.
-`--libxc` adds the automatic semilocal inventory, while `--compositions` reports
-the separate build-time-generated MethodIR catalog and backend qualification.
-Neither command imports Python; see the [native CLI guide](native_cli.md) for
-the execution boundary.
-
-## Conventional CPU UMP2 energy and analytic forces
-
-`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces
-from a converged, physically
-validated UHF reference. The initial public domain is all-electron, unscreened
-conventional Gaussian integrals on CPU with real FP64 arithmetic. The two spin
-occupations and orbital frames remain distinct, including for equal occupations.
+A method name is not a guarantee that every basis, backend, spin state or
+property is supported. Check the settings you intend to use:
 
 ```python
 from generativeqc import Calculator
 
-calc = Calculator(method="ump2", basis="sto-3g", device="cpu")
-result = calc.singlepoint([("Li", (0.0, 0.0, 0.0))], multiplicity=2)
-print(result.energy)       # UHF reference plus UMP2 correlation, Hartree
-print(result.correlation)  # opposite-spin and combined same-spin contributions
+calc = Calculator(method="pbe0-rks", basis="def2-svp", device="cuda")
+print(calc.capabilities.supported_properties)
+print(calc.capabilities.supported_second_order)
 ```
 
-The default remains energy only. Request `properties=("energy", "forces")`
-explicitly for complete native CPU analytic forces, including orbital relaxation,
-Pulay/overlap and all three spin correlation channels. For example:
+`Calculator.capabilities` describes the chosen calculation context.
+Unsupported combinations raise an error instead of silently selecting
+a different method or backend. See [capability reference](../reference/capabilities.md)
+for details.
+
+## Unrestricted MP2 on CPU
+
+`ump2` computes unrestricted MP2 energy from a converged UHF reference.
+Its current implementation uses all-electron, unscreened conventional
+Gaussian integrals and FP64 on CPU. It does not support CUDA, RI/DF,
+frozen core, ECP or mixed precision.
 
 ```python
-calc = Calculator(method="ump2", basis="sto-3g", device="cpu", initial_guess=None)
+calc = Calculator(method="ump2", basis="sto-3g", device="cpu")
+result = calc.singlepoint([("Li", (0, 0, 0))], multiplicity=2)
+print(result.energy)
+print(result.correlation)
+```
+
+Energy is the default output. Request analytic forces explicitly:
+
+```python
 result = calc.singlepoint(
-    [("O", (0.0, 0.0, 0.0)), ("H", (0.2, 0.0, 1.8))],
+    [("O", (0, 0, 0)), ("H", (0.2, 0, 1.8))],
     multiplicity=2,
     properties=("energy", "forces"),
 )
-print(result.forces)  # negative energy derivative, Hartree/Bohr
+print(result.forces)
 ```
 
-RI/DF, frozen-core, mixed-precision, ECP and CUDA requests fail explicitly.
-The energy and force use the same reconverged UHF state. Root selection remains
-a reference policy: convergence alone does not guarantee a stable or intended
-broken-symmetry determinant. Forces do not silently perform finite differences
-or call a reference package. A nonconverged response, unresolved nonstationary
-same-space degeneracy, small denominator, stale source or insufficient numeric
-budget returns no force or correlation diagnostic. Prepared force replay retains
-the last successful warm state across failures.
+The force includes orbital response, Pulay terms and same-/opposite-spin
+correlation. Spin orbitals remain separate even with equal occupations.
+The physical UHF state matters: an SCF-converged broken-symmetry solution
+is not necessarily the state you intended. A failed response or insufficient
+numeric budget raises rather than returning incomplete forces.
+`result.correlation` includes spin-resolved contributions, residuals and
+workspace diagnostics. The workspace estimate is not measured process RSS.
 
-`result.correlation` reports the physical UHF residual, true coupled-response
-residual, response workspace, planned whole-endpoint numeric capacity and response
-operator identity. The byte plan includes live reference/provider storage, MO
-weights, Krylov arrays and bounded shell staging. It excludes allocator/object
-and compiler-stack overhead. A zero measured-endpoint field means unmeasured;
-the capacity plan is not an RSS observation or a speed claim. The native diagnostic groups alpha-alpha and
-beta-beta into `same_spin_energy` and reports alpha-beta as
-`opposite_spin_energy`; its equation hash identifies the complete three-channel
-compiler inventory. The public selector currently starts UHF from the ordinary
-core guess. `singlepoint` has no supplied-density option; a prepared UMP2
-batch can instead import a validated two-spin HF density through the existing
-public warm-state checkpoint/restore interface. The imported density is a
-proposal for a fresh UHF solve, not a substitute for final-state validation.
-`resolved_model()` records `ump2` and the requested spin multiplicity, while a
-checkpoint stores separate alpha and beta density blocks even for a singlet.
-`save_checkpoint()` and `load_checkpoint()` preserve that identity and require
-the restored batch to reconverge before returning an energy.
+Prepared UMP2 calculations can restore compatible two-spin HF density
+checkpoints as starting guesses; the target UHF calculation must still
+converge. See [checkpoint/restart](checkpoint.md) and the
+[MP2 implementation](../developer/mp2.md).
 
 ## Restricted correlated methods
 
-Conventional `mp2`, `rccsd`, `rccsd(t)`/`ccsd(t)` and the CUDA density-fitted
-`df-rccsd(t)`/`df-ccsd(t)` selectors share one canonical RHF reference and
-publish native analytic forces in their admitted domains. Their selector table,
-batch shapes, memory controls and failure behavior are collected in
-[Restricted correlated methods](correlated_methods.md).
+`mp2`, `rccsd`, `rccsd(t)`/`ccsd(t)`, and CUDA density-fitted
+`df-rccsd(t)`/`df-ccsd(t)` use a restricted HF reference.
+Backend, batch, memory and force support differ by selector.
+See [restricted correlated methods](correlated_methods.md) and the
+[CCSD(T)/CBS workflow](ccsdt_cbs.md).
 
 ## Second-order derivatives
 
-The Python `Calculator` exposes analytic Cartesian Hessian-vector products and
-full Hessians only when the selected execution context advertises second-order
-support. For example, the qualified CPU direct all-electron strict-FP64
-closed-shell LDA/PBE RKS domain can be queried and used as follows:
+Hessians and Hessian-vector products are available only for supported
+calculation contexts. Check `calc.capabilities.supported_second_order`
+before calling `calc.hessian(...)` or
+`calc.hessian_vector_product(...)`. Results are analytic Cartesian
+derivatives, not finite differences. The supported methods, resource
+arguments and result shapes are in [Hessians and HVPs](hessians.md).
 
-```python
-from generativeqc import Calculator, GridSpec, KsOptions
+## Repeated GFN2-xTB calculations
 
-atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-calc = Calculator(
-    method="pbe-rks",
-    basis="sto-3g",
-    device="cpu",
-    precision="fp64",
-    ks_options=KsOptions(grid=GridSpec()),
-)
-
-if calc.capabilities.supported_second_order:
-    hvp = calc.hessian_vector_product(
-        atoms,
-        [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
-        integral_budget_bytes=64 << 20,
-    )
-    hessian = calc.hessian(
-        atoms,
-        integral_budget_bytes=64 << 20,
-        output_budget_bytes=64 << 20,
-    )
-```
-
-The full Hessian is the raw analytic matrix. Unsupported second-order domains
-remain fail-closed; callers should use the contextual capability record rather
-than infer support from the method name alone. The qualified domains, resource
-arguments, result shapes and solver strategies are documented in
-[Hessians and Hessian-vector products](hessians.md); implementation and response
-details belong in the [Hessian developer documentation](../developer/hessian.md).
-
-## Repeated GFN2 calculations
-
-Reuse a `Calculator(method="gfn2-xtb")` for repeated molecular energy/force
-calls. It retains one native workspace and starts fresh SCC on every call,
-including changed coordinates. Changes to the molecule or scientific controls
-are checked before reuse. Calls on the same calculator are serialized.
-
-Call `calc.clear_cache()` when you want to release its resident CPU/GPU storage;
-the next `singlepoint()` rebuilds the workspace. Collection of the calculator
-also releases this storage. Separate calculators own separate workspaces.
+Reuse a `Calculator(method="gfn2-xtb")` for repeated energy and force calls.
+It keeps its workspace but starts a fresh SCC solve on each call, even when
+coordinates change. Calls on the same calculator are serialized.
+`calc.clear_cache()` releases the retained workspace.
 
 ## DFT forces
 
-Analytic DFT forces are requested through the ordinary property interface when
-the selected method/backend context advertises force support. Dispersion-corrected
-selectors are covered in [Dispersion corrections](dispersion.md) instead of
-being repeated here; the gates below apply to the electronic endpoint that a
-correction reuses.
+Request analytic forces using the ordinary property interface:
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions
@@ -182,31 +113,19 @@ result = calc.singlepoint(
 )
 ```
 
-Admitted direct CUDA KS paths can use component-wise `precision="auto"`:
-qualified Direct Coulomb J and density contractions may use reduced compute
-precision while exact K and final-state audits remain FP64. For global-hybrid
-forces, AUTO admission is limited to PBE0/B3LYP-style routes; generated split
-hybrids retain strict FP64. See the
-[CUDA hybrid acceptance contract](../maintainer/hybrid_cuda_acceptance.md).
-
-Generated CUDA consumers may require a discoverable CUDA toolkit during first
-use and may reuse compiler artifacts on later calls. Exact backend, basis,
-precision, exchange, nonlocal-correlation, ECP, and resource admission remains
-context-specific. See [KS options](ks_options.md), the method-specific user
-guides, and `Calculator.capabilities` instead of copying those gates here.
+Available DFT forces depend on the functional, basis and backend.
+Some direct CUDA calculations support `precision="auto"` for selected
+SCF operations; exact exchange and final-state checks may remain FP64.
+PBE0/B3LYP-style global hybrids and generated split hybrids have different
+precision restrictions. See [KS options](ks_options.md),
+[dispersion](dispersion.md) and
+[CUDA hybrid validation](../maintainer/hybrid_cuda_acceptance.md).
 
 ## HF force convergence
 
-Direct CUDA HF force publication applies an additional physical commutator check
-and final physical-state validation beyond the ordinary density/energy stopping
-criteria. This can add finalization work while preserving the requested
-iteration limit and fail-closed convergence behavior. The implementation
-semantics, Pulay construction, work counters, and diagnostic ownership are
-documented in [Direct CUDA HF force finalization](../developer/hf_force_finalization.md).
+Direct CUDA HF forces require a final physical-state check beyond the usual
+energy and density stopping tests. It may add work at the end of SCF.
+See [HF force finalization](../developer/hf_force_finalization.md).
 
-## Planned work is not current support
-
-The [implementation roadmap](../maintainer/roadmap.md) describes development
-directions only. A roadmap entry, compiler representation, generated kernel, or
-low-level capability record is not a public execution promise until the
-execution-context capability gate admits it.
+The [roadmap](../maintainer/roadmap.md) lists work in progress; check
+`Calculator.capabilities` for current support.

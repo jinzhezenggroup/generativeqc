@@ -1,6 +1,6 @@
 # Reference
 
-Reference is for exact lookup rather than teaching.
+Look up API names, units, method capabilities and numerical conventions here.
 
 - [Python API](api.md) — recursively generated from modules that explicitly declare `__all__`.
 - [Python contract policy](python_contracts.md) — applicable contract facets and authoritative owners.

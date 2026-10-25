@@ -1,12 +1,8 @@
 # Restricted correlated methods: MP2, RCCSD and RCCSD(T)
 
-Use this guide for conventional closed-shell correlated calculations through
-`Calculator`. Every selector below reuses one canonical RHF reference and
-publishes native analytic forces wherever the declared domain is admitted; none
-of them differentiates energies numerically or calls an external quantum-chemistry
-program at runtime.
-
-Check the exact domain before relying on a property:
+Use `Calculator` for closed-shell MP2, RCCSD and RCCSD(T). These methods use a
+converged RHF reference; analytic-force support varies by method and backend.
+Check the available properties for your calculation:
 
 ```python
 from generativeqc import Calculator
@@ -16,12 +12,12 @@ print(calc.capabilities.supported_properties)
 print(calc.capabilities.supports_batch)
 ```
 
-Selector discovery alone never proves that a basis, backend, spin state or
-property is qualified. See [Capability sources and interpretation](../reference/capabilities.md).
+See [method capabilities](../reference/capabilities.md) for backend and
+property restrictions.
 
 ## Choose a selector
 
-| Selector | Reference and correlation | Admitted backends | Default properties | Prepared batch |
+| Selector | Reference and correlation | Backend | Default properties | Prepared batch |
 | --- | --- | --- | --- | --- |
 | `mp2` | Canonical RHF-MP2, conventional four-center integrals | CPU and CUDA | Energy and forces | Ragged |
 | `rccsd` | Conventional RCCSD in the RHF orbital frame | CPU and CUDA | Energy only | Homogeneous |
@@ -74,11 +70,6 @@ df = Calculator(
     correlation_memory_budget_bytes=8 << 30,
 )
 ```
-
-Density-fitted MP2 has several reference contracts with different capabilities.
-The [CBS workflow](ccsdt_cbs.md) documents correlation-only and full DF-HF
-variants; the [MP2 developer contract](../developer/mp2.md) owns the exact
-admission table.
 
 ## Control cost, memory and convergence
 
@@ -133,12 +124,10 @@ Method-specific response solves remain separate.
 
 ## Failure behavior
 
-A nonconverged correlated solve, non-finite value, small denominator, failed
-response solve, or insufficient budget raises without publishing a partial
-energy or stale correlation diagnostics. CUDA failures never fall back to a
-host computation under a CUDA label, and a force request is never answered by an
-RHF or MP2 derivative alone. When you need the diagnostic rather than an
-exception, inspect the per-item status of a non-strict prepared batch.
+Nonconvergence, small denominators, response failures and insufficient
+memory raise errors rather than returning partial energies or forces.
+CUDA requests do not silently switch to CPU. To inspect per-molecule
+failures, run a prepared batch in non-strict mode.
 
 ## Where the details live
 

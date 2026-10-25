@@ -1,8 +1,8 @@
 # Maintainer Guide
 
-Maintain scientific correctness, reproducible performance, resource discipline, and repository health. Use the core workflows for recurring work; subsystem qualification documents define specific acceptance contracts.
-
-Keep the distinction clear: the current rules and qualification procedures live here; raw measurements belong under `benchmarks/results/`, and historical investigation or discarded designs belong under `.agents/notes/`.
+Find validation procedures, performance measurements, resource limits and
+repository maintenance instructions. Raw benchmark runs are stored in
+`benchmarks/results/`; historical engineering decisions are in `.agents/notes/`.
 
 ## Core workflows
 
