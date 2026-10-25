@@ -95,6 +95,42 @@ def _assert_workers_stopped(root: Path, count: int) -> None:
         assert worker["endpoint"] != str(root / "shared.sock")
 
 
+def _assert_one_worker_remains(workers: list[dict[str, Any]]) -> None:
+    # Group termination is asynchronous: after wait() reaps the group leader,
+    # its killed child can briefly remain runnable before the kernel exits it.
+    # Use the same bounded cleanup observation window as the final check.
+    deadline = time.monotonic() + 2
+    while any(
+        sum(_running(worker[key]) for worker in workers) != 1
+        for key in ("server", "child")
+    ):
+        assert time.monotonic() < deadline, workers
+        time.sleep(0.01)
+
+
+def test_one_worker_check_waits_for_asynchronous_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = [{"server": 1, "child": 2}, {"server": 3, "child": 4}]
+    live = [{1, 2, 3, 4}, {3, 4}]
+    monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live[0])
+    monkeypatch.setattr(time, "sleep", lambda _: live.pop(0))
+    _assert_one_worker_remains(workers)
+    assert live == [{3, 4}]
+
+
+@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set()])
+def test_one_worker_check_rejects_missing_or_leaked_workers(
+    monkeypatch: pytest.MonkeyPatch, live: set[int]
+) -> None:
+    workers = [{"server": 1, "child": 2}, {"server": 3, "child": 4}]
+    clock = iter([0.0, 3.0])
+    monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live)
+    monkeypatch.setattr(time, "monotonic", lambda: next(clock))
+    with pytest.raises(AssertionError):
+        _assert_one_worker_remains(workers)
+
+
 @pytest.mark.parametrize("startup_delay", [0, 0.6])
 @pytest.mark.parametrize(
     "command,code", [("success", 0), ("failure", 17), ("timeout", 124)]
@@ -209,8 +245,8 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
                     for path in cache_workers.glob("gqc-scc-*.json")
                 ]
                 assert len(workers) == 2
-                for key in ("server", "child"):
-                    assert sum(_running(worker[key]) for worker in workers) == 1
+                _assert_one_worker_remains(workers)
+                assert not successful.done()
             finally:
                 (cache_workers / "release-success").touch()
             assert successful.result().returncode == 0
