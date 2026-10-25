@@ -1723,7 +1723,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
          standard_convergence_model && grid_spec == default_grid_spec() && !budget_fock &&
              configured_chunk_width() == 1 &&
              MatrixLibraryOwner::provider_allowance(static_cast<int>(n)),
-         auto_through_d, auto_all_electron, !runtime::active_device_resource_ledger});
+         auto_through_d, auto_all_electron, !runtime::active_device_resource_ledger,
+         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && !has_exchange &&
+             spins == 1 && !has_range_correction && !nonlocal_correlation &&
+             scf::direct_jk_incremental_exact_eligible(strategy) &&
+             !precision_schedule.any_lower_precision()});
     incremental_policy_options.incremental_direct_jk |= auto_incremental;
     incremental_direct_jk_policy = scf::resolve_incremental_direct_jk_policy(
         incremental_policy_options,
@@ -1733,7 +1737,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The promoted automatic KS owner was qualified with rolling, bounded
     // proposals and its own full-density closure. Keep that policy separate
     // from the explicit fixed-anchor controller (including its zero cadence).
-    if (auto_incremental && !options.incremental_direct_jk &&
+    if (auto_incremental && has_exchange && !options.incremental_direct_jk &&
         incremental_direct_jk_policy.fixed_full_density_anchor) {
       incremental_direct_jk_policy.fixed_full_density_anchor = false;
       incremental_direct_jk_policy.effective_rebuild_interval = 1;
@@ -2056,7 +2060,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
             throw std::invalid_argument(std::string(name) + " requires a nonnegative integer");
           return result;
         };
-        const auto point_batch_tiles = point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 32);
+        // Large meta-GGA grids amortize point launches with wider bounded
+        // batches. Explicit caps and public-ledger refusal remain authoritative.
+        const bool large_point_batch = xc_layout.nao >= 512 && xc_layout.npoint >= (1U << 19) &&
+                                       xc_layout.jets >= 4 && xc_layout.work_jets >= 4;
+        const auto point_batch_tiles =
+            point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", large_point_batch ? 64 : 32);
         if (point_batch_tiles > 1) {
           constexpr std::size_t incumbent_point_batch_budget = 32 * 1024 * 1024;
           // GGA keeps four AO jets even though its density product needs only
@@ -2064,7 +2073,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // so AO storage does not collapse otherwise eligible point batches.
           // Explicit caps and the bounded allocation retry below stay exact.
           const auto automatic_point_batch_budget =
-              product(incumbent_point_batch_budget, std::max(xc_layout.jets, xc_layout.work_jets));
+              large_point_batch ? std::size_t{1} << 30
+                                : product(incumbent_point_batch_budget,
+                                          std::max(xc_layout.jets, xc_layout.work_jets));
           const auto point_batch_budget =
               point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", automatic_point_batch_budget);
           const bool explicit_point_batch_budget =

@@ -464,13 +464,16 @@ __global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_
 
 /** Schwarz bounds in public AO order, including sparse spherical expansions. */
 template <bool Cartesian, unsigned Order, bool Specialized = false>
-__global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure) {
+__global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure,
+                                             const std::int32_t* ao_order) {
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (item >= static_cast<std::size_t>(batch.batch_size) * matrix) return;
   const auto system = static_cast<std::int32_t>(item / matrix);
-  const auto i = static_cast<std::int32_t>((item % matrix) / n);
-  const auto j = static_cast<std::int32_t>(item % n);
+  const auto row = static_cast<std::int32_t>((item % matrix) / n);
+  const auto column = static_cast<std::int32_t>(item % n);
+  const auto i = ao_order ? ao_order[system * n + row] : row;
+  const auto j = ao_order ? ao_order[system * n + column] : column;
   if (!schwarz_order_matches<Order, Cartesian>(batch, system, i, j)) return;
   double value;
   if constexpr (Specialized)
@@ -479,7 +482,7 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
     value = schwarz_diagonal<Order, Cartesian>(batch, system, i, j);
   // NaN bounds must never masquerade as screened-out quartets.
   if (!isfinite(value)) atomicExch(failure, 1);
-  bounds[item] = sqrt(fabs(value));
+  bounds[system * matrix + i * n + j] = sqrt(fabs(value));
 }
 
 /** One output owner reduces all density pairs; no ERI tensor or atomics.
@@ -1041,7 +1044,8 @@ void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, 
 
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
-                                         int* failure, bool cartesian) {
+                                         int* failure, bool cartesian,
+                                         const std::int32_t* ao_order) {
   // Capture this preparation-only rollback before launching. Both schedules
   // retain the same dense public bounds and existing allocation/failure ABI.
   const auto* selection = std::getenv("GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ");
@@ -1049,13 +1053,13 @@ void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shar
   for_each_schwarz_order(batch, [&]<unsigned Order>() {
     if (cartesian)
       independent_jk_bounds_kernel<true, Order>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
     else if (specialized)
       independent_jk_bounds_kernel<false, Order, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
     else
       independent_jk_bounds_kernel<false, Order>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
   });
 }
 

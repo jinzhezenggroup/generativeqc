@@ -173,3 +173,33 @@ def test_cuda_retained_force_host_arena_is_not_merged_into_scf_workspace(
     assert by_name["serialized KS transient host phase peak"].bytes == 320 * mib
     force = by_name["serialized generated KS force host staging cap"]
     assert force.bytes == 256 * mib and force.kind == "persistent"
+
+
+@pytest.mark.parametrize("atoms,force_mib", [(48, 512), (96, 1024), (120, 1024)])
+def test_large_direct_force_cap_coexists_with_ragged_fleet(
+    monkeypatch: pytest.MonkeyPatch, atoms: int, force_mib: int
+) -> None:
+    """A larger retained force arena cannot be lent to either fleet member."""
+    from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+
+    library = _inventory_library(monkeypatch)
+    molecule = [(1, (float(i), 0.0, 0.0)) for i in range(atoms)]
+    request = resources_ks.ks_resource_request(
+        [H2, molecule], backend="cuda", library=library
+    )
+    unrestricted = plan_resources([request], ResourceBudget()).require_feasible()
+    by_name = {estimate.name: estimate for estimate in unrestricted.estimates}
+    assert (
+        by_name["serialized generated KS force device staging cap"].bytes
+        == force_mib << 20
+    )
+    assert (
+        by_name["serialized generated KS force host staging cap"].bytes
+        == force_mib << 19
+    )
+    peak = unrestricted.peak_bytes["device"]
+    plan_resources([request], ResourceBudget(device_bytes=peak)).require_feasible()
+    with pytest.raises(MemoryError, match="no supported plan fits"):
+        plan_resources(
+            [request], ResourceBudget(device_bytes=peak - 1)
+        ).require_feasible()

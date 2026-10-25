@@ -27,7 +27,7 @@ from generativeqc_compiler.common.resources import (
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
-from ._cuda_force_resources import CUDA_FORCE_DEVICE_CAP, CUDA_FORCE_HOST_CAP
+from ._cuda_force_resources import ordinary_cuda_force_limits
 from ._snapshot_grid_cache import SNAPSHOT_GRID_CACHE_BYTES
 from .basis import BasisSet
 from .basis_capabilities import require_basis
@@ -43,7 +43,6 @@ from .resources_hf import (
 from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
-_CUDA_FORCE_HOST_CAP = CUDA_FORCE_HOST_CAP
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
     "provider_allowance",
@@ -1034,6 +1033,21 @@ def ks_resource_request(
         else "serialized-native",
     }
     has_ecp = any(item["orbital"].get("ecp_terms") for item in items)
+    # Serialized generated-force ownership can retain the largest member's
+    # arena across the next SCF replay. Charge exactly the execution policy's
+    # maximum caps, including a mixed fleet's all-electron and ECP members.
+    force_caps = tuple(
+        ordinary_cuda_force_limits(
+            item["atoms"],
+            density_fitted=False,
+            hamiltonian="scalar-semilocal-ecp"
+            if item["orbital"].get("ecp_terms")
+            else "all-electron",
+        )
+        for item in items
+    )
+    force_device_cap = max(cap[0] for cap in force_caps)
+    force_host_cap = max(cap[1] for cap in force_caps)
     if has_ecp:
         controls["ecp_host_inventory"] = _ecp_inventory_owner(library)
     if _application_precision_budget is not None:
@@ -1054,6 +1068,8 @@ def ks_resource_request(
     if backend == "cuda":
         controls.update(
             device_id=device_id,
+            generated_force_device_cap=force_device_cap,
+            generated_force_host_cap=force_host_cap,
             one_electron_mapping=os.environ.get(
                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
             ),
@@ -1122,7 +1138,7 @@ def ks_resource_request(
         items,
         backend=backend,
         workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
-        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + _CUDA_FORCE_HOST_CAP)
+        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + force_host_cap)
         if backend == "cuda"
         else 0,
         diis_history=diis_history,
@@ -1193,7 +1209,7 @@ def ks_resource_request(
         estimates.append(
             ResourceEstimate(
                 "serialized generated KS force host staging cap",
-                _CUDA_FORCE_HOST_CAP,
+                force_host_cap,
                 "pageable",
                 first_phase,
                 last_phase,
@@ -1358,7 +1374,7 @@ def ks_resource_request(
                 estimates.append(
                     ResourceEstimate(
                         "serialized generated KS force device staging cap",
-                        CUDA_FORCE_DEVICE_CAP,
+                        force_device_cap,
                         f"device:{device_id}",
                         first_phase,
                         last_phase,

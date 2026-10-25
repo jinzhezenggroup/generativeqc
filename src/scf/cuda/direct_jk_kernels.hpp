@@ -103,10 +103,13 @@ void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, 
 void launch_build_eri_system_orbits(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
                                     std::size_t elements, double* eri);
 
-/** Preserve the exact public-AO consumer launch and borrowed allocations. */
+/** Build all oriented public-AO bounds. Optional per-system AO permutations
+ * group comparable primitive work while preserving evaluator/output order.
+ * The caller retains the permutation until this stream completes. */
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
-                                         int* failure, bool cartesian = false);
+                                         int* failure, bool cartesian = false,
+                                         const std::int32_t* ao_order = nullptr);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

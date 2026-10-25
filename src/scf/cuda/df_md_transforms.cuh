@@ -48,6 +48,20 @@ static __global__ void df_md_prepare_transforms(DfMdView view) {
       }
     view.transforms[primitive.transform_offset + item] = primitive.weight * value;
   }
+  __syncthreads();
+  if (view.prepare_norms && threadIdx.x == 0) {
+    double maximum = 0;
+    for (unsigned component = 0; component < components; ++component) {
+      double norm = 0;
+      for (unsigned d = 0; d < hermites; ++d) {
+        const auto e = fabs(view.transforms[primitive.transform_offset + component * hermites + d]);
+        if (e != 0)
+          norm = __dadd_ru(norm, __dmul_ru(e, df_md_hermite_norm(primitive.exponent, angular, d)));
+      }
+      maximum = !isfinite(norm) ? INFINITY : fmax(maximum, norm);
+    }
+    primitive.component_norm_bound = maximum;
+  }
 }
 
 }  // namespace generativeqc::scf::cuda_execution
