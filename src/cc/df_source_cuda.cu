@@ -17,6 +17,7 @@
 #include "df_mo_source_generated.hpp"
 #include "generated_df_cc_source_cuda.cuh"
 #include "generated_symmetric_matrix_function.cuh"
+#include "hf/df_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "runtime/cuda_resources.cuh"
@@ -88,7 +89,9 @@ __global__ void audit_source_response(const double* values, std::size_t count, i
 // drain and die before the stream/source owner, including failed publication.
 class DFSourceState {
  public:
-  std::unique_ptr<scf::CudaDensityFittingJkPlan, PlanDelete> plan;
+  std::shared_ptr<hf::DFReference> shared_reference;
+  std::unique_ptr<scf::CudaDensityFittingJkPlan, PlanDelete> owned_plan;
+  scf::CudaDensityFittingJkPlan* plan{};  // Borrowed from one of the preceding owners.
   runtime::OwnedCudaBuffer<double> coefficients;
   std::size_t nocc{}, numeric_bytes{};
   std::mutex response_mutex;
@@ -99,7 +102,8 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
                                     double relative_threshold, int device, std::size_t caller_bytes,
                                     bool retain_response_state,
                                     const scf::cuda_execution::CudaDfSourcePolicy* policy,
-                                    bool factors_only) {
+                                    bool factors_only,
+                                    std::shared_ptr<hf::DFReference> shared_reference) {
   runtime::df_progress::Scope trace("df_correlation_source");
   runtime::df_progress::Scope::number("factors_only", factors_only ? 1 : 0);
   const auto started = Clock::now();
@@ -129,90 +133,137 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   const auto blocks_bytes = checked_add(layout.blocks_bytes, retained_c_bytes);
   const auto execution_payload = std::max({layout.transform_bytes, packing_bytes, blocks_bytes});
   admit(checked_add(external, execution_payload), budget);
-  const auto construction = scf::df_source_capacity::plan(
-      orbital, auxiliary,
-      {sizeof(scf::cuda_execution::CudaDensityFittingIntegralSourceImpl),
-       sizeof(scf::cuda_execution::HostBatch), sizeof(scf::cuda_execution::DfPublicAoExpansion)});
-  const auto construction_peak = checked_add(external, construction.numeric_bytes);
-  admit(construction_peak, budget);
   runtime::CudaDeviceScope device_scope(device);
   DFSourceResult result;
   result.nocc = o;
   result.nvir = v;
   result.naux = q;
   result.host_output_bytes = bytes(layout.output_values);
-
   auto stage = Clock::now();
-  scf::CudaDensityFittingIntegralSource* raw_source = nullptr;
-  std::vector<double> metric;
-  std::size_t source_n = 0, source_q = 0;
   std::string detail;
-  const auto source_status = scf::create_cuda_density_fitting_integral_source(
-      device, {orbital}, {auxiliary}, &raw_source, metric, source_n, source_q, detail, policy);
-  std::unique_ptr<scf::CudaDensityFittingIntegralSource, SourceDelete> source(raw_source);
-  check_status(source_status, detail);
-  if (source_n != n || source_q != q || metric.size() != checked_mul(q, q))
-    throw std::runtime_error("native CUDA DF-CC source dimensions changed");
-  const auto placement = scf::cuda_density_fitting_integral_source_diagnostic(source.get());
-  if ((std::strcmp(placement.value_backend, "generated_rys") != 0 &&
-       std::strcmp(placement.value_backend, "generated_rys_auxiliary_g_polynomial") != 0) ||
-      !placement.public_transform_on_device)
-    throw std::runtime_error("native CUDA DF-CC requires generated device DF integrals");
-  const auto source_device = scf::cuda_density_fitting_integral_source_device_bytes(source.get());
-  const auto source_host = scf::cuda_density_fitting_integral_source_host_peak_bytes(source.get());
-  // Keep the observed ledger check as well as the pre-allocation bound. The
-  // factory's device diagnostic excludes its already-freed metric staging.
-  const auto source_peak = checked_add(
-      external, checked_add(source_device, checked_add(source_host, bytes(metric.capacity()))));
-  const auto observed_construction = checked_add(
-      external, checked_add(source_device, checked_add(source_host, bytes(checked_mul(q, q)))));
-  if (observed_construction > construction_peak)
-    throw std::logic_error("DF source construction exceeded its preflight bound");
-  admit(source_peak, budget);
-  const auto setup_bound =
-      checked_add(external, metric_setup_bound(n, q, source_device, source_host));
-  admit(setup_bound, budget);
-  result.source_seconds = elapsed(stage);
+  std::unique_ptr<scf::CudaDensityFittingJkPlan, PlanDelete> owner;
+  scf::CudaDensityFittingJkPlan* selected = nullptr;
+  scf::CudaDensityFittingMetricDiagnostic retained_diagnostic;
+  scf::cuda_execution::CudaDfSourcePolicy resolved_policy;
+  if (policy)
+    resolved_policy = *policy;
+  else if (!scf::cuda_execution::resolve_cuda_df_source_policy(resolved_policy, detail))
+    throw std::invalid_argument(detail);
+  const char* reuse = std::getenv("GENERATIVEQC_DF_SHARED_SOURCE");
+  if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
+    throw std::invalid_argument("GENERATIVEQC_DF_SHARED_SOURCE must be 0 or 1");
+  if ((!reuse || std::strcmp(reuse, "0") != 0) && shared_reference &&
+      shared_reference->matches(orbital, ref, device)) {
+    auto* candidate = shared_reference->plan();
+    if (candidate && candidate->inverse_square_roots && candidate->integral_source &&
+        scf::cuda_density_fitting_jk_plan_matches(candidate, 0, n, q, relative_threshold) &&
+        scf::cuda_density_fitting_integral_source_geometry_matches(candidate->integral_source, 0,
+                                                                   orbital, auxiliary) &&
+        scf::cuda_density_fitting_integral_source_policy_matches(candidate->integral_source,
+                                                                 resolved_policy))
+      selected = candidate;
+  }
+  if (selected) {
+    // The method reserved this owner's entire lease before entering the builder.
+    // Only fresh compensated projections and outputs consume the remaining cap.
+    // Host/GPU SCF B, E and density-dependent U are not correlation factors.
+    retained_diagnostic = shared_reference->metric_diagnostic();
+    result.shared_reference_bytes = shared_reference->storage_bytes();
+    result.metric_rank = retained_diagnostic.effective_rank;
+    result.metric_absolute_threshold = retained_diagnostic.absolute_threshold;
+    result.metric_condition_number = retained_diagnostic.condition_number;
+    result.numeric_capacity_bytes = checked_add(external, execution_payload);
+    result.device_capacity_bytes =
+        std::max({layout.transform_bytes, packing_bytes, blocks_bytes - result.host_output_bytes});
+    admit(result.numeric_capacity_bytes, budget);
+    result.source_seconds = elapsed(stage);
+  } else {
+    const auto construction = scf::df_source_capacity::plan(
+        orbital, auxiliary,
+        {sizeof(scf::cuda_execution::CudaDensityFittingIntegralSourceImpl),
+         sizeof(scf::cuda_execution::HostBatch), sizeof(scf::cuda_execution::DfPublicAoExpansion)});
+    const auto construction_peak = checked_add(external, construction.numeric_bytes);
+    admit(construction_peak, budget);
+    stage = Clock::now();
+    scf::CudaDensityFittingIntegralSource* raw_source = nullptr;
+    std::vector<double> metric;
+    std::size_t source_n = 0, source_q = 0;
+    const auto source_status = scf::create_cuda_density_fitting_integral_source(
+        device, {orbital}, {auxiliary}, &raw_source, metric, source_n, source_q, detail, policy);
+    std::unique_ptr<scf::CudaDensityFittingIntegralSource, SourceDelete> source(raw_source);
+    check_status(source_status, detail);
+    if (source_n != n || source_q != q || metric.size() != checked_mul(q, q))
+      throw std::runtime_error("native CUDA DF-CC source dimensions changed");
+    const auto placement = scf::cuda_density_fitting_integral_source_diagnostic(source.get());
+    if ((std::strcmp(placement.value_backend, "generated_rys") != 0 &&
+         std::strcmp(placement.value_backend, "generated_rys_auxiliary_g_polynomial") != 0) ||
+        !placement.public_transform_on_device)
+      throw std::runtime_error("native CUDA DF-CC requires generated device DF integrals");
+    const auto source_device = scf::cuda_density_fitting_integral_source_device_bytes(source.get());
+    const auto source_host =
+        scf::cuda_density_fitting_integral_source_host_peak_bytes(source.get());
+    // Keep the observed ledger check as well as the pre-allocation bound. The
+    // factory's device diagnostic excludes its already-freed metric staging.
+    const auto source_peak = checked_add(
+        external, checked_add(source_device, checked_add(source_host, bytes(metric.capacity()))));
+    const auto observed_construction = checked_add(
+        external, checked_add(source_device, checked_add(source_host, bytes(checked_mul(q, q)))));
+    if (observed_construction > construction_peak)
+      throw std::logic_error("DF source construction exceeded its preflight bound");
+    admit(source_peak, budget);
+    const auto setup_bound =
+        checked_add(external, metric_setup_bound(n, q, source_device, source_host));
+    admit(setup_bound, budget);
+    result.source_seconds = elapsed(stage);
 
-  stage = Clock::now();
-  scf::CudaDensityFittingJkPlan* raw_plan = nullptr;
-  auto* transferred = source.release();
-  std::vector<scf::CudaDensityFittingMetricDiagnostic> diagnostics;
-  const auto plan_status = scf::create_cuda_density_fitting_jk_plan_from_source(
-      device, &transferred, 1, n, q, metric, relative_threshold, q, n, &raw_plan, diagnostics,
-      detail, false);
-  // The shared factory consumes the source on every outcome. Establish RAII
-  // before inspecting status so any published plan is also failure-safe.
-  std::unique_ptr<scf::CudaDensityFittingJkPlan, PlanDelete> owner(raw_plan);
-  check_status(plan_status, detail);
-  if (!owner || !owner->streamed || !owner->integral_source || !owner->inverse_square_roots ||
-      diagnostics.size() != 1)
-    throw std::runtime_error("native CUDA DF-CC requires the streamed metric owner");
-  auto& plan = *owner;
-  const auto& diag = diagnostics.front();
+    stage = Clock::now();
+    scf::CudaDensityFittingJkPlan* raw_plan = nullptr;
+    auto* transferred = source.release();
+    std::vector<scf::CudaDensityFittingMetricDiagnostic> diagnostics;
+    const auto plan_status = scf::create_cuda_density_fitting_jk_plan_from_source(
+        device, &transferred, 1, n, q, metric, relative_threshold, q, n, &raw_plan, diagnostics,
+        detail, false);
+    // The shared factory consumes the source on every outcome. Establish RAII
+    // before inspecting status so any published plan is also failure-safe.
+    owner.reset(raw_plan);
+    check_status(plan_status, detail);
+    if (!owner || !owner->streamed || !owner->integral_source || !owner->inverse_square_roots ||
+        diagnostics.size() != 1)
+      throw std::runtime_error("native CUDA DF-CC requires the streamed metric owner");
+    const auto& diag = diagnostics.front();
+    const auto setup_peak =
+        checked_add(external, checked_add(diag.peak_device_bytes, diag.peak_host_bytes));
+    if (setup_peak > setup_bound)
+      throw std::logic_error("shared DF metric owner exceeded source setup bound");
+    admit(setup_peak, budget);
+    result.metric_rank = diag.effective_rank;
+    result.metric_absolute_threshold = diag.absolute_threshold;
+    result.metric_condition_number = diag.condition_number;
+    result.metric_staging_bytes = checked_mul(2, bytes(metric.size()));
+    std::vector<double>().swap(metric);
+    const auto fixed =
+        checked_add(external, checked_add(diag.device_resident_bytes, diag.host_resident_bytes));
+    const auto execution_peak = checked_add(fixed, execution_payload);
+    admit(execution_peak, budget);
+    result.numeric_capacity_bytes =
+        std::max({construction_peak, source_peak, setup_bound, execution_peak});
+    const auto device_payload =
+        std::max({layout.transform_bytes, packing_bytes, blocks_bytes - result.host_output_bytes});
+    result.device_capacity_bytes =
+        std::max({construction.device_bytes, source_device, diag.peak_device_bytes,
+                  checked_add(diag.device_resident_bytes, device_payload)});
+    result.metric_seconds = elapsed(stage);
+
+    selected = owner.get();
+    retained_diagnostic = diag;
+  }
+  auto& plan = *selected;
   result.source_identity = plan.factor_basis_identity;
-  const auto setup_peak =
-      checked_add(external, checked_add(diag.peak_device_bytes, diag.peak_host_bytes));
-  if (setup_peak > setup_bound)
-    throw std::logic_error("shared DF metric owner exceeded source setup bound");
-  admit(setup_peak, budget);
-  result.metric_rank = diag.effective_rank;
-  result.metric_absolute_threshold = diag.absolute_threshold;
-  result.metric_condition_number = diag.condition_number;
-  result.metric_staging_bytes = checked_mul(2, bytes(metric.size()));
-  std::vector<double>().swap(metric);
-  const auto fixed =
-      checked_add(external, checked_add(diag.device_resident_bytes, diag.host_resident_bytes));
-  const auto execution_peak = checked_add(fixed, execution_payload);
-  admit(execution_peak, budget);
-  result.numeric_capacity_bytes =
-      std::max({construction_peak, source_peak, setup_bound, execution_peak});
-  const auto device_payload =
-      std::max({layout.transform_bytes, packing_bytes, blocks_bytes - result.host_output_bytes});
-  result.device_capacity_bytes =
-      std::max({construction.device_bytes, source_device, diag.peak_device_bytes,
-                checked_add(diag.device_resident_bytes, device_payload)});
-  result.metric_seconds = elapsed(stage);
+  runtime::df_progress::Scope::number("shared_reference_bytes", result.shared_reference_bytes);
+  runtime::df_progress::Scope::number("source_constructions",
+                                      result.shared_reference_bytes ? 0 : 1);
+  runtime::df_progress::Scope::number("metric_factorizations",
+                                      result.shared_reference_bytes ? 0 : 1);
 
   const auto stream = plan.stream;
   // Buffers are declared after the metric owner: all stream-dependent storage
@@ -350,16 +401,25 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   result.block_seconds = elapsed(stage);
   if (retain_response_state) {
     result.retained_source_bytes = checked_add(
-        checked_add(diag.device_resident_bytes, diag.host_resident_bytes), retained_c_bytes);
+        result.shared_reference_bytes ? result.shared_reference_bytes
+                                      : checked_add(retained_diagnostic.device_resident_bytes,
+                                                    retained_diagnostic.host_resident_bytes),
+        retained_c_bytes);
     auto state = std::make_shared<DFSourceState>();
     state->nocc = o;
     state->numeric_bytes = result.retained_source_bytes;
-    state->plan = std::move(owner);
+    state->plan = selected;
+    state->owned_plan = std::move(owner);
+    if (result.shared_reference_bytes) state->shared_reference = std::move(shared_reference);
     state->coefficients = std::move(retained_coefficients);
     result.response_state = std::move(state);
   }
   result.total_seconds = elapsed(started);
   runtime::df_progress::Scope::number("source_identity", result.source_identity);
+  runtime::df_progress::Scope::number("source_rows", result.source_rows);
+  runtime::df_progress::Scope::number("source_values", result.source_values);
+  runtime::df_progress::Scope::number("transform_gemms", result.transform_gemms);
+  runtime::df_progress::Scope::number("transform_summands", result.transform_summands);
   runtime::df_progress::Scope::number("core_block_gemms", result.block_gemms);
   runtime::df_progress::Scope::number("host_output_bytes", result.host_output_bytes);
   return result;

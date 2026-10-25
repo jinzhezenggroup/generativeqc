@@ -3,6 +3,10 @@
 #include "scf/cuda_density_fitting_final_state.hpp"
 
 namespace generativeqc::scf {
+bool cuda_density_fitting_integral_source_policy_matches(
+    const CudaDensityFittingIntegralSource*, const cuda_execution::CudaDfSourcePolicy&) noexcept {
+  return false;
+}
 bool cuda_density_fitting_rhf_warm_matches(const CudaDensityFittingJkPlan*,
                                            const reference::Matrix&, const reference::Matrix&,
                                            const reference::Matrix&, const reference::Matrix&,

@@ -10,6 +10,10 @@
 #include "hf/reference.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 
+namespace generativeqc::hf {
+class DFReference;
+}
+
 namespace generativeqc::cc {
 
 class DFSourceState;
@@ -27,6 +31,9 @@ struct DFSourceResult {
   std::uint64_t source_identity{};
   std::shared_ptr<DFSourceState> response_state;
   std::size_t retained_source_bytes{};
+  /** Overlap with an already-admitted DFReference lease; included in retained_source_bytes
+   * only when retaining response. Forward numeric_capacity_bytes excludes this lease. */
+  std::size_t shared_reference_bytes{};
   std::vector<double> boo, bov, bvv, ovov, ovvo, oovv, ovoo, oooo;
   std::size_t numeric_capacity_bytes{}, host_output_bytes{};
   // Conservative device reservation, including the shared metric owner's lazy
@@ -46,10 +53,14 @@ struct DFSourceResult {
  * caller_bytes covers external live state in addition to the supplied reference
  * and systems. The complete source operation must fit maximum_bytes. Failures
  * return no partial result; there is no CPU numerical fallback. CUDA builds
- * provide this internal entry point while public DF-CC forces remain gated.
+ * provide this internal entry point.
  * retain_response_state keeps the exact immutable device coefficients and
  * metric/source owner; downstream callers must charge retained_source_bytes
  * while that state remains live. Ordinary energy calls release it by default.
+ * A matching shared_reference may supply its source/metric. The caller has already
+ * reserved storage_bytes() outside maximum_bytes. Identity/policy mismatch falls
+ * back to fresh construction; compensated AO-to-MO projections always run anew.
+ * Reference and correlation consumers use the owner sequentially, as in SCF.
  */
 DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
                                     const hf::PhysicalReference& reference,
@@ -57,7 +68,8 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
                                     int device, std::size_t caller_bytes = 0,
                                     bool retain_response_state = false,
                                     const scf::cuda_execution::CudaDfSourcePolicy* policy = nullptr,
-                                    bool factors_only = false);
+                                    bool factors_only = false,
+                                    std::shared_ptr<hf::DFReference> shared_reference = {});
 
 /** Borrowed physical factors and fixed-orbital Lagrangian cotangents.
  * All factors are Q-major. Boo/Bvv must be symmetric spatial-orbital pairs.

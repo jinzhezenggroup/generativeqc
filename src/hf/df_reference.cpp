@@ -34,13 +34,17 @@ scf::ScfResult DFReference::solve(const core::System& orbital, const core::Syste
   options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
   options.density_fitting_host_retry = false;
   options.density_fitting_memory_budget_bytes = value_budget;
+  std::vector<scf::CudaDensityFittingMetricDiagnostic> diagnostics;
   auto results = scf::run_rhf_density_fitting_cuda_bucket_cached(
-      &plan_, {*orbital_}, auxiliary_, options, {initial_density}, device, nullptr, &data_);
+      &plan_, {*orbital_}, auxiliary_, options, {initial_density}, device, &diagnostics, &data_);
   if (results.size() == 1 && results.front().status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
     throw std::bad_alloc();
   if (results.size() != 1 || results.front().status != GENERATIVEQC_STATUS_SUCCESS ||
       !results.front().scf.converged || !results.front().scf.reference)
     throw std::runtime_error("native DF-HF reference did not converge");
+  if (diagnostics.size() != 1)
+    throw std::logic_error("DF reference has no unique forward metric receipt");
+  metric_diagnostic_ = diagnostics.front();
   auto result = std::move(results.front().scf);
   identity_.emplace(orbital, *result.reference);
   reference_ = result.reference;
