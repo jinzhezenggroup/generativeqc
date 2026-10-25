@@ -244,6 +244,11 @@ slow_paths=(
 # core-a timed out and runtime-heavy finished in 550 s. Transfer whole files
 # to its existing loadfile workers, retaining every ordinary core modulo slot.
 measured_core_runtime_paths=(
+  # Cold runs 40143589924 / 40145048394 exhausted core-a while this
+  # intact closure audit cost 443 / 441 worker-seconds. Runtime-heavy
+  # completed in 1114 / 1252 s without probe-cache hits; retain every
+  # gate and the ordinary core slot on its existing file-locality lane.
+  tests/python/test_bulk_aot_clangxx_closure.py
   tests/python/test_cpu_hf_high_l.py
   tests/python/test_cuda_xc_point_contract.py
   tests/python/test_uccsd_solver.py
@@ -353,10 +358,6 @@ core_fresh_frontier_a=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
-  # Run 40085506217 exhausted core-c at 99%; core-a finished in 15m13s.
-  # Move the intact C++ closure audit (~460 observed worker-seconds),
-  # retaining its ordinary modulo slot and every test/acceptance gate.
-  tests/python/test_bulk_aot_clangxx_closure.py
   # Runs 40123113539 / 40124170599 exhausted core-c while core-a
   # completed in 20m49s in the latter. Keep the intact ~305-worker-second
   # Lambda reuse module on core-a without removing its ordinary slot.
