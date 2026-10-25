@@ -1,0 +1,45 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All 16 scoped default CLI timing gates pass, but full performance promotion requires complete work/allocation and compile-cost evidence.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 5654,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "c30148f04699f2961a49ff3025669ccd426c1ca1f966400f913205fe63a306f5"
+    },
+    {
+      "bytes": 5821,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "d1714c0bee006640d59b975e6830e1cc2303ecc87c278be2a3b576022ed094f9"
+    },
+    {
+      "bytes": 59366,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "ea74e9708d4d7f3575c738a3781d1e40f9888f82f2a58ce4093f536b1980cb72"
+    },
+    {
+      "bytes": 3476,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "c091a33baa9f0aae2c6223046348e273c4a6340f1d23b41ce33e96c287f3d095"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "qualify-cli-cuda-v2.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "824b94bdea0084a1728952030d6689382147d887"
+  }
+}
