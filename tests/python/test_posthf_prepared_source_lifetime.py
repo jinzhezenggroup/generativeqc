@@ -91,7 +91,9 @@ Problem build_problem(int system, const integrals::ElectronInteractionSource* so
                       int,SolverOptions options,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response,
                       const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy,
-                      bool df_mp2_mode) {
+                      bool df_mp2_mode, std::shared_ptr<FittedReference> shared_reference) {
+  if (bool(shared_reference) != bool(fitted_live))
+    throw std::logic_error("fitted owner missing from provider handoff");
   observed_df_mp2_mode=df_mp2_mode;
   if (options.max_bytes != 4096u - (fitted_live ? 32u : 0u))
     throw std::logic_error("fitted owner missing from provider admission");

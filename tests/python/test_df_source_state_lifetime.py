@@ -158,7 +158,8 @@ using namespace generativeqc;
 std::shared_ptr<cc::DFSourceState> create_state(bool coefficients = true) {
   runtime::CudaDeviceScope scope(owner_device);
   auto state = std::make_shared<cc::DFSourceState>();
-  state->plan.reset(new scf::CudaDensityFittingJkPlan{});
+  state->owned_plan.reset(new scf::CudaDensityFittingJkPlan{});
+  state->plan = state->owned_plan.get();
   state->plan->device_id = owner_device;
   state->plan->stream = reinterpret_cast<void*>(1);
   state->plan->integral_source = reinterpret_cast<void*>(2);
@@ -310,7 +311,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     unit += "};\n" + DESTROY_STUBS + release_blas + "\n" + release + "\n"
     unit += _definition(plan, "void destroy_cuda_density_fitting_jk_plan(")
-    unit += "\n}\nnamespace generativeqc::cc {\n"
+    unit += "\n}\nnamespace generativeqc::hf { class DFReference; }\n"
+    unit += "namespace generativeqc::cc {\n"
     unit += _definition(source, "struct PlanDelete") + ";\n"
     unit += _definition(source, "class DFSourceState") + ";\n}\n" + DRIVER
     directory = tmp_path_factory.mktemp("df-source-state-lifetime")
