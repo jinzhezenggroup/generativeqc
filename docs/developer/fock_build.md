@@ -536,10 +536,3 @@ performance-dependent J/K schedules and DF finalization. Consult the
 [CUDA execution policies](fock_cuda_execution.md) before changing an
 execution selector; benchmark acceptance is independent of raw Fock
 contract validation.
-
-```{toctree}
-:hidden:
-:maxdepth: 1
-
-fock_cuda_execution
-```

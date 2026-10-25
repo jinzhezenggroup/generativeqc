@@ -295,11 +295,3 @@ The packed raw/fitted owner, capacity admission and exact fallback
 semantics live in [packed DF value storage](df_packed_storage.md).
 The explicit packed constructor and diagnostic controls are not
 unrestricted public capability claims.
-
-```{toctree}
-:hidden:
-:maxdepth: 1
-
-df_occupied_response
-df_packed_storage
-```

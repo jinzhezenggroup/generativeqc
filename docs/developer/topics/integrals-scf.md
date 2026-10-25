@@ -16,6 +16,7 @@ Integral generation, shell work, Fock assembly, SCF state, exchange strategies, 
 ../one_electron_derivatives
 ../second_integral_derivatives
 ../fock_build
+../fock_cuda_execution
 ../fock_strategies
 ../direct_rys_tasks
 ../scf_module_boundaries

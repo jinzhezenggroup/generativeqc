@@ -646,10 +646,3 @@ for teardown, independent device tests and failure publication.
 
 See the [screened-response accelerator contract](response_backends.md#combining-screened-response-with-optional-accelerators)
 for provisional solve, exact residual and bounded retry rules.
-
-```{toctree}
-:hidden:
-:maxdepth: 1
-
-response_backends
-```

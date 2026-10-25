@@ -43,6 +43,7 @@ initial_guesses
 
 ks_options
 libxc
+dispersion
 dft_density_fitting
 wb97mv_cuda
 r2scan3c

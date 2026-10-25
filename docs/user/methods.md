@@ -158,7 +158,10 @@ also releases this storage. Separate calculators own separate workspaces.
 ## DFT forces
 
 Analytic DFT forces are requested through the ordinary property interface when
-the selected method/backend context advertises force support:
+the selected method/backend context advertises force support. Dispersion-corrected
+selectors are covered in [Dispersion corrections](dispersion.md) instead of
+being repeated here; the gates below apply to the electronic endpoint that a
+correction reuses.
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions
