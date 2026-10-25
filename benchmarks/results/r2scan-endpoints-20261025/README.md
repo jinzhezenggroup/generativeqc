@@ -106,7 +106,8 @@ PYTHONPATH=python:. python benchmarks/results/r2scan-endpoints-20261025/reproduc
 ```
 
 This recomputes qualification, wins, target comparisons and work tables, verifies
-all publication hashes, and redraws both figures byte for byte. It also checks
-that the CBS figure is unchanged. If Direct cold work is revisited later,
+all publication hashes, and redraws both original figures byte for byte using
+their recorded hashes. The [final refresh](../readme-refresh-20261025/README.md)
+supersedes the homepage figures and verifies that CBS is unchanged. If Direct cold work is revisited later,
 preparation and SCF operator work remain the useful focus; this campaign stops
 at the validated improvements above.
