@@ -1,0 +1,101 @@
+{
+  "paired_cuda": [
+    {
+      "order": "ABBA",
+      "case": "rhf-h2-energy-force",
+      "median_seconds": {
+        "A": 0.8526423275470734,
+        "B": 0.7816396318376064
+      },
+      "candidate_over_baseline": 0.9167262832074836,
+      "passed": true
+    },
+    {
+      "order": "ABBA",
+      "case": "pbe-h2-energy",
+      "median_seconds": {
+        "A": 0.8788341376930475,
+        "B": 0.8033692799508572
+      },
+      "candidate_over_baseline": 0.9141307164736605,
+      "passed": true
+    },
+    {
+      "order": "ABBA",
+      "case": "pbe-h2-energy-force",
+      "median_seconds": {
+        "A": 0.8970740884542465,
+        "B": 0.8200043495744467
+      },
+      "candidate_over_baseline": 0.9140876546633967,
+      "passed": true
+    },
+    {
+      "order": "ABBA",
+      "case": "pbe-ragged-energy",
+      "median_seconds": {
+        "A": 0.9751647803932428,
+        "B": 0.8986662607640028
+      },
+      "candidate_over_baseline": 0.921553237804188,
+      "passed": true
+    },
+    {
+      "order": "BAAB",
+      "case": "rhf-h2-energy-force",
+      "median_seconds": {
+        "A": 0.8466217406094074,
+        "B": 0.7757044043391943
+      },
+      "candidate_over_baseline": 0.9162349218445937,
+      "passed": true
+    },
+    {
+      "order": "BAAB",
+      "case": "pbe-h2-energy",
+      "median_seconds": {
+        "A": 0.8721783049404621,
+        "B": 0.7972156964242458
+      },
+      "candidate_over_baseline": 0.914051280464568,
+      "passed": true
+    },
+    {
+      "order": "BAAB",
+      "case": "pbe-h2-energy-force",
+      "median_seconds": {
+        "A": 0.8866736795753241,
+        "B": 0.8153569120913744
+      },
+      "candidate_over_baseline": 0.9195681916281679,
+      "passed": true
+    },
+    {
+      "order": "BAAB",
+      "case": "pbe-ragged-energy",
+      "median_seconds": {
+        "A": 0.9635768011212349,
+        "B": 0.8922591432929039
+      },
+      "candidate_over_baseline": 0.9259865350168824,
+      "passed": true
+    }
+  ],
+  "installed": {
+    "cpu": {
+      "publications": 24,
+      "maximum_energy_error": 1.865174681370263e-14,
+      "maximum_force_error": 1.1601830607332886e-14,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-06
+    },
+    "cuda": {
+      "sdk_publications": 24,
+      "cli_publications": 4,
+      "maximum_energy_error": 1.9095836023552692e-14,
+      "maximum_force_error": 1.176836406102666e-14,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-06
+    }
+  }
+}

@@ -54,6 +54,12 @@ SOURCE_EXACT_ALLOWED = {
         "scf/solver/cpu_target_eigen.hpp",
         "scf/solver/diis.hpp",
     ),
+    # Production capacity shares scalar AO dimensions and overflow-checked byte
+    # arithmetic. This grants no provider/solver ownership to other guess code.
+    "scf/initial_guess/huckel_capacity.hpp": (
+        "molecule/basis.hpp",
+        "runtime/bounded_workspace.hpp",
+    ),
 }
 # CUDA planning and linear algebra have separate rebuild ownership. Enumerate
 # these extracted owners rather than exempting all historical cuda/ fragments.

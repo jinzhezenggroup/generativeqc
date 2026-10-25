@@ -15,6 +15,7 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/automatic_policy.hpp"
 #include "scf/initial_guess/huckel.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/initial_guess/minao.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
@@ -247,30 +248,8 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
   const auto n = molecule::ao_count(system);
   const auto n2 = checked_mul(n, n);
-  if (options.kind == PreliminaryKind::Huckel) {
-    const auto atomic = huckel_maximum_atomic_aos(system);
-    const auto atomic2 = checked_mul(atomic, atomic);
-    // Assembly and strict admission are serialized. The occupied atomic
-    // subspace is at most n, and its solve needs at most seven matrices.
-    // Admission is the larger peak: incoming seed + three snapshot/proposal
-    // copies + four metric/spin matrices + two live product temporaries +
-    // four eigensolver/validation matrices. Reserve sixteen FP64 matrices
-    // for that fourteen-matrix peak, not two simultaneous preparation phases.
-    // Cached atomic frames and one serialized atomic owner are charged below;
-    // the already retained target integrals belong to the target's inventory.
-    auto bytes = checked_add(16U << 20, checked_mul(16 * sizeof(double), n2));
-    bytes = checked_add(bytes, checked_mul(24, checked_mul(atomic2, atomic2)));
-    bytes =
-        checked_add(bytes, checked_mul(8, checked_mul(atomic2, 200 + 2 * options.diis_history)));
-    std::size_t primitives = 0;
-    for (const auto& shell : system.shells)
-      primitives = checked_add(primitives, shell.primitives.size());
-    bytes = checked_add(bytes, checked_mul(512, checked_add(n, system.atoms.size())));
-    bytes = checked_add(bytes, checked_mul(128, primitives));
-    if (bytes > static_cast<std::uint64_t>(INT64_MAX))
-      throw std::overflow_error("Huckel capacity exceeds portable int64 scope");
-    return bytes;
-  }
+  if (options.kind == PreliminaryKind::Huckel)
+    return huckel_numeric_capacity(huckel_capacity_shape(system), options.diis_history);
   if (options.kind == PreliminaryKind::Minao)
     return minao_numeric_capacity_shape(n, system.atoms.size(), minao_source_ao_count(system),
                                         minao_source_primitive_count(system));
