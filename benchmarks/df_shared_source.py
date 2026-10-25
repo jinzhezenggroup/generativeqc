@@ -103,6 +103,25 @@ def main() -> None:
                         "repeat": repeat,
                         "phase": phase,
                         "seconds": seconds,
+                        "reference_iterations": result.iterations,
+                        "ccsd_iterations": getattr(
+                            result.correlation, "ccsd_iterations", None
+                        ),
+                        "response_iterations": getattr(
+                            result.correlation, "response_iterations", None
+                        ),
+                        "source_values": getattr(
+                            result.cc_performance, "source_values", None
+                        ),
+                        "lambda_fp64_iterations": getattr(
+                            result.cc_performance, "lambda_fp64_iterations", None
+                        ),
+                        "lambda_seconds": getattr(
+                            result.cc_performance, "lambda_seconds", None
+                        ),
+                        "orbital_seconds": getattr(
+                            result.cc_performance, "orbital_seconds", None
+                        ),
                         "energy_error": energy_error,
                         "directional_force_error": float(derivative_error),
                     }

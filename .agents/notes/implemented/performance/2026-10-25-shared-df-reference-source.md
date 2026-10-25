@@ -47,3 +47,10 @@ Complete endpoint timings and source-bound receipts accompany qualification.
 This change does not share arbitrary SCF factors with the separate legacy RI-MP2
 builder, cache changing MO projections, or add new Hessian/Lambda intermediates.
 Those require their own precision/frame contracts and measured endpoint gains.
+
+Initial [source-bound endpoint evidence](../../../../benchmarks/results/df-shared-source-20261025/README.md)
+shows a small setup saving: full-DF water MP2/cc-pVTZ cold decreases from 1.2860
+to 1.2798 seconds; CCSD(T)/def2-SVP from 0.8099 to 0.8033 seconds. Both arms
+retain identical compensated source/transform work. Sharing is useful for
+eliminating duplicate ownership and metric setup; it is not evidence that
+ordinary SCF factors can replace compensated correlation factors.

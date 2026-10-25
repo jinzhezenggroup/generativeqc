@@ -2169,7 +2169,8 @@
         ".agents/notes/implemented/performance/2026-10-25-shared-df-reference-source.md",
         "tests/native/df_shared_source_probe.cpp",
         "tests/python/test_df_shared_source_cuda.py",
-        "tests/python/test_full_df_cbs_native.py"
+        "tests/python/test_full_df_cbs_native.py",
+        "benchmarks/results/df-shared-source-20261025/README.md"
       ]
     }
   ]
