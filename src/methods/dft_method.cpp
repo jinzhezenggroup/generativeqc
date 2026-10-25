@@ -370,8 +370,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   // merely to make both precision modes use an identical execution schedule.
   // The existing contracted derivative provider also covers the small r2SCAN
   // d-shell domain used by the defining r2SCAN-3c basis (RKS and UKS).
-  const bool r2scan_shape = execution_plan.semilocal_family == dft::SemilocalFamily::R2scan &&
-                            maximum_angular <= 2;
+  const bool r2scan_shape =
+      execution_plan.semilocal_family == dft::SemilocalFamily::R2scan && maximum_angular <= 2;
   const bool native_shape =
       atoms <= 32 && dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
                                                                  execution_plan.spin_channels == 1);

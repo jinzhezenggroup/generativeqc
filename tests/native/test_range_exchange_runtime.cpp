@@ -25,8 +25,7 @@ struct SyntheticProgram {
       const double*, const double*, const generativeqc::scf::cuda_execution::Angular*,
       unsigned mask) {
     double seeds = 0;
-    for (unsigned bit = 0; bit < 4; ++bit)
-      seeds += (mask & (1U << bit)) ? 1.0 : 0.0;
+    for (unsigned bit = 0; bit < 4; ++bit) seeds += (mask & (1U << bit)) ? 1.0 : 0.0;
     return {0.0, seeds, 0.0, 0.0};
   }
 };
@@ -68,8 +67,7 @@ void expanded_shape_and_transaction() {
   require(calculate(true, slots.data()) == 0, "independent derivative slots were rejected");
   require(work[0] == 1 && work[1] == 3, "independent primitive work is wrong");
   for (std::size_t index = 0; index < slots.size(); ++index) {
-    const auto expected =
-        index == 0 || index == 3 || index == 6 ? 1.0 : index == 9 ? -3.0 : 0.0;
+    const auto expected = index == 0 || index == 3 || index == 6 ? 1.0 : index == 9 ? -3.0 : 0.0;
     require(slots[index] == expected, "independent derivative publication is incorrect");
   }
   records[0] = std::numeric_limits<double>::quiet_NaN();
