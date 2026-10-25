@@ -4,32 +4,33 @@ The one-electron compiler emits normalized contracted overlap S, kinetic T,
 and nuclear attraction V. Production CUDA artifacts remain bounded to
 Cartesian s/p/d/f shells; an explicit qualification mode can generate through
 g without promoting that larger family into the runtime capability table.
-Production consumers write S and Hcore=T+V directly. The handwritten CUDA
-implementation remains the default and the independent CPU implementation
-remains an oracle.
+Production consumers write S and Hcore=T+V directly using the generated
+FP64 scalar operators. The independent CPU implementation remains an oracle.
 
-## Selecting a candidate
+## Execution schedules
 
-Set these variables **before creating a prepared batch**:
+NVIDIA providers use `nucleus_8` by default: eight lanes share one AO pair and
+partition its nuclear attraction sum. One lane computes overlap and kinetic
+energy, and the group reduces the output channels in FP64. Providers without
+qualified subgroup operations retain `thread`.
+
+To select a diagnostic schedule, set the mapping before preparing a batch:
 
 ```bash
-export GENERATIVEQC_ONE_ELECTRON_VALUES=generated
-export GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING=thread
+export GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING=shell_warp
 ```
 
-`GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING=shell_warp` selects the alternative
-shell-pair schedule. `GENERATIVEQC_ONE_ELECTRON_VALUES=reference` selects the
-handwritten implementation in the same binary. Unrecognized explicit value
-selections also retain that implementation. These controls participate in
-prepared resource and checkpoint runtime-policy identities. Changing either
-selection invalidates the cached native direct plan before the next execution.
-Explicit resource plans still require a matching policy identity. Create a new
-prepared batch for cold A/B comparisons.
+The supported values are `thread`, `shell_warp`, `nucleus_8`, and `nucleus_32`.
+An unsupported cooperative provider falls back to `thread`. The mapping belongs
+to prepared resource and checkpoint policy identities; changing it invalidates
+a cached direct plan before execution. Explicit resource plans still require a
+matching policy identity. Use a fresh prepared batch for cold comparisons.
 
-Both candidates run on CUDA, including public real-spherical d/f bases,
-RHF/UHF and the standalone one-electron construction used by density fitting.
-They do not delegate integrals to a CPU backend. First derivatives continue
-through the existing analytic/handwritten implementation.
+These schedules cover Cartesian and real-spherical s/p/d/f bases, RHF/UHF, and
+the standalone one-electron construction used by density fitting. They share
+one scalar definition and keep integral evaluation on the selected device.
+First derivatives use their separately qualified generated
+[derivative schedules](one_electron_derivatives.md).
 
 ## Scientific and execution boundaries
 
@@ -75,6 +76,8 @@ only S/Hcore outputs.
 | --- | --- | --- |
 | `thread` | One thread owns a lower-triangular AO pair | Scalar primitive accumulators |
 | `shell_warp` | One warp owns a shell pair, lanes cover AO components | Scalar primitive accumulators |
+| `nucleus_8` | Eight lanes own an AO pair and partition its nuclei | Per-lane scalar accumulators, FP64 shuffle reduction |
+| `nucleus_32` | One warp owns an AO pair and partitions its nuclei | Per-lane scalar accumulators, FP64 shuffle reduction |
 
 Each owner writes both symmetric matrix entries, and writes the diagonal once.
 Partial blocks and components beyond one warp are explicitly bounded. Batch

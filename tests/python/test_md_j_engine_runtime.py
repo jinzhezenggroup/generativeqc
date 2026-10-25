@@ -582,7 +582,7 @@ void screening_boundaries() {
   // legacy exact mask above. Probe divisions at normal/subnormal extremes and
   // neighboring source norms against a wider independent product.
   for (double q : {0.0, 0x1p-1022, 0x1p-400, 0.1, 1.0, 0x1p400, 0x1p1023}) {
-    for (double share : {0.0, 0x1p-1074, 0x1p-60, 1e-12}) {
+    for (double share : {0.0, 0x1p-1074, 0x1p-60, 1e-12, 1e-9}) {
       const double threshold = md_j_engine_source_threshold(q, share);
       assert(threshold >= 0.0);
       for (double source : {0.0, std::nextafter(threshold, 0.0), threshold,
@@ -599,11 +599,17 @@ void screening_boundaries() {
                                        md_j_engine_source_threshold(0.0, 1e-12)));
   md.maximum_pair_primitives = 81;
   md.primitive_count = 100003;
-  for (unsigned targets : {1, 2, 6, 9, 81}) {
-    const double share = md_j_primitive_allowance(md, 0.02, targets);
-    assert(static_cast<long double>(share) * targets * md.primitive_count <= 1e-12L);
-    assert(share >= md_j_primitive_allowance(md, 0.02));
-  }
+  // The invocation-local provisional cap changes only the allowance, never
+  // the directed, downward-rounded cumulative omission proof.
+  for (double cap : {1e-12, 1e-10, 1e-9})
+    for (double screening : {0.0, 1e-13, 1e-9, 0.02})
+      for (unsigned targets : {1, 2, 6, 9, 81}) {
+        md.density_error_cap = cap;
+        const double share = md_j_primitive_allowance(md, screening, targets);
+        assert(static_cast<long double>(share) * targets * md.primitive_count <=
+               static_cast<long double>(std::min(screening, cap)));
+        assert(share >= md_j_primitive_allowance(md, screening));
+      }
   ++completed;
 }
 template <unsigned B, unsigned K, bool Count = true>

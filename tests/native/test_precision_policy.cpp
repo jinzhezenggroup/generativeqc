@@ -609,7 +609,7 @@ void verify_one_electron_provider_policy() {
     ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
     ScopedEnv configured_cumetal("CUMETAL_ROOT", "/configured-but-inactive");
     const auto policy = resolve_one_electron_value_policy(nvidia);
-    require(policy.mapping == 1U && !policy.diagnostic_override && !policy.capability_fallback,
+    require(policy.mapping == 2U && !policy.diagnostic_override && !policy.capability_fallback,
             "configured-but-inactive CuMetal must not change NVIDIA auto selection");
   }
   {
@@ -629,6 +629,16 @@ void verify_one_electron_provider_policy() {
     const auto policy = resolve_one_electron_value_policy(nvidia);
     require(policy.mapping == 0U && policy.diagnostic_override && !policy.capability_fallback,
             "explicit pair-thread diagnostic override must remain deterministic");
+  }
+  for (const auto* selector : {"nucleus_8", "nucleus_32"}) {
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", selector);
+    const auto supported = resolve_one_electron_value_policy(nvidia);
+    require(supported.mapping == (std::strcmp(selector, "nucleus_8") == 0 ? 2U : 3U) &&
+                supported.diagnostic_override && !supported.capability_fallback,
+            "NVIDIA must execute the requested qualified nuclear-source schedule");
+    const auto fallback = resolve_one_electron_value_policy(cumetal);
+    require(fallback.mapping == 0U && fallback.capability_fallback,
+            "unsupported subgroup schedules must retain the provider's safe fallback");
   }
 }
 
