@@ -240,6 +240,11 @@
       "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
       "review_document": "benchmarks/results/readme-final-20261024/README.md"
     },
+    "host-full-eri-20261025": {
+      "owner": "#2762 full-range KS host ERI qualification",
+      "reason": "Compact source-bound complete endpoint and independent scientific evidence keeps natural incremental and source-eligible schedules separate, including paired timings, source/build inventories, per-action work, and final GPU/sanitizer receipts. Large binary and profiler artifacts remain untracked.",
+      "review_document": "benchmarks/results/host-full-eri-20261025/README.md"
+    },
     "hf-cold-work-20261025": {
       "owner": "HF cold final-state work and resident DF source qualification",
       "reason": "Lossless full-precision receipts retain all 75 populations and 300 complete cold/warm calls across baseline, candidate and fresh GPU4, including failed independent fitting gates and every exposed precision solve. Shared compression avoids repeating provenance; source-matched ablations, independent references and executable replay remain in the compact publication. No numerical acceptance or storage cap is changed.",
@@ -854,6 +859,14 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
+    },
+    {
+      "path": "benchmarks/results/host-full-eri-20261025/measurements.json.xz",
+      "family": "host-full-eri-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "full-range-source-reuse-with-natural-default-control-and-independent-gates",
+      "bytes": 176688,
+      "sha256": "f61ea564bb095f92ccea4828ab472ade77dd3d1961f0f2099eec0a238d331434"
     },
     {
       "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",

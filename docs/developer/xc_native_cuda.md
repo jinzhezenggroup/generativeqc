@@ -514,6 +514,29 @@ primary retains its current J/K and final occupied projection during a range-onl
 rebase. This preserves the physical replay gates and counts the operators
 actually executed.
 
+### Full-range host ERI backing
+
+Admitted cold strict global-hybrid KS sources (including PBE0/B3LYP) use the
+same bounded pageable tier for full-range ERIs. `GENERATIVEQC_KS_HOST_MAX_BYTES`,
+`GENERATIVEQC_KS_HOST_TILE_BYTES`, and `GENERATIVEQC_KS_HOST_BUCKET_MASK` are the
+full-range counterparts of the LR controls below. Unset capacity selects at most
+32 GiB and one quarter of available machine/cgroup headroom; explicit zero
+retains the previous GPU/Direct policy. These controls do not enable RHF graphs,
+mixed-storage sources or DF primary integrals.
+
+Full GPU residency keeps priority. With host backing enabled, unmasked GPU
+selection fits whole buckets to the existing device ceiling before admitting
+omitted buckets in RAM. Explicit `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` stays
+authoritative. Both spin channels share immutable ERIs while J consumes total
+density and K keeps separate spin densities. Geometry/precision changes retire
+the phase source; force kernels still evaluate derivative integrals.
+
+Full-range diagnostics use `cuda_full_eri_action` and `full_direct_recompute/`,
+`full_gpu_replay/`, `full_host_replay/` bucket regions with the same work and
+transfer counters as LR. Profiled wall times remain separate from complete
+endpoint timing. The [consumer decision](../../.agents/notes/implemented/performance/2026-10-25-full-range-host-eri.md)
+records candidates that need separate ownership/scheduling qualification.
+
 ### Experimental pageable LR ERI backing
 
 `GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES` bounds the additional pageable FP64
