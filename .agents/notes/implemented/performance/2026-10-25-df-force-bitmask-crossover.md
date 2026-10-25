@@ -51,3 +51,28 @@ This supersedes only the admission threshold in
 [the original fitted-force decision](2026-10-10-df-force-active-ao.md).
 Revisit the crossover with complete cold/warm/moved measurements on additional
 hardware/workloads; reduced projection work alone does not prove endpoint gains.
+
+## Final qualification
+
+[The retained publication](../../../../benchmarks/results/df-dft48-work-20261025/README.md)
+contains 192 fresh README populations / 768 complete E+F calls on source
+`2ed9b394a2889b3a373dc91ebbaaed03931056eb`. Six clean same-binary controls
+retain three frozen-density warm calls: r2SCAN-3c Standard changes from
+13.733/7.320 s cold/warm to 11.001/4.200 s, and Fast from 11.521/5.317 s
+to 10.120/3.628 s. These are observations on separately allocated cards;
+the earlier single-repeat ablation is not substituted for the formal cohort.
+All 24 control sample pairs have equal energies/Fock counts and maximum force
+change below 1.8e-13 Eh/Bohr. Selected point-times-AO-squared work is reduced
+to about one quarter while grid/Becke work remains present.
+
+All 263 related tests pass after supplying the five initially absent packaged
+LDA/UKS test artifacts; the original setup failures remain in the evidence.
+Independent matched-grid LDA/PBE/PBE0/r2SCAN RKS/UKS oracles, geometry rebinding
+and both resource/occupancy dense fallbacks retain their gates. Eighteen
+Standard/Fast moved-geometry and property-transition checks also pass. The
+whole README retains its original 58 qualified / 6 failed cases per profile.
+
+The 36/42-atom r2SCAN-3c diagnostics still spend about 4.51/8.13 seconds in
+prepared DF integral derivatives, versus 1.12 seconds at 48 atoms. That
+separate response-planning discontinuity remains a follow-up; its costs
+are not attributed to AO masks or hidden from the ablation records.
