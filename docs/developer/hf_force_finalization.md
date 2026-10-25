@@ -46,6 +46,35 @@ contracts.
 
 ## Work and diagnostics
 
+Large cold restricted owners can first use a bounded screened FP64 operator.
+Admission requires at least 512 AOs, one system, shells through d, at least 24
+allowed iterations, and the bounded quartet provider. Warm/imported seeds,
+physical-reference export, resident ERIs/values, mixed precision, incremental
+J/K, and UHF retain their existing routes. A requested screening tolerance
+at or above `8e-8` also retains the ordinary route.
+
+The proposal uses a screening tolerance of `8e-8` for at most eight iterations.
+The driver then resets operator-dependent DIIS and energy state and converges
+the requested target operator under the original acceptance criteria. Both
+stages consume the same user iteration allowance. The proposal graph is local
+to the cold execution; retained warm graphs always represent the target.
+`GENERATIVEQC_HF_COLD_SCREENING=0` or `none` disables this diagnostic policy.
+
+Screened proposals still use FP64 arithmetic: their work contributes to
+`strict_stage_fock_builds` and the public iteration total, never to
+`mixed_stage_fock_builds`. `refinement_iterations` counts only the target tail.
+Different converged trajectories can have different observable errors within
+the same requested tolerances; a more accurate force target should request
+tighter convergence, independently of the preliminary operator.
+
+The bounded task page is independent of fixed-topology storage. Targets with
+at least 24 GiB may use up to one quarter of device memory, capped at 32M tasks
+and 6 GiB. Smaller targets retain the one-sixteenth memory budget and unknown
+targets use 256 MiB. If the larger arena allocation is refused, the owner
+recomputes its layout and queue offsets and retries at most once with the old
+8M-task ceiling before any upload or graph capture. Physical-reference export
+retains the old 8M-task/1.5-GiB profile.
+
 Force finalization adds one density projection, one physical Fock build, four
 matrix products for residual validation, and two matrix products for the Pulay
 weight. Existing device scratch owns those products; the work counter is copied

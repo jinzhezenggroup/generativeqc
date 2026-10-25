@@ -1,0 +1,25 @@
+{
+  "id": "hf.cold-screening",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_HF_COLD_SCREENING"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/rhf_policy.hpp",
+    "src/scf/cuda/rhf_policy.cpp",
+    "src/scf/cuda_rhf.cpp"
+  ],
+  "rationale": "Large unseeded single-system restricted FP64 bounded quartet owners use up to eight screened FP64 proposal steps, then reset DIIS and converge the requested target under the original criteria. Both stages share the user iteration budget and complete work counters. Warm/imported, UHF, physical-reference, resident, mixed and incremental owners retain their existing route. Three fresh-process HF96 endpoint pairs pass the common #2786 gates and beat GPU4PySCF; tight-target independent force, lifecycle and allocation-refusal tests pass. The default force error against a tighter reference increases from 5.10e-8 to 3.02e-7 Eh/Bohr, within the common campaign gate; this difference and the failed extra 1e-7 diagnostic are retained.",
+  "revisit_condition": "Requalify independent energy/force, complete FP64 work, cold/warm endpoints, iteration caps, moved/imported owners and bounded allocation fallback before changing admission, cutoff, step limit or target convergence. The measured HF96 speedup does not establish universal performance. Never equate FP64 arithmetic counters with an unscreened preliminary operator.",
+  "evidence": [
+    "docs:docs/developer/hf_force_finalization.md",
+    ".agents/notes/implemented/performance/2026-10-26-cold-hf-screening-pages.md",
+    "benchmarks/results/cold-hf-defaults-20261026/README.md",
+    "tests/python/test_hf_cold_screening_cuda.py",
+    "tests/native/test_precision_policy.cpp"
+  ]
+}

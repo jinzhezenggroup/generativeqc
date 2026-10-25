@@ -84,9 +84,11 @@ struct DirectJkFixedTopologyTaskProfile {
 };
 
 struct DirectJkBoundedStreamingTaskProfile {
-  std::size_t maximum_task_capacity{8U * 1024U * 1024U};
-  // Keep the qualified 1.5-GiB page cap; task capacity follows the current ABI.
-  std::size_t maximum_arena_bytes{std::size_t{3} << 29};
+  std::size_t maximum_task_capacity{32U * 1024U * 1024U};
+  // A larger reusable page amortizes compaction and graph launches on large
+  // targets. Actual capacity remains bounded by target memory and the task ABI;
+  // allocation refusal retries the incumbent 8M-task page once.
+  std::size_t maximum_arena_bytes{std::size_t{6} << 30};
 };
 
 struct DirectJkTuningProfile {
@@ -119,6 +121,37 @@ DirectJkSchedulePolicy resolve_direct_jk_schedule_policy(
 
 std::size_t direct_jk_bounded_streaming_task_capacity_limit(
     const DirectJkSchedulePolicy& policy, std::size_t generated_task_bytes) noexcept;
+
+/** Facts for a cold preliminary HF operator. These describe actual admitted
+ * providers and seed ownership, not just a requested execution mode. */
+struct ColdHfScreeningDomain {
+  std::size_t nbf{};
+  std::size_t systems{};
+  unsigned maximum_shell_angular{};
+  unsigned maximum_iterations{};
+  bool first_setup{};
+  bool warm_seed{};
+  bool unrestricted{};
+  bool physical_reference{};
+  bool bounded_quartet_direct{};
+  bool persistent_eri{};
+  bool resident_values{};
+  bool mixed_precision{};
+  bool incremental_jk{};
+};
+
+struct ColdHfScreeningPolicy {
+  double tolerance{};
+  unsigned maximum_iterations{};
+};
+
+/** A bounded screened FP64 proposal for large cold RHF owners only. The
+ * driver must reset DIIS and converge the original target operator before any
+ * publication, charging both stages to the same user iteration allowance.
+ * Zero policy keeps ordinary execution; warm/imported/moved owners never inherit
+ * the preliminary graph. The environment opt-out is diagnostic only. */
+ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
+                                                double target_screening) noexcept;
 
 /**
  * IEEE-754 binary32 unit roundoff (2^-24). Published from the shared header so

@@ -82,7 +82,8 @@ struct PrecisionProvenance {
   uint32_t refinement_iterations{0};
   /** Complete mixed-stage Fock/operator applications for this item. */
   uint64_t mixed_stage_fock_builds{0};
-  /** Complete strict-FP64 SCF-stage Fock/operator applications for this item. */
+  /** Complete FP64 SCF-stage applications, including screened FP64 proposals.
+   * refinement_iterations separately identifies the target-operator tail. */
   uint64_t strict_stage_fock_builds{0};
   /** Additional strict physical-Fock builds performed after SCF convergence. */
   uint64_t post_scf_fock_builds{0};
