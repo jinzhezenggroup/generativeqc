@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # Custom XC scalar expression contract
 
 `generativeqc.extensions.xc.expression(source, *, name="user-expression")`

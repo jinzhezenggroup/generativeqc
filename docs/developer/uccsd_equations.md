@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # UCCSD energy and residual TensorIR
 
 `generativeqc_compiler.cc.uccsd_equations.build_program(oa, ob, va, vb)`

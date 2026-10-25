@@ -137,12 +137,6 @@ For calculation-time module triggers and the distinction between packaged AOT,
 Python artifacts and compiler caches, see the
 [runtime compilation inventory](../maintainer/runtime_compilation.md).
 
-```{toctree}
-:hidden:
-
-../maintainer/runtime_compilation
-```
-
 Builds automatically prefer `sccache` and fall back to `ccache` when either
 is on `PATH`. Runtime JIT compilation uses the same precedence on artifact
 cache misses and refuses to start an uncached compiler process. `sccache` is a

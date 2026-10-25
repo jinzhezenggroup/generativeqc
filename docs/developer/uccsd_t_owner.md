@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # Canonical UCCSD(T) energy owner
 
 `tools.generativeqc_cc.PreparedUCCSDT` adds complete real-FP64 conventional

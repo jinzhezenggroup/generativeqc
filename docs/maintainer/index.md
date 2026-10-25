@@ -47,6 +47,7 @@ stationary_large_domain_qualification
 
 cuda_ownership
 generated_cuda_host_api
+runtime_compilation
 vendor_boundaries
 cpu_autotuning
 source_work_audit

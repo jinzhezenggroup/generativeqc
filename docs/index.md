@@ -11,16 +11,17 @@ GenerativeQC documentation is organized by **reader and task**, not by the inter
 - **[Maintainer Guide](maintainer/index.md)** — validation, performance qualification, evidence, ownership, generated artifacts, and roadmap work.
 - **[Agent Guide](agent/index.md)** — workflow map for coding agents; repository `AGENTS.md` files remain normative.
 
-## Generated material
+## Generated and machine-readable material
 
 The [Python API reference](reference/api.md) recursively discovers modules that
 declare `__all__` and generates their exported signatures, type annotations,
-docstrings, inheritance, and source links at Sphinx build time. The
-generated [public method table](public_methods.md), `codegen_capabilities.json`,
-the `cuda_ownership/` ledger, and the generated Libxc import/coverage reports
-remain at the docs root because repository tooling currently writes or consumes
-those paths. Guides should link to those sources rather than copying their
-contents.
+docstrings, inheritance, and source links at Sphinx build time. The generated
+[public method table](public_methods.md), `codegen_capabilities.json`, the
+`cuda_ownership/` ledger, and the generated Libxc import/coverage reports remain
+at the docs root because repository tooling writes or consumes those exact
+paths; see [Generated documentation and data](maintainer/generated-files.md) for
+the producer/consumer inventory. Guides link to those sources rather than
+copying their contents.
 
 Historical rationale and discarded designs belong under `.agents/notes/`, not in current-state guides.
 Machine-readable checker inputs and repository inventories belong under `manifests/`, not in the documentation tree.
@@ -57,7 +58,5 @@ agent/index
 public_methods
 libxc_bulk_import
 libxc_maple_coverage
-density_sources
-xc_expressions
 cuda_ownership/README
 ```
