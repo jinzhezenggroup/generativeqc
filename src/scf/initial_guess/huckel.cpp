@@ -7,6 +7,7 @@
 #include "core/types.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/cpu_target_eigen.hpp"
@@ -177,15 +178,7 @@ std::pair<unsigned, unsigned> huckel_atomic_configuration(int atomic_number) {
 }
 
 std::size_t huckel_maximum_atomic_aos(const core::System& system) {
-  std::vector<std::size_t> counts(system.atoms.size(), 0);
-  for (const auto& atom : system.atoms) (void)huckel_atomic_configuration(atom.atomic_number);
-  for (const auto& shell : system.shells) {
-    const auto configuration =
-        huckel_atomic_configuration(system.atoms.at(shell.atom_index).atomic_number);
-    if (shell.angular_momentum == 0 || (shell.angular_momentum == 1 && configuration.second))
-      counts[shell.atom_index] += 2 * shell.angular_momentum + 1;
-  }
-  return counts.empty() ? 0 : *std::max_element(counts.begin(), counts.end());
+  return huckel_capacity_shape(system).atomic_aos;
 }
 
 HuckelDensityResult huckel_density(const core::System& system,

@@ -10,6 +10,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -30,6 +31,7 @@ def cache_workers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "if os.environ.get('SCCACHE_START_SERVER') == '1':\n"
         " assert os.environ['SCCACHE_NO_DAEMON'] == '1'\n"
         " assert 'SCCACHE_STARTUP_NOTIFY' not in os.environ\n"
+        " time.sleep(float(os.environ.get('QC_TEST_STARTUP_DELAY', '0')))\n"
         " child = subprocess.Popen([sys.executable, '-c', "
         "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
         " record = root / (endpoint.parent.name + '.json')\n"
@@ -47,7 +49,8 @@ def cache_workers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "else:\n"
         " assert sys.argv[1] != '--stop-server'\n"
         " if sys.argv[1] == 'timeout': time.sleep(60)\n"
-        " if sys.argv[1] == 'slow': time.sleep(0.3)\n"
+        " if sys.argv[1] == 'slow':\n"
+        "  while not (root / 'release-success').exists(): time.sleep(0.01)\n"
         " print('compiled', flush=True)\n"
         " sys.exit(17 if sys.argv[1] == 'failure' else 0)\n"
     )
@@ -92,16 +95,34 @@ def _assert_workers_stopped(root: Path, count: int) -> None:
         assert worker["endpoint"] != str(root / "shared.sock")
 
 
+@pytest.mark.parametrize("startup_delay", [0, 0.6])
 @pytest.mark.parametrize(
     "command,code", [("success", 0), ("failure", 17), ("timeout", 124)]
 )
 def test_owned_workers_stop_on_every_outcome(
-    cache_workers: Path, command: str, code: int
+    cache_workers: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    code: int,
+    startup_delay: float,
 ) -> None:
-    result = compiler_cache.run_cached_compiler([command], 0.5, label="probe")
+    monkeypatch.setenv("QC_TEST_STARTUP_DELAY", str(startup_delay))
+    original = compiler_cache.run_compiler
+
+    def client_deadline(
+        argv: list[str], timeout: float, **kwargs: Any
+    ) -> CompileResult:
+        # Exercise real client cancellation after startup has produced a worker.
+        # Whole-call startup deadlines are covered independently below.
+        if argv[-1] == "timeout":
+            timeout = min(timeout, 0.2)
+        return original(argv, timeout, **kwargs)
+
+    monkeypatch.setattr(compiler_cache, "run_compiler", client_deadline)
+    result = compiler_cache.run_cached_compiler([command], 10, label="probe")
     assert result.returncode == code
     assert result.timed_out == (command == "timeout")
-    assert result.duration_seconds < 1.5
+    assert result.duration_seconds < 11
     _assert_workers_stopped(cache_workers, 1)
 
 
@@ -147,21 +168,51 @@ def test_remote_or_unknown_workers_fail_closed(
     _assert_workers_stopped(cache_workers, 1)
 
 
+@pytest.mark.parametrize("startup_delay", [0, 0.6])
 def test_concurrent_timeout_does_not_kill_another_invocation(
-    cache_workers: Path,
+    cache_workers: Path, monkeypatch: pytest.MonkeyPatch, startup_delay: float
 ) -> None:
+    monkeypatch.setenv("QC_TEST_STARTUP_DELAY", str(startup_delay))
+    ready = Barrier(2, timeout=10)
+    original = compiler_cache.run_compiler
+
+    def synchronized_clients(
+        argv: list[str], timeout: float, **kwargs: Any
+    ) -> CompileResult:
+        if argv[-1] in {"timeout", "slow"}:
+            # Both private servers and recorded children must exist before the
+            # cancellation. Do not assume Python startup fits in 0.2 seconds.
+            started = time.monotonic()
+            ready.wait()
+            timeout = max(0.0, timeout - (time.monotonic() - started))
+        if argv[-1] == "timeout":
+            timeout = min(timeout, 0.2)
+        return original(argv, timeout, **kwargs)
+
+    monkeypatch.setattr(compiler_cache, "run_compiler", synchronized_clients)
     sentinel = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True
     )
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
             timed = executor.submit(
-                compiler_cache.run_cached_compiler, ["timeout"], 0.2, label="probe"
+                compiler_cache.run_cached_compiler, ["timeout"], 10, label="probe"
             )
             successful = executor.submit(
-                compiler_cache.run_cached_compiler, ["slow"], 2, label="probe"
+                compiler_cache.run_cached_compiler, ["slow"], 10, label="probe"
             )
-            assert timed.result().timed_out
+            try:
+                assert timed.result().timed_out
+                assert not successful.done()
+                workers = [
+                    json.loads(path.read_text())
+                    for path in cache_workers.glob("gqc-scc-*.json")
+                ]
+                assert len(workers) == 2
+                for key in ("server", "child"):
+                    assert sum(_running(worker[key]) for worker in workers) == 1
+            finally:
+                (cache_workers / "release-success").touch()
             assert successful.result().returncode == 0
         assert sentinel.poll() is None
         _assert_workers_stopped(cache_workers, 2)

@@ -1,0 +1,54 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All eight scoped CPU endpoint non-regression gates pass. This is not a complete performance promotion: allocation/compilation-cost and independent per-iteration residual measurements are outside this campaign.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 5672,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "1d74a5601531addc1120c21474f06814f2e609176c3d63fab217aef03e38e2e0"
+    },
+    {
+      "bytes": 27599,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "57c8adbc87b04943e5e54b3f06c940f761bd9fd11fca906f90448bc6623c7330"
+    },
+    {
+      "bytes": 1818,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "b39aab10af4fa3d9cbfc1d42c74dd50193f59189d529c866b62b631d2349a7dc"
+    },
+    {
+      "bytes": 2462,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "1311746dfcf7129613578656bc71d0b177739e40feb3215b3a684d38ed6d3cd1"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.native_resource_composition",
+      "--samples",
+      "21",
+      "--warmup",
+      "3",
+      "--source-sha",
+      "7e555f3841e3109dea82fa94d12de8ad78ff0353",
+      "--output",
+      ".artifacts/benchmarks/arm.json"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353"
+  }
+}

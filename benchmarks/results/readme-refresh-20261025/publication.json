@@ -1,0 +1,127 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "7a7320099d7eb03f022e6ee55e06ae3408bc091f",
+    "dirty": false
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Descriptive default E+F latency observations with all completed accuracy-failing and slower points shown. No additional optimization or repeated-process significance claim."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4481,
+      "sha256": "4bfb1405bbaa0aee152f42a9f256f4de312076f0b0dbd26b50f0473859db95af",
+      "role": "summary"
+    },
+    {
+      "path": "auxiliary-inputs.json.xz",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862",
+      "role": "input"
+    },
+    {
+      "path": "conditions.md",
+      "bytes": 6214,
+      "sha256": "a39abf99602a094607d78898ce896f175013cac069648c376afc72ef649eb499",
+      "role": "summary"
+    },
+    {
+      "path": "diagnostics.json.xz",
+      "bytes": 29032,
+      "sha256": "1946204fe25cd70d0fbc747e78754d81e7223eaed7ea8c62aa2d11281358c3b8",
+      "role": "samples"
+    },
+    {
+      "path": "figures.json",
+      "bytes": 246,
+      "sha256": "7ae1902adaee510fa69a30636813cb343e1352b9708fcd3d18de49918bdb49a9",
+      "role": "summary"
+    },
+    {
+      "path": "gpu4pyscf.json.xz",
+      "bytes": 187896,
+      "sha256": "59d4159f51e9ce6a994e92bdf192925a7992e4801fde9419713365f84febc2ae",
+      "role": "samples"
+    },
+    {
+      "path": "jobs.json.xz",
+      "bytes": 5072,
+      "sha256": "a439b7dd9eee2dd5cc94881303c255471b6ea7d55812b9ec7a290becee6f97bc",
+      "role": "reproduction"
+    },
+    {
+      "path": "oracles.json.xz",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
+      "role": "input"
+    },
+    {
+      "path": "provenance.json.xz",
+      "bytes": 7496,
+      "sha256": "cd788e537858706691630e62680e47a64a297ef57748739782e76466252c2129",
+      "role": "summary"
+    },
+    {
+      "path": "qualification.json.xz",
+      "bytes": 22152,
+      "sha256": "7cde06af13c76be2e9153a21c3b1deaef00d507543e5282d1a20ac5eba425db0",
+      "role": "summary"
+    },
+    {
+      "path": "reference-reuse.json",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac",
+      "role": "input"
+    },
+    {
+      "path": "reproduce.py",
+      "bytes": 9193,
+      "sha256": "2d4f3ad1b0068d443ad6f98043be8cfff5903b666e403928d66c8ec2c5cd8eb2",
+      "role": "reproduction"
+    },
+    {
+      "path": "standard.json.xz",
+      "bytes": 211680,
+      "sha256": "61b4f46ed84ace2e378b768601938132e00106e5f49b7fc25bdb355209f2a60d",
+      "role": "samples"
+    },
+    {
+      "path": "summary.json.xz",
+      "bytes": 552,
+      "sha256": "d96f56bdde8ce42f98cce6f2dcb80f975638f07f437969c28fc5436f33119d19",
+      "role": "summary"
+    },
+    {
+      "path": "timings.md",
+      "bytes": 13903,
+      "sha256": "99d7c0e4875635d003bd445bdee76567795853dc3e9dce8ae8fdb0ba6fe59044",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json.xz",
+      "bytes": 3252,
+      "sha256": "19b13a3de419fa4665d528c1e0e537de8d4ca7ce590366aab25c820f0459db13",
+      "role": "evidence"
+    },
+    {
+      "path": "work.md",
+      "bytes": 10535,
+      "sha256": "bcd493fce3768ae19960de8d0551010d8b9702da574ab8eb7114e861beac6285",
+      "role": "summary"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/readme-refresh-20261025/reproduce.py",
+      "--output",
+      ".artifacts/readme-refresh-replay",
+      "--verify",
+      "--check-readme"
+    ]
+  }
+}

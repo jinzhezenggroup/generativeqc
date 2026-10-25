@@ -1,8 +1,9 @@
 # User Guide
 
-Use this guide to install GenerativeQC, choose a supported method, and run a calculation. Start with [Quick start](quickstart.md) if you have not used the package before; for terminology, see [Learn quantum chemistry](../learn/index.md).
-
-For precise names, units, capabilities, and public Python signatures, use the [Reference](../reference/index.md) and its [generated public method table](../public_methods.md). Internal algorithms and implementation details belong in the [Developer Guide](../developer/index.md).
+Install the package, choose a method and run a calculation. Start with
+[installation](installation.md) and the [quick start](quickstart.md).
+For method names and exact API options, see the [Reference](../reference/index.md).
+For background, see [Learn quantum chemistry](../learn/index.md).
 
 ## Start here
 

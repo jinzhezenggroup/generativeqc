@@ -1,9 +1,8 @@
 # Hessians and Hessian-vector products
 
-GenerativeQC can assemble a raw analytic Cartesian Hessian, or one
-Hessian-vector product (HVP), for the DFT contexts it has qualified. Both are
-true analytic derivatives: no displaced SCF runs, finite differences or
-reference-package orbital Hessians are used to produce the published number.
+`Calculator` provides analytic Cartesian Hessians and Hessian-vector products
+(HVPs) for selected DFT methods. These results do not use finite differences
+of the energy.
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions
@@ -27,12 +26,11 @@ print(hvp.value)      # shape (natoms, 3), Hartree/Bohr^2
 print(hessian.matrix) # shape (3*natoms, 3*natoms), Hartree/Bohr^2
 ```
 
-## Check the capability first
+## Check support
 
-Second-order support is a property of a fully resolved execution context, not of
-a method name. Call `calc.second_order_capabilities` before relying on it:
-`hessian_vector_product` and `hessian` raise for an unqualified context instead
-of falling back to finite differences or a nearby supported domain.
+Check `calc.second_order_capabilities` for the chosen device, basis and method.
+Unsupported requests raise an error; they do not switch methods or fall
+back to finite differences.
 
 `Calculator.capabilities.supported_second_order` exposes the same frozenset.
 The general rule for how a capability source relates to a method identity is in
@@ -40,10 +38,9 @@ The general rule for how a capability source relates to a method identity is in
 first-order equivalent is described under
 [DFT forces](methods.md#dft-forces).
 
-## Qualified domains
+## Supported methods
 
-Two distinct second-order domains currently exist. They do not inherit each
-other's admission.
+Two sets of DFT calculations currently support second derivatives:
 
 **CPU LDA/PBE RKS.** Direct all-electron Cartesian closed-shell strict-FP64
 LDA and PBE, with no exact exchange, no density fitting, no dispersion
@@ -57,11 +54,9 @@ differentiation and coupled response — stays in linked native code, and an
 AOT Hessian package must be built; Python, CuPy and runtime compilation are not
 numerical dependencies.
 
-Everything else is fail-closed, including other functional families, truncated
-DF metrics, mixed precision, independent XC/VV10 grids, and coupled
-response for contexts without their own qualified chain. Meta-GGA is rejected
-in the generic fixed-density geometry bilinear because its density response is
-not qualified there.
+Other functionals, truncated DF metrics, mixed precision and independent
+XC/VV10 grids are not supported for these derivatives. The generic
+fixed-density route also excludes meta-GGA density response.
 
 ## Resource arguments
 

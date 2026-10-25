@@ -24,6 +24,7 @@
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -792,6 +793,38 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
   try {
     const auto value = generativeqc::scf::initial_guess::preliminary_minao_numeric_capacity(
         target_aos, atomic_numbers, atom_count);
+    *output = value;
+    return 0;
+  } catch (const std::exception&) {
+    return 1;
+  }
+}
+
+/** Private compact-topology query for the native Huckel preparation allowance.
+ * Atomic occupied-channel selection and the numeric polynomial are shared with
+ * actual admission. Borrows immutable arrays, uses O(atoms) metadata scratch,
+ * and never constructs scientific state. Failure leaves output unchanged.
+ */
+int generativeqc_resource_huckel_numeric_capacity_v1(
+    const std::int32_t* atomic_numbers, std::size_t atom_count, const std::uint32_t* shell_atoms,
+    const std::uint32_t* angular_momenta, const std::uint64_t* primitive_counts,
+    std::size_t shell_count, int representation, std::uint32_t diis_history,
+    std::uint64_t* output) {
+  if (!atomic_numbers || !shell_atoms || !angular_momenta || !primitive_counts || !output ||
+      !diis_history || diis_history > 16)
+    return 1;
+  try {
+    using namespace generativeqc::scf::initial_guess;
+    const auto shape = huckel_capacity_shape(
+        atom_count, shell_count, representation,
+        [&](std::size_t index) { return atomic_numbers[index]; },
+        [&](std::size_t index) {
+          if (primitive_counts[index] > std::numeric_limits<std::size_t>::max())
+            throw std::overflow_error("Huckel primitive count exceeds size_t");
+          return HuckelShellShape{shell_atoms[index], angular_momenta[index],
+                                  static_cast<std::size_t>(primitive_counts[index])};
+        });
+    const auto value = huckel_numeric_capacity(shape, diis_history);
     *output = value;
     return 0;
   } catch (const std::exception&) {
