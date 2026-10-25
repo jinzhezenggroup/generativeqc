@@ -38,7 +38,7 @@ A changed auxiliary exponent of the same shape must build a fresh source.
 
 The compiled lifecycle probe compares all factor/block outputs against fresh
 construction, rejects same-shape auxiliary changes, threshold changes and a
-detached frame, exercises budget refusal, and performs a physical source
+detached frame and changed source policy, exercises budget/backend refusal, and performs a physical source
 pullback after the outer HF handle is released. It checks final owner release.
 Complete PySCF energy and reconverged directional-force gates cover full-DF
 MP2 in spherical/Cartesian bases and CCSD(T), including auxiliary g functions.

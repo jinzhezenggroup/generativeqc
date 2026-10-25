@@ -66,10 +66,17 @@ int main() {
     changed.shells.back().primitives.front().exponent *= 1.01;
     const auto other_aux = build(changed, *solved.reference, 1e-10, false, owner);
     const auto other_threshold = build(auxiliary, *solved.reference, 1e-9, false, owner);
+    scf::cuda_execution::CudaDfSourcePolicy alternate;
+    require(scf::cuda_execution::resolve_cuda_df_source_policy(alternate, detail),
+            "invalid default source policy");
+    alternate.requested_value_mapping = 1;  // Explicit component versus automatic source.
+    const auto other_policy = cc::build_df_source_cuda(orbital, auxiliary, *solved.reference,
+                                                       budget - owner->storage_bytes(), 1e-10, 0, 0,
+                                                       false, &alternate, false, owner);
     const auto detached = *solved.reference;
     const auto other_frame = build(auxiliary, detached, 1e-10, false, owner);
     require(!other_aux.shared_reference_bytes && !other_threshold.shared_reference_bytes &&
-                !other_frame.shared_reference_bytes,
+                !other_frame.shared_reference_bytes && !other_policy.shared_reference_bytes,
             "mismatched source/frame identity reused the reference");
     bool refused = false;
     try {
@@ -96,7 +103,23 @@ int main() {
         "retained source pullback failed after reference release");
     cached.response_state.reset();
     require(lifetime.expired(), "shared reference lifetime leaked");
-    std::printf("{\"lifecycle\":true,\"mismatch_fallbacks\":3,\"maximum_factor_error\":%.17g}\n",
+    // A matching SCF owner must not authorize a backend that the independent
+    // correlation builder rejects. Exercise the same-policy case explicitly.
+    setenv("GENERATIVEQC_DF_VALUE_MATH", "polynomial", 1);
+    auto specialized = std::make_shared<hf::DFReference>();
+    const auto specialized_solved = specialized->solve(orbital, auxiliary, options, 0, nullptr);
+    bool backend_refused = false;
+    try {
+      (void)cc::build_df_source_cuda(orbital, auxiliary, *specialized_solved.reference,
+                                     budget - specialized->storage_bytes(), 1e-10, 0, 0, false,
+                                     nullptr, false, specialized);
+    } catch (const std::runtime_error& error) {
+      backend_refused = std::string(error.what()).find("requires generated device DF integrals") !=
+                        std::string::npos;
+    }
+    unsetenv("GENERATIVEQC_DF_VALUE_MATH");
+    require(backend_refused, "shared owner widened the correlation backend contract");
+    std::printf("{\"lifecycle\":true,\"mismatch_fallbacks\":4,\"maximum_factor_error\":%.17g}\n",
                 maximum);
     return 0;
   } catch (const std::exception& error) {

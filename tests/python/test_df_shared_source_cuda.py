@@ -23,7 +23,7 @@ def test_shared_source_authentication_capacity_and_lifetime() -> None:
         [executable], capture_output=True, text=True, check=True, timeout=180
     )
     receipt = json.loads(result.stdout)
-    assert receipt["lifecycle"] and receipt["mismatch_fallbacks"] == 3
+    assert receipt["lifecycle"] and receipt["mismatch_fallbacks"] == 4
     assert receipt["maximum_factor_error"] < 1e-11
 
 

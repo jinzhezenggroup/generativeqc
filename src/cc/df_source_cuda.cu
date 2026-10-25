@@ -152,8 +152,10 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   const char* reuse = std::getenv("GENERATIVEQC_DF_SHARED_SOURCE");
   if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
     throw std::invalid_argument("GENERATIVEQC_DF_SHARED_SOURCE must be 0 or 1");
-  if ((!reuse || std::strcmp(reuse, "0") != 0) && shared_reference &&
-      shared_reference->matches(orbital, ref, device)) {
+  // Sharing cannot widen the correlation builder's generated-math contract.
+  // Diagnostic specialized backends retain the incumbent fresh-source refusal.
+  if (resolved_policy.value_math == 0 && (!reuse || std::strcmp(reuse, "0") != 0) &&
+      shared_reference && shared_reference->matches(orbital, ref, device)) {
     auto* candidate = shared_reference->plan();
     if (candidate && candidate->inverse_square_roots && candidate->integral_source &&
         scf::cuda_density_fitting_jk_plan_matches(candidate, 0, n, q, relative_threshold) &&
