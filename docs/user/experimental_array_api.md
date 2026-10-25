@@ -938,7 +938,7 @@ Scientific index domains, representations and symmetry annotations are not
 admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
 tests support external fixed Boolean masks in finite generic real graphs, and
 comparison selectors with the explicit `allow_comparison_where=True` option;
-see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs).
 `xp.grad` and `xp.value_and_grad` accept `allow_external_mask_where=True`
 for first-order fixed external-mask gradients on generic finite FP64 arrays
 with `backend="reference"` or the default native CPU backend. Select only real

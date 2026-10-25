@@ -23,7 +23,7 @@ residual blocks must include their actual KKT stationarity equations. Neither
 constraints nor orthogonality/overlap terms can be inferred from an energy alone.
 
 `StationaryProblem.compile()` builds the Lagrangian from the declared residuals
-and uses the existing [TensorIR reverse generator](tensor_ir.md#derivative-programs-151).
+and uses the existing [TensorIR reverse generator](tensor_ir.md#derivative-programs).
 It returns:
 
 - `lagrangian`: the explicit scalar L;
