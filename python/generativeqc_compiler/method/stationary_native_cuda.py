@@ -182,7 +182,9 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     }
     sr = ranged.get("short-range")
     lr = ranged.get("long-range")
-    if bool(sr) != bool(lr) or (sr and sr.omega != lr.omega):
+    if (sr is None) != (lr is None) or (
+        sr is not None and lr is not None and sr.omega != lr.omega
+    ):
         raise ValueError("native stationary range graph requires matched SR/LR")
     nlc = execution.nonlocal_correlation
     if bool(ranged) != bool(nlc):
