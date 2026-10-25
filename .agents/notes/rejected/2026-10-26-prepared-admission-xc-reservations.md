@@ -48,6 +48,10 @@ ledger capacity would violate future-owner reservations. CPU observer overhead
 or serialization is not supported as the primary cause by these measurements.
 The 1.05 endpoint gate and original model/property coverage remain unchanged.
 
+A recovery on newer source must also inventory optional owners introduced after
+these measured revisions, including the dependent spatial-grid execution copy.
+The historical ablations do not qualify that newer storage or its scheduling.
+
 Raw clean measurements, runner, product receipts, profiler summaries and the
 three separate traces are retained under
 `n5:/home/jzzeng/generativeqc-qualification/prepared-device-diagnosis-20261026/`.
