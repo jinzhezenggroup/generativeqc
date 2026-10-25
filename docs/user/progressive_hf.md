@@ -50,7 +50,7 @@ print(run.target.energy, run.verification.status)
 
 ## Immutable target and typed plan
 
-`TargetProblem` snapshots the resolved #173 scientific model, prepared-provider
+`TargetProblem` snapshots the resolved scientific model, prepared-provider
 identity, basis mathematical/source hashes, observable accuracy requirements,
 solver tolerances, requested atom count and the final physical-residual gate.
 Grid and local-policy identities are explicit fields and must be absent in the
@@ -58,14 +58,14 @@ first HF slice. This prevents a later adapter from silently changing those parts
 of the target.
 
 `StagePlan` separately records the resolved model, provider, arithmetic policy,
-solve tolerance, transfer operation, optional cost estimate, typed #173 error
+solve tolerance, transfer operation, optional cost estimate, typed error
 evidence and allowed successor stages. `DeterministicHFPlan` currently accepts
 exactly:
 
 1. an RHF/UHF initialization compatible in geometry, electron count, spin and
-   Hamiltonian, followed by #189 metric density projection; and
+   Hamiltonian, followed by metric density projection; and
 2. the exact target model/provider with an FP64 final state. `precision="auto"`
-   is admitted only when #174 strict refinement is required and later observed.
+   is admitted only when strict refinement is required and later observed.
 
 Different basis or fitted-operator stages are staged warm starts, not a claim of
 one continuous homotopy. No orbitals, virtual spaces or correlated amplitudes
@@ -113,7 +113,7 @@ records the Fock execution identity, density/overlap hashes, RMS and maximum
 time and counts as one target Fock build; its failure makes target verification
 fail closed. It is a state audit, not an observable-error certificate.
 
-- `verified`: exact target gates passed and an independent #173 assessment has
+- `verified`: exact target gates passed and an independent assessment has
   status `observed_met`;
 - `unverified`: the exact target is established, but observable accuracy has no
   independent reference audit;

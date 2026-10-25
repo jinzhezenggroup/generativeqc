@@ -221,7 +221,7 @@ Collecting today's headers cannot qualify an old `compile_probe` object: the old
 probe recipe did not observe the dependencies used to generate it. The collector
 does not alter that probe's diagnostic contract or the existing cache/store
 schema. Production packaging, catalog-wide economics and CUDA numerical/resource
-qualification remain separate work under #1123.
+qualification remain separate work.
 
 The compiler cache is a separate identity layer: a store miss does not prove it
 returned fresh object bytes. The recipe's deterministic seed transports the

@@ -403,7 +403,7 @@ kernel and its retained fallback for multi-tile automatic execution. The
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
 qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
-ablations belong to the independent #2072 arm.
+ablations belong to a separate source-specialization arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped
@@ -493,18 +493,18 @@ neither a scientific-code retirement nor a performance advantage is claimed.
 
 ## Direct J connection
 
-`scf/cuda_direct_jk_device.hpp` exposes the #202 provider's ordinary stream and
+`scf/cuda_direct_jk_device.hpp` exposes the direct-J/K provider's ordinary stream and
 an enqueue operation over caller-owned device density/J/K arrays. It reuses
 the existing operator validation and contracted-ERI kernel, with device finite
 checks and no success-path staging or synchronization. This lets a method use
 one stream for matrix production, J and XC without inheriting the HF graph
 layout. `CudaKsPlan` uses this seam directly, with an exact state arena charged
-through the #203 device ledger. It reuses the existing matrix, DIIS, eigensolver
+through the shared device ledger. It reuses the existing matrix, DIIS, eigensolver
 and density kernels, keeps current physical Fock and proposal state separate,
 and reads one scalar diagnostic record per iteration. Convergence returns the
 current evaluated density; only converged states replace the resident warm
-cache. An energy-only public call omits final matrix export. Full #203 public
-planning remains separate integration work.
+cache. An energy-only public call omits final matrix export. Full public planning
+of this seam remains separate integration work.
 
 Strict-FP64 restricted resident VV10 solves use bounded native initialization
 before the ordinary physical target tail. The initializer first solves a
@@ -728,7 +728,7 @@ before promotion, counting discovery in setup rather than amortizing it away.
 ## Validation
 
 `generativeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
-full-matrix integration, the independent #214 H2 fixture, spin-resolved finite
+full-matrix integration, the independent H2 fixture, spin-resolved finite
 differences, empty spin/vacuum tails, partial tiles and Cartesian/spherical f
 shells. It checks a density changed by a device kernel without re-upload,
 generation rejection, same-shape stale grid rejection, independent-stream

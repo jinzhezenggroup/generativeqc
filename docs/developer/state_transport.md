@@ -68,7 +68,7 @@ fabricated finite score.
 ## Exact restricted-amplitude transformation
 
 For compatible exact maps `O = M_oo` and `V = M_vv`, the restricted spatial
-amplitudes use the #148 axis and simultaneous-pair conventions:
+amplitudes use the shared axis and simultaneous-pair conventions:
 
 ```text
 t1_target[k,c]     = sum_ia       O[k,i] V[c,a] t1_source[i,a]

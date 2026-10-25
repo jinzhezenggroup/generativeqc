@@ -145,10 +145,10 @@ python -m tools.generativeqc_validation.capabilities --output /tmp/capabilities.
 
 Each of the 55 canonical shell classes has separate **representation, source,
 compilation, numerical, endpoint, and production** fields. The 34 f-containing
-rows reuse #135's class matrix. Source support is attributed to the committed
+rows reuse the shared class matrix. Source support is attributed to the committed
 emitter catalog; compilation and numerical stages await attached measurements.
 Manifest selection is reported as historical state, not inferred acceptance.
-FPPS is explicitly provisional until #135 supplies equivalent acceptance.
+FPPS is explicitly provisional until equivalent acceptance evidence exists.
 This protocol never edits the production manifest or compiles the full f
 matrix in ordinary PR CI. The JSON table is a projection of the catalog, not a
 second independent matrix that needs manual maintenance.
@@ -301,7 +301,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 Use `run --tier gpu-numerical` inside the same allocation to wrap an existing
 autotune command with `--local`, or let autotune request its own finite Slurm
 allocation with `--partition main --gres gpu:5090:1`. Use `--attach PATH` to
-register its original versioned output (including #135/#136 evidence) by hash.
+register its original versioned output (including f-shell class evidence) by hash.
 The existing large endpoint runner is wrapped identically with `--tier endpoint`.
 No full f-shell matrix is added to ordinary CI. Missing hardware/tools become
 `not-run` with reasons. An unallocated GPU invocation also records `not-run`.
@@ -351,13 +351,13 @@ consistency check, not an independent displaced libcint reference). The public
 HF API exposes neither full iteration histories, final orbitals/density, nor
 allocator peaks. Explicit energy-only execution is
 available through the C ABI's NULL/zero force output and Python's
-``properties=("energy",)`` selection; #174's executable boundary benchmark
+``properties=("energy",)`` selection; the precision-boundary benchmark
 measures that endpoint directly rather than subtracting force time. The example
 therefore demonstrates numerical and endpoint evidence plus timing collection
 while **prohibiting performance or production promotion**. It is not a speedup
 claim or CC implementation.
 
-The #174 boundary runner keeps its fixed-density Fock diagnostic separate from
+The precision-boundary runner keeps its fixed-density Fock diagnostic separate from
 clean endpoint timing. It records synchronized wall time, GPU global-timer shell-class
 time, and the retained FP64/FP32 quartet count for every class actually routed
 through the generated streaming workers. Run it only in an allocated GPU job:
@@ -377,4 +377,4 @@ recognizes that completion and omits its ordinary cold-start retry.
 
 The broad experimental threshold is evidence plumbing, not an automatic-policy
 promotion. Its JSON limitations explicitly reserve controller, strict
-refinement, and promotion claims for later #174 slices.
+refinement, and promotion claims for later evaluation.

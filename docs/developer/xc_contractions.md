@@ -2,9 +2,10 @@
 
 `generativeqc_compiler.xc` now has one contraction owner between the audited scalar
 functional and AO potential, response and explicit geometric consumers. This
-implements A–C of #236 for real LDA/GGA on a fixed quadrature and screening
-branch. The native CPU candidate is explicit; method capability registration,
-stationary molecular forces, GPU XC and Hessians remain with #162/#163/#180.
+covers the value/gradient contraction path for real LDA/GGA on a fixed
+quadrature and screening branch. The native CPU candidate is explicit; method
+capability registration, stationary molecular forces, GPU XC and Hessians
+remain separate owners.
 The value-only Becke partition routine currently supplies no physical weight
 Jacobian, so geometry returns independent source partials for that later adapter.
 

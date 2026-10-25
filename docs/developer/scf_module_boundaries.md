@@ -4,11 +4,9 @@ This page is the **current ownership and dependency map** for Hartree–Fock
 and shared SCF infrastructure. It is not a chronological account of each
 source extraction or a claim that every later molecular runtime test is green.
 
-The structural decomposition tracked by
-[issue #240](https://github.com/jinzhezenggroup/generativeqc/issues/240)
-was delivered and that issue was closed on 2026-09-22. Its historical
-production-acceptance audit recorded separate runtime failures; closing the
-structural issue does **not** promote those failures to passing results.
+The structural decomposition was delivered, and its historical
+production-acceptance audit recorded separate runtime failures. Completing the
+structural work does **not** promote those failures to passing results.
 For the rationale and pinned historical receipts, see the
 [SCF decomposition provenance note](../../.agents/notes/implemented/architecture/2026-10-09-scf-decomposition-provenance.md).
 

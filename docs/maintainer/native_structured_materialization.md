@@ -128,7 +128,7 @@ diagnostic retains the observed `fourth_power(n)` expression with unknown certif
 growth degree: helper anchors alone are not a proof of their full arithmetic.
 `INCOMPLETE` makes changed or missing anchors explicit. Neither status
 proves the selected public endpoint, consumer ABI/lifetime, complete
-scientific write support, or runtime allocation bytes. The linked #1574
+scientific write support, or runtime allocation bytes. The linked
 implementation remains a separate performance decision.
 
 CI publishes `native-structured-materialization.json` and

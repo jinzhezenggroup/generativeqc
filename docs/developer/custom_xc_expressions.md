@@ -2,7 +2,7 @@
 
 `generativeqc.extensions.xc.expression(source, *, name="user-expression")`
 captures a restricted string declaration once as an immutable `UserExpression`.
-This is schema `generativeqc.xc-expression.v2`, a prerequisite for issue #2330.
+This is schema `generativeqc.xc-expression.v2`.
 It accepts neither Python functions nor Array API callbacks, decorators, foreign
 `Expr` objects, or caller-owned graphs. The parser does not execute user code and
 is not a general security sandbox for arbitrary Python.
@@ -188,8 +188,9 @@ calls establish only those finite pointwise outputs. Independent polynomial
 tests exercise the complete endpoints; a custom polynomial is not thereby a
 physically calibrated XC functional. `formula.capability()` remains the sealed
 declaration's qualification report, separate from an individual compiled artifact.
-SCF, nuclear forces, response and CUDA remain unqualified. This delivers a bounded
-part of #2330 B; C--G and broader B qualification remain separate work.
+SCF, nuclear forces, response and CUDA remain unqualified. This covers only the
+bounded scalar-expression contract; broader derivative qualification remains
+separate work.
 
 | Stage | CPU | CUDA |
 | --- | --- | --- |
@@ -203,6 +204,6 @@ part of #2330 B; C--G and broader B qualification remain separate work.
 `UserExpression` is deliberately distinct from `FunctionalSpec`;
 `method.compose(..., xc=formula)` rejects it. Native Calculator admission is
 unchanged. There is no Python SCF callback or host/device/reference fallback.
-Issue #2330's broader derivative qualification, native LDA SCF, GGA/meta-GGA,
-forces, CUDA and end-to-end usability remain separate work. This contract does
-not complete #2330, #558 or #1118.
+Broader derivative qualification, native LDA SCF, GGA/meta-GGA,
+forces, CUDA and end-to-end usability remain separate work. This contract is
+not a claim of any broader XC capability.

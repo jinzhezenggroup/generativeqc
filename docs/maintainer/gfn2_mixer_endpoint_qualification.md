@@ -117,5 +117,5 @@ artifacts. A synthetic journal, a compiled probe, a running job, or an unbound
 library is insufficient. Keep credential-bearing proxy/WSS/access URLs and
 transport stdout out of this manifest and public evidence.
 
-Refs: #1882, #560. Restricted diagnostic qualification leaves provider selection,
+Restricted diagnostic qualification leaves provider selection,
 unrestricted/ragged acceptance and the parent product/scientific scope open.

@@ -18,8 +18,8 @@ one-electron, Coulomb, XC AO/grid/partition, overlap/Pulay and nuclear
 sources, while their `rho`/`sigma` features come from the method graph.
 Global hybrids add one exchange source without PBE0/B3LYP-specific code.
 
-The planner binds the shared #179 CPKS contract, #161/#236 XC feature-Hessian
-action and #178 weighted second-integral HVP contract. Its integral blocks
+The planner binds the shared CPKS contract, the XC feature-Hessian action and
+the weighted second-integral HVP contract. Its integral blocks
 execute only the bounded source algebra; native CPKS and XC/grid consumers
 remain separate owners. Second-order support is now admitted through an exact
 primitive-type rule registry rather than a fixed "one semilocal primitive"
@@ -58,7 +58,7 @@ reuses the stationary-gradient
 source energy and derives its fixed integral weights, then generates an exact
 TensorIR JVP for a supplied
 density or weighted-density response, and contracts that response with the
-first-integral directional tile plus #178's fixed-weight second-integral HVP
+first-integral directional tile plus the fixed-weight second-integral HVP
 vector. This is an executable source-level algebra slice for both RKS and UKS;
 native shell/center recovery, shared CPKS execution, XC/grid/partition motion
 and molecular assembly remain owned by their qualified consumers. In particular,
@@ -80,8 +80,8 @@ canonical installed owner is now `generativeqc.stationary_nuclear`: metric-densi
 RHS construction, occupied-orbital/density reconstruction and the single-/multi-
 RHS consumer contract live there without importing repository `tools.*`.
 Method-specific Fock physics remains injected through the response operator's
-`induced_fock(delta_density)` contract. The shared #179 GMRES implementation
-is now installed as `generativeqc.response_solver`; tools response/Hessian
+`induced_fock(delta_density)` contract. The shared GMRES implementation
+is installed as `generativeqc.response_solver`; tools response/Hessian
 imports are compatibility aliases or wrappers around the same production
 objects. Existing `solve_rhf_nuclear_perturbation[s]` names remain strict RHF
 compatibility wrappers.
@@ -123,7 +123,7 @@ empty cache directories for independent compiler-cold qualification.
 For large-domain compilation investigations, opt in with `--case he13`:
 this uses the 13-Cartesian-AO single-He `s+d+d` fixture from the existing
 resource-bound test. Its generated second-integral CPU C++ cold-JIT path has
-previously exceeded the 300-second compiler limit (#2272), so this is an
+has previously exceeded the 300-second compiler limit, so this is an
 explicit expensive diagnostic, not part of routine PR smoke tests. Do not infer
 that passing the smaller benchmark fixes that cold-compile blocker.
 

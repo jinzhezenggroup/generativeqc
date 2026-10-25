@@ -58,7 +58,8 @@ JVP/VJP/RHS/source programs without importing the runtime solver.
 `src/integrals`, `src/tensor` and `src/dft` own the corresponding native interfaces, runtime allocation and
 execution templates; method and SCF code consume these interfaces. A compiler
 package move does not promote a new scientific capability or retire a native
-fallback. Native scientific ownership and retirement are tracked by #231.
+fallback. Native scientific ownership and retirement are tracked by the
+[CUDA ownership ledger](../maintainer/cuda_ownership.md).
 
 The compiler also owns the [shared iteration-invariant proof and symbolic native
 arena schedule](iteration_reuse.md). RCCSD and DF Lambda generators bind their

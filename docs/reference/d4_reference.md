@@ -37,7 +37,7 @@ a profile and the wrong zeta parameters fails explicitly.
 `r2scan3c_d4_parameters()` and the Python `r2scan3c_d4_eeq()` MethodIR spec pin
 `s6=1, s8=0, s9=2, a1=0.42, a2=5.65`, the DFT-D4 4.2.0 molecular default
 cutoffs `CN=30`, `two-body=60`, `ATM=40` bohr, and the EEQ charge-CN cutoff
-`25` bohr. This is the D4 component needed by #172; it does not by itself add
+`25` bohr. This is the D4 component; it does not by itself add
 the electronic r2SCAN functional, the r2SCAN-3c basis, or gCP.
 
 ## Validation

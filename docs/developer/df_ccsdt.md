@@ -1,9 +1,9 @@
 # DF-CCSD(T) same-Hamiltonian definition and factorized path
 
-Status: the #157 factorized energy route and the #158 native/public force route
-are implemented. The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes
-CUDA/FP64 energy and analytic forces for the conventional-RHF +
-correlation-only-DF variant. Prepared batches remain unsupported.
+The factorized energy route and the native/public force route are implemented.
+The public `df-rccsd(t)` / `df-ccsd(t)` selector exposes CUDA/FP64 energy and
+analytic forces for the conventional-RHF + correlation-only-DF variant.
+Prepared batches remain unsupported.
 
 ## First supported method definition
 
@@ -184,7 +184,7 @@ in the contract identity instead of allowing two differently defined DF
 Hamiltonians to share a cache/result identity.
 
 Changing the correlation Hamiltonian does **not** recompute or replace the
-conventional RHF Fock matrix. This is intentional: the first #157 variant is
+conventional RHF Fock matrix. This is intentional: this variant is
 “conventional RHF reference + correlation-only DF”.
 
 ## Dense same-Hamiltonian oracle
@@ -546,7 +546,7 @@ native consumer against its matching header; the public C/Python ABI is unchange
 The default-promotion inventory audits the strict-FP64 admission as
 `cc-execution:df-triples-distinct-moments`, separately from SolverOptions.
 
-#1764 now has an explicit compiler-owned first precision candidate:
+A compiler-owned first precision candidate now exists:
 `w_fp32_candidate_program` lowers only the two reduction-heavy W contractions
 inside each occupied moment to FP32 storage/compute/accumulation. The surrounding
 W sum, V algebra, denominator checks, energy epilogue, reductions and published

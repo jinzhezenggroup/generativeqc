@@ -106,9 +106,8 @@ overrides or unreported provider mutation are outside the supported contract.
 
 This API neither rotates nor reconverges orbitals. It makes no claims about
 complex, spin-flip, external, UKS/XC, geometry tracking, root equivalence, spin
-population, nuclear forces or complete root-workflow qualification. Parent
-#1826 still requires recovery, intended-root identity and energy/force publication
-gates.
+population, nuclear forces or complete root-workflow qualification. Recovery,
+intended-root identity and energy/force publication gates remain separate work.
 
 ## Scientific acceptance
 

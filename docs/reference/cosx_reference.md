@@ -94,7 +94,7 @@ It is a small-system oracle, not a production execution path. It does not:
 - advertise analytic nuclear derivatives or DFT hybrid forces;
 - claim a crossover against RI-K.
 
-The next #246 slice must preserve these versioned semantics while replacing
+A later COSX iteration must preserve these versioned semantics while replacing
 the materialized reference tensors with bounded AO/ESP tasks and generated
 native device execution.
 

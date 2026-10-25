@@ -3,8 +3,8 @@
 `tools/audit_residency_receipts.py` consumes declared transfer and synchronization
 evidence for one CUDA endpoint. It does not measure CUDA operations. The native
 `cuda_component_trace` JSONL and KS transport diagnostics remain the owners of
-their existing measurements. The `#1668` source-work scanner remains an advisory
-static inventory; neither its sites nor GPU-related filenames prove residency.
+their existing measurements. The advisory source-work scanner remains a static
+inventory; neither its sites nor GPU-related filenames prove residency.
 
 ## Contract
 

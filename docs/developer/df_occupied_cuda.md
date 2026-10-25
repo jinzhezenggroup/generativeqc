@@ -89,7 +89,7 @@ endpoint qualification are described in the
 [96-atom optimization decision](../../.agents/notes/implemented/performance/2026-10-03-df-symmetric-occupied-products.md).
 
 The same plan supports resident tensors, generated panels and compatibility
-host-backed tiles. Full AO panels follow #282's capacity rebalance and reuse
+host-backed tiles. Full AO panels follow the capacity rebalance and reuse
 the diagonal T before any column replacement. Tight row traversal retains
 bounded column regeneration; its generated tile trace exposes that work.
 The T, column and output matrices fit the original three/four tile buffers

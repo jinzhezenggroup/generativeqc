@@ -79,8 +79,7 @@ DOI:10.1063/1.460359 (the upstream code comments the same reference).
   /`reduce_sum`/`divide`/`broadcast`/`add`). Inputs are declared general
   (symmetry-free) `restricted_spatial` parameters so dense tangent/cotangent
   spaces are legal under the current AD rules; the program passes a
-  `dot_test` adjoint check and a one-entry finite-difference JVP check
-  (issue #150 steps 3 and 11).
+  `dot_test` adjoint check and a one-entry finite-difference JVP check.
 
 ## Pinned upstream and provenance
 
@@ -123,7 +122,8 @@ separator, Linux `:`):
 python -m pytest tests/python/test_cc_triples.py -q
 ```
 
-On qz (pinned PySCF 2.14.0, Python 3.11 per docs/qz-development.md):
+On a pinned PySCF 2.14.0 / Python 3.11 reference environment (see
+[reproducing and checking references](../maintainer/validation.md#reproducing-and-checking-references)):
 
 ```bash
 source .venv/bin/activate
@@ -144,20 +144,20 @@ PySCF. Each audited numerator term is also checked against explicit
 source-index loops and the executed NumPy seed on unequal occupied/virtual
 dimensions, so a wrong subscript cannot silently change the inventory hash.
 
-## Bounded CUDA tiles (slice B)
+## Bounded CUDA tiles
 
 `tools/generativeqc_cc/triples_tiles.py` decomposes the triangular `a>=b>=c`
 virtual sum into a-chunked tiles (`TriplesTileEnumerator`); occupied space
 is never chunked. `tile_triples_energy` / `tile_triples_energy_masked` are
 the per-tile CPU reference and the masked-domain oracle;
 `build_tile_triples_program` lowers one tile to the same unshared
-tiny-TensorIR inventory as slice A. It uses distinct virtual spaces for
+tiny-TensorIR inventory as the reference evaluator. It uses distinct virtual spaces for
 prefix-bounded label axes (`a,b,c`) and the full W1 summation axis `f`,
 so partial-tile resident feeds have exact TensorSpec shapes without truncating
 the canonical contraction.
 
 `tools/generativeqc_cc/triples_cuda.py` `CudaTriplesTiles` evaluates each tile on
-CUDA through the #420 resident TensorIR owner: one exact-shape plan and one
+CUDA through the resident TensorIR owner: one exact-shape plan and one
 `PreparedResident` per tile (compile-cached to disk). Label axes are sliced
 to `a_end`, while `ovvv` axis 2 and `t2` axis 3 retain full `nvir` for
 the W1 sum; a full `nocc³ × nvir³` T3 or denominator tensor is never
@@ -184,7 +184,7 @@ python -m pytest tests/python/test_cc_triples_tiles.py -q
 ## Complete analytic-gradient validation boundary
 
 `tools.generativeqc_cc/triples_complete_gradient.py` provides the internal conventional
-RCCSD(T) complete-gradient endpoint for #155 B. It composes the existing pieces
+RCCSD(T) complete-gradient endpoint. It composes the existing pieces
 in one state-bound chain:
 
 ```text
@@ -198,7 +198,7 @@ The response mathematics is owned by `BoundCCSDTOrbitalResponse`; the final
 set of coupled-cluster derivative equations. On CPU, its generated Lambda,
 parameter-response, triples VJP, raw-Hamiltonian, canonicalization and AO
 back-transform programs execute through the common native TensorIR CPU backend
-from #772 rather than the NumPy TensorIR interpreter. It reuses the already-
+rather than the NumPy TensorIR interpreter. It reuses the already-
 qualified RCCSD CPU dense derivative oracle and generated bounded CUDA one-
 electron / weighted-ERI consumers for the final h/g/S cotangents. CPU and CUDA
 final contractions therefore consume the same total response weights.

@@ -1,7 +1,7 @@
 # DF response timeline and causal upload probes
 
 The 384-AO response sentinel uses the same orbital/auxiliary def2-SVP basis and
-full analytic-force reference as the matched #206 matrix. Its resident raw
+full analytic-force reference as the matched DF force matrix. Its resident raw
 values are prepared before the warm force call. A warm raw-value read therefore
 uploads an existing column; it does not generate new integrals. Source-backed
 execution is a distinct provider and must be reported separately.
@@ -14,7 +14,7 @@ instrumented runs use separate output directories. Raw profiler databases and
 logs belong in ignored `.artifacts/`; reviewed results retain compact summaries,
 raw endpoint samples, source/library identities and reproduction commands.
 
-For #206 closure rows that declare a resident response, pass
+For matrix rows that declare a resident response, pass
 `--expected-response-policy resident`. The runner then fails closed if the
 executed trace uses a streamed/host-panel fallback, performs a host raw-panel
 gather, uploads more than one full `[AO,AO,Naux]` raw tensor, or places its
@@ -127,4 +127,4 @@ For clean endpoint measurements omit both tracing arguments and use at least
 five repeats. Preserve 192/384 AO, batch 1/4, and the 19-AO UHF sanity case when
 qualifying a performance candidate. Run compilation, profiling and reference
 preflight separately from those samples. This attribution tooling alone does
-not close #308 or establish promotion of a derivative schedule.
+not establish promotion of a derivative schedule.

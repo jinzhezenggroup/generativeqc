@@ -529,7 +529,7 @@ native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
 whitelist in Python. Native CUDA and other Direct DFT batch forces
-remain work under #2151.
+remain separate work.
 See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation

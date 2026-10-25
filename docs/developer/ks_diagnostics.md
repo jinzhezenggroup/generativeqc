@@ -265,7 +265,7 @@ Python result storage is owned by the caller.
 ## Internal final-state handoff
 
 The native CPU and resident CUDA RKS/UKS owners provide an internal,
-versioned final-state handoff for issue #163. CPU ECP handoffs remain
+versioned final-state handoff. CPU ECP handoffs remain
 unsupported. This interface is deliberately absent from the public C/Python
 result ABI; a handoff alone does not qualify a public force request.
 
@@ -437,7 +437,7 @@ route. \`GENERATIVEQC_CUDA_KS_CHUNK=1\` (also \`0\`, \`off\` or \`none\`) select
 baseline explicitly. \`GENERATIVEQC_CUDA_KS_CHUNK=2\` is an opt-in qualification
 selector for direct all-electron RKS only. UKS keeps its occupation
 stabilization and bounded final-closure host policy; ECP RKS keeps the strict
-physical final closure required by #586.
+physical final closure required by the ECP contract.
 
 The two-slot path is bound to the shared compiled-execution lifecycle also used
 by TensorIR graph replay. \`GENERATIVEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or

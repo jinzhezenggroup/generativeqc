@@ -16,6 +16,3 @@ semantic subsystem/generated-family shard whose meaning actually changed.
 The reporter still accepts a monolithic JSON file through `--ledger <file>` for
 historical/reproduction workflows, but the repository-tracked current source is this
 directory.
-
-Agent: ChatGPT
-Model: GPT-5.6 Sol

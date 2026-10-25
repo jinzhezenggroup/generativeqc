@@ -1,7 +1,5 @@
 # Semiempirical product/derivative requirement contracts
 
-Issue: [#875](https://github.com/jinzhezenggroup/generativeqc/issues/875)
-
 The shared `SemiempiricalMethodIR` is an immutable scientific composition
 graph, **not** an SCC solver, compiler-target admission policy, runtime
 certificate, or proof that an analytic nuclear force is available.

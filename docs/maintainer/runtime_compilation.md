@@ -207,10 +207,10 @@ Keep independent binary/static-data integrity and ABI tests; no permanent
 function-body hash, AST shape or exact internal compile-count test is needed
 to maintain this inventory.
 
-[Issue #2680](https://github.com/jinzhezenggroup/generativeqc/issues/2680)
-still requires source/binary-bound fresh-process empty/primed artifact **and**
-compiler-cache measurements, actual compile counts/time where available, and
-the corresponding independent accuracy gates. Those measurements must record
+Completing this inventory still requires fresh-process, source/binary-bound
+empty/primed artifact **and** compiler-cache measurements, actual compile
+counts/time where available, and the corresponding independent accuracy gates.
+Those measurements must record
 installed-wheel versus build-tree loading, actual selected routes, cache roots
 and overrides, private JIT slots, compiler facts and endpoint work. Retain
 UNAVAILABLE counters rather than filling them with zero. This inventory supplies

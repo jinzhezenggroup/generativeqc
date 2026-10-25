@@ -449,8 +449,8 @@ not through a silent fallback. For methods with qualified analytic forces,
 `xp.value_and_grad` reuses the existing first-order native-source AD path.
 
 This does **not** allow an arbitrary new formula in \(\rho,\sigma,\tau\)
-to run self-consistently. That separate compiler/SCF work is tracked in
-[XC expression-to-SCF #2330](https://github.com/jinzhezenggroup/generativeqc/issues/2330).
+to run self-consistently. That separate compiler/SCF work is described in the
+[custom XC expression contract](../developer/custom_xc_expressions.md).
 
 ### Diagnose small-endpoint overhead
 

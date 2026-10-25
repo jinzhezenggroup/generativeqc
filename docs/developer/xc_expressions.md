@@ -254,4 +254,5 @@ numerical stages, memory capacities and interleaved timings. Its endpoint tier
 measures the **fixed-feature upload -> XC -> download -> consumption** workflow,
 including changed inputs; it makes no molecular SCF or force speedup claim and
 cannot promote a public DFT method. Local cache/tuning CLI ownership stays with
-CG09/#136; this module supplies explicit candidate inputs and measurements.
+the tuning harness; this module supplies explicit candidate inputs and
+measurements.

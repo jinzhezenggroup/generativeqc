@@ -87,7 +87,7 @@ increasing-column FMA chain and zero-on-invalid publication with a sticky error.
 The library candidate performs a batched contraction and one in-place combined
 weight/finite publication pass, without a separate numeric buffer. The canonical
 request binds the existing two-node TensorIR region and all three external inputs.
-Production SCF/force endpoint qualification remains under #1884.
+Production SCF/force endpoint qualification remains separate work.
 
 The enclosing `PreparedCosxFockPlan` passes the remaining admitted device
 envelope to the shared exchange owner after charging Coulomb residency and
@@ -495,8 +495,8 @@ DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
 candidate; the current adapter rejects them. DFT, triples precision, other provider
-families and complete endpoint qualification remain in
-#1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+families and complete endpoint qualification remain separate work. No new
+scientific precision domain is enabled.
 
 Conventional RCCSD iteration also emits typed prepared contractions for directly
 representable unbatched and leading-batch layouts. Non-contraction nodes reuse

@@ -178,7 +178,8 @@ screening and the distinct Fock/force task domains remain in their own callers.
 The independent small-block checks cover all AO equality patterns, arbitrary
 nonsymmetric weights, normalized pairs, raw/fused derivatives, coincident
 centers, public spherical transforms, and three finite-difference step sizes.
-Only representative f shells are used here; the full f matrix belongs to #135.
+Only representative f shells are used here; the complete f-shell matrix is
+covered by the separate f-shell validation protocol.
 
 Run `tools/screen_weighted_eri.py --nvcc /path/to/nvcc --cuda-target sm_90 --output /tmp/weighted-screen` to compile the materialized and inline-single-use
 candidates. Choose a target supported by the local CUDA compiler. Both consume all runtime inputs and write all thirteen outputs.

@@ -392,10 +392,11 @@ is enabled. Tuning suffixes are not consulted, and HF inventory is unaffected.
 The host inventory includes 36 bytes per quadrature point, packed AO metadata,
 all prepared owners and warm snapshots, iteration records, and conservative
 value-only Cartesian/Jet/recurrence, eigensolver, DIIS and XC workspace bounds.
-CUDA state/XC and #202 direct-J device capacities come from the allocator's
+CUDA state/XC and direct-J device capacities come from the allocator's
 own checked layouts. One-electron device setup is conservatively bounded and
 charged only for its excess over the owner it replaces. KS passes the exact
-direct-J source size to #202 rather than inheriting its standalone default cap.
+direct-J source size to that provider rather than inheriting its standalone
+default cap.
 The public method has one global budget and no separate XC or J user budget.
 
 KS binds its ledger during **preparation and execution**, retaining separate

@@ -7,7 +7,7 @@ Otherwise J/K regenerate public-basis three-center tiles on device or replay
 two-electron HF force response uses separately bounded generation in both cases. The
 mathematical provider remains `density_fitted`; execution placement does not
 change its fitting basis, metric cutoff, energy normalization or force sign.
-The one-electron and overlap/Pulay consumer remains owned by #141.
+The one-electron and overlap/Pulay consumer remains a separate owned route.
 
 ## Transfer and lifetime ledger
 
@@ -150,7 +150,9 @@ neighbors, and measured global resource caps. All 16 native CPU tests and
 106 selected Python CPU checks pass; the three native CUDA DF/provider tests
 also pass.
 
-The workload/device-aware zero-budget policy and its replay invariants are documented in the [#598 resource-policy decision](../../.agents/notes/implemented/performance/2026-09-20-df-resource-policy.md).
+The workload/device-aware zero-budget policy and its replay invariants are
+documented in the
+[DF resource-policy decision](../../.agents/notes/implemented/performance/2026-09-20-df-resource-policy.md).
 
 The resident-source/full-panel boundary and live-memory ceiling are covered by
 `test_df_resident_source_reuse_cuda.py` and `test_df_preparation_budget.py`.

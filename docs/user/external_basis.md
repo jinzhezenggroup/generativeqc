@@ -195,7 +195,7 @@ changed-geometry and ragged batch evidence, with complete basis identities and
 actual backend labels. CUDA runs require a finite Slurm GPU allocation. See
 [archived evidence](../../benchmarks/results/external-basis-169/README.md).
 
-Higher-l work (#170) must add each needed value/derivative/backend route and
+Higher-l work must add each needed value/derivative/backend route and
 independent conventions tests before extending the corresponding capability
 entry. The [ECP baseline](ecp.md) provides an explicit potential-bearing native
 Hamiltonian, active-electron bookkeeping and direct HF gradients within its

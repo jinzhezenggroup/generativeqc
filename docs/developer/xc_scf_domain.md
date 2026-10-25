@@ -11,7 +11,7 @@ finite-domain numerical lowering. There is no exact exchange or
 density fitting in these method compositions.
 
 This replaces the provisional SCF PBE-to-LDA tail fallback. The independent
-`interior-v1` Python reference consumer and its #214 fixtures keep their
+`interior-v1` Python reference consumer and its shared fixtures keep their
 original domain and identities. The native `integrate_pbe_rks` diagnostic
 entry also retains its interior-domain guard; `integrate_pbe_rks_with_tail`
 now evaluates the versioned domain below. Its old function name does not
@@ -210,13 +210,13 @@ LDA/PBE CPKS actions and solves against independent molecular references; see
 [the response boundary](response.md#native-cuda-cpks) for host/device ownership
 and the required Slurm allocation.
 
-`generativeqc_dft_tests` retains the #214 identical-grid oracle and adds unequal
+`generativeqc_dft_tests` retains the identical-grid oracle and adds unequal
 spin directional tests, isolated symmetric off-diagonal perturbations,
 spin swaps, and deliberate half/double-factor failures. These tests precede
 SCF acceptance. The CPU slice's empty/near-empty-spin continuity and
 returned-state regressions remain enabled. Native single-system CUDA SCF and
 replay tests are documented separately in `xc_native_cuda.md`; prepared ragged
-batching and full resource evidence remain part of the complete #162 milestone.
+batching and full resource evidence remain part of the complete milestone.
 
 If CPU UKS energy and the unshifted physical commutator pass their gates while
 the proposed density still changes, subsequent orbital updates use a

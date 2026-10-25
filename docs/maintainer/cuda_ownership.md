@@ -9,8 +9,6 @@ The semantic source of truth is the sharded
 [CUDA ownership ledger](../cuda_ownership/README.md) under
 `docs/cuda_ownership/`. The derived current report is generated from this
 ledger and the actual source tree; it is **not** a committed snapshot.
-The completed ownership consolidation is tracked in
-[issue #231](https://github.com/jinzhezenggroup/generativeqc/issues/231).
 The historical phases and measured deltas are preserved in the
 [retirement provenance note](../../.agents/notes/implemented/architecture/2026-10-09-cuda-retirement-provenance.md),
 not as current baseline numbers on this page.
@@ -123,18 +121,17 @@ retains the actual source, gate decisions and measurement record.
 ## Current-state interpretation and decisions
 
 Generated S/T/V and DF value/derivative families replaced their qualifying
-handwritten production routes through the #231 campaign. Retained native
+handwritten production routes during that consolidation. Retained native
 exceptions, CUDA runtime and other method families must still be classified
 by the **current ledger**. Removed internal selectors are not reproducible
 controls on new checkouts; use the pinned historical source when repeating a
 before/after measurement.
 
-The Direct-HF subsequent cleanup is tracked in
-[issue #356](https://github.com/jinzhezenggroup/generativeqc/issues/356);
-its closed status is not a guarantee that every current CUDA scientific
-exception has a generated replacement. New XC, AD, TensorIR and correlated
-methods must preserve the same rules without assuming uniform kernel
-implementations across CPU and CUDA.
+The Direct-HF cleanup that followed is likewise recorded in the ledger and
+provenance note; its completion is not a guarantee that every current CUDA
+scientific exception has a generated replacement. New XC, AD, TensorIR and
+correlated methods must preserve the same rules without assuming uniform
+kernel implementations across CPU and CUDA.
 
 See [Performance engineering](performance_engineering.md) for work/traffic
 optimization methods and [Validation](validation.md) for endpoint acceptance.

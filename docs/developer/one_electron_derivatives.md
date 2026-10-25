@@ -247,13 +247,14 @@ complete process host high-water is not claimed. Resource-budgeted runs omit
 optional iteration-history profiling, while retaining final residuals and
 iteration counts.
 
-The generated shell-warp implementation became the production default after
-#357; its archived measurements below remain bound to that earlier selection.
-The current nucleus-cooperative default is qualified separately by the linked
-#670 promotion decision, not by relabeling these historical measurements.
-The archived endpoint evidence is deliberately not rewritten: resident DF
-unchanged replay measured 4.586 / 5.429 ms (reference / generated), and Direct
-sdf18 changed geometry measured 36.667 / 39.352 ms. Those cases explain why #357 initially retained the cooperative native route as
+The generated shell-warp implementation became the production default after an
+earlier schedule selection; its archived measurements below remain bound to that
+earlier selection. The current nucleus-cooperative default is qualified
+separately by the linked promotion decision, not by relabeling these historical
+measurements. The archived endpoint evidence is deliberately not rewritten:
+resident DF unchanged replay measured 4.586 / 5.429 ms (reference / generated),
+and Direct sdf18 changed geometry measured 36.667 / 39.352 ms. Those cases
+explain why the cooperative native route was initially retained as
 an explicit performance control. After the generated nucleus-cooperative
 promotion and this compatibility cleanup, that native force route is retired;
 the archived timings remain historical evidence rather than a live selector.
@@ -261,8 +262,8 @@ The old scalar kernel (335.6 us in the archived sp8 profile) was already slower
 than both the cooperative kernel (85.2 us) and generated shell warp (58.0 us).
 
 No new GPU timing claim is made by the retirement change itself; promotion uses
-the pinned #141 numerical/resource/endpoint evidence above. Reproduction scripts
-for the removed scalar path require an archived pre-#357 checkout. Set `PYTHON`,
+the pinned numerical/resource/endpoint evidence above. Reproduction scripts
+for the removed scalar path require an archived pre-retirement checkout. Set `PYTHON`,
 optional `CUDA_HOME`/`NSYS`, and run GPU measurements through a finite Slurm
 allocation. `GENERATIVEQC_LIBRARY` can select a nondefault build.
 

@@ -125,9 +125,9 @@ O(N^2) density/potential matrices. Molecular partition scratch additionally
 scales as O(B*natom). Explicit grids are caller-owned O(npoint) input. This is
 point tiling, **not a global memory-budget guarantee**. Native AO's existing
 allocation guard remains in force; no second public memory-budget API or
-J/K scheduler is introduced. #203 must account for XC graph intermediates,
-matrix outputs, copies and allocator/BLAS overhead before a prepared method
-claims a composed memory bound.
+J/K scheduler is introduced. A prepared method claiming a composed memory
+bound must also account for XC graph intermediates, matrix outputs, copies and
+allocator/BLAS overhead.
 
 ## Native LDA/PBE RKS and UKS execution
 
@@ -277,4 +277,4 @@ potentials and require the independent gates to reject them. Weight scaling,
 spin swaps, total/equal-spin equivalence, partial tiles, stale molecular grids,
 changed basis/rules, invalid domains and symmetry are additional regressions.
 The evidence runner records all matrix/energy errors and density finite
-differences using #138's evidence envelope; it does not claim SCF acceptance.
+differences using the shared evidence envelope; it does not claim SCF acceptance.

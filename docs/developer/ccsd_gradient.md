@@ -62,7 +62,8 @@ fails. `--eri-weight-mode dense` transforms a complete AO N^4 ERI cotangent once
 per reported component and sends it to the existing bounded weighted-ERI
 consumer. `--eri-weight-mode shell` instead generates one AO shell-quartet
 cotangent from the same MO weight and immediately contracts it through the
-existing shell-quartet #144 consumer; no complete AO N^4 cotangent is retained.
+existing shell-quartet weighted-ERI consumer; no complete AO N^4 cotangent is
+retained.
 The shell mode is a memory-bounded fallback, not yet a launch-efficient schedule.
 
 Omit `--output` to print JSON. `--input` accepts the complete explicit molecular
@@ -305,7 +306,7 @@ ownership, allocator overhead and other process allocations. Whole-process GPU
 memory can therefore be much larger and is not claimed to be bounded by 16 or
 64 MiB.
 
-During this qualification the pre-existing #144 reference weighted-ERI CUDA
+During this qualification the pre-existing reference weighted-ERI CUDA
 fallback failed even for ssss with CUDA `out of memory`: every record invoked an
 order-12 `primitive_eri_cartesian<12>` Dual3 recurrence. The repaired fallback
 specializes orders 0-12 using the same total-shell-angular invariant as direct

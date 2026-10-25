@@ -244,7 +244,7 @@ repulsion) and Fock matrix. Both consumers use one owned density snapshot;
 the J/K contraction is implemented only in the native provider. LDA and PBE
 are checked against the independent pinned XC integration fixtures and
 density-direction energy variations. This is not DFT SCF and supplies no
-geometric XC forces; those remain with #162/#165.
+geometric XC forces.
 
 ### Executable MethodIR exact exchange
 
@@ -360,7 +360,7 @@ operator executable.
 | CUDA direct raw services | Independent terms, public Cartesian/spherical AOs through f, nonsymmetric densities, batch/item execution and matching first derivatives |
 | CUDA DF SCF adapter | Existing standard HF DF pair, using existing DF implementations |
 | Independent CUDA SCF | Any exact/DF/absent pair and signed coefficients; host DIIS with CUDA integrals, J/K and two-electron derivatives; fitted plans use ordinary device eigensolves |
-| SR/LR operators | Rejected; #166 supplies these additional mathematical operators |
+| SR/LR operators | Rejected; a separate operator provider supplies these additional mathematical operators |
 
 The CPU reference consumes already materialized four-center integral and
 derivative tensors. This refactor does not make that algorithm bounded or
