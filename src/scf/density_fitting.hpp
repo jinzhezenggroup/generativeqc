@@ -348,6 +348,15 @@ class DensityFittingBudgetError : public std::invalid_argument {
     const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
     std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);
 
+/** Shape-only ceiling for the extra resident promotion above the base DF
+ * policy targets. Uses the actual packed planner and the same complete response
+ * floor as promotion, without a resource probe or numerical work. A fleet bound
+ * must take the maximum with df_budget_targets and include separate source/setup
+ * lifetimes. This query neither admits a method nor changes an explicit cap. */
+[[nodiscard]] std::size_t method_owned_df_resident_capacity(std::size_t nbf, std::size_t naux,
+                                                            std::size_t restricted_rank,
+                                                            std::size_t source_device_bytes);
+
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native
  * plan diagnostics when the SCF owner requests a history. Includes overlap,

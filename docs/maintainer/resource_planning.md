@@ -119,6 +119,14 @@ procedure does not establish GPU performance or complete physical receipts.
 
 ## CUDA DF bucket capacity ownership
 
+The native base DF policy exposes `df_budget_targets` for resource-independent
+workload and resident targets. Their maximum bounds automatic base resolution.
+`method_owned_df_resident_capacity` separately bounds the extra method-owned
+resident promotion using the actual packed planner and its shared response floor.
+Complete prepared-owner planning must include both bounds, explicit caps and
+source/setup lifetimes; these queries alone do not reserve a fleet or admit
+optional XC storage. They perform no CUDA probes or numerical work.
+
 With `generativeqc_resource_hf_df_cuda_fleet_v1`, the Python CUDA HF DF planner
 and native CLI share one C++ numeric composition owner. It groups expanded
 topologies by orbital/electron/primitive compatibility, checks Cartesian,

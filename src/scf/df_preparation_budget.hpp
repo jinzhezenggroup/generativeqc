@@ -160,26 +160,20 @@ inline std::size_t df_resident_value_admission_floor(DfBudgetWorkload workload) 
       source_margin);
 }
 
-/** Resolve one value/response allowance without a fixed-size magic default.
- *
- * Live automatic mode bounds its workload target by available device memory,
- * not the probe-failure cap: a 1-GiB cap forces roomy multi-GiB tensors to
- * regenerate on every replay. When the live envelope can admit a complete
- * source-backed resident device value owner, raise the target to its admission
- * floor before splitting response capacity. This does not choose the
- * materialized host raw owner; that separate route changed SCF work counts
- * during qualification. Tight live envelopes retain the smaller target and
- * streamed fallback. Explicit positive budgets remain hard caps. If the probe
- * is unavailable, the same dimensions deterministically resolve to a
- * conservative 32 MiB..1 GiB envelope. Force response and value ownership
- * are proportional to their estimated staged work, not an unconditional 50/50.
- */
-inline DfResolvedBudget resolve_df_budget(DfBudgetWorkload workload, DfResourceEnvelope resource,
-                                          std::size_t requested_bytes) noexcept {
+/** Shape-only targets of the base value/response policy, before live clipping.
+ * Their maximum bounds resolve_df_budget's automatic result for any resource
+ * envelope. It is not a complete prepared Fock bound: source setup and later
+ * method-owned resident promotion have separate lifetimes and capacity rules. */
+struct DfBudgetTargets {
+  std::size_t workload_bytes{}, resident_bytes{};
+  long double response_fraction{};
+};
+
+/** Share policy arithmetic with pre-construction capacity queries. No device
+ * probe, invented free-memory envelope or scientific work is needed. */
+inline DfBudgetTargets df_budget_targets(DfBudgetWorkload workload) noexcept {
   constexpr std::size_t mib = 1024U * 1024U;
   constexpr std::size_t min_auto = 32U * mib;
-  constexpr std::size_t max_fallback = 1024U * mib;
-  constexpr std::size_t min_headroom = 256U * mib;
 
   const long double n = static_cast<long double>(std::max<std::size_t>(1, workload.nbf));
   const long double a = static_cast<long double>(std::max<std::size_t>(1, workload.naux));
@@ -201,6 +195,29 @@ inline DfResolvedBudget resolve_df_budget(DfBudgetWorkload workload, DfResourceE
       workload.forces ? df_budget_ceiling(static_cast<long double>(resident_value_floor) /
                                           (1.0L - response_fraction))
                       : resident_value_floor;
+  return {workload_target, resident_target, response_fraction};
+}
+
+/** Resolve one value/response allowance without a fixed-size magic default.
+ *
+ * Live automatic mode bounds its workload target by available device memory,
+ * not the probe-failure cap: a 1-GiB cap forces roomy multi-GiB tensors to
+ * regenerate on every replay. When the live envelope can admit a complete
+ * source-backed resident device value owner, raise the target to its admission
+ * floor before splitting response capacity. This does not choose the
+ * materialized host raw owner; that separate route changed SCF work counts
+ * during qualification. Tight live envelopes retain the smaller target and
+ * streamed fallback. Explicit positive budgets remain hard caps. If the probe
+ * is unavailable, the same dimensions deterministically resolve to a
+ * conservative 32 MiB..1 GiB envelope. Force response and value ownership
+ * are proportional to their estimated staged work, not an unconditional 50/50.
+ */
+inline DfResolvedBudget resolve_df_budget(DfBudgetWorkload workload, DfResourceEnvelope resource,
+                                          std::size_t requested_bytes) noexcept {
+  constexpr std::size_t mib = 1024U * 1024U;
+  constexpr std::size_t max_fallback = 1024U * mib;
+  constexpr std::size_t min_headroom = 256U * mib;
+  const auto [workload_target, resident_target, response_fraction] = df_budget_targets(workload);
 
   DfResolvedBudget result;
   result.requested_bytes = requested_bytes;
