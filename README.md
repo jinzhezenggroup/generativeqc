@@ -128,10 +128,10 @@ print(first.energies)
 
 With the frozen cohort's then-default settings, GenerativeQC was faster than
 GPU4PySCF in **64/64** measured warm cases. For 96-atom Direct ωB97M-V,
-the measured warm speedup was **4.21×**.
+the measured warm speedup was **4.22×**.
 
-These figures preserve the `r2-default-v2` image (42b2669 plus its retained
-patch), not current-master performance. That image enabled screened Direct HF
+These figures preserve the `46b916ac` image after the DF screening-headroom
+repair, not current-master performance. That image enabled screened Direct HF
 by default; the current source keeps that route explicit opt-in after a stronger
 force diagnostic failed. These historical timings do not qualify the restored
 ordinary-HF default, and no new integrated-image GPU measurements are claimed.

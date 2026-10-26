@@ -1,11 +1,11 @@
 # Historical frozen-image comparison conditions
 
 The retained #2786 homepage cohort measured eight methods, Direct/DF, and
-3/12/48/96-atom water clusters, with the frozen image's then-default GenerativeQC
-settings and stock GPU4PySCF. This table describes that historical image, not
-current-master defaults. Its screened Direct HF route is now explicit opt-in;
-the figures do not establish restored ordinary-HF default accuracy or speed.
-No new integrated-image GPU measurements are claimed.
+3/12/48/96-atom water clusters, with the frozen `46b916ac` image's then-default
+GenerativeQC settings and stock GPU4PySCF. This table describes that historical
+image, not current-master defaults. Its screened Direct HF route is now
+explicit opt-in; the figures do not establish restored ordinary-HF default
+accuracy or speed. No new integrated-image GPU measurements are claimed.
 Every fresh process measures one cold and three warm complete energy-and-force
 calls. Each warm call starts from that engine's own frozen cold density. No
 reference density enters production. The original 2×4 layout and cold/warm
@@ -39,20 +39,23 @@ error ≤1e-5 Eh/atom, maximum force error ≤1e-4 Eh/Bohr and RMS force error
 gates. DF fitting error is included. Default-grid failures remain visible;
 no grid or tolerance was changed to improve publication status. Figure qualification is limited to the sampled static geometries. This refresh
 adds no production optimization or new displaced-geometry qualification. The
-implementation evidence retains independent 96/120-atom original/warm/moved
-checks and explicit graph/proposal-lifetime tests.
+implementation publications retain their original endpoint and lifetime gates.
+The DF headroom repair additionally retains 96-atom moved-geometry and HF
+parity, independent references and constrained-capacity fallback checks.
 
 The original oracle receipts and audited reuse manifest are copied byte for
 byte from the preceding retained campaign. Offline reproduction compares exact
 geometry, orbital basis, representation, charge, spin and frozen auxiliary
 inputs; it then checks reference producer identities, controls, package versions,
 grid stability, CPU/GPU spots and every energy/force sample. All figure timings
-are newly measured using the single frozen `r2-default-v2` source, based on
-`42b266917f6676ecf0559fb8965a4e19f60d0fe3` plus the retained `source.patch.xz`.
-The dirty source archive SHA-256 is
-`e4af728d14fc6279faa146748b65fcc38d87b98dbe5e0ee0233d3df5658b6b71`.
-The parent SHA alone does not identify the modified implementation. No earlier
-cohort or the separate three-round qualification supplies a figure timing.
+are newly measured from committed source
+`46b916ac6df0082d56fbc48639bc1261aecc7d04`, including the DF shell-screening
+headroom repair. The clean Git archive identity is retained in
+`provenance.json.xz`. All 2,770 relevant source/header/compiler/runner files
+match the previously qualified candidate tree. The exact candidate library is
+reused; its inherited embedded source identity is not represented as the new
+commit. The linked library SHA-256 identifies execution. No earlier cohort or
+separate three-round qualification supplies a figure timing.
 
 Cold includes object construction, preparation, SCF, complete forces and host
 export. It is application-object cold with installed/prebuilt code; process
@@ -73,26 +76,31 @@ visibility and exit codes.
 The measured execution schedules retain the existing explicit controls
 `GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=2` and
 `GENERATIVEQC_SCF_VALIDATION_GEMM=1`. These are not unset-source defaults.
-Math libraries use one thread; all seven workers reserve eight CPU cores. No experimental screening, memory-cap or
-profiler controls enter the figure measurements. Slurm device visibility is
-preserved. The accelerator snapshot precedes measurement; its inherited
-`sampling_point` label says “after benchmark measurements” and does not establish
-post-run clock/temperature stability.
+Math libraries use one thread; all seven workers reserve eight CPU cores, 16 GB and a 45-minute time limit.
+Jobs are admitted individually as GPUs become available. No experimental
+screening, memory-cap or profiler controls enter the figure measurements. Slurm
+device visibility is preserved. Each accelerator snapshot is labeled before
+measurement and bound to the executed CUDA PCI address and GPU UUID. Such a
+snapshot does not establish clocks throughout timed calls.
 
-Separate intrusive MD-J work-counter diagnostics belong to
-[`cold-r2-defaults-20261026`](../cold-r2-defaults-20261026/README.md); their
-timings never enter these figures. Full compiler output and binaries remain in
-ignored artifacts. Compact source audit, core/AOT hashes, build settings and
-verified sccache 0.16.0 before/after shared-cache statistics are retained in
-`provenance.json.xz`. CCSD(T)/CBS inputs, timings, text and figure remain unchanged.
+Separate intrusive work-counter diagnostics belong to the
+[DF headroom investigation](../df-screening-headroom-20261026/README.md) and
+[earlier cold qualification](../cold-r2-defaults-20261026/README.md); their timings
+never enter these figures. The repair used verified sccache 0.16.0 to rebuild
+the changed CUDA bridge and independently relink verified parent objects. Its
+source-matched build evidence and limitations remain in that publication. This
+refresh performs no new compilation. Core/AOT hashes and source parity are
+retained in `provenance.json.xz`. CCSD(T)/CBS inputs, timings, text and figure
+remain unchanged.
 
-The DF PBE0-96 population in this figure is slower in cold than its paired
-reference despite the separate three-round campaign retaining a faster native
-median. Its three warm calls are also slower than the native regression
-population with the same iteration count. The cause is not established; the
-original complete population is retained rather than replaced by a faster
-repeat. Accelerator snapshots do not establish clocks throughout timed calls.
+The entire preceding cohort, including its slower DF PBE0-96 observation, is
+recoverable byte for byte from existing Git history using `previous-cohort.json`.
+This refresh replaces every timing population together. The previous figure's
+memory-budget remainder disabled optional screening; the new source reserves
+space for norms during tile planning while retaining strict fallback.
 
-Figures use the original Matplotlib 3.11.2 renderer; version, FreeType and font
-identity are retained in provenance. Install `render-requirements.txt` for
-byte-identical replay. Layout, labels and rendering code are unchanged.
+Figures use Matplotlib 3.11.2; version, FreeType and font identity are retained
+in provenance. Both axes are linear and the time axis starts at zero. The 2×4
+layout, labels, colors and cold/warm encoding are preserved. Install
+`render-requirements.txt` for byte-identical replay. Historical publications
+retain the renderer's default log-log axes.
