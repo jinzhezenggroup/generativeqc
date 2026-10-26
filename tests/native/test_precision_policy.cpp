@@ -56,9 +56,40 @@ constexpr double kTestFloat32UnitRoundoff = 5.9604644775390625e-08;
  * proposal cannot consume iterations or alter graph ownership. */
 void verify_cold_hf_screening_domain() {
   using namespace generativeqc::scf::cuda_policy;
-  ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", nullptr);
   const ColdHfScreeningDomain cold{768,   1,    2,     100,   true,  false, false,
                                    false, true, false, false, false, false};
+  generativeqc::runtime::CudaTargetInfo target;
+  target.total_global_memory = std::size_t{32} << 30;
+  for (const char* value :
+       {static_cast<const char*>(nullptr), "0", "none", "", "invalid", "true", " 1", "1 "}) {
+    ScopedEnv disabled("GENERATIVEQC_HF_COLD_SCREENING", value);
+    const auto policy = resolve_cold_hf_screening(cold, 1e-12);
+    require(policy.maximum_iterations == 0 && policy.tolerance == 0.0,
+            "screened proposals require an exact explicit opt-in");
+    const auto profile = resolve_hf_direct_tuning_profile(false);
+    require(profile.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
+                profile.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
+            "default and invalid selections preserve the incumbent page profile");
+    const auto schedule = resolve_direct_jk_schedule_policy(target, profile);
+    require(schedule.bounded_streaming.arena_maximum_bytes == (std::size_t{3} << 29) &&
+                schedule.bounded_streaming.task_capacity_ceiling == 8U * 1024U * 1024U,
+            "default scheduling must not retain the expanded page");
+    DirectJkTuningProfile custom;
+    custom.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+    require(resolve_direct_jk_schedule_policy(target, custom)
+                    .bounded_streaming.arena_maximum_bytes == target.total_global_memory / 16,
+            "the incumbent default divisor also applies to custom profiles");
+  }
+  ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", "1");
+  const auto expanded = resolve_hf_direct_tuning_profile(false);
+  require(expanded.bounded_streaming.maximum_task_capacity == 32U * 1024U * 1024U &&
+              resolve_direct_jk_schedule_policy(target, expanded)
+                      .bounded_streaming.arena_maximum_bytes == (std::size_t{6} << 30),
+          "explicit opt-in retains the qualified expanded page");
+  const auto reference = resolve_hf_direct_tuning_profile(true);
+  require(reference.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
+              reference.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
+          "physical-reference export retains its incumbent cap even when opted in");
   const auto accepted = resolve_cold_hf_screening(cold, 1e-12);
   require(accepted.tolerance > 1e-12 && accepted.maximum_iterations > 0 &&
               accepted.maximum_iterations < cold.maximum_iterations,
@@ -119,6 +150,7 @@ void verify_direct_jk_target_policy() {
   using generativeqc::scf::cuda_policy::resolve_direct_jk_schedule_policy;
   using generativeqc::scf::detail::GeneratedShellTask;
 
+  ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", nullptr);
   CudaTargetInfo qualified;
   qualified.warp_size = 32;
   qualified.maximum_threads_per_sm = 1536;
@@ -129,15 +161,15 @@ void verify_direct_jk_target_policy() {
   const auto production = resolve_direct_jk_schedule_policy(qualified);
   require(production.fixed_topology.arena_maximum_bytes == qualified.total_global_memory / 32U,
           "fixed-topology storage keeps its independent 1/32 device-memory budget");
-  require(production.bounded_streaming.arena_maximum_bytes == (std::size_t{6} << 30),
-          "large targets bound the expanded streaming page at six GiB");
+  require(production.bounded_streaming.arena_maximum_bytes == (std::size_t{3} << 29),
+          "default targets retain the incumbent 1.5-GiB streaming page");
   require(production.persistent_quartet_warps_per_sm == 8U,
           "resource-rich targets preserve the qualified eight-worker schedule");
   require(sizeof(GeneratedShellTask) == 192U,
           "generated task ABI preserves the qualified 192-byte record");
   require(direct_jk_bounded_streaming_task_capacity_limit(production, sizeof(GeneratedShellTask)) ==
-              32U * 1024U * 1024U,
-          "192-byte task ABI admits the qualified 32M bounded page");
+              8U * 1024U * 1024U,
+          "192-byte task ABI retains the incumbent 8M bounded page");
 
   CudaTargetInfo synthetic;
   synthetic.warp_size = 32;
@@ -198,7 +230,7 @@ void verify_direct_jk_target_policy() {
   const auto fixed_tuned = resolve_direct_jk_schedule_policy(qualified, fixed_only);
   require(
       direct_jk_bounded_streaming_task_capacity_limit(fixed_tuned, sizeof(GeneratedShellTask)) ==
-          (std::size_t{6} << 30) / sizeof(GeneratedShellTask),
+          (std::size_t{3} << 29) / sizeof(GeneratedShellTask),
       "tightening fixed-topology storage must not shrink bounded streaming pages");
 
   DirectJkTuningProfile bounded_only;

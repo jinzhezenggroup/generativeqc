@@ -199,14 +199,15 @@ DirectJkSchedulePolicy resolve_direct_jk_schedule_policy(const runtime::CudaTarg
       kUnknownTargetFixedTopologyArenaBytes, kFixedTopologyArenaDeviceMemoryDivisor);
 
   // Bounded streaming has an independent reusable scratch budget. Large
-  // targets can amortize queue compaction across a 32M-task page (6 GiB at the
+  // opted-in targets can amortize compaction across a 32M-task page (6 GiB at the
   // current ABI). Smaller/unknown targets keep the conservative 1/16 budget.
   // The owner retries its incumbent page if the larger allocation is refused.
   policy.bounded_streaming.task_capacity_ceiling = profile.bounded_streaming.maximum_task_capacity;
   policy.bounded_streaming.arena_maximum_bytes = resolve_target_memory_budget(
       target.total_global_memory, profile.bounded_streaming.maximum_arena_bytes,
       kUnknownTargetBoundedStreamingArenaBytes,
-      target.total_global_memory >= kLargeBoundedStreamingTargetBytes
+      selected("GENERATIVEQC_HF_COLD_SCREENING", "1") &&
+              target.total_global_memory >= kLargeBoundedStreamingTargetBytes
           ? kLargeBoundedStreamingArenaDeviceMemoryDivisor
           : kBoundedStreamingArenaDeviceMemoryDivisor);
 
@@ -241,13 +242,22 @@ bool reuse_converged_fock_requested() noexcept {
          std::strcmp(force_rebuild, "none") == 0;
 }
 
+DirectJkTuningProfile resolve_hf_direct_tuning_profile(bool physical_reference) noexcept {
+  DirectJkTuningProfile profile;
+  if (!physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")) {
+    profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
+    profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  }
+  return profile;
+}
+
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept {
   constexpr double cutoff = 8.0e-8;
   // Qualification covers large closed-shell through-d direct owners. Keep
   // small/batched/reference and seeded solves on their existing paths; never
   // consume a short user allowance with a proposal that needs a target tail.
-  if (!enabled("GENERATIVEQC_HF_COLD_SCREENING") || domain.nbf < 512 || domain.systems != 1 ||
+  if (!selected("GENERATIVEQC_HF_COLD_SCREENING", "1") || domain.nbf < 512 || domain.systems != 1 ||
       domain.maximum_shell_angular > 2 || domain.maximum_iterations < 24 || !domain.first_setup ||
       domain.warm_seed || domain.unrestricted || domain.physical_reference ||
       !domain.bounded_quartet_direct || domain.persistent_eri || domain.resident_values ||
