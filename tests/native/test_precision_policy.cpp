@@ -76,9 +76,10 @@ void verify_cold_hf_screening_domain() {
             "default scheduling must not retain the expanded page");
     DirectJkTuningProfile custom;
     custom.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
-    require(resolve_direct_jk_schedule_policy(target, custom)
-                    .bounded_streaming.arena_maximum_bytes == target.total_global_memory / 16,
-            "the incumbent default divisor also applies to custom profiles");
+    require(
+        resolve_direct_jk_schedule_policy(target, custom).bounded_streaming.arena_maximum_bytes ==
+            target.total_global_memory / 16,
+        "the incumbent default divisor also applies to custom profiles");
   }
   ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", "1");
   const auto expanded = resolve_hf_direct_tuning_profile(false);
