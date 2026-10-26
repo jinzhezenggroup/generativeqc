@@ -1,6 +1,6 @@
 # Decision: bounded cold HF proposals and larger reusable task pages
 
-Status: implemented
+Status: implemented; explicit opt-in only
 Date: 2026-10-26
 
 ## Problem
@@ -11,6 +11,15 @@ task pages also repeated compaction and launch overhead. Warm timings alone
 missed both costs.
 
 ## Decision
+
+Containment after review: only exact `GENERATIVEQC_HF_COLD_SCREENING=1`
+selects both the proposal and larger page. Unset/0/none/empty/invalid values
+restore the incumbent 8M-task / 1.5-GiB / one-sixteenth-memory policy and
+ordinary SCF operator. Physical-reference exports keep the incumbent page.
+The historical capsule below is unchanged and describes the pre-containment
+source, not the current default. Its failed default-force diagnostic remains
+negative evidence; tighter requests do not turn it into a passing default.
+
 
 Admit a screened FP64 proposal only for large unseeded single-system restricted
 bounded quartet owners. At most eight steps at `8e-8` precede a fresh target

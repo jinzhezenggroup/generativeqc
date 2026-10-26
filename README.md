@@ -124,16 +124,23 @@ print(first.energies)
 
 ## Benchmarks
 
-**HF/DFT energy + analytic forces — RTX 5090**
+**Historical HF/DFT energy + analytic forces — RTX 5090 (2026-10-26 frozen cohort)**
 
-With default settings, GenerativeQC outperforms GPU4PySCF in **64/64** measured warm cases.
-For 96-atom Direct ωB97M-V, the measured warm speedup is **4.21×**.
+With the frozen cohort's then-default settings, GenerativeQC was faster than
+GPU4PySCF in **64/64** measured warm cases. For 96-atom Direct ωB97M-V,
+the measured warm speedup was **4.21×**.
 
-![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
+These figures preserve the `r2-default-v2` image (42b2669 plus its retained
+patch), not current-master performance. That image enabled screened Direct HF
+by default; the current source keeps that route explicit opt-in after a stronger
+force diagnostic failed. These historical timings do not qualify the restored
+ordinary-HF default, and no new integrated-image GPU measurements are claimed.
 
-![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+![Historical frozen-image Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
-Default XC/VV10 grids, native SCF policies and full grid-response forces;
+![Historical frozen-image density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+
+The measured image used its default XC/VV10 grids, native SCF policies and full grid-response forces;
 all complete performance points are shown, including accuracy failures.
 Cold includes setup; warm is the median of three frozen-density calls.
 Independent energy/force accuracy results remain in the detailed tables.

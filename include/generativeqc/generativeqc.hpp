@@ -555,6 +555,28 @@ class Calculation {
     return properties;
   }
 
+  /** @native-contract generativeqc::Calculation::initial_guess_diagnostic
+   * @behavior Copy the most recent native preliminary-density diagnostic.
+   * @inputs A live Calculation; no preparation or execution is requested.
+   * @outputs Returns an owned scalar record, or nullopt when no record exists.
+   * Preparation failure/budget refusal is recorded separately from target SCF
+   * convergence; an absent record must not be interpreted as successful preparation.
+   * @lifetime The returned value survives the calculation and subsequent execution.
+   * @errors Throws Error on query failure other than NOT_IMPLEMENTED.
+   * @execution Synchronous and Python-free; serialize against execute/destruction.
+   * @units Numeric capacity is bytes; preparation time is seconds.
+   */
+  [[nodiscard]] std::optional<generativeqc_initial_guess_diagnostic> initial_guess_diagnostic()
+      const {
+    generativeqc_initial_guess_diagnostic diagnostic{};
+    diagnostic.struct_size = sizeof(diagnostic);
+    diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+    const auto status = generativeqc_calculation_get_initial_guess_diagnostic(handle_, &diagnostic);
+    if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) return std::nullopt;
+    check(status);
+    return diagnostic;
+  }
+
   /** @native-contract generativeqc::Calculation::execute
    * @behavior Run a prepared method and return a value result.
    * @inputs properties defaults to ENERGY; nonzero supported flag combinations are required.

@@ -119,6 +119,24 @@ procedure does not establish GPU performance or complete physical receipts.
 
 ## CUDA DF bucket capacity ownership
 
+The native base DF policy exposes `df_budget_targets` for resource-independent
+workload and resident targets. Their maximum bounds automatic base resolution.
+`method_owned_df_resident_capacity` separately bounds the extra method-owned
+resident promotion using the actual packed planner and its shared response floor.
+Complete prepared-owner planning must include both bounds, explicit caps and
+source/setup lifetimes; these queries alone do not reserve a fleet or admit
+optional XC storage. They perform no CUDA probes or numerical work.
+
+`prepared_fock_device_capacity` composes the native Direct allocator bound with
+DF value/response policy and source metadata. A mixed owner's resident-promotion
+ceiling includes its already retained Direct provider. Its separate setup bound
+includes the initial auxiliary metric, which exists before DF value-plan
+construction and is not limited by the later value/response cap. The native KS
+fleet accepts this Fock setup phase alongside one-electron/ECP and quadrature
+setup, retaining other fleet members and lazy force capacity during serialized
+rebuilds. SCF/XC, initial guesses, opaque providers and independent consumers
+still require their own bounds before a complete endpoint reservation is valid.
+
 With `generativeqc_resource_hf_df_cuda_fleet_v1`, the Python CUDA HF DF planner
 and native CLI share one C++ numeric composition owner. It groups expanded
 topologies by orbital/electron/primitive compatibility, checks Cartesian,

@@ -3,6 +3,12 @@
 Status: implemented
 Date: 2026-10-01
 
+The 1e-8 density-domain choice below is historical. The
+[October 21 molecular-domain decision](2026-10-21-vv10-default-density-domain.md)
+superseded it with 1e-10; its October 26 follow-up records the migration of the
+larger-basis live CUDA acceptance tests. Original numerical evidence below is
+retained for the original domain.
+
 ## Problem
 
 Correcting the through-f public endpoint exposes a 2.46e-8 Eh difference on

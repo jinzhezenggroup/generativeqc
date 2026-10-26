@@ -129,9 +129,33 @@ void test_bridge() {
               alias == shapes,
           "overlapping CUDA transport input/output was accepted");
 }
+
+void test_df_setup_lifetime() {
+  using namespace generativeqc::scf;
+  CudaKsDeviceResourceItem item{1, 1, 1, 1, 100, 200, 300, 40, 50, 0, true, 700, 900};
+  item.fock_setup = 5000;
+  CudaKsDeviceFleetResources fleet;
+  fleet.append(item, 3);
+  // During a serialized rebuild the other two items retain all their numeric
+  // arenas; all three provider and lazy-force reservations remain available.
+  const auto values = fleet.inventory();
+  require(values[4] == 4400 && values[7] == 8450 && values[8] == 9050,
+          "DF metric setup did not coexist with retained fleet/force owners");
+  const auto before = values;
+  item.fock_setup = std::numeric_limits<std::uint64_t>::max();
+  bool refused = false;
+  try {
+    fleet.append(item);
+  } catch (const std::overflow_error&) {
+    refused = true;
+  }
+  require(refused && fleet.inventory() == before,
+          "overflowing DF setup changed a previously admitted fleet");
+}
 }  // namespace
 
 int main() {
   test_fleet();
   test_bridge();
+  test_df_setup_lifetime();
 }
