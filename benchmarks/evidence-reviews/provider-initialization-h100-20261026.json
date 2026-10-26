@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "provider-initialization-h100-20261026",
+  "owner": "native provider initialization engineering / issue 2809",
+  "reason": "Bounded source reconstruction and actual initialization receipts preserve one source-bound vendor owner, legacy refusal, selected admission and cleanup without a numerical endpoint claim. Three compiled products are inventory-only and remotely retained. Explicit public redactions and the unavailable pre-scrub CLI stdout are retained rather than invented; no storage-budget exception or increase.",
+  "review_document": "benchmarks/results/provider-initialization-h100-20261026/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/inputs.json.xz",
+      "family": "provider-initialization-h100-20261026",
+      "classification": "required-compact-accepted-evidence",
+      "role": "bounded-executed-source-and-input-reconstruction",
+      "bytes": 228780,
+      "sha256": "d9593b5045852e9f78038dbe2761b19c625ffbf219043ee6479eb8a1de801f60"
+    }
+  ]
+}
