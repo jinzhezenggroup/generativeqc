@@ -49,6 +49,25 @@ remain at their explicitly hash-bound persistent task locations.
 
 ## Historical CPU preparation and admission
 
+The checkout retains `hf-source-identity.json` and `cbs-source-identity.json`,
+not the two regenerable full-repository file inventories. HF is the clean
+`cbd4d807` Git tree; CBS is `976f756b` plus the existing qualified patch in
+`cbs-fast-memory-20261021/qualified-source.patch.xz`. The four CBS changed-file
+before/after identities, source/archive/patch hashes, pinned checks, original
+inventory hashes and unavailable provenance are retained.
+
+Each compact identity binds every source path, mode, byte count and SHA-256 by
+one `source_tree_sha256`: SHA-256 of the UTF-8 JSON path-to-identity object with
+sorted keys and compact separators. `qz_smoke.checked_source_tree` still reads
+and hashes every actual source file before any device or endpoint call; missing,
+extra, renamed, modified and mode-changed files are refused. It also retains
+support for the original full inventories.
+
+The frozen plans, transport capsules, publication failures and numeric originals
+are unchanged. Their historical inventory hashes identify the original records,
+not these compact replacements; do not silently rebind a frozen plan. This
+storage change supplies no new build/device result or scientific acceptance.
+
 The coordinator transferred the existing `i2679-cbs-energy-1023` CPU Notebook.
 Fresh platform status and two container process/FD samples confirmed its
 identity and allocation. These observations establish neither a future resource
