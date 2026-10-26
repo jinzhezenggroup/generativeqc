@@ -150,7 +150,7 @@ patch and support member; re-runs all independent observable gates; checks pair
 identity/ordering; recomputes median/MAD and the 2% gate; and verifies the moved
 work trees and the explicit failed record. It reuses the retained
 `readme-final-20261022` numerical oracles and `xc-bounded-cross-20261024` base
-source manifest. No GPU, external archive or native library is required.
+source identity projection. No GPU, external archive or native library is required.
 
 `endpoints.json.xz` stores full original endpoints and the moved reference.
 `integration.json.xz` separately stores all 66 current-parent calls and their
@@ -169,3 +169,17 @@ Fourteen historical RTX 5090 JSON records are stored as deterministic gzip,
 recovering 617,245 bytes. `history-storage.json` pins each
 original Git blob and both byte representations; decompression is exact.
 Historical observations and their acceptance decisions remain unchanged.
+
+### Source identity projection
+
+The retained source deltas share the guarded XC manifest identity. Its compact
+record now includes the original hashes (or absence) for all 29 paths touched
+by the DF-charge and fitted-range deltas, plus the unchanged endpoint driver
+hash and the digests of those nine original
+deltas. The verifier authenticates each delta and its baseline identity, derives
+full file counts, and compares the complete changed-path projections. Paths
+outside this union are shared unchanged; the build/test production-equivalence
+checks therefore retain their original scope. Original full-manifest digests
+remain recorded identities, not claims that this checkout reconstructs their
+complete text or recomputes their SHA-256. Numerical records, force/energy gates,
+paired populations and original failure records are unchanged.
