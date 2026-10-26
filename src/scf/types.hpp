@@ -14,6 +14,7 @@
 #include "scf/fock_build.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/precision_work.hpp"
+#include "scf/provider_initialization.hpp"
 
 namespace generativeqc::scf {
 
@@ -146,6 +147,9 @@ struct ScfOptions {
   /** Correlated energy consumers require values-only, bounded direct RHF. */
   bool export_physical_reference{false};
   std::size_t reference_memory_budget_bytes{};
+  /** Native-only immutable request; absent preserves legacy provider admission.
+   * No public method-descriptor transport is provided by this internal field. */
+  std::optional<ProviderInitializationRequest> reference_provider_initialization;
   /**
    * Requested floating-point execution policy. \p std::nullopt (absent) preserves
    * the legacy GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch; an

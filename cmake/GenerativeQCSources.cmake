@@ -15,6 +15,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
+    src/api/c_api_hf_physical_audit.cpp
     src/api/c_api_response.cpp
     src/api/c_api_df_gradient.cpp
     src/api/c_api_d3.cpp

@@ -2923,6 +2923,38 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_hf_physical_audit_cpu_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "548a5e31cfe9d2965e9dec8c49c43aec24a4c9a50a0910ec9a4a4cc2473705fa",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_hf_physical_audit_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "858fd729e2aa0148c2bedee00e98d7facc3fd69433f428602716c62e87d5fc1d",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

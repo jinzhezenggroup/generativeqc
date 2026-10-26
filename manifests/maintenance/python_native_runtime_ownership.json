@@ -912,6 +912,16 @@
           "classification": "compatibility"
         },
         {
+          "path": "python/generativeqc/_hf_physical_native.py",
+          "symbol": "audit",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/progressive_controller.py",
+          "symbol": "_audit_target_physical_residual_python",
+          "classification": "compatibility"
+        },
+        {
           "path": "python/generativeqc/progressive_controller.py",
           "symbol": "finalize_hf_verification",
           "classification": "wrapper"
@@ -930,6 +940,7 @@
         "src/scf/effort_policy.hpp",
         "src/scf/initial_guess/density.cpp",
         "src/scf/occupied_projection.cpp",
+        "src/scf/hf_physical_audit.hpp",
         "src/scf/progressive_verification.hpp"
       ],
       "native_callers": [
@@ -937,10 +948,11 @@
         "src/api/c_api_common.cpp",
         "src/api/c_api_scf_effort.cpp",
         "src/api/c_api_projection.cpp",
+        "src/api/c_api_hf_physical_audit.cpp",
         "src/api/c_api_hf_verification.cpp"
       ],
       "remaining_python_runtime": [
-        "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition; Python retains typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility. Python still owns typed planning, projection/audit adapters and physical-residual assembly; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence."
+        "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. For all-electron CPU RHF/UHF Direct/DF, the physical fixed-density audit uses one native scope for preparation, Fock/overlap, shared residual reduction and cleanup. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition. Python retains typed planning, resource preflight, audit transport/presentation, typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility; unsupported audit domains and missing protocols retain explicit compatibility, never a retry after admitted native refusal; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
@@ -950,6 +962,8 @@
         "tests/python/test_native_scf_effort.py",
         "tests/native/test_scf_effort_sdk.cpp",
         "tests/python/test_native_basis_projection.py",
+        "tests/python/test_native_hf_physical_audit.py",
+        "tests/native/test_hf_physical_audit.cpp",
         "tests/native/test_hf_verification.cpp",
         "tests/python/test_native_hf_verification.py"
       ],

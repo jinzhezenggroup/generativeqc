@@ -2,12 +2,136 @@
 
 #include <cstring>
 #include <mutex>
+#include <utility>
+
+#include "runtime/cuda_provider_identity.hpp"
+#include "runtime/loaded_provider_identity.hpp"
 
 #if defined(__linux__) && !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+#include <cuda.h>
 #include <dlfcn.h>
 #endif
 
 namespace generativeqc::runtime {
+
+CudaProviderIdentityObservation observe_cuda_provider_identity(
+    std::uint8_t providers, const std::array<const void*, 3>& execution_symbols) {
+  CudaProviderIdentityObservation result;
+#if defined(__linux__) && !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+  if (providers > 3) return result;
+  constexpr const char* libraries[]{"libcudart.so.12", "libcublas.so.12", "libcusolver.so.11",
+                                    "libcuda.so.1"};
+  constexpr const char* symbols[]{"cudaRuntimeGetVersion", "cublasCreate_v2", "cusolverDnCreate",
+                                  "cuCtxGetId"};
+  CudaProviderIdentity identity;
+  identity.provider = CudaProviderKind::Nvidia;
+  identity.providers = providers;
+  for (unsigned index = 0; index != 4; ++index) {
+    if ((index == 1 && !(providers & 1)) || (index == 2 && !(providers & 2))) continue;
+    if (index != 3 && !execution_symbols[index]) return result;
+    auto loaded = loaded_provider_identity(libraries[index], symbols[index],
+                                           index == 3 ? nullptr : execution_symbols[index]);
+    result.loaded_status = loaded.status;
+    if (loaded.status != LoadedIdentityStatus::available) return result;
+    identity.build_ids[index] = std::move(loaded.build_id);
+    result.library_pins[index] = std::move(loaded.library_pin);
+  }
+  // Compile against the selected SDK's real declarations, but keep these driver
+  // capabilities optional/lazy. Taking a decltype creates no static driver link.
+  struct Queries {
+    decltype(&cuCtxGetCurrent) current{};
+    decltype(&cuCtxGetId) id{};
+    decltype(&cuCtxGetDevice) device{};
+    decltype(&cuDeviceGetUuid_v2) uuid{};
+    decltype(&cuDriverGetVersion) driver_version{};
+    decltype(&cudaRuntimeGetVersion) runtime_version{};
+  } query;
+  void* driver = result.library_pins[3].get();
+  query.current = reinterpret_cast<decltype(query.current)>(dlsym(driver, "cuCtxGetCurrent"));
+  query.id = reinterpret_cast<decltype(query.id)>(dlsym(driver, "cuCtxGetId"));
+  query.device = reinterpret_cast<decltype(query.device)>(dlsym(driver, "cuCtxGetDevice"));
+  query.uuid = reinterpret_cast<decltype(query.uuid)>(dlsym(driver, "cuDeviceGetUuid_v2"));
+  query.driver_version =
+      reinterpret_cast<decltype(query.driver_version)>(dlsym(driver, "cuDriverGetVersion"));
+  query.runtime_version = reinterpret_cast<decltype(query.runtime_version)>(
+      dlsym(result.library_pins[0].get(), "cudaRuntimeGetVersion"));
+  if (!query.current || !query.id || !query.device || !query.uuid || !query.driver_version ||
+      !query.runtime_version) {
+    result.loaded_status = LoadedIdentityStatus::missing_symbol;
+    return result;
+  }
+  const std::pair<const char*, const void*> driver_bindings[]{
+      {"cuCtxGetCurrent", reinterpret_cast<const void*>(query.current)},
+      {"cuCtxGetId", reinterpret_cast<const void*>(query.id)},
+      {"cuCtxGetDevice", reinterpret_cast<const void*>(query.device)},
+      {"cuDeviceGetUuid_v2", reinterpret_cast<const void*>(query.uuid)},
+      {"cuDriverGetVersion", reinterpret_cast<const void*>(query.driver_version)}};
+  for (const auto& [name, address] : driver_bindings) {
+    const auto owner = loaded_provider_identity("libcuda.so.1", name, address);
+    if (owner.status != LoadedIdentityStatus::available || owner.library_pin.get() != driver ||
+        owner.build_id != *identity.build_ids[3]) {
+      result.loaded_status = owner.status == LoadedIdentityStatus::available
+                                 ? LoadedIdentityStatus::wrong_symbol_owner
+                                 : owner.status;
+      return result;
+    }
+  }
+  const CurrentContextQueries access{
+      &query,
+      [](void* state, std::uintptr_t& context) {
+        CUcontext value{};
+        const auto status = static_cast<Queries*>(state)->current(&value);
+        context = reinterpret_cast<std::uintptr_t>(value);
+        return static_cast<std::uint32_t>(status);
+      },
+      [](void* state, std::uintptr_t context, std::uint64_t& id) {
+        unsigned long long value{};
+        const auto status =
+            static_cast<Queries*>(state)->id(reinterpret_cast<CUcontext>(context), &value);
+        id = value;
+        return static_cast<std::uint32_t>(status);
+      },
+      [](void* state, int& device) {
+        CUdevice value{};
+        const auto status = static_cast<Queries*>(state)->device(&value);
+        device = value;
+        return static_cast<std::uint32_t>(status);
+      },
+      [](void* state, int device, std::array<unsigned char, 16>& uuid) {
+        CUuuid value{};
+        const auto status = static_cast<Queries*>(state)->uuid(&value, device);
+        std::memcpy(uuid.data(), value.bytes, uuid.size());
+        return static_cast<std::uint32_t>(status);
+      },
+      [](void* state, int& version) {
+        return static_cast<std::uint32_t>(static_cast<Queries*>(state)->driver_version(&version));
+      },
+      [](void* state, int& version) {
+        return static_cast<std::uint32_t>(static_cast<Queries*>(state)->runtime_version(&version));
+      }};
+  const auto before = observe_current_context(access);
+  result.status = before.status;
+  result.error_domain = before.error_domain;
+  result.error_status = before.error_status;
+  if (!before.identity) return result;
+  const auto after = observe_current_context(access);
+  result.status = after.status;
+  result.error_domain = after.error_domain;
+  result.error_status = after.error_status;
+  if (!after.identity) return result;
+  if (*before.identity != *after.identity) {
+    result.status = ContextIdentityStatus::changed;
+    return result;
+  }
+  identity.context = *after.identity;
+  result.identity = std::move(identity);
+#else
+  (void)providers;
+  (void)execution_symbols;
+#endif
+  return result;
+}
+
 namespace {
 
 #if defined(__linux__) && !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
