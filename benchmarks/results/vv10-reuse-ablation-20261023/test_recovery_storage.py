@@ -22,7 +22,7 @@ if _capsule.is_file():
 from collect_recovery import collect, deduplicate, inventory
 from exact_pack import decode, encode
 from recovery_contract import sha
-from reproduce_recovery import restore_collection, restore_tools
+from reproduce_recovery import restore_collection, restore_tools, verify_source_identity
 from repack_collection import repack
 
 
@@ -65,6 +65,49 @@ class RecoveryStorageTests(unittest.TestCase):
                     'numerical_replay_sha256': sha(collection / 'numerical-replay.json')}
         (collection / 'collection.json').write_text(json.dumps(metadata))
         return collection, metadata, original
+
+    def test_compact_source_binds_revision_and_original_sdk_manifest(self):
+        publication = Path(__file__).resolve().parent
+        source = json.loads((publication / 'source-identity.json').read_bytes())
+        raw = decode((publication / 'recovery-execution-and-failure-history.json.xz').read_bytes())
+        spec = json.loads(next(row['utf8'] for row in raw if row['path'] == 'spec.json'))
+        expected = spec['expected_sdk']
+        self.assertEqual(verify_source_identity(publication, expected), source)
+        trial = self.root / 'source-identity.json'
+        changes = [
+            ('schema', 'wrong'), ('revision', '0' * 40), ('tree', 'invalid-tree'),
+            ('source_entries', source['source_entries'] - 1),
+            ('source_patch', 'unexpected.patch'),
+        ]
+        for key, value in changes:
+            altered = copy.deepcopy(source)
+            altered[key] = value
+            trial.write_text(json.dumps(altered))
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                verify_source_identity(self.root, expected)
+        for key, value in [('sha256', '0' * 64), ('bytes', 1), ('path', 'different.json')]:
+            altered = copy.deepcopy(source)
+            altered['original_manifest'][key] = value
+            trial.write_text(json.dumps(altered))
+            with self.subTest(manifest=key), self.assertRaises(ValueError):
+                verify_source_identity(self.root, expected)
+        altered = copy.deepcopy(source)
+        altered['solver']['path'] = 'different.py'
+        trial.write_text(json.dumps(altered))
+        with self.assertRaises(ValueError):
+            verify_source_identity(self.root, expected)
+
+    def test_changed_source_identity_is_rejected_before_restoration(self):
+        collection, metadata, _ = self.fixture()
+        path = collection / 'source-identity.json'
+        path.write_text('{"role":"HOST_ONLY_SOURCE_IDENTITY"}')
+        metadata['source_identity'] = {'file': path.name, 'sha256': sha(path)}
+        (collection / 'collection.json').write_text(json.dumps(metadata))
+        path.write_text('{"role":"CHANGED_SOURCE_IDENTITY"}')
+        destination = self.root / 'must-not-exist'
+        with self.assertRaisesRegex(ValueError, 'source identity changed'):
+            restore_collection(collection, destination)
+        self.assertFalse(destination.exists())
 
     def test_exact_whole_file_alias_restores_original_paths_bytes_and_modes(self):
         collection, _, original = self.fixture()
