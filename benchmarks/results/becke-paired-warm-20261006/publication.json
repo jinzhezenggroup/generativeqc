@@ -19,12 +19,6 @@
       "sha256": "ad5fb106ac03cbc3eb8031ed53c1d2ae1ba8b3846a90f7a00e7ab2cc5fdf9946"
     },
     {
-      "bytes": 65843,
-      "path": "source-files.sha256.gz",
-      "role": "input",
-      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7"
-    },
-    {
       "bytes": 41187,
       "path": "source.patch",
       "role": "source-patch",
@@ -43,16 +37,16 @@
       "sha256": "26000b291b4375a98e43b7f11f682ad9d37cc1bee678b0ba0af2fcb0a96af907"
     },
     {
-      "bytes": 4156,
+      "bytes": 4369,
       "path": "reproduce.sh",
       "role": "reproduction",
-      "sha256": "27914dc2e0ff83a88e69e94fbcfc44e01ab059afe4ef932936bb7814bcbe068d"
+      "sha256": "12490dd240b343e9ace6e7919f4ad51d7b52d9726e73f35ec145023cc9ae4b6a"
     },
     {
-      "bytes": 2369,
+      "bytes": 2798,
       "path": "summary.md",
       "role": "summary",
-      "sha256": "970ed568ea28e609161d5377118340a5f9b8b2827417d19af9b9b65148dca8f6"
+      "sha256": "48565e89826aa4de0330eb216899b1777b745a05298338a407e6c72cd6d33399"
     },
     {
       "bytes": 81758,
@@ -103,7 +97,7 @@
       "benchmarks/results/becke-paired-warm-20261006/reproduce.sh"
     ],
     "prerequisites": "CUDA12.9 sm120/RTX5090; finite main/gpu:5090:1 Slurm with preserved visibility; ccache/CMake/Ninja and C++/CUDA compiler; Python compiler dependencies, NumPy/CuPy/pytest. Set CUDA_ROOT/PYTHON; add installed cuTENSOR library path if required. Published independent vectors reuse the original GPU4PySCF/PySCF2.14/Libxc7 campaign. Full recipe not separately rerun.",
-    "source_restore": "Keep bundle outside checkout, restore original source.revision and apply source.patch, then verify the decompressed 1400-input manifest. The exact measured paired driver and independent reference companions are bound by this publication."
+    "source_restore": "Keep the paired-warm and physical-endpoints result directories as siblings outside the reconstructed checkout. Restore original source.revision and apply the local source.patch; reproduce.sh authenticates the shared source-files.sha256.gz and verifies its 1400 inputs. The original paired driver, local independent reference companions and failures remain bound here."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

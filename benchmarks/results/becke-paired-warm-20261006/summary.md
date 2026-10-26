@@ -18,3 +18,10 @@ All 84 native calls pass unchanged independent reference gates (E 1e-8 hartree; 
 Actual pair visits, launches and peak scratch reservation do not shrink. Logical reverse-panel savings are offset by modeled extra gather directions; those counters do not measure hardware traffic. Profiling is off in this campaign; split durations come only from the prior separate intrusive campaign.
 
 Original Release binary/source/dirty patch and 382 ccache launcher proofs remain unchanged. Current cache stats are shared aggregate counters, not owner hits/misses. Global device peak memory and a new compiler-only duration were not measured; no promotion is claimed. Source reconstruction and reproduction shell syntax must be checked separately. The full recipe is not claimed as a second executed campaign.
+
+The unchanged 1,400-input source manifest is shared with
+`../becke-physical-endpoints-20261006/source-files.sha256.gz`; `reproduce.sh`
+checks its compressed SHA-256 before use. Keep both result directories as
+siblings outside the checkout being reconstructed. The local dirty-source patch,
+independent reference vectors, active protocol companions and failures remain
+unchanged; only the duplicate source-file list was removed.
