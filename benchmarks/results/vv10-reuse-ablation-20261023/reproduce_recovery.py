@@ -49,6 +49,10 @@ def restore_collection(collection_directory, destination):
     require(collection['schema'] == 'generativeqc.vv10-mixed-protocol-collection.v1', 'wrong collection schema')
     require(hashlib.sha256(logical_bytes(source / 'raw-inventory.json')).hexdigest() == collection['inventory_sha256'], 'inventory changed')
     require(hashlib.sha256(logical_bytes(source / 'numerical-replay.json')).hexdigest() == collection['numerical_replay_sha256'], 'stored replay changed')
+    if 'source_identity' in collection:
+        identity = collection['source_identity']
+        require(hashlib.sha256(logical_bytes(source / relative(identity['file']))).hexdigest()
+                == identity['sha256'], 'source identity changed')
     seen = set()
     for pack in collection['packs']:
         name, mount = relative(pack['file']), relative(pack['mount'])
@@ -86,6 +90,24 @@ def restore_collection(collection_directory, destination):
     return collection
 
 
+def verify_source_identity(publication, expected_sdk):
+    """Check recorded source identity and consumed solver without a full Git listing."""
+    source = load(Path(publication) / 'source-identity.json')
+    require(source['schema'] == 'generativeqc.vv10-source-identity.v1', 'source identity schema differs')
+    require(source['revision'] == expected_sdk['source_revision'], 'source revision differs')
+    tree = source['tree']
+    require(isinstance(tree, str) and len(tree) == 40
+            and all(c in '0123456789abcdef' for c in tree), 'invalid recorded source tree')
+    require(source['source_patch'] is None, 'unexpected source patch')
+    require(source['source_entries'] == expected_sdk['source_entries'], 'source entry count differs')
+    original = source['original_manifest']
+    require(original['path'] == 'source-manifest.json' and original['bytes'] == 3192615
+            and original['sha256'] == expected_sdk['manifests']['source-manifest.json'],
+            'original source manifest identity differs')
+    require(source['solver']['path'] == 'benchmarks/readme_defaults_accuracy.py', 'source solver differs')
+    return source
+
+
 def verify_provenance(restored, publication, helper_root=None):
     from collect_recovery import verify_terminal_bindings
     restored, publication = Path(restored), Path(publication)
@@ -94,13 +116,11 @@ def verify_provenance(restored, publication, helper_root=None):
     verify_terminal_bindings(recovery)
     spec = load(recovery / 'spec.json')
     expected_sdk = spec['expected_sdk']
+    source = verify_source_identity(publication, expected_sdk)
     for name, expected in expected_sdk['manifests'].items():
-        require(sha(sdk / relative(name)) == expected, 'SDK manifest differs: ' + name)
-    source = load(sdk / 'source-manifest.json')
-    require(source['revision'] == spec['source_revision'] == expected_sdk['source_revision'], 'source revision mismatch')
-    require(len(source['files']) == expected_sdk['source_entries'], 'source entry inventory mismatch')
-    source_rows = {row['path']: row for row in source['files']}
-    require(len(source_rows) == len(source['files']), 'duplicate source identity')
+        if name != 'source-manifest.json':
+            require(sha(sdk / relative(name)) == expected, 'SDK manifest differs: ' + name)
+    require(source['revision'] == spec['source_revision'], 'source revision mismatch')
     owner = load(control / 'global-campaign-claim-v1/owner.json')
     failed = load(control / 'global-campaign-claim-v1/failed.json')
     require(failed['owner'] == owner and not (control / 'global-campaign-claim-v1/complete.json').exists(),
@@ -152,7 +172,7 @@ def verify_provenance(restored, publication, helper_root=None):
             candidate = restored / 'diagnostic/diagnostic-lease/failed.json'
         require(candidate.stat().st_size == predecessor['bytes'] and sha(candidate) == predecessor['sha256'],
                 'retained failed predecessor differs from admitted recovery spec')
-    solver = source_rows['benchmarks/readme_defaults_accuracy.py']['sha256']
+    solver = source['solver']['sha256']
     adapter = sha(control / 'metadata-entry.py')
     for path in sorted((attempt / 'output').glob('reference-*.json')):
         row = load(path)
@@ -222,7 +242,7 @@ def main():
     require(timing_table(summary).encode() == (publication / 'timings.md').read_bytes(), 'separate timing tables differ')
     require(work_table(summary).encode() == (publication / 'work.md').read_bytes(), 'actual work tables differ')
     require(summary['selected_replay'] == load(publication / 'numerical-replay.json'), 'terminal pure-data replay differs')
-    print('PASS: exact full raw bytes/modes; old80 + new48 and pilot64; protocols/hardware separate; original protocol INCOMPLETE')
+    print('PASS: retained raw bytes/modes and compact Git source identity; old80 + new48 and pilot64; protocols/hardware separate; original protocol INCOMPLETE')
 
 
 if __name__ == '__main__':
