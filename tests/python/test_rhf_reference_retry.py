@@ -170,6 +170,7 @@ std::vector<Item> run() {
   generativeqc_status status=GENERATIVEQC_STATUS_SUCCESS;
   const bool reuse_converged_fock=mode!=4,mixed_precision_fock=false;
   const bool screened_reference_iterations=screened;
+  const double iteration_screening=1e-12;
   const std::vector<std::uint32_t> host_pre_refinement_iterations{screened ? 7U : 0U};
   std::uint32_t host_final_fock_rebuild_count=mode==3 ? 1U : 0U;
   std::uint32_t post_scf_physical_fock_builds=0,post_scf_final_eigen_solves=1;

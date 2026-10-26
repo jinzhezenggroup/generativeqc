@@ -16,6 +16,8 @@ constexpr std::size_t kUnknownTargetFixedTopologyArenaBytes = std::size_t{256} <
 constexpr std::size_t kFixedTopologyArenaDeviceMemoryDivisor = 32;
 constexpr std::size_t kUnknownTargetBoundedStreamingArenaBytes = std::size_t{256} << 20;
 constexpr std::size_t kBoundedStreamingArenaDeviceMemoryDivisor = 16;
+constexpr std::size_t kLargeBoundedStreamingArenaDeviceMemoryDivisor = 4;
+constexpr std::size_t kLargeBoundedStreamingTargetBytes = std::size_t{24} << 30;
 constexpr unsigned kUnknownTargetPersistentQuartetWarpsPerSm = 4;
 constexpr std::uint64_t kSmallHfNativeMatrixThreads = 32;
 
@@ -196,15 +198,18 @@ DirectJkSchedulePolicy resolve_direct_jk_schedule_policy(const runtime::CudaTarg
       target.total_global_memory, profile.fixed_topology.maximum_arena_bytes,
       kUnknownTargetFixedTopologyArenaBytes, kFixedTopologyArenaDeviceMemoryDivisor);
 
-  // Bounded streaming is a reusable page scratch arena, not fixed-topology
-  // resident storage. Its independently qualified 8M-task page is 1.5 GiB at
-  // the current GeneratedShellTask ABI, so it gets a separate resource budget.
-  // Never derive this capacity from the fixed-topology arena: doing so shrinks
-  // the 768-AO page count and changes endpoint scheduling.
+  // Bounded streaming has an independent reusable scratch budget. Large
+  // opted-in targets can amortize compaction across a 32M-task page (6 GiB at the
+  // current ABI). Smaller/unknown targets keep the conservative 1/16 budget.
+  // The owner retries its incumbent page if the larger allocation is refused.
   policy.bounded_streaming.task_capacity_ceiling = profile.bounded_streaming.maximum_task_capacity;
   policy.bounded_streaming.arena_maximum_bytes = resolve_target_memory_budget(
       target.total_global_memory, profile.bounded_streaming.maximum_arena_bytes,
-      kUnknownTargetBoundedStreamingArenaBytes, kBoundedStreamingArenaDeviceMemoryDivisor);
+      kUnknownTargetBoundedStreamingArenaBytes,
+      selected("GENERATIVEQC_HF_COLD_SCREENING", "1") &&
+              target.total_global_memory >= kLargeBoundedStreamingTargetBytes
+          ? kLargeBoundedStreamingArenaDeviceMemoryDivisor
+          : kBoundedStreamingArenaDeviceMemoryDivisor);
 
   // Persistent workers are one warp per block. Respect both the resident block
   // ceiling and the SM thread ceiling; unknown facts choose a smaller
@@ -235,6 +240,31 @@ bool reuse_converged_fock_requested() noexcept {
   const char* force_rebuild = std::getenv("GENERATIVEQC_FINAL_FOCK_REBUILD");
   return force_rebuild == nullptr || std::strcmp(force_rebuild, "0") == 0 ||
          std::strcmp(force_rebuild, "none") == 0;
+}
+
+DirectJkTuningProfile resolve_hf_direct_tuning_profile(bool physical_reference) noexcept {
+  DirectJkTuningProfile profile;
+  if (!physical_reference && selected("GENERATIVEQC_HF_COLD_SCREENING", "1")) {
+    profile.bounded_streaming.maximum_task_capacity = 32U * 1024U * 1024U;
+    profile.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+  }
+  return profile;
+}
+
+ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
+                                                double target_screening) noexcept {
+  constexpr double cutoff = 8.0e-8;
+  // Qualification covers large closed-shell through-d direct owners. Keep
+  // small/batched/reference and seeded solves on their existing paths; never
+  // consume a short user allowance with a proposal that needs a target tail.
+  if (!selected("GENERATIVEQC_HF_COLD_SCREENING", "1") || domain.nbf < 512 || domain.systems != 1 ||
+      domain.maximum_shell_angular > 2 || domain.maximum_iterations < 24 || !domain.first_setup ||
+      domain.warm_seed || domain.unrestricted || domain.physical_reference ||
+      !domain.bounded_quartet_direct || domain.persistent_eri || domain.resident_values ||
+      domain.mixed_precision || domain.incremental_jk || !std::isfinite(target_screening) ||
+      target_screening < 0.0 || target_screening >= cutoff)
+    return {};
+  return {cutoff, 8U};
 }
 
 std::optional<double> configured_mixed_precision_fock_threshold(
