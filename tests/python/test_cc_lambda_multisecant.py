@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ from generativeqc.response_solver import GMRESOptions, solve
 from generativeqc_compiler.cc.lambda_equations import build_lambda_programs
 from generativeqc_compiler.cc.pair_coordinates import RestrictedPairCoordinates
 
+from benchmarks import _support, cc_lambda_multisecant
 from benchmarks.cc_lambda_multisecant import (
     Coordinates,
     converge,
@@ -321,3 +323,52 @@ def test_generated_cc_history_and_lambda_vs_determinant_oracle(seed: int) -> Non
         )
         np.testing.assert_allclose(result.solution, expected, atol=2e-11)
         assert np.linalg.norm(jacobian.T @ result.solution + gradient) < 1e-10
+
+
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_output_refusal_precedes_science_and_native_loading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+) -> None:
+    monkeypatch.setattr(_support, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence", encoding="utf-8")
+    destination = original
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / original.name
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results/existing.json"
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(original)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("invalid output reached scientific work or native loading")
+
+    monkeypatch.setattr(cc_lambda_multisecant, "screen_case", forbidden)
+    monkeypatch.setattr(cc_lambda_multisecant, "NativeGMRES", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cc_lambda_multisecant",
+            "--native-gmres",
+            str(tmp_path / "missing.so"),
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        cc_lambda_multisecant.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert original.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()

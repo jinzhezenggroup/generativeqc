@@ -25,6 +25,7 @@ from generativeqc_compiler.cc.lambda_equations import build_lambda_programs
 from generativeqc_compiler.cc.pair_coordinates import RestrictedPairCoordinates
 from generativeqc_compiler.tensor import execute
 
+from benchmarks._support import raw_output_path
 from benchmarks.cc_lambda_multisecant_native import NativeGMRES
 from tools.cc_endpoint_fixtures import load
 from tools.generativeqc_cc.multisecant import SecantHistory, fit_multisecant
@@ -367,7 +368,7 @@ def main() -> None:
     parser.add_argument(
         "--native-gmres", type=Path, help="prebuilt cc_lambda_multisecant_gmres bridge"
     )
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.repetitions < 1:
         parser.error("repetitions must be positive")
