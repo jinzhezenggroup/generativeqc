@@ -95,16 +95,17 @@ def _assert_workers_stopped(root: Path, count: int) -> None:
         assert worker["endpoint"] != str(root / "shared.sock")
 
 
-def _assert_one_worker_remains(workers: list[dict[str, Any]]) -> None:
-    # Group termination is asynchronous: after wait() reaps the group leader,
-    # its killed child can briefly remain runnable before the kernel exits it.
-    # Use the same bounded cleanup observation window as the final check.
+def _assert_cancelled_worker_stopped(
+    cancelled: dict[str, Any], survivor: dict[str, Any]
+) -> None:
+    # Reaping the group leader does not make grandchild exit synchronous.
+    # Keep the independent invocation alive throughout the bounded observation.
     deadline = time.monotonic() + 2
-    while any(
-        sum(_running(worker[key]) for worker in workers) != 1
-        for key in ("server", "child")
-    ):
-        assert time.monotonic() < deadline, workers
+    while True:
+        assert all(_running(survivor[key]) for key in ("server", "child"))
+        if not any(_running(cancelled[key]) for key in ("server", "child")):
+            break
+        assert time.monotonic() < deadline, cancelled
         time.sleep(0.01)
 
 
@@ -115,11 +116,11 @@ def test_one_worker_check_waits_for_asynchronous_exit(
     live = [{1, 2, 3, 4}, {3, 4}]
     monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live[0])
     monkeypatch.setattr(time, "sleep", lambda _: live.pop(0))
-    _assert_one_worker_remains(workers)
+    _assert_cancelled_worker_stopped(workers[0], workers[1])
     assert live == [{3, 4}]
 
 
-@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set()])
+@pytest.mark.parametrize("live", [{1, 2, 3, 4}, set(), {1, 2}, {1, 4}, {2, 3}])
 def test_one_worker_check_rejects_missing_or_leaked_workers(
     monkeypatch: pytest.MonkeyPatch, live: set[int]
 ) -> None:
@@ -128,7 +129,7 @@ def test_one_worker_check_rejects_missing_or_leaked_workers(
     monkeypatch.setattr(sys.modules[__name__], "_running", lambda pid: pid in live)
     monkeypatch.setattr(time, "monotonic", lambda: next(clock))
     with pytest.raises(AssertionError):
-        _assert_one_worker_remains(workers)
+        _assert_cancelled_worker_stopped(workers[0], workers[1])
 
 
 @pytest.mark.parametrize("startup_delay", [0, 0.6])
@@ -211,6 +212,7 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
     monkeypatch.setenv("QC_TEST_STARTUP_DELAY", str(startup_delay))
     ready = Barrier(2, timeout=10)
     original = compiler_cache.run_compiler
+    endpoints: dict[str, str] = {}
 
     def synchronized_clients(
         argv: list[str], timeout: float, **kwargs: Any
@@ -219,6 +221,7 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
             # Both private servers and recorded children must exist before the
             # cancellation. Do not assume Python startup fits in 0.2 seconds.
             started = time.monotonic()
+            endpoints[argv[-1]] = kwargs["environment"]["SCCACHE_SERVER_UDS"]
             ready.wait()
             timeout = max(0.0, timeout - (time.monotonic() - started))
         if argv[-1] == "timeout":
@@ -245,7 +248,10 @@ def test_concurrent_timeout_does_not_kill_another_invocation(
                     for path in cache_workers.glob("gqc-scc-*.json")
                 ]
                 assert len(workers) == 2
-                _assert_one_worker_remains(workers)
+                by_endpoint = {worker["endpoint"]: worker for worker in workers}
+                _assert_cancelled_worker_stopped(
+                    by_endpoint[endpoints["timeout"]], by_endpoint[endpoints["slow"]]
+                )
                 assert not successful.done()
             finally:
                 (cache_workers / "release-success").touch()

@@ -84,7 +84,7 @@ class NativeContractTests(unittest.TestCase):
         self.assertEqual(sum(d.kind == "c-function" for d in declarations), 115)
         self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 53)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 54)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
