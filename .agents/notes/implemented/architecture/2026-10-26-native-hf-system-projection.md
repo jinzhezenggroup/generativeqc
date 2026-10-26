@@ -80,3 +80,29 @@ accounting. Python per-item source eligibility and seed installation remain;
 this step does not close all progressive control, resource authority, CUDA
 projection or #2227. Revisit compatibility only after each missing domain has
 independent scientific, capacity and complete-endpoint acceptance.
+
+## Master integration qualification (2026-10-27)
+
+After the scalar final-verification policy and other master changes landed,
+the ownership inventory and API-count conflicts were reconciled against
+`d2d6b91eefb0928b69f47cb2d6ab16cd0ef892c9`. Both native owners remain present;
+the reviewed C-function inventory is 118. Candidate
+`75eb7dcf7802badc2c469f6d3c7564dbfecf0828` was rebuilt and independently measured.
+The [integration publication](../../../../benchmarks/results/native-hf-system-projection-20261027/integration/README.md)
+retains its own patch, sources, all samples and qualification receipts. The
+original publication above is unchanged and is not relabelled as new-head data.
+
+122 CTests, 315 Python tests and 25 subtests pass, together with installed SDK
+execution with `PATH=/nonexistent`, Sphinx, pre-commit, API and ownership audits.
+The same complete ABBA/BAAB 21+3 campaign took 85.13 seconds against an 85.27-second
+pilot estimate. All eight work/timing gates pass (maximum ratio
+0.9909565218160084), as do all 1536 independent E/F/D publications at unchanged
+1e-8/1e-6/1e-7 gates. No broad scaling or significant-speedup claim follows.
+
+The concurrent remote merge `204d38df0a43f20f1a2aad93c6ab6a40d92c1f57`
+also includes #2815 CUDA provider-initialization admission. It is preserved;
+projection and verification adapters, their public APIs and focused tests are
+identical to the measured revision. A separate rebuild, 122 CTests, 315 Python
+tests plus 25 subtests and installed SDK execution pass on that remote source.
+Its source comparison and receipts are included in `head-validation.json.xz`.
+The timing population remains attributed to `75eb7dcf7`, not the later merge.
