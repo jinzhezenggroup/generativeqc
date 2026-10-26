@@ -1,0 +1,36 @@
+{
+  "schema": "generativeqc.cc-lambda-multisecant.qualification.v1",
+  "source_base_revision": "fa5a5c5613e816924bfe0b03734ecb3bad2cf5f9",
+  "source_state": "base revision plus the tooling prototype identified by each screen record; no native production changes",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "compiler_cache": "sccache 0.16.0",
+  "compile_commands": [
+    "sccache c++ -std=c++20 -O2 -fPIC -Isrc -c src/response/native_gmres.cpp -o .artifacts/multisecant/native_gmres.o",
+    "sccache c++ -std=c++20 -O2 -fPIC -Isrc -c benchmarks/cc_lambda_multisecant_gmres.cpp -o .artifacts/multisecant/bridge.o",
+    "c++ -shared .artifacts/multisecant/native_gmres.o .artifacts/multisecant/bridge.o -o .artifacts/multisecant/gmres.so"
+  ],
+  "compiler_cache_before": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+  "compiler_cache_after": "Compile requests                      2\nCompile requests executed             2\nCache hits                            0\nCache misses                          2\nCache misses (C/C++)                  2\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          2\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  1.064 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                            1 GiB\nMax cache size                       10 GiB\n",
+  "compiler_cache_statistics_scope": "shared server snapshots; may include unrelated compilations",
+  "pytest_command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. python -m pytest -q tests/python/test_cc_lambda_multisecant.py tests/python/test_response_operator_contract.py",
+  "pytest_passed": 14,
+  "repeated_observations": 36,
+  "maximum_independent_residual_norm": 8.77264811957193e-13,
+  "maximum_lambda_change": 2.721579472203528e-13,
+  "record_sha256": {
+    "ccsd.json": "afca2cf84024be05580f8ef29a142f2f01f39a5f2c0b375407272a14f16d6244",
+    "ccsdt.json": "86ac37ab8480729f40edd7182beb05912ad8f8b1e36f1a2e400d8b1689112260"
+  },
+  "gpu_tested": false,
+  "cbs_energy_force_tested": false,
+  "default_promotion": false,
+  "sphinx_command": "PYTHONPATH=python:. sphinx-build -q -W --keep-going -b html docs .artifacts/multisecant/docs-html",
+  "sphinx_warnings_as_errors_passed": true,
+  "ruff_and_clang_format_passed": true,
+  "screen_commands": [
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. python benchmarks/cc_lambda_multisecant.py --native-gmres .artifacts/multisecant/gmres.so --repetitions 2 --output benchmarks/results/cc-lambda-multisecant-20261027/ccsd.json",
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. python benchmarks/cc_lambda_multisecant.py --triples --native-gmres .artifacts/multisecant/gmres.so --repetitions 2 --output benchmarks/results/cc-lambda-multisecant-20261027/ccsdt.json"
+  ],
+  "pre_commit_command": "prek run",
+  "pre_commit_passed": true
+}
