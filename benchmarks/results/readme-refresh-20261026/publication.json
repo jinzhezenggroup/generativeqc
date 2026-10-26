@@ -109,8 +109,8 @@
     {
       "path": "validation.json.xz",
       "role": "evidence",
-      "bytes": 3324,
-      "sha256": "0954308221a407653d6e3f9a6a9aa22b53a9c333637deb6baeef8e54a797c985"
+      "bytes": 3320,
+      "sha256": "e6afbec1971ca13dc22f53744106a9702943e0067c9d3308ee86bfe945c9c38f"
     },
     {
       "path": "work.md",
