@@ -92,6 +92,10 @@ int main(int argc, char** argv) {
     return binary
 
 
-@pytest.mark.parametrize("scenario", [0, 1, 2], ids=["null-provider", "valid-provider", "scf-failure"])
-def test_direct_prepare_provider_boundary(direct_boundary_probe: Path, scenario: int) -> None:
+@pytest.mark.parametrize(
+    "scenario", [0, 1, 2], ids=["null-provider", "valid-provider", "scf-failure"]
+)
+def test_direct_prepare_provider_boundary(
+    direct_boundary_probe: Path, scenario: int
+) -> None:
     subprocess.run([str(direct_boundary_probe), str(scenario)], check=True, timeout=10)
