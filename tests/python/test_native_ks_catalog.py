@@ -101,6 +101,9 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
                 method = resolve_bulk_ks(
                     row.name.split(":", 1)[1].upper(), spin=spin
                 ).method
+                # Compare the compiled catalog with public resolution as well
+                # as its generator: a stale row must not define its own oracle.
+                assert row.domain == resolve_ks_options(row.name).scf_domain
             else:
                 method = resolve_method(row.source, spin=spin)
             reference = compile_ks_execution_plan(method)
@@ -155,6 +158,31 @@ def test_named_runtime_skips_python_scientific_lowering(
     assert selected.radial_points == portable.radial_points
     assert selected.angular_polar == portable.angular_polar
     assert selected.angular_azimuth == portable.angular_azimuth
+
+
+@pytest.mark.parametrize(
+    "functional",
+    ["LDA_C_VWN_4", "LDA_C_CHACHIYO", "LDA_C_PZ_MOD", "GGA_X_APBE", "MGGA_X_LTA"],
+)
+@pytest.mark.parametrize("prefix", ["libxc:", "libxc-rks:", "libxc-uks:"])
+def test_automatic_runtime_uses_native_catalog(
+    library: Any, functional: str, prefix: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Automatic selectors borrow the native program in their exact worker domain."""
+    from generativeqc import ks
+
+    options = resolve_ks_options(
+        prefix + functional, KsOptions(grid=GridSpec(8, 6, 12))
+    )
+    portable = native_ks_options(options)
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("automatic catalog program fell back to Python scientific lowering")
+
+    monkeypatch.setattr(ks, "_native_execution_plan", forbidden)
+    selected = native_ks_options(options, library=library)
+    assert selected._catalog_library_owner is library
+    assert program(selected) == program(portable)
 
 
 def test_same_name_custom_graph_remains_exact_explicit_compiler_work(
@@ -280,11 +308,21 @@ def test_unselected_publication_preserves_the_complete_extension() -> None:
         )
 
 
-@pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks", "pbe0-rks", "b3lyp-rks"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        "pbe-rks",
+        "pbe-uks",
+        "pbe0-rks",
+        "b3lyp-rks",
+        "libxc:LDA_C_CHACHIYO",
+        "libxc-uks:LDA_C_CHACHIYO",
+    ],
+)
 def test_real_calculator_and_budgeted_prepare_use_selected_owner(
-    library: Any, method: str
+    library: Any, method: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from generativeqc import ResourceBudget
+    from generativeqc import ResourceBudget, ks
 
     calculator = Calculator(
         method=method,
@@ -292,10 +330,18 @@ def test_real_calculator_and_budgeted_prepare_use_selected_owner(
         ks_options=KsOptions(grid=GridSpec(8, 6, 12)),
         initial_guess=None,
     )
-    descriptor = calculator._method_descriptor()
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("budgeted native preparation retried Python scientific lowering")
+
+    # The runtime descriptor must be native-owned. Resource metadata still
+    # consults compiler plans separately; this slice does not retire that policy.
+    with monkeypatch.context() as binding:
+        binding.setattr(ks, "_native_execution_plan", forbidden)
+        descriptor = calculator._method_descriptor()
     assert descriptor.ks_options.contents.semilocal_component_count > 0
     molecule = (("H", (0, 0, -0.7)), ("H", (0.1, 0, 0.7)))
-    multiplicity = 2 if method.endswith("uks") else 1
+    multiplicity = 2 if calculator.ks_options.method_ir.spin == "polarized" else 1
     charge = 1 if multiplicity == 2 else 0
     with calculator.prepare_batch(
         [molecule], charges=[charge], multiplicities=[multiplicity]
