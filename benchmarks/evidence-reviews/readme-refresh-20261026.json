@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-refresh-20261026",
+  "owner": "Fresh HF/DFT README cohort",
+  "reason": "Retain all 128 newly measured populations and 512 complete calls, including slower and accuracy-failing points, with complete observables, work and source identities. No old timing replaces a new measurement; compact storage retains offline figure and qualification replay.",
+  "review_document": "benchmarks/results/readme-refresh-20261026/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/gpu4pyscf.json.xz",
+      "family": "readme-refresh-20261026",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete lossless endpoint populations and original independent observable/work receipts",
+      "bytes": 187492,
+      "sha256": "65a957ae022838706431956d6618b80b2e92d3848a56e324876cd14d66c3e64f"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/standard.json.xz",
+      "family": "readme-refresh-20261026",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete lossless endpoint populations and original independent observable/work receipts",
+      "bytes": 213548,
+      "sha256": "b03d0c799ddbcd0736381a1ef28afc845ca4abe70ec6ca9875a9cd5bc4cf7c41"
+    }
+  ]
+}

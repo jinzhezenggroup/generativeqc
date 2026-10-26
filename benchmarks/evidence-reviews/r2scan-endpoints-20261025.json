@@ -2,17 +2,9 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "r2scan-endpoints-20261025",
   "owner": "Large pure-Coulomb endpoints and default HF/DFT figure refresh",
-  "reason": "Retain all 128 fresh populations and 512 complete E/F calls with semantic work, settings and source/binary identities. The compact exploration capsule preserves rejected and cancelled trials separately from the figure cohort. Independent accuracy failures remain visible; this storage review does not assert universal performance or numerical acceptance. The existing size budgets are unchanged.",
+  "reason": "Retain all 128 fresh populations and 512 complete E/F calls with semantic work, settings and source/binary identities. The compact exploration index preserves rejected and cancelled trial identities and timing/work summaries; the original bundle is recoverable from checksum-pinned existing Git history. Independent accuracy failures remain visible; this storage review does not assert universal performance or numerical acceptance. The existing size budgets are unchanged.",
   "review_document": "benchmarks/results/r2scan-endpoints-20261025/README.md",
   "files": [
-    {
-      "path": "benchmarks/results/r2scan-endpoints-20261025/exploration-00.json.xz",
-      "family": "r2scan-endpoints-20261025",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Rejected/partial exploratory receipts, diagnostic work and source reconstruction; excluded from figure timings",
-      "bytes": 818152,
-      "sha256": "ce0d5e65cd5eb00f5c5b580dde29308b54d0db94413393182915599e4f384f19"
-    },
     {
       "path": "benchmarks/results/r2scan-endpoints-20261025/gpu4pyscf.json.xz",
       "family": "r2scan-endpoints-20261025",
