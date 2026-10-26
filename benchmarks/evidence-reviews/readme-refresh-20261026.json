@@ -10,16 +10,16 @@
       "family": "readme-refresh-20261026",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete lossless endpoint populations and original independent observable/work receipts",
-      "bytes": 187492,
-      "sha256": "65a957ae022838706431956d6618b80b2e92d3848a56e324876cd14d66c3e64f"
+      "bytes": 188664,
+      "sha256": "1be7407733cd6b574c46a731aa3bdc2b17cb9b203c6835426b298f112169a7ee"
     },
     {
       "path": "benchmarks/results/readme-refresh-20261026/standard.json.xz",
       "family": "readme-refresh-20261026",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete lossless endpoint populations and original independent observable/work receipts",
-      "bytes": 213548,
-      "sha256": "b03d0c799ddbcd0736381a1ef28afc845ca4abe70ec6ca9875a9cd5bc4cf7c41"
+      "bytes": 214196,
+      "sha256": "bf21c9d9f54d0a3f16bd4505206e489c1ac70d66021f1fa63511a3ed6a5e61b6"
     }
   ]
 }

@@ -127,7 +127,7 @@ print(first.energies)
 **HF/DFT energy + analytic forces — RTX 5090**
 
 With default settings, GenerativeQC outperforms GPU4PySCF in **64/64** measured warm cases.
-For 96-atom Direct ωB97M-V, the measured warm speedup is **4.21×**.
+For 96-atom Direct ωB97M-V, the measured warm speedup is **4.22×**.
 
 ![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 

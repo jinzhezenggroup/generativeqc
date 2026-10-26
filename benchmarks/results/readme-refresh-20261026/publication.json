@@ -1,8 +1,8 @@
 {
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
-    "revision": "42b266917f6676ecf0559fb8965a4e19f60d0fe3",
-    "dirty": true
+    "revision": "46b916ac6df0082d56fbc48639bc1261aecc7d04",
+    "dirty": false
   },
   "decision": {
     "status": "inconclusive",
@@ -13,8 +13,8 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 4927,
-      "sha256": "728a3c7e7067d18b9bcbdb29076f31fdcd9573a326c2ac6f8da8d410f1210525"
+      "bytes": 4601,
+      "sha256": "854afb2f261b570becca0942134e0c6eee10e4e2f305ca9b7fb987fa42b0c094"
     },
     {
       "path": "auxiliary-inputs.json.xz",
@@ -25,26 +25,26 @@
     {
       "path": "conditions.md",
       "role": "summary",
-      "bytes": 7210,
-      "sha256": "9f47c4c7bb6aa8350c6f041b8862db1269dcb03b80ab186ec476d3b3231a29be"
+      "bytes": 7635,
+      "sha256": "295ce958dab37483321f5fddf324d58b15d1956d5213d97694f3cde40e94ab95"
     },
     {
       "path": "figures.json",
       "role": "summary",
       "bytes": 246,
-      "sha256": "a8313fb3f8041851f47efcbb6d14c0c2b4374639c350712a13bd9aeccb175488"
+      "sha256": "4b3f76c509ad58852a003f8b2c9e11c1770d1bb04b31388a9de56e8abc5c3643"
     },
     {
       "path": "gpu4pyscf.json.xz",
       "role": "samples",
-      "bytes": 187492,
-      "sha256": "65a957ae022838706431956d6618b80b2e92d3848a56e324876cd14d66c3e64f"
+      "bytes": 188664,
+      "sha256": "1be7407733cd6b574c46a731aa3bdc2b17cb9b203c6835426b298f112169a7ee"
     },
     {
       "path": "jobs.json.xz",
       "role": "reproduction",
-      "bytes": 6408,
-      "sha256": "ccedf10fb858fdf62fc6c3ff5ce86e713afa37ab0f7b640f145e21c0652af512"
+      "bytes": 6652,
+      "sha256": "af7768152180678b3259d98e131762582c68ebf8360971cf1f7b26f9acee43d9"
     },
     {
       "path": "oracles.json.xz",
@@ -53,16 +53,22 @@
       "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
     },
     {
+      "path": "previous-cohort.json",
+      "role": "reproduction",
+      "bytes": 4595,
+      "sha256": "c3d995e146b6561f7e6dc5da2d810df9973d09388f6838f86cf0f2efd06c1d90"
+    },
+    {
       "path": "provenance.json.xz",
       "role": "summary",
-      "bytes": 7148,
-      "sha256": "46b64e80b957278ee5abd57429560d62090f48f4dafa044c4901512b3ab39ae9"
+      "bytes": 6132,
+      "sha256": "dff9d2c0efe28ec591d217cbf8603a322c7f86933fb960a408e8df3532ca42df"
     },
     {
       "path": "qualification.json.xz",
       "role": "summary",
-      "bytes": 22448,
-      "sha256": "c0b5591ff5cf5b2d8f37d7dd7f547a47fbd0400fbc3e91b4765d07f4653bcfe5"
+      "bytes": 22308,
+      "sha256": "044ad4b77b7d91c67fb013951710459fb94f2defa1f88e403e542a9ea30223b5"
     },
     {
       "path": "reference-reuse.json",
@@ -79,38 +85,32 @@
     {
       "path": "reproduce.py",
       "role": "reproduction",
-      "bytes": 9563,
-      "sha256": "daa03cbed6a7d754ebba32a16ca16a6c3b0244cb665d0727f1b7f5b546b33dc7"
-    },
-    {
-      "path": "source.patch.xz",
-      "role": "source-patch",
-      "bytes": 13804,
-      "sha256": "c816fb1ffd9ff4e860311f47bb18c9bf297e863525140a894550a2d957734e55"
+      "bytes": 10827,
+      "sha256": "4cf2ed5f97288020d86b7025168824a27030e0b56092dac1f6b9a240fc346b3f"
     },
     {
       "path": "standard.json.xz",
       "role": "samples",
-      "bytes": 213548,
-      "sha256": "b03d0c799ddbcd0736381a1ef28afc845ca4abe70ec6ca9875a9cd5bc4cf7c41"
+      "bytes": 214196,
+      "sha256": "bf21c9d9f54d0a3f16bd4505206e489c1ac70d66021f1fa63511a3ed6a5e61b6"
     },
     {
       "path": "summary.json.xz",
       "role": "summary",
-      "bytes": 388,
-      "sha256": "b02d6b225029297cfdd61cce31d69b59806c56684660d424f65a2d7d4081a101"
+      "bytes": 296,
+      "sha256": "bcfee4f949dcb81109ac6d224d8fc1df4c79b7f24b222712eb7204c8b1d5aaa4"
     },
     {
       "path": "timings.md",
       "role": "summary",
-      "bytes": 13901,
-      "sha256": "22f7bfc7ff29c333f13d74a3f90f0227436be91ae2d6653dfa006c4b34a151af"
+      "bytes": 13896,
+      "sha256": "56e8efdf9e892930169543e6ceefd841d444c0340564c4d74b7bab71c7f7d990"
     },
     {
       "path": "validation.json.xz",
       "role": "evidence",
-      "bytes": 3324,
-      "sha256": "0954308221a407653d6e3f9a6a9aa22b53a9c333637deb6baeef8e54a797c985"
+      "bytes": 3408,
+      "sha256": "262a3e7c090ffff794925622ba50be0aacb3f3ed4a6c65235904b3438abfdd99"
     },
     {
       "path": "work.md",
