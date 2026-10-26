@@ -84,11 +84,10 @@ struct DirectJkFixedTopologyTaskProfile {
 };
 
 struct DirectJkBoundedStreamingTaskProfile {
-  std::size_t maximum_task_capacity{32U * 1024U * 1024U};
-  // A larger reusable page amortizes compaction and graph launches on large
-  // targets. Actual capacity remains bounded by target memory and the task ABI;
-  // allocation refusal retries the incumbent 8M-task page once.
-  std::size_t maximum_arena_bytes{std::size_t{6} << 30};
+  std::size_t maximum_task_capacity{8U * 1024U * 1024U};
+  // Keep the incumbent default page; the explicit cold-HF diagnostic may
+  // request a larger profile, still bounded by target memory and the task ABI.
+  std::size_t maximum_arena_bytes{std::size_t{3} << 29};
 };
 
 struct DirectJkTuningProfile {
@@ -122,6 +121,10 @@ DirectJkSchedulePolicy resolve_direct_jk_schedule_policy(
 std::size_t direct_jk_bounded_streaming_task_capacity_limit(
     const DirectJkSchedulePolicy& policy, std::size_t generated_task_bytes) noexcept;
 
+/** Select the optional larger HF page only for explicit cold-screening
+ * diagnostics. Physical-reference exports always retain the incumbent page. */
+DirectJkTuningProfile resolve_hf_direct_tuning_profile(bool physical_reference) noexcept;
+
 /** Facts for a cold preliminary HF operator. These describe actual admitted
  * providers and seed ownership, not just a requested execution mode. */
 struct ColdHfScreeningDomain {
@@ -149,7 +152,8 @@ struct ColdHfScreeningPolicy {
  * driver must reset DIIS and converge the original target operator before any
  * publication, charging both stages to the same user iteration allowance.
  * Zero policy keeps ordinary execution; warm/imported/moved owners never inherit
- * the preliminary graph. The environment opt-out is diagnostic only. */
+ * the preliminary graph. Only GENERATIVEQC_HF_COLD_SCREENING=1 opts in;
+ * the unset/default route preserves the incumbent operator and page policy. */
 ColdHfScreeningPolicy resolve_cold_hf_screening(const ColdHfScreeningDomain& domain,
                                                 double target_screening) noexcept;
 

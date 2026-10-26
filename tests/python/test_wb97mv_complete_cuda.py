@@ -380,6 +380,9 @@ def test_complete_cuda_force_matches_independent_engine(
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc_compiler.dft.nonlocal_policy import (
+        MOLECULAR_VV10_DENSITY_THRESHOLD,
+    )
 
     primitive_gate = os.environ.get("GENERATIVEQC_WB97MV_BECKE_PRIMITIVE_TEST") == "1"
     if primitive_gate:
@@ -497,7 +500,11 @@ def test_complete_cuda_force_matches_independent_engine(
         assert energy_only.forces is None
         np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
         assert abs(energy_only.energy - cold.energy) < 1e-9
-        with reference_vv10_domain(1e-8):
+        # Both engines must integrate the current molecular density domain.
+        # The historical 1e-8 reference mask excludes tails now retained by
+        # native VV10 (1e-10), producing a model mismatch above the energy gate.
+        density_threshold = float(MOLECULAR_VV10_DENSITY_THRESHOLD)
+        with reference_vv10_domain(density_threshold):
             oracle = reference_sample(
                 reference_engine(atoms, reference_basis, grid, spin=spin), cp
             )
@@ -533,7 +540,7 @@ def test_complete_cuda_force_matches_independent_engine(
             (symbol, tuple(position))
             for (symbol, _), position in zip(atoms, moved_coordinates, strict=True)
         ]
-        with reference_vv10_domain(1e-8):
+        with reference_vv10_domain(density_threshold):
             moved_oracle = reference_sample(
                 reference_engine(moved_atoms, reference_basis, grid, spin=spin), cp
             )
@@ -565,6 +572,7 @@ def test_complete_cuda_force_matches_independent_engine(
                 "spin": spin,
                 "basis": basis,
                 "slurm_job": os.environ["SLURM_JOB_ID"],
+                "vv10_density_threshold": density_threshold,
                 "cold_energy": cold.energy,
                 "cold_reference_energy": oracle["energies_hartree"][0],
                 "cold_forces": cold.forces.tolist(),
