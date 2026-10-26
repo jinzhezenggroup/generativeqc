@@ -56,6 +56,67 @@ def _selection(
     return values[0], values[1:boundary], values[boundary + 1 :]
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> None:
+    """Source both actual Bash variants across all CI events and shards."""
+    module = "tests/python/test_df_cc_mixed_precision.py"
+    selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
+    content = selector.read_text(encoding="utf-8")
+    addition = f"  {module}\n"
+    assert content.count(addition) == 1
+    old_selector = tmp_path / "original-selector.sh"
+    old_selector.write_text(content.replace(addition, "", 1), encoding="utf-8")
+
+    def run(path: Path, shard: str) -> tuple[str, list[str], list[str], list[str]]:
+        script = f"source {shlex.quote(str(path))}\n"
+        script += (
+            'printf "%s\\0" "$dist_mode" "${test_targets[@]}" '
+            '--coverage-- "${coverage_args[@]}" --extra-- "${extra_args[@]}"\n'
+        )
+        result = subprocess.run(
+            ["bash", "-eu", "-c", script],
+            cwd=ROOT,
+            env={
+                **os.environ,
+                "GITHUB_EVENT_NAME": event,
+                "GENERATIVEQC_CI_SHARD": shard,
+            },
+            capture_output=True,
+            check=True,
+        )
+        fields = result.stdout.decode().split("\0")[:-1]
+        ci = fields.index("--coverage--")
+        ei = fields.index("--extra--")
+        return fields[0], fields[1:ci], fields[ci + 1:ei], fields[ei + 1:]
+
+    old = {shard: run(old_selector, shard) for shard in SHARDS}
+    new = {shard: run(selector, shard) for shard in SHARDS}
+    expected = Counter(
+        str(file.relative_to(ROOT))
+        for file in (ROOT / "tests/python").rglob("test_*.py")
+    )
+    old_counts = Counter(path for _, paths, _, _ in old.values() for path in paths)
+    new_counts = Counter(path for _, paths, _, _ in new.values() for path in paths)
+    assert old_counts == new_counts == expected
+    assert old_counts[module] == 1
+    original_owners = [shard for shard in SHARDS if module in old[shard][1]]
+    assert len(original_owners) == 1 and original_owners[0].startswith("core-")
+    assert [shard for shard in SHARDS if module in new[shard][1]] == [
+        "runtime-heavy"
+    ]
+    for shard in SHARDS:
+        assert old[shard][0] == new[shard][0]  # distribution
+        assert old[shard][2] == new[shard][2]  # coverage
+        assert old[shard][3] == new[shard][3]  # extras/deselections
+        assert Counter(old[shard][1]) - Counter([module]) == (
+            Counter(new[shard][1]) - Counter([module])
+        )
+        if shard not in {*original_owners, "runtime-heavy"}:
+            assert old[shard][1] == new[shard][1]
+
+
 def test_core_shard_selection_ignores_host_locale(tmp_path: Path) -> None:
     """Exercise non-C collation even on CI hosts lacking installed locales."""
     system_sort = shutil.which("sort")
@@ -223,6 +284,7 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
 @pytest.mark.parametrize(
     ("module", "owner"),
     (
+        ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
     ),
@@ -412,6 +474,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
+            "test_df_cc_mixed_precision.py",
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
@@ -477,6 +540,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
+        "tests/python/test_df_cc_mixed_precision.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
