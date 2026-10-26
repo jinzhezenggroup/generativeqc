@@ -13,13 +13,26 @@ if not __debug__:
     raise SystemExit("Evidence verification requires assertions; do not use -O.")
 packet = json.loads(lzma.decompress((ROOT / "endpoints.json.xz").read_bytes()))
 provenance = json.loads(lzma.decompress((ROOT / "provenance.json.xz").read_bytes()))
-for arm, raw in provenance["source_manifests"].items():
-    assert hashlib.sha256(raw.encode()).hexdigest() == provenance["source_manifest_sha256"][arm]
-    manifest = json.loads(raw)
-    receipt_name = "stage24-source-verification.json" if arm == "guarded" else "validation-gemm-pr-source-verification.json"
-    verified = json.loads(provenance["support"][receipt_name])
-    assert verified["source_revision"] == manifest["source_revision"] and not verified["mismatches"]
-    assert verified["files_verified"] == len(manifest["files"])
+def verify_source_identities(provenance):
+    """Check recorded compact identities, not unavailable historical Git objects."""
+    sources = provenance["source_identities"]
+    assert hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == provenance["source_identities_sha256"]
+    assert set(sources) == {"baseline", "guarded"}
+    assert sources["baseline"]["tree"] == "79b2a331c383bc45bc7640bb2916c2c7ed514676"
+    assert sources["baseline"]["source_patch"] is None
+    assert sources["guarded"]["tree"] is None  # Historical commit object was not recovered.
+    assert sources["guarded"]["baseline_revision"] == sources["baseline"]["revision"]
+    assert len(sources["guarded"]["changed_files"]) == 4
+    for arm, source in sources.items():
+        assert source["manifest_sha256"] == provenance["source_manifest_sha256"][arm]
+        assert source["manifest_bytes"] == (1643599 if arm == "baseline" else 1643737)
+        receipt_name = "stage24-source-verification.json" if arm == "guarded" else "validation-gemm-pr-source-verification.json"
+        verified = json.loads(provenance["support"][receipt_name])
+        assert verified["source_revision"] == source["revision"] and not verified["mismatches"]
+        assert verified["files_verified"] == source["files_verified"] == (12425 if arm == "baseline" else 12426)
+
+
+verify_source_identities(provenance)
 for name, raw in provenance["support"].items():
     assert hashlib.sha256(raw.encode()).hexdigest() == provenance["support_sha256"][name]
 refs = ROOT.parent / "readme-final-20261022"

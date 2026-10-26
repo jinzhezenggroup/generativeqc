@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "xc-bounded-cross-20261024",
   "owner": "bounded FP64 XC cross-product overflow proof",
-  "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
+  "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, compact recorded source identities and all four guarded-arm source differences, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
   "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md",
   "files": [
     {
@@ -12,14 +12,7 @@
       "role": "complete-endpoints-and-independent-moved-references",
       "bytes": 534772,
       "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
-    },
-    {
-      "path": "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz",
-      "family": "xc-bounded-cross-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "source-build-test-and-execution-provenance",
-      "bytes": 597596,
-      "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     }
   ]
 }
+
