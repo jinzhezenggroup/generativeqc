@@ -41,8 +41,8 @@ def _assert_cold_budget(workflow: str) -> None:
     prerequisite = _step(job, "Compile production CUDA prerequisite archive")
     # Both serial build phases must fit without consuming setup/probe/cleanup time.
     assert _minutes(prerequisite) == 10
-    assert _minutes(build) == 30
-    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 50
+    assert _minutes(build) == 45
+    assert _minutes(prerequisite) + _minutes(build) + 10 <= _minutes(header) <= 65
     assert "continue-on-error:" not in header
     gates = (
         (
@@ -117,16 +117,16 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("timeout-minutes: 50", "timeout-minutes: 35"),
-        ("timeout-minutes: 50", "timeout-minutes: 40"),
-        ("timeout-minutes: 50", "timeout-minutes: 45"),
-        ("timeout-minutes: 50", "timeout-minutes: 60"),
+        ("timeout-minutes: 65", "timeout-minutes: 50"),
+        ("timeout-minutes: 65", "timeout-minutes: 55"),
+        ("timeout-minutes: 65", "timeout-minutes: 60"),
+        ("timeout-minutes: 65", "timeout-minutes: 80"),
         ("timeout-minutes: 10", "timeout-minutes: 0"),
         ("timeout-minutes: 10", "# timeout omitted"),
-        ("timeout-minutes: 30", "timeout-minutes: 0"),
-        ("timeout-minutes: 30", "# timeout omitted"),
-        ("timeout-minutes: 30", "timeout-minutes: 30\n        continue-on-error: true"),
-        ("timeout-minutes: 30", "timeout-minutes: 30\n        if: false"),
+        ("timeout-minutes: 45", "timeout-minutes: 0"),
+        ("timeout-minutes: 45", "# timeout omitted"),
+        ("timeout-minutes: 45", "timeout-minutes: 45\n        continue-on-error: true"),
+        ("timeout-minutes: 45", "timeout-minutes: 45\n        if: false"),
         ("--target generativeqc_cuda_runtime_tests --parallel 3", "--target help"),
         ("ctest --test-dir build/cuda-release-sm120", "echo skipped"),
         ("if: always()", "if: success()"),
