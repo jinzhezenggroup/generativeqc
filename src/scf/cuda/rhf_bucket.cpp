@@ -327,7 +327,8 @@ std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexce
                                      hf_cuda_retained_host_numeric_bytes(*plan));
   if (resources.solver_host_workspace_ != nullptr)
     bytes = runtime::add_capacity(bytes, resources.solver_host_workspace_bytes_);
-  return runtime::add_capacity(bytes, resources.provider_retained_bytes_);
+  return runtime::add_capacity(bytes, resources.provider_initialization_.retained_capacity(
+                                          resources.provider_retained_bytes_));
 }
 
 std::size_t hf_cuda_reference_reuse_capacity(const CudaRhfBucketPlan& plan,

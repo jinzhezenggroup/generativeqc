@@ -159,6 +159,9 @@ the compiler's structural admission and explicit blacklist at build time.
 `libxc-uks:GGA_X_APBE` selects UKS. These programs execute through the existing
 native CPU KS lowerer, without importing Python at runtime. CUDA and mixed
 automatic component graphs remain unavailable rather than changing the method.
+The generated catalog retains each worker's numerical domain: density-only LDA
+uses its distinct total-density RKS and spin-resolved UKS contract, while GGA
+and tau meta-GGA retain the general Libxc work domain.
 
 MethodIR compositions have a separate build-time generated catalog. Query the
 full list, including backend qualification and unsupported-graph reasons:

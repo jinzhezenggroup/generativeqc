@@ -508,7 +508,9 @@ def main(argv: list[str] | None = None) -> None:
                 "SLURM_CPUS_PER_TASK",
             )
         },
-        "accelerator": cuda_accelerator_metadata(cp),
+        "accelerator": cuda_accelerator_metadata(
+            cp, sampling_point="before benchmark measurements"
+        ),
         "environment": environment_metadata(
             distributions={
                 "pyscf": ("pyscf",),

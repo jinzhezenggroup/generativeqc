@@ -1,0 +1,39 @@
+{
+  "scope": "HF independent frozen Git source reconstruction, no build/device/science yet",
+  "source": {
+    "source_revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+    "git_tree": "c8a85362459c4258f9f64ea4f0f94d6b43872d89",
+    "derived_git_lf_archive_sha256": "21fe3643a42d982a4a18fa18e4319be7d44db45f5f8d50ab1199f8c9c0485026",
+    "derived_archive_bytes": 159764480,
+    "reconstruction": "direct canonical Git archive of measured commit; qualified patch retained as provenance, not applied twice",
+    "qualified_patch_sha256": "3ebd93ce481b47058e20990f99f11a1c9d349d6780cc5a63286583bbd3316041",
+    "qualified_patch_base": "f5ca5398f25ed7b31285367b5b8fd829d3b024b5",
+    "pinned_file_sha256": {
+      "docs/user/dft_density_fitting.md": "60750c8e763dc60477c62bc263ca4478f81fce372737b6d72e96fa1e6a3c6f72",
+      "src/scf/cuda/df_gradient_bridge.cu": "0569e13f7f80e44c911c612e417dab14725ea9de6697d149081ddf4cf1f2aadb",
+      "tests/python/test_df_raw_coulomb_response_cuda.py": "c127342a51c9526f8699ec4762f33b5778edbacd9600dc3881e274274d1f0830",
+      "benchmarks/readme_defaults.py": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+      "python/generativeqc_compiler/integral/production_profile.py": "28bd9c12689142b6eb4422d5e246ba145979709fdbbcc46ba1ece59e75f1cf02",
+      "python/generativeqc_compiler/integral/production_shell_classes.json": "dd9ff7e8c9df954b5c82749b60d9331cbadb6afba32ab165889ab0e9e8152d9d"
+    },
+    "original_5852_package_archive_provenance": "UNAVAILABLE; not replaced by this derived archive"
+  },
+  "pinned_file_checks": {
+    "docs/user/dft_density_fitting.md": true,
+    "src/scf/cuda/df_gradient_bridge.cu": true,
+    "tests/python/test_df_raw_coulomb_response_cuda.py": true,
+    "benchmarks/readme_defaults.py": true,
+    "python/generativeqc_compiler/integral/production_profile.py": true,
+    "python/generativeqc_compiler/integral/production_shell_classes.json": true
+  },
+  "file_count": 12130,
+  "source_changes_after_snapshot": "NONE; no production patch added",
+  "CPU_hostname": "i2679-cbs-energy-1023--f31870b307aa-eesqb2quac",
+  "cpu_max": "5500000 100000",
+  "memory_max": "322122547200",
+  "schema": "generativeqc.h100-source-identity.v1",
+  "source_tree_sha256": "c8aaee5555f45420a3a66ab58928ea5d7dc69f47fc77826fa3f1808a15835891",
+  "source_tree_encoding": "UTF-8 JSON object: sorted path keys; sorted identity keys; compact separators; mode, bytes, sha256",
+  "original_inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+  "original_inventory_compressed_sha256": "12b9b745a0cd36d737f0d910369e8c9fc83cfca4333e43f6a1fb4a7960c1ec25"
+}

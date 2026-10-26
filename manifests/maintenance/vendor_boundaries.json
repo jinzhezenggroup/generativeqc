@@ -145,12 +145,13 @@
     "src/scf/cuda_rhf.cpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests. The extra create-symbol addresses authenticate the actual execution binding for an explicit provider identity observation; they do not execute additional vendor calls.",
       "references": {
-        "cublasCreate": 1,
+        "cublasCreate": 2,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,
-        "cublasSetWorkspace": 1
+        "cublasSetWorkspace": 1,
+        "cusolverDnCreate": 1
       }
     },
     "src/solver/cuda/cusolver_compat.hpp": {

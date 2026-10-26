@@ -1,0 +1,37 @@
+{
+  "schema": "generativeqc.provider-init-offline-verification.v1",
+  "scope": "metadata restoration and verification only; no compile/GPU/vendor/scientific work",
+  "reader_sha256": "cecda4ed75edbcbdeb301e0bd51f43dc5e51eb0a593c1b02b4f09ab0eb7b26ca",
+  "manifest_sha256": "49c441dbd232c0184bb8535f956622cf5f81d2686aa0ed65655727baded14934",
+  "POSIX_actual_roundtrip": {
+    "status": "PASS_OFFLINE_CAPTURED_RECORD_AND_SOURCE_VERIFICATION",
+    "measured_head": "e87cad557a81ff956e210efa2d76c770f0fdd41f",
+    "captured_records": 52,
+    "publicly_redacted_records": 42,
+    "restorable_executed_sources": 53,
+    "actual_inventory_files": 56,
+    "compiled_inventory_only": 3,
+    "CLI_calls": 38,
+    "CLI_pre_scrub_stdout_verified": 37,
+    "CLI_pre_scrub_stdout_UNAVAILABLE": 1,
+    "actual_vendor_child_stdout_bytes_verified": 5278,
+    "observed_delta_bytes": 375390208,
+    "qualification": "PASS_ENGINEERING_NATIVE_INIT_SUBCONTRACT_ONLY",
+    "new_GPU_or_scientific_work": false,
+    "restoration": {
+      "restored_files": 105,
+      "restored_POSIX_modes_checked": 105,
+      "mode_execution_platform": "posix",
+      "Windows_permissions_are_POSIX_validation": false
+    }
+  },
+  "negative_cases_refused": [
+    "trailing-compressed-stream",
+    "truncated-compressed-stream",
+    "unsafe-restoration-path",
+    "duplicate-json-key",
+    "existing-output-directory",
+    "corrupted-stored-source-record"
+  ],
+  "original_private_transport_sha256": "fdb5a10fcf1791c03f4c59c201830059b31f03c9bfd1d280e8928f7c61cf567f"
+}

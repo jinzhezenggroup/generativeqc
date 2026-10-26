@@ -1,27 +1,29 @@
-# Historical HF/DFT README cohort after the cold endpoint improvements (2026-10-26)
+# Historical HF/DFT README cohort after the DF screening-headroom repair
 
 [Direct figure](../../../assets/readme-direct-defaults.svg) · [DF figure](../../../assets/readme-df-defaults.svg) · [All timings](timings.md) · [Executed work](work.md) · [Conditions](conditions.md)
 
-All **128 populations / 512 complete energy-and-force calls** were newly
-measured with the **#2786 default-grid framework** and one frozen implementation.
-Eight methods, Direct/DF and 3/12/48/96 atoms each have one fresh process per
-engine, with one cold and three frozen-density warm calls. HF is included.
-The original 2×4 format, colors and cold/warm encoding are preserved;
-**all completed accuracy-failing points remain visible**. CCSD(T)/CBS is unchanged.
+All **128 populations / 512 complete energy-and-force calls** were freshly
+measured on 2026-10-26 with the **#2786 default-grid framework**, including the
+DF screening-headroom repair. Eight methods, Direct/DF and 3/12/48/96 atoms
+each have one fresh process per engine, one cold and three frozen-density warm
+calls. Both axes are linear, with latency starting at zero. The 2×4 layout,
+colors and cold/warm encoding are preserved.
+**All completed accuracy-failing points remain visible.** CCSD(T)/CBS is unchanged.
 
 ## Integration scope
 
-This is a retained measurement of the frozen `r2-default-v2` image described
-below, not a benchmark of current master. Its then-default Direct HF route used
-screened proposals; current source preserves that route only with the explicit
-HF opt-in after the stronger force diagnostic failed. The original samples,
-figures, source patch, gates and failed records are unchanged. In particular,
-these historical HF timings do not establish the restored ordinary-HF default's
-accuracy or speed. No integrated-image GPU rerun is claimed.
+This is a retained measurement of the frozen `46b916ac` source and its qualified
+incrementally linked library described below, not a benchmark of current
+master. Its then-default Direct HF route used screened proposals; current
+source preserves that route only with the explicit HF opt-in after the
+stronger force diagnostic failed. The original samples, linear figures,
+scientific gates and failed records are unchanged. These historical HF timings
+do not establish the restored ordinary-HF default's accuracy or speed. No
+integrated-image GPU rerun is claimed.
 
 The homepage labels these exact historical figures in the surrounding heading,
-alt text and caption. The SVG bytes and pinned-renderer replay remain unchanged;
-new current-source measurements should be published as a separate cohort.
+alt text and caption. The linear SVG bytes and pinned-renderer replay remain
+unchanged; new current-source measurements should be a separate cohort.
 
 ## Observations
 
@@ -29,75 +31,71 @@ new current-source measurements should be published as a separate cohort.
 | --- | --- | ---: |
 | direct | cold | 32 / 32 |
 | direct | warm | 32 / 32 |
-| df | cold | 31 / 32 |
+| df | cold | 32 / 32 |
 | df | warm | 32 / 32 |
 
-This cohort is faster in **63/64 cold** and **64/64 warm** cases.
-Direct ωB97M-V96 warm is **4.21×** faster. These are descriptive latency
-observations from one process per engine/case, not a universal performance
-claim or a repeated-process confidence interval.
+This cohort is faster in **64/64 cold** and **64/64 warm** cases.
+Direct ωB97M-V96 warm is **4.22×** faster.
+These are descriptive observations from one process per engine/case, not
+confidence intervals or a universal performance claim. All repeats enter the
+reported warm medians and ranges; no timing comes from an earlier campaign.
 
-Every slower observation remains in the figures (complete E+F seconds):
-
-| Case | Phase | GenerativeQC | GPU4PySCF |
-| --- | --- | ---: | ---: |
-| df pbe0 96 | cold | 26.9349 | 26.2575 |
-
-DF PBE0-96 is slower in this fresh single-process cohort, while its independent
-three-round default campaign has a faster native cold median. Its native warm
-calls also differ from the three-round campaign despite equal iteration counts.
-The cause is not established. This complete population is retained, not
-replaced by one of the faster qualification samples. The
-[six-endpoint evidence](../cold-r2-defaults-20261026/README.md) retains all three
-rounds and the distinction between default timing and scientific qualification.
+All measured native medians are below their paired GPU4PySCF medians.
 
 ## Accuracy and source identity
 
 GenerativeQC has **58 qualified / 6 failed / 0 unverified** populations;
 GPU4PySCF has **58 qualified / 6 failed / 0 unverified**.
-The unchanged gates are energy ≤1e-5 Eh/atom, maximum force ≤1e-4 Eh/Bohr
-and RMS force ≤3e-5 Eh/Bohr, with quarter-gate reference stability and CPU/GPU
-checks. Default-grid and fitting failures are displayed rather than omitted.
-References preserve their original producer identities and bytes; exact geometry,
-basis/representation, state and auxiliary inputs are checked before reuse.
-Numerical references are reused; every timing in these figures is new.
+Unchanged gates are energy ≤1e-5 Eh/atom, maximum force ≤1e-4 Eh/Bohr and RMS
+force ≤3e-5 Eh/Bohr, with quarter-gate reference stability and CPU/GPU checks.
+Default-grid/fitting failures remain plotted. Original reference bytes and
+producer identities are preserved; exact scientific inputs and all measured
+samples are rechecked before reference reuse. Timing data are all new.
 
-All populations use frozen `r2-default-v2`: base
-`42b266917f6676ecf0559fb8965a4e19f60d0fe3` plus the exact `source.patch.xz`.
-Its archive SHA-256 is
-`e4af728d14fc6279faa146748b65fcc38d87b98dbe5e0ee0233d3df5658b6b71`.
-This dirty source is not represented as the unmodified parent commit. The
-13,178 archived files match the frozen tree, and all 1,858 compiler inputs
-match the actual build tree. All 558 C++/CUDA compile commands invoke verified
-sccache 0.16.0. Core/AOT identities and shared-cache statistics are retained.
+Source is the clean committed tree `46b916ac6df0082d56fbc48639bc1261aecc7d04`. Its archive
+SHA-256 is `c5ae0e48c72409ef6bfd91c37cc77c3fb4c4c26f814428c0b4aa5c26ecf02b73`. All 2,770 relevant
+source/header/compiler/runner files match the qualified candidate source.
+The same core/AOT libraries are reused; full hashes and source parity are in
+`provenance.json.xz`. The core's inherited embedded source identity is explicitly
+distinguished from this commit. The
+[repair evidence](../df-screening-headroom-20261026/README.md) retains the verified
+incremental compilation/relink, independent references, three-round same-card
+comparisons, moved geometry, work counts and constrained-memory fallbacks.
 
-Seven finite Slurm workers run preassigned scientific pairs consecutively on
-the same allocated RTX 5090, alternating first-arm order. No research selector
-or profiling control enters these figures. Existing spatial-order and validation
-GEMM controls, resource limits and timer boundaries are disclosed in
-[conditions](conditions.md). Intrusive work counts and separate 96/120-atom
-moved-geometry tests belong to the implementation evidence, not figure timings.
-The inherited stronger default-HF force diagnostic failure remains documented
-in [its original evidence](../cold-hf-defaults-20261026/README.md).
+Seven finite Slurm workers pair both engines consecutively on each assigned
+RTX 5090 and alternate first-arm order. CUDA PCI addresses and GPU UUIDs bind
+each pair. Existing spatial-order and validation-GEMM controls, solver policies
+and timer boundaries are disclosed in [conditions](conditions.md). Intrusive
+diagnostics do not enter the figures. The inherited stronger default-HF force
+diagnostic limitation remains in [its evidence](../cold-hf-defaults-20261026/README.md).
 
-## Reproduction
+## Reproduction and previous cohort
 
 ```bash
 PYTHONPATH=python:. python benchmarks/results/readme-refresh-20261026/reproduce.py \
-  --output .artifacts/readme-refresh-20261026-replay --verify --check-readme
+  --output .artifacts/readme-screening-refresh-replay --verify --check-readme
 ```
 
-Install `render-requirements.txt` in an isolated environment before byte replay;
-it pins the original Matplotlib 3.11.2 renderer. Replay checks all 128 populations / 512 calls, unchanged scientific inputs,
-same-job pairing, source/library identities, independent gates, work and timing
-tables, and redraws both figures byte for byte. `--check-readme` additionally
-checks the current homepage assets and unchanged CBS checksum; omit it for
-historical replay after a later refresh. All **128 offline runner, reducer,
-qualification and output-retention tests** pass. Raw compiler output and
-binaries remain in ignored artifacts; no external release asset is required.
+Install `render-requirements.txt` for the original Matplotlib 3.11.2 renderer.
+Replay checks all 128 populations / 512 calls, same-card pairing, complete
+inputs, source/library identities, independent gates and work/timing tables,
+then redraws both figures byte for byte. `--check-readme` also checks current
+homepage images and the unchanged CBS checksum. The existing 52 offline runner,
+qualification and publication tests pass.
 
-The unchanged repository storage budget is preserved by indexing the older
-r²SCAN exploratory archive and pinning its existing Git recovery revision.
-All accepted historical endpoints, reference inputs and ordinary figure replay
-inputs remain in the checkout. The original archive restores byte for byte;
-its historical figures also replay byte for byte with the original renderer.
+The previous complete cohort and figures, including its **26.9349-second native
+versus 26.2575-second GPU4PySCF DF PBE0-96 cold** observation, remain unchanged
+in existing Git history. The repair addresses the norm-storage capacity cliff;
+this refresh replaces every timing population together. `previous-cohort.json`
+pins all original file hashes and the existing recovery commit:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/readme-refresh-20261026/previous-cohort.json \
+  --output .artifacts/readme-before-screening-repair
+```
+
+Recovery was checked byte for byte, and the original figures still replay
+byte for byte. A full clone restores offline; shallow clones may need the
+recorded commit. This preserves the unchanged evidence-storage budget without
+removing a slow observation from the historical record or publishing a release.

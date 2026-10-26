@@ -79,13 +79,24 @@ def main() -> None:
     assert len(records) == 128 and {key(r) for r in records} == expected
     assert all(r["status"] == "complete" and len(r["samples"]) == 4 for r in records)
     provenance = read(ROOT / "provenance.json.xz")
+    assert provenance["render"]["axes"] == "linear"
     if args.verify:
         import matplotlib
 
         if matplotlib.__version__ != provenance["render"]["matplotlib"]:
-            raise ValueError("Install render-requirements.txt for byte-identical replay")
-    patch = lzma.decompress((ROOT / "source.patch.xz").read_bytes())
-    assert hashlib.sha256(patch).hexdigest() == provenance["source_archive"]["patch_sha256"]
+            raise ValueError(
+                "Install render-requirements.txt for byte-identical replay"
+            )
+    # This campaign uses committed source and the previously qualified binary.
+    # Its embedded source identity inherits a parent metadata object; authenticate
+    # the actual library and incremental-build evidence rather than treating that
+    # embedded string as the identity of the final source commit.
+    assert provenance["source_archive"]["dirty"] is False
+    for evidence in provenance["qualification_evidence"]:
+        assert (
+            hashlib.sha256((ROOT / evidence["path"]).read_bytes()).hexdigest()
+            == (evidence["sha256"])
+        )
     assert {r["source_revision"] for r in records} == {provenance["source_revision"]}
     assert {r["runner_sha256"] for r in records} == {provenance["runner_sha256"]}
     native = [r for r in records if r["arm"] == "standard"]
@@ -99,6 +110,11 @@ def main() -> None:
         key(r): r for r in load_records([PREVIOUS / f"{a}.json.xz" for a in ARMS])
     }
     indexed = {key(r): r for r in records}
+    jobs = read(ROOT / "jobs.json.xz")
+    allocations = {r["SLURM_JOB_ID"]: r for r in jobs["allocations"]}
+    assert len(jobs["commands"]) == 128
+    assert all(r["returncode"] == 0 for r in jobs["commands"])
+    assert all(r["returncode"] == 0 for r in jobs["worker_exits"])
     for record in records:
         for field in INPUT_FIELDS:
             assert record.get(field) == previous[key(record)].get(field), (
@@ -109,6 +125,19 @@ def main() -> None:
             ("gpu4pyscf", record["method"], record["mode"], record["atoms"])
         ]
         assert record["slurm_job_id"] == paired["slurm_job_id"]
+        allocation = allocations[record["slurm_job_id"]]
+        assert record["accelerator"]["pci_bus_id"] == allocation["pci"]
+        assert (
+            record["accelerator"]["nvidia_smi"]["uuid"]
+            == (paired["accelerator"]["nvidia_smi"]["uuid"])
+        )
+        assert (
+            record["environment"]["runtime"]["cuda_visible_devices"]
+            == (allocation["CUDA_VISIBLE_DEVICES"])
+        )
+        assert record["accelerator"]["nvidia_smi"]["sampling_point"] == (
+            "before benchmark measurements"
+        )
     for name in ("oracles.json.xz", "reference-reuse.json", "auxiliary-inputs.json.xz"):
         assert (ROOT / name).read_bytes() == (PREVIOUS / name).read_bytes()
     subprocess.run(
@@ -124,6 +153,7 @@ def main() -> None:
             str(ROOT / "reference-reuse.json"),
             "--default-labels",
             "--include-unqualified",
+            "--linear-axes",
             "--output",
             str(args.output),
         ],

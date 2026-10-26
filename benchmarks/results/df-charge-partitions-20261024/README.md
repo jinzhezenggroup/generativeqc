@@ -93,7 +93,7 @@ PYTHONPATH=python:. python benchmarks/results/df-charge-partitions-20261024/repr
 ```
 
 The verifier authenticates every original endpoint JSON text and support file,
-reconstructs byte-identical source manifests from the retained bounded-XC base
+checks compact source identities and exact deltas against the retained bounded-XC base
 plus explicit deltas, rechecks all 242 complete calls against independent
 references, and recomputes paired statistics, settings and semantic work gates.
 Profiler exports and original run scripts are retained in provenance; large
@@ -109,3 +109,17 @@ python tools/restore_retained_evidence.py --all \
   --manifest benchmarks/results/df-charge-partitions-20261024/history-storage.json \
   --output .artifacts/df-charge-history
 ```
+
+### Source identity projection
+
+The retained source deltas share the guarded XC manifest identity. Its compact
+record now includes the original hashes (or absence) for all 29 paths touched
+by the DF-charge and fitted-range deltas, plus the unchanged endpoint driver
+hash and the digests of those nine original
+deltas. The verifier authenticates each delta and its baseline identity, derives
+full file counts, and compares the complete changed-path projections. Paths
+outside this union are shared unchanged; the build/test production-equivalence
+checks therefore retain their original scope. Original full-manifest digests
+remain recorded identities, not claims that this checkout reconstructs their
+complete text or recomputes their SHA-256. Numerical records, force/energy gates,
+paired populations and original failure records are unchanged.
