@@ -41,6 +41,8 @@ from generativeqc_compiler.method.stationary_composite_resources import (
 from generativeqc_compiler.method.stationary_cuda import (
     COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     compile_stationary_cuda,
+    load_stationary_aot_artifact,
+    stationary_aot_profile_for_plan,
     stationary_external_provider_sources,
     stationary_runtime_sources,
 )
@@ -115,13 +117,36 @@ def requires_composite_stationary_cuda(state: typing.Any) -> bool:
     return True
 
 
+def composite_stationary_aot_profile(state: typing.Any) -> typing.Any:
+    """Select an exact packaged point model without discovering a compiler.
+
+    Custom Hamiltonians, point models and partition rules keep bounded JIT.
+    A selected package must pass the ordinary binary/plan integrity loader;
+    missing or corrupt declared packages never silently compile a replacement.
+    """
+    source = state._source
+    if (
+        source.hamiltonian != "all-electron"
+        or source.grid_spec.partition_iterations != 3
+        or source.nonlocal_grid_spec.partition_iterations != 3
+    ):
+        return None
+    return stationary_aot_profile_for_plan(
+        int(source.functional_code), state.identity.spin, _plan_for_state(state)
+    )
+
+
 def _canonical_gradient_sum(
     plan: StationaryGradientPlan,
     components: typing.Mapping[str, typing.Any],
     natom: int,
 ) -> np.ndarray:
     """Validate complete source coverage and sum already-host-resident gradients."""
-    plan.reduction_program(atoms=natom, sources=components)
+    if type(natom) is not int or natom < 1:
+        raise ValueError("atoms must be a positive integer")
+    # The host sum consumes already-scattered components. Reuse the compiler's
+    # coverage contract without constructing an unused TensorIR program at runtime.
+    plan.validate_source_coverage(sources=components)
     gradient = np.zeros((natom, 3), dtype=np.float64)
     for name in plan.source_names:
         component = np.asarray(components[name])
@@ -175,6 +200,7 @@ class PreparedCompositeStationaryCudaGradient:
         compiler: typing.Any,
         cache: Path,
         library: Path,
+        target: typing.Any = None,
         tile_points: int | None = None,
         max_device_bytes: int = 1 << 30,
         max_host_bytes: int = 2 << 30,
@@ -197,6 +223,7 @@ class PreparedCompositeStationaryCudaGradient:
             "compiler": compiler,
             "cache": cache,
             "library": library,
+            "target": target,
             "tile_points": tile_points,
             "max_device_bytes": max_device_bytes,
             "max_host_bytes": max_host_bytes,
@@ -263,6 +290,7 @@ class PreparedCompositeStationaryCudaGradient:
         compiler: typing.Any,
         cache: Path,
         library: Path,
+        target: typing.Any,
         tile_points: int | None,
         max_device_bytes: int,
         max_host_bytes: int,
@@ -275,6 +303,7 @@ class PreparedCompositeStationaryCudaGradient:
         """Contract all twelve gradients under the live SCF token and publish forces."""
         self._attempt_source_metrics = None
         started = perf_counter()
+        target = compiler.target if target is None else target
         if type(fp32_semilocal_geometry) is not bool:
             raise TypeError("semilocal FP32 geometry selection must be boolean")
         if type(active_ao_producer) is not str or active_ao_producer not in {
@@ -396,7 +425,7 @@ class PreparedCompositeStationaryCudaGradient:
             spins=plan.spin_blocks,
             source_count=len(stationary_runtime_sources(plan)),
             nonlocal_bytes=nlc_budget,
-            target=compiler.target,
+            target=target,
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             tile_points=tile_points,
@@ -440,7 +469,7 @@ class PreparedCompositeStationaryCudaGradient:
             device,
             tile_points,
             str(library),
-            str(compiler.target),
+            str(target),
             max_device_bytes,
             max_host_bytes,
             nlc_budget,
@@ -460,15 +489,27 @@ class PreparedCompositeStationaryCudaGradient:
             force_memory = _prepare_force_memory(source, device_bound)
             self._stack = ExitStack()
             try:
-                primitive = emit_first_derivative_cuda((("nuclear", ()),))
-                artifact = compile_stationary_cuda(
-                    primitive,
-                    functional=functional,
-                    plan=plan,
-                    iterations=source.grid_spec.partition_iterations,
-                    compiler=compiler,
-                    cache=cache,
-                )
+                packaged = composite_stationary_aot_profile(state) is not None
+                primitive = None
+                if packaged:
+                    artifact = load_stationary_aot_artifact(
+                        Path(library).parent,
+                        functional=functional,
+                        spin=state.identity.spin,
+                        plan=plan,
+                        iterations=source.grid_spec.partition_iterations,
+                        architecture=target.architecture,
+                    )
+                else:
+                    primitive = emit_first_derivative_cuda((("nuclear", ()),))
+                    artifact = compile_stationary_cuda(
+                        primitive,
+                        functional=functional,
+                        plan=plan,
+                        iterations=source.grid_spec.partition_iterations,
+                        compiler=compiler,
+                        cache=cache,
+                    )
                 # Accumulators borrow this producer's stream. Register the
                 # producer first so exception cleanup drains/destroys its
                 # consumers before releasing that stream, including pre-drain
@@ -476,7 +517,7 @@ class PreparedCompositeStationaryCudaGradient:
                 self.grid = self._stack.enter_context(
                     CudaGrid(
                         basis,
-                        _native_grid_artifact(library, compiler.target.architecture),
+                        _native_grid_artifact(library, target.architecture),
                         order=2,
                         tile_points=tile_points,
                         active_ao_capacity=n,
@@ -495,6 +536,7 @@ class PreparedCompositeStationaryCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        target=target,
                         integral_derivatives=False,
                         cooperative_becke=True,
                         phased_becke=phased_becke,
@@ -505,7 +547,6 @@ class PreparedCompositeStationaryCudaGradient:
                         page_work_budget=max(1, na * (na - 1) // 2),
                     )
                 )
-                self.sources.kinds[("nuclear", ())] = 0
                 nonlocal_artifact = (
                     compile_stationary_cuda(
                         primitive,
@@ -532,6 +573,7 @@ class PreparedCompositeStationaryCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        target=target,
                         integral_derivatives=False,
                         cooperative_becke=True,
                         phased_becke=phased_becke,
@@ -773,6 +815,9 @@ class PreparedCompositeStationaryCudaGradient:
         self.executions += 1
         work = {
             "execution": "cuda-complete-composite",
+            "stationary_artifact_kind": self.sources.artifact.metadata.get(
+                "artifact_kind", "runtime-jit"
+            ),
             "fp32_semilocal_geometry_requested": fp32_semilocal_geometry,
             "fp64_geometry_retries": 0,
             "plan_identity": plan.identity,

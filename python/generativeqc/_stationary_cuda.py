@@ -513,8 +513,13 @@ def _artifact_derivative_requests(
     """
     domain = artifact.metadata.get("component_domain")
     if domain is None:
-        return requests
-    inventory = derivative_requests(tuple(domain))
+        if artifact.metadata.get("artifact_kind") != "packaged-aot":
+            return requests
+        # A geometry-only consumer still dispatches nuclear repulsion through
+        # the packaged s/p inventory, whose nuclear kind is not zero.
+        inventory = qualified_sp_requests()
+    else:
+        inventory = derivative_requests(tuple(domain))
     if not set(requests).issubset(inventory):
         raise ValueError("stationary CUDA artifact omits required derivative requests")
     return inventory

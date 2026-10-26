@@ -259,7 +259,8 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
  * projection, empty spin, and discarded metric directions with the same data.
  */
 void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, double cutoff,
-                     std::int32_t occupied = 1, std::size_t qtile = 1, bool single = false) {
+                     std::int32_t occupied = 1, std::size_t qtile = 1, bool single = false,
+                     DfMetricWhitening whitening = DfMetricWhitening::Automatic) {
   setenv("GENERATIVEQC_DF_EXCHANGE", "occupied", 1);
   setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto", 1);
   setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied", 1);
@@ -291,12 +292,16 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
   require(create_cuda_density_fitting_jk_plan_from_source(
               0, &source, 1, n, a, metric, cutoff, qtile, n * n, &raw, diagnostics, detail, true,
               {single ? DfPairStorage::SymmetricLowerSingle : DfPairStorage::SymmetricLower,
-               capacity}) == GENERATIVEQC_STATUS_SUCCESS,
+               capacity, false, whitening}) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
       raw, destroy_cuda_density_fitting_jk_plan);
   if (cutoff > 1e-10)
     require(!plan->metric_full_rank[0], "packed truncation fixture retained all directions");
+  if (whitening == DfMetricWhitening::Cholesky)
+    require(bool(plan->cholesky_response_root) ==
+                (single && plan->metric_full_rank[0] && plan->panel_capacity >= a * a),
+            "Cholesky whitening did not preserve rank/capacity admission");
   std::vector<double> h(n * n), x(n * n), initial(n * n), initial_beta(n * n), density, beta;
   for (std::size_t i = 0; i < n; ++i) {
     h[i * n + i] = -20 + 15.0 * i;
@@ -319,39 +324,93 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
               GENERATIVEQC_STATUS_SUCCESS,
           detail);
   if (single) {
-    // One exact final occupied K now publishes a fitted U=B*C lease. The force
-    // response must consume it without claiming raw-A ownership or changing
-    // the independent raw-integral force.
-    std::vector<double> j, k;
-    bool used = false;
-    require(try_cuda_density_fitting_final_rhf_jk(plan.get(), token, density, j, k, used, detail,
-                                                  false) == GENERATIVEQC_STATUS_SUCCESS &&
-                used,
-            "single-B fitted final projection build failed: " + detail);
-    if (plan->metric_full_rank[0]) {
-      require(plan->final_projection_token && *plan->final_projection_token == token,
-              "single-B fitted final projection was not retained");
-      setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
-      const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
-      const auto reference = build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
-      std::vector<double> derivative;
-      DfGradientResources resources;
-      require(execute_cuda_density_fitting_generated_force_response(
-                  plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, 0, derivative,
-                  detail, &resources, &token) == GENERATIVEQC_STATUS_SUCCESS,
-              "single-B fitted projection force response: " + detail);
-      require(resources.occupied_response && !plan->final_projection_token,
-              "single-B fitted response did not consume the final projection lease");
-      require(derivative.size() == reference.size(), "single-B fitted projection force shape");
-      for (std::size_t i = 0; i < derivative.size(); ++i)
-        require(std::abs(derivative[i] - reference[i]) < 8e-10,
-                "single-B final projection reuse differs from raw-integral force");
-      setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
-    } else {
-      require(!plan->final_projection_token,
-              "rank-truncated single-B plan published an unrecoverable fitted projection");
+    if (!uhf) {
+      // One exact final occupied K now publishes a fitted U=B*C lease. The force
+      // response must consume it without claiming raw-A ownership or changing
+      // the independent raw-integral force.
+      std::vector<double> j, k;
+      bool used = false;
+      require(try_cuda_density_fitting_final_rhf_jk(plan.get(), token, density, j, k, used, detail,
+                                                    false) == GENERATIVEQC_STATUS_SUCCESS &&
+                  used,
+              "single-B fitted final projection build failed: " + detail);
+      if (plan->metric_full_rank[0]) {
+        require(plan->final_projection_token && *plan->final_projection_token == token,
+                "single-B fitted final projection was not retained");
+        setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
+        const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
+        const auto reference =
+            build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
+        std::vector<double> derivative;
+        DfGradientResources resources;
+        require(execute_cuda_density_fitting_generated_force_response(
+                    plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, 0, derivative,
+                    detail, &resources, &token) == GENERATIVEQC_STATUS_SUCCESS,
+                "single-B fitted projection force response: " + detail);
+        require(resources.occupied_response && !plan->final_projection_token,
+                "single-B fitted response did not consume the final projection lease");
+        require(derivative.size() == reference.size(), "single-B fitted projection force shape");
+        for (std::size_t i = 0; i < derivative.size(); ++i)
+          require(std::abs(derivative[i] - reference[i]) < 8e-10,
+                  "single-B final projection reuse differs from raw-integral force");
+        setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
+      } else {
+        require(!plan->final_projection_token,
+                "rank-truncated single-B plan published an unrecoverable fitted projection");
+      }
     }
-    single_final_exchange(*plan, token, density, oracle, cutoff);
+    // A retained factor's auxiliary gauge must survive both spin channels,
+    // pure Coulomb contraction and bounded general-density response. The oracle
+    // constructs derivatives from independent physical raw three-center values.
+    auto total = density;
+    if (uhf)
+      for (std::size_t i = 0; i < total.size(); ++i) total[i] += beta[i];
+    const std::vector<DensityFittingDensityResponse> terms =
+        uhf ? std::vector<DensityFittingDensityResponse>{{total, 1, 0},
+                                                         {density, 0, .5},
+                                                         {beta, 0, .5}}
+            : std::vector<DensityFittingDensityResponse>{{density, 1, .25}};
+    const auto reference =
+        uhf ? build_density_fitting_uhf_gradient(oracle, density, beta, cutoff).derivative
+            : build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
+    for (bool occupied_route : {false, true}) {
+      if (occupied_route && !plan->metric_full_rank[0]) continue;
+      setenv("GENERATIVEQC_DF_RESPONSE_SPACE", occupied_route ? "occupied" : "dense", 1);
+      setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", occupied_route ? "fitted" : "auto", 1);
+      for (std::size_t tile : {1U, 3U}) {
+        std::vector<double> derivative;
+        DfGradientResources resources;
+        const auto response_status = execute_cuda_density_fitting_generated_force_response(
+            plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, tile, derivative, detail,
+            &resources, occupied_route ? &token : nullptr);
+        require(response_status == GENERATIVEQC_STATUS_SUCCESS,
+                "single fitted factor response: " + detail + " spin=" + std::to_string(uhf) +
+                    " cutoff=" + std::to_string(cutoff) +
+                    " occupied=" + std::to_string(occupied_route));
+        require(
+            resources.occupied_response == occupied_route && resources.device_bytes <= (4U << 20),
+            "single fitted response violated its route or scratch bound");
+        require(derivative.size() == reference.size(), "single fitted response shape");
+        for (std::size_t i = 0; i < derivative.size(); ++i)
+          require(std::abs(derivative[i] - reference[i]) < 8e-10,
+                  "single fitted response differs from physical raw-integral oracle");
+      }
+    }
+    setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "dense", 1);
+    setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
+    const std::vector<DensityFittingDensityResponse> coulomb_terms{{total, 1, 0}};
+    const auto coulomb_reference =
+        build_density_fitting_rhf_gradient(oracle, total, cutoff, {1, 0}).derivative;
+    std::vector<double> coulomb_derivative;
+    require(execute_cuda_density_fitting_generated_force_response(
+                plan.get(), 0, orbital, auxiliary, {}, {}, coulomb_terms, 0, 4U << 20, 1,
+                coulomb_derivative, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "single fitted Coulomb response: " + detail);
+    require(coulomb_derivative.size() == coulomb_reference.size(), "single fitted Coulomb shape");
+    for (std::size_t i = 0; i < coulomb_derivative.size(); ++i)
+      require(std::abs(coulomb_derivative[i] - coulomb_reference[i]) < 8e-10,
+              "single fitted Coulomb response differs from physical raw-integral oracle");
+    if (!uhf) single_final_exchange(*plan, token, density, oracle, cutoff);
     return;
   }
   if (!uhf) {
@@ -384,15 +443,25 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                 plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, maximum_tile,
                 derivative, detail, &resources, expected) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
-    require(resources.occupied_response == expected_occupied,
-            "packed response selected the wrong factor route");
+    // Truncated metrics use the general spectral derivative. The bridge may
+    // validate an occupied lease, but does not consume its mutable staging.
+    require(resources.occupied_response == (expected_occupied && plan->metric_full_rank[0]),
+            "packed response selected the wrong factor route: spin=" + std::to_string(uhf) +
+                " rank=" + std::to_string(occupied) + " capacity=" + std::to_string(capacity) +
+                " cutoff=" + std::to_string(cutoff) + " qtile=" + std::to_string(qtile) +
+                " expected=" + std::to_string(expected_occupied) +
+                " token=" + std::to_string(expected != nullptr));
     require(resources.borrowed_device_bytes ==
-                (expected_occupied
+                (expected_occupied && plan->metric_full_rank[0]
                      ? (plan->projection_capacity + 2 * plan->panel_capacity) * sizeof(double)
                      : (plan->metric_full_rank[0]
                             ? plan->stored_tensor_elements_per_system * sizeof(double)
                             : 0)),
-            "packed response misreported unequal borrowed capacities");
+            "packed response misreported unequal borrowed capacities: actual=" +
+                std::to_string(resources.borrowed_device_bytes) +
+                " projection=" + std::to_string(plan->projection_capacity) +
+                " panel=" + std::to_string(plan->panel_capacity) + " occupied=" +
+                std::to_string(expected_occupied) + " cutoff=" + std::to_string(cutoff));
     require(!resources.recomputed_value_bytes && !resources.tensor_host_to_device_bytes,
             "packed response regenerated/uploaded immutable raw values");
     require(derivative.size() == reference.size(), "packed force shape");
@@ -511,9 +580,15 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                                        plan->metric_full_rank[0] != 0, plan->factor_basis_identity};
     const CudaDfPackedRawTensorView packed_view{
         plan->packed_raw, n, a, plan->stored_pair_count, plan->factor_basis_identity, metric_view};
-    const CudaDfWhitenedTensorView whitened_view{
-        plan->three_center,          n,          a, plan->stored_pair_count, true,
-        plan->factor_basis_identity, metric_view};
+    const CudaDfWhitenedTensorView whitened_view{plan->three_center,
+                                                 n,
+                                                 a,
+                                                 plan->stored_pair_count,
+                                                 true,
+                                                 plan->factor_basis_identity,
+                                                 metric_view,
+                                                 plan->resident_spectral_factors,
+                                                 plan->cholesky_response_root};
     {
       // Omit the optional resident views to exercise the same raw-source
       // boundary as a streamed owner. Both allowances must reproduce the
@@ -821,6 +896,11 @@ int main() {
       packed_response(false, 0, 2, cutoff, 2, 3);
       packed_response(true, 1, 2, cutoff, 2, 3);
       packed_response(false, 0, 2, cutoff, 2, 1);  // Insufficient rank-squared panel.
+      // Independent raw-integral forces cover the triangular gauge, its final
+      // projection lease, arbitrary response panels, and both bounded fallbacks.
+      packed_response(false, 0, 1, cutoff, 1, 2, true, DfMetricWhitening::Cholesky);
+      packed_response(true, 1, 2, cutoff, 2, 2, true, DfMetricWhitening::Cholesky);
+      packed_response(false, 0, 1, cutoff, 1, 1, true, DfMetricWhitening::Cholesky);
     }
     for (bool ragged : {false, true}) streamed_projected_exchange(ragged);
     streamed_general_response();

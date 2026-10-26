@@ -73,7 +73,11 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
   const auto* page = std::getenv("GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE");
   batch.direct_order_seven_page_size = select_direct_order_seven_page_size(page ? page : "");
   const auto* dddd = std::getenv("GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR");
-  batch.direct_dddd_force_class_major = dddd && std::string_view(dddd) == "1";
+  // The existing class-major owner avoids rescanning unrelated pair classes.
+  // Its materialized-cache, angular-domain and topology guards still select
+  // the original generic fallback when this owner cannot execute. Keep the
+  // historical diagnostic spelling as an explicit opt-out / forced-path knob.
+  batch.direct_dddd_force_class_major = !dddd || std::string_view(dddd) == "1";
   const auto* census = std::getenv("GENERATIVEQC_DIRECT_FORCE_CENSUS");
   const auto* split = std::getenv("GENERATIVEQC_DIRECT_FORCE_CENSUS_SPLIT_LOW");
   batch.direct_force_split_low = census && *census && split && std::string_view(split) == "1";

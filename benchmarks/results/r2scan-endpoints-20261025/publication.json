@@ -12,8 +12,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 6595,
-      "sha256": "0806e887de97df0642bc92ca8be89ab3ac98b8cc0f7e688ecf668ed1911585a9",
+      "bytes": 7831,
+      "sha256": "68370e12ae3e97958657c4de7cd9b6d287671810458e209caef6303b2cf104a8",
       "role": "summary"
     },
     {
@@ -38,12 +38,6 @@
       "path": "endpoint-validation.json.xz",
       "bytes": 85120,
       "sha256": "b24971f5fce7a7f2718c0dd7cd12bcca1a1015fa00ab3a9d62a1780df0f33432",
-      "role": "samples"
-    },
-    {
-      "path": "exploration-00.json.xz",
-      "bytes": 818152,
-      "sha256": "ce0d5e65cd5eb00f5c5b580dde29308b54d0db94413393182915599e4f384f19",
       "role": "samples"
     },
     {
@@ -108,8 +102,8 @@
     },
     {
       "path": "validation.json.xz",
-      "bytes": 2980,
-      "sha256": "a7b4fad69c9c6bae5da780e85455dc695175b2654eaf1a021d80f51cf1d1acbd",
+      "bytes": 3020,
+      "sha256": "d80732a1b104a3a65fc0f839fbc9ff4e7740fc8bf28943e6303254e4ac109429",
       "role": "evidence"
     },
     {
@@ -117,6 +111,18 @@
       "bytes": 10634,
       "sha256": "52783d3a9ac144e92e1b08e7f4e2b0cdba7c6d4309140c0caae640abc7154bd1",
       "role": "summary"
+    },
+    {
+      "path": "exploration-history.json",
+      "role": "summary",
+      "bytes": 377,
+      "sha256": "a076f97675da2596a6796ea8be4b31387b0a554fa289ff39dfd45f96b6255570"
+    },
+    {
+      "path": "exploration-index.json.xz",
+      "role": "summary",
+      "bytes": 29740,
+      "sha256": "5184daf1a5966264b9ade05e6c00e7f8ea6316dca32a73aed4d87669e4bdafbd"
     }
   ],
   "archives": [],

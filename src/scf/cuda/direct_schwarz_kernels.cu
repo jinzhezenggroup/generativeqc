@@ -125,8 +125,18 @@ void launch_build_schwarz_and_shell_pair_bounds_packed_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
     std::size_t pair_count, double* schwarz_bounds, double* shell_pair_bounds) {
   for_each_schwarz_order(batch, [&]<unsigned Order>() {
-    build_schwarz_and_shell_pair_bounds_packed_kernel<Order><<<grid, block, shared_bytes, stream>>>(
-        batch, pair_count, schwarz_bounds, shell_pair_bounds);
+    // Through-d Schwarz frames can fill one warp per block without changing
+    // pair ownership. High-order frames retain the bounded single-thread route.
+    dim3 scheduled_grid = grid, scheduled_block = block;
+    if constexpr (Order <= 8) {
+      constexpr unsigned width = 32;
+      scheduled_block = dim3(width);
+      scheduled_grid = dim3(static_cast<unsigned>(
+          (static_cast<std::size_t>(batch.batch_size) * pair_count + width - 1) / width));
+    }
+    build_schwarz_and_shell_pair_bounds_packed_kernel<Order>
+        <<<scheduled_grid, scheduled_block, shared_bytes, stream>>>(
+            batch, pair_count, schwarz_bounds, shell_pair_bounds);
   });
 }
 

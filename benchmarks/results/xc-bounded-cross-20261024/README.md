@@ -72,7 +72,7 @@ From the repository root:
 PYTHONPATH=python:. python benchmarks/results/xc-bounded-cross-20261024/reproduce.py
 ```
 
-The verifier authenticates all 108 original JSON texts and both source manifests,
+The verifier authenticates all 108 original JSON texts and the recorded source identities,
 rechecks all 352 calls against the retained independent references, checks paired
 settings/device identities and recomputes the twelve cold/warm timing verdicts.
 The endpoint packet retains every force component; provenance retains the
@@ -83,3 +83,22 @@ gzip to recover 1,290,910 bytes within unchanged storage caps. Every decompresse
 file equals its original Git blob. `history-storage.json` pins both forms and
 supports restoration of original names through the shared offline tool. Failed
 historical samples and all numerical values are preserved.
+
+### Compact source identity
+
+Whole-repository manifest strings are replaced by their original digest, byte
+count and entry count. The baseline manifest was independently checked against
+its Git tree: all 12,425 files matched. For the guarded arm, the four changed
+paths retain both baseline and measured SHA-256 values; the other 12,422 entries
+were identical. Its historical commit object was not recovered, so its tree is
+explicitly unknown. These hashes identify the recorded files, but do not recover
+the guarded source or prove a clean checkout. The original manifests likewise
+contained hashes rather than source bytes. The verifier checks these recorded
+identities and the retained pre-build verification receipts, not a fresh tree
+enumeration. Build, driver, binary, endpoint and failure records are unchanged.
+The unused historical commit-message text is omitted; it contained no patch,
+measurement or failure data. No full-manifest restoration is promised.
+
+Downstream DF-charge and fitted-range checks retain a 30-path baseline projection (29 changed paths plus the endpoint driver)
+and the digests of nine original source deltas. This preserves their complete
+changed-path and file-count checks without restoring the whole repository list.

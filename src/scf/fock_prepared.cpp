@@ -183,6 +183,7 @@ struct PreparedFockPlan::Impl {
   unsigned retained_fitted_derivative_order{};
   FockOccupiedProjectionReservation projection_reservation;
   bool external_integrals{};
+  ExternalBuilder external_builder;
   std::unique_ptr<ExplicitIntegralBackend> explicit_backend;
 
   const integrals::IntegralData& one_electron() const {
@@ -190,19 +191,21 @@ struct PreparedFockPlan::Impl {
   }
 
   Impl(const core::System& system, integrals::IntegralData values, FockSpin spin,
-       FockBackend backend, int device, std::size_t budget)
+       FockBackend backend, int device, std::size_t budget, ExternalBuilder builder)
       : orbital(system),
         device_id(-1),
         requested_budget(0),
         exact(std::move(values)),
-        external_integrals(true) {
+        external_integrals(true),
+        external_builder(std::move(builder)) {
     auto spec = make_hf_fock_spec(spin);
     spec.derivative_order = 0;
     diagnostic.strategy = resolve_fock_build(spec, backend, 0.0);
     const auto n = molecule::ao_count(system);
     if (!n || n != exact.nbf || n > 256 || exact.overlap.size() != n * n ||
-        exact.hcore.size() != n * n || exact.eri.size() != n * n * n * n || exact.ncoord != 0 ||
-        !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
+        exact.hcore.size() != n * n ||
+        (external_builder ? !exact.eri.empty() : exact.eri.size() != n * n * n * n) ||
+        exact.ncoord != 0 || !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
         !exact.eri_derivative.empty())
       throw std::invalid_argument("external HF integral layout is invalid");
     const auto finite = [](const auto& array) {
@@ -211,7 +214,10 @@ struct PreparedFockPlan::Impl {
     if (!finite(exact.overlap) || !finite(exact.hcore) || !finite(exact.eri) ||
         !std::isfinite(exact.nuclear_repulsion))
       throw std::invalid_argument("external HF integrals must be finite");
-    if (backend == FockBackend::Cuda) {
+    if (external_builder) {
+      if (backend != FockBackend::Cpu)
+        throw std::invalid_argument("streamed external integral provider requires CPU");
+    } else if (backend == FockBackend::Cuda) {
       explicit_backend = make_cuda_explicit_integrals(device, n, exact.eri, budget);
       device_id = device;
     } else {
@@ -604,8 +610,9 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
 PreparedFockPlan::~PreparedFockPlan() = default;
 PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values,
                                    FockSpin spin, FockBackend backend, int device,
-                                   std::size_t budget)
-    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget)) {}
+                                   std::size_t budget, ExternalBuilder builder)
+    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget,
+                                   std::move(builder))) {}
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
@@ -709,6 +716,7 @@ bool PreparedFockPlan::matches_system(const core::System& system) const noexcept
 }
 DirectJkMatrices PreparedFockPlan::build(const std::vector<double>& density,
                                          const std::vector<double>& beta) const {
+  if (impl_->external_builder) return impl_->external_builder(strategy().spec, density, beta);
   if (impl_->explicit_backend)
     return impl_->explicit_backend->build(strategy().spec, density, beta);
   return impl_->cpu_view ? impl_->cpu_view->build(density, beta)

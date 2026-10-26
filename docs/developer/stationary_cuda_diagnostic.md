@@ -27,10 +27,11 @@ or derivative execution. Density fitting, range-separated/nonlocal hybrids,
 angular momentum above d and Hessians are outside this contract.
 Ordinary stationary first derivatives require no CPKS/Hessian solve.
 
-All-electron semilocal public forces retain packaged AOT modules. Composed global-hybrid
-forces compile a bounded plan-specific wrapper using NVCC on first use and
-reuse it through the ordinary compiler cache and prepared owner. Set `CUDACXX`
-or `CUDA_PATH` to the toolkit when it is not discoverable. Primitive derivative
+Represented all-electron semilocal and global-hybrid public forces use packaged
+AOT modules. Unrepresented compositions compile a bounded plan-specific wrapper
+using NVCC on first use and reuse it through the ordinary compiler cache and
+prepared owner. Set `CUDACXX` or `CUDA_PATH` to the toolkit when it is not
+discoverable. Primitive derivative
 objects are cached independently of functional/spin wrappers. There is no CPU
 scientific fallback. The semilocal point graph, work-domain treatment and
 exchange fraction are shared with energy evaluation; meta-GGA consumers carry
@@ -135,6 +136,17 @@ exchange coefficient does not reuse a standard hybrid artifact. An unrepresented
 composition retains the explicit bounded JIT path. Once a catalog profile is
 selected, a missing, corrupt or incompatible package fails closed; it does not
 silently discover NVCC or regenerate primitives, wrappers or AD.
+
+The default WB97M-V composite force also selects a packaged profile for each
+spin. Its point-model identity is explicitly declared in the profile manifest;
+the semilocal default identity is not interchangeable with the nonlocal work
+domain. Both XC and VV10 partition iteration counts must match the packaged
+value. Custom point models, Hamiltonians or partition rules retain bounded JIT.
+Native providers continue to own integral derivatives and VV10; the packaged
+module supplies geometry and nuclear work. Nuclear dispatch uses the package's
+complete primitive inventory even for this geometry-only consumer. Final host
+composition validates compiler-owned source coverage without generating unused
+reduction IR.
 
 The build compiles the method-independent s/p derivative inventory once, and the
 component-expanded s/p/d inventory once as 23 bounded shards. Each selected

@@ -102,7 +102,7 @@ def test_generated_schedules_preserve_scf_and_geometry(
     # Same-expression schedule parity is distinct from independent correctness:
     # Libcint below and archived clean-baseline endpoint evidence own that gate.
     reference = run_case(monkeypatch, "thread", **kwargs)
-    for mapping in ("shell_warp", None):
+    for mapping in ("shell_warp", "nucleus_8", "nucleus_32", None):
         actual = run_case(monkeypatch, mapping, **kwargs)
         for expected, found in zip(reference, actual, strict=True):
             np.testing.assert_allclose(
@@ -132,7 +132,7 @@ def test_policy_changes_rebuild_reused_direct_plan(
     monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "thread")
     with calc.prepare_batch([atoms]) as prepared:
         prepared.execute(strict=True)
-        for mapping in ("thread", "shell_warp", "thread"):
+        for mapping in ("thread", "shell_warp", "nucleus_8", "nucleus_32", "thread"):
             monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
             actual = prepared.execute([moved], strict=True)
             with calc.prepare_batch([[("H", tuple(r)) for r in moved]]) as fresh:
@@ -150,7 +150,7 @@ def test_policy_changes_rebuild_reused_direct_plan(
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
-@pytest.mark.parametrize("mapping", ["thread", "shell_warp"])
+@pytest.mark.parametrize("mapping", ["thread", "shell_warp", "nucleus_8", "nucleus_32"])
 def test_generated_pair_policy_hcore_matches_independent_libcint(
     monkeypatch: typing.Any, representation: typing.Any, mapping: typing.Any
 ) -> None:

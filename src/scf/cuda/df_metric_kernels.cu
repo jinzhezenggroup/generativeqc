@@ -14,6 +14,15 @@
 
 namespace generativeqc::scf::cuda_df {
 
+__global__ void metric_identity_kernel(std::size_t n, double* matrix) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < n * n) matrix[i] = i / n == i % n ? 1.0 : 0.0;
+}
+
+void launch_metric_identity(cudaStream_t stream, std::size_t n, double* matrix) {
+  metric_identity_kernel<<<static_cast<unsigned>((n * n + 255) / 256), 256, 0, stream>>>(n, matrix);
+}
+
 // Existing DF arithmetic and reduction order; host orchestration compiles separately.
 __global__ void symmetrize_metrics_kernel(std::size_t dimension, std::size_t tiles,
                                           double* metrics) {

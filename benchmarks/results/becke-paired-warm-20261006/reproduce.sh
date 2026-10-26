@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 bundle=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+shared="$bundle/../becke-physical-endpoints-20261006"
+printf '%s  %s\n' \
+    'd0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7' \
+    "$shared/source-files.sha256.gz" | sha256sum --check --status
 python=${PYTHON:-python3}
 : "${CUDA_ROOT:?set CUDA_ROOT to the actual CUDA 12.9 toolkit}"
 export CUDA_PATH="$CUDA_ROOT" PATH="$CUDA_ROOT/bin:$PATH"
@@ -8,7 +12,7 @@ export PYTHONPATH="$PWD/python:$PWD:$PWD/tests/python" PYTHONDONTWRITEBYTECODE=1
 out="$PWD/.artifacts/becke-paired-warm-reproduction"
 mkdir -p "$out/bin" "$out/compiler-tmp"
 export TMPDIR="$out/compiler-tmp" CCACHE_BASEDIR="$PWD"
-gzip -cd "$bundle/source-files.sha256.gz" | sha256sum --check > "$out/source-check.txt"
+gzip -cd "$shared/source-files.sha256.gz" | sha256sum --check > "$out/source-check.txt"
 ccache --version > "$out/ccache-version.txt"
 if [[ -z ${SLURM_JOB_ID:-} ]]; then
     ccache --show-stats > "$out/core-ccache-before.txt"

@@ -1415,32 +1415,34 @@ class RuntimeTests(unittest.TestCase):
         table = {entry["name"]: entry for entry in json.loads(listing.stdout)}
         self.assertEqual(table["libxc:gga_x_apbe"]["aliases"], ["libxc-rks:gga_x_apbe"])
         self.assertFalse(table["libxc-uks:gga_x_apbe"]["cuda"])
-        energies = []
-        for selector in (
-            "libxc:GGA_X_APBE",
-            "LIBXC-RKS:GGA_X_APBE",
-            "libxc-uks:GGA_X_APBE",
-        ):
-            result = self.cli(
-                "run",
-                str(SOURCE / "tests/data/h2_bohr.xyz"),
-                "--units",
-                "bohr",
-                "--method",
-                selector,
-                "--json",
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            payload = json.loads(result.stdout)
-            spin = "polarized" if "uks" in selector else "unpolarized"
-            self.assertEqual(
-                payload["method_ir_identity"],
-                resolve_bulk_ks("GGA_X_APBE", spin=spin).method.identity,
-            )
-            self.assertTrue(math.isfinite(payload["energy_hartree"]))
-            energies.append(payload["energy_hartree"])
-        self.assertAlmostEqual(energies[0], energies[1], places=12)
-        self.assertAlmostEqual(energies[0], energies[2], places=8)
+        # Exercise both numerical domains through the installed-style process
+        # with no interpreter/toolchain on PATH. GGA alone cannot catch a stale
+        # generic domain on a density-only LDA catalog entry.
+        for functional in ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"):
+            energies = []
+            for prefix in ("libxc:", "LIBXC-RKS:", "libxc-uks:"):
+                with self.subTest(functional=functional, prefix=prefix):
+                    result = self.cli(
+                        "run",
+                        str(SOURCE / "tests/data/h2_bohr.xyz"),
+                        "--units",
+                        "bohr",
+                        "--method",
+                        prefix + functional,
+                        "--json",
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    payload = json.loads(result.stdout)
+                    spin = "polarized" if "uks" in prefix else "unpolarized"
+                    self.assertEqual(
+                        payload["method_ir_identity"],
+                        resolve_bulk_ks(functional, spin=spin).method.identity,
+                    )
+                    self.assertTrue(math.isfinite(payload["energy_hartree"]))
+                    energies.append(payload["energy_hartree"])
+            self.assertEqual(len(energies), 3)
+            self.assertAlmostEqual(energies[0], energies[1], places=12)
+            self.assertAlmostEqual(energies[0], energies[2], places=8)
         rejected = self.cli(
             "run",
             str(SOURCE / "tests/data/h2_bohr.xyz"),

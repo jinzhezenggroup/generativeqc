@@ -68,13 +68,17 @@ def main() -> None:
     packet, provenance = read("endpoints.json.xz"), read("provenance.json.xz")
     revision = packet["source_revision"]
     assert revision == provenance["source_revision"]
-    source_raw = provenance["source_manifest_raw"]
-    assert hashlib.sha256(source_raw.encode()).hexdigest() == provenance["source_manifest_sha256"]
-    source = json.loads(source_raw)
-    assert source["source_revision"] == revision
+    source = provenance["source_identity"]
+    identity_bytes = json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(identity_bytes).hexdigest() == provenance["source_identity_sha256"]
+    assert source["revision"] == revision
+    assert source["tree"] == "79b2a331c383bc45bc7640bb2916c2c7ed514676"
+    assert source["source_patch"] is None
+    assert source["manifest_sha256"] == provenance["source_manifest_sha256"]
+    assert source["manifest_bytes"] == 1643599
     verified = json.loads(provenance["support"]["validation-gemm-pr-source-verification.json"])
     assert verified["source_revision"] == revision and not verified["mismatches"]
-    assert verified["files_verified"] == len(source["files"])
+    assert verified["files_verified"] == source["files_verified"] == 12425
     for name, raw in provenance["support"].items():
         assert hashlib.sha256(raw.encode()).hexdigest() == provenance["support_sha256"][name]
     references = ROOT.parent / "readme-final-20261022"

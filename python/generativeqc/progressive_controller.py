@@ -685,7 +685,54 @@ def finalize_hf_verification(
     physical_audit_error: str | None = None,
     physical_audit_budget_exhausted: bool = False,
 ) -> FinalVerification:
-    """Derive a fail-closed final record; serialized status is never trusted."""
+    """Derive final acceptance through the shared native metadata policy.
+
+    The first configured library supplies the policy for standalone calls. Older
+    libraries and integer metadata outside the ABI retain explicit compatibility;
+    native refusal never retries it. This does not perform a physical Fock audit.
+    """
+    return _finalize_hf_verification(
+        problem,
+        target_stage,
+        result,
+        actual_model,
+        actual_provider_hashes,
+        budget,
+        executions,
+        accuracy=accuracy,
+        physical_audit=physical_audit,
+        physical_audit_error=physical_audit_error,
+        physical_audit_budget_exhausted=physical_audit_budget_exhausted,
+    )
+
+
+def _finalize_hf_verification(
+    *args: typing.Any, library: typing.Any = None, **kwargs: typing.Any
+) -> FinalVerification:
+    """Bind running-controller decisions to its already selected native library."""
+    from ._hf_verification_native import finalize
+
+    native = finalize(*args, library=library, **kwargs)
+    if native is not None:
+        return native
+    return _finalize_hf_verification_python(*args, **kwargs)
+
+
+def _finalize_hf_verification_python(
+    problem: TargetProblem,
+    target_stage: StagePlan,
+    result: typing.Any,
+    actual_model: ResolvedModel,
+    actual_provider_hashes: tuple[tuple[str, str], ...],
+    budget: ProgressiveBudget,
+    executions: tuple[StageExecution, ...],
+    *,
+    accuracy: AccuracyAssessment | None = None,
+    physical_audit: HFPhysicalResidualAudit | None = None,
+    physical_audit_error: str | None = None,
+    physical_audit_budget_exhausted: bool = False,
+) -> FinalVerification:
+    """Old-library/unrepresentable-metadata compatibility; never a native retry."""
     if (
         not isinstance(problem, TargetProblem)
         or target_stage.role is not StageRole.TARGET
@@ -1216,7 +1263,7 @@ def run_progressive_hf(
     )
     actual_hashes = _provider_hashes(target_result.basis_metadata)
     execution_tuple = tuple(executions)
-    verification = finalize_hf_verification(
+    verification = _finalize_hf_verification(
         plan.problem,
         plan.stages[1],
         target_result,
@@ -1228,6 +1275,7 @@ def run_progressive_hf(
         physical_audit=physical_audit,
         physical_audit_error=physical_audit_error,
         physical_audit_budget_exhausted=physical_audit_budget_exhausted,
+        library=target_calculator._library,
     )
     diagnostics = {
         "schema": "generativeqc.progressive_hf",

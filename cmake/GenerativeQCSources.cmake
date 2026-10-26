@@ -30,6 +30,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_resource_ledger_plan.cpp
     src/api/c_api_device_resources.cpp
     src/api/c_api_scf_effort.cpp
+    src/api/c_api_hf_verification.cpp
     src/api/c_api_response_recycle.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
@@ -233,6 +234,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/eigensolver.cpp
       src/solver/cuda/generalized_eigen.cpp
       src/solver/cuda/symmetric_eigen_provider.cpp
+      src/solver/cuda/cholesky_provider.cpp
       src/solver/cuda/symmetric_eigen_handles.cpp
       src/solver/cuda/symmetric_eigen_workspace.cpp
       src/scf/cuda/eigensolver_kernels.cu

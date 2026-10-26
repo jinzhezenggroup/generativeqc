@@ -148,6 +148,7 @@ def render(
     qualifications: list[dict] | None = None,
     include_unqualified: bool = False,
     default_labels: bool = False,
+    linear_axes: bool = False,
 ) -> list[dict]:
     """Render complete latency populations, retaining independent accuracy status.
 
@@ -156,6 +157,9 @@ def render(
     reducer. The default preserves historical accuracy-filtered figure replay.
     ``default_labels`` omits the Standard preset name for homepage figures;
     it requires a default-only population and never relabels Fast receipts.
+    ``linear_axes`` uses proportional atom spacing and a zero latency baseline
+    to show absolute time differences. The default retains historical log-log
+    rendering so earlier publications can still replay unchanged.
     """
     if default_labels and any(record.get("arm") == "fast" for record in records):
         raise ValueError("default labels require receipts without Fast")
@@ -248,11 +252,15 @@ def render(
                     f"{LABELS[method]}\n{basis}", fontsize=11, loc="left", pad=10
                 )
                 ax.set(
-                    yscale="log",
-                    xscale="log",
-                    xlim=(SIZES[0] / 1.2, SIZES[-1] * 1.2),
+                    yscale="linear" if linear_axes else "log",
+                    xscale="linear" if linear_axes else "log",
+                    xlim=(0, SIZES[-1] * 1.06)
+                    if linear_axes
+                    else (SIZES[0] / 1.2, SIZES[-1] * 1.2),
                     xticks=SIZES,
                 )
+                if linear_axes:
+                    ax.set_ylim(bottom=0)
                 ax.set_xlabel("Atoms in water cluster")
                 ax.set_ylabel("Energy + forces (s)")
                 ax.set_xticklabels([str(size) for size in SIZES])
@@ -374,6 +382,11 @@ def main() -> None:
         action="store_true",
         help="Plot complete performance points regardless of retained accuracy status",
     )
+    parser.add_argument(
+        "--linear-axes",
+        action="store_true",
+        help="Use linear atom/time axes and start the time axis at zero",
+    )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.reference_reuse and not args.oracles:
@@ -396,6 +409,7 @@ def main() -> None:
         qualifications=qualifications,
         include_unqualified=args.include_unqualified,
         default_labels=args.default_labels,
+        linear_axes=args.linear_axes,
     )
     if qualifications is not None:
         (args.output / "qualification.json").write_text(

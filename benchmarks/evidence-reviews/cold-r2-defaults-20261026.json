@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cold-r2-defaults-20261026",
+  "owner": "Bounded cold r2SCAN proposal qualification",
+  "reason": "Losslessly retain all 36 paired production populations and 144 complete cold/warm energy-force calls, including inherited accuracy failures, for independent host-only replay. The exact original bytes retain source, binary, work and scientific identities.",
+  "review_document": "benchmarks/results/cold-r2-defaults-20261026/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cold-r2-defaults-20261026/receipts.json.xz",
+      "family": "cold-r2-defaults-20261026",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete lossless endpoint populations and original independent observable/work receipts",
+      "bytes": 180192,
+      "sha256": "c50699c0a1076d1137d323745f2fdb5924949e492900d46a48512b7ae585aa89"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import Calculator
+from generativeqc import Calculator, _native
 
 from benchmarks._retained_basis import load_retained_basis
 from benchmarks.df_component_ledger import read_trace
@@ -171,11 +171,13 @@ def test_shell_screening_invalid_control_on_generic(monkeypatch: Any) -> None:
         assert owner.execute(strict=True).items[0].converged
 
 
-@pytest.mark.parametrize("budget,enabled", [(3 << 20, False), (2_000_000, True)])
+@pytest.mark.parametrize(
+    "budget,enabled", [(3 << 20, True), (2_000_000, True), ("minimum", False)]
+)
 def test_panel_clipping_and_capacity_fallback(
-    budget: int, enabled: bool, monkeypatch: Any, tmp_path: Any
+    budget: int | str, enabled: bool, monkeypatch: Any, tmp_path: Any
 ) -> None:
-    """A screen may consume spare bytes but must never retile the strict plan."""
+    """Prefer a smaller screened panel while preserving the minimal strict fallback."""
     assert os.environ.get("SLURM_JOB_ID")
     controls(monkeypatch)
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "panel")
@@ -183,6 +185,24 @@ def test_panel_clipping_and_capacity_fallback(
     with calc.prepare_batch([separated_fragments()]) as owner:
         monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCREEN_ABS", "off")
         owner.execute(strict=True)
+        if budget == "minimum":
+            # Find the actual strict capacity boundary instead of encoding a
+            # private workspace formula. Failed attempts must leave the owner
+            # reusable; the last feasible byte allowance cannot fund norms.
+            low, high = 1, 2_000_000
+            while low < high:
+                middle = (low + high) // 2
+                monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(middle))
+                item = owner.execute(strict=False).items[0]
+                assert item.status in (
+                    _native.STATUS_SUCCESS,
+                    _native.STATUS_OUT_OF_MEMORY,
+                )
+                if item.status == _native.STATUS_SUCCESS:
+                    high = middle
+                else:
+                    low = middle + 1
+            budget = high
         monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
         answers, counters = [], []
         for index, screen in enumerate(("off", "1e-10")):
@@ -201,7 +221,7 @@ def test_panel_clipping_and_capacity_fallback(
         assert answers[0].energy == pytest.approx(answers[1].energy, abs=1e-10, rel=0)
         strict, screened = counters
         assert (
-            strict["response_auxiliary_blocks"] == screened["response_auxiliary_blocks"]
+            screened["response_auxiliary_blocks"] >= strict["response_auxiliary_blocks"]
         )
         assert screened["response_auxiliary_blocks"] > 1
         assert screened["response_probe_total_device_bytes"] <= budget
@@ -216,11 +236,20 @@ def test_panel_clipping_and_capacity_fallback(
                 screened["response_probe_total_device_bytes"]
                 == strict["response_probe_total_device_bytes"]
             )
-        assert (
-            screened["shell_primitive_products"]
-            + screened.get("screening_shell_primitive_products_skipped", 0)
-            == strict["shell_primitive_products"]
-        )
+        if screened.get("screening_shell_tile_reduced", 0):
+            # A shifted panel boundary may revisit part of an auxiliary shell.
+            # Compare executed work, not a conserved census across unlike tiles.
+            assert (
+                screened["shell_primitive_products"]
+                < strict["shell_primitive_products"]
+            )
+            assert screened["screening_shell_primitive_products_skipped"] > 0
+        else:
+            assert (
+                screened["shell_primitive_products"]
+                + screened.get("screening_shell_primitive_products_skipped", 0)
+                == strict["shell_primitive_products"]
+            )
 
 
 def test_batch_geometry_screening_matches_strict(

@@ -489,8 +489,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, cuda_status(direct_target_error));
     return outputs;
   }
+  const auto direct_profile =
+      cuda_policy::resolve_hf_direct_tuning_profile(options.export_physical_reference);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
-      cuda_policy::resolve_direct_jk_schedule_policy(direct_target);
+      cuda_policy::resolve_direct_jk_schedule_policy(direct_target, direct_profile);
 
   const std::size_t nbf = host.nbf;
   const std::size_t direct_nbf = host.direct_nbf;
@@ -902,22 +904,27 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  // Both allocations use the same complete arena formula. A capacity retry
+  // occurs before uploads or graph capture, so no device pointer can outlive
+  // the layout whose offsets it uses.
+  const auto make_page_layout = [&](std::size_t page_capacity) {
+    return make_layout(
+        batch_size, nbf, direct_nbf, total_atoms, total_shells, total_shell_pairs,
+        total_shell_pair_blocks, page_capacity, total_shell_pair_primitives,
+        requested_quartet_direct ? host.psss_resident_tasks.size() : 0,
+        requested_quartet_direct ? host.psss_resident_ket_pairs.size() : 0,
+        total_shell_quartet_tiles, fp32_shell_quartet_tile_capacity, generated_shell_task_capacity,
+        resident_ppps_ket_task_capacity, generic_order5_tile_capacity,
+        host.primitive_exponents.size(), diis_history, options.max_iterations, host.spin_count,
+        requested_persistent_eri, requested_transformed_direct, shell_class_profiling,
+        inactive_eigensolver_profiling, bounded_fock_class_timing,
+        requested_bounded_direct_streaming, requested_mixed_precision_fock,
+        requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram, use_cublas,
+        tensor::CudaStructuredProductBinding::basis_workspace_required(),
+        requested_fp32_block_screening);
+  };
   if (first_setup) {
-    if (!make_layout(batch_size, nbf, direct_nbf, total_atoms, total_shells, total_shell_pairs,
-                     total_shell_pair_blocks, bounded_generated_task_capacity,
-                     total_shell_pair_primitives,
-                     requested_quartet_direct ? host.psss_resident_tasks.size() : 0,
-                     requested_quartet_direct ? host.psss_resident_ket_pairs.size() : 0,
-                     total_shell_quartet_tiles, fp32_shell_quartet_tile_capacity,
-                     generated_shell_task_capacity, resident_ppps_ket_task_capacity,
-                     generic_order5_tile_capacity, host.primitive_exponents.size(), diis_history,
-                     options.max_iterations, host.spin_count, requested_persistent_eri,
-                     requested_transformed_direct, shell_class_profiling,
-                     inactive_eigensolver_profiling, bounded_fock_class_timing,
-                     requested_bounded_direct_streaming, requested_mixed_precision_fock,
-                     requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram,
-                     use_cublas, tensor::CudaStructuredProductBinding::basis_workspace_required(),
-                     requested_fp32_block_screening)) {
+    if (!make_page_layout(bounded_generated_task_capacity)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1231,10 +1238,35 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   cusolverStatus_t solver_error = CUSOLVER_STATUS_SUCCESS;
   if (first_setup) {
     std::unique_lock<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
-    if ((cuda_error = cudaStreamCreateWithFlags(&resources.stream_, cudaStreamNonBlocking)) !=
-            cudaSuccess ||
-        (cuda_error = runtime::resource_cuda_malloc_async(&resources.arena_, layout.bytes,
-                                                          resources.stream_)) != cudaSuccess) {
+    cuda_error = cudaStreamCreateWithFlags(&resources.stream_, cudaStreamNonBlocking);
+    if (cuda_error == cudaSuccess)
+      cuda_error =
+          runtime::resource_cuda_malloc_async(&resources.arena_, layout.bytes, resources.stream_);
+    const auto fallback_capacity =
+        std::min(bounded_generated_task_capacity, std::size_t{8} * 1024U * 1024U);
+    if (cuda_error == cudaErrorMemoryAllocation && resources.stream_ && !resources.arena_ &&
+        requested_bounded_direct_streaming && !options.export_physical_reference &&
+        fallback_capacity < bounded_generated_task_capacity) {
+      // Ledger or allocator refusal must preserve the bounded original route.
+      // A failed allocation owns no storage. Only clear the expected OOM slot;
+      // an unrelated asynchronous error must not be relabelled as capacity.
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) {
+        fill_global_failure(outputs, cuda_status(pending));
+        return outputs;
+      }
+      if (!make_page_layout(fallback_capacity)) {
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+        return outputs;
+      }
+      bounded_generated_task_capacity = fallback_capacity;
+      plan.bounded_generated_task_capacity = fallback_capacity;
+      plan.bounded_generated_task_offsets = make_bounded_generated_task_offsets(
+          host, fallback_capacity, &plan.bounded_generated_task_upper_bounds);
+      cuda_error =
+          runtime::resource_cuda_malloc_async(&resources.arena_, layout.bytes, resources.stream_);
+    }
+    if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
       return outputs;
     }
@@ -2139,12 +2171,34 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // Keep geometry, primitive pairs, Schwarz bounds and the admitted arena live
   // across both stages. Only the iterative operator is screened; publication
   // still requires the original unscreened FP64 Hamiltonian and residual gates.
-  const bool screened_reference_iterations = options.export_physical_reference && quartet_direct &&
-                                             !persistent_eri && !phase_resident_active &&
-                                             !mixed_precision_fock && !incremental_direct_jk &&
-                                             options.reference_iteration_screening_tolerance > 0.0;
+  const auto cold_policy = cuda_policy::resolve_cold_hf_screening(
+      {nbf, batch_size,
+       host.shell_angular.empty() ? 255U
+                                  : static_cast<unsigned>(*std::max_element(
+                                        host.shell_angular.begin(), host.shell_angular.end())),
+       options.max_iterations, first_setup, any_system_warm, unrestricted,
+       options.export_physical_reference, quartet_direct && bounded_direct_streaming,
+       persistent_eri, phase_resident_active, mixed_precision_fock, incremental_direct_jk},
+      options.screening_tolerance);
+  const bool cold_screened_iterations = cold_policy.maximum_iterations != 0;
+  const double iteration_screening = cold_screened_iterations
+                                         ? cold_policy.tolerance
+                                         : options.reference_iteration_screening_tolerance;
+  const bool screening_eligible = quartet_direct && !persistent_eri && !phase_resident_active &&
+                                  !mixed_precision_fock && !incremental_direct_jk &&
+                                  iteration_screening > 0.0;
+  const bool screened_reference_iterations =
+      (options.export_physical_reference || cold_screened_iterations) && screening_eligible;
+  const unsigned provisional_limit =
+      cold_screened_iterations ? cold_policy.maximum_iterations : options.max_iterations;
   double fock_screening_tolerance = options.screening_tolerance;
-  auto& iteration_graphs = phase_resident_active ? resident_values->graphs : plan.graphs;
+  // A provisional operator may never become the retained ordinary warm graph.
+  // This local borrower drains with this execution; warm replay captures the
+  // original target operator into the untouched persistent graph owner.
+  cuda_execution::RhfIterationGraphs screened_cold_graphs;
+  auto& iteration_graphs = cold_screened_iterations ? screened_cold_graphs
+                           : phase_resident_active  ? resident_values->graphs
+                                                    : plan.graphs;
   const auto reference_phase_peak = posthf::checked_add(
       resources.reference_peak_bytes_, resident_values ? resident_values->capacity_bytes() : 0);
   const int lwork = plan.lwork;
@@ -2830,7 +2884,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const auto launch_fock_builder = [&](const double* density_input, bool allow_mixed_precision,
                                        bool track_incremental_work) -> cudaError_t {
     fock_screening_tolerance = screened_reference_iterations && allow_mixed_precision
-                                   ? options.reference_iteration_screening_tolerance
+                                   ? iteration_screening
                                    : options.screening_tolerance;
     if (resident_values && resident_values->active()) {
       const auto resident_status = resident_values->enqueue(density_input, hcore, fock);
@@ -3528,12 +3582,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     const bool screened_stage = screened_reference_iterations && allow_mixed_precision;
     const double iteration_energy_tolerance =
-        screened_stage ? std::max(options.energy_tolerance,
-                                  100.0 * options.reference_iteration_screening_tolerance)
+        screened_stage ? std::max(options.energy_tolerance, 100.0 * iteration_screening)
                        : options.energy_tolerance;
     const double iteration_density_tolerance =
-        screened_stage ? std::max(options.density_tolerance,
-                                  1000.0 * options.reference_iteration_screening_tolerance)
+        screened_stage ? std::max(options.density_tolerance, 1000.0 * iteration_screening)
                        : options.density_tolerance;
     // Only the item's coarse mixed stage may defer stationarity. Exact peers
     // and every FP64 refinement step must satisfy the physical force criterion.
@@ -3609,7 +3661,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     }
     if (append_device_tail) {
       launch_tail_rhf_loop_kernel(1, 1, 0, resources.stream_, static_cast<std::int32_t>(batch_size),
-                                  options.max_iterations, active, iterations);
+                                  provisional_limit, active, iterations);
     }
     return cuda_status(cudaPeekAtLastError());
   };
@@ -3682,7 +3734,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   if (cuda_error == cudaSuccess && split_provider_iteration) {
     std::vector<std::uint8_t> host_active(batch_size, 1U);
-    ::generativeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned iteration) {
+    ::generativeqc::solver::run_bounded_iterations(provisional_limit, [&](unsigned iteration) {
       // The existing provider fence proves completion without a new GPU sync.
       // Retain per-iteration progress even if a later expensive Fock times out.
       runtime::df_progress::Scope iteration_trace("cuda_rhf_iteration", "cuda_completed");
@@ -3980,7 +4032,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     // reports an honest non-convergence instead of a clamped success. Each item
     // leaves the loop on its own convergence, so a stagnating item is promoted
     // without holding back or dictating the precision of its neighbors.
-    ::generativeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
+    // A provisional stage consumes the same user's iteration allowance. A
+    // difficult proposal can transfer to the target without doubling that cap.
+    const auto refinement_limit =
+        cold_screened_iterations
+            ? options.max_iterations - *std::max_element(host_pre_refinement_iterations.begin(),
+                                                         host_pre_refinement_iterations.end())
+            : options.max_iterations;
+    ::generativeqc::solver::run_bounded_iterations(refinement_limit, [&](unsigned) {
       if (std::none_of(host_refinement_active.begin(), host_refinement_active.end(),
                        [](std::uint8_t value) { return value != 0; })) {
         return false;
@@ -4585,9 +4644,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           screened_reference_iterations ? outputs[0].scf.precision.refinement_iterations : 0U);
       if (trace.enabled()) {
         char cutoff_label[32]{};
-        std::snprintf(
-            cutoff_label, sizeof(cutoff_label), "%.17g",
-            screened_reference_iterations ? options.reference_iteration_screening_tolerance : 0.0);
+        std::snprintf(cutoff_label, sizeof(cutoff_label), "%.17g",
+                      screened_reference_iterations ? iteration_screening : 0.0);
         runtime::df_progress::Scope::label("iteration_screening_tolerance", cutoff_label);
       }
       runtime::df_progress::Scope::number(
@@ -5705,7 +5763,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         precision_route_enabled && host_mixed_item_census[system] != 0U;
     result.energy = host_energy[system];
     // The refinement iterations are reported as part of the complete solve.
-    result.iterations = precision_item_mixed
+    result.iterations = (precision_item_mixed || screened_reference_iterations)
                             ? host_pre_refinement_iterations[system] + host_iterations[system]
                             : host_iterations[system];
     result.energy_change = host_energy_change[system];
@@ -5721,13 +5779,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     result.precision.effective_bits = precision_item_mixed ? 32U : 64U;
     result.precision.mixed_precision_fock_threshold =
         precision_item_mixed ? host_mixed_item_threshold[system] : 0.0;
-    result.precision.strict_refinement_applied = precision_item_mixed;
+    result.precision.strict_refinement_applied =
+        precision_item_mixed || screened_reference_iterations;
     result.precision.mixed_precision_reserved_error =
         precision_item_mixed ? requested_precision_policy.item_budget_error : 0.0;
-    result.precision.refinement_iterations = precision_item_mixed ? host_iterations[system] : 0U;
+    result.precision.refinement_iterations =
+        (precision_item_mixed || screened_reference_iterations) ? host_iterations[system] : 0U;
     result.precision.mixed_stage_fock_builds =
         precision_item_mixed ? host_pre_refinement_iterations[system] : 0U;
-    result.precision.strict_stage_fock_builds = host_iterations[system];
+    // Screening changes the preliminary operator, not its arithmetic. Count
+    // every FP64 build here; refinement_iterations separately identifies the
+    // target-operator tail. Never label screened FP64 work as mixed precision.
+    result.precision.strict_stage_fock_builds =
+        host_iterations[system] +
+        (screened_reference_iterations ? host_pre_refinement_iterations[system] : 0U);
     const bool audited_item = host_final_audit_mask[system] != 0U;
     const bool completed_item = host_converged[system] != 0 && host_failed[system] == 0;
     const bool entered_finalization = completed_item || audited_item;

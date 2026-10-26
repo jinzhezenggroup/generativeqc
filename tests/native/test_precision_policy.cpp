@@ -52,6 +52,97 @@ using Admission = generativeqc::scf::cuda_policy::AutoMixedPrecisionAdmission;
 /** Binary32 unit roundoff, mirrored from the policy constant. */
 constexpr double kTestFloat32UnitRoundoff = 5.9604644775390625e-08;
 
+/** Admission must follow the actual execution/seed domain; an ineligible
+ * proposal cannot consume iterations or alter graph ownership. */
+void verify_cold_hf_screening_domain() {
+  using namespace generativeqc::scf::cuda_policy;
+  const ColdHfScreeningDomain cold{768,   1,    2,     100,   true,  false, false,
+                                   false, true, false, false, false, false};
+  generativeqc::runtime::CudaTargetInfo target;
+  target.total_global_memory = std::size_t{32} << 30;
+  for (const char* value :
+       {static_cast<const char*>(nullptr), "0", "none", "", "invalid", "true", " 1", "1 "}) {
+    ScopedEnv disabled("GENERATIVEQC_HF_COLD_SCREENING", value);
+    const auto policy = resolve_cold_hf_screening(cold, 1e-12);
+    require(policy.maximum_iterations == 0 && policy.tolerance == 0.0,
+            "screened proposals require an exact explicit opt-in");
+    const auto profile = resolve_hf_direct_tuning_profile(false);
+    require(profile.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
+                profile.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
+            "default and invalid selections preserve the incumbent page profile");
+    const auto schedule = resolve_direct_jk_schedule_policy(target, profile);
+    require(schedule.bounded_streaming.arena_maximum_bytes == (std::size_t{3} << 29) &&
+                schedule.bounded_streaming.task_capacity_ceiling == 8U * 1024U * 1024U,
+            "default scheduling must not retain the expanded page");
+    DirectJkTuningProfile custom;
+    custom.bounded_streaming.maximum_arena_bytes = std::size_t{6} << 30;
+    require(
+        resolve_direct_jk_schedule_policy(target, custom).bounded_streaming.arena_maximum_bytes ==
+            target.total_global_memory / 16,
+        "the incumbent default divisor also applies to custom profiles");
+  }
+  ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", "1");
+  const auto expanded = resolve_hf_direct_tuning_profile(false);
+  require(expanded.bounded_streaming.maximum_task_capacity == 32U * 1024U * 1024U &&
+              resolve_direct_jk_schedule_policy(target, expanded)
+                      .bounded_streaming.arena_maximum_bytes == (std::size_t{6} << 30),
+          "explicit opt-in retains the qualified expanded page");
+  const auto reference = resolve_hf_direct_tuning_profile(true);
+  require(reference.bounded_streaming.maximum_task_capacity == 8U * 1024U * 1024U &&
+              reference.bounded_streaming.maximum_arena_bytes == (std::size_t{3} << 29),
+          "physical-reference export retains its incumbent cap even when opted in");
+  const auto accepted = resolve_cold_hf_screening(cold, 1e-12);
+  require(accepted.tolerance > 1e-12 && accepted.maximum_iterations > 0 &&
+              accepted.maximum_iterations < cold.maximum_iterations,
+          "cold screened proposal must leave a nonempty strict target allowance");
+  for (auto domain : {ColdHfScreeningDomain{}, cold}) {
+    domain.warm_seed = true;
+    require(resolve_cold_hf_screening(domain, 1e-12).maximum_iterations == 0,
+            "an imported/warm density must not enter the cold proposal");
+  }
+  auto rejects = [&](ColdHfScreeningDomain domain) {
+    const auto policy = resolve_cold_hf_screening(domain, 1e-12);
+    require(policy.maximum_iterations == 0 && policy.tolerance == 0.0,
+            "ineligible cold owner changed its iteration/operator contract");
+  };
+  for (auto member :
+       {&ColdHfScreeningDomain::unrestricted, &ColdHfScreeningDomain::physical_reference,
+        &ColdHfScreeningDomain::persistent_eri, &ColdHfScreeningDomain::resident_values,
+        &ColdHfScreeningDomain::mixed_precision, &ColdHfScreeningDomain::incremental_jk}) {
+    auto domain = cold;
+    domain.*member = true;
+    rejects(domain);
+  }
+  auto domain = cold;
+  domain.first_setup = false;
+  rejects(domain);
+  domain = cold;
+  domain.bounded_quartet_direct = false;
+  rejects(domain);
+  domain = cold;
+  domain.systems = 2;
+  rejects(domain);
+  domain = cold;
+  domain.maximum_shell_angular = 3;
+  rejects(domain);
+  domain = cold;
+  domain.nbf = 128;
+  rejects(domain);
+  for (unsigned cap : {1U, 2U, 8U, 23U}) {
+    domain = cold;
+    domain.maximum_iterations = cap;
+    rejects(domain);
+  }
+  for (double cutoff : {-1.0, accepted.tolerance, 1e-4, std::numeric_limits<double>::infinity(),
+                        std::numeric_limits<double>::quiet_NaN()})
+    require(resolve_cold_hf_screening(cold, cutoff).maximum_iterations == 0,
+            "a proposal must not tighten or accept an invalid target cutoff");
+  {
+    ScopedEnv disabled("GENERATIVEQC_HF_COLD_SCREENING", "0");
+    rejects(cold);
+  }
+}
+
 void verify_direct_jk_target_policy() {
   using generativeqc::runtime::CudaTargetInfo;
   using generativeqc::scf::cuda_policy::bounded_direct_primary_streaming_fock_mask_requested;
@@ -60,6 +151,7 @@ void verify_direct_jk_target_policy() {
   using generativeqc::scf::cuda_policy::resolve_direct_jk_schedule_policy;
   using generativeqc::scf::detail::GeneratedShellTask;
 
+  ScopedEnv selection("GENERATIVEQC_HF_COLD_SCREENING", nullptr);
   CudaTargetInfo qualified;
   qualified.warp_size = 32;
   qualified.maximum_threads_per_sm = 1536;
@@ -71,14 +163,14 @@ void verify_direct_jk_target_policy() {
   require(production.fixed_topology.arena_maximum_bytes == qualified.total_global_memory / 32U,
           "fixed-topology storage keeps its independent 1/32 device-memory budget");
   require(production.bounded_streaming.arena_maximum_bytes == (std::size_t{3} << 29),
-          "5090 bounded streaming preserves the qualified 1.5-GiB page arena");
+          "default targets retain the incumbent 1.5-GiB streaming page");
   require(production.persistent_quartet_warps_per_sm == 8U,
           "resource-rich targets preserve the qualified eight-worker schedule");
   require(sizeof(GeneratedShellTask) == 192U,
           "generated task ABI preserves the qualified 192-byte record");
   require(direct_jk_bounded_streaming_task_capacity_limit(production, sizeof(GeneratedShellTask)) ==
               8U * 1024U * 1024U,
-          "192-byte task ABI restores the qualified 8M bounded page");
+          "192-byte task ABI retains the incumbent 8M bounded page");
 
   CudaTargetInfo synthetic;
   synthetic.warp_size = 32;
@@ -550,7 +642,7 @@ void verify_one_electron_provider_policy() {
     ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
     ScopedEnv configured_cumetal("CUMETAL_ROOT", "/configured-but-inactive");
     const auto policy = resolve_one_electron_value_policy(nvidia);
-    require(policy.mapping == 1U && !policy.diagnostic_override && !policy.capability_fallback,
+    require(policy.mapping == 2U && !policy.diagnostic_override && !policy.capability_fallback,
             "configured-but-inactive CuMetal must not change NVIDIA auto selection");
   }
   {
@@ -570,6 +662,16 @@ void verify_one_electron_provider_policy() {
     const auto policy = resolve_one_electron_value_policy(nvidia);
     require(policy.mapping == 0U && policy.diagnostic_override && !policy.capability_fallback,
             "explicit pair-thread diagnostic override must remain deterministic");
+  }
+  for (const auto* selector : {"nucleus_8", "nucleus_32"}) {
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", selector);
+    const auto supported = resolve_one_electron_value_policy(nvidia);
+    require(supported.mapping == (std::strcmp(selector, "nucleus_8") == 0 ? 2U : 3U) &&
+                supported.diagnostic_override && !supported.capability_fallback,
+            "NVIDIA must execute the requested qualified nuclear-source schedule");
+    const auto fallback = resolve_one_electron_value_policy(cumetal);
+    require(fallback.mapping == 0U && fallback.capability_fallback,
+            "unsupported subgroup schedules must retain the provider's safe fallback");
   }
 }
 
@@ -744,6 +846,7 @@ void verify_precision_work_query_contract() {
 int main() {
   try {
     verify_direct_jk_target_policy();
+    verify_cold_hf_screening_domain();
     verify_auto_budget_admission();
     verify_per_item_budget();
     verify_fp64_strict();

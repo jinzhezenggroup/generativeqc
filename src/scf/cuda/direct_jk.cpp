@@ -1820,7 +1820,16 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                             coulomb, nullptr, nullptr);
         direct_jk_check(cudaGetLastError());
       }
-      launch_md_j(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
+      // Only the explicit pure-J proposal facade may spend its requested
+      // omission budget. Copy the view: the prepared physical owner, later
+      // full-density closure and graph captures keep their original 1e-12 cap.
+      // The existing finite KS proposal epoch requests at most 1e-9; larger
+      // private requests cannot widen that qualified bound.
+      auto md_invocation = plan->md_j;
+      if (proposal_screening > plan->screening_tolerance && md_invocation.primitive_bounds &&
+          !spec.exchange.present && !unrestricted)
+        md_invocation.density_error_cap = std::min(proposal_screening, 1e-9);
+      launch_md_j(plan->stream, plan->batch, md_invocation, 0, plan->diagnostic.batch_size,
                   unrestricted, screening, density, beta, coulomb);
       direct_jk_check(cudaGetLastError());
       if (plan->md_j.work_counts) {
@@ -1834,6 +1843,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                           sizeof(primitive_screen), cudaMemcpyDeviceToHost,
                                           plan->stream));
         direct_jk_check(cudaStreamSynchronize(plan->stream));
+        std::fprintf(stderr,
+                     "MD_J_INVOCATION fock=%zu proposal_screening=%.17g omission_cap=%.17g\n",
+                     plan->md_j_calls, proposal_screening, md_invocation.density_error_cap);
         for (unsigned angular = 0; angular < 25; ++angular)
           std::fprintf(stderr,
                        "MD_J_WORK fock=%zu bra=%u ket=%u uniform_roots=%llu "

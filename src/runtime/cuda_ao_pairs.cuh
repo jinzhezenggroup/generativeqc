@@ -36,7 +36,7 @@ __device__ void store_symmetric(Outputs<Channels> outputs, const double (&values
  * Policy owns scalar geometry, operator evaluation and accumulated channels.
  * Keeping primitive preparation outside the term loops allows geometry reuse.
  */
-template <class Policy, std::size_t TermCapacity, class View>
+template <class Policy, std::size_t TermCapacity, unsigned AtomLanes = 1, class View>
 __device__ typename Policy::Accumulator contract(const View& batch, std::int64_t i,
                                                  std::int64_t j) {
   const auto si = batch.ao_shells[i], sj = batch.ao_shells[j];
@@ -58,7 +58,11 @@ __device__ typename Policy::Accumulator contract(const View& batch, std::int64_t
           const auto second = Policy::component(batch.ao_term_angular + 3 * term_j);
           const double weight = primitive_weight * batch.ao_term_coefficients[term_i] *
                                 batch.ao_term_coefficients[term_j];
-          Policy::accumulate(result, pair, first, second, weight, batch, i / batch.nbf);
+          if constexpr (AtomLanes == 1)
+            Policy::accumulate(result, pair, first, second, weight, batch, i / batch.nbf);
+          else
+            Policy::accumulate_partition(result, pair, first, second, weight, batch, i / batch.nbf,
+                                         threadIdx.x % AtomLanes, AtomLanes);
         }
       }
     }
@@ -106,6 +110,36 @@ __global__ void shell_warp_pairs(View batch, Outputs<Policy::channels> outputs) 
     const auto i = begin_i + component / count_j, j = begin_j + component % count_j;
     if (si == sj && i < j) continue;
     evaluate_pair<Policy, TermCapacity>(batch, i, j, outputs);
+  }
+}
+
+/** Disjoint subwarps share one AO pair and partition its nuclear source.
+ * All lanes within a pair traverse identical normalized primitive/term loops.
+ * A complete group participates in each shuffle, including a ragged last warp;
+ * inactive groups exit together and the ballot excludes them from the mask.
+ */
+template <class Policy, std::size_t TermCapacity, unsigned Lanes, class View>
+__global__ void nucleus_pairs(View batch, const std::int32_t* pair_first,
+                              const std::int32_t* pair_second, std::size_t pair_count,
+                              Outputs<Policy::channels> outputs) {
+  static_assert(Lanes == 8 || Lanes == 32);
+  const std::size_t task = (std::size_t{blockIdx.x} * blockDim.x + threadIdx.x) / Lanes;
+  const bool valid = task < static_cast<std::size_t>(batch.batch_size) * pair_count;
+  const unsigned mask = __ballot_sync(0xffffffffU, valid);
+  if (!valid) return;
+  const std::size_t system = task / pair_count, pair_index = task % pair_count;
+  const std::int64_t base = system * batch.nbf;
+  const auto i = base + pair_first[pair_index], j = base + pair_second[pair_index];
+  const auto result = contract<Policy, TermCapacity, Lanes>(batch, i, j);
+  double values[Policy::channels];
+  Policy::project(result, values);
+#pragma unroll
+  for (unsigned c = 0; c < Policy::channels; ++c)
+    for (unsigned shift = Lanes / 2; shift; shift /= 2)
+      values[c] += __shfl_down_sync(mask, values[c], shift, Lanes);
+  if (threadIdx.x % Lanes == 0) {
+    const std::size_t n = batch.nbf, offset = system * n * n;
+    store_symmetric(outputs, values, offset + (i % n) * n + j % n, offset + (j % n) * n + i % n);
   }
 }
 

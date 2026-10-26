@@ -99,7 +99,16 @@ relaxing tolerances.
 `FinalVerification` checks the actual resolved target identity, prepared-provider
 identity, basis mathematical/source hashes, native success/convergence,
 energy/density gates, physical SCF residual, requested energy/force capabilities,
-effective final FP64 arithmetic and complete execution budgets. It distinguishes:
+effective final FP64 arithmetic and complete execution budgets.
+
+The shared native `generativeqc_hf_verify_final_v1` policy owns scalar acceptance,
+strict-cleanup requirements and budget precedence. A running controller uses its
+selected target library; standalone verification uses the first configured
+library. Python validates typed identities and observable array shape and
+presents the native decision. Missing older-library protocols and Python integer
+metadata outside the fixed-width ABI retain explicit compatibility; a native
+error never triggers another verifier. This metadata policy does not rebuild the
+physical target or certify an empirical accuracy estimate.
 
 A force capability is established only by a finite, real numerical array with
 shape exactly `(TargetProblem.atom_count, 3)`. Empty, partial, extra-atom,
@@ -111,7 +120,10 @@ target basis, direct/DF operator, screening, metric and arithmetic policy. It
 records the Fock execution identity, density/overlap hashes, RMS and maximum
 `FDS-SDF`, and fixed-density energy agreement. This audit is included in target
 time and counts as one target Fock build; its failure makes target verification
-fail closed. It is a state audit, not an observable-error certificate.
+fail closed. It is a state audit, not an observable-error certificate. The
+fixed-density audit assembly remains a separate Python runtime owner.
+
+Final disposition distinguishes:
 
 - `verified`: exact target gates passed and an independent assessment has
   status `observed_met`;

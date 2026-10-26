@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "scf-validation-gemm-20261024",
   "owner": "independent optional physical-validation GEMM qualification",
-  "reason": "Lossless complete endpoint records retain all 328 independently checked calls, paired work and statistics, moved references, full measured source inputs, build and sanitizer evidence, and failed attempts. Historical JSON compression preserves every original byte without changing storage limits.",
+  "reason": "Lossless complete endpoint records retain all 328 independently checked calls, paired work and statistics, moved references, compact verified source identity, build and sanitizer evidence, and failed attempts. Historical JSON compression preserves every original byte without changing storage limits.",
   "review_document": "benchmarks/results/scf-validation-gemm-20261024/README.md",
   "files": [
     {
@@ -12,14 +12,6 @@
       "role": "complete-endpoints-and-independent-moved-references",
       "bytes": 500048,
       "sha256": "8ff3395641e4db3704676b36a5579547c5274e2d7f9dcb0c9f93148ce0492263"
-    },
-    {
-      "path": "benchmarks/results/scf-validation-gemm-20261024/provenance.json.xz",
-      "family": "scf-validation-gemm-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "complete-source-build-test-and-execution-provenance",
-      "bytes": 608544,
-      "sha256": "0ddb9f78f3a8b4fdb6545d18cb6a77569c6660a039afcf93028292a41fd431d0"
     }
   ]
 }

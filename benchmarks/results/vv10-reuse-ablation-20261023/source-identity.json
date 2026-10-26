@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.vv10-source-identity.v1",
+  "revision": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+  "tree": "264829c86b05182e720b7084f827723c161bc272",
+  "source_entries": 12222,
+  "original_manifest": {
+    "path": "source-manifest.json",
+    "bytes": 3192615,
+    "sha256": "5ade9b506b3fa171dd9e71c0f07dd3db13f1e94fde0d958ecf9752afdceffb9a",
+    "serialization": "json.dumps(indent=2), Git path order, trailing newline, CRLF"
+  },
+  "solver": {
+    "path": "benchmarks/readme_defaults_accuracy.py",
+    "sha256": "53aa8cc27bfbcb4835de0b1d66aeae892519737af75319f2b0b2d4987028448b"
+  },
+  "source_patch": null
+}

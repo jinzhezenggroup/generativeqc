@@ -250,13 +250,25 @@ def _gradient_jvp(
             if function.with_value
             else reverse.program
         )
-        forward = linearize(derivative, names)
+        live_inputs = {
+            node.attrs["name"] for node in derivative.live_nodes if node.op == "input"
+        }
+        source_gradients = tuple(
+            name
+            for source in base._execution.molecular.sources.values()
+            if source.derivative_order == 2
+            for name in source.gradient_names
+            if name in live_inputs
+        )
+        forward = linearize(derivative, (*names, *source_gradients))
         specs = {
             node.attrs["name"]: node.spec for node in primal.nodes if node.op == "input"
         }
         directions = dict(zip(names, tangents, strict=True))
         for seed, name in forward.input_map.items():
-            feeds[seed] = _seed(directions[name], specs[name], f"tangent {name}")
+            if name in directions:
+                feeds[seed] = _seed(directions[name], specs[name], f"tangent {name}")
+        base._execution.molecular.directions = directions
         values = base._execution.execute(_combine(derivative, forward.program), feeds)
         reverse_names = {
             original: generated for generated, original in reverse.output_map.items()
