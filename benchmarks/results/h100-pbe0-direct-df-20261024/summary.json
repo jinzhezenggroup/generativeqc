@@ -1,0 +1,39 @@
+{
+  "ABI_scalar": "UNAVAILABLE_NOT_EXPLICITLY_RECORDED",
+  "arms": {
+    "fast": "NOT_RUN",
+    "gpu4pyscf": "NOT_RUN",
+    "standard": "FAILED_COLD"
+  },
+  "artifact_key": "UNAVAILABLE_MANIFEST_NOT_LOADED",
+  "cache_binaries": "INVENTORY_ONLY_REMOTE_RETAINED_NOT_PUBLISHED_AS_RAW",
+  "cleanup": "PASS",
+  "complete_EF_returns": 0,
+  "core_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+  "endpoint_seconds": "UNAVAILABLE",
+  "energy": "UNAVAILABLE",
+  "environment_identity": "9a839b321b4fef6499530df9bc19ca3dbdd024a0f7c714509ddcf886187dcc44",
+  "exact_companion_paths": "BOTH_ABSENT_IN_POST_FAILURE_ROOT_STAT",
+  "forces": "UNAVAILABLE",
+  "full2731_DF96_formal_parent": "INCOMPLETE",
+  "job": "h100-pbe0-direct48-cold-20261024-e961-v1",
+  "new_science_or_retry_authority": "NONE_NO_UNUSED_BALANCE",
+  "numerical_precision_OOM_verdict": "NOT_ESTABLISHED",
+  "raw_original_bytes": 10312946,
+  "raw_originals_restorable": 77,
+  "request_count": 1,
+  "schema": "generativeqc.h100-pbe0-failed-pilot-replay.v1",
+  "scientific_acceptance": "INCOMPLETE",
+  "source_env_device_receipts_equal": true,
+  "source_revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+  "speedups": null,
+  "status": "FAILED_SPENT",
+  "supplemental_originals": 8,
+  "time_scopes_do_not_add": {
+    "Root_elapsed_seconds": 177.03144659101963,
+    "engineering_charge_before_export_seconds": 279.9375319555402,
+    "supervisor_wall_before_export_seconds": 99.93753195554018,
+    "worker_command_wall_seconds": 44.01946358755231
+  },
+  "work_precision_fallback_peak_billing": "UNAVAILABLE"
+}
