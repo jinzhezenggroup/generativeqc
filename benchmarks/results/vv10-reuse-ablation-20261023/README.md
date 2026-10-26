@@ -38,10 +38,10 @@ python reproduce_recovery.py --output ../../../.artifacts/vv10-replay
 python -m unittest discover -p 'test_*.py'
 ```
 
-Restores716 originals/134 aliases: SHA/bytes/POSIX modes, source/SDK/oracle/
+Restores715 collection paths (134 whole-file aliases), plus16 retirement records: SHA/bytes/POSIX modes, source/SDK/oracle/
 claim/admission/return bindings and retired Job receipts;
 frozen replay regenerates reports. Helpers restore from `offline-source.json.xz`.
-Originals retained. XZ caps:96MiB decoder/64MiB expansion; reject
+Numerical, runtime, producer and failure records are unchanged. XZ caps:96MiB decoder/64MiB expansion; reject
 truncation/extra streams. Verify Git-LF blobs or a `core.autocrlf=false` archive.
 
 Failures retained: Windows3.13.14 /
@@ -51,3 +51,18 @@ and no restorable owner/device checkpoint; intrusive both-off diagnostic rc1 los
 E/F/outer timing after a list/tuple postcheck, keeping journal/callback work.
 Missing observables remain UNAVAILABLE; later source integrity cannot complete
 the failed protocol or establish its cause. Broader DFT is unproven.
+
+## Source identity
+
+`source-identity.json` replaces only the derived 12,222-entry full-repository
+source listing. It binds the frozen commit and tree, the original listing's
+byte count and SHA-256, and the solver identity consumed by the oracle checks.
+The revision/tree pair was verified against the public Git revision. Replay
+authenticates this recorded identity through publication/collection checksums
+and checks the solver SHA against retained oracle receipts; it does not resolve
+the Git tree or provide a self-contained Git-object proof.
+Build, runtime, driver, numerical and failed-protocol receipts remain unchanged.
+The original full listing is no longer restored by this replay. Its exact
+3,192,615 bytes were independently reconstructed from all frozen Git blobs
+(JSON indent 2, Git path order, CRLF and final newline), matching its recorded
+SHA-256. This removes repeated source metadata, not scientific observations.

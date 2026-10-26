@@ -179,14 +179,23 @@ does not change SCF convergence or the independent energy/force acceptance
 gates. If the old SSS primitive screen is explicitly enabled as well, the two
 omission budgets are additive.
 
-Norm storage is admitted only **after** the existing response tiles and scratch
-are fixed. Insufficient response-budget headroom or an optional allocation
-failure retains strict evaluation, without shrinking tiles or replaying source
-work. Generic/partial-shell consumers also remain strict and still reject
+Response planning reserves norm storage by reducing the auxiliary tile when
+the same response algebra and its minimum mandatory scratch still fit. It
+chooses the largest tile within that allowance; it does not enlarge the memory
+budget or change screening thresholds. If the minimum scratch cannot coexist
+with the norms, the original tile and strict evaluation remain available. An
+optional allocation failure also retains strict evaluation. Generic/partial-shell
+consumers remain strict and still reject
 invalid controls. Norms are recomputed for every geometry; they never escape
 the stream-protected force arena. Their bytes are included in response scratch.
 `GENERATIVEQC_DF_SHELL_COUNTERS=1` adds considered/skipped shell tasks and skipped
 primitive products; these intrusive counters are excluded from clean timings.
+`screening_shell_tile_reduced` records whether planning reduced the tile. A
+changed tile can split auxiliary shells differently, so cross-plan work checks
+compare actual executed/skipped work rather than assuming identical task visits.
+
+The [headroom decision](../../.agents/notes/implemented/performance/2026-10-26-df-screening-headroom.md)
+explains why the small norm allocation takes priority over the final columns.
 
 The [qualification](../../benchmarks/results/df-source-screening-20261004/README.md)
 records full endpoints, independent references, work conservation, changed

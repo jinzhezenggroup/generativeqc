@@ -1,4 +1,4 @@
-"""First-order PyTorch backward backed by native analytic HF gradients."""
+"""PyTorch energies with qualified analytic first- and second-order derivatives."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
 
     from .batch import PreparedBatch
 
-__all__ = ["batched_energy", "energy"]
+__all__ = ["batched_energy", "energy", "integral_energy"]
 
 
 def _validated_atomic_numbers(
@@ -33,17 +33,61 @@ def _validated_atomic_numbers(
     )
 
 
-def _require_first_order_backward() -> None:
-    """Reject differentiable backward before detached forces lose Hessian terms.
-
-    Checking grad mode also covers functional Hessian/HVP APIs whose default
-    non-strict behavior can turn a detached backward into silent zero entries.
-    """
-    if torch.is_grad_enabled():
+def _require_second_order(calculator: typing.Any) -> None:
+    """Expose only a context's independently qualified native HVP consumer."""
+    if "hvp" not in getattr(calculator, "second_order_capabilities", ()):
         raise RuntimeError(
-            "GenerativeQC energy supports only first-order coordinate derivatives; "
-            "higher-order derivatives through native forces are unsupported"
+            "higher-order derivatives are unsupported for this calculator context"
         )
+
+
+def _check_model_signature(calculator: typing.Any, signature: typing.Any) -> None:
+    """Keep a later response on the model that produced the saved energy/forces."""
+    if signature is not None and calculator._model_signature() != signature:
+        raise RuntimeError("calculator model changed after differentiable forward")
+
+
+class _CoordinateGradient(torch.autograd.Function):
+    """Bind an analytic gradient to coordinates with a native HVP backward."""
+
+    @staticmethod
+    def forward(
+        ctx: typing.Any,
+        coordinates: typing.Any,
+        gradient: typing.Any,
+        calculator: typing.Any,
+        numbers: typing.Any,
+        charge: int,
+        multiplicity: int,
+        model_signature: typing.Any,
+    ) -> typing.Any:
+        _check_model_signature(calculator, model_signature)
+        ctx.save_for_backward(coordinates)
+        ctx.calculator, ctx.numbers = calculator, numbers
+        ctx.charge, ctx.multiplicity = charge, multiplicity
+        ctx.model_signature = model_signature
+        return gradient.clone()
+
+    @staticmethod
+    def backward(ctx: typing.Any, direction: typing.Any) -> typing.Any:
+        if torch.is_grad_enabled():
+            raise RuntimeError(
+                "third-order derivatives through native response are unsupported"
+            )
+        (coordinates,) = ctx.saved_tensors
+        _check_model_signature(ctx.calculator, ctx.model_signature)
+        xyz = coordinates.detach().to(device="cpu", dtype=torch.float64).numpy()
+        vector = direction.detach().to(device="cpu", dtype=torch.float64).numpy()
+        result = ctx.calculator.hessian_vector_product(
+            list(zip(ctx.numbers, xyz, strict=True)),
+            vector,
+            charge=ctx.charge,
+            multiplicity=ctx.multiplicity,
+        )
+        product = torch.as_tensor(
+            result.value.copy(), dtype=coordinates.dtype, device=coordinates.device
+        )
+        return product, None, None, None, None, None, None
 
 
 class _EnergyFunction(torch.autograd.Function):
@@ -56,6 +100,13 @@ class _EnergyFunction(torch.autograd.Function):
         charge: typing.Any,
         multiplicity: typing.Any,
     ) -> typing.Any:
+        # Capture before the primal call, rather than when first backward later
+        # builds its graph: callers may mutate the calculator between the two.
+        ctx.model_signature = (
+            calculator._model_signature()
+            if hasattr(calculator, "_model_signature")
+            else None
+        )
         if coordinates.device.type != "cpu":
             # The C ABI can accept device buffers in a later version; the MVP
             # makes this transfer explicit instead of hiding it in native code.
@@ -75,15 +126,27 @@ class _EnergyFunction(torch.autograd.Function):
         force_tensor = torch.as_tensor(
             result.forces, dtype=coordinates.dtype, device=coordinates.device
         )
-        ctx.save_for_backward(force_tensor)
+        ctx.save_for_backward(coordinates, force_tensor)
+        ctx.calculator, ctx.numbers = calculator, atomic_numbers
+        ctx.charge, ctx.multiplicity = charge, multiplicity
         return coordinates.new_tensor(result.energy)
 
     @staticmethod
     def backward(ctx: typing.Any, grad_output: typing.Any) -> typing.Any:  # type: ignore[override]
-        _require_first_order_backward()
-        (forces,) = ctx.saved_tensors
-        # Native forces are -dE/dR, while autograd requests dE/dR.
-        return -forces * grad_output, None, None, None, None
+        coordinates, forces = ctx.saved_tensors
+        gradient = -forces
+        if torch.is_grad_enabled():
+            _require_second_order(ctx.calculator)
+            gradient = _CoordinateGradient.apply(
+                coordinates,
+                gradient,
+                ctx.calculator,
+                ctx.numbers,
+                ctx.charge,
+                ctx.multiplicity,
+                ctx.model_signature,
+            )
+        return gradient * grad_output, None, None, None, None
 
 
 def energy(
@@ -94,13 +157,14 @@ def energy(
     charge: int = 0,
     multiplicity: int = 1,
 ) -> torch.Tensor:
-    """Return HF energy with a native analytic first-order coordinate backward.
+    """Return energy with analytic coordinate backward and qualified double backward.
 
     Coordinates must be a real floating-point tensor; energy and coordinate
     gradients retain its dtype and device. Atomic numbers, charge and
     multiplicity must be exact integers (not bools).
-    Differentiable backward (``create_graph=True``), Hessians and HVPs raise an
-    error because the native force callback does not provide force derivatives.
+    ``create_graph=True`` and double backward require the calculator's qualified
+    HVP capability. An unqualified context rejects before detached forces could
+    hide missing Hessian terms. Third derivatives remain unsupported.
 
     Coordinates have shape ``(natoms, 3)`` in Bohr; the result is a scalar
     in Hartree and backward returns ``dE/dR`` in Hartree/Bohr. Forward
@@ -145,6 +209,12 @@ class _BatchedEnergyFunction(torch.autograd.Function):
                     "all ragged coordinate tensors must share device and dtype"
                 )
 
+        ctx.calculator = getattr(prepared_batch, "_calculator", calculator)
+        ctx.model_signature = (
+            ctx.calculator._model_signature()
+            if hasattr(ctx.calculator, "_model_signature")
+            else None
+        )
         # Native coordinates are FP64. Convert before NumPy so real Torch
         # dtypes without a NumPy representation (notably bfloat16) work too.
         cpu_coordinates = [
@@ -160,7 +230,9 @@ class _BatchedEnergyFunction(torch.autograd.Function):
                 raise ValueError("prepared batch charges do not match")
             if prepared_batch.multiplicities != multiplicities:
                 raise ValueError("prepared batch multiplicities do not match")
-            result = prepared_batch.execute(cpu_coordinates, strict=True)
+            result = prepared_batch.execute(
+                cpu_coordinates, strict=True, properties=("energy", "forces")
+            )
         else:
             systems = [
                 [
@@ -174,22 +246,46 @@ class _BatchedEnergyFunction(torch.autograd.Function):
                 charges=charges,
                 multiplicities=multiplicities,
                 strict=True,
+                properties=("energy", "forces"),
             )
 
         force_tensors = tuple(
             torch.as_tensor(item.forces, dtype=reference.dtype, device=reference.device)
             for item in result.items
         )
-        ctx.save_for_backward(*force_tensors)
+        ctx.save_for_backward(*coordinates, *force_tensors)
+        ctx.count = len(coordinates)
+        ctx.numbers, ctx.charges, ctx.multiplicities = (
+            atomic_numbers,
+            charges,
+            multiplicities,
+        )
         return torch.as_tensor(
             result.energies, dtype=reference.dtype, device=reference.device
         )
 
     @staticmethod
     def backward(ctx: typing.Any, grad_output: typing.Any) -> typing.Any:  # type: ignore[override]
-        _require_first_order_backward()
+        coordinates = ctx.saved_tensors[: ctx.count]
+        forces = ctx.saved_tensors[ctx.count :]
+        if torch.is_grad_enabled():
+            _require_second_order(ctx.calculator)
+            gradients = tuple(
+                _CoordinateGradient.apply(
+                    r,
+                    -force,
+                    ctx.calculator,
+                    ctx.numbers[i],
+                    ctx.charges[i],
+                    ctx.multiplicities[i],
+                    ctx.model_signature,
+                )
+                for i, (r, force) in enumerate(zip(coordinates, forces, strict=True))
+            )
+        else:
+            gradients = tuple(-force for force in forces)
         coordinate_gradients = tuple(
-            -force * grad_output[index] for index, force in enumerate(ctx.saved_tensors)
+            gradient * grad_output[i] for i, gradient in enumerate(gradients)
         )
         return None, None, None, None, None, *coordinate_gradients
 
@@ -212,9 +308,9 @@ def batched_energy(
     Coordinate tensors must be real floating point; energies and gradients
     retain their shared dtype and device. Each atomic-number list must match
     its coordinates. Atomic numbers, charges
-    and multiplicities must be exact integers (not bools). Only first-order
-    derivatives are supported; differentiable backward, Hessians and HVPs raise
-    an error, including when a prepared batch supplies the detached forces.
+    and multiplicities must be exact integers (not bools). Double backward uses
+    the executing calculator's qualified HVP capability for each item, including
+    caller-owned prepared batches. Third derivatives remain unsupported.
 
     Each coordinate tensor has shape ``(natoms_i, 3)`` in Bohr; the result
     has shape ``(nsystems,)`` in Hartree. Forward stages all coordinates as
@@ -222,8 +318,8 @@ def batched_energy(
     dtype/device. Native execution uses strict mode: any failed item raises
     rather than publishing a partial energy tensor. A caller-owned prepared
     batch must remain open and must not be used concurrently. Its default
-    property set (or the calculator batch default) must include forces;
-    this wrapper does not override an energy-only batch default. See
+    model must support forces, which this wrapper explicitly requests even
+    when the native method has an energy-only default. See
     :ref:`python-torch-errors`, :ref:`python-torch-ownership` and
     :ref:`python-torch-backends`."""
 
@@ -263,3 +359,125 @@ def batched_energy(
         normalized_multiplicities,
         *tuple(coordinates),
     )
+
+
+class _IntegralGradient(torch.autograd.Function):
+    """Joint parameter gradient whose adjoint is the relaxed integral HVP."""
+
+    @staticmethod
+    def forward(
+        ctx: typing.Any,
+        coordinates: typing.Any,
+        exponents: typing.Any,
+        coefficients: typing.Any,
+        state: typing.Any,
+        *gradients: typing.Any,
+    ) -> typing.Any:
+        ctx.save_for_backward(coordinates, exponents, coefficients)
+        ctx.state = state
+        ctx.set_materialize_grads(False)
+        return tuple(value.clone() for value in gradients)
+
+    @staticmethod
+    def backward(ctx: typing.Any, *directions: typing.Any) -> typing.Any:
+        if torch.is_grad_enabled():
+            raise RuntimeError(
+                "third-order derivatives through integral response are unsupported"
+            )
+        from .experimental.integral_autodiff import IntegralGradient
+
+        inputs = ctx.saved_tensors
+        arrays = tuple(
+            (torch.zeros_like(value) if direction is None else direction)
+            .detach()
+            .cpu()
+            .numpy()
+            for value, direction in zip(inputs, directions, strict=True)
+        )
+        product = ctx.state.hvp(IntegralGradient(*arrays))
+        gradients = tuple(
+            torch.as_tensor(array.copy(), dtype=value.dtype, device=value.device)
+            for array, value in zip(
+                (product.coordinates, product.exponents, product.coefficients),
+                inputs,
+                strict=True,
+            )
+        )
+        return (*gradients, None, None, None, None)
+
+
+class _IntegralEnergy(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: typing.Any,
+        coordinates: typing.Any,
+        exponents: typing.Any,
+        coefficients: typing.Any,
+        owner: typing.Any,
+    ) -> typing.Any:
+        state = owner.prepare(
+            coordinates.detach().cpu().numpy(),
+            exponents=exponents.detach().cpu().numpy(),
+            coefficients=coefficients.detach().cpu().numpy(),
+        )
+        try:
+            derivative = state.gradient()
+            gradients = tuple(
+                torch.as_tensor(
+                    array.copy(), dtype=coordinates.dtype, device=coordinates.device
+                )
+                for array in (
+                    derivative.coordinates,
+                    derivative.exponents,
+                    derivative.coefficients,
+                )
+            )
+        except BaseException:
+            state.close()
+            raise
+        object.__setattr__(owner, "_diagnostics", state.diagnostics())
+        ctx.save_for_backward(coordinates, exponents, coefficients, *gradients)
+        ctx.state, ctx.second_order = state, owner.derivative_order == 2
+        return coordinates.new_tensor(state.energy)
+
+    @staticmethod
+    def backward(ctx: typing.Any, cotangent: typing.Any) -> typing.Any:
+        inputs, gradients = ctx.saved_tensors[:3], ctx.saved_tensors[3:]
+        if torch.is_grad_enabled():
+            if not ctx.second_order:
+                raise RuntimeError(
+                    "integral double backward requires derivative_order=2"
+                )
+            gradients = _IntegralGradient.apply(*inputs, ctx.state, *gradients)
+        return (*(gradient * cotangent for gradient in gradients), None)
+
+
+def integral_energy(
+    coordinates: torch.Tensor,
+    exponents: torch.Tensor,
+    coefficients: torch.Tensor,
+    owner: typing.Any,
+) -> torch.Tensor:
+    """Differentiate RHF/UHF energy jointly through coordinates and raw basis inputs.
+
+    ``owner`` is an experimental IntegralHF instance. Inputs are finite FP64
+    tensors on one device, using that owner's units, shapes and fixed topology.
+    CPU staging is explicit; the owner selects scientific CPU/CUDA execution.
+    ``derivative_order=2`` admits double backward through the retained converged
+    state, including mixed basis/geometry terms. Third derivatives reject. The
+    graph owns its state independently of ``owner.close()`` and input mutation
+    is checked by Torch's saved-tensor versioning.
+    """
+    from .experimental.integral_autodiff import IntegralHF
+
+    if not isinstance(owner, IntegralHF):
+        raise TypeError("owner must be an IntegralHF instance")
+    inputs = (coordinates, exponents, coefficients)
+    if any(
+        not isinstance(value, torch.Tensor) or value.dtype != torch.float64
+        for value in inputs
+    ):
+        raise TypeError("integral AD inputs must be float64 Torch tensors")
+    if any(value.device != coordinates.device for value in inputs):
+        raise ValueError("integral AD inputs must share one device")
+    return _IntegralEnergy.apply(*inputs, owner)

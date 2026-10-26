@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import math
@@ -24,6 +25,88 @@ SPEC.loader.exec_module(smoke)
 
 
 class TransportTests(unittest.TestCase):
+    def compact_inventory(self, plan: dict) -> tuple[Path, Path, str]:
+        source = plan["sources"]["cbs"]
+        path = Path(source["inventory"])
+        files = smoke.load_json(path)["source_tree"]
+        encoded = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "generativeqc.h100-source-identity.v1",
+                    "file_count": len(files),
+                    "source_tree_sha256": hashlib.sha256(encoded).hexdigest(),
+                }
+            )
+        )
+        source["inventory_sha256"] = smoke.digest(path)
+        return Path(source["root"]), path, source["inventory_sha256"]
+
+    def test_compact_source_identity_accepts_identical_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            plan, _ = self.fixture(Path(name))
+            root, inventory, expected = self.compact_inventory(plan)
+            self.assertEqual(
+                smoke.checked_source_tree(root, inventory, expected),
+                {"inventory_sha256": expected, "verified_files": 1},
+            )
+
+    def test_compact_source_identity_rejects_source_drift(self) -> None:
+        for change in ("content", "missing", "extra", "mode", "renamed", "symlink"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as name:
+                if change in ("mode", "symlink") and smoke.os.name != "posix":
+                    continue  # POSIX source metadata is checked on the target host.
+                plan, _ = self.fixture(Path(name))
+                root, inventory, expected = self.compact_inventory(plan)
+                driver = root / "benchmarks/readme_cbs.py"
+                if change == "content":
+                    driver.write_bytes(b"!" + driver.read_bytes()[1:])
+                elif change == "missing":
+                    driver.unlink()
+                elif change == "extra":
+                    (root / "unexpected.py").write_text("# extra\n")
+                elif change == "mode":
+                    driver.chmod(stat.S_IMODE(driver.stat().st_mode) ^ stat.S_IXUSR)
+                elif change == "renamed":
+                    driver.rename(driver.with_name("other.py"))
+                else:
+                    outside = Path(name) / "outside.py"
+                    outside.write_bytes(driver.read_bytes())
+                    driver.unlink()
+                    driver.symlink_to(outside)
+                with self.assertRaises(ValueError):
+                    smoke.checked_source_tree(root, inventory, expected)
+
+    def test_compact_source_identity_rejects_bad_binding_and_metadata(self) -> None:
+        for field, value in (
+            ("file_count", True),
+            ("file_count", 0),
+            ("source_tree_sha256", "0" * 64),
+        ):
+            with (
+                self.subTest(field=field, value=value),
+                tempfile.TemporaryDirectory() as name,
+            ):
+                plan, _ = self.fixture(Path(name))
+                root, inventory, original = self.compact_inventory(plan)
+                record = smoke.load_json(inventory)
+                record[field] = value
+                inventory.write_text(json.dumps(record))
+                with self.assertRaises(ValueError):
+                    smoke.checked_source_tree(root, inventory, original)
+                with self.assertRaises(ValueError):
+                    smoke.checked_source_tree(root, inventory, smoke.digest(inventory))
+
+    def test_compact_source_drift_is_refused_before_device(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            plan, _ = self.fixture(Path(name))
+            root, _, _ = self.compact_inventory(plan)
+            (root / "unexpected.py").write_text("# source drift\n")
+            with patch.object(smoke, "device_observation") as device:
+                with self.assertRaises(ValueError):
+                    smoke.execute(plan, "cbs-c2", Path(name) / "attempt")
+                device.assert_not_called()
+
     def test_rank_binding_rejects_fabricated_or_ambiguous_proof(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             plan, _ = self.fixture(Path(name))

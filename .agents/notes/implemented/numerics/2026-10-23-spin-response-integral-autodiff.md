@@ -119,3 +119,11 @@ and their response, or a tiled primal schedule can retain all parameter
 derivatives with bounded endpoint work. Supporting DF requires differentiation
 of the actual three-center/metric factorization; supporting KS also requires
 AO/grid/XC parameter motion. Neither may be relabeled exact HF.
+
+## Subsequent execution and frontend extension
+
+The [2026-10-25 directional AD decision](2026-10-25-directional-ad-retained-state-and-direct-consumers.md)
+records retained stationary states, directional frontend source bindings,
+qualified Torch double backward and the optional CPU direct integral consumer.
+It preserves the derivative physics and independent qualification boundaries
+described here while changing source storage and execution reuse.

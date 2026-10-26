@@ -8,6 +8,11 @@
 #define GQC_AD_FN static
 #endif
 
+#ifdef GQC_INTEGRAL_AD_CUDA
+#define GQC_AD_MEMBER __device__
+#else
+#define GQC_AD_MEMBER
+#endif
 namespace integral_ad {
 GQC_AD_FN bool finite(double x) { return std::isfinite(x); }
 GQC_AD_FN bool zero(double x) { return x == 0; }
@@ -48,12 +53,27 @@ GQC_AD_FN void coordinate_inputs(Scalar* x, unsigned slots, unsigned centers, co
       x[slots + 3 * i + axis] = coordinates[3 * atoms[i] + axis];
 }
 
+/** Source consumers select storage and contraction without duplicating any
+ * primitive, normalization or pullback mathematics. The default retains the
+ * public ordered dense integral ABI; streaming consumers live with their
+ * generated scientific contraction rules. */
 template <class Scalar>
-GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scalar* coefficients,
-                      const Scalar* seeds, Scalar* output, Scalar* scratch, std::size_t lane = 0,
-                      std::size_t lanes = 1) {
+struct DenseConsumer {
+  const Scalar* seeds;
+  Scalar* output;
+  GQC_AD_MEMBER std::size_t size() const { return value_count; }
+  GQC_AD_MEMBER bool accept(std::size_t) const { return true; }
+  GQC_AD_MEMBER Scalar weight(std::size_t index) const { return seeds[index]; }
+  GQC_AD_MEMBER void add(std::size_t index, Scalar value) const { output[index] += value; }
+};
+
+template <class Scalar, class Consumer>
+GQC_AD_FN int execute_consumer(const Scalar* coordinates, const Scalar* alpha,
+                               const Scalar* coefficients, const Scalar* seeds, Scalar* output,
+                               Scalar* scratch, std::size_t lane, std::size_t lanes,
+                               Consumer consumer) {
   const bool derivative = seeds != nullptr;
-  const auto output_size = derivative ? parameter_count : value_count;
+  const auto output_size = derivative ? parameter_count : consumer.size();
   if (derivative || lanes == 1)
     for (std::size_t i = 0; i < output_size; ++i) output[i] = 0;
   Scalar* normalized = scratch;
@@ -82,7 +102,7 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
       const int sa = ao_shell[a], sb = ao_shell[b];
       int atoms[3] = {shell_atom[sa], shell_atom[sb], 0};
       const auto index = std::size_t(a) * nao + b;
-      if (index % lanes != lane) continue;
+      if (index % lanes != lane || !consumer.accept(index)) continue;
       const int component = ao_component[a] * ncomponent + ao_component[b];
       const double scale = ao_scale[a] * ao_scale[b];
       coordinate_inputs(x, 2, 2, atoms, coordinates);
@@ -94,25 +114,25 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
           const Scalar factor = scale * normalized[p] * normalized[q];
           overlap(component, x, values, derivative, scratch + 7 * nprim);
           if (derivative)
-            consume(2, 2, primitives, atoms, scale, normalized, values, seeds[index], output,
-                    cotangent);
+            consume(2, 2, primitives, atoms, scale, normalized, values, consumer.weight(index),
+                    output, cotangent);
           else
-            output[index] += factor * values[0];
+            consumer.add(index, factor * values[0]);
           kinetic(component, x, values, derivative, scratch + 7 * nprim);
           if (derivative)
-            consume(2, 2, primitives, atoms, scale, normalized, values, seeds[n2 + index], output,
-                    cotangent);
+            consume(2, 2, primitives, atoms, scale, normalized, values, consumer.weight(n2 + index),
+                    output, cotangent);
           else
-            output[n2 + index] += factor * values[0];
+            consumer.add(n2 + index, factor * values[0]);
           for (int nucleus = 0; nucleus < nat; ++nucleus) {
             atoms[2] = nucleus;
             coordinate_inputs(x, 2, 3, atoms, coordinates);
             nuclear_attraction(component, x, values, derivative, scratch + 7 * nprim);
             if (derivative)
               consume(2, 3, primitives, atoms, scale, normalized, values,
-                      charges[nucleus] * seeds[n2 + index], output, cotangent);
+                      charges[nucleus] * consumer.weight(n2 + index), output, cotangent);
             else
-              output[n2 + index] += charges[nucleus] * factor * values[0];
+              consumer.add(n2 + index, charges[nucleus] * factor * values[0]);
           }
         }
     }
@@ -123,7 +143,10 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
     for (int b = 0; b < nao; ++b)
       for (int c = 0; c < nao; ++c)
         for (int d = 0; d < nao; ++d) {
-          if ((((std::size_t(a) * nao + b) * nao + c) * nao + d + n2) % lanes != lane) continue;
+          const auto source_index = 2 * n2 + ((std::size_t(a) * nao + b) * nao + c) * nao + d;
+          if ((((std::size_t(a) * nao + b) * nao + c) * nao + d + n2) % lanes != lane ||
+              !consumer.accept(source_index))
+            continue;
           const int shells[4] = {ao_shell[a], ao_shell[b], ao_shell[c], ao_shell[d]};
           const int atoms[4] = {shell_atom[shells[0]], shell_atom[shells[1]], shell_atom[shells[2]],
                                 shell_atom[shells[3]]};
@@ -145,17 +168,19 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
                   x[3] = alpha[s];
                   eri(component, x, values, derivative, scratch + 7 * nprim);
                   if (derivative)
-                    consume(4, 4, primitives, atoms, scale, normalized, values, seeds[index],
-                            output, cotangent);
+                    consume(4, 4, primitives, atoms, scale, normalized, values,
+                            consumer.weight(index), output, cotangent);
                   else
-                    output[index] += scale * normalized[p] * normalized[q] * normalized[r] *
-                                     normalized[s] * values[0];
+                    consumer.add(index, scale * normalized[p] * normalized[q] * normalized[r] *
+                                            normalized[s] * values[0]);
                 }
         }
 
   for (int a = 0; a < nat; ++a)
     for (int b = 0; b < a; ++b) {
-      if ((n2 + n4 + std::size_t(a) * (a - 1) / 2 + b) % lanes != lane) continue;
+      if ((n2 + n4 + std::size_t(a) * (a - 1) / 2 + b) % lanes != lane ||
+          !consumer.accept(value_count - 1))
+        continue;
       const int atoms[2] = {a, b};
       coordinate_inputs(x, 0, 2, atoms, coordinates);
       nuclear_pair(x, values, derivative);
@@ -164,9 +189,9 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
         for (int i = 0; i < 2; ++i)
           for (int axis = 0; axis < 3; ++axis)
             output[3 * atoms[i] + axis] +=
-                factor * seeds[value_count - 1] * values[1 + 3 * i + axis];
+                factor * consumer.weight(value_count - 1) * values[1 + 3 * i + axis];
       } else
-        output[value_count - 1 + lane] += factor * values[0];
+        consumer.add(value_count - 1 + lane, factor * values[0]);
     }
   if (derivative) {
     for (int shell = 0; shell < nshell; ++shell) {
@@ -184,6 +209,13 @@ GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scal
     for (std::size_t i = 0; i < output_size; ++i)
       if (!finite(output[i])) return 1;
   return 0;
+}
+template <class Scalar>
+GQC_AD_FN int execute(const Scalar* coordinates, const Scalar* alpha, const Scalar* coefficients,
+                      const Scalar* seeds, Scalar* output, Scalar* scratch, std::size_t lane = 0,
+                      std::size_t lanes = 1) {
+  return execute_consumer(coordinates, alpha, coefficients, seeds, output, scratch, lane, lanes,
+                          DenseConsumer<Scalar>{seeds, output});
 }
 }  // namespace integral_ad
 

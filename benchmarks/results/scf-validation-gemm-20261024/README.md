@@ -84,7 +84,7 @@ PYTHONPATH=python:. python benchmarks/results/scf-validation-gemm-20261024/repro
 
 `endpoints.json.xz` retains all 96 original endpoint JSON texts and their byte
 hashes, including every force component and the moved references.
-`provenance.json.xz` retains the complete 12,425-file measured source manifest,
+`provenance.json.xz` retains a compact identity for the 12,425-file measured source tree,
 verification receipt, build/cache/package identities, scripts, allocations and
 successful/failed test logs. The verifier authenticates retained inputs,
 rechecks all 328 calls, recomputes paired statistics and emits actual work counts.
@@ -98,3 +98,15 @@ results, failure records and logical identities are retained. Existing gzip-awar
 consumers continue to work; historical original-name readers can restore the
 snapshot with the shared tool as documented in each affected campaign. No
 per-file, aggregate or incoming-review limit is increased.
+
+### Compact source identity
+
+The former whole-repository source manifest is represented by its original
+SHA-256, byte count and file count, the measured revision and verified Git tree,
+and selected solver/driver/build-file hashes. All 12,425 manifest entries were
+independently compared to that tree before this metadata reduction: no missing
+or modified file was found. Build, driver, package, test and failure receipts
+remain byte-for-byte unchanged inside provenance. The verifier checks the
+recorded identity and historical pre-build verification receipt; it does not
+re-enumerate the Git tree or restore the original full manifest. Numerical
+inputs, endpoint records and qualification thresholds are unchanged.

@@ -99,7 +99,16 @@ relaxing tolerances.
 `FinalVerification` checks the actual resolved target identity, prepared-provider
 identity, basis mathematical/source hashes, native success/convergence,
 energy/density gates, physical SCF residual, requested energy/force capabilities,
-effective final FP64 arithmetic and complete execution budgets. It distinguishes:
+effective final FP64 arithmetic and complete execution budgets.
+
+The shared native `generativeqc_hf_verify_final_v1` policy owns scalar acceptance,
+strict-cleanup requirements and budget precedence. A running controller uses its
+selected target library; standalone verification uses the first configured
+library. Python validates typed identities and observable array shape and
+presents the native decision. Missing older-library protocols and Python integer
+metadata outside the fixed-width ABI retain explicit compatibility; a native
+error never triggers another verifier. This metadata policy does not rebuild the
+physical target or certify an empirical accuracy estimate.
 
 A force capability is established only by a finite, real numerical array with
 shape exactly `(TargetProblem.atom_count, 3)`. Empty, partial, extra-atom,
@@ -126,6 +135,8 @@ build, and binds the density/overlap bytes and versioned operator/execution
 identity. It creates no AO-grid packing owner. Missing protocols, non-CPU and
 unsupported metadata domains retain explicit compatibility; an admitted native
 failure never retries Python or changes the requested model or budget.
+
+Final disposition distinguishes:
 
 - `verified`: exact target gates passed and an independent assessment has
   status `observed_met`;

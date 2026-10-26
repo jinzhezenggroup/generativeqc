@@ -1,5 +1,7 @@
 """Native HF endpoint coverage for the typed #192 deterministic controller."""
 
+from typing import Any
+
 import pytest
 from generativeqc import Calculator
 from generativeqc.accuracy import ObservableTarget, TargetAccuracy
@@ -128,6 +130,13 @@ def test_native_schedule_target_energy_and_forces_against_pyscf(
 
     monkeypatch.setattr(
         controller, "_audit_target_physical_residual_python", forbidden_audit
+    )
+
+    def forbidden_policy(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("native progressive endpoint used Python final acceptance")
+
+    monkeypatch.setattr(
+        controller, "_finalize_hf_verification_python", forbidden_policy
     )
     source, target = calculators(method=method, fitted=fitted)
     problem = TargetProblem.from_calculator(

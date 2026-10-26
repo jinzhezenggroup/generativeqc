@@ -1,0 +1,120 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "46b916ac6df0082d56fbc48639bc1261aecc7d04",
+  "history_rewritten": false,
+  "scope": "Complete preceding 2026-10-26 README cohort and figures before DF screening-headroom repair. Updated in place only after a complete fresh 128-population campaign. Exact original bytes remain in existing Git history.",
+  "file_count": 22,
+  "total_bytes": 873843,
+  "files": [
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/README.md",
+      "bytes": 4927,
+      "sha256": "728a3c7e7067d18b9bcbdb29076f31fdcd9573a326c2ac6f8da8d410f1210525"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/auxiliary-inputs.json.xz",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/conditions.md",
+      "bytes": 7210,
+      "sha256": "9f47c4c7bb6aa8350c6f041b8862db1269dcb03b80ab186ec476d3b3231a29be"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/figures.json",
+      "bytes": 246,
+      "sha256": "a8313fb3f8041851f47efcbb6d14c0c2b4374639c350712a13bd9aeccb175488"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/gpu4pyscf.json.xz",
+      "bytes": 187492,
+      "sha256": "65a957ae022838706431956d6618b80b2e92d3848a56e324876cd14d66c3e64f"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/jobs.json.xz",
+      "bytes": 6408,
+      "sha256": "ccedf10fb858fdf62fc6c3ff5ce86e713afa37ab0f7b640f145e21c0652af512"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/oracles.json.xz",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/provenance.json.xz",
+      "bytes": 7148,
+      "sha256": "46b64e80b957278ee5abd57429560d62090f48f4dafa044c4901512b3ab39ae9"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/publication.json",
+      "bytes": 3880,
+      "sha256": "715a4d9ca2731351dbde68178138cb526813b8d0cdea76aa5a5744142476004c"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/qualification.json.xz",
+      "bytes": 22448,
+      "sha256": "c0b5591ff5cf5b2d8f37d7dd7f547a47fbd0400fbc3e91b4765d07f4653bcfe5"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/reference-reuse.json",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/render-requirements.txt",
+      "bytes": 90,
+      "sha256": "03ec1c613727a38de86cad21631e62667403568dde4b5f9e2f288c736dfc11c4"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/reproduce.py",
+      "bytes": 9563,
+      "sha256": "daa03cbed6a7d754ebba32a16ca16a6c3b0244cb665d0727f1b7f5b546b33dc7"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/source.patch.xz",
+      "bytes": 13804,
+      "sha256": "c816fb1ffd9ff4e860311f47bb18c9bf297e863525140a894550a2d957734e55"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/standard.json.xz",
+      "bytes": 213548,
+      "sha256": "b03d0c799ddbcd0736381a1ef28afc845ca4abe70ec6ca9875a9cd5bc4cf7c41"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/summary.json.xz",
+      "bytes": 388,
+      "sha256": "b02d6b225029297cfdd61cce31d69b59806c56684660d424f65a2d7d4081a101"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/timings.md",
+      "bytes": 13901,
+      "sha256": "22f7bfc7ff29c333f13d74a3f90f0227436be91ae2d6653dfa006c4b34a151af"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/validation.json.xz",
+      "bytes": 3324,
+      "sha256": "0954308221a407653d6e3f9a6a9aa22b53a9c333637deb6baeef8e54a797c985"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261026/work.md",
+      "bytes": 10535,
+      "sha256": "bcd493fce3768ae19960de8d0551010d8b9702da574ab8eb7114e861beac6285"
+    },
+    {
+      "path": "assets/readme-direct-defaults.svg",
+      "bytes": 142929,
+      "sha256": "096d38b44495512c80a5809ff982280269d9e4bed5824e1af1af0ca1f3033663"
+    },
+    {
+      "path": "assets/readme-df-defaults.svg",
+      "bytes": 142974,
+      "sha256": "ab4be5affae1b77f43118ff563b0c2f99b0b986ce49160544bbfc4915d6729f0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6290,
+      "sha256": "1c4d31ba76e8965ace0104d7953081a9c673fe60be8a73f21f297741d714ff57"
+    }
+  ]
+}

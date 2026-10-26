@@ -27,6 +27,7 @@
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/cuda_df_nuclear_sink.hpp"
 #include "scf/df_derivative_policy.hpp"
+#include "scf/df_response_tile_budget.hpp"
 #include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::scf {
@@ -1595,6 +1596,25 @@ generativeqc_status execute_cuda_df_hf_gradient(
                (single_fitted_tensor ? (a - block) * n * n : 0) +
                (owned_occupied ? occupied_retained + std::max(occupied_scratch, block * n * n) : 0);
       };
+      const auto orbital_shells = orbital.shells.size();
+      const auto auxiliary_shells = auxiliary.shells.size();
+      const auto norm_bytes = (orbital_shells * orbital_shells + auxiliary_shells) * sizeof(double);
+      const auto counter_bytes = shell_counters ? sizeof(observed_shell_screen_work) : 0;
+      const auto density_reservation = borrowed_density ? n * n * sizeof(double) : std::size_t{0};
+      if (shell_target > 0 && shell_execution && full_shell_domain &&
+          counter_bytes <= maximum_bytes - arena.stats.host_bytes) {
+        // Filling the allowance with the largest panel can leave less than one
+        // MiB for shell norms and abruptly disable screening. Prefer a slightly
+        // smaller panel when the same algebra and its minimum scratch still fit.
+        // Account for density uploaded since the headroom query, and preserve
+        // the existing logical reservation for a borrowed resident density.
+        const auto density_bytes = borrowed_density ? 0 : terms.size() * n * n * sizeof(double);
+        const auto original_tile = tile;
+        tile = df_response_tile_with_headroom(
+            tile, available - density_bytes, norm_bytes + counter_bytes + density_reservation,
+            [&](std::size_t block) { return workspace_size(block) * sizeof(double); });
+        runtime::cuda_trace::trace_counter("screening_shell_tile_reduced", tile < original_tile);
+      }
       double* workspace = nullptr;
       // Free bytes are advisory: allocation granularity, fragmentation or a
       // concurrent consumer can still refuse the proposed panel. No response
@@ -1739,16 +1759,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                            bytes + gradient_copies * sizeof(double));
       }
       if (shell_target > 0 && shell_execution && full_shell_domain) {
-        // Reserve only unused headroom AFTER the original response shape and
-        // scratch have been fixed. A resident density removes the physical
-        // response allocation, but keep its old bytes logically reserved here
-        // so this placement-only change cannot newly admit force screening.
-        const auto orbital_shells = orbital.shells.size();
-        const auto auxiliary_shells = auxiliary.shells.size();
-        const auto norm_bytes =
-            (orbital_shells * orbital_shells + auxiliary_shells) * sizeof(double);
-        const auto counter_bytes = shell_counters ? sizeof(observed_shell_screen_work) : 0;
-        const auto density_reservation = borrowed_density ? n * n * sizeof(double) : std::size_t{0};
+        // Tile planning leaves room when feasible, but allocation granularity or
+        // another consumer may still deny the optional screen. Keep the exact
+        // unscreened fallback and charge a borrowed density's logical reserve.
         const auto device_headroom = maximum_bytes - arena.stats.device_bytes;
         double* norms = nullptr;
         if (density_reservation <= device_headroom &&

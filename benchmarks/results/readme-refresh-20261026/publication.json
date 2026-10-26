@@ -1,0 +1,133 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "46b916ac6df0082d56fbc48639bc1261aecc7d04",
+    "dirty": false
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Descriptive one-process-per-population default E+F observations; all completed failures and slower points displayed. Separate repeated-process evidence qualifies the optimization."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 5470,
+      "sha256": "83f82b4b5d0601fd41a724d635f4d7e63301b5cf0e17ede5f97fca7010f0c5ec"
+    },
+    {
+      "path": "auxiliary-inputs.json.xz",
+      "role": "input",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "path": "conditions.md",
+      "role": "summary",
+      "bytes": 8088,
+      "sha256": "cde40b2e49bfe1a3df6a759ec170526a32735669556d7100898c23c22db5edbd"
+    },
+    {
+      "path": "figures.json",
+      "role": "summary",
+      "bytes": 246,
+      "sha256": "ae63d01a6d694e77c76af5122ffb992aa24c6ba299512dd6225f3e42314aa69a"
+    },
+    {
+      "path": "gpu4pyscf.json.xz",
+      "role": "samples",
+      "bytes": 188664,
+      "sha256": "1be7407733cd6b574c46a731aa3bdc2b17cb9b203c6835426b298f112169a7ee"
+    },
+    {
+      "path": "jobs.json.xz",
+      "role": "reproduction",
+      "bytes": 6652,
+      "sha256": "af7768152180678b3259d98e131762582c68ebf8360971cf1f7b26f9acee43d9"
+    },
+    {
+      "path": "oracles.json.xz",
+      "role": "input",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "path": "previous-cohort.json",
+      "role": "reproduction",
+      "bytes": 4595,
+      "sha256": "c3d995e146b6561f7e6dc5da2d810df9973d09388f6838f86cf0f2efd06c1d90"
+    },
+    {
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "bytes": 6152,
+      "sha256": "39c8ba35d6048a4f9a14e5fd4c27620bd37fcfa12b252bbf0795c5036e8e2abb"
+    },
+    {
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "bytes": 22308,
+      "sha256": "044ad4b77b7d91c67fb013951710459fb94f2defa1f88e403e542a9ea30223b5"
+    },
+    {
+      "path": "reference-reuse.json",
+      "role": "input",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "path": "render-requirements.txt",
+      "role": "reproduction",
+      "bytes": 90,
+      "sha256": "03ec1c613727a38de86cad21631e62667403568dde4b5f9e2f288c736dfc11c4"
+    },
+    {
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "bytes": 10908,
+      "sha256": "b7581a6e48b891e31a0f38cd083c2fc0e419845d82db90c1d30524f9ddc4b242"
+    },
+    {
+      "path": "standard.json.xz",
+      "role": "samples",
+      "bytes": 214196,
+      "sha256": "bf21c9d9f54d0a3f16bd4505206e489c1ac70d66021f1fa63511a3ed6a5e61b6"
+    },
+    {
+      "path": "summary.json.xz",
+      "role": "summary",
+      "bytes": 296,
+      "sha256": "bcfee4f949dcb81109ac6d224d8fc1df4c79b7f24b222712eb7204c8b1d5aaa4"
+    },
+    {
+      "path": "timings.md",
+      "role": "summary",
+      "bytes": 13896,
+      "sha256": "56e8efdf9e892930169543e6ceefd841d444c0340564c4d74b7bab71c7f7d990"
+    },
+    {
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "bytes": 3408,
+      "sha256": "786a32d5aa0bf2f1675f859979040eb3c57ef921e60792c76c6eda8294505c1c"
+    },
+    {
+      "path": "work.md",
+      "role": "summary",
+      "bytes": 10535,
+      "sha256": "bcd493fce3768ae19960de8d0551010d8b9702da574ab8eb7114e861beac6285"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/readme-refresh-20261026/reproduce.py",
+      "--output",
+      ".artifacts/readme-refresh-20261026-replay",
+      "--verify",
+      "--check-readme"
+    ]
+  }
+}

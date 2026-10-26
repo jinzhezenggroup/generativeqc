@@ -92,19 +92,14 @@ def _toolchain_metadata() -> dict[str, Any]:
     return tools
 
 
-def _visible_nvidia_device(device_id: int) -> str:
-    """Map a process-local CUDA ordinal to the scheduler-visible GPU token."""
+def _nvidia_smi_state(pci_bus_id: str, sampling_point: str) -> dict[str, Any] | None:
+    """Sample the executed GPU without assuming CUDA and NVML ordinal order.
 
-    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if visible:
-        devices = tuple(item.strip() for item in visible.split(","))
-        if device_id < len(devices) and devices[device_id]:
-            return devices[device_id]
-    return str(device_id)
-
-
-def _nvidia_smi_state(device_id: int) -> dict[str, Any] | None:
-    """Capture post-benchmark clocks, power, temperature, and performance state."""
+    CUDA_VISIBLE_DEVICES may contain remapped ordinals or UUIDs. The PCI address
+    comes from the active CUDA device, so querying nvidia-smi by that address
+    preserves scheduler visibility without interpreting its tokens ourselves.
+    A snapshot describes collection time, never the clocks during a timed call.
+    """
 
     nvidia_smi = shutil.which("nvidia-smi")
     if nvidia_smi is None:
@@ -116,11 +111,12 @@ def _nvidia_smi_state(device_id: int) -> dict[str, Any] | None:
         "clocks.current.sm",
         "clocks.current.memory",
         "temperature.gpu",
+        "uuid",
     )
     output = _command_output(
         (
             nvidia_smi,
-            f"--id={_visible_nvidia_device(device_id)}",
+            f"--id={pci_bus_id}",
             f"--query-gpu={','.join(fields)}",
             "--format=csv,noheader,nounits",
         )
@@ -144,7 +140,9 @@ def _nvidia_smi_state(device_id: int) -> dict[str, Any] | None:
         "sm_clock_mhz": number(row[3]),
         "memory_clock_mhz": number(row[4]),
         "temperature_celsius": number(row[5]),
-        "sampling_point": "after benchmark measurements",
+        "uuid": row[6],
+        "sampling_point": sampling_point,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -225,17 +223,27 @@ def environment_metadata(
     }
 
 
-def cuda_accelerator_metadata(cupy_module: Any) -> dict[str, Any]:
-    """Return stable JSON fields for the CUDA device used by a benchmark."""
+def cuda_accelerator_metadata(
+    cupy_module: Any, *, sampling_point: str = "at metadata collection"
+) -> dict[str, Any]:
+    """Identify the executed device and label an optional instantaneous sample.
+
+    Callers that know their measurement boundary should supply sampling_point;
+    collecting metadata does not imply that a benchmark has already run.
+    """
 
     device_id = cupy_module.cuda.Device().id
     properties = cupy_module.cuda.runtime.getDeviceProperties(device_id)
+    pci_bus_id = cupy_module.cuda.runtime.deviceGetPCIBusId(device_id)
+    if isinstance(pci_bus_id, bytes):
+        pci_bus_id = pci_bus_id.decode("ascii")
     name = properties.get("name")
     if isinstance(name, bytes):
         name = name.decode("utf-8", errors="replace").rstrip("\x00")
     return {
         "backend": "cuda",
         "device_id": device_id,
+        "pci_bus_id": pci_bus_id,
         "name": name,
         "compute_capability": [
             properties.get("major"),
@@ -246,7 +254,7 @@ def cuda_accelerator_metadata(cupy_module: Any) -> dict[str, Any]:
         "clock_rate_khz": properties.get("clockRate"),
         "driver_version": cupy_module.cuda.runtime.driverGetVersion(),
         "runtime_version": cupy_module.cuda.runtime.runtimeGetVersion(),
-        "nvidia_smi": _nvidia_smi_state(device_id),
+        "nvidia_smi": _nvidia_smi_state(pci_bus_id, sampling_point),
     }
 
 
