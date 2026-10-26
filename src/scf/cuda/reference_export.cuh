@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -29,7 +30,14 @@ inline std::size_t retained_bytes(cudaStream_t stream, std::size_t before, std::
   const auto after = free_bytes(stream);
   const auto delta = before > after ? before - after : 0;
   if (delta > allowance)
-    throw std::length_error("CUDA RHF provider exceeds retained allocation allowance");
+    // The synchronized free-memory difference includes driver/allocator effects;
+    // retain the observation without presenting it as an exact allocation ledger.
+    throw std::length_error(
+        "CUDA RHF provider exceeds retained allocation allowance: "
+        "free_before_bytes=" +
+        std::to_string(before) + " free_after_bytes=" + std::to_string(after) +
+        " observed_delta_bytes=" + std::to_string(delta) +
+        " allowance_bytes=" + std::to_string(allowance));
   return delta;
 }
 inline std::size_t check_capacity(std::size_t base, std::size_t additional, std::size_t budget) {
