@@ -1,0 +1,172 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Scalar response/resolvent composition has 0.2\u20130.4% descriptive endpoint gains, below the 2% floor; fewer than five paired samples. Keep production unchanged; narrow remaining #2516 work to generic bounded forward residency.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 8572,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "5085eef1642929a0a435280ca60be724cfa3b97f494281c840d7d2d05ebc2eed"
+    },
+    {
+      "bytes": 20856,
+      "path": "audit.json.xz",
+      "role": "summary",
+      "sha256": "5f7b000bbf3144fda6b148325243af45aa27a179131605c80873800b439ae9bf"
+    },
+    {
+      "bytes": 5799,
+      "path": "ethane230.input",
+      "role": "input",
+      "sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "bytes": 5528,
+      "path": "oracles.json.xz",
+      "role": "summary",
+      "sha256": "696c3ab9e3f3cd9dd760c84982ad776bf2304ff12a7e0afff010975444790654"
+    },
+    {
+      "bytes": 4520,
+      "path": "production-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "89022108737b0ef22b01f3a71bafdc95c437e00669d4c36db8b35fc45642fa35"
+    },
+    {
+      "bytes": 2112,
+      "path": "qualification-tests.patch.xz",
+      "role": "source-patch",
+      "sha256": "ea1aa9013df27c3eb68cd8cabaa8bb8b61e75b6afc0924c55b7547be24b821a7"
+    },
+    {
+      "bytes": 6624,
+      "path": "receipts.json.xz",
+      "role": "summary",
+      "sha256": "a7cc054ab93515e24727899497c843c223af3d72a59c0034223e70af7a7e7dc1"
+    },
+    {
+      "bytes": 5468,
+      "path": "reproduction/analyze_profile.py",
+      "role": "reproduction",
+      "sha256": "f9d81220d8ef74e879fb94cf1e1b5640d7f6c8724a8479910db42b12ab837ab4"
+    },
+    {
+      "bytes": 1750,
+      "path": "reproduction/build.sh",
+      "role": "reproduction",
+      "sha256": "64e48cb6d59a5fa35ec5b760110499c2e51b092e9c1645430b9739157c06fe02"
+    },
+    {
+      "bytes": 1246,
+      "path": "reproduction/cluster_inputs.py",
+      "role": "reproduction",
+      "sha256": "8d1fef4683fc0e5921beb791670d63fae98dfc2b297d7208c303dd2e97a86b7f"
+    },
+    {
+      "bytes": 1573,
+      "path": "reproduction/clusters-final.sh",
+      "role": "reproduction",
+      "sha256": "a56e614a89b16f1a41a380b0b63a3ed3fb39a6f7474d29fa19a1011deb74eed8"
+    },
+    {
+      "bytes": 1435,
+      "path": "reproduction/compare-final.sh",
+      "role": "reproduction",
+      "sha256": "212c73b96b68f89de6de1ef7b1297dbad6a5e39abc24edc0c9f610ee0dbc545d"
+    },
+    {
+      "bytes": 1575,
+      "path": "reproduction/force_oracle.py",
+      "role": "reproduction",
+      "sha256": "f2ac4f81098405264630b8d5e65941b83bbd5aede5c996ec2ec5cac63c4890d2"
+    },
+    {
+      "bytes": 2700,
+      "path": "reproduction/instrument.py",
+      "role": "reproduction",
+      "sha256": "23ec7b7235b6ad4e458185abe9c318636f76faf3ee2ff70bbe56ce48157348f9"
+    },
+    {
+      "bytes": 789,
+      "path": "reproduction/memcheck.sh",
+      "role": "reproduction",
+      "sha256": "83565b11ee2aa78f214b06236bd143e2960116c02538a725d900254b77295c52"
+    },
+    {
+      "bytes": 1563,
+      "path": "reproduction/profile-final.sh",
+      "role": "reproduction",
+      "sha256": "3895c24351b03220c2dcf0e75b62789444677687937deb00bc8e1e5e33277e81"
+    },
+    {
+      "bytes": 1546,
+      "path": "reproduction/profile.sh",
+      "role": "reproduction",
+      "sha256": "4877ed7ad8a4a199dd4d864afdce06eb73067e67775125f127d99061ad3a0397"
+    },
+    {
+      "bytes": 1918,
+      "path": "reproduction/summarize.py",
+      "role": "reproduction",
+      "sha256": "ba546dc915b7338ecb7b46f1b077bf2452edfed3952cd44d601b6ae9a07d392c"
+    },
+    {
+      "bytes": 849,
+      "path": "reproduction/test-final.sh",
+      "role": "reproduction",
+      "sha256": "fcc3712e53ca5eab670eb478e5c456fbc67da441474521b95f00a28b1a248470"
+    },
+    {
+      "bytes": 11132,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "098bc0a955a15a5e08eff975225fc267a9a9f2a5735a206e48349a288f3af7df"
+    },
+    {
+      "bytes": 3408,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "d6426a2468dd92c5e74426090beca6842cbeac4ae78993822d0ada9c5db179d7"
+    },
+    {
+      "bytes": 3986,
+      "path": "water28.input",
+      "role": "input",
+      "sha256": "14138a5a2a74958b1627e1445fb56e0a268de5d2a6a5469b772fb3939fa5033e"
+    },
+    {
+      "bytes": 2092,
+      "path": "water28.metadata.json.xz",
+      "role": "input",
+      "sha256": "ed2f71689752ee16098e76b09cabf9d97838529695352ccd922aab4f4fecd1c8"
+    },
+    {
+      "bytes": 7984,
+      "path": "water56.input",
+      "role": "input",
+      "sha256": "da4869695f49232b4e93e054f051b20f342c09e23c3c5791a020e4a075ba90c4"
+    },
+    {
+      "bytes": 2372,
+      "path": "water56.metadata.json.xz",
+      "role": "input",
+      "sha256": "5beaba63fcd332e0d0e6c12950640fef627cb4a507f6aa4b2a14f5c1e5f17488"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/ccsdt-response-reuse-20261027/reproduction/summarize.py"
+    ],
+    "notes": "README.md contains source reconstruction, CPU audit, independent oracles and finite Slurm recipes."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "fa5a5c5613e816924bfe0b03734ecb3bad2cf5f9"
+  }
+}
