@@ -113,6 +113,20 @@ records the Fock execution identity, density/overlap hashes, RMS and maximum
 time and counts as one target Fock build; its failure makes target verification
 fail closed. It is a state audit, not an observable-error certificate.
 
+For all-electron CPU RHF/UHF Direct/DF inputs within the native through-g domain,
+the fixed-density audit uses one native scope for preparation, Fock construction,
+overlap, residual reduction and cleanup. Its additive C ABI exposes a capacity
+query and transactional execution for SDK callers. The existing complete HF
+resource preflight remains an additional frontend gate; native execution also
+checks the conservative numeric envelope before constructing a provider. This
+does not establish complete allocator/provider/RSS accounting.
+
+The native receipt keeps the maximum and RMS distinct, counts one physical Fock
+build, and binds the density/overlap bytes and versioned operator/execution
+identity. It creates no AO-grid packing owner. Missing protocols, non-CPU and
+unsupported metadata domains retain explicit compatibility; an admitted native
+failure never retries Python or changes the requested model or budget.
+
 - `verified`: exact target gates passed and an independent assessment has
   status `observed_met`;
 - `unverified`: the exact target is established, but observable accuracy has no

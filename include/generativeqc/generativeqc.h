@@ -2535,6 +2535,93 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_cross_overlap_cpu(
     generativeqc_context* context, const generativeqc_system* target,
     const generativeqc_system* source, double* output, size_t output_count);
 
+/** Fixed-density HF audit controls. unrestricted and density_fitted are 0/1;
+ * reserved is zero. A strictly positive maximum_host_bytes bounds conservative
+ * numeric/value metadata, excluding allocator/provider overhead and process RSS.
+ * DIIS history preserves the full-HF capacity envelope but no SCF is run.
+ * Screening is finite nonnegative; the metric threshold is strictly in (0,1).
+ */
+typedef struct generativeqc_hf_physical_audit_controls_v1 {
+  uint32_t struct_size, abi_version;
+  uint32_t unrestricted, density_fitted, diis_history, reserved;
+  uint64_t maximum_host_bytes;
+  double screening_tolerance, metric_relative_threshold;
+} generativeqc_hf_physical_audit_controls_v1;
+
+/** Counts use FP64 elements. Provider and additional audit workspace are
+ * separate numeric allowances; required_host_bytes is their checked sum.
+ */
+typedef struct generativeqc_hf_physical_audit_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t ao_count, spin_count, density_count, overlap_count;
+  uint64_t provider_bytes, workspace_bytes, required_host_bytes;
+} generativeqc_hf_physical_audit_capacity_v1;
+
+/** Caller-owned square row-major overlap output and detached audit scalars.
+ * overlap_capacity is in doubles; only ao_count squared elements are written.
+ * Energy includes nuclear repulsion; energy_difference is absolute relative to
+ * the supplied target energy. Residual maximum and RMS use all spin entries.
+ * A successful call reports exactly one physical Fock build, with no SCF.
+ */
+typedef struct generativeqc_hf_physical_audit_result_v1 {
+  uint32_t struct_size, abi_version;
+  double* overlap;
+  uint64_t overlap_capacity;
+  double energy, energy_difference, maximum_commutator, rms_commutator;
+  uint64_t fock_builds, auxiliary_rank;
+} generativeqc_hf_physical_audit_result_v1;
+
+/** @native-contract generativeqc_hf_physical_audit_cpu_query_v1
+ * @behavior Query a conservative native CPU capacity for an independent
+ * fixed-density RHF/UHF Direct/DF physical audit before any provider execution.
+ * @inputs Live normalized orbital system, optional auxiliary system and complete
+ * controls/output ABI headers. A null auxiliary selects the orbital basis for DF;
+ * an unused auxiliary is ignored. Controls/output records must not overlap.
+ * @outputs Atomically publishes AO/spin/array counts and provider/workspace/total
+ * numeric byte bounds. A below-limit budget still returns the required capacity.
+ * @errors Invalid controls/count overflow return INVALID_ARGUMENT; incompatible
+ * headers ABI_MISMATCH; ECP or beyond-g topology NOT_IMPLEMENTED. Output is unchanged.
+ * @lifetime Borrows systems and records for this call; retains no arrays or owners.
+ * @execution Synchronous CPU metadata only, without scientific array allocation,
+ * integral evaluation, provider initialization or accelerator access.
+ * @units Geometry is Bohr; counts are FP64 elements and capacities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_query_v1(
+    const generativeqc_system* system, const generativeqc_system* auxiliary,
+    const generativeqc_hf_physical_audit_controls_v1* controls,
+    generativeqc_hf_physical_audit_capacity_v1* output);
+
+/** @native-contract generativeqc_hf_physical_audit_cpu_v1
+ * @behavior Rebuild one exact requested physical HF Fock at the supplied final
+ * density and audit FDS-SDF through shared native mean-field implementations.
+ * This does not run SCF, certify convergence or replace the requested model.
+ * @inputs CPU context, normalized systems and complete controls/output headers.
+ * Density is finite row-major [spin,AO,AO] with the exact queried count; RHF uses
+ * double occupation, UHF unit-occupation spin blocks. Target energy is finite.
+ * Output overlap meets the queried capacity and does not alias density, controls
+ * or output record. Controls, density and the output record are mutually disjoint.
+ * @outputs Publishes overlap, fixed-density energy, energy difference, residual
+ * maximum/RMS and actual Fock/rank counts only after the entire audit succeeds.
+ * Unused output tails and all borrowed inputs remain unchanged.
+ * @errors Invalid metadata, ranges, aliasing or nonfinite input return
+ * INVALID_ARGUMENT; incompatible headers ABI_MISMATCH; unsupported domain or
+ * non-CPU context NOT_IMPLEMENTED. Below-limit admission returns OUT_OF_MEMORY before
+ * provider construction. Scientific/provider failures propagate with context
+ * details and no partial publication or fallback retry.
+ * @lifetime Borrows inputs synchronously. Native provider, density and residual
+ * workspaces are destroyed before return; detached outputs belong to the caller.
+ * @execution Synchronous CPU FP64 using the existing Direct/DF Fock, energy and
+ * physical residual owners. Serialize shared-context calls and destruction.
+ * No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
+ * @units Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
+ * use the declared AO convention. Numeric capacities are bytes, not RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_system* auxiliary,
+    const generativeqc_hf_physical_audit_controls_v1* controls, const double* density,
+    uint64_t density_count, double target_energy, generativeqc_hf_physical_audit_result_v1* output);
+
 /** Borrowed real row-major basis transport. input_kind is 0 for occupied
  * columns (source_AO by occupied), 1 for a pure source_AO-square HF density.
  * A zero workspace limit is unbounded; maximum_ao remains a required bound. */

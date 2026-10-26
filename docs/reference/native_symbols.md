@@ -63,6 +63,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_one_electron_gradient_cuda](#native-c-generativeqc-system-one-electron-gradient-cuda)
 - [generativeqc_batch_get_last_fock_builds](#native-c-generativeqc-batch-get-last-fock-builds)
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
+- [generativeqc_hf_physical_audit_cpu_query_v1](#native-c-generativeqc-hf-physical-audit-cpu-query-v1)
+- [generativeqc_hf_physical_audit_cpu_v1](#native-c-generativeqc-hf-physical-audit-cpu-v1)
 - [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
@@ -1586,6 +1588,74 @@ to the caller. Keep the owner and its context alive throughout the call.
 and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Overlap is dimensionless; system geometry uses Bohr.
+
+(native-c-generativeqc-hf-physical-audit-cpu-query-v1)=
+## generativeqc_hf_physical_audit_cpu_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_query_v1 ( const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , generativeqc_hf_physical_audit_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query a conservative native CPU capacity for an independent
+fixed-density RHF/UHF Direct/DF physical audit before any provider execution.
+
+**Inputs.** Live normalized orbital system, optional auxiliary system and complete
+controls/output ABI headers. A null auxiliary selects the orbital basis for DF;
+an unused auxiliary is ignored. Controls/output records must not overlap.
+
+**Outputs.** Atomically publishes AO/spin/array counts and provider/workspace/total
+numeric byte bounds. A below-limit budget still returns the required capacity.
+
+**Errors.** Invalid controls/count overflow return INVALID_ARGUMENT; incompatible
+headers ABI_MISMATCH; ECP or beyond-g topology NOT_IMPLEMENTED. Output is unchanged.
+
+**Lifetime.** Borrows systems and records for this call; retains no arrays or owners.
+
+**Execution.** Synchronous CPU metadata only, without scientific array allocation,
+integral evaluation, provider initialization or accelerator access.
+
+**Units.** Geometry is Bohr; counts are FP64 elements and capacities are bytes.
+
+(native-c-generativeqc-hf-physical-audit-cpu-v1)=
+## generativeqc_hf_physical_audit_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , const double * density , uint64_t density_count , double target_energy , generativeqc_hf_physical_audit_result_v1 * output ) ;
+```
+
+**Behavior.** Rebuild one exact requested physical HF Fock at the supplied final
+density and audit FDS-SDF through shared native mean-field implementations.
+This does not run SCF, certify convergence or replace the requested model.
+
+**Inputs.** CPU context, normalized systems and complete controls/output headers.
+Density is finite row-major [spin,AO,AO] with the exact queried count; RHF uses
+double occupation, UHF unit-occupation spin blocks. Target energy is finite.
+Output overlap meets the queried capacity and does not alias density, controls
+or output record. Controls, density and the output record are mutually disjoint.
+
+**Outputs.** Publishes overlap, fixed-density energy, energy difference, residual
+maximum/RMS and actual Fock/rank counts only after the entire audit succeeds.
+Unused output tails and all borrowed inputs remain unchanged.
+
+**Errors.** Invalid metadata, ranges, aliasing or nonfinite input return
+INVALID_ARGUMENT; incompatible headers ABI_MISMATCH; unsupported domain or
+non-CPU context NOT_IMPLEMENTED. Below-limit admission returns OUT_OF_MEMORY before
+provider construction. Scientific/provider failures propagate with context
+details and no partial publication or fallback retry.
+
+**Lifetime.** Borrows inputs synchronously. Native provider, density and residual
+workspaces are destroyed before return; detached outputs belong to the caller.
+
+**Execution.** Synchronous CPU FP64 using the existing Direct/DF Fock, energy and
+physical residual owners. Serialize shared-context calls and destruction.
+No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
+
+**Units.** Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
+use the declared AO convention. Numeric capacities are bytes, not RSS.
 
 (native-c-generativeqc-basis-projection-query-v1)=
 ## generativeqc_basis_projection_query_v1

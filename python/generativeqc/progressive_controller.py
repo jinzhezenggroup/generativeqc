@@ -882,7 +882,6 @@ def _audit_target_physical_residual(
 ) -> HFPhysicalResidualAudit:
     """Rebuild the exact target Fock once and audit FDS-SDF at its final density."""
     from generativeqc_compiler.common.resources import ResourceBudget
-    from generativeqc_compiler.dft import NativeAO
 
     started = time.perf_counter()
     unrestricted = problem.model.method == "uhf"
@@ -905,6 +904,49 @@ def _audit_target_physical_residual(
             host_bytes=maximum_host_bytes, host_reserve_bytes=workspace_bytes
         ),
     ).require_feasible()
+    from ._hf_physical_native import audit
+
+    native = audit(
+        problem,
+        calculator,
+        atoms,
+        density,
+        target_energy,
+        charge=charge,
+        multiplicity=multiplicity,
+        maximum_host_bytes=maximum_host_bytes,
+    )
+    if native is not None:
+        return native
+    return _audit_target_physical_residual_python(
+        problem,
+        calculator,
+        atoms,
+        density,
+        target_energy,
+        charge=charge,
+        multiplicity=multiplicity,
+        maximum_host_bytes=maximum_host_bytes,
+        started=started,
+    )
+
+
+def _audit_target_physical_residual_python(
+    problem: TargetProblem,
+    calculator: typing.Any,
+    atoms: tuple[Atom, ...],
+    density: np.ndarray,
+    target_energy: float,
+    *,
+    charge: int,
+    multiplicity: int,
+    maximum_host_bytes: int,
+    started: float,
+) -> HFPhysicalResidualAudit:
+    """Explicit missing-protocol/domain compatibility after bounded admission."""
+    from generativeqc_compiler.dft import NativeAO
+
+    unrestricted = problem.model.method == "uhf"
     fitted = calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE
     approximation = "density_fitted" if fitted else "exact"
     with ExitStack() as stack:
