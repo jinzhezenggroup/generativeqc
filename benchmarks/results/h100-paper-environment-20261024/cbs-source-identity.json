@@ -1,0 +1,73 @@
+{
+  "scope": "authenticated frozen-source reconstruction only; no build/device/science execution",
+  "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+  "base_archive_sha256": "1fdae9fb620e839b5bdd5f1cf06686d2c7bf7d8bcfbeb3742f559ea216d60e69",
+  "historical_archive_sha256": "dc5aad9325885642a2b1209e5a25424fb7addd9fc839860daff97cd43a8e6ee8",
+  "decoded_patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad",
+  "pinned_six_files": {
+    "src/response/native_gmres.cpp": true,
+    "src/response/native_gmres.hpp": true,
+    "benchmarks/readme_cbs.py": true,
+    "python/generativeqc/cbs.py": true,
+    "python/generativeqc/_response_native.py": true,
+    "python/generativeqc/response_solver.py": true
+  },
+  "file_count": 12145,
+  "changed": {
+    "python/generativeqc/_response_native.py": {
+      "before": {
+        "mode": "0o644",
+        "bytes": 10792,
+        "sha256": "34cc82f174dff141ab7c5268b995b58e6efc7168719f39592336e05e41ce2c18"
+      },
+      "after": {
+        "mode": "0o644",
+        "bytes": 11096,
+        "sha256": "02c7ea9ff860ab3a670079b33628cf9a32c592f79ca3db35fb4d18c45e5c5a52"
+      }
+    },
+    "python/generativeqc/response_solver.py": {
+      "before": {
+        "mode": "0o644",
+        "bytes": 71805,
+        "sha256": "8a43fc8041f311fa2650b3e799908d21d836136fcab9eb9b166459dbfd22ec5a"
+      },
+      "after": {
+        "mode": "0o644",
+        "bytes": 72047,
+        "sha256": "8628555616718adbe6d2ad3a6f5ecee58c53b1b1cacfe2b15c1aff0c4381cfc8"
+      }
+    },
+    "src/response/native_gmres.cpp": {
+      "before": {
+        "mode": "0o644",
+        "bytes": 20072,
+        "sha256": "abc02809db9af7822f56d2ed252d606a72fed96f5bee4b2dc88d76dd5fb565fd"
+      },
+      "after": {
+        "mode": "0o644",
+        "bytes": 20820,
+        "sha256": "ae03aac4eadc18c42b5e2a9705083e4726f345bf26c5f717e424f6754c66041e"
+      }
+    },
+    "src/response/native_gmres.hpp": {
+      "before": {
+        "mode": "0o644",
+        "bytes": 3375,
+        "sha256": "d4f3a426e095a64b7cb25cb36aa2a94c535071fbdd3b8782d76b092850bc0d01"
+      },
+      "after": {
+        "mode": "0o644",
+        "bytes": 3371,
+        "sha256": "adfcb0bd4d1af3016c37c7fd301d850ad73380e41b2229a6bfe051a21674c668"
+      }
+    }
+  },
+  "schema": "generativeqc.h100-source-identity.v1",
+  "source_tree_sha256": "c0f1e7d38a65535553540cb0f9c11dab89affbe9499dddcd1eb690ae6ca3c628",
+  "source_tree_encoding": "UTF-8 JSON object: sorted path keys; sorted identity keys; compact separators; mode, bytes, sha256",
+  "original_inventory_sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924",
+  "original_inventory_compressed_sha256": "591f5808dccf9e5e8189744fb46d01995cc50986d7aa22b514cbec4241829bad",
+  "base_git_tree": "e3f309500ea8a94ae91c0e22d4f3bb87200326b6",
+  "qualified_patch_path": "benchmarks/results/cbs-fast-memory-20261021/qualified-source.patch.xz"
+}
