@@ -1,12 +1,13 @@
 """Reject changed compact XC identities without re-running measured GPU work."""
+
 import contextlib
 import copy
 import hashlib
 import io
 import json
-from pathlib import Path
 import runpy
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,9 +16,9 @@ class SourceIdentityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with contextlib.redirect_stdout(io.StringIO()):
-            cls.replay = runpy.run_path(str(
-                ROOT / "benchmarks/results/xc-bounded-cross-20261024/reproduce.py"
-            ))
+            cls.replay = runpy.run_path(
+                str(ROOT / "benchmarks/results/xc-bounded-cross-20261024/reproduce.py")
+            )
 
     def test_complete_replay(self):
         self.assertEqual(self.replay["report"]["qualified_calls"], 352)
@@ -39,9 +40,11 @@ class SourceIdentityTests(unittest.TestCase):
             with self.subTest(arm=arm, field=field):
                 p = copy.deepcopy(self.replay["provenance"])
                 p["source_identities"][arm][field] = value
-                p["source_identities_sha256"] = hashlib.sha256(json.dumps(
-                    p["source_identities"], sort_keys=True, separators=(",", ":")
-                ).encode()).hexdigest()
+                p["source_identities_sha256"] = hashlib.sha256(
+                    json.dumps(
+                        p["source_identities"], sort_keys=True, separators=(",", ":")
+                    ).encode()
+                ).hexdigest()
                 with self.assertRaises(AssertionError):
                     self.replay["verify_source_identities"](p)
 

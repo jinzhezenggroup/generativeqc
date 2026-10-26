@@ -28,15 +28,23 @@ class PopulationTests(unittest.TestCase):
 
     def test_changed_source_identity_rejected(self) -> None:
         original = REPLAY.read
-        for field, value in (("revision", "0" * 40), ("tree", "0" * 40),
-                             ("source_patch", "dirty"), ("manifest_bytes", 0),
-                             ("manifest_sha256", "0" * 64), ("files_verified", 0)):
+        for field, value in (
+            ("revision", "0" * 40),
+            ("tree", "0" * 40),
+            ("source_patch", "dirty"),
+            ("manifest_bytes", 0),
+            ("manifest_sha256", "0" * 64),
+            ("files_verified", 0),
+        ):
             with self.subTest(field=field):
                 provenance = original("provenance.json.xz")
                 provenance["source_identity"][field] = value
                 provenance["source_identity_sha256"] = hashlib.sha256(
-                    json.dumps(provenance["source_identity"], sort_keys=True,
-                               separators=(",", ":")).encode()
+                    json.dumps(
+                        provenance["source_identity"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
                 ).hexdigest()
                 try:
                     REPLAY.read = lambda name: (
