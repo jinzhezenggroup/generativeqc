@@ -36,6 +36,13 @@
       "family": "split:M06-2X",
       "method": "M06-2X",
       "legacy": false
+    },
+    {
+      "name": "wb97mv",
+      "family": "Wb97mv",
+      "method": "WB97M-V",
+      "legacy": false,
+      "point_model": "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
     }
   ]
 }

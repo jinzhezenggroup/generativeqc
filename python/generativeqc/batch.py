@@ -682,6 +682,7 @@ class PreparedBatch:
         from ._snapshot_grid_cache import SnapshotGridCache
         from ._stationary_composite_cuda import (
             PreparedCompositeStationaryCudaGradient,
+            composite_stationary_aot_profile,
             requires_composite_stationary_cuda,
         )
         from ._stationary_cuda import (
@@ -782,7 +783,12 @@ class PreparedBatch:
                     forces, work = prepared.execute(
                         state,
                         basis,
-                        compiler=self._stationary_cuda_compiler(),
+                        compiler=(
+                            None
+                            if composite_stationary_aot_profile(state) is not None
+                            else self._stationary_cuda_compiler()
+                        ),
+                        target=target,
                         cache=Path(
                             os.environ.get(
                                 "GENERATIVEQC_STATIONARY_CACHE",

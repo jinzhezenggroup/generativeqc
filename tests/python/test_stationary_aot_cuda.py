@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 
 def _forbid_aot_generation(guard: pytest.MonkeyPatch, batch: object) -> None:
     """Guard the lazy runtime boundary and the actual integral/method owners."""
-    from generativeqc import _stationary_cuda
+    from generativeqc import _stationary_composite_cuda, _stationary_cuda
     from generativeqc_compiler.integral import first_derivative_schedule
     from generativeqc_compiler.method import stationary_cuda
     from generativeqc_compiler.method.stationary_gradient import StationaryGradientPlan
@@ -29,6 +29,8 @@ def _forbid_aot_generation(guard: pytest.MonkeyPatch, batch: object) -> None:
     guard.setattr(batch, "_stationary_cuda_compiler", forbidden)
     guard.setattr(_stationary_cuda, "compile_stationary_cuda", forbidden)
     guard.setattr(_stationary_cuda, "cached_derivative_cuda_source", forbidden)
+    guard.setattr(_stationary_composite_cuda, "compile_stationary_cuda", forbidden)
+    guard.setattr(_stationary_composite_cuda, "emit_first_derivative_cuda", forbidden)
     guard.setattr(first_derivative_schedule, "emit_first_derivative_cuda", forbidden)
     guard.setattr(first_derivative_schedule, "derivative_cuda_sources", forbidden)
     guard.setattr(stationary_cuda, "emit_stationary_wrapper_cuda", forbidden)

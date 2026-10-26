@@ -18,6 +18,12 @@ namespace generativeqc::scf {
  */
 enum class DfPairStorage { Dense, SymmetricLower, SymmetricLowerSingle };
 
+/** Internal construction policy, frozen with the value owner. Cholesky is
+ * still conditional on full spectral rank and sufficient bounded scratch;
+ * Spectral supplies an explicit numerical/control fallback for native callers.
+ */
+enum class DfMetricWhitening { Automatic, Spectral, Cholesky };
+
 inline bool df_packed_pairs(DfPairStorage storage) noexcept {
   return storage == DfPairStorage::SymmetricLower || storage == DfPairStorage::SymmetricLowerSingle;
 }
@@ -76,6 +82,7 @@ struct DfValueStorageOptions {
   // Method-owned pure J may retain raw A in the single tensor slot. Admission
   // still requires a full-rank metric; all other cases retain fitted B.
   bool coulomb_only_raw{};
+  DfMetricWhitening metric_whitening{DfMetricWhitening::Automatic};
 };
 
 /** Checked capacities shared by the common planner and native allocator.

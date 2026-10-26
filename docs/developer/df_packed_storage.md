@@ -63,6 +63,18 @@ final occupied projections carry the same immutable gauge and metric identity.
 Rank-truncated or mixed-rank batches retain symmetric `B = E Q^T` throughout.
 The `packed` and dense representations also retain symmetric B.
 
+Large full-rank singleton `packed-single` owners can instead retain
+`F = A L^-T`, where `M = L L^T`. The internal typed whitening policy defaults
+to attempting this route at 1024 or more auxiliary functions, provided the
+existing panel holds a metric matrix and the Cholesky solver fits the existing
+eigensolver scratch. Setup still computes the spectrum and applies the same
+rank cutoff. A capacity refusal or non-positive Cholesky factor retains the
+spectral route; provider/device errors remain errors. Each raw panel is copied
+into its final factor storage and whitened by a triangular solve. After all
+panels complete, the factor slot retains `L^-1` for physical response. This
+extra persistent metric matrix is covered by the value planner's metric
+reservation; no additional AO tensor is retained.
+
 J/K, including qualified final physical Fock validation, reuse the fitted
 tensor without claiming a raw-A owner. Validated canonical or
 strictly reconstructed corrected occupied factors can use a separately budgeted
@@ -94,6 +106,14 @@ consumers retain their original spectral response, including discarded-direction
 derivatives; they cannot borrow this root shortcut. The choice adds no device
 allocation and grants no raw final-projection lease. Trace counters report the
 actual root GEMMs, FLOPs, copy bytes and scratch allowance.
+
+Cholesky factor views carry the explicit map `R = L^-1`, so the physical
+fitted source is `F R`. Pure Coulomb, occupied and bounded general-density
+responses must all consume this same map. The spectral response selector does
+not reinterpret a Cholesky factor as an eigen-coordinate tensor. The original
+eigensystem remains available for raw-source and truncated-metric response.
+Fitted occupied response budgets one unpacked AO slice and its occupied
+projection simultaneously, even when the requested derivative panel is one Q.
 
 An exact final-K projection from a physical packed AO source additionally proves
 `S_Q = C^T B_Q C` symmetric. The response stores its `r*(r+1)/2` independent

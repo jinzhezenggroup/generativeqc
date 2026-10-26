@@ -490,7 +490,9 @@ static cudaError_t contract_retained_coulomb_response(
   auto* potentials = charges + terms.size() * auxiliary_count;
   auto* weights = potentials + terms.size() * auxiliary_count;
   const double* response_root = forward.metric.inverse_square_root;
-  if (forward.spectral_basis) {
+  if (forward.factor_response_root) {
+    response_root = forward.factor_response_root;
+  } else if (forward.spectral_basis) {
     // Full-rank response does not otherwise use the first metric interval.
     cuda_df::launch_spectral_response_root(stream, auxiliary_count, forward.metric.eigenvectors,
                                            forward.metric.eigenvalues, workspace);
@@ -517,7 +519,7 @@ static cudaError_t contract_retained_coulomb_response(
       checked(generated::df_rhf_retained_charge_contract(
           blas, static_cast<int>(forward.pair_count), static_cast<int>(auxiliary_count),
           forward.data, density, charges + term * auxiliary_count));
-      if (forward.spectral_basis) {
+      if (forward.spectral_basis || forward.factor_response_root) {
         // charges are in the forward factor's gauge. A row vector times R
         // returns the physical auxiliary potential without a second Q^T.
         checked(generated::df_occupied_apply_metric_root(
@@ -1074,6 +1076,7 @@ static cudaError_t contract_occupied_response(
   const auto* packed_raw = buffers.resident_packed_raw.data;
   const auto* fitted_occupied = buffers.fitted_occupied_source;
   const bool spectral_occupied = fitted_occupied && fitted_occupied->spectral_basis;
+  const auto* explicit_root = fitted_occupied ? fitted_occupied->factor_response_root : nullptr;
   // The spectral route remains an explicit numerical/performance control.
   // Only the qualified fitted/full-rank consumer may reuse this forward root;
   // raw and truncated response retain their original eigenfactor ordering.
@@ -1083,7 +1086,7 @@ static cudaError_t contract_occupied_response(
     throw std::invalid_argument(
         "GENERATIVEQC_DF_OCCUPIED_METRIC must be auto, spectral or retained-root");
   const bool retained_root = fitted_occupied && metric.full_rank && metric.inverse_square_root &&
-                             metric_policy != "spectral";
+                             (metric_policy != "spectral" || explicit_root);
   const auto* final_fitted_projection = buffers.final_fitted_occupied_projection;
   const bool reuse_final_fitted_projection =
       final_fitted_projection && retained_root && terms.size() == 1 &&
@@ -1115,7 +1118,9 @@ static cudaError_t contract_occupied_response(
   if (!metric.full_rank)
     inverse_kernel<<<blocks(aa), threads, 0, stream>>>(a, metric.inverse_square_root, inverse);
   const double* response_root = metric.inverse_square_root;
-  if (spectral_occupied && retained_root) {
+  if (explicit_root) {
+    response_root = explicit_root;
+  } else if (spectral_occupied && retained_root) {
     cuda_df::launch_spectral_response_root(stream, a, metric.eigenvectors, metric.eigenvalues,
                                            inverse);
     const auto status = cudaGetLastError();
@@ -1164,7 +1169,7 @@ static cudaError_t contract_occupied_response(
                                        symmetric_occupied_pairs);
     runtime::cuda_trace::trace_counter("response_occupied_root_elements", a * root_pairs);
     runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms_avoided",
-                                       spectral_occupied ? 1 : 2);
+                                       spectral_occupied || explicit_root ? 1 : 2);
     runtime::cuda_trace::trace_counter("response_occupied_charge_scale_elements_avoided", a);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_source_elements_avoided",
                                        fitted_occupied->pair_count * a);
@@ -1297,7 +1302,13 @@ static cudaError_t contract_occupied_response(
         // Preserve weak metric directions until after applying the charge
         // projection. Forming X X^T first also destabilizes occupied response.
         const auto ti = static_cast<int>(terms.size());
-        if (spectral_occupied) {
+        if (explicit_root) {
+          // F=W*A carries the Cholesky gauge. Apply W^T to its charge before
+          // constructing physical auxiliary derivatives; Q belongs to another gauge.
+          checked(generativeqc_tensor::submit_column_gemm({blas, true, false, ai, ti, ai, &one,
+                                                           explicit_root, ai, charges, ai, &zero,
+                                                           potentials, ai}));
+        } else if (spectral_occupied) {
           // E:D is already in the eigenbasis. Scaling before the sole Q
           // rotation retains weak-direction cancellation without applying Q^T twice.
           cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
@@ -1327,7 +1338,7 @@ static cudaError_t contract_occupied_response(
           std::swap(charges, potentials);
         }
         runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms",
-                                           spectral_occupied ? 1 : 2);
+                                           spectral_occupied || explicit_root ? 1 : 2);
       }
     } else {
       potential_kernel<<<blocks(terms.size() * a), threads, 0, stream>>>(a, terms.size(), inverse,

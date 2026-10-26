@@ -68,7 +68,8 @@
         "cublasDestroy": 1,
         "cublasSetStream": 1,
         "cublasSetPointerMode": 1,
-        "cublasDsyrk": 2
+        "cublasDsyrk": 2,
+        "cublasDtrsm": 1
       }
     },
     "src/scf/cuda/direct_jk_kernels.cu": {
@@ -176,6 +177,15 @@
         "cusolverDnXsyevjSetMaxSweeps": 1,
         "cusolverDnXsyevjSetSortEig": 1,
         "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
+    "src/solver/cuda/cholesky_provider.cpp": {
+      "classification": "provider",
+      "contract": "src/solver/cuda/cholesky_provider.hpp",
+      "reason": "Shared FP64 lower Cholesky query/submission borrows the prepared solver handle and device buffers; method owners retain bounded admission, numerical info interpretation and fallback policy.",
+      "references": {
+        "cusolverDnDpotrf": 1,
+        "cusolverDnDpotrf_bufferSize": 1
       }
     },
     "src/solver/cuda/symmetric_eigen_provider.cpp": {
@@ -441,6 +451,8 @@
         "cublasDsyr2k_v2": 2,
         "cublasDsyrk": 1,
         "cublasDsyrk_v2": 2,
+        "cublasDtrsm": 1,
+        "cublasDtrsm_v2": 2,
         "cublasDtrsmBatched": 1,
         "cublasGetMathMode": 1,
         "cublasGetPointerMode": 1,
@@ -468,6 +480,8 @@
         "cusolverDnDestroySyevjInfo": 1,
         "cusolverDnDormtr": 1,
         "cusolverDnDormtr_bufferSize": 1,
+        "cusolverDnDpotrf": 1,
+        "cusolverDnDpotrf_bufferSize": 1,
         "cusolverDnDpotrfBatched": 1,
         "cusolverDnDsyevjBatched": 1,
         "cusolverDnDsyevjBatched_bufferSize": 1,
