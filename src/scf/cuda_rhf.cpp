@@ -1243,8 +1243,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         reference_providers.mask(), {reinterpret_cast<const void*>(&cudaRuntimeGetVersion),
                                      reinterpret_cast<const void*>(&cublasCreate),
                                      reinterpret_cast<const void*>(&cusolverDnCreate)});
-    const auto family = !use_cusolver ? std::optional<ProviderInitializationEigenFamily>{}
-                        : use_jacobi  ? ProviderInitializationEigenFamily::jacobi_batched
+    const auto family = !reference_providers.solver
+                            ? std::optional<ProviderInitializationEigenFamily>{}
+                        : use_jacobi ? ProviderInitializationEigenFamily::jacobi_batched
                         : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
                             ? ProviderInitializationEigenFamily::xsyevd
                             : ProviderInitializationEigenFamily::xsyev_batched;

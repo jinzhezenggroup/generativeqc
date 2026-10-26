@@ -13,7 +13,7 @@
 
 namespace generativeqc::scf {
 
-using ProviderInitializationEigenFamily = solver::cuda::SymmetricEigenFamily;
+using ProviderInitializationEigenFamily = ::generativeqc::solver::cuda::SymmetricEigenFamily;
 enum class ProviderInitializationMode { legacy_default, explicit_qualified };
 
 struct ProviderInitializationIdentity {
