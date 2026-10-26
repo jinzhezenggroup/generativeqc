@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.method.stationary_cuda import (
+    AVAILABLE_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
 )
 from generativeqc_compiler.method.stationary_native_cuda import (
@@ -17,6 +18,7 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     emit_native_stationary_profile_cuda,
     emit_native_stationary_registry_cpp,
 )
+from generativeqc_compiler.xc.automatic_semilocal import automatic_registry_entries
 
 from tools.generate_df_kernels import write_if_changed
 
@@ -27,6 +29,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument(
+        "--cmake-catalog",
+        type=Path,
+        help="write default/automatic selections during available-profile discovery",
+    )
+    parser.add_argument(
         "--cmake-dependencies",
         type=Path,
         help="write configure-time compiler inputs alongside profile discovery",
@@ -34,16 +41,51 @@ def main() -> None:
     parser.add_argument(
         "--profiles", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
+    parser.add_argument(
+        "--functional",
+        action="append",
+        help="Bound automatic discovery to these structural registrations",
+    )
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--profile", choices=NATIVE_STATIONARY_CUDA_PROFILES)
     selection.add_argument("--list-profiles", action="store_true")
     selection.add_argument("--list-aot-profiles", action="store_true")
+    selection.add_argument("--list-available-aot-profiles", action="store_true")
+    selection.add_argument("--list-automatic-aot-profiles", action="store_true")
     selection.add_argument("--all-profiles", action="store_true")
     selection.add_argument(
         "--registry", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
     args = parser.parse_args()
-    if args.list_profiles or args.list_aot_profiles:
+    if args.cmake_catalog is not None and not args.list_available_aot_profiles:
+        parser.error("--cmake-catalog requires --list-available-aot-profiles")
+    if args.functional and not (args.list_automatic_aot_profiles or args.cmake_catalog):
+        parser.error("--functional applies only to automatic profile discovery")
+    if args.list_automatic_aot_profiles or args.cmake_catalog:
+        selected = (
+            {name.upper() for name in args.functional} if args.functional else None
+        )
+        entries = automatic_registry_entries()
+        if selected is not None and selected - {entry.name for entry in entries}:
+            parser.error("unknown automatic semilocal functional selection")
+        automatic = ";".join(
+            f"libxc_{entry.code}_{spin}"
+            for entry in entries
+            if selected is None or entry.name in selected
+            for spin in ("rks", "uks")
+        )
+        if args.list_automatic_aot_profiles:
+            print(automatic)
+            return
+        # These compiler-owned identifiers contain only [a-z0-9_]. Publish
+        # both selections in one host-only discovery process, without lowering
+        # any automatic stationary graph or repeating compiler imports.
+        write_if_changed(
+            args.cmake_catalog,
+            f'set(_generativeqc_stationary_default_catalog "{";".join(QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)}")\n'
+            f'set(_generativeqc_automatic_force_catalog "{automatic}")\n',
+        )
+    if args.list_profiles or args.list_aot_profiles or args.list_available_aot_profiles:
         if (
             args.output is not None
             or args.output_dir is not None
@@ -51,7 +93,9 @@ def main() -> None:
         ):
             parser.error("profile discovery does not write an output file")
         names = (
-            QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+            AVAILABLE_STATIONARY_AOT_PROFILE_NAMES
+            if args.list_available_aot_profiles
+            else QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
             if args.list_aot_profiles
             else NATIVE_STATIONARY_CUDA_PROFILES
         )

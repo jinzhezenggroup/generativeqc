@@ -1042,8 +1042,33 @@ class Calculator:
                 )
             )
         cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
+        automatic_cuda_force = False
+        if (
+            self._automatic_libxc_name is not None
+            and self._device_name == "cuda"
+            and self._precision_mode == _native.PRECISION_FP64
+            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and self._ks_options.xc_schedule == "device_fused"
+            and not basis_has_ecp
+        ):
+            from .resources_ks import native_cuda_stationary_model_available
+
+            automatic_cuda_force = native_cuda_stationary_model_available(
+                self._library,
+                self._ks_options,
+                precision="fp64",
+                max_iterations=self._max_iterations,
+                diis_history=self._diis_history,
+                energy_tolerance=self._energy_tolerance,
+                density_tolerance=self._density_tolerance,
+                screening_tolerance=self._screening_tolerance,
+            )
         semilocal_force = (
-            (self._automatic_libxc_name is None or cpu_direct_semilocal_force)
+            (
+                self._automatic_libxc_name is None
+                or cpu_direct_semilocal_force
+                or automatic_cuda_force
+            )
             and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
@@ -1366,6 +1391,7 @@ class Calculator:
                 and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
             )
             or qualified_direct_semilocal_context(self)
+            or self._automatic_libxc_name is not None
         ):
             return frozenset({"energy"})
         return self._capabilities.supported_properties

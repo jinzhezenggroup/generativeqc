@@ -10,6 +10,7 @@ Rationale: .agents/notes/implemented/architecture/2026-09-20-stationary-cuda-emi
 
 import json
 import os
+import re
 import typing
 from dataclasses import asdict, dataclass
 from functools import lru_cache
@@ -38,9 +39,15 @@ from generativeqc_compiler.method.stationary_resources import (
     GEOMETRY_THREADS,
 )
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_name,
+    automatic_registry_entries,
+    automatic_scf_domain,
+)
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from ._generated_stationary_aot_profiles import STATIONARY_AOT_BUILD_PROFILES
+from .bulk_ks import resolve_bulk_ks
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
@@ -946,8 +953,15 @@ class StationaryAotProfile:
 
     @property
     def plan(self) -> StationaryGradientPlan:
+        # Automatic registrations reuse their energy owner's exact work domain.
+        # The profile identifies package contents; it does not grant capability.
+        method = (
+            resolve_bulk_ks(self.method, spin=self.spin, backend="cuda").method
+            if self.name.startswith("libxc_")
+            else resolve_method(self.method, spin=self.spin)
+        )
         return StationaryGradientPlan(
-            resolve_method(self.method, spin=self.spin),
+            method,
             StationaryMeanField(self.point_model),
         )
 
@@ -962,6 +976,16 @@ QUALIFIED_STATIONARY_AOT_PROFILES = tuple(
 QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
     f"{profile.name}_{'rks' if profile.spin == 'unpolarized' else 'uks'}"
     for profile in QUALIFIED_STATIONARY_AOT_PROFILES
+)
+# Discovery must remain cheap: do not lower hundreds of MethodIRs merely to
+# choose a bounded package. The selected graph is authenticated during emission.
+AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES = tuple(
+    f"libxc_{entry.code}_{spin}"
+    for entry in automatic_registry_entries()
+    for spin in ("rks", "uks")
+)
+AVAILABLE_STATIONARY_AOT_PROFILE_NAMES = (
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
 )
 STATIONARY_AOT_ASSETS = (
     "src/dft/stationary_gradient_cuda.cuh",
@@ -1059,6 +1083,17 @@ def _profile_stem(profile: StationaryAotProfile) -> str:
 
 @lru_cache(maxsize=16)
 def _qualified_aot_profile(name: str) -> StationaryAotProfile:
+    match = re.fullmatch(r"libxc_([1-9][0-9]*)_(rks|uks)", name)
+    if match:
+        code = int(match[1])
+        functional = automatic_functional_name(code)
+        return StationaryAotProfile(
+            f"libxc_{code}",
+            code,
+            functional,
+            "unpolarized" if match[2] == "rks" else "polarized",
+            point_model=automatic_scf_domain(functional),
+        )
     matches = tuple(
         profile
         for profile in QUALIFIED_STATIONARY_AOT_PROFILES
@@ -1092,6 +1127,11 @@ def stationary_aot_profile_for_plan(
         and profile.spin == spin
         and profile.plan.identity == plan.identity
     )
+    automatic = f"libxc_{functional}_{'rks' if spin == 'unpolarized' else 'uks'}"
+    if automatic in AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES:
+        profile = _qualified_aot_profile(automatic)
+        if profile.plan.identity == plan.identity:
+            matches += (profile,)
     if len(matches) > 1:
         raise ValueError("stationary CUDA AOT plan identity has duplicate profiles")
     return matches[0] if matches else None

@@ -3847,7 +3847,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Prove the force consumer's complete physical/canonical state before
     // publishing convergence or a warm seed. Rejection resumes the intact
     // DIIS proposal and invalidates only the borrowed orbital scratch.
-    if (converged && standard_convergence_active()) {
+    if (converged && (standard_convergence_active() || automatic_program)) {
       early_final_probe_ran = true;
       converged = probe_current_final_state();
     } else if (!converged && early_final_probe_eligible && has_energy_history &&
@@ -3984,6 +3984,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // UKS/ECP retain their separate corrective-closure contract below.
       account_incremental_full_energy_finalization();
       final_closure = true;
+      output.converged = true;
+      is_active = false;
+    } else if (automatic_program && converged) {
+      // The shared canonical proof above audited this exact physical F[D]
+      // against the original density tolerance, without changing D. Applying
+      // another unextrapolated update can amplify roundoff at an unstable
+      // fixed point and reject an already valid warm state. A rejected proof
+      // instead continues the intact DIIS solve within its original budget.
       output.converged = true;
       is_active = false;
     } else if (strict_final_closure && converged && !final_closure) {
@@ -4182,7 +4190,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     prepare_final_frame();
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    if (standard_convergence_active())
+    if (standard_convergence_active() || automatic_program)
       limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;

@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from generativeqc_compiler.method.stationary_cuda import (
+    AVAILABLE_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_SPD_COMPONENTS,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_STATIONARY_AOT_PROFILES,
@@ -105,12 +106,13 @@ def audit_stationary_aot_directory(
     records = []
     manifest_bytes = 0
     selected = QUALIFIED_STATIONARY_AOT_PROFILE_NAMES if profiles is None else profiles
-    for name in selected:
-        _qualified_aot_profile(name)
+    selected_profiles = tuple(
+        _qualified_aot_profile(name) for name in dict.fromkeys(selected)
+    )
     inventory = tuple(
-        entry
-        for entry in QUALIFIED_STATIONARY_PACKAGE
-        if entry[2].removesuffix("_spd") in selected
+        (profile.functional, profile.spin, _profile_stem(profile) + suffix, domain)
+        for suffix, domain in (("", None), ("_spd", QUALIFIED_SPD_COMPONENTS))
+        for profile in selected_profiles
     )
     for functional, spin, name, component_domain in inventory:
         profile_name = name.removesuffix("_spd")
@@ -235,7 +237,7 @@ def main() -> None:
     parser.add_argument(
         "--profile",
         action="append",
-        choices=QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+        choices=AVAILABLE_STATIONARY_AOT_PROFILE_NAMES,
         help="Repeat for a deliberately bounded package inventory; default is the full catalog",
     )
     parser.add_argument(

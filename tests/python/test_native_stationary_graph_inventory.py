@@ -36,7 +36,7 @@ def qualified(*arguments: str) -> tuple[str, ...]:
 
 def test_inventory_is_generated_from_compiler_method_ir() -> None:
     native = qualified("--list-profiles")
-    aot = qualified("--list-aot-profiles")
+    aot = qualified("--list-available-aot-profiles")
     assert native and len(native) == len(set(native))
     assert set(native) <= set(aot)
     assert native == qualified("--list-profiles")
@@ -140,7 +140,7 @@ const CudaStationaryBinding& native_stationary_profile_m06_2x_rks() {
 namespace generativeqc::methods::detail {
 struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
-  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{};
+  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{}, automatic_program{};
 };
 unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
 unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }

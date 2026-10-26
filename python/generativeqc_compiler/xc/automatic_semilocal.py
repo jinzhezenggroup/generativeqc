@@ -115,12 +115,24 @@ def automatic_functional_ingredients(code: int) -> tuple[str, ...]:
         raise UnsupportedXC("automatic Libxc point code is not registered") from error
 
 
+@cache
+def _automatic_name_registry() -> dict[int, str]:
+    return {entry.code: entry.name for entry in automatic_registry_entries()}
+
+
+def automatic_functional_name(code: int) -> str:
+    """Authenticate a code without granting a backend or derivative capability."""
+    automatic_functional_ingredients(code)
+    return _automatic_name_registry()[code]
+
+
 __all__ = [
     "AUTOMATIC_FUNCTIONAL_CODE_BASE",
     "AUTOMATIC_SCF_DOMAIN",
     "AutomaticRegistryEntry",
     "automatic_functional_code",
     "automatic_functional_ingredients",
+    "automatic_functional_name",
     "automatic_registry_entries",
     "automatic_scf_domain",
 ]

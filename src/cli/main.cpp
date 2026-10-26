@@ -339,12 +339,15 @@ void print_methods(bool json, bool libxc = false) {
         if (!first) std::cout << ",\n";
         std::cout << "  {\"name\":\"" << entry.name << "\",\"family\":\"density_functional\","
                   << "\"properties\":[\"energy\"],\"supports_batch\":true,\"available\":true,"
-                  << "\"status\":\"available\",\"cpu\":true,\"cuda\":false,\"aliases\":[";
+                  << "\"status\":\"available\",\"cpu\":" << (entry.cpu ? "true" : "false")
+                  << ",\"cuda\":" << (entry.cuda ? "true" : "false") << ",\"aliases\":[";
         if (entry.spin == 1) std::cout << "\"libxc-rks:" << entry.name.substr(6) << "\"";
         std::cout << "]}";
         first = false;
       } else {
-        std::cout << entry.name << "\tdensity_functional\tenergy\tyes\tCPU only\n";
+        std::cout << entry.name << "\tdensity_functional\tenergy\tyes\t"
+                  << (entry.cuda ? "native preparation checks backend availability" : "CPU only")
+                  << '\n';
       }
     }
   }

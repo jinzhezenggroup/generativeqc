@@ -131,6 +131,15 @@ generativeqc_status dft_cuda_native_stationary_gradient(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status dft_automatic_artifact_diagnostic(const PreparedBatch& batch, std::size_t index,
+                                                      KsAutomaticArtifactDiagnostic& output,
+                                                      std::string& detail) {
+  const auto* ks = dynamic_cast<const KsBatchOwnerPort*>(&batch);
+  if (ks) return ks->automatic_artifact_diagnostic(index, output, detail);
+  detail = "automatic artifact receipt requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
                                                  dft::CudaStationaryCapacity& capacity,
                                                  std::string& detail) {

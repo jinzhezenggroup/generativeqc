@@ -17,6 +17,22 @@
 
 namespace generativeqc::methods::detail {
 
+/** Model-level capability upper bound without a molecule or CUDA operation.
+ * Actual shape, resources and final-state admission remain per prepared item. */
+bool dft_cuda_stationary_model_available(const generativeqc_method_descriptor& descriptor);
+
+/** A current automatic CUDA execution receipt. Text and addresses refer to
+ * process-lifetime linked descriptors; work belongs to the retained native
+ * controller and is published only for a force at the current final token. */
+struct KsAutomaticArtifactDiagnostic {
+  std::array<const char*, 7> identities{};
+  std::array<const void*, 2> artifact_owners{};
+  std::array<std::uint64_t, 40> work{};
+};
+generativeqc_status dft_automatic_artifact_diagnostic(const PreparedBatch& batch, std::size_t index,
+                                                      KsAutomaticArtifactDiagnostic& output,
+                                                      std::string& detail);
+
 /** Context-qualified additional CUDA force capacity without any CUDA operation.
  * Shapes are atoms, AOs, primitives, grid points, maximum shell l, ECP terms
  * and total ECP core electrons. Model admission is shared with prepared owners;

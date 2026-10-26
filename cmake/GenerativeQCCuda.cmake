@@ -333,6 +333,10 @@ macro(generativeqc_configure_cuda_backend target)
     target_sources(${target} PRIVATE src/scf/aot_shell_registry_stub.cpp)
   endif()
   generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)
+  # Automatic forces execute only through the shared native owner. Do not
+  # multiply that package by legacy Python s/p and unadmitted s/p/d DSOs.
+  set(_generativeqc_legacy_stationary_names ${_generativeqc_stationary_names})
+  list(FILTER _generativeqc_legacy_stationary_names EXCLUDE REGEX "^libxc_")
   # Native C++/CLI force bindings and Python-only stationary DSOs are
   # independent products. The monolithic CLI needs only the former.
   if(_generativeqc_stationary_names AND
@@ -418,7 +422,7 @@ macro(generativeqc_configure_cuda_backend target)
     generativeqc_set_cuda_compile_pool(
         generativeqc_stationary_sp_primitives "${_generativeqc_aot_compile_pool}")
 
-    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_legacy_stationary_names)
     # Component-expanded s/p/d derivatives are shared compiler output: generate
     # the bounded primitive inventory once, then device-link it into each
     # method/spin wrapper. The 23 x 16 layout is part of the versioned v3
@@ -550,11 +554,11 @@ macro(generativeqc_configure_cuda_backend target)
       target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
     endif()  # GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
 
-    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_legacy_stationary_names)
     # Generated source weights are exact-plan-bound after #665/#689. Package
     # semilocal and admitted global-hybrid plans through one profile catalog;
     # runtime selection still verifies the exact StationaryGradientPlan identity.
-    foreach(_generativeqc_stationary_name IN LISTS _generativeqc_stationary_names)
+    foreach(_generativeqc_stationary_name IN LISTS _generativeqc_legacy_stationary_names)
       set(_generativeqc_stationary_source
           "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/generativeqc_stationary_${_generativeqc_stationary_name}.cu")
       set(_generativeqc_stationary_manifest

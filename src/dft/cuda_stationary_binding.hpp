@@ -56,6 +56,9 @@ struct CudaStationaryBinding {
   decltype(geometry) geometry_fp32{};
   /** Optional immutable atom-prefix/radius topology; no per-point owner upload. */
   int (*grid_topology)(void*, const std::size_t*, const double*, std::size_t, char*, std::size_t){};
+  /** Build-time compiler/header closure; the runtime receipt additionally
+   * binds this actual descriptor's loaded native module, never just source. */
+  const char* source_identity{};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */
@@ -63,6 +66,17 @@ const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) n
 
 /** Match the complete point/spin/weight contract, never a functional name. */
 const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept;
+
+/** Shared preparation/planner predicate for unit automatic semilocal sources.
+ * This selects retained integral storage only; shape and endpoint admission
+ * still belong to the prepared calculation. Omitted artifacts retain order 0. */
+inline unsigned automatic_stationary_derivative_order(std::uint32_t functional,
+                                                      std::uint32_t domain,
+                                                      std::uint32_t spins) noexcept {
+  return cuda_stationary_binding(CudaStationaryModel{functional, domain, spins, 3, 1.0, 1.0, 0.0})
+             ? 1U
+             : 0U;
+}
 
 /** Enumerate linked bindings without maintaining a second method inventory. */
 std::span<const CudaStationaryBinding* const> cuda_stationary_bindings() noexcept;

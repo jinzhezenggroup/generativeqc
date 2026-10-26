@@ -226,8 +226,12 @@ def rows() -> tuple[Row, ...]:
                 exchange=(),
                 fock_coefficients=(),
                 cpu=True,
-                cuda=False,
-                reason="automatic Libxc semilocal programs require the CPU backend",
+                # The same native program represents both backends. Actual
+                # CUDA preparation still requires a linked static provider and
+                # applies its precision/shape/spin admission; catalog selection
+                # must not fall back to Python lowering when a package omits it.
+                cuda=True,
+                reason="",
             )
     return tuple(result[name] for name in sorted(result))
 

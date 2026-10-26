@@ -1203,6 +1203,19 @@ class PreparedBatch:
             public_dft_forces and self._native_dft_force_eligible(index)
             for index in range(count)
         )
+        if (
+            public_dft_forces
+            and self._calculator._automatic_libxc_name is not None
+            and self._calculator._device_name == "cuda"
+            and not all(native_dft_forces)
+        ):
+            # Automatic CUDA force admission belongs to the shared native
+            # owner. An unbuilt or unsupported neighbor cannot invoke the
+            # historical Python stationary/JIT compatibility path.
+            raise NotImplementedError(
+                "automatic CUDA forces require a packaged native stationary "
+                "profile and an admitted all-electron s/p FP64 context for every item"
+            )
         selected_execute = getattr(
             self._library, "generativeqc_ks_batch_execute_selected_forces_v1", None
         )

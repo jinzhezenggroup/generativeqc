@@ -35,7 +35,7 @@ class NativeMethodirProjectionTests(unittest.TestCase):
                     self.assertEqual(row.components, ((functional, 1.0),))
                     self.assertEqual(row.domain, domain)
                     self.assertTrue(row.cpu)
-                    self.assertFalse(row.cuda)
+                    self.assertTrue(row.cuda)
                     self.assertEqual(row.exchange, ())
 
     def test_semantic_projection_and_backend_gates(self) -> None:
