@@ -421,13 +421,6 @@
       "sha256": "d03e7238d55ac583a438e21f8a179edf11b869986e7f1350b7d9620d09bdae43"
     },
     {
-      "bytes": 9451229,
-      "linux_mode": 420,
-      "path": "scripts/expected-original-input-manifest-v1.json",
-      "role": "ORIGINAL",
-      "sha256": "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38"
-    },
-    {
       "bytes": 8551,
       "linux_mode": 420,
       "path": "scripts/external-dependencies-v1.json",
@@ -674,27 +667,6 @@
       "encoding": "byte-pool",
       "offset": 828354,
       "sha256": "27ee9fdb18142374e83afc5b6fced5bcf3adbaab682054109cd722df8e326d52"
-    },
-    "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38": {
-      "bytes": 9451229,
-      "encoding": "xz-parts",
-      "parts": [
-        {
-          "bytes": 1025716,
-          "file": "expected-input-0.xz",
-          "raw_bytes": 4700000,
-          "raw_sha256": "db8e1ae7d0381c8439c01b55dd4cd6c5a78f22c56cd004c60a0084a6fc84cd65",
-          "sha256": "58880f89397dd2249a92584c820428b335fab94d9e2aa014f7af0f9d70ac3173"
-        },
-        {
-          "bytes": 626576,
-          "file": "expected-input-1.xz",
-          "raw_bytes": 4751229,
-          "raw_sha256": "956498964e4d5b18d9867aa3c1f771e7d36db3414ded1d5061e9f2f11ad0212a",
-          "sha256": "2d3f67a7f9c7875611a03ae1e42638bf08cf1a2b7e4f5238c291d9711f3423ab"
-        }
-      ],
-      "sha256": "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38"
     },
     "2eff370ea6d5567dbe212bd3a788296c4486128147b01bc1682c951b26799bf0": {
       "bytes": 628,
@@ -1097,6 +1069,109 @@
       "sha256": "ff73a8b1224a31194c6b6133b9710bf55b654a04fc68e7aea847f6e6685a5e97"
     }
   },
+  "omitted_originals": [
+    {
+      "bytes": 9451229,
+      "historical_consumption": {
+        "actual_receipts": [
+          "output/static-before.json",
+          "output/static-after.json"
+        ],
+        "consumer": "scripts/runtime_gate.py and scripts/environment_cohort.py",
+        "deployed_input": "scripts/prepared-plan.json: task_data/task_modes",
+        "full_manifest_original_retention": "Prior full85 Git history and frozen local originals retained; not restored by this reader",
+        "publication_replays_full_environment_validation": false,
+        "recorded_qualified_input_identity_sha256": "9a839b321b4fef6499530df9bc19ca3dbdd024a0f7c714509ddcf886187dcc44",
+        "recorded_receipts_equal": true
+      },
+      "linux_mode": 420,
+      "original_domain": {
+        "expected_root": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024",
+        "external_dependencies": 19,
+        "external_manifest_sha256": "e33ee9a178cabc5a4cf6b362c65115331d222c5d4f8a32218abc42b90ef7b294",
+        "fixed_inputs_outside_closed_scopes": [
+          {
+            "bytes": 17884280,
+            "mode": "0o644",
+            "path": "assets/qm7.mat",
+            "sha256": "fd6c26c1086887310518e6a6da778253bc5d3ceb8166007a679a740fff9ee6ea"
+          },
+          {
+            "bytes": 1374,
+            "mode": "0o644",
+            "path": "assets/requirements.installed.txt",
+            "sha256": "1f680aa8d5047ecdf715846b6843b18d651e733afe466664016d9ffccdde7e9b"
+          },
+          {
+            "bytes": 1013114992,
+            "mode": "0o755",
+            "path": "build/cbs-sm90-portable-attempt2/libgenerativeqc.so.0.1.0",
+            "sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6"
+          },
+          {
+            "bytes": 1013114968,
+            "mode": "0o755",
+            "path": "build/hf-sm90-portable-attempt1/libgenerativeqc.so.0.1.0",
+            "sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df"
+          },
+          {
+            "bytes": 2436271,
+            "mode": "0o644",
+            "path": "output/cbs-source-inventory.json",
+            "sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924"
+          },
+          {
+            "bytes": 2433081,
+            "mode": "0o644",
+            "path": "output/hf-source-inventory.json",
+            "sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b"
+          },
+          {
+            "bytes": 72733,
+            "mode": "0o644",
+            "path": "scripts/adapter-prepared-v3/protocol-manifest-v2.json",
+            "sha256": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761"
+          },
+          {
+            "bytes": 22460,
+            "mode": "0o644",
+            "path": "scripts/adapter-prepared-v5/qz_smoke.py",
+            "sha256": "66bd120eea89abf44a5a4e4a77616afc91979c7fb67822eab1a58011e6bb7b66"
+          },
+          {
+            "bytes": 1168,
+            "mode": "0o644",
+            "path": "scripts/gate-wait-v3/build_support.py",
+            "sha256": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad"
+          },
+          {
+            "bytes": 7604,
+            "mode": "0o644",
+            "path": "scripts/gate-wait-v3/finalize_release.py",
+            "sha256": "76edfc8e70f90862c1c4fbff156d54c08a7fd8df46b49b21bafd4016e59b492b"
+          },
+          {
+            "bytes": 12212,
+            "mode": "0o644",
+            "path": "scripts/gate-wait-v3/gate_wait.py",
+            "sha256": "b35b3f18a054922f47e1700a2918544a9b2e63131f213eebd596e3b7bb1f865c"
+          }
+        ],
+        "regular_bytes": 5931857284,
+        "regular_files": 48416,
+        "regular_scope_roots": [
+          "source/cbs-qualified",
+          "source/hf-dft-cbd4",
+          "env"
+        ],
+        "symlink_count": 8
+      },
+      "path": "scripts/expected-original-input-manifest-v1.json",
+      "publication": "OMITTED_IDENTITY_ONLY",
+      "role": "ORIGINAL",
+      "sha256": "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38"
+    }
+  ],
   "pool": {
     "bytes": 111800,
     "file": "original-bytes.xz",
@@ -1197,5 +1272,5 @@
   ],
   "schema": "generativeqc.h100-pbe0-failed-pilot-originals.v1",
   "scientific_scope": "one spent initial Direct48 cold3 pilot;1requested/0returned; no current-master defect claim",
-  "scope": "77 exact terminal originals plus8 exact audit/API/stat/static-binding originals; cache binaries remain inventory-only"
+  "scope": "76 exact terminal originals plus8 exact supplements; only the named whole-environment manifest is OMITTED_IDENTITY_ONLY; cache binaries remain inventory-only"
 }

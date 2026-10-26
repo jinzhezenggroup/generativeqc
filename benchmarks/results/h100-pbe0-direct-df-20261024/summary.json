@@ -16,11 +16,23 @@
   "exact_companion_paths": "BOTH_ABSENT_IN_POST_FAILURE_ROOT_STAT",
   "forces": "UNAVAILABLE",
   "full2731_DF96_formal_parent": "INCOMPLETE",
+  "historical_terminal_original_bytes": 10312946,
+  "historical_terminal_originals": 77,
   "job": "h100-pbe0-direct48-cold-20261024-e961-v1",
   "new_science_or_retry_authority": "NONE_NO_UNUSED_BALANCE",
   "numerical_precision_OOM_verdict": "NOT_ESTABLISHED",
-  "raw_original_bytes": 10312946,
-  "raw_originals_restorable": 77,
+  "omitted_originals": [
+    {
+      "bytes": 9451229,
+      "linux_mode": 420,
+      "path": "scripts/expected-original-input-manifest-v1.json",
+      "publication": "OMITTED_IDENTITY_ONLY",
+      "role": "ORIGINAL",
+      "sha256": "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38"
+    }
+  ],
+  "raw_original_bytes": 861717,
+  "raw_originals_restorable": 76,
   "request_count": 1,
   "schema": "generativeqc.h100-pbe0-failed-pilot-replay.v1",
   "scientific_acceptance": "INCOMPLETE",
@@ -35,5 +47,6 @@
     "supervisor_wall_before_export_seconds": 99.93753195554018,
     "worker_command_wall_seconds": 44.01946358755231
   },
+  "whole_environment_validation_replayed": false,
   "work_precision_fallback_peak_billing": "UNAVAILABLE"
 }

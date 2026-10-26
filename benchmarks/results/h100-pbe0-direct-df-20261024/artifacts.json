@@ -1,29 +1,19 @@
 {
   "files": [
     {
-      "bytes": 1025716,
-      "path": "expected-input-0.xz",
-      "sha256": "58880f89397dd2249a92584c820428b335fab94d9e2aa014f7af0f9d70ac3173"
-    },
-    {
-      "bytes": 626576,
-      "path": "expected-input-1.xz",
-      "sha256": "2d3f67a7f9c7875611a03ae1e42638bf08cf1a2b7e4f5238c291d9711f3423ab"
-    },
-    {
       "bytes": 111800,
       "path": "original-bytes.xz",
       "sha256": "c884aa24bb0ac13d42f71eb4b50f457c2fa30c99869cff3817eabe45ec31ec13"
     },
     {
-      "bytes": 43088,
+      "bytes": 46192,
       "path": "originals.json",
-      "sha256": "4d811b65b1c30ab657b3161c810af3abf1d237aee530b3df667d08f8144c6579"
+      "sha256": "fb9f12f65d26a9f08fceced2190c8ebbca2d1be475bba06ce2ef4358a2a6adbc"
     },
     {
-      "bytes": 1593,
+      "bytes": 2042,
       "path": "summary.json",
-      "sha256": "8d630926a34f997afe05d0ec0da8b651f12f0ad52493deb1164da1ed60a7a4cc"
+      "sha256": "4f3f6dc312b2b06a4efe29fefc11419a9fae900be5dc550ef66a6663082f8c52"
     }
   ],
   "schema": "generativeqc.h100-pbe0-terminal-artifacts.v1"

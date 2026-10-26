@@ -3,6 +3,9 @@
 import copy
 import json
 import lzma
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +15,49 @@ import reader as r
 
 
 class ReaderTests(unittest.TestCase):
+    def local_pinned_repo(self, directory: Path) -> tuple[Path, dict, bytes]:
+        repo = directory / "pinned"
+        repo.mkdir()
+
+        def git(*args: str, data: bytes | None = None) -> bytes:
+            return subprocess.run(
+                ["git", *args],
+                cwd=repo,
+                input=data,
+                capture_output=True,
+                timeout=10,
+                check=True,
+            ).stdout
+
+        git("init", "--quiet")
+        raw = b"exact existing offline blob\n"
+        blob = git("hash-object", "-w", "--stdin", data=raw).decode().strip()
+        tree = (
+            git("mktree", data=f"100644 blob {blob}\tfile.txt\n".encode())
+            .decode()
+            .strip()
+        )
+        commit = (
+            f"tree {tree}\nauthor OfflineFixture <fixture@example.invalid> 1 +0000\ncommitter OfflineFixture <fixture@example.invalid> 1 +0000\n\nsynthetic offline fixture\n"
+        ).encode()
+        revision = (
+            git("hash-object", "-t", "commit", "-w", "--stdin", data=commit)
+            .decode()
+            .strip()
+        )
+        return (
+            repo,
+            {
+                "revision": revision,
+                "path": "file.txt",
+                "mode": "100644",
+                "blob": blob,
+                "bytes": len(raw),
+                "sha256": r.sha(raw),
+            },
+            raw,
+        )
+
     def fixture(self, directory: Path) -> tuple[dict, dict[str, bytes]]:
         values = {
             "one.json": b'{"number":1.2345678901234567,"minus_zero":-0.0}\n',
@@ -158,12 +204,91 @@ class ReaderTests(unittest.TestCase):
             "mode": "100644",
             "blob": "2" * 40,
         }
-        with patch("reader.subprocess.check_output") as command:
+        with patch("reader.subprocess.run") as command:
             with self.assertRaises(ValueError):
                 r.git_blob(None, entry)
             with self.assertRaises(ValueError):
                 r.git_blob(Path.cwd(), entry)
             command.assert_not_called()
+
+    def test_existing_valid_pin_is_readable_with_all_transports_forbidden(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, entry, raw = self.local_pinned_repo(Path(directory))
+            with patch.dict(
+                os.environ, {"GIT_ALLOW_PROTOCOL": "", "GIT_NO_LAZY_FETCH": "1"}
+            ):
+                self.assertEqual(r.git_blob(repo, entry), raw)
+
+    def test_valid_pin_missing_promisor_blob_never_attempts_transport(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo, entry, _ = self.local_pinned_repo(root)
+            marker = root / "transport-attempt.txt"
+            sentinel = root / "local-transport-sentinel.py"
+            sentinel.write_text(
+                "import pathlib,sys\nwith pathlib.Path(sys.argv[1]).open('ab') as f:f.write(b'ATTEMPT\\n')\nraise SystemExit(97)\n",
+                encoding="utf-8",
+            )
+
+            def ext_arg(value: str) -> str:
+                return value.replace("%", "%%").replace(" ", "% ")
+
+            endpoint = "ext::" + " ".join(
+                ext_arg(str(value)) for value in (sys.executable, sentinel, marker)
+            )
+            for key, value in (
+                ("core.repositoryformatversion", "1"),
+                ("extensions.partialClone", "origin"),
+                ("remote.origin.promisor", "true"),
+                ("remote.origin.partialclonefilter", "blob:none"),
+                ("remote.origin.url", endpoint),
+                ("protocol.ext.allow", "always"),
+            ):
+                subprocess.run(
+                    ["git", "config", "--local", key, value],
+                    cwd=repo,
+                    capture_output=True,
+                    timeout=5,
+                    check=True,
+                )
+            obj = repo / ".git" / "objects" / entry["blob"][:2] / entry["blob"][2:]
+            obj.resolve().relative_to(repo.resolve())
+            obj.chmod(0o600)
+            obj.unlink()
+            # Only a local sentinel helper could run. It has no networking code
+            # and never contacts or supplies data from an external repository.
+            with (
+                patch.dict(
+                    os.environ,
+                    {"GIT_ALLOW_PROTOCOL": "ext", "GIT_NO_LAZY_FETCH": "0"},
+                ),
+                self.assertRaises(ValueError),
+            ):
+                r.git_blob(repo, entry)
+            self.assertFalse(
+                marker.exists(),
+                "valid missing-object read attempted a transport helper",
+            )
+
+    def test_unsupported_git_option_fails_closed_without_unprotected_fallback(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, entry, _ = self.local_pinned_repo(Path(directory))
+            failure = subprocess.CalledProcessError(
+                129, ["git"], stderr=b"unknown option: --no-lazy-fetch"
+            )
+            with patch("reader.subprocess.run", side_effect=failure) as command:
+                with self.assertRaisesRegex(
+                    ValueError, "no-lazy-fetch support required"
+                ):
+                    r.git_blob(repo, entry)
+                self.assertTrue(command.call_args_list)
+                for invocation in command.call_args_list:
+                    self.assertIn("--no-lazy-fetch", invocation.args[0])
+                    self.assertEqual(invocation.kwargs["env"]["GIT_ALLOW_PROTOCOL"], "")
+                    self.assertEqual(invocation.kwargs["env"]["GIT_NO_LAZY_FETCH"], "1")
+                    self.assertEqual(invocation.kwargs["timeout"], 15)
 
     def test_restoration_does_not_execute_code_or_overwrite_existing_data(self) -> None:
         with tempfile.TemporaryDirectory() as d:

@@ -26,6 +26,14 @@ AUDIT_SHA = "fcab7709e199a6817a780e6afd6f4a3827477109dfc0b157e2619fc846e10b08"
 PLAN_SHA = "019f0f5945c34805fa39007a0e1e496dea7ec57daac29123e76d91d1bf0456f3"
 RELEASE_SHA = "ad95a9f8a5e3206b4957f58c6187c45e3c0b468f4d3acfd94b28fb18b3b6babc"
 SOURCE = "cbd4d8074de35105717c8aac7cd1f86babbe90ec"
+OMITTED_INPUT = {
+    "path": "scripts/expected-original-input-manifest-v1.json",
+    "sha256": "2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38",
+    "bytes": 9451229,
+    "linux_mode": 420,
+    "role": "ORIGINAL",
+    "publication": "OMITTED_IDENTITY_ONLY",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -104,6 +112,34 @@ def decode(raw: bytes, limit: int) -> bytes:
     return result
 
 
+def offline_git(repo: Path, arguments: list[str]) -> bytes:
+    # A promisor checkout must not turn a missing pinned object into network
+    # access. The required global option also rejects unsupported Git versions
+    # before object lookup; never fall back to a bare invocation.
+    environment = os.environ.copy()
+    environment.update(
+        GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_TERMINAL_PROMPT="0"
+    )
+    command = ["git", "--no-lazy-fetch", "-c", "protocol.allow=never", *arguments]
+    try:
+        return subprocess.run(
+            command,
+            cwd=repo,
+            env=environment,
+            capture_output=True,
+            timeout=15,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode("utf-8", errors="replace")[:2048]
+        raise ValueError(
+            f"offline Git read failed (exit {error.returncode}; "
+            f"Git --no-lazy-fetch support required): {detail}"
+        ) from error
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("offline Git read exceeded the 15-second limit") from error
+
+
 def git_blob(repo: Path | None, entry: dict) -> bytes:
     require(repo is not None, "published Git input needs --repo; no implicit fetch")
     require(
@@ -111,17 +147,13 @@ def git_blob(repo: Path | None, entry: dict) -> bytes:
         "fixed Git revision required",
     )
     path = relative(entry["path"])
-    listing = subprocess.check_output(
-        ["git", "ls-tree", entry["revision"], "--", path], cwd=repo
-    )
+    listing = offline_git(repo, ["ls-tree", entry["revision"], "--", path])
     fields = listing.decode().split("\t")[0].split()
     require(
         len(fields) == 3 and fields[0] == entry["mode"] and fields[2] == entry["blob"],
         "published Git mode/blob differs",
     )
-    return subprocess.check_output(
-        ["git", "show", entry["revision"] + ":" + path], cwd=repo
-    )
+    return offline_git(repo, ["show", entry["revision"] + ":" + path])
 
 
 def recover(
@@ -229,17 +261,38 @@ def replay(files: dict[str, bytes], capsule: dict) -> dict:
     index = j("audit/terminal-originals-index.json")
     originals = {r["path"]: r for r in index["retained_files"]}
     rows = {r["path"]: r for r in capsule["files"]}
+    omissions = capsule.get("omitted_originals", [])
+    require(
+        len(omissions) == 1
+        and all(omissions[0].get(k) == v for k, v in OMITTED_INPUT.items()),
+        "only the exact named manifest may be identity-only",
+    )
+    omitted_path = OMITTED_INPUT["path"]
+    require(
+        all(originals[omitted_path][k] == OMITTED_INPUT[k] for k in ("bytes", "sha256"))
+        and originals[omitted_path]["mode"] == OMITTED_INPUT["linux_mode"],
+        "omitted identity differs from retained original index",
+    )
     require(
         len(originals) == 77
         and sum(r["bytes"] for r in originals.values()) == 10312946,
         "original retention scope",
     )
     require(
-        {name for name in files if not name.startswith("audit/")} == set(originals),
+        {name for name in files if not name.startswith("audit/")}
+        == set(originals) - {omitted_path},
         "missing or extra terminal original",
     )
     inventory = {r["path"]: r for r in index["inventory"]}
     for name, row in originals.items():
+        if name == omitted_path:
+            require(name not in rows, "omitted manifest also declared restorable")
+            require(
+                inventory[name]["sha256"] == row["sha256"]
+                and inventory[name]["mode"] == row["mode"],
+                "omitted original inventory/mode differs",
+            )
+            continue
         checked(files[name], row)
         require(
             rows[name]["linux_mode"] == row["mode"]
@@ -259,7 +312,12 @@ def replay(files: dict[str, bytes], capsule: dict) -> dict:
     )
     for name, digest in {**plan["task_code"], **plan["task_data"]}.items():
         require(
-            sha(files["scripts/" + name]) == digest
+            (
+                OMITTED_INPUT["sha256"]
+                if "scripts/" + name == omitted_path
+                else sha(files["scripts/" + name])
+            )
+            == digest
             and oct(originals["scripts/" + name]["mode"]) == plan["task_modes"][name],
             "code/data mode/byte mismatch",
         )
@@ -430,8 +488,12 @@ def replay(files: dict[str, bytes], capsule: dict) -> dict:
         "work_precision_fallback_peak_billing": "UNAVAILABLE",
         "source_env_device_receipts_equal": True,
         "cleanup": "PASS",
-        "raw_originals_restorable": 77,
-        "raw_original_bytes": 10312946,
+        "raw_originals_restorable": 76,
+        "raw_original_bytes": 861717,
+        "historical_terminal_originals": 77,
+        "historical_terminal_original_bytes": 10312946,
+        "omitted_originals": [OMITTED_INPUT],
+        "whole_environment_validation_replayed": False,
         "supplemental_originals": 8,
         "cache_binaries": "INVENTORY_ONLY_REMOTE_RETAINED_NOT_PUBLISHED_AS_RAW",
         "exact_companion_paths": "BOTH_ABSENT_IN_POST_FAILURE_ROOT_STAT",

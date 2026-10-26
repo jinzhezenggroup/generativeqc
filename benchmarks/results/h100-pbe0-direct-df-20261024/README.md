@@ -88,21 +88,32 @@ No changes to #2789/#2795 or their scientific evidence are included here.
 
 ## Lossless storage and offline replay
 
-`originals.json` identifies **all77 retained terminal originals**, exact bytes,
-Linux-mode witnesses, plus eight exact audit/final-CLI/stat/static-binding originals.
-All85 delivered originals are recoverable; the77 terminal originals total10,312,946B.
-The9,451,229-byte
-expected input manifest is losslessly split at a byte boundary into two XZ members;
-the whole SHA is rechecked after joining. Other unique bytes share one bounded
-pool; five already-published fixed Git inputs are restored by exact revision,
-path,mode,blob,size and SHA rather than duplicated. Nothing is rounded or rewritten.
-The measured source remains `cbd4...`; its selected driver/diagnosis files are
-restored from byte-identical blobs in the published ancestor `7522994...` archive.
-This is a recovery anchor for those exact files, not an asserted whole-tree or
-new scientific-source equivalence. The other recovery anchors are published
-ancestors too, so an unmerged implementation commit is not a storage dependency.
-`artifacts.json` describes stored members. The changed-file size budget counts
-both full compressed parts plus every new file; no limit or policy is raised.
+`originals.json` restores **76 terminal originals (861,717 raw bytes) plus eight
+exact supplements**. Every delivered original retains its exact bytes and recorded
+Linux mode. Only `scripts/expected-original-input-manifest-v1.json` is
+**OMITTED_IDENTITY_ONLY**: SHA-256
+`2e7518ffbe13a36e9dcb00004230a69a6e92340cbb7ba45805385010d3a73a38`,
+9,451,229 bytes, mode0644. The original 77-file terminal index is preserved verbatim
+as historical evidence; it does not make the omitted original restorable here.
+
+The omitted census describes the closed `source/cbs-qualified`,
+`source/hf-dft-cbd4` and `env` trees, 11 enumerated fixed inputs, 48,416 regular
+files /5,931,857,284 bytes and eight symlinks. Its separate external descriptor
+binds19 dependencies. The capsule records those domains, counts and identities.
+The frozen historical preflight really consumed the full manifest; its exact
+before/after PASS receipts and their equal environment identity remain delivered.
+This compact publication checks those recorded receipts and deployed input
+identities. It **does not rerun whole-environment validation**, reconstruct the
+48,416-row census or qualify a new environment. The prior full85 publication remains
+in Git history and frozen local backups; this reader does not restore the census.
+
+All other84 originals remain byte-identical. Other unique bytes share one bounded
+pool; five published fixed Git inputs are restored by revision/path/mode/blob/size
+and SHA. The measured source remains `cbd4...`; selected driver/diagnosis files use
+byte-identical blobs in the published ancestor `7522994...` only as recovery
+anchors, not whole-tree or new scientific-source equivalence. `artifacts.json`
+describes the remaining members. The two census fragments and their now-unused
+large-file storage descriptor are absent; no storage limit or policy is raised.
 
 The521-file /28,134,391-byte Task inventory includes binary cache data retained
 remotely. Those bytes are **inventory-only here**, not77 additional raw originals,

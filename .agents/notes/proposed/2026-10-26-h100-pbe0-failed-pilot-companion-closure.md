@@ -1,6 +1,6 @@
 # Decision: retain the spent PBE0 pilot and separate input identity from product closure
 
-Status: proposed
+Status: implemented
 Date: 2026-10-26
 
 The first frozen-source H100 Direct PBE0 water48 pilot consumed one Standard/cold
@@ -21,15 +21,19 @@ input identity are therefore insufficient evidence that the selected Python forc
 product was produced and distributed.
 
 The publication preserves the failure and source/package boundary without changing
-the runtime, loader, SDK, gates, cache identities or measured source. It restores
-all77 collected terminal originals plus eight exact supplemental originals.
-Hash-bound published Git inputs are referenced, and the large exact input manifest
-is represented by two lossless byte fragments under the unchanged single-file
-limit. Complete changed blobs, including both fragments, remain below2MiB.
-This is necessary for exact replay of the Root-selected environment identity;
-neither a source census hash alone nor the remote-only cache inventory is called
-lossless terminal-original delivery. Cache binaries and compressed transport
-envelopes have explicit separate recovery limits.
+runtime, loader, SDK, gates, cache identities or measured source. The original
+full85 publication remains in Git history and frozen local backups. This
+publication restores76 collected terminal originals plus eight exact supplements,
+omitting only the9,451,229-byte
+whole-environment manifest as explicitly named identity-only metadata. Its SHA,
+mode, domains, counts, actual deployed consumption and equal recorded before/after
+receipts remain bound; the full census cannot be recovered by the current reader.
+The historical preflight consumed the full list. Offline replay of these retained
+receipts is not a new whole-environment validation. All other84 raw originals,
+including scientific request inputs, failure logs and exact companion-path stat,
+remain byte-identical. The two census XZ fragments and their unused storage
+descriptor are absent from the current public tree. Cache binaries
+and compressed transport envelopes retain their separate recovery limits.
 
 Rejected interpretations include a silent JIT fallback for a declared missing
 package, renaming/copying old native-cache artifacts into the companion locator,
