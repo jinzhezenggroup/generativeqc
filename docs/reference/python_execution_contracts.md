@@ -251,8 +251,23 @@ STO-3G calculator if none is supplied.
 Backward returns `dE/dR = -forces`, in Hartree/Bohr, multiplied by the upstream
 energy cotangent. Gradients are only with respect to coordinates. Atomic
 numbers, charge, multiplicity, calculator options and prepared topology are
-not differentiable inputs. Only first-order backward is supported;
-differentiable backward (`create_graph=True`), Hessians and HVPs are rejected.
+not differentiable inputs. Differentiable backward (`create_graph=True`) and
+double backward require `"hvp"` in the executing calculator's contextual
+`second_order_capabilities`. The second backward uses that native analytic HVP,
+including the outer loss's chain rule. Unqualified methods remain first order.
+Use `torch.autograd.grad(gradient, coordinates, grad_outputs=direction)` for an
+HVP, or `torch.autograd.functional.hessian(..., vectorize=False)` for a matrix.
+Third derivatives, `torch.func` transforms, vectorized backward, and Torch's
+`functional.hvp` double-backward trick are outside this interface's contract.
+
+`integral_energy(coordinates, exponents, coefficients, owner)` separately binds
+an experimental `IntegralHF` owner. All three inputs are FP64 tensors on one
+device. Shapes, Bohr coordinates, positive exponents and signed raw coefficients
+follow the [integral AD contract](../user/experimental_array_api.md#integral-ad-values-and-ownership).
+It differentiates all three inputs; `derivative_order=2` enables joint double
+backward, including mixed blocks. Logarithmic exponents can be composed with
+ordinary Torch `exp`. A retained converged state supplies the second derivative;
+no dense parameter Hessian is assembled.
 
 (python-torch-errors)=
 ## Torch failure behavior
@@ -261,7 +276,7 @@ Invalid tensor types/dimensions, mismatched identities, inconsistent batch
 dtype/device or noninteger identity values raise `TypeError`/`ValueError`.
 Calculator admission/execution exceptions propagate. Batched forward always
 uses strict batch execution, so an item failure raises and no energy tensor is
-published. Higher-order differentiation raises `RuntimeError` rather than
+published. Unsupported derivative orders raise `RuntimeError` rather than
 silently producing zero force derivatives. A supplied prepared batch must have
 exactly the provided atom numbers, charges and multiplicities.
 
@@ -277,8 +292,15 @@ to the input tensor's dtype/device. Casting to a lower-precision Torch dtype
 does not change the native method's numerical policy.
 
 Saved detached force tensors belong to the autograd context and support its
-first-order backward after forward returns. The wrapper does not differentiate
-through native SCF iterations or force evaluation. Do not mutate coordinate
+first-order backward after forward returns. Qualified native second backward
+calls the same calculator's public HVP at the saved geometry; it can perform a
+fresh SCF/response solve. Configuration must remain fixed throughout the graph.
+Changing the calculator model after forward raises before a second derivative
+can combine the saved energy/forces with a different response model.
+The integral wrapper instead retains its independently owned stationary state,
+which survives closing the original owner and is released with the graph.
+Saved-input version checks reject in-place input mutation. Neither wrapper
+differentiates SCF iteration history. Do not mutate coordinate
 inputs while forward runs. Caller-owned prepared batches remain open and keep
 their warm state; the wrapper does not take ownership of closing them. Their
 non-reentrancy also applies to concurrent Torch forwards.
@@ -289,9 +311,9 @@ non-reentrancy also applies to concurrent Torch forwards.
 PyTorch is optional and imported only when this module is selected. The tensor's
 device determines result placement, not the native calculator backend: a CUDA
 input tensor can use a CPU calculator after host staging. A supplied calculator
-must admit both energy and analytic forces for the requested context. Single
-forward requests both explicitly; batched forward uses the prepared/calculator
-default property set, which must therefore already include forces. Energy-only
-default contexts are not supported by this batched wrapper, even when an explicit
-force request would be qualified. The wrapper does not add force capability. A supplied prepared batch owns execution
-and topology admission. Higher-order AD is unsupported regardless of backend.
+must admit both energy and analytic forces for the requested context. Single and batched
+forward request both explicitly, including on methods whose native default is
+energy only. The wrapper does not add force capability. A supplied prepared batch owns execution
+and topology admission. Native second-order admission follows the calculator;
+integral second order follows the explicit owner's derivative order and backend.
+A CUDA tensor alone does not authorize CUDA scientific execution.

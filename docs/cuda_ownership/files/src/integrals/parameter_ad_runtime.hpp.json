@@ -1,0 +1,20 @@
+{
+  "path": "src/integrals/parameter_ad_runtime.hpp",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Shared CPU/CUDA primitive staging, consumer dispatch, scratch and ABI publication. Explicit device-qualified consumer members make this previously shared header part of the maintained CUDA inventory. The existing primitive contraction and product-rule composition are classified separately; integral recurrence, normalization and scalar derivative expressions remain compiler-generated.",
+  "regions": [
+    {
+      "start": "GQC_AD_FN void consume(",
+      "stop": "GQC_AD_FN void coordinate_inputs(",
+      "role": "scientific",
+      "reason": "Canonical ordered primitive contraction pullback: normalized-coefficient product rule, exponent partial weights and accumulation for repeated physical centers. This composition predates the direct consumer and is shared by both storage schedules; it is not a duplicate integral recurrence. Retire this handwritten composition only after equivalent compiler-owned contraction lowering passes the independent joint-parameter and zero-coefficient gates."
+    },
+    {
+      "start": "GQC_AD_FN int execute_consumer(",
+      "stop": "GQC_AD_FN int execute(",
+      "role": "scientific",
+      "reason": "Conservative mixed-region classification of the existing normalized ordered AO contraction and normalization pullback together with its loop schedule. Dense and direct consumers share this composition rather than duplicating mathematical rules. Generated contraction lowering must preserve complete endpoint work bounds and the independent CPU/CUDA derivative gates before this region can be retired."
+    }
+  ]
+}

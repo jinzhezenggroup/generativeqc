@@ -43,7 +43,7 @@ independent scientific references—not replaced by a learned surrogate.
 - **More chemistry.** GFN2-xTB energies and forces; Cartesian and spherical
   Gaussian bases, custom basis input, and scalar Gaussian ECPs.
 - **One native core, several interfaces.** Python, C, C++, and a Python-free
-  native CLI, plus PyTorch and JAX integration.
+  native CLI, plus PyTorch integration and an experimental differentiable Array API.
 
 ## Install
 

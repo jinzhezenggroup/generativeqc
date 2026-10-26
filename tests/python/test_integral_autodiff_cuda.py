@@ -72,6 +72,17 @@ def test_cuda_integral_primal_pullback_and_coupled_hvp(
                 getattr(cpu.integral_jvp(XYZ, direction), name),
                 atol=3e-10,
             )
+        # Retained device providers must outlive the public generator owner.
+        # This path also runs under the complete-endpoint sanitizer gate.
+        with gpu.prepare(XYZ) as state:
+            gpu.close()
+            assert state.energy == pytest.approx(energy, abs=3e-11)
+            np.testing.assert_allclose(
+                _flat(state.gradient()), _flat(gradient), atol=3e-10
+            )
+            np.testing.assert_allclose(
+                _flat(state.hvp(direction)), _flat(expected), atol=5e-9
+            )
     finally:
         gpu.close()
         cpu.close()
