@@ -330,6 +330,7 @@ extern "C" GENERATIVEQC_API int generativeqc_integral_ad_direct_prepare_v1(
   return integral_ad_status(
       [&] {
         if (!owner || !state || !receipt) throw std::invalid_argument("missing integral AD output");
+        if (!fock) throw std::invalid_argument("missing direct integral AD provider");
         auto prepared = std::make_unique<IntegralHFState>(
             system, values, n, unrestricted, backend, device, iterations, diis_history,
             energy_tolerance, density_tolerance, budget, fock, parameters, parameter_count,
