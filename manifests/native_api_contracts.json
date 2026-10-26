@@ -2105,6 +2105,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_hf_verify_final_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "1c0bdbdce71a19c19a0674e58f483ed94f2603c75deba2a495ffdabea45c8446",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_initial_guess_auto_kind_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

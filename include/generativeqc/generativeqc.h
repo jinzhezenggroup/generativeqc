@@ -1604,6 +1604,80 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_scf_effort_verify_v1(const generativeqc_scf_effort_final_descriptor_v1* descriptor,
                                   generativeqc_scf_effort_verification_v1* output);
 
+/** Observed facts for progressive-HF final verification. Identity comparison,
+ * object validation and finite force-array shape checking belong to the typed
+ * caller; flags are observations, never permission to skip a numerical gate. */
+enum {
+  GENERATIVEQC_HF_VERIFY_MODEL_MATCHES = 1u << 0,
+  GENERATIVEQC_HF_VERIFY_PROVIDER_MATCHES = 1u << 1,
+  GENERATIVEQC_HF_VERIFY_HASHES_MATCH = 1u << 2,
+  GENERATIVEQC_HF_VERIFY_SUCCEEDED = 1u << 3,
+  GENERATIVEQC_HF_VERIFY_CONVERGED = 1u << 4,
+  GENERATIVEQC_HF_VERIFY_RESIDUAL_PRESENT = 1u << 5,
+  GENERATIVEQC_HF_VERIFY_AUDIT_PRESENT = 1u << 6,
+  GENERATIVEQC_HF_VERIFY_AUDIT_TARGET_MATCHES = 1u << 7,
+  GENERATIVEQC_HF_VERIFY_AUDIT_FAILED = 1u << 8,
+  GENERATIVEQC_HF_VERIFY_AUDIT_BUDGET_EXHAUSTED = 1u << 9,
+  GENERATIVEQC_HF_VERIFY_OBSERVABLES_COMPLETE = 1u << 10,
+  GENERATIVEQC_HF_VERIFY_PRECISION_MATCHES = 1u << 11,
+  GENERATIVEQC_HF_VERIFY_FINAL_FP64 = 1u << 12,
+  GENERATIVEQC_HF_VERIFY_AUTOMATIC_PRECISION = 1u << 13,
+  GENERATIVEQC_HF_VERIFY_STRICT_REFINEMENT = 1u << 14,
+  GENERATIVEQC_HF_VERIFY_ACCURACY_PRESENT = 1u << 15,
+  GENERATIVEQC_HF_VERIFY_ACCURACY_TARGET_MATCHES = 1u << 16,
+  GENERATIVEQC_HF_VERIFY_FOCK_LIMIT_PRESENT = 1u << 17,
+  GENERATIVEQC_HF_VERIFY_FOCK_COUNT_PRESENT = 1u << 18
+};
+
+/** Final observed values and explicit limits; no serialized status is accepted.
+ * accuracy: 0 unverified, 1 unconverged, 2 observed_unmet,
+ * 3 estimated_above_target, 4 observed_met, 5 estimated_below_target,
+ * 6 another non-certifying disposition. Unused optional numeric fields are
+ * ignored. Counts are exact nonnegative metadata, without truncating overflow. */
+typedef struct generativeqc_hf_verification_descriptor_v1 {
+  uint32_t struct_size, abi_version, flags, accuracy;
+  uint64_t iterations, iteration_limit, fock_builds, fock_limit;
+  double energy, energy_change, density_rms, residual_rms;
+  double audit_rms, audit_max, audit_energy_difference;
+  double energy_tolerance, density_tolerance, residual_tolerance;
+} generativeqc_hf_verification_descriptor_v1;
+
+/** Detached decision. status: 0 unverified, 1 verified, 2 unmet, 3 budget_exhausted.
+ * target_reasons bits 0..16: model, provider, provider hashes, convergence,
+ * nonfinite energy, energy change, density, audit target, audit energy,
+ * failed audit, unavailable residual, residual gate, missing observables,
+ * requested precision, final FP64, missing strict cleanup, accuracy target.
+ * budget_reasons bits 0..3: audit host budget, iterations, unavailable Fock
+ * count, Fock count limit. target_established is equivalent to no target reasons.
+ * cleanup: 0 unavailable, 1 missing, 2 applied, 3 not_required_fp64.
+ * accuracy retains a matching observation, otherwise becomes unverified (0). */
+typedef struct generativeqc_hf_verification_result_v1 {
+  uint32_t struct_size, abi_version, status, target_reasons, budget_reasons, cleanup, accuracy;
+} generativeqc_hf_verification_result_v1;
+
+/** @native-contract generativeqc_hf_verify_final_v1
+ * @behavior Derive progressive-HF final acceptance from observed metadata. Audit
+ * maximum commutator takes precedence over native RMS; budget exhaustion takes
+ * status precedence without erasing target failures. Empirical/unknown accuracy
+ * never becomes verified. Numeric equality meets a gate.
+ * @inputs Full current-ABI descriptors; positive finite convergence tolerances,
+ * declared flags and accuracy code, exact counts and caller-validated identities.
+ * Present audit diagnostics must be finite and nonnegative. Nonfinite actual
+ * energy/change/density/native residual are physical failures, not API errors.
+ * @outputs Atomically publishes every target/budget failure and final disposition.
+ * @errors Null pointers, unknown flags/codes or malformed controls return
+ * INVALID_ARGUMENT; incompatible complete headers return ABI_MISMATCH. Failed
+ * calls leave output unchanged, including when input and output storage overlap.
+ * @lifetime Borrows input only during the call; retains no calculation or device.
+ * @execution Constant-storage synchronous host metadata only; no scientific
+ * reevaluation, callback, Python/compiler import or retry with a different policy.
+ * @units Energy and energy differences are Hartree; density and physical residual
+ * retain their target solver definitions. Work counts include declared audit work.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_hf_verify_final_v1(const generativeqc_hf_verification_descriptor_v1* descriptor,
+                                generativeqc_hf_verification_result_v1* output);
+
 /** Opaque CPU retained response-vector owner; it owns no physical method state. */
 typedef struct generativeqc_response_recycle generativeqc_response_recycle;
 

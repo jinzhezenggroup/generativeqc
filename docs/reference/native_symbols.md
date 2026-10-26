@@ -24,6 +24,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
 - [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
 - [generativeqc_response_recycle_state_v1_get](#native-c-generativeqc-response-recycle-state-v1-get)
@@ -538,6 +539,39 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-hf-verify-final-v1)=
+## generativeqc_hf_verify_final_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_verify_final_v1 ( const generativeqc_hf_verification_descriptor_v1 * descriptor , generativeqc_hf_verification_result_v1 * output ) ;
+```
+
+**Behavior.** Derive progressive-HF final acceptance from observed metadata. Audit
+maximum commutator takes precedence over native RMS; budget exhaustion takes
+status precedence without erasing target failures. Empirical/unknown accuracy
+never becomes verified. Numeric equality meets a gate.
+
+**Inputs.** Full current-ABI descriptors; positive finite convergence tolerances,
+declared flags and accuracy code, exact counts and caller-validated identities.
+Present audit diagnostics must be finite and nonnegative. Nonfinite actual
+energy/change/density/native residual are physical failures, not API errors.
+
+**Outputs.** Atomically publishes every target/budget failure and final disposition.
+
+**Errors.** Null pointers, unknown flags/codes or malformed controls return
+INVALID_ARGUMENT; incompatible complete headers return ABI_MISMATCH. Failed
+calls leave output unchanged, including when input and output storage overlap.
+
+**Lifetime.** Borrows input only during the call; retains no calculation or device.
+
+**Execution.** Constant-storage synchronous host metadata only; no scientific
+reevaluation, callback, Python/compiler import or retry with a different policy.
+
+**Units.** Energy and energy differences are Hartree; density and physical residual
+retain their target solver definitions. Work counts include declared audit work.
 
 (native-c-generativeqc-response-recycle-capacity-v1-get)=
 ## generativeqc_response_recycle_capacity_v1_get
