@@ -1,0 +1,111 @@
+{
+  "schema": "generativeqc.cuda-rhf-provider-guard-engineering.v1",
+  "scope": "One compiled production-header guard with real vendor handles; no molecular or matrix operation.",
+  "engineering_status": "PASS",
+  "provider_admission": "REFUSED",
+  "scientific_status": "NOT_RUN",
+  "source": {
+    "base_commit": "e1e244197411b58da42aa8a2cbce49014d7ed3ff",
+    "production_header": "src/scf/cuda/reference_export.cuh",
+    "production_header_lf_sha256": "a31a7a501693f7945606cc2397a817eaf3f049b4b51ccc455b3e31d7711259e2",
+    "bridge_file": "gpu_guard.cpp.txt",
+    "bridge_lf_sha256": "5822004597eb93f3083159f523737f271e61d615dc4f7810a7da25b33e20e6bd",
+    "source_files_verified_unchanged_before_after": 39,
+    "packet_files_including_manifest": 40,
+    "packet_bytes": 462444
+  },
+  "device": {
+    "name": "NVIDIA H100 80GB HBM3",
+    "uuid_sha256": "977070d342fac93a326dafacea887da87b42ff849e2c413a449f065e0c4ed666",
+    "driver": "595.58.03",
+    "same_identity_before_after": true
+  },
+  "libraries": [
+    {
+      "path": "/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcudart.so.12.9.79",
+      "bytes": 741088,
+      "sha256": "256e6409e4f06f618e1fb53d4844a6b81cdded1013afa8ade40c22f99eb133b7"
+    },
+    {
+      "path": "/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcublas.so.12.9.2.10",
+      "bytes": 105140976,
+      "sha256": "5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2"
+    },
+    {
+      "path": "/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcusolver.so.11.7.5.82",
+      "bytes": 301268392,
+      "sha256": "aff8ed0075d183b7163696239e9fc9d198d593d33253d3b3a2f843877a882418"
+    }
+  ],
+  "cuda_runtime_version": 12090,
+  "cuda_driver_api_version": 13020,
+  "toolchain": {
+    "host_compiler": "g++ 11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04.3)",
+    "cache_launcher": "sccache 0.16.0",
+    "cache_launcher_sha256": "8cc465f71f6f6c85d9df34503fda47f0d23480796501605e0502c88004546149",
+    "compile_command": [
+      "/opt/generativeqc-reuse/venv/bin/sccache",
+      "/usr/bin/g++",
+      "-std=c++20",
+      "-O2",
+      "-I/tmp/gqc-2809-h100-guard-20261026-v1/src",
+      "-I/tmp/gqc-2809-h100-guard-20261026-v1/include",
+      "-I/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/include",
+      "-c",
+      "gpu_guard.cpp",
+      "-o",
+      "gpu_guard.o"
+    ],
+    "compile_returncode": 0,
+    "link_command": [
+      "/usr/bin/g++",
+      "gpu_guard.o",
+      "-L/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib",
+      "-Wl,-rpath,/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib",
+      "-lcudart",
+      "-lcublas",
+      "-lcusolver",
+      "-ldl",
+      "-o",
+      "gpu_guard"
+    ],
+    "link_returncode": 0,
+    "cache_stats_before_stdout": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/root/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n\n\n",
+    "cache_stats_after_stdout": "Compile requests                      1\nCompile requests executed             1\nCache hits                            0\nCache misses                          1\nCache misses (C/C++)                  1\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          1\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  1.160 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/root/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                           70 KiB\nMax cache size                       10 GiB\n"
+  },
+  "process": {
+    "returncode": 0,
+    "seconds": 0.7069428162649274,
+    "timing_scope": "Single engineering bridge process, excluding staging, compilation and transport; not endpoint timing or billing.",
+    "stdout_lf": "runtime_version=12090 driver_api=13020\nloaded cudart=/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcudart.so.12\nloaded cublas=/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcublas.so.12\nloaded cusolver=/opt/generativeqc-reuse/cuda-12.9/targets/x86_64-linux/lib/libcusolver.so.11\nfree_before_bytes=84467187712 free_after_bytes=84091797504 observed_delta_bytes=375390208 allowance_bytes=201326592\nprovider_refused=1\ndiagnostic=CUDA RHF provider exceeds retained allocation allowance: free_before_bytes=84467187712 free_after_bytes=84091797504 observed_delta_bytes=375390208 allowance_bytes=201326592\ncleanup parameters=0\ncleanup solver=0\ncleanup blas=0\ncleanup stream=0\nENGINEERING_GUARD_PASS; SCIENCE_NOT_RUN\n",
+    "stdout_lf_sha256": "ebd352dcd3b6632bbc18f1e632991d2c9c3be02d16a22dc710ab9219349684b8",
+    "stderr": ""
+  },
+  "observed": {
+    "free_before_bytes": 84467187712,
+    "free_after_bytes": 84091797504,
+    "observed_delta_bytes": 375390208,
+    "allowance_bytes": 201326592
+  },
+  "checks": {
+    "all_four_fields_match_consumed_cuda_snapshot": true,
+    "all_four_cleanup_statuses_zero": true,
+    "source_unchanged_before_after": true,
+    "production_policy_changed": false
+  },
+  "prior_precondition": {
+    "status": "UNAVAILABLE",
+    "reason": "compiler cache prerequisite unavailable: the existing cache executable was absent from PATH",
+    "compilation_started": false,
+    "device_bridge_started": false,
+    "resolution": "A separate invocation exposed the verified existing cache executable on process PATH; source, runner, shared cache and keys were unchanged."
+  },
+  "limits": [
+    "This fresh compiled-guard observation is independent of the earlier standalone vendor-init observation.",
+    "The unchanged combined allowance is 192 MiB; this is a passing diagnostic/cleanup check of an expected refusal, not a successful provider admission.",
+    "No GenerativeQC SDK, geometry, SCF, matrix operation or scientific endpoint ran.",
+    "The snapshot difference is not an exact causal allocation ledger, process peak, internal work or billing evidence.",
+    "This does not recover missing historical CBS byte counts or qualify a new device-wide budget policy."
+  ],
+  "transcription": "Actual bridge stdout with CRCRLF transport line endings normalized to LF; private controller/admission/transport records are excluded."
+}
