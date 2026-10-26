@@ -72,6 +72,7 @@
 #include "scf/cuda/one_electron_values.cuh"
 #include "scf/cuda/one_electron_view.hpp"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/cuda/provider_initialization.cuh"
 #include "scf/cuda/queue_plan.hpp"
 #include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda/reference_export.cuh"
@@ -459,6 +460,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     const ScfOptions& options, int device_id, bool unrestricted, bool shell_class_profiling,
     bool inactive_eigensolver_profiling,
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
+  preflight_reference_provider_initialization(options.reference_provider_initialization,
+                                              options.export_physical_reference);
   const runtime::ResidencyExecution residency_execution(runtime::ResidencyOwner::hf_bucket);
   using SourceRole = runtime::ResidencyRole;
   using SourceSite = runtime::ResidencySite;
@@ -1174,8 +1177,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   plan.resident_warm_density.clear();
   plan.resident_previous_energy.clear();
   std::size_t reference_base_bytes = 0;
-  const std::size_t reference_provider_allowance =
-      (use_cublas ? 96ULL << 20 : 0) + (use_cusolver ? 96ULL << 20 : 0);
+  const ReferenceProviders reference_providers{use_cublas, use_cusolver};
+  const auto reference_provider_allowance = provider_initialization_allowance(
+      options.reference_provider_initialization, reference_providers);
   if (options.export_physical_reference) {
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
@@ -1233,6 +1237,25 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         direct_schedule.persistent_quartet_warps_per_sm;
     plan.persistent_quartet_worker_blocks =
         direct_target.multiprocessor_count * direct_schedule.persistent_quartet_warps_per_sm;
+  }
+  if (explicit_provider_initialization(options.reference_provider_initialization)) {
+    const auto identity = runtime::observe_cuda_provider_identity(
+        reference_providers.mask(), {reinterpret_cast<const void*>(&cudaRuntimeGetVersion),
+                                     reinterpret_cast<const void*>(&cublasCreate),
+                                     reinterpret_cast<const void*>(&cusolverDnCreate)});
+    const auto family = !reference_providers.solver
+                            ? std::optional<ProviderInitializationEigenFamily>{}
+                        : use_jacobi ? ProviderInitializationEigenFamily::jacobi_batched
+                        : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
+                            ? ProviderInitializationEigenFamily::xsyevd
+                            : ProviderInitializationEigenFamily::xsyev_batched;
+    const auto resolved =
+        bind_reference_provider_initialization(options.reference_provider_initialization,
+                                               reference_providers, family, device_id, identity);
+    if (!first_setup && resources.provider_identity_pins_ != identity.library_pins)
+      throw ProviderInitializationUnavailable("CUDA RHF provider loaded-object owner changed");
+    resources.provider_initialization_ = resolved;
+    resources.provider_identity_pins_ = identity.library_pins;
   }
   cublasStatus_t blas_error = CUBLAS_STATUS_SUCCESS;
   cusolverStatus_t solver_error = CUSOLVER_STATUS_SUCCESS;
