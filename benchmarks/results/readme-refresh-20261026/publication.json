@@ -13,8 +13,8 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 4601,
-      "sha256": "854afb2f261b570becca0942134e0c6eee10e4e2f305ca9b7fb987fa42b0c094"
+      "bytes": 4645,
+      "sha256": "2f9a5db3363c49eae27fa849708ae9d4fab6b1d2d57c3683f5db15c63e35d2a1"
     },
     {
       "path": "auxiliary-inputs.json.xz",
@@ -25,14 +25,14 @@
     {
       "path": "conditions.md",
       "role": "summary",
-      "bytes": 7635,
-      "sha256": "295ce958dab37483321f5fddf324d58b15d1956d5213d97694f3cde40e94ab95"
+      "bytes": 7757,
+      "sha256": "28a561411117e684d163a0f8c16e12afe36a7c7aadeaf0d4dd3bac4e5ad79643"
     },
     {
       "path": "figures.json",
       "role": "summary",
       "bytes": 246,
-      "sha256": "4b3f76c509ad58852a003f8b2c9e11c1770d1bb04b31388a9de56e8abc5c3643"
+      "sha256": "ae63d01a6d694e77c76af5122ffb992aa24c6ba299512dd6225f3e42314aa69a"
     },
     {
       "path": "gpu4pyscf.json.xz",
@@ -61,8 +61,8 @@
     {
       "path": "provenance.json.xz",
       "role": "summary",
-      "bytes": 6132,
-      "sha256": "dff9d2c0efe28ec591d217cbf8603a322c7f86933fb960a408e8df3532ca42df"
+      "bytes": 6152,
+      "sha256": "39c8ba35d6048a4f9a14e5fd4c27620bd37fcfa12b252bbf0795c5036e8e2abb"
     },
     {
       "path": "qualification.json.xz",
@@ -85,8 +85,8 @@
     {
       "path": "reproduce.py",
       "role": "reproduction",
-      "bytes": 10827,
-      "sha256": "4cf2ed5f97288020d86b7025168824a27030e0b56092dac1f6b9a240fc346b3f"
+      "bytes": 10908,
+      "sha256": "b7581a6e48b891e31a0f38cd083c2fc0e419845d82db90c1d30524f9ddc4b242"
     },
     {
       "path": "standard.json.xz",
@@ -110,7 +110,7 @@
       "path": "validation.json.xz",
       "role": "evidence",
       "bytes": 3408,
-      "sha256": "262a3e7c090ffff794925622ba50be0aacb3f3ed4a6c65235904b3438abfdd99"
+      "sha256": "e3cc68745339a65d65aa8b781b3fb6e5b401d7c325ee37de79d535a06ed7168d"
     },
     {
       "path": "work.md",

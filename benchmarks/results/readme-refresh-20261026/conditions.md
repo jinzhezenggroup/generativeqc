@@ -95,6 +95,8 @@ This refresh replaces every timing population together. The previous figure's
 memory-budget remainder disabled optional screening; the new source reserves
 space for norms during tile planning while retaining strict fallback.
 
-Figures use the original Matplotlib 3.11.2 renderer; version, FreeType and font
-identity are retained in provenance. Install `render-requirements.txt` for
-byte-identical replay. Layout, labels and rendering code are unchanged.
+Figures use Matplotlib 3.11.2; version, FreeType and font identity are retained
+in provenance. Both axes are linear and the time axis starts at zero. The 2×4
+layout, labels, colors and cold/warm encoding are preserved. Install
+`render-requirements.txt` for byte-identical replay. Historical publications
+retain the renderer's default log-log axes.

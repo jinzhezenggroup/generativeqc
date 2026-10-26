@@ -6,7 +6,8 @@ All **128 populations / 512 complete energy-and-force calls** were freshly
 measured on 2026-10-26 with the **#2786 default-grid framework**, including the
 DF screening-headroom repair. Eight methods, Direct/DF and 3/12/48/96 atoms
 each have one fresh process per engine, one cold and three frozen-density warm
-calls. The original 2×4 format, colors and cold/warm encoding are preserved.
+calls. Both axes are linear, with latency starting at zero. The 2×4 layout,
+colors and cold/warm encoding are preserved.
 **All completed accuracy-failing points remain visible.** CCSD(T)/CBS is unchanged.
 
 ## Observations

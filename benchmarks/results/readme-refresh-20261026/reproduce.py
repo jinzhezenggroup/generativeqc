@@ -79,6 +79,7 @@ def main() -> None:
     assert len(records) == 128 and {key(r) for r in records} == expected
     assert all(r["status"] == "complete" and len(r["samples"]) == 4 for r in records)
     provenance = read(ROOT / "provenance.json.xz")
+    assert provenance["render"]["axes"] == "linear"
     if args.verify:
         import matplotlib
 
@@ -152,6 +153,7 @@ def main() -> None:
             str(ROOT / "reference-reuse.json"),
             "--default-labels",
             "--include-unqualified",
+            "--linear-axes",
             "--output",
             str(args.output),
         ],
