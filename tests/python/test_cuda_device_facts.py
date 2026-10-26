@@ -261,6 +261,23 @@ cudaError_t cudaGetLastError();
 constexpr int cudaLimitStackSize=0;
 cudaError_t cudaDeviceGetLimit(std::size_t*,int);
 cudaError_t cudaDeviceSetLimit(int,std::size_t);
+cudaError_t cudaRuntimeGetVersion(int*);
+"""
+
+# The production translation unit also declares the optional identity observer.
+# These declarations keep the device-facts probe independent of an installed SDK;
+# its harness below never calls the context identity or version functions.
+DRIVER_HEADER = r"""
+#pragma once
+using CUresult = int;
+using CUdevice = int;
+using CUcontext = struct CUctx_st*;
+struct CUuuid { char bytes[16]; };
+CUresult cuCtxGetCurrent(CUcontext*);
+CUresult cuCtxGetId(CUcontext,unsigned long long*);
+CUresult cuCtxGetDevice(CUdevice*);
+CUresult cuDeviceGetUuid_v2(CUuuid*,CUdevice);
+CUresult cuDriverGetVersion(int*);
 """
 
 HARNESS = r"""
@@ -424,44 +441,26 @@ int main(int argc,char** argv) {
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="ELF loader gate")
 @pytest.mark.parametrize("provider", ["nvidia", "cumetal"])
-def test_fresh_facts_and_failure_fallback(tmp_path: Path, provider: str) -> None:
+def test_fresh_facts_and_failure_fallback(
+    tmp_path: Path, provider: str, required_native_cxx: NativeCxx
+) -> None:
     """Compile the production query owner against independent, changing device facts."""
-    compiler = shutil.which("c++")
-    ccache = shutil.which("ccache")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
-    if ccache is None:
-        pytest.fail("ccache is required for native qualification")
-    subprocess.run([ccache, "--version"], check=True, capture_output=True)
     (tmp_path / "cuda_runtime_api.h").write_text(HEADER)
+    (tmp_path / "cuda.h").write_text(DRIVER_HEADER)
     source = tmp_path / "probe.cpp"
     source.write_text(HARNESS)
-    objects = []
-    for i, part in enumerate((source, ROOT / "src/runtime/cuda_device_facts.cpp")):
-        output = tmp_path / f"part{i}.o"
-        subprocess.run(
-            [
-                ccache,
-                compiler,
-                "-std=c++20",
-                "-O2",
-                "-I",
-                str(tmp_path),
-                "-I",
-                str(ROOT / "src"),
-                f"-DGENERATIVEQC_CUDA_PROVIDER_CUMETAL={int(provider == 'cumetal')}",
-                "-c",
-                str(part),
-                "-o",
-                str(output),
-            ],
-            check=True,
-            timeout=60,
-        )
-        objects.append(str(output))
-    binary = tmp_path / "facts"
-    subprocess.run(
-        [compiler, *objects, "-ldl", "-pthread", "-o", str(binary)], check=True
+    binary = required_native_cxx.build_executable(
+        [source, ROOT / "src/runtime/cuda_device_facts.cpp"],
+        tmp_path / "facts",
+        compile_args=[
+            "-std=c++20",
+            "-O2",
+            "-I" + str(tmp_path),
+            "-I" + str(ROOT / "src"),
+            f"-DGENERATIVEQC_CUDA_PROVIDER_CUMETAL={int(provider == 'cumetal')}",
+        ],
+        link_args=["-ldl", "-pthread"],
+        compile_timeout=60,
     )
     modes = [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11]
     for mode in [*modes, 12, 13, 14]:
