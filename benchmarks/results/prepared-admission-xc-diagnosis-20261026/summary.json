@@ -1,0 +1,452 @@
+{
+  "timings": [
+    {
+      "fitting": "none",
+      "order": "forward",
+      "label": "baseline",
+      "median_seconds": 0.211304866,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "none",
+      "order": "forward",
+      "label": "no_batch",
+      "median_seconds": 0.260759019,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "forward",
+      "label": "no_ao",
+      "median_seconds": 0.212603906,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "forward",
+      "label": "no_batch_no_ao",
+      "median_seconds": 0.266449439,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0",
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "forward",
+      "label": "candidate",
+      "median_seconds": 0.266482164,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/candidate/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "none",
+      "order": "reverse",
+      "label": "candidate",
+      "median_seconds": 0.266604422,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/candidate/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "none",
+      "order": "reverse",
+      "label": "no_batch_no_ao",
+      "median_seconds": 0.266300948,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0",
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "reverse",
+      "label": "no_ao",
+      "median_seconds": 0.212566823,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "reverse",
+      "label": "no_batch",
+      "median_seconds": 0.261119978,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0"
+      }
+    },
+    {
+      "fitting": "none",
+      "order": "reverse",
+      "label": "baseline",
+      "median_seconds": 0.211725743,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "none",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy-forces"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "cuda",
+      "order": "forward",
+      "label": "baseline",
+      "median_seconds": 0.1258118,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "cuda",
+      "order": "forward",
+      "label": "no_batch",
+      "median_seconds": 0.173631771,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "forward",
+      "label": "no_ao",
+      "median_seconds": 0.126476651,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "forward",
+      "label": "no_batch_no_ao",
+      "median_seconds": 0.179039135,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0",
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "forward",
+      "label": "candidate",
+      "median_seconds": 0.179164122,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/candidate/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "cuda",
+      "order": "reverse",
+      "label": "candidate",
+      "median_seconds": 0.179157798,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/candidate/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {}
+    },
+    {
+      "fitting": "cuda",
+      "order": "reverse",
+      "label": "no_batch_no_ao",
+      "median_seconds": 0.179093953,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0",
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "reverse",
+      "label": "no_ao",
+      "median_seconds": 0.126631551,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "reverse",
+      "label": "no_batch",
+      "median_seconds": 0.173995213,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES": "0"
+      }
+    },
+    {
+      "fitting": "cuda",
+      "order": "reverse",
+      "label": "baseline",
+      "median_seconds": 0.12577171,
+      "command": [
+        "/home/jzzeng/generativeqc-qualification/prepared-device-d474d0b265e59e0ed36c819839f9ad2a5293b75f-v1/ks-cli-endpoints-v5/sdk-qualifiers/baseline/public-ks",
+        "pbe-rks",
+        "cuda",
+        "spherical",
+        "0",
+        "2147483648",
+        "21",
+        "3",
+        "cuda",
+        "retain",
+        "energy"
+      ],
+      "switches": {}
+    }
+  ],
+  "profiles": {
+    "baseline": {
+      "launches": 6149,
+      "xc_point_evaluations": 25,
+      "xc_total_accumulations": 25,
+      "gpu_kernel_total_ns": 177969665
+    },
+    "no_batch_no_ao": {
+      "launches": 7293,
+      "xc_point_evaluations": 720,
+      "xc_total_accumulations": 720,
+      "gpu_kernel_total_ns": 236207077
+    },
+    "candidate": {
+      "launches": 7293,
+      "xc_point_evaluations": 720,
+      "xc_total_accumulations": 720,
+      "gpu_kernel_total_ns": 236213785
+    }
+  }
+}

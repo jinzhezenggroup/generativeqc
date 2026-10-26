@@ -50,6 +50,13 @@ was reproduced with the preserved baseline source/library; matching baseline
 and candidate energies differ only near roundoff. These failures must remain
 visible rather than being relabelled as passing independent qualifications.
 
+The later [reference-domain replay](../../../../benchmarks/results/cold-four-defaults-20261026/README.md#vv10-reference-domain-follow-up)
+resolves these three failures: the live test retained a 1e-8 reference mask after
+#2652 changed native molecular VV10 to 1e-10. With the same frozen `wb-aot2`
+binary, the original mask reproduces all three failures and the matched mask
+passes every existing complete endpoint gate. Original failed receipts remain
+unchanged; the separate follow-up does not reclassify their results as passes.
+
 Clean repeated #2786 timings use a separate frozen default image and retain
 constructor, preparation, SCF, analytic forces, host export and three frozen
 engine-local warm calls. No cache clearing or precomputed oracle seed is used.

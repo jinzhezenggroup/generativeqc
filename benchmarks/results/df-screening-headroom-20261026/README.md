@@ -5,6 +5,17 @@ RTX 5090 whose native DF PBE0-96 endpoint was about 2.4 seconds slower than
 earlier qualification. Reserving optional norm storage during response planning
 removes that difference. Original README samples and figures remain unchanged.
 
+## Integration scope
+
+The measurements below belong to the frozen candidate at
+`46b916ac6df0082d56fbc48639bc1261aecc7d04`, built on `c10120db` plus the retained
+source patch. The later dependency integration brings in the HF explicit-opt-in
+containment and restored incumbent defaults from #2800. It does not change these
+receipts, source pins or the original README figures. In particular, the retained
+HF96 timing/parity comparison describes that historical candidate, not a new
+qualification of the integrated default. The DF headroom planner source is
+unchanged by this integration; no new GPU measurements are claimed here.
+
 ## Complete endpoints
 
 Three fresh processes per arm/card, one cold and three frozen-density warm

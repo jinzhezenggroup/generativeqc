@@ -1,4 +1,4 @@
-# HF/DFT README refresh after the cold endpoint improvements (2026-10-26)
+# Historical HF/DFT README cohort after the cold endpoint improvements (2026-10-26)
 
 [Direct figure](../../../assets/readme-direct-defaults.svg) · [DF figure](../../../assets/readme-df-defaults.svg) · [All timings](timings.md) · [Executed work](work.md) · [Conditions](conditions.md)
 
@@ -8,6 +8,20 @@ Eight methods, Direct/DF and 3/12/48/96 atoms each have one fresh process per
 engine, with one cold and three frozen-density warm calls. HF is included.
 The original 2×4 format, colors and cold/warm encoding are preserved;
 **all completed accuracy-failing points remain visible**. CCSD(T)/CBS is unchanged.
+
+## Integration scope
+
+This is a retained measurement of the frozen `r2-default-v2` image described
+below, not a benchmark of current master. Its then-default Direct HF route used
+screened proposals; current source preserves that route only with the explicit
+HF opt-in after the stronger force diagnostic failed. The original samples,
+figures, source patch, gates and failed records are unchanged. In particular,
+these historical HF timings do not establish the restored ordinary-HF default's
+accuracy or speed. No integrated-image GPU rerun is claimed.
+
+The homepage labels these exact historical figures in the surrounding heading,
+alt text and caption. The SVG bytes and pinned-renderer replay remain unchanged;
+new current-source measurements should be published as a separate cohort.
 
 ## Observations
 

@@ -1,0 +1,23 @@
+{
+  "scope": "preparatory failures, neither a GPU/provider retry nor repaired quota",
+  "CPU_stage": {
+    "source_raw_bytes": 1249,
+    "source_raw_sha256": "782844d9c2e01c9da3c52d168488763df6a95db2b556c8af1c891505e16c8051",
+    "returncode": 1,
+    "stdout_utf8_sha256": "42f63d935d068529eb90627aa8845c94eed9e48e84bc0a9b4e8b72b74ad0a1b1",
+    "exact_traceback_excerpt": "Traceback (most recent call last):\r\n  File \"<stdin>\", line 11, in <module>\r\nOSError: [Errno 122] Disk quota exceeded\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 11, in <module>\r\nOSError: [Errno 122] Disk quota exceeded",
+    "errno": 122,
+    "staged_file_bytes": 0,
+    "provider_process_started": false,
+    "quota_resolved": false
+  },
+  "local_source_hash_refusal": {
+    "event": "local pre-API source byte hash refused CRLF working-copy bytes",
+    "correction": "explicit LF bytes written to match exact command source SHA",
+    "remote_GPU_attempts_before_correction": 0,
+    "scientific_requests": 0
+  },
+  "source_hash_note_raw_sha256": "7270ab3e4bdad56c9c68cff4cf7e3e9734ade2aea547ea9b99b4e0a3990617a2",
+  "actual_provider_processes_after_preparation": 1,
+  "provider_retries": 0
+}

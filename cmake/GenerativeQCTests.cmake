@@ -583,6 +583,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_cuda_host_resources.cpp)
   generativeqc_native_test(generativeqc_ks_device_resource_tests
                        tests/native/test_ks_device_resources.cpp)
+  generativeqc_native_test(generativeqc_df_fock_capacity_tests
+                       tests/native/test_df_fock_capacity.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
   generativeqc_native_test(generativeqc_hf_cuda_resource_tests

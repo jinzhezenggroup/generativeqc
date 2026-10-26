@@ -45,6 +45,16 @@ struct RunOptions {
   bool forces{false};
   bool json{false};
   std::uint32_t diis_history{8};
+  // Zero kind preserves the CLI's core-density start. A selected provider is
+  // copied by native preparation; these controls never alter the target SCF.
+  generativeqc_initial_guess_options initial_guess = [] {
+    generativeqc_initial_guess_options value{};
+    value.struct_size = sizeof(value);
+    value.abi_version = GENERATIVEQC_ABI_VERSION;
+    return value;
+  }();
+  std::string initial_guess_name{"none"};
+  bool initial_guess_explicit{false}, initial_guess_controls_explicit{false};
   std::uint32_t batch{1};
   std::optional<std::uint64_t> host_bytes, device_bytes, pinned_host_bytes;
   std::uint64_t host_reserve_bytes{0}, device_reserve_bytes{0};

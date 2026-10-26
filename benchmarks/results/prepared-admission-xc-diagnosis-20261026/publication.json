@@ -1,0 +1,45 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The historical candidate still fails the original 1.05 gate. Two diagnosed endpoint regressions are reproduced by disabling unreserved optional XC panels/maps; future native admission requires explicit lifetime allowances.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 4258,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "d16e92ec20a4208b460e56e929ec13a3aa99cd16e3149d89f6437c09e8e7b9de"
+    },
+    {
+      "bytes": 27211,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "aae919d0e9ffd6090e91b1eb960c140b10b2b47a27299d82a6e5534d2e3a5850"
+    },
+    {
+      "bytes": 11674,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "98cfc07e3d6b148e95e5fd041c57d2243cfb68fe0fe75fe280c2c756b7e5c70d"
+    },
+    {
+      "bytes": 2725,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "3ff26a92250f8d2675bd117483624ded4e5ffe66dec325b32d21f72e92ae6245"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "diagnose-ks.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "d474d0b265e59e0ed36c819839f9ad2a5293b75f"
+  }
+}

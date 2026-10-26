@@ -1,7 +1,11 @@
-# Comparison conditions
+# Historical frozen-image comparison conditions
 
-The #2786 homepage framework measures eight methods, Direct/DF, and
-3/12/48/96-atom water clusters, with default GenerativeQC and stock GPU4PySCF.
+The retained #2786 homepage cohort measured eight methods, Direct/DF, and
+3/12/48/96-atom water clusters, with the frozen image's then-default GenerativeQC
+settings and stock GPU4PySCF. This table describes that historical image, not
+current-master defaults. Its screened Direct HF route is now explicit opt-in;
+the figures do not establish restored ordinary-HF default accuracy or speed.
+No new integrated-image GPU measurements are claimed.
 Every fresh process measures one cold and three warm complete energy-and-force
 calls. Each warm call starts from that engine's own frozen cold density. No
 reference density enters production. The original 2×4 layout and cold/warm

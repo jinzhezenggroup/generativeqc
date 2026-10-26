@@ -489,13 +489,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, cuda_status(direct_target_error));
     return outputs;
   }
-  cuda_policy::DirectJkTuningProfile direct_profile;
-  // Correlated references retain their existing explicitly budgeted page.
-  // Ordinary direct HF may admit the larger page and retry the old capacity.
-  if (options.export_physical_reference) {
-    direct_profile.bounded_streaming.maximum_task_capacity = 8U * 1024U * 1024U;
-    direct_profile.bounded_streaming.maximum_arena_bytes = std::size_t{3} << 29;
-  }
+  const auto direct_profile =
+      cuda_policy::resolve_hf_direct_tuning_profile(options.export_physical_reference);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
       cuda_policy::resolve_direct_jk_schedule_policy(direct_target, direct_profile);
 

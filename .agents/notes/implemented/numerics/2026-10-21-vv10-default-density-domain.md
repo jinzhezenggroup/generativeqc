@@ -5,6 +5,8 @@ Date: 2026-10-21
 
 Supersedes the density cutoff in the
 [original WB97M-V composition decision](../architecture/2026-09-22-wb97mv-self-consistent-composition.md#explicit-nonlocal-density-domain).
+Also supersedes the 1e-8 reference-mask choice in the
+[October 1 matched-domain decision](2026-10-01-matched-vv10-comparator-domain.md).
 
 ## Problem
 
@@ -72,3 +74,21 @@ Inactive-row fixtures now use a density below 1e-10, while explicit boundary
 and formerly excluded tail cases verify both VV10 pair legs and resource caps.
 These fixture changes do not relax screening, memory limits, or scientific
 tolerances.
+
+## Larger-basis CUDA acceptance follow-up, 2026-10-26
+
+PR #2795 exposed one missed live-test migration: the complete CUDA force test
+still forced GPU4PySCF to 1e-8 for cold and displaced geometries. Native already
+used this note's 1e-10 domain. Water/def2-TZVP, local def2-TZVPD water and UKS
+NH2/def2-TZVP therefore failed the unchanged 1e-8 Eh energy gate by approximately
+2.50e-8, 2.56e-8 and 8.05e-8 Eh. Reproducing these on the earlier optimization
+baseline excluded a new AOT regression but did not establish reference parity.
+
+The test now imports the declared molecular threshold for both independently
+computed reference endpoints and records that configuration in its receipts.
+Slurm 14542 reproduces all three failures with the stale reference mask, then
+passes all three full tests with the matched mask using the same frozen native
+binary. No native arithmetic, tolerance or reference kernel changed. See the
+[paired replay and complete receipts](../../../../benchmarks/results/cold-four-defaults-20261026/README.md#vv10-reference-domain-follow-up).
+Keep explicitly historical 1e-8 diagnostics distinct from current-domain
+acceptance tests; the historical data remains valid for its original domain.
