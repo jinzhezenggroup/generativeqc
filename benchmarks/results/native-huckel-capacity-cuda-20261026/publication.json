@@ -1,0 +1,49 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All eight scoped CUDA endpoint gates and installed independent-reference checks pass; full performance promotion remains unqualified because allocation/compilation-cost and independent iteration-residual evidence were not measured.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7212,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "e5f02bcca96bbb93f89b0a573ddf73f68a52a1afc3ac0238ff7a1705cfd130ab"
+    },
+    {
+      "bytes": 36777,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "341ec934f91e25d07810467a0c981f92c3dd45565f1ba82fda4ca396e0937662"
+    },
+    {
+      "bytes": 2451,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "f76c78c04a939995330ab230d0ae6edfec54d6758c8a6f8c686e13cccb9dc109"
+    },
+    {
+      "bytes": 3416,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "310afcd1493fcda44181f32a7a2bfa2b909806354fdd37f56d4fd620121cbece"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "run-paired.py",
+      "OUTPUT_DIR",
+      "cuda",
+      "CANDIDATE_CHECKOUT",
+      "BASELINE_CHECKOUT"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "7e555f3841e3109dea82fa94d12de8ad78ff0353"
+  }
+}

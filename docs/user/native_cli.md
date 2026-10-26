@@ -550,6 +550,36 @@ never select profiles. DFT schedule-only winners are validated and reported,
 but not automatically applied: their workload-specific KS admission cannot be
 replaced by a binary-only shortcut.
 
+## Choose a preliminary density
+
+`run --initial-guess none|hf|lda|minao|huckel` forwards an explicit cold-start
+policy to native preparation. The CLI default is `none`, which retains the
+core-density start. Provider admission and bounded fallback follow the same
+[initial-guess contract](initial_guesses.md) as the SDK and Python API.
+
+```bash
+generativeqc run molecule.xyz --method rhf --basis sto-3g \
+  --initial-guess huckel --initial-guess-bytes 268435456 --forces --json
+```
+
+`--initial-guess-max-iterations` limits preliminary iterations; its native
+default is 32. `--initial-guess-bytes` bounds preliminary numeric payloads;
+zero selects the native 256 MiB default. This is separate from the retained
+target calculation and allocator/provider overhead. A cap too small for the
+preparation records `budget_skipped` and uses the native core-density fallback.
+The target's convergence controls remain `--max-iterations`,
+`--energy-tolerance` and `--density-tolerance`.
+
+An explicit provider adds an `initial_guess` JSON record with the actual
+outcome, preliminary work, target attempts, discarded target work, numeric
+capacity and preparation time. Text output reports the provider, outcome and
+numeric capacity. SDK callers can copy the same native record through
+`Calculation::initial_guess_diagnostic()`; an unavailable record is `nullopt`.
+
+These controls currently apply to `run`. Other commands reject them rather
+than ignoring a requested policy or omitting its capacity from a dry-run plan.
+Unsupported method/backend/provider combinations fail at native admission.
+
 ## Run correlated methods
 
 All registered native selectors reach the native preparation owner, including

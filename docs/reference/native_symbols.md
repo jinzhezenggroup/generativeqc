@@ -175,6 +175,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Calculation::operator=-copy](#native-cpp-generativeqc-calculation-copy-assignment-copy)
 - [generativeqc::Calculation::Calculation-move](#native-cpp-generativeqc-calculation-calculation-move)
 - [generativeqc::Calculation::supported_properties](#native-cpp-generativeqc-calculation-supported-properties)
+- [generativeqc::Calculation::initial_guess_diagnostic](#native-cpp-generativeqc-calculation-initial-guess-diagnostic)
 - [generativeqc::Calculation::execute](#native-cpp-generativeqc-calculation-execute)
 - [generativeqc::BatchItemResult](#native-cpp-generativeqc-batchitemresult)
 - [generativeqc::DensityFittingMetricDiagnostic](#native-cpp-generativeqc-densityfittingmetricdiagnostic)
@@ -4595,6 +4596,31 @@ remains borrowed by this wrapper during the call.
 **Errors.** Throws Error if the native context query fails.
 
 **Execution.** Synchronous, Python-free; serialize against execute/destruction.
+
+(native-cpp-generativeqc-calculation-initial-guess-diagnostic)=
+## generativeqc::Calculation::initial_guess_diagnostic
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+[[ nodiscard ]] std :: optional < generativeqc_initial_guess_diagnostic > initial_guess_diagnostic ( ) const
+```
+
+**Behavior.** Copy the most recent native preliminary-density diagnostic.
+
+**Inputs.** A live Calculation; no preparation or execution is requested.
+
+**Outputs.** Returns an owned scalar record, or nullopt when no record exists.
+Preparation failure/budget refusal is recorded separately from target SCF
+convergence; an absent record must not be interpreted as successful preparation.
+
+**Lifetime.** The returned value survives the calculation and subsequent execution.
+
+**Errors.** Throws Error on query failure other than NOT_IMPLEMENTED.
+
+**Execution.** Synchronous and Python-free; serialize against execute/destruction.
+
+**Units.** Numeric capacity is bytes; preparation time is seconds.
 
 (native-cpp-generativeqc-calculation-execute)=
 ## generativeqc::Calculation::execute

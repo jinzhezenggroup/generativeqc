@@ -1,0 +1,127 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json.gz",
+      "sha256": "aae919d0e9ffd6090e91b1eb960c140b10b2b47a27299d82a6e5534d2e3a5850"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "energies": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        1260
+      ]
+    },
+    "forces": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        3780
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "No compilation in the diagnostic; original installed headers/libraries/executables and compile receipts were preserved and authenticated.",
+    "seconds": null
+  },
+  "device": {
+    "gpu": "RTX 5090 (Slurm gpu:5090:1)",
+    "host": "n5 / node5",
+    "slurm_job": 1858,
+    "visibility": "0"
+  },
+  "hardware": {
+    "host": "node5",
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "Historical candidate and baseline retain the same scientific equations; this diagnosis toggles existing optional execution schedules only.",
+    "ir": "No compiler or scientific IR changes are made by this diagnostic."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "8767588fa12ca607e94067ba0801b8e52ede59b5a99413059a38cd52cd19e0bd",
+    "source": "deece8fc7fe3036c6a3bd95fbbfdb745cfa4d3b45ac8f72344a43c2710843ce9"
+  },
+  "inputs_hash": "5e0a57cc48e6db4abf22525c4d8d0dc4f4a827bb46bd914b805fd3d808415531",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Historical candidate numeric/provider receipts are retained per phase, but this diagnosis does not measure full allocation/RSS coverage."
+  },
+  "performance": {
+    "reason": "Historical candidate exceeds the unchanged 1.05 endpoint gate in both diagnosed models and both execution orders; disabling optional batching/maps reproduces the slowdown.",
+    "status": "fail"
+  },
+  "residuals": {},
+  "revision": "d474d0b265e59e0ed36c819839f9ad2a5293b75f",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "baseline": "a97112c4e703f90d21ba48f032d49d2d2e9c19fe",
+    "candidate": "d474d0b265e59e0ed36c819839f9ad2a5293b75f",
+    "numeric_cap": 2147483648,
+    "orders": [
+      "forward",
+      "reverse"
+    ],
+    "original_qualification_gate": 1.05,
+    "profiling": "separate one-endpoint invocations; profile times never enter clean timing medians",
+    "retained_inputs": "Exact probe and runner source in samples.json.gz; original commands preserved per timing row.",
+    "samples_per_configuration": 21,
+    "scope": "two historical full SDK endpoints, Direct PBE RKS E/F and DF PBE RKS energy; not the complete 100-comparison campaign",
+    "warmups": 3
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "reason": null,
+      "scope": "reused original products verified against original compile receipts",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "Candidate remains 26% slower for Direct and 42% for DF in the two diagnosed endpoints.",
+      "status": "fail"
+    },
+    "numerical": {
+      "reason": null,
+      "scope": "diagnostic E/F parity <=1e-12 and identical iteration counts only; not a new independent molecular oracle campaign",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "No replacement implementation or promotion is included.",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Only the preserved spherical STO-3G inputs are diagnosed.",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "revision": "d474d0b265e59e0ed36c819839f9ad2a5293b75f",
+      "status": "pass"
+    }
+  },
+  "subject": "Rejected prepared admission: optional XC schedule diagnosis",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "compiler": "c++ Ubuntu 11.4.0",
+    "nsight_systems": "2025.1.3.140",
+    "products": "previously compiled public SDK products; exact original executable/library receipts verified before and after",
+    "threads": 1
+  }
+}

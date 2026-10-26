@@ -1,0 +1,82 @@
+[
+  {
+    "order": "ABBA",
+    "case": "rhf-h2-energy-force",
+    "median_seconds": {
+      "A": 0.0103712216950953,
+      "B": 0.010654343292117119
+    },
+    "candidate_over_baseline": 1.0272987701300138,
+    "passed": true
+  },
+  {
+    "order": "ABBA",
+    "case": "pbe-h2-energy",
+    "median_seconds": {
+      "A": 0.04021768318489194,
+      "B": 0.04013924393802881
+    },
+    "candidate_over_baseline": 0.998049632881573,
+    "passed": true
+  },
+  {
+    "order": "ABBA",
+    "case": "pbe-h2-energy-force",
+    "median_seconds": {
+      "A": 0.047472667414695024,
+      "B": 0.0474854176864028
+    },
+    "candidate_over_baseline": 1.0002685813206238,
+    "passed": true
+  },
+  {
+    "order": "ABBA",
+    "case": "pbe-ragged-energy",
+    "median_seconds": {
+      "A": 0.06719197239726782,
+      "B": 0.06684257136657834
+    },
+    "candidate_over_baseline": 0.9947999587119772,
+    "passed": true
+  },
+  {
+    "order": "BAAB",
+    "case": "rhf-h2-energy-force",
+    "median_seconds": {
+      "A": 0.010345525573939085,
+      "B": 0.01065489323809743
+    },
+    "candidate_over_baseline": 1.0299035232137126,
+    "passed": true
+  },
+  {
+    "order": "BAAB",
+    "case": "pbe-h2-energy",
+    "median_seconds": {
+      "A": 0.04021759331226349,
+      "B": 0.03995915502309799
+    },
+    "candidate_over_baseline": 0.9935739991411497,
+    "passed": true
+  },
+  {
+    "order": "BAAB",
+    "case": "pbe-h2-energy-force",
+    "median_seconds": {
+      "A": 0.04750202829018235,
+      "B": 0.04738220851868391
+    },
+    "candidate_over_baseline": 0.9974775862039725,
+    "passed": true
+  },
+  {
+    "order": "BAAB",
+    "case": "pbe-ragged-energy",
+    "median_seconds": {
+      "A": 0.0671769930049777,
+      "B": 0.06686218874529004
+    },
+    "candidate_over_baseline": 0.9953138084096093,
+    "passed": true
+  }
+]

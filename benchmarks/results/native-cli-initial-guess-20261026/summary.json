@@ -1,0 +1,244 @@
+{
+  "default_cli_comparisons": {
+    "cpu": [
+      {
+        "order": "ABBA",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.40737836388871074,
+          "B": 0.39857095340266824
+        },
+        "ratio": 0.9783802693840448,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.011293167248368263,
+          "B": 0.010699281934648752
+        },
+        "ratio": 0.9474119792385682,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 0.38897462701424956,
+          "B": 0.38939329888671637
+        },
+        "ratio": 1.001076347513154,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 0.6011356823146343,
+          "B": 0.600920740980655
+        },
+        "ratio": 0.9996424412319832,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.4075953899882734,
+          "B": 0.39918927382677794
+        },
+        "ratio": 0.9793763217936854,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.011296123266220093,
+          "B": 0.010427201166749
+        },
+        "ratio": 0.9230778490113051,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 0.389021506998688,
+          "B": 0.38958724588155746
+        },
+        "ratio": 1.0014542611981383,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 0.6007789643481374,
+          "B": 0.601002165582031
+        },
+        "ratio": 1.0003715197221257,
+        "passed": true
+      }
+    ],
+    "cuda": [
+      {
+        "order": "ABBA",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.9739678520709276,
+          "B": 1.9924819450825453
+        },
+        "ratio": 1.0093791259022755,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.264017965644598,
+          "B": 1.239083707332611
+        },
+        "ratio": 0.9802738101912408,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 1.9115393534302711,
+          "B": 1.872779469937086
+        },
+        "ratio": 0.9797232092430479,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 2.4176159128546715,
+          "B": 2.4122931845486164
+        },
+        "ratio": 0.997798356522327,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 2.0177569873631,
+          "B": 2.0190195087343454
+        },
+        "ratio": 1.0006257053644976,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.2521333321928978,
+          "B": 1.2651827968657017
+        },
+        "ratio": 1.010421785234285,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 2.050943326205015,
+          "B": 1.9267868418246508
+        },
+        "ratio": 0.9394637176005742,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 2.4591491874307394,
+          "B": 2.5323784220963717
+        },
+        "ratio": 1.029778280650854,
+        "passed": true
+      }
+    ]
+  },
+  "numerical": {
+    "cpu_endpoint_energy": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "rms_error": 0.0,
+      "shape": [
+        672
+      ]
+    },
+    "cpu_endpoint_forces": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "rms_error": 0.0,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "cuda_endpoint_energy": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 5.684341886080802e-14,
+      "max_scaled_error": 0.056843418860808015,
+      "rms_error": 1.1719083885631893e-14,
+      "shape": [
+        672
+      ]
+    },
+    "cuda_endpoint_forces": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 1.0651202142497596e-14,
+      "max_scaled_error": 0.010651202142497596,
+      "rms_error": 1.2326297513887824e-15,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "installed_energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 2.1316282072803006e-14,
+      "max_scaled_error": 2.1316282072803006e-06,
+      "rms_error": 1.8875398912922532e-14,
+      "shape": [
+        26
+      ]
+    },
+    "installed_forces": {
+      "passed": true,
+      "atol": 1e-06,
+      "rtol": 0,
+      "max_absolute_error": 3.020903382999762e-08,
+      "max_scaled_error": 0.030209033829997622,
+      "rms_error": 1.0255187939891318e-08,
+      "shape": [
+        26,
+        6
+      ]
+    }
+  },
+  "timed_endpoints": 1344,
+  "timed_force_publications": 1008,
+  "independent_installed_cli_publications": 26
+}

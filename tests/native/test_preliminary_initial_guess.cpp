@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -22,6 +24,10 @@ extern "C" int generativeqc_resource_minao_numeric_capacity_v1(std::size_t targe
                                                                const std::int32_t* atomic_numbers,
                                                                std::size_t atom_count,
                                                                std::uint64_t* output);
+extern "C" int generativeqc_resource_huckel_numeric_capacity_v1(
+    const std::int32_t* atomic_numbers, std::size_t atom_count, const std::uint32_t* shell_atoms,
+    const std::uint32_t* angular_momenta, const std::uint64_t* primitive_counts,
+    std::size_t shell_count, int representation, std::uint32_t diis_history, std::uint64_t* output);
 
 namespace {
 using namespace generativeqc;
@@ -130,6 +136,27 @@ void check() {
   const std::int32_t z[] = {8, 1, 1};
   std::uint64_t minao_query_bytes = 0;
   const auto exact_native_bytes = preliminary_numeric_capacity(system, minao_resource_policy);
+  // The same compact shape used by Python must match actual SDK preparation,
+  // including repeated contractions on one atom and every admitted DIIS size.
+  const std::uint32_t shell_atoms[]{0, 0, 0, 1, 2}, angular[]{0, 0, 1, 0, 0};
+  const std::uint64_t primitives[]{3, 3, 3, 3, 3};
+  PreliminaryOptions huckel_policy;
+  huckel_policy.kind = PreliminaryKind::Huckel;
+  for (unsigned history : {1U, 8U, 16U}) {
+    huckel_policy.diis_history = history;
+    std::uint64_t capacity = 0;
+    require(generativeqc_resource_huckel_numeric_capacity_v1(z, 3, shell_atoms, angular, primitives,
+                                                             5, system.basis_representation,
+                                                             history, &capacity) == 0 &&
+                capacity == preliminary_numeric_capacity(system, huckel_policy),
+            "Huckel compact query disagrees with native preparation");
+    const auto retained = capacity;
+    require(generativeqc_resource_huckel_numeric_capacity_v1(z, 3, shell_atoms, angular, primitives,
+                                                             5, system.basis_representation, 17,
+                                                             &capacity) != 0 &&
+                capacity == retained,
+            "invalid Huckel query published a partial allowance");
+  }
   require(generativeqc_resource_minao_numeric_capacity_v1(molecule::ao_count(system), z, 3,
                                                           &minao_query_bytes) == 0 &&
               minao_query_bytes == exact_native_bytes,
@@ -572,8 +599,42 @@ void check_huckel_automatic_policy() {
           "Huckel invalid request overwrote output");
 }
 
+void check_sdk_diagnostic_lifetime() {
+  // The public C++ adapter must distinguish no execution from a recorded
+  // bounded fallback, and its copied diagnostic must survive owner teardown.
+  std::optional<generativeqc_initial_guess_diagnostic> saved;
+  {
+    generativeqc_context_descriptor context_descriptor{};
+    context_descriptor.struct_size = sizeof(context_descriptor);
+    context_descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    context_descriptor.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+    generativeqc::Context context(context_descriptor);
+    const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+    generativeqc::System system(context, atoms, "sto-3g");
+    auto method = generativeqc::default_method_descriptor("rhf");
+    method.precision_mode = GENERATIVEQC_PRECISION_FP64;
+    generativeqc_initial_guess_options guess{};
+    guess.struct_size = sizeof(guess);
+    guess.abi_version = GENERATIVEQC_ABI_VERSION;
+    guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    guess.maximum_numeric_bytes = 1;
+    method.initial_guess = &guess;
+    generativeqc::Calculation original(context, system, method);
+    require(!original.initial_guess_diagnostic(), "unexecuted SDK owner invented a diagnostic");
+    generativeqc::Calculation moved(std::move(original));
+    const auto result = moved.execute();
+    require(std::abs(result.energy - (-1.1167143251757508)) < 1e-8,
+            "bounded SDK fallback changed independent H2 energy");
+    saved = moved.initial_guess_diagnostic();
+  }
+  require(saved && saved->outcome == 4 && saved->preliminary_fock_builds == 0 &&
+              saved->preparation_numeric_capacity > 1,
+          "copied SDK diagnostic lost bounded fallback or owner lifetime");
+}
+
 int main() {
   try {
+    check_sdk_diagnostic_lifetime();
     check_automatic_policy();
     check_huckel_automatic_policy();
     check();

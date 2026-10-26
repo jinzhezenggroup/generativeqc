@@ -235,6 +235,10 @@ void print_usage(std::ostream& out) {
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --diis-history N         SCF history length (default: 8)\n"
+         "  --initial-guess none|hf|lda|minao|huckel  Explicit run-only cold start (default: "
+         "none)\n"
+         "  --initial-guess-max-iterations N  Preliminary iteration limit (native default: 32)\n"
+         "  --initial-guess-bytes N   Preliminary numeric cap; 0 selects native 256 MiB default\n"
          "  --precision fp64|auto    Native precision admission (default: fp64)\n"
          "  --density-fitting-threshold F --density-fitting-memory-bytes N\n"
          "  --correlation-memory-bytes N --mp2-denominator-threshold F\n"
@@ -436,6 +440,7 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.ccsd_denominator_threshold = options.ccsd_denominator_threshold;
   descriptor.ccsd_damping = options.ccsd_damping;
   descriptor.ccsd_level_shift = options.ccsd_level_shift;
+  descriptor.initial_guess = options.initial_guess.kind ? &options.initial_guess : nullptr;
   return descriptor;
 }
 
@@ -545,6 +550,29 @@ RunOptions parse_run(int argc, char** argv) {
       // The native descriptor treats zero as its eight-vector default, not disabled DIIS.
       // Resolve that sentinel before sharing controls with metadata-only planning.
       options.diis_history = parsed == 0 ? 8u : static_cast<std::uint32_t>(parsed);
+    } else if (option == "--initial-guess") {
+      options.initial_guess_name = lower(std::string(value()));
+      const auto& selected = options.initial_guess_name;
+      if (selected == "none")
+        options.initial_guess.kind = 0;
+      else if (selected == "hf")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HF;
+      else if (selected == "lda")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_LDA;
+      else if (selected == "minao")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+      else if (selected == "huckel")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+      else
+        throw UsageError("--initial-guess must be none, hf, lda, minao, or huckel");
+      options.initial_guess_explicit = true;
+    } else if (option == "--initial-guess-max-iterations") {
+      options.initial_guess.max_iterations =
+          parse_positive_u32(value(), "initial-guess iterations");
+      options.initial_guess_controls_explicit = true;
+    } else if (option == "--initial-guess-bytes") {
+      options.initial_guess.maximum_numeric_bytes = parse_bytes(value(), "initial-guess bytes");
+      options.initial_guess_controls_explicit = true;
     } else if (resources && option == "--batch") {
       options.batch = parse_positive_u32(value(), "batch");
       if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
@@ -690,6 +718,13 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) &&
+      std::string_view(argv[1]) != "run")
+    throw UsageError("initial-guess controls currently require the run command");
+  if (options.initial_guess_controls_explicit && !options.initial_guess.kind)
+    throw UsageError("initial-guess limits require --initial-guess hf, lda, minao, or huckel");
+  if (is_gfn2(options) && options.initial_guess.kind)
+    throw UsageError("initial-guess preparation requires a Gaussian HF/DFT method");
   if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit ||
                            options.density_fitting_explicit || options.auxiliary_basis_explicit))
     throw UsageError(
@@ -740,6 +775,27 @@ RunOptions parse_run(int argc, char** argv) {
 }
 
 std::string json_escape(std::string_view value);
+
+// Publish the native state-machine result, including bounded fallback, without
+// inferring preparation success from the target's convergence or iteration count.
+std::string_view initial_guess_outcome_name(std::uint32_t outcome) {
+  switch (outcome) {
+    case 0:
+      return "disabled";
+    case 1:
+      return "existing_density_bypass";
+    case 2:
+      return "used";
+    case 3:
+      return "preparation_failed";
+    case 4:
+      return "budget_skipped";
+    case 5:
+      return "target_failed_core_retry";
+    default:
+      return "unknown";
+  }
+}
 
 int run(RunOptions options) {
   const std::vector<generativeqc_atom> atoms = read_xyz(options);
@@ -832,6 +888,10 @@ int run(RunOptions options) {
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
+  const auto guess =
+      options.initial_guess.kind ? calculation.initial_guess_diagnostic() : std::nullopt;
+  if (options.initial_guess.kind && !guess)
+    throw std::runtime_error("native initial-guess execution did not publish its diagnostic");
 
   std::cout << std::setprecision(17);
   if (options.json) {
@@ -853,6 +913,20 @@ int run(RunOptions options) {
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
+    if (guess) {
+      std::cout << ",\"initial_guess\":{\"kind\":\"" << options.initial_guess_name
+                << "\",\"outcome\":\"" << initial_guess_outcome_name(guess->outcome)
+                << "\",\"outcome_code\":" << guess->outcome
+                << ",\"preliminary_iterations\":" << guess->preliminary_iterations
+                << ",\"preliminary_fock_builds\":" << guess->preliminary_fock_builds
+                << ",\"target_attempts\":" << guess->target_attempts
+                << ",\"discarded_target_iterations\":" << guess->discarded_target_iterations
+                << ",\"discarded_target_fock_builds\":" << guess->discarded_target_fock_builds
+                << ",\"preparation_numeric_capacity\":" << guess->preparation_numeric_capacity
+                << ",\"preparation_seconds\":" << guess->preparation_seconds
+                << ",\"work_counters_complete\":"
+                << (guess->work_counters_complete ? "true" : "false") << "}";
+    }
     if (result.forces) {
       std::cout << ",\"forces_hartree_per_bohr\":[";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {
@@ -881,6 +955,11 @@ int run(RunOptions options) {
     }
     std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
+    if (guess)
+      std::cout << "initial_guess: " << options.initial_guess_name << '\n'
+                << "initial_guess_outcome: " << initial_guess_outcome_name(guess->outcome) << '\n'
+                << "initial_guess_numeric_capacity_bytes: " << guess->preparation_numeric_capacity
+                << '\n';
     if (result.forces) {
       std::cout << "forces_hartree_per_bohr:\n";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {

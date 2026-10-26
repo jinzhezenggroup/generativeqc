@@ -177,6 +177,22 @@ int main() {
   const auto saturated = resolve_df_budget({huge,huge,huge,huge,12,true},roomy,0);
   if (!saturated.feasible || saturated.total_bytes > roomy.free_bytes) return 9;
   if (saturated.value_bytes+saturated.response_bytes != saturated.total_bytes) return 10;
+  // A shape-only target must cover every live/probe-failure base-policy result,
+  // including tiny, saturated and explicit envelopes. It is not a Fock fleet
+  // promise: source setup and method-owned promotion are checked separately.
+  for (const auto work : {DfBudgetWorkload{1,1,1,1,0,false},
+                         DfBudgetWorkload{768,3712,96,1,6,true},
+                         DfBudgetWorkload{huge,huge,huge,huge,12,true}}) {
+    const auto target = df_budget_targets(work);
+    const auto ceiling = std::max(target.workload_bytes, target.resident_bytes);
+    for (const auto resource : {DfResourceEnvelope{}, DfResourceEnvelope{1,2,true},
+                               DfResourceEnvelope{400ULL<<20,8ULL<<30,true}, roomy}) {
+      const auto resolved = resolve_df_budget(work,resource,0);
+      if (resolved.total_bytes > ceiling) return 11;
+      for (const std::size_t cap : {1ULL,17ULL,1ULL<<30})
+        if (resolve_df_budget(work,resource,cap).total_bytes != cap) return 12;
+    }
+  }
 }
 """)
     executable = tmp_path / "resident_budget"
@@ -561,6 +577,35 @@ int main() {
         1,768,3712,160,constrained.value_bytes,100ULL<<20,0,false);
     if (constrained_values.value_storage.rank_capacity == 160) return 39;
   } catch (const DensityFittingBudgetError&) {}
+  // Promotion may spend fractional headroom beyond the base policy. The
+  // native packed-plan ceiling must cover that increase for both occupied U
+  // and rank-zero J, across rebuild resource envelopes and source sizes.
+  for (const auto n : {std::size_t(1), std::size_t(96), std::size_t(768)}) {
+    const auto a = n == 768 ? 3712U : 256U;
+    for (const auto rank : {std::size_t(0), n / 2}) {
+      for (const auto source_bytes : {std::size_t(64ULL<<10), std::size_t(100ULL<<20)}) {
+        const DfBudgetWorkload workload{n,a,96,1,0,true};
+        const auto targets = df_budget_targets(workload);
+        const auto ceiling = std::max({targets.workload_bytes, targets.resident_bytes,
+            method_owned_df_resident_capacity(n,a,rank,source_bytes)});
+        for (const auto free : {1ULL,400ULL<<20,8ULL<<30,30ULL<<30,1ULL<<40}) {
+          const auto base = resolve_df_budget(workload,{free,std::max(free,32ULL<<30),true},0);
+          const auto promoted =
+              resolve_method_owned_df_resident_budget(base,n,a,rank,source_bytes,rank == 0);
+          if (promoted.total_bytes > ceiling) return 40;
+          if (promoted.value_bytes+promoted.response_bytes != promoted.total_bytes) return 41;
+        }
+      }
+    }
+  }
+  try {
+    (void)method_owned_df_resident_capacity(1,1,2,0);
+    return 42;
+  } catch (const std::invalid_argument&) {}
+  try {
+    (void)method_owned_df_resident_capacity(96,256,48,std::numeric_limits<std::size_t>::max());
+    return 43;
+  } catch (const std::overflow_error&) {}
   return 0;
 }
 """)

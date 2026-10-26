@@ -280,6 +280,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::Calculation::initial_guess_diagnostic": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "73b4976eba24fe64903c981e24093c92f0d86b8450711e08b9d6b71c0eee3a22",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::Calculation::operator=-copy": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
