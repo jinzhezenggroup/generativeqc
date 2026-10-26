@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "bytes": 111800,
+      "path": "original-bytes.xz",
+      "sha256": "c884aa24bb0ac13d42f71eb4b50f457c2fa30c99869cff3817eabe45ec31ec13"
+    },
+    {
+      "bytes": 46192,
+      "path": "originals.json",
+      "sha256": "fb9f12f65d26a9f08fceced2190c8ebbca2d1be475bba06ce2ef4358a2a6adbc"
+    },
+    {
+      "bytes": 2042,
+      "path": "summary.json",
+      "sha256": "4f3f6dc312b2b06a4efe29fefc11419a9fae900be5dc550ef66a6663082f8c52"
+    }
+  ],
+  "schema": "generativeqc.h100-pbe0-terminal-artifacts.v1"
+}
