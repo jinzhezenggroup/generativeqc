@@ -1,5 +1,23 @@
 # Default cold Direct r²SCAN-3c96 and six-endpoint regression
 
+## Integration with the explicit HF opt-in policy
+
+The measurements below belong to the frozen `42b2669` plus retained patch
+image, before the later HF containment integration. They remain historical
+receipts, not measurements of the integrated tree. In particular, the Direct
+HF96 speedup and the stronger failing default-request diagnostic used the
+then-default screened route. The integrated code requires explicit
+`GENERATIVEQC_HF_COLD_SCREENING=1` for that route and restores the incumbent
+ordinary-HF schedule/page profile when it is unset; these timings do not
+qualify the restored HF default or show that the optional route passes the
+stronger diagnostic. Raw samples, source patches, thresholds and failure
+records are unchanged.
+
+The r²SCAN pure-J changes and qualified one-electron/Schwarz/force scheduling
+remain separately reviewed. Host policy checks verify that this integration
+preserves the explicit HF opt-in gate; no new GPU timing or complete numerical
+qualification of the integrated tree is claimed.
+
 The final cold candidate uses the unchanged **#2786 default-grid framework**:
 complete construction, preparation, SCF, analytic forces and host export,
 followed by three calls from each engine's own frozen cold density. Three
@@ -123,8 +141,9 @@ match the actual build tree. The core library hash is
 Core/AOT hashes, exact commands, build allocation, cache version and shared
 cache statistics remain in `evidence.json.xz`. CUDA 12.9.1/GCC 13.3,
 Release/sm120, sccache 0.16.0 and one math thread were used. Scheduler device
-visibility is preserved. Publication adds documentation and retained evidence;
-production sources remain identical to the measured archive.
+visibility is preserved. The original publication added documentation and retained evidence while its
+production sources matched the measured archive. Later integration changes
+are described above; the archived source identity is not relabeled.
 
 Full build output, source archives and binaries remain in ignored artifacts
 at `n1:/data/jzzeng/cold-opt-20261025/`. No external release asset is required.

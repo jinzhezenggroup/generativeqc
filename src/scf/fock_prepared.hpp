@@ -52,6 +52,24 @@ struct FockOccupiedProjectionReservation {
   bool operator==(const FockOccupiedProjectionReservation&) const = default;
 };
 
+/** Pre-construction numeric capacities for the geometry-backed CUDA Fock
+ * owner. The supplied exact_device_bytes must come from the native Direct
+ * allocator's capacity query, or be zero when the strategy has no exact term.
+ * No GPU probe, source packing or integral evaluation is performed. Setup
+ * includes retained providers and the temporary DF source metric, but excludes
+ * one-electron/ECP export and opaque-provider allowances; enclosing method
+ * planners must compose those independent lifetimes before reserving a fleet.
+ */
+struct PreparedFockDeviceCapacity {
+  std::size_t retained_response_bytes{}, setup_bytes{};
+};
+
+[[nodiscard]] PreparedFockDeviceCapacity prepared_fock_device_capacity(
+    const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
+    std::size_t device_budget_bytes, std::size_t exact_device_bytes,
+    unsigned retained_fitted_derivative_order = 0,
+    FockOccupiedProjectionReservation projection_reservation = {});
+
 /** Immutable geometry/semantic owner for the common Fock provider views.
  * CPU numerical sources use the existing reference integrals; CUDA uses
  * the existing direct evaluator and source-backed DF tile generator. The

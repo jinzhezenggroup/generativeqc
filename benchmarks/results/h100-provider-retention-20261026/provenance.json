@@ -1,0 +1,96 @@
+{
+  "schema": "generativeqc.h100-provider-diagnostic-provenance.v1",
+  "scope": "one source/device/library-bound standalone vendor initialization; no numerical acceptance",
+  "raw_observation": {
+    "stored": "observation.json.xz",
+    "raw_bytes": 4886,
+    "raw_sha256": "d02983462d275634f47444b376a6f283e25bbb1ffde4be7fb60ecaa797d75d13"
+  },
+  "raw_provider_stdout": {
+    "stored": "provider-stdout.utf8.xz",
+    "raw_bytes": 5060,
+    "raw_sha256": "59068277be7928b889bab97e37343e6e2c20cc25b650a3f4132fa632517c887e",
+    "scope": "exact UTF8 encoding of actual transport stdout string; CRCRLF/trailing OK retained; decoded observation equality, not byte equality to separately saved observation"
+  },
+  "actual_transport": {
+    "source_container_bytes": 6591,
+    "source_container_sha256": "e92ae1ee3f1d21350525f3cf0eb3241a0d708dffd113aef22894f2c8958a9c89",
+    "returncode": 0,
+    "controller_elapsed_seconds": 5.632252200040966,
+    "command_LF_view_sha256": "8f6fa7456938193c990ae4fe31cb80930c408a1c54d76ac15f61a8add12cfbd5",
+    "scientific_requests": 0,
+    "retries": 0,
+    "client_stderr_bytes": 438,
+    "client_stderr_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+    "client_stderr_publication": "content omitted: private Windows permission/update advisories, no device diagnostic stderr claim"
+  },
+  "actual_inline_source": {
+    "raw_bytes": 7537,
+    "raw_sha256": "d470eb22bf3a7ecfed2078cded86bb2abdcf3a8cec0bcbbc98217d3ada99ffc5",
+    "effective_command_source_equals_saved_source_bytes": true,
+    "saved_command_raw_bytes": 8706,
+    "saved_command_raw_sha256": "2ba9fbb114fdd10b0ad5f7e6324b5a58cbc8e6b7239eb879872fafbacc4b4609",
+    "saved_command_CRLF_pairs": 114,
+    "explicit_readonly_command_LF_view_sha256": "8f6fa7456938193c990ae4fe31cb80930c408a1c54d76ac15f61a8add12cfbd5",
+    "actual_prefix_argv": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5s",
+      "160s",
+      "/opt/generativeqc-reuse/python/bin/python3.11",
+      "-I",
+      "-S",
+      "-B"
+    ],
+    "old_prepared_source_sha256": "be32f1394864115a4cf5c43877bdde7b3f48a92cec7be62cb7dd4877f199883a",
+    "note": "actual inline source d470 is distinct from the old prepared source be32 still referenced by its embedded permit.script_sha256; that stale prepared-file pointer is not used as actual inline identity"
+  },
+  "public_reproduction": {
+    "file": "reproduce.py",
+    "sha256": "45c0f2ed0584b1717fc05685e57c8ae7985bb8ab962361219e05af34242a79c0",
+    "actual_recorded_source": false,
+    "changes": [
+      "replace permit dictionary containing private coordination/authorization metadata with its sole consumed engineering delta-cap field; no API sequence change",
+      "public derivative docstring",
+      "refuse optimized Python before execution; original assertions retained",
+      "Ruff formatting/import ordering and local lint comments preserve original helper signatures/dict construction/failure catches"
+    ],
+    "actual_inline_source_contents_publication": "not published verbatim because embedded permit contains private coordination metadata; source and exact command-source hashes retained",
+    "one_off_static_derivative_check": "PASS: parsed imports and executable AST agree after the declared permit/docstring/optimized-Python-guard adaptations; no execution or library loading"
+  },
+  "source_allowance": {
+    "revision": "e1e244197411b58da42aa8a2cbce49014d7ed3ff",
+    "files": [
+      {
+        "path": "src/scf/cuda_rhf.cpp",
+        "Git_LF_sha256": "cf03140e3d0ae5ec6df0daf468941c338c2920292b313b890fe0eb47ebce7acf"
+      },
+      {
+        "path": "src/scf/cuda/reference_export.cuh",
+        "Git_LF_sha256": "e5715c720da9672f6bcbb03a08af00ea5621f9b1f2613ba86232bd52180658d0"
+      }
+    ],
+    "per_enabled_provider_bytes": 100663296,
+    "both_enabled_bytes": 201326592,
+    "semantics": "max(before-after,0) > allowance refuses; comparison source only, not GenerativeQC execution"
+  },
+  "locator": {
+    "stored": "library-locator-stdout.utf8.xz",
+    "source_container_bytes": 1927,
+    "source_container_sha256": "d7d549ce7fb53f7f73fd38c970e818956e81e3084f8252cacfe3f32b73789dca",
+    "stdout_raw_bytes": 1342,
+    "stdout_sha256": "6bcae7218287665db07625eebe5ba93d1ba4be31f10b4052c1304d192576a79e",
+    "returncode": 0,
+    "transitive_bytes_hashes": "UNAVAILABLE_NOT_HASHED"
+  },
+  "originals": "original local controller files retained unchanged; public extracts/redactions explicitly declared",
+  "qualification": {
+    "source_byte_binding": "independent replay checks retained data/identities only",
+    "new_owner_GPU_or_library_calls": 0,
+    "GenerativeQC_model_or_geometry_or_SCF_or_matrix_or_scientific_endpoint_calls": 0,
+    "historical_CBS_delta": "UNAVAILABLE_NOT_RECOVERED",
+    "physical_OOM": "NOT_PROVEN",
+    "provider_causal_allocation_peak_billing": "UNAVAILABLE",
+    "global_or_H100_capacity_policy": "NOT_QUALIFIED"
+  }
+}

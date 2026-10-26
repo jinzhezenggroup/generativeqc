@@ -1,4 +1,4 @@
-# HF/DFT README refresh after the DF screening-headroom repair
+# Historical HF/DFT README cohort after the DF screening-headroom repair
 
 [Direct figure](../../../assets/readme-direct-defaults.svg) · [DF figure](../../../assets/readme-df-defaults.svg) · [All timings](timings.md) · [Executed work](work.md) · [Conditions](conditions.md)
 
@@ -9,6 +9,21 @@ each have one fresh process per engine, one cold and three frozen-density warm
 calls. Both axes are linear, with latency starting at zero. The 2×4 layout,
 colors and cold/warm encoding are preserved.
 **All completed accuracy-failing points remain visible.** CCSD(T)/CBS is unchanged.
+
+## Integration scope
+
+This is a retained measurement of the frozen `46b916ac` source and its qualified
+incrementally linked library described below, not a benchmark of current
+master. Its then-default Direct HF route used screened proposals; current
+source preserves that route only with the explicit HF opt-in after the
+stronger force diagnostic failed. The original samples, linear figures,
+scientific gates and failed records are unchanged. These historical HF timings
+do not establish the restored ordinary-HF default's accuracy or speed. No
+integrated-image GPU rerun is claimed.
+
+The homepage labels these exact historical figures in the surrounding heading,
+alt text and caption. The linear SVG bytes and pinned-renderer replay remain
+unchanged; new current-source measurements should be a separate cohort.
 
 ## Observations
 

@@ -1,6 +1,6 @@
 {
   "id": "hf.cold-screening",
-  "classification": "already-default",
+  "classification": "negative-evidence",
   "controls": [
     "hf-runtime:GENERATIVEQC_HF_COLD_SCREENING"
   ],
@@ -13,8 +13,8 @@
     "src/scf/cuda/rhf_policy.cpp",
     "src/scf/cuda_rhf.cpp"
   ],
-  "rationale": "Large unseeded single-system restricted FP64 bounded quartet owners use up to eight screened FP64 proposal steps, then reset DIIS and converge the requested target under the original criteria. Both stages share the user iteration budget and complete work counters. Warm/imported, UHF, physical-reference, resident, mixed and incremental owners retain their existing route. Three fresh-process HF96 endpoint pairs pass the common #2786 gates and beat GPU4PySCF; tight-target independent force, lifecycle and allocation-refusal tests pass. The default force error against a tighter reference increases from 5.10e-8 to 3.02e-7 Eh/Bohr, within the common campaign gate; this difference and the failed extra 1e-7 diagnostic are retained.",
-  "revisit_condition": "Requalify independent energy/force, complete FP64 work, cold/warm endpoints, iteration caps, moved/imported owners and bounded allocation fallback before changing admission, cutoff, step limit or target convergence. The measured HF96 speedup does not establish universal performance. Never equate FP64 arithmetic counters with an unscreened preliminary operator.",
+  "rationale": "Only exact GENERATIVEQC_HF_COLD_SCREENING=1 selects the bounded cold FP64 proposal and larger reusable pages. Unset/0/none/empty/invalid values preserve the incumbent ordinary operator and 8M-task/1.5-GiB/one-sixteenth-memory page policy. The frozen pre-containment source improved HF96 timing but increased default force error from 5.10e-8 to 3.02e-7 Eh/Bohr, failing the unchanged additional 1e-7 diagnostic. Tighter requests qualified the optional route, not the failed default; all measured failures and historical source identities remain retained. The speedup is not claimed for restored defaults.",
+  "revisit_condition": "Before any default promotion, resolve the retained default-request force failure and requalify the bounded affected cold/warm case against its independent reference without changing thresholds. Preserve complete FP64 work, iteration allowances, physical-reference admission and page-refusal behavior. Historical tight-target results are not default qualification.",
   "evidence": [
     "docs:docs/developer/hf_force_finalization.md",
     ".agents/notes/implemented/performance/2026-10-26-cold-hf-screening-pages.md",

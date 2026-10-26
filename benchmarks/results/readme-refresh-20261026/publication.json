@@ -13,8 +13,8 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 4645,
-      "sha256": "2f9a5db3363c49eae27fa849708ae9d4fab6b1d2d57c3683f5db15c63e35d2a1"
+      "bytes": 5470,
+      "sha256": "83f82b4b5d0601fd41a724d635f4d7e63301b5cf0e17ede5f97fca7010f0c5ec"
     },
     {
       "path": "auxiliary-inputs.json.xz",
@@ -25,8 +25,8 @@
     {
       "path": "conditions.md",
       "role": "summary",
-      "bytes": 7757,
-      "sha256": "28a561411117e684d163a0f8c16e12afe36a7c7aadeaf0d4dd3bac4e5ad79643"
+      "bytes": 8088,
+      "sha256": "cde40b2e49bfe1a3df6a759ec170526a32735669556d7100898c23c22db5edbd"
     },
     {
       "path": "figures.json",

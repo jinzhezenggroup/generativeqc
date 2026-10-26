@@ -23,6 +23,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def explicit_cold_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests qualify the optional route, not the restored default."""
+    monkeypatch.setenv("GENERATIVEQC_HF_COLD_SCREENING", "1")
+
+
 @pytest.fixture(scope="module")
 def independent_targets() -> tuple[Any, Any, Any]:
     """Converge each original/displaced target without a native density."""
@@ -63,10 +69,11 @@ def independent_targets() -> tuple[Any, Any, Any]:
 
 
 def calculator(**options: Any) -> Any:
-    """Qualify the default algorithm at a tight independent force target.
+    """Qualify the opted-in algorithm at a tight independent force target.
 
-    Default-tolerance endpoint parity is separately retained by the #2786
-    campaign. These controls demand a tighter stationary solution without
+    Historical default-tolerance results (including the failed tighter force
+    diagnostic) remain in the #2786-derived capsule; they are not default
+    qualification for this opt-in containment. These controls demand a tighter stationary solution without
     changing the screened proposal or any observable acceptance threshold.
     """
     from generativeqc import Calculator
@@ -206,5 +213,34 @@ def test_energy_only_iteration_allowance(
                 assert item.precision["refinement_iterations"] > 0
             else:
                 assert not item.precision["strict_refinement_applied"]
+    finally:
+        calc.clear_cache()
+
+
+def test_default_request_retains_incumbent_operator(
+    independent_targets: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check the actual default request, not the tighter opt-in helper above."""
+    from generativeqc import Calculator
+
+    monkeypatch.delenv("GENERATIVEQC_HF_COLD_SCREENING", raising=False)
+    atoms, _, targets = independent_targets
+    calc = Calculator(
+        method="rhf",
+        basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        precision="fp64",
+    )
+    try:
+        with calc.prepare_batch([atoms], warm_start=True) as owner:
+            cold = owner.execute(strict=True).items[0]
+            check_target(cold, targets[0])
+            assert cold.precision["refinement_iterations"] == 0
+            owner.set_warm_start_updates(False)
+            warm = owner.execute(strict=True).items[0]
+            check_target(warm, targets[0])
+            assert warm.warm_start_used
+            assert warm.precision["refinement_iterations"] == 0
     finally:
         calc.clear_cache()
