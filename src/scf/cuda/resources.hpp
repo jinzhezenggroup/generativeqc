@@ -8,6 +8,7 @@
 
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
+#include "scf/provider_initialization.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -38,6 +39,10 @@ class CudaResources {
   }
 
   int device_id_{-1};
+  // Declared before handle/binding members so loaded objects stay pinned through
+  // teardown and every member destructor. This owns no additional CUDA context.
+  std::array<std::shared_ptr<void>, 4> provider_identity_pins_;
+  ResolvedProviderInitialization provider_initialization_;
   cudaStream_t stream_{};
   cublasHandle_t blas_{};
   std::optional<tensor::CudaMatrixProductBinding> matrix_binding_;
@@ -55,8 +60,9 @@ class CudaResources {
   /** Required canonical correction plane for restricted quartet references. */
   double* reference_fock_correction_{};
   std::size_t reference_fock_correction_bytes_{};
-  /** Numeric reference peak includes the observed provider allocations. */
+  /** Declared reference admission envelope, not a measured device/process peak. */
   std::size_t reference_peak_bytes_{};
+  /** Synchronized initialization free-memory delta, not an owned allocation. */
   std::size_t provider_retained_bytes_{};
 };
 

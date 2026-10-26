@@ -9,9 +9,9 @@ policy probes are replaced; no integrals or SCF iterations run.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from _cpp_source_support import (
@@ -19,6 +19,9 @@ from _cpp_source_support import (
     cpp_record_definition,
 )
 from _eigen_handle_test_support import empty_eigen_owner_units
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,11 +31,10 @@ def between(source: str, start: str, end: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("host C++ compiler and ccache required")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
+def capacity_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    compiler, cache = native_cxx.compiler, native_cxx.cache
     directory = tmp_path_factory.mktemp("correlated-reference-capacity")
     (directory / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t=void*; using cudaGraph_t=void*; "
@@ -342,6 +344,20 @@ void accounting() {
   p.topology.ecp_systems.resize(1); auto& ecp=p.topology.ecp_systems[0];
   charge(ecp.atoms); charge(ecp.ecp_terms); ecp.shells.resize(1); charge(ecp.shells[0].primitives);
   require(hf_cuda_retained_numeric_bytes(&p)==expected,"omitted retained host/provider capacity");
+  p.resources.provider_initialization_.mode=ProviderInitializationMode::explicit_qualified;
+  p.resources.provider_initialization_.allowance_bytes=4096;
+  require(hf_cuda_retained_numeric_bytes(&p)==expected+2048,"selected provider reservation omitted or doubled");
+  p.resources.provider_retained_bytes_=0;
+  require(hf_cuda_retained_numeric_bytes(&p)==expected+2048,"zero observed delta released selected capacity");
+  p.resources.provider_initialization_={};
+  p.resources.provider_retained_bytes_=2048;
+  auto first=options(), second=first;
+  require(same_hf_bucket_execution_options(first,second),"legacy execution identity changed");
+  first.reference_provider_initialization=ProviderInitializationRequest{
+      ProviderInitializationMode::explicit_qualified,128,{}};
+  require(!same_hf_bucket_execution_options(first,second),"changed provider request reused legacy handles");
+  second=first;second.reference_provider_initialization->allowance_bytes=129;
+  require(!same_hf_bucket_execution_options(first,second),"changed allowance reused old handles");
   require(hf_cuda_owned_device_bytes(&p)==device,"host bytes polluted device diagnostic");
   p.resources.solver_host_workspace_=nullptr;
   require(hf_cuda_retained_numeric_bytes(&p)==expected-1024,"unallocated host workspace charged");
