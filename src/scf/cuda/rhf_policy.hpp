@@ -313,7 +313,8 @@ bool psps_signature_bucketing_requested() noexcept;
 bool ppss_signature_bucketing_requested() noexcept;
 unsigned ppps_resident_block_threads_requested() noexcept;
 struct OneElectronValuePolicy {
-  /** 0: one AO pair per thread; 1: one shell pair per warp. */
+  /** 0: one AO pair per thread; 1: one shell pair per warp;
+   * 2/3: one AO pair per eight/32 nuclear-source lanes. */
   unsigned mapping{};
   /** An explicit diagnostic selector was supplied. */
   bool diagnostic_override{};

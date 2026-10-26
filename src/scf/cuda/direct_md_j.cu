@@ -287,7 +287,7 @@ __global__ void md_j_potential(MdJView md, std::size_t class_begin, std::size_t 
     return;
   }
   const double output_bound = md.maximum_bounds[bra.pair];
-  const double allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
+  const double allowance = __ddiv_rd(fmin(screening, md.density_error_cap), double(md.pair_count));
   for (auto primitive_index = md.class_offsets[KetAngular] + threadIdx.x;
        primitive_index < md.class_offsets[KetAngular + 1]; primitive_index += blockDim.x) {
     const auto ket = md.primitives[md.ordered_primitives[primitive_index]];

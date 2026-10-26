@@ -135,6 +135,18 @@ point accumulation error. No old per-AO integral mask is applied. Zero tolerance
 disables omission of nonzero terms. Nonrepresentable bound arithmetic retains
 work, and zero density produces zero source work.
 
+The private restricted pure-J proposal facade can instead use an absolute
+omission cap up to `min(proposal_screening, 1e-9)`. It copies the borrowed view
+for that invocation; the prepared owner retains its physical cap. The same
+outward bounds and cumulative-tail proof apply at the requested allowance.
+Hybrid exchange, unrestricted and nonprimitive recipes keep their existing
+caps. These provisional operators cannot certify a returned SCF state: the
+bounded KS proposal epoch ends with full-density physical energy and canonical
+checks using the original screening and stopping criteria. Warm replay and
+ordinary graph capture use the physical owner. Disable coarse proposals with
+`GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` to retain the original budget
+throughout the solve.
+
 Preparation sorts primitive bounds within angular classes. Every replay computes
 the current maximum source norm and five device-only active prefixes. A
 primitive remains in the prefix if it can contribute as either an output or a

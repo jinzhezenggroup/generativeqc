@@ -1,6 +1,6 @@
 {
   "id": "ks.incremental-proposals",
-  "classification": "retained-opt-in",
+  "classification": "already-default",
   "controls": [
     "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_PROPOSALS",
     "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING"
@@ -13,10 +13,12 @@
     "src/dft/ks_incremental_policy.hpp",
     "src/scf/cuda_fock_execution.cpp",
     "src/scf/cuda/direct_jk.cpp",
-    "src/scf/cuda/direct_coulomb.cpp"
+    "src/scf/cuda/direct_coulomb.cpp",
+    "src/scf/cuda/direct_md_j.hpp",
+    "src/scf/cuda/md_j_engine.cuh"
   ],
-  "rationale": "The global incremental Direct-J/K selector remains opt-in. Within a selected strict-FP64 exact Direct owner, bounded screened proposals inherit existing Standard model, spin, resource and complete final-proof admission without an additional functional whitelist. Zero or unset interval cannot create an unbounded screened chain: the cap is eight deltas. Proposal energies never count toward the mandatory full-density closing pair. Internally retained eligible same-geometry warm states use ordinary full-density proof; explicit seeds, changed geometry and clear restore cold policy. Explicit proposals=0 restores the ordinary screened cadence. Public resource budgets remain unsupported. The first eight eligible delta actions per solve may use 1e-9 screening through an explicit provisional MD-J/generated-K facade; the immutable target cutoff remains in force for full/warm/final/force consumers. Unsupported producers and exhausted proposal budgets retain the original cutoff; coarse_screening=0 disables only this heuristic.",
-  "revisit_condition": "Broaden provider, spin or proof capabilities only with independent cold/warm/displaced E/F validation. Preserve the global opt-in, finite screened epoch, fresh full closure and truthful work counters; sampled PBE0 speedups do not establish a universal functional or geometry performance guarantee.",
+  "rationale": "Within a qualified automatic cold or explicitly selected strict-FP64 exact Direct owner, bounded screened proposals inherit existing Standard model, spin, resource and complete final-proof admission without an additional functional whitelist. Zero or unset interval cannot create an unbounded screened chain: the cap is eight deltas. Proposal energies never count toward the mandatory full-density closing pair. Internally retained eligible same-geometry warm states use ordinary full-density proof; explicit seeds, changed geometry and clear restore cold policy. Explicit proposals=0 restores the ordinary screened cadence. Public resource budgets remain unsupported. The first eight eligible delta actions per solve may use 1e-9 screening through an explicit provisional MD-J/generated-K facade; the immutable target cutoff remains in force for full/warm/final/force consumers. Unsupported producers and exhausted proposal budgets retain the original cutoff; coarse_screening=0 disables only this heuristic. The restricted primitive pure-J proposal uses its requested cumulative omission allowance up to 1e-9 on an invocation-local view. The prepared physical view keeps its 1e-12 cap; complete full-density closure, ordinary graph capture and warm replay cannot inherit the temporary allowance. Hybrid exchange, unrestricted and nonprimitive recipes retain their existing caps.",
+  "revisit_condition": "Broaden provider, spin or proof capabilities only with independent cold/warm/displaced E/F validation. Preserve the qualified automatic/explicit admission, finite screened epoch, fresh full closure and truthful work counters; sampled PBE0 speedups do not establish a universal functional or geometry performance guarantee.",
   "evidence": [
     "docs:docs/user/ks_options.md",
     "note:.agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md",
@@ -24,6 +26,10 @@
     "tests/python/test_ks_incremental_controller.py",
     "tests/python/test_ks_incremental_convergence_cuda.py",
     "note:.agents/notes/implemented/performance/2026-10-23-provisional-delta-screening.md",
-    "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/coarse-screening.json"
+    "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/coarse-screening.json",
+    "tests/python/test_md_j_engine_runtime.py",
+    "docs:docs/developer/md_j_engine.md",
+    "benchmarks:benchmarks/results/cold-r2-defaults-20261026/README.md",
+    "note:.agents/notes/implemented/performance/2026-10-26-direct-r2-cold-defaults.md"
   ]
 }

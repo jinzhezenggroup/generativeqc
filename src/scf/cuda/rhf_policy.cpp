@@ -550,10 +550,20 @@ OneElectronValuePolicy resolve_one_electron_value_policy(
   OneElectronValuePolicy policy;
   const char* selection = std::getenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING");
   if (selection == nullptr) {
-    policy.mapping = provider.templated_shell_warp_one_electron ? 1U : 0U;
+    // Partition nuclear attraction across eight lanes using the same scalar
+    // policy. Providers without qualified subgroup operations retain threads.
+    policy.mapping = provider.templated_shell_warp_one_electron ? 2U : 0U;
     return policy;
   }
   policy.diagnostic_override = true;
+  if (std::strcmp(selection, "nucleus_8") == 0 || std::strcmp(selection, "nucleus_32") == 0) {
+    if (!provider.templated_shell_warp_one_electron) {
+      policy.capability_fallback = true;
+      return policy;
+    }
+    policy.mapping = std::strcmp(selection, "nucleus_8") == 0 ? 2U : 3U;
+    return policy;
+  }
   const bool requests_shell_warp =
       std::strcmp(selection, "1") == 0 || std::strcmp(selection, "shell_warp") == 0;
   if (requests_shell_warp && !provider.templated_shell_warp_one_electron) {

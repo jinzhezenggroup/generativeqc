@@ -72,7 +72,7 @@ def one_electron_program_inventory(
         "schema": "generativeqc.one_electron_values",
         "version": 1,
         "precision": "fp64",
-        "schedules": ["thread", "shell_warp"],
+        "schedules": ["thread", "shell_warp", "nucleus_8", "nucleus_32"],
         "programs": [
             integral_to_payload(build_one_electron_value_ir(family, angular))
             for family in ("overlap", "kinetic", "nuclear_attraction")
