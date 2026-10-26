@@ -84,6 +84,8 @@ def native_probe(
     direct = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     api = (ROOT / "src/api/c_api_resources.cpp").read_text()
     quadrature = (ROOT / "src/dft/cuda_quadrature.cu").read_text()
+    optional_start = ks.index("    const bool optional_xc_admitted =")
+    optional_end = ks.index("    // Maps share one arena", optional_start)
     start = ks.index("        const auto point_batch_size =")
     end = ks.index("        prepared_ao_work =", start)
     source = r"""
@@ -223,7 +225,9 @@ std::size_t prepare_optional(std::vector<void*>& allocations,
   dft::CudaKsResources resource;
   using dft::sum;
   using dft::product;
+  const int device = 0;
 """
+        + ks[optional_start:optional_end]
         + ks[start:end]
         + r"""
   if(selected_tiles) *selected_tiles=owner.batch.tiles;
@@ -269,6 +273,22 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
   for (auto* arena:allocations) assert(resource_cuda_free(arena)==cudaSuccess);
   if (ledger) assert(ledger->live==0);
   active_device_resource_ledger.reset();
+}
+extern "C" void promised_capacity(std::size_t headroom,std::uint64_t* result) {
+  auto ledger=std::make_shared<runtime::DeviceResourceLedger>();
+  constexpr std::size_t mandatory=1024;
+  ledger->limit=mandatory+headroom;
+  runtime::DeviceCapacityReservation reservation(ledger,mandatory);
+  runtime::DeviceCapacityScope scope(reservation);
+  std::vector<void*> allocations;
+  std::size_t selected=1;
+  result[0]=prepare_optional(allocations,nullptr,&selected);
+  result[1]=selected;
+  assert(runtime::active_device_capacity_promise);
+  assert(ledger->capacity_reserved==mandatory);
+  assert(ledger->live<=headroom && ledger->rejected==0);
+  for(auto* arena:allocations) assert(runtime::resource_cuda_free(arena)==cudaSuccess);
+  assert(ledger->live==0 && ledger->capacity_reserved==mandatory);
 }
 extern "C" void large_capacity(std::size_t limit,std::uint64_t* result) {
   auto layout=dft::cuda_xc_layout_shape(96,4000,1088,1078336,1,false,256);
@@ -348,6 +368,7 @@ extern "C" int grid_shapes(std::size_t points,std::size_t spins,std::size_t func
         r"""
 extern "C" int active_policy(std::size_t spins, bool host_unfused, std::uint64_t* out) {
   using namespace dft;
+  const int device = 0;
   try {
     const auto xc_layout=cuda_xc_layout_shape(2,6,2,49152,1,spins==2,256,
                                              false,CudaXcAoPrecision::Fp64,1,1,true);
@@ -780,3 +801,22 @@ def test_large_meta_gga_point_batches_keep_explicit_caps_and_allocation_fallback
     assert capacity(1) == (0, 1)
     monkeypatch.setenv(CONTROLS[1], "0")
     assert capacity() == (0, 1)
+
+
+@pytest.mark.parametrize("headroom", [0, 32 << 20])
+def test_point_batch_does_not_spend_reserved_capacity(
+    native_probe: Any, monkeypatch: pytest.MonkeyPatch, headroom: int
+) -> None:
+    for name in CONTROLS:
+        monkeypatch.delenv(name, raising=False)
+    native_probe.promised_capacity.argtypes = [
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    native_probe.promised_capacity.restype = None
+    result = (ctypes.c_uint64 * 2)()
+    native_probe.promised_capacity(headroom, result)
+    if headroom:
+        assert 0 < result[0] <= headroom and result[1] > 1
+    else:
+        assert tuple(result) == (0, 1)
