@@ -221,6 +221,18 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
 
+For an explicitly bounded CUDA `run`, `--owned-device-bytes N` selects native
+prepared admission for instrumented numeric buffers and retained provider
+reservations, including preparation and execution. It is **not** a total GPU,
+process RSS or complete-plan limit. A successful JSON result adds
+`owned_device_resources` with the measured instrumented charges, requested bytes
+(or `null` if unavailable), and `complete_plan_peak: false`. An insufficient cap
+or unsupported CPU/backend request fails without retrying an unbudgeted solve.
+This run-only option does not change the `resources --device-bytes` dry-run
+budget or the response-specific Hessian/HVP budgets. See the
+[native admission contract](../maintainer/resource_planning.md#native-prepared-admission-lifetime)
+for inventory, lifetime and observation boundaries.
+
 For ordinary Gaussian HF/KS methods, `run` and geometry `optimize` now use
 the same SCF stopping defaults as Python `Calculator`: 100 iterations,
 energy change `1e-10` Hartree and density RMS `1e-8`. The `resources`
