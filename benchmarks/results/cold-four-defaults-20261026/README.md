@@ -64,10 +64,45 @@ the occupied-response suite also passes Compute Sanitizer memcheck.
 WB cold/warm, energy-only, finite-difference and moved-force checks pass for
 RKS H2/STO-3G, UKS H3/STO-3G and RKS water/def2-SVP while compiler discovery,
 source emission and reduction-IR generation are forbidden. All 28 stationary
-packages pass native-cubin auditing. Three larger-basis WB energy checks remain
-failures at the unchanged 1e-8 Eh threshold: water/def2-TZVP (2.50e-8), local
+packages pass native-cubin auditing. Three larger-basis WB energy checks failed
+the original run at the unchanged 1e-8 Eh threshold: water/def2-TZVP (2.50e-8), local
 def2-TZVPD (2.56e-8), and NH2 UKS/def2-TZVP (8.05e-8). Each was reproduced on
 the frozen baseline. These are not claimed as passing checks.
+
+### VV10 reference-domain follow-up
+
+The three failures came from an outdated reference configuration. PR #2652
+changed the native molecular VV10 density domain to rho >= 1e-10, but this live
+test still forced GPU4PySCF's SCF and gradient masks to rho >= 1e-8. The test now
+uses the declared molecular density threshold for both cold and displaced
+reference calls and records it with the numerical results. The independent
+engine, native production code, grid and acceptance thresholds are unchanged.
+
+Slurm job 14542 on n1/RTX 5090 replays the original frozen `wb-aot2` image with
+the PR-head test: the old reference mask reproduces **3 failures**, and the
+matched mask gives **3 passes**. Both runs use the identical native library.
+
+| Case | Original energy error, Eh | Matched energy error, Eh | Matched max force error, Eh/Bohr |
+| --- | ---: | ---: | ---: |
+| RKS water/def2-TZVP | 2.50e-8 | 1.81e-10 | 4.83e-10 |
+| RKS water/local def2-TZVPD | 2.56e-8 | 4.47e-10 | 1.01e-9 |
+| UKS NH2/def2-TZVP | 8.05e-8 | 4.88e-11 | 4.15e-9 |
+
+All cold/warm, energy-only, translation, three-step finite-difference and moved
+force checks pass with compiler discovery/emission still forbidden. Across
+moved geometries the maximum energy/force errors are 4.68e-10 Eh and 4.72e-9
+Eh/Bohr. The unchanged gates are 1e-8 Eh and 1e-7 Eh/Bohr. Nine host checks cover
+the density boundary, matched response grids and failure-safe reference-mask
+restoration; Ruff lint/format and diff whitespace checks pass.
+
+[`wb-domain-followup.json.xz`](wb-domain-followup.json.xz) retains both outcomes,
+complete numerical receipts, allocation, package versions, binary/test hashes
+and the runner. Raw logs remain at `n1:/data/jzzeng/wb-domain-2795-20261026/`.
+This is a controlled replay of the original acceptance image, not a new
+exact-head native rebuild or performance campaign. The original failure
+receipts and `summary.json.xz` are retained unchanged; this follow-up explains
+and resolves those three reference-domain failures without claiming broader
+WB domain qualification or changing the separate DF HF96 fitting limitation.
 
 ## Provenance and reproduction
 
