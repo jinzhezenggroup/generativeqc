@@ -14,17 +14,17 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SourceIdentityTests(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         with contextlib.redirect_stdout(io.StringIO()):
             cls.replay = runpy.run_path(
                 str(ROOT / "benchmarks/results/xc-bounded-cross-20261024/reproduce.py")
             )
 
-    def test_complete_replay(self):
+    def test_complete_replay(self) -> None:
         self.assertEqual(self.replay["report"]["qualified_calls"], 352)
         self.assertEqual(self.replay["report"]["records"], 108)
 
-    def test_rehashed_wrong_identity(self):
+    def test_rehashed_wrong_identity(self) -> None:
         for arm, field, value in (
             ("baseline", "revision", "0" * 40),
             ("baseline", "tree", "0" * 40),
@@ -48,7 +48,7 @@ class SourceIdentityTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     self.replay["verify_source_identities"](p)
 
-    def test_changed_difference_hash(self):
+    def test_changed_difference_hash(self) -> None:
         p = copy.deepcopy(self.replay["provenance"])
         changes = p["source_identities"]["guarded"]["changed_files"]
         changes[next(iter(changes))]["guarded_sha256"] = "0" * 64

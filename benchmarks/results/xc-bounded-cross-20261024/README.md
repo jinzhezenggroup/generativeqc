@@ -98,3 +98,7 @@ identities and the retained pre-build verification receipts, not a fresh tree
 enumeration. Build, driver, binary, endpoint and failure records are unchanged.
 The unused historical commit-message text is omitted; it contained no patch,
 measurement or failure data. No full-manifest restoration is promised.
+
+Downstream DF-charge and fitted-range checks retain a 30-path baseline projection (29 changed paths plus the endpoint driver)
+and the digests of nine original source deltas. This preserves their complete
+changed-path and file-count checks without restoring the whole repository list.

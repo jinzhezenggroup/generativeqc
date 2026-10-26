@@ -47,7 +47,7 @@ class PopulationTests(unittest.TestCase):
                     ).encode()
                 ).hexdigest()
                 try:
-                    REPLAY.read = lambda name: (
+                    REPLAY.read = lambda name, provenance=provenance: (
                         provenance if name == "provenance.json.xz" else original(name)
                     )
                     with self.assertRaises(AssertionError):
