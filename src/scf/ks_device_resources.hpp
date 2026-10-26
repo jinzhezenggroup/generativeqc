@@ -19,6 +19,10 @@ struct CudaKsDeviceResourceItem {
   std::uint64_t state, xc, coulomb, quadrature_setup, matrix_provider, ecp_workspace;
   bool device_fused_xc;
   std::uint64_t stationary_minimum, stationary_cached;
+  /** Complete Fock construction phase, including an initial DF source metric
+   * and any retained Direct provider. Zero preserves the Direct-only v1 ABI.
+   * The coulomb slot must separately bound retained Fock/response capacity. */
+  std::uint64_t fock_setup{};
 };
 
 namespace cuda_ks_capacity {
@@ -52,14 +56,14 @@ inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
     throw std::invalid_argument("invalid CUDA KS device resource shape");
   for (const auto value :
        {shape.state, shape.xc, shape.coulomb, shape.quadrature_setup, shape.matrix_provider,
-        shape.ecp_workspace, shape.stationary_minimum, shape.stationary_cached})
+        shape.ecp_workspace, shape.stationary_minimum, shape.stationary_cached, shape.fock_setup})
     static_cast<void>(sum({value}));
   const auto shell_pairs = product(shape.shells, sum({shape.shells, 1})) / 2;
   const auto one_electron =
       product(64, sum({1, shape.atoms, shape.shells, shape.primitives, shape.cartesian_aos,
                        shell_pairs, product(shape.cartesian_aos, shape.cartesian_aos)}));
-  const auto setup =
-      std::max({one_electron, shape.ecp_workspace, sum({shape.coulomb, shape.quadrature_setup})});
+  const auto setup = std::max({one_electron, shape.ecp_workspace, shape.fock_setup,
+                               sum({shape.coulomb, shape.quadrature_setup})});
   return {shape.state,
           shape.device_fused_xc ? shape.xc : 0,
           shape.coulomb,

@@ -1248,6 +1248,40 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
   }
 }
 
+static std::size_t method_owned_df_response_floor(std::size_t nbf, std::size_t naux,
+                                                  std::size_t restricted_rank,
+                                                  std::size_t source_device_bytes) {
+  const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
+  // The generated singleton response stages four metric matrices, density/AO
+  // temporaries, two all-Q occupied projections, and a bounded 64-Q W panel.
+  // It does not retain 3*Natoms copies of the complete derivative tensors.
+  // Metadata has different packing from the value source; keep two copies and
+  // a conservative fixed margin. Native response allocation still enforces
+  // the resulting cap, including optional diagnostic allocations.
+  return df_budget_ceiling(64.0L * 1024 * 1024 + 2.0L * source_device_bytes +
+                           sizeof(double) *
+                               (4.0L * auxiliary_count * auxiliary_count +
+                                69.0L * basis_count * basis_count + 2.0L * auxiliary_count +
+                                2.0L * auxiliary_count * occupied_rank * occupied_rank));
+}
+
+std::size_t method_owned_df_resident_capacity(std::size_t nbf, std::size_t naux,
+                                              std::size_t restricted_rank,
+                                              std::size_t source_device_bytes) {
+  if (restricted_rank > nbf)
+    throw std::invalid_argument("DF resident capacity rank exceeds the orbital dimension");
+  // Zero is the planner's uncapped sizing query, not a fabricated live memory
+  // envelope. Its normal panel covers at least the minimum resident B/U plan
+  // sought by promotion's bisection, including optional-U fallback boundaries.
+  const auto values = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, 0,
+                                                        source_device_bytes, 0, false);
+  const auto response =
+      method_owned_df_response_floor(nbf, naux, restricted_rank, source_device_bytes);
+  if (values.peak_workspace_bytes > std::numeric_limits<std::size_t>::max() - response)
+    throw std::overflow_error("DF resident value/response capacity overflows size_t");
+  return values.peak_workspace_bytes + response;
+}
+
 DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget& budget,
                                                          std::size_t nbf, std::size_t naux,
                                                          std::size_t restricted_rank,
@@ -1257,18 +1291,8 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       budget.response_override_bytes || !budget.response_bytes ||
       (!restricted_rank && !allow_zero_rank_coulomb) || restricted_rank > nbf)
     return budget;
-  const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
-  // The generated singleton response stages four metric matrices, density/AO
-  // temporaries, two all-Q occupied projections, and a bounded 64-Q W panel.
-  // It does not retain 3*Natoms copies of the complete derivative tensors.
-  // Metadata has different packing from the value source; keep two copies and
-  // a conservative fixed margin. Native response allocation still enforces
-  // the resulting cap, including optional diagnostic allocations.
-  const auto response_floor = df_budget_ceiling(
-      64.0L * 1024 * 1024 + 2.0L * source_device_bytes +
-      sizeof(double) *
-          (4.0L * auxiliary_count * auxiliary_count + 69.0L * basis_count * basis_count +
-           2.0L * auxiliary_count + 2.0L * auxiliary_count * occupied_rank * occupied_rank));
+  const auto response_floor =
+      method_owned_df_response_floor(nbf, naux, restricted_rank, source_device_bytes);
   // Prefer the existing response margin. A rank-zero Coulomb consumer may
   // instead use its complete shape-derived response floor if that is what
   // admits a resident value owner within this unchanged total envelope.

@@ -1,0 +1,251 @@
+{
+  "source": "ffc6537b15b7df10240a1b9bb94f6f6190715408",
+  "baseline": "40c31f7bd6130903ade0cd87ef60fb06c56d9d8b",
+  "default_cli_comparisons": {
+    "cpu": [
+      {
+        "order": "ABBA",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.40770216239616275,
+          "B": 0.3980151987634599
+        },
+        "ratio": 0.9762400974874152,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.011351179331541061,
+          "B": 0.010475156363099813
+        },
+        "ratio": 0.9228253785043217,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 0.3888345705345273,
+          "B": 0.38896832754835486
+        },
+        "ratio": 1.0003439946547028,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 0.6008325084112585,
+          "B": 0.6014049286022782
+        },
+        "ratio": 1.0009527117507895,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.40715030347928405,
+          "B": 0.39782143104821444
+        },
+        "ratio": 0.9770873990480907,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 0.011296396143734455,
+          "B": 0.010628246236592531
+        },
+        "ratio": 0.9408528261013126,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 0.38918379275128245,
+          "B": 0.38936991710215807
+        },
+        "ratio": 1.000478242810575,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 0.6006503608077765,
+          "B": 0.6003632824867964
+        },
+        "ratio": 0.9995220541937343,
+        "passed": true
+      }
+    ],
+    "cuda": [
+      {
+        "order": "ABBA",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.866848124191165,
+          "B": 1.8869812488555908
+        },
+        "ratio": 1.0107845541388905,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.0712310168892145,
+          "B": 1.0921401306986809
+        },
+        "ratio": 1.0195187718426835,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 1.7944025248289108,
+          "B": 1.7627760488539934
+        },
+        "ratio": 0.9823749267305936,
+        "passed": true
+      },
+      {
+        "order": "ABBA",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 2.435229344293475,
+          "B": 2.3469468895345926
+        },
+        "ratio": 0.9637477862338688,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.8404418472200632,
+          "B": 1.817797962576151
+        },
+        "ratio": 0.9876964954485711,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "df-rhf-water-energy-force",
+        "median_seconds": {
+          "A": 1.061243761330843,
+          "B": 1.0665307603776455
+        },
+        "ratio": 1.0049818894013307,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy",
+        "median_seconds": {
+          "A": 1.7682295124977827,
+          "B": 1.756349716335535
+        },
+        "ratio": 0.9932815304357937,
+        "passed": true
+      },
+      {
+        "order": "BAAB",
+        "case": "pbe-water-energy-force",
+        "median_seconds": {
+          "A": 2.318965557962656,
+          "B": 2.2721752375364304
+        },
+        "ratio": 0.9798227618062022,
+        "passed": true
+      }
+    ]
+  },
+  "numerical": {
+    "cpu_endpoint_energy": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "rms_error": 0.0,
+      "shape": [
+        672
+      ]
+    },
+    "cpu_endpoint_forces": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "rms_error": 0.0,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "cuda_endpoint_energy": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.04263256414560601,
+      "rms_error": 7.944109290391274e-15,
+      "shape": [
+        672
+      ]
+    },
+    "cuda_endpoint_forces": {
+      "passed": true,
+      "atol": 1e-12,
+      "rtol": 0,
+      "max_absolute_error": 1.0429157537572564e-14,
+      "max_scaled_error": 0.010429157537572564,
+      "rms_error": 1.024214291353086e-15,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "installed_energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 2.1316282072803006e-14,
+      "max_scaled_error": 2.1316282072803006e-06,
+      "rms_error": 1.8875398912922532e-14,
+      "shape": [
+        26
+      ]
+    },
+    "installed_forces": {
+      "passed": true,
+      "atol": 1e-06,
+      "rtol": 0,
+      "max_absolute_error": 3.020903382999762e-08,
+      "max_scaled_error": 0.030209033829997622,
+      "rms_error": 1.0255187939891318e-08,
+      "shape": [
+        26,
+        6
+      ]
+    }
+  },
+  "timed_endpoints": 1344,
+  "timed_force_publications": 1008,
+  "independent_installed_cli_publications": 26,
+  "cpu_ctests": 119,
+  "targeted_python_tests": 24,
+  "python_subtests": 25,
+  "gpu_job": 14434,
+  "sdk_memcheck_errors": 0
+}

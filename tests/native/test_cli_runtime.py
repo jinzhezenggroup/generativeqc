@@ -76,6 +76,127 @@ class RuntimeTests(unittest.TestCase):
             *arguments,
         )
 
+    def test_explicit_native_initial_guesses_and_budget_boundary(self) -> None:
+        """Exercise installed-style execution, native fallback, and oracle E/F."""
+        arguments = (
+            "run",
+            str(SOURCE / "tests/data/h2_bohr.xyz"),
+            "--units",
+            "bohr",
+            "--method",
+            "rhf",
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+            "--json",
+        )
+        # Independent PySCF/STO-3G H2 at 1.4 bohr; signs are physical forces.
+        expected_energy = -1.1167143251757508
+        for kind in ("none", "hf", "lda", "minao", "huckel"):
+            with self.subTest(kind=kind):
+                result = self.cli(*arguments, "--initial-guess", kind)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertAlmostEqual(
+                    payload["energy_hartree"], expected_energy, delta=1e-8
+                )
+                if kind == "none":
+                    self.assertNotIn("initial_guess", payload)
+                else:
+                    diagnostic = payload["initial_guess"]
+                    self.assertEqual(diagnostic["kind"], kind)
+                    self.assertEqual(diagnostic["outcome"], "used")
+                    self.assertTrue(diagnostic["work_counters_complete"])
+                    self.assertEqual(diagnostic["target_attempts"], 1)
+                    self.assertGreater(diagnostic["preparation_numeric_capacity"], 0)
+                if kind == "huckel":
+                    capacity = payload["initial_guess"]["preparation_numeric_capacity"]
+        for cap, outcome in (
+            (0, "used"),
+            (capacity, "used"),
+            (capacity - 1, "budget_skipped"),
+        ):
+            with self.subTest(cap=cap):
+                result = self.cli(
+                    *arguments,
+                    "--initial-guess",
+                    "huckel",
+                    "--initial-guess-bytes",
+                    str(cap),
+                    "--forces",
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertAlmostEqual(
+                    payload["energy_hartree"], expected_energy, delta=1e-8
+                )
+                self.assertAlmostEqual(
+                    payload["forces_hartree_per_bohr"][0][2],
+                    0.028454057162506152,
+                    delta=1e-6,
+                )
+                self.assertAlmostEqual(
+                    payload["forces_hartree_per_bohr"][1][2],
+                    -0.02845405716250593,
+                    delta=1e-6,
+                )
+                diagnostic = payload["initial_guess"]
+                self.assertEqual(diagnostic["outcome"], outcome)
+                self.assertEqual(diagnostic["preparation_numeric_capacity"], capacity)
+                if outcome == "budget_skipped":
+                    self.assertEqual(diagnostic["preliminary_fock_builds"], 0)
+
+    def test_preliminary_iteration_limit_preserves_target_fallback(self) -> None:
+        """Exhausting atomic preparation reports its failure and still solves the target."""
+        molecule = self.root / "water.xyz"
+        molecule.write_text(
+            "3\nwater in bohr\nO 0 0 0\n"
+            "H 0 -1.43233673 1.10715266\nH 0 1.43233673 1.10715266\n"
+        )
+        args = ("run", str(molecule), "--units", "bohr", "--method", "rhf", "--json")
+        core = self.cli(*args)
+        bounded = self.cli(
+            *args, "--initial-guess", "huckel", "--initial-guess-max-iterations", "1"
+        )
+        self.assertEqual(core.returncode, 0, core.stdout + core.stderr)
+        self.assertEqual(bounded.returncode, 0, bounded.stdout + bounded.stderr)
+        expected, actual = json.loads(core.stdout), json.loads(bounded.stdout)
+        self.assertAlmostEqual(
+            actual["energy_hartree"], expected["energy_hartree"], delta=1e-10
+        )
+        self.assertEqual(actual["initial_guess"]["outcome"], "preparation_failed")
+        self.assertGreater(actual["initial_guess"]["preliminary_fock_builds"], 0)
+
+    def test_initial_guess_invalid_and_unsupported_choices(self) -> None:
+        """A requested policy must fail explicitly rather than be ignored."""
+        input_path = str(SOURCE / "tests/data/h2_bohr.xyz")
+        for command, flags in (
+            ("run", ("--initial-guess", "unknown")),
+            ("run", ("--initial-guess-bytes", "1")),
+            ("run", ("--initial-guess", "none", "--initial-guess-bytes", "1")),
+            ("run", ("--initial-guess", "huckel", "--initial-guess-bytes", "-1")),
+            (
+                "run",
+                ("--initial-guess", "huckel", "--initial-guess-max-iterations", "0"),
+            ),
+            ("resources", ("--initial-guess", "huckel")),
+            ("optimize", ("--initial-guess", "huckel")),
+            ("hessian", ("--initial-guess", "huckel")),
+            ("run", ("--method", "gfn2-xtb", "--initial-guess", "huckel")),
+            ("run", ("--method", "mp2", "--initial-guess", "huckel")),
+            (
+                "run",
+                ("--method", "uhf", "--multiplicity", "3", "--initial-guess", "huckel"),
+            ),
+        ):
+            with self.subTest(command=command, flags=flags):
+                result = self.cli(
+                    command, input_path, "--units", "bohr", "--method", "rhf", *flags
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn("energy_hartree", result.stdout)
+
     def bundle(self) -> Path:
         directory = self.root / "bundle"
         directory.mkdir()
