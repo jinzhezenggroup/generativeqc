@@ -2571,6 +2571,69 @@ typedef struct generativeqc_basis_projection_output_v1 {
   double metric_orthogonality_error, electron_trace, metric_idempotency_error;
 } generativeqc_basis_projection_output_v1;
 
+/** System-to-system HF density transfer policy. This operation prepares the
+ * overlap metrics itself and projects every RHF/UHF spin channel natively.
+ * maximum_host_bytes is required; prepared-fleet storage is a separate budget. */
+typedef struct generativeqc_hf_system_projection_controls_v1 {
+  uint32_t struct_size, abi_version, unrestricted, reserved;
+  uint64_t maximum_ao, maximum_host_bytes;
+  double relative_threshold, validation_tolerance, maximum_residual;
+} generativeqc_hf_system_projection_controls_v1;
+
+/** Metadata-only shape and conservative live numeric-matrix capacity. */
+typedef struct generativeqc_hf_system_projection_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t source_ao, target_ao, spin_count, alpha_occupied, beta_occupied;
+  uint64_t source_density_count, target_density_count, numeric_workspace_bytes;
+} generativeqc_hf_system_projection_capacity_v1;
+
+/** @native-contract generativeqc_hf_system_projection_query_v1
+ * @behavior Validate the system-to-system HF transfer domain and query matrix capacity.
+ * @inputs Live all-electron source/target systems with identical ordered nuclei, geometry,
+ * charge and spin. Initialize versioned controls/output; unrestricted is 0 or 1, reserved
+ * is zero, maximum_ao and maximum_host_bytes are positive. Policy thresholds follow the
+ * existing occupied projection contract. Input and output descriptors do not overlap.
+ * @outputs Publishes AO/spin dimensions, occupations, density counts and numeric byte bound.
+ * A below-bound host budget does not suppress the metadata-only capacity report.
+ * @errors Invalid metadata/overflow or ABI mismatch preserve the output. Unsupported ECP
+ * or beyond-g domains return NOT_IMPLEMENTED; mismatched model identity is INVALID_ARGUMENT.
+ * @lifetime Systems and descriptors are borrowed for the call; nothing is retained.
+ * @execution Synchronous metadata-only query without overlap/eigen work or GPU access.
+ * Matrix capacity excludes caller buffers, prepared fleets, metadata and opaque overhead.
+ * @units Coordinates are Bohr, occupations are electron counts and capacity is bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_projection_query_v1(
+    const generativeqc_system* target, const generativeqc_system* source,
+    const generativeqc_hf_system_projection_controls_v1* controls,
+    generativeqc_hf_system_projection_capacity_v1* output);
+
+/** @native-contract generativeqc_hf_system_project_cpu_v1
+ * @behavior Own three overlap matrices and all spin projections in one native scope,
+ * reusing existing overlap and occupied-projection mathematics. This proposes a seed only.
+ * @inputs Explicit CPU context, query-compatible source/target systems and controls, finite
+ * spin-major source density with the exact queried count, and one versioned projection
+ * output per spin. Each output has target_AO-square density storage and target_AO by occupied
+ * coefficient storage. Written ranges are disjoint from all inputs/descriptors and each other.
+ * Empty-spin coefficients may be NULL; output descriptor count must equal spin_count.
+ * @outputs Publishes every spin's detached density, coefficients and invariant diagnostics
+ * only after all channels succeed; output tails and source density remain unchanged.
+ * @errors Invalid/aliased/nonfinite/count errors return INVALID_ARGUMENT; insufficient
+ * numeric budget returns OUT_OF_MEMORY before overlap work. Unsupported contexts/domains
+ * return NOT_IMPLEMENTED. Any failure preserves all output records/buffers; no Python retry.
+ * @lifetime Synchronous borrowed inputs and caller-owned outputs; all native scratch closes
+ * before return. Serialize operations and destruction sharing the context or system owners.
+ * @execution Explicit CPU FP64 overlap/projection; no SCF, device probe or hidden GPU transfer.
+ * The numeric bound excludes caller buffers, prepared fleets and opaque provider overhead.
+ * @units Densities and coefficients follow each system's public AO normalization; occupation
+ * and electron trace count electrons, diagnostic residuals are dimensionless, capacity is bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_project_cpu_v1(
+    generativeqc_context* context, const generativeqc_system* target,
+    const generativeqc_system* source,
+    const generativeqc_hf_system_projection_controls_v1* controls, const double* density,
+    uint64_t density_count, generativeqc_basis_projection_output_v1* outputs,
+    uint64_t output_count);
+
 /** @native-contract generativeqc_basis_projection_query_v1
  * @behavior Query the shared occupied transport's conservative numeric capacity, without
  * admitting a target calculation or inspecting numerical inputs.

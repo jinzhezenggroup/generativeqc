@@ -48,6 +48,17 @@ run = run_progressive_hf(plan, source, target, atoms)
 print(run.target.energy, run.verification.status)
 ```
 
+CPU all-electron RHF/UHF initialization with the built-in projection policy uses
+one native system-projection owner for overlap preparation and all spin channels.
+It validates identical ordered nuclei, geometry and electron/spin state, then
+publishes a seed only after every channel passes. `projection_owners` records
+`native_cpu_system` for that path. Old libraries, custom policies and unsupported
+backend/model domains retain explicit preparation compatibility; an admitted
+native error never retries it. The native matrix-capacity query adds live metrics
+and detached spin results to the existing projection workspace. Prepared fleets,
+caller buffers and opaque provider overhead are separate; this is not an RSS bound.
+Python still owns per-item eligibility/reporting and transactional seed installation.
+
 ## Immutable target and typed plan
 
 `TargetProblem` snapshots the resolved scientific model, prepared-provider
