@@ -58,7 +58,6 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
         "fallback_cublas_matrix_product_ao_threshold{17}\n"
         "SmallHfMatrixCalibration matrix{}\n"
         "resolve_small_hf_profitability\n"
-        "maximum_task_capacity{8U * 1024U * 1024U}\n"
         "maximum_arena_bytes{std::size_t{1} << 30}\n"
         "cuda_stack_limit_bytes{std::size_t{64} << 10}\n"
         "maximum_persistent_quartet_warps_per_sm{8}\n"

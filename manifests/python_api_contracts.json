@@ -442,7 +442,9 @@
     "generativeqc.experimental.integral_autodiff.IntegralRHF": "generativeqc/experimental/integral_autodiff.py:IntegralRHF",
     "generativeqc.experimental.integral_autodiff.IntegralValues": "generativeqc/experimental/integral_autodiff.py:IntegralValues",
     "generativeqc.experimental.integral_autodiff.IntegralHF": "generativeqc/experimental/integral_autodiff.py:IntegralHF",
-    "generativeqc.experimental.integral_autodiff.IntegralUHF": "generativeqc/experimental/integral_autodiff.py:IntegralUHF"
+    "generativeqc.experimental.integral_autodiff.IntegralUHF": "generativeqc/experimental/integral_autodiff.py:IntegralUHF",
+    "generativeqc.experimental.integral_autodiff.IntegralHFState": "generativeqc/experimental/integral_autodiff.py:IntegralHFState",
+    "generativeqc.torch.integral_energy": "generativeqc/torch.py:integral_energy"
   },
   "declarations": {
     "generativeqc/_api_types.py:Atom": {
@@ -9468,6 +9470,124 @@
         "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
         "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
         "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/torch.py:integral_energy": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_execution_contracts.md#python-torch-backends",
+        "errors": "docs/reference/python_execution_contracts.md#python-torch-errors",
+        "ownership": "docs/reference/python_execution_contracts.md#python-torch-ownership",
+        "values": "docs/reference/python_execution_contracts.md#python-torch-values"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.prepare": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.gradient": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.hvp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.hessian": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.close": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.__enter__": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.__exit__": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.energy": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHFState.diagnostics": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
       }
     }
   }

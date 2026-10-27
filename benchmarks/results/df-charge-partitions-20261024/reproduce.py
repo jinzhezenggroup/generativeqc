@@ -26,18 +26,23 @@ def digest(text):
 packet = unpack(ROOT / "endpoints.json.xz")
 provenance = unpack(ROOT / "provenance.json.xz")
 previous = unpack(ROOT.parent / "xc-bounded-cross-20261024/provenance.json.xz")
-base_raw = previous["source_manifests"]["guarded"]
-base = json.loads(base_raw)
+sources = previous["source_identities"]
+assert digest(json.dumps(sources, sort_keys=True, separators=(",", ":"))) == previous["source_identities_sha256"]
+base = sources["guarded"]
+assert base["manifest_sha256"] == previous["source_manifest_sha256"]["guarded"]
+projection = base["downstream_base_files"]
 manifests = {}
 for name, delta in provenance["source_manifest_deltas"].items():
-    assert digest(base_raw) == delta["base_manifest_sha256"]
-    files = dict(base["files"])
-    for removed in delta["removed"]:
-        del files[removed]
+    assert digest(json.dumps(delta, sort_keys=True, separators=(",", ":"))) == base["downstream_delta_sha256"][name]
+    assert delta["base_manifest_sha256"] == base["manifest_sha256"]
+    assert not delta["removed"]
+    assert set(delta["changed"]) <= set(projection)
+    files = {path: value for path, value in projection.items() if value is not None}
     files.update(delta["changed"])
-    manifest = dict(source_revision=delta["source_revision"], files=dict(sorted(files.items())))
-    assert digest(json.dumps(manifest, indent=2) + "\n") == delta["manifest_sha256"]
-    manifests[name] = manifest
+    count = base["files_verified"] + sum(projection[path] is None for path in delta["changed"])
+    # This is the complete changed-path projection, not a reconstructed full manifest.
+    manifests[name] = dict(source_revision=delta["source_revision"], files=files,
+                           files_verified=count, manifest_sha256=delta["manifest_sha256"])
 for name, raw in provenance["support"].items():
     assert digest(raw) == provenance["support_sha256"][name], name
 support = provenance["support"]
@@ -45,13 +50,13 @@ build = manifests["stage25-source-inputs.json"]
 tested = manifests["stage25-test-source-inputs-v2.json"]
 verified = json.loads(support["stage25-source-verification.json"])
 assert verified["source_revision"] == build["source_revision"]
-assert verified["files_verified"] == len(build["files"]) and not verified["mismatches"]
+assert verified["files_verified"] == build["files_verified"] and not verified["mismatches"]
 assert set(build["files"]) == set(tested["files"])
 changes = {p for p in build["files"] if build["files"][p] != tested["files"][p]}
 assert changes == {"tests/native/df_md_j_probe.cu", "tests/python/test_df_md_j_cuda.py"}
 verified_test = json.loads(support["stage25-test-source-verification-v2.json"])
 assert verified_test["production_inputs_unchanged"] and not verified_test["mismatches"]
-assert verified_test["files_verified"] == len(tested["files"])
+assert verified_test["files_verified"] == tested["files_verified"]
 assert verified_test["build_revision"] == build["source_revision"]
 assert verified_test["test_revision"] == tested["source_revision"]
 

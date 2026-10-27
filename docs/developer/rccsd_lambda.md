@@ -93,6 +93,69 @@ static CC/Fock/integral inputs for the repeated shared transpose action resident
 on device, and records transfers/resource ownership. Native/public response and
 force APIs remain independently gated.
 
+## Experimental multisecant screen
+
+`tools/generativeqc_cc/multisecant.py` provides an opt-in **host tooling**
+prototype. It is not connected to native CUDA CCSD history ownership or the
+public force/CBS endpoints. `benchmarks/cc_lambda_multisecant.py` compares ranks
+0, 4 and 6 using pinned small-molecule Hamiltonians, generated physical actions
+and either Python GMRES or the actual native C++ GMRES controller.
+
+The history owns detached FP64 `(t, R(t))` pairs. For Anderson `(G(t), R(t))`
+rows it recovers `t = G(t) - (1-d) R(t)/D`. Precision, reference/coordinate epoch,
+denominator or damping changes invalidate previous samples. Inputs with extra
+nonlinear transformations cannot use this reconstruction. The native DIIS
+triangular pair ordering and Lambda's dense-representative ordering differ;
+the small reference adapter explicitly permutes and applies sqrt weights.
+Seven states, including the final physical point, supply six adjacent secants.
+
+The inverse starts from `H0 = diag(-1/D)`. A thin SVD of column-normalized `Y`
+filters near dependence without forming normal equations. Its stored factors
+give `H = H0 + C U.T`; Lambda applies `H.T x = H0 x + U (C.T x)`. No complete
+Jacobian is constructed by the screen. Empty, negligible or budget-refused
+history retains the diagonal inverse. The history retention allowance and fit
+workspace allowance are separate host numeric estimates; caller-owned inputs,
+the scientific graphs and GMRES require their own accounting.
+
+Build the small controller bridge through a verified compiler cache, then run
+the screen from the repository root:
+
+```bash
+qc_multisecant_cache=$(command -v sccache || command -v ccache)
+test -n "$qc_multisecant_cache"
+"$qc_multisecant_cache" --version
+mkdir -p .artifacts/multisecant
+"$qc_multisecant_cache" --show-stats > .artifacts/multisecant/cache-before.txt
+"$qc_multisecant_cache" c++ -std=c++20 -O2 -fPIC -Isrc \
+  -c src/response/native_gmres.cpp -o .artifacts/multisecant/native_gmres.o
+"$qc_multisecant_cache" c++ -std=c++20 -O2 -fPIC -Isrc \
+  -c benchmarks/cc_lambda_multisecant_gmres.cpp -o .artifacts/multisecant/bridge.o
+c++ -shared .artifacts/multisecant/native_gmres.o .artifacts/multisecant/bridge.o \
+  -o .artifacts/multisecant/gmres.so
+"$qc_multisecant_cache" --show-stats > .artifacts/multisecant/cache-after.txt
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
+  python benchmarks/cc_lambda_multisecant.py --triples --repetitions 2 \
+  --native-gmres .artifacts/multisecant/gmres.so \
+  --output .artifacts/multisecant/ccsdt-screen.json
+```
+
+Omit `--triples` for CCSD. Omitting the bridge uses Python GMRES with a true
+residual check every step; the native bridge uses interval 30 and its existing
+predicted-convergence trigger. These controllers' action counts must not be
+mixed. Both retain `1e-12` solve tolerance and `1e-9` independent physical
+residual gates. The `(T)` amplitude cotangent is projected onto the constrained
+pair space before adjusting the RHS.
+
+JSON records capture/fit cost, Lambda wall time including fresh primal and
+independent Lambda audits, exact action counts, rank, source/fixture/program
+identities and host storage estimates. Program construction and the shared
+triples RHS source preparation are reported separately. This is a supplied
+Hamiltonian CPU screen, not complete E+F timing or GPU memory qualification.
+Q-batch preservation and repeated C4/C6/C7 CBS E+F measurements remain required
+before native promotion. See the
+[experiment decision](../../.agents/notes/implemented/numerics/2026-10-27-lambda-multisecant-screen.md)
+for evidence and the native integration boundary.
+
 ## Validation and remaining consumers
 
 The internal native CUDA DF path composes the retained-core Lambda actions

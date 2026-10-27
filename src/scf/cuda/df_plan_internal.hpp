@@ -82,6 +82,11 @@ struct CudaDensityFittingJkPlan {
   // views must carry this choice, including leases on the final E*C projection.
   // Raw, dense, paired-raw and rank-truncated owners retain the symmetric gauge.
   bool resident_spectral_factors{};
+  // Full-rank F=L^-1 A gauge. Setup borrows the scaled-eigenvector
+  // slot for L, then retains L^-1 here for the physical force reverse map.
+  // The spectral metric remains intact for rank diagnostics and raw fallbacks.
+  bool resident_cholesky_factors{};
+  double* cholesky_response_root{};
   // Full-rank pure J owns raw A in three_center instead of a fitted tensor.
   // No alias is installed in packed_raw: destruction retains one allocation.
   bool resident_raw_coulomb{};

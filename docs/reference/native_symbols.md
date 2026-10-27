@@ -24,6 +24,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
 - [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
 - [generativeqc_response_recycle_state_v1_get](#native-c-generativeqc-response-recycle-state-v1-get)
@@ -63,6 +64,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_one_electron_gradient_cuda](#native-c-generativeqc-system-one-electron-gradient-cuda)
 - [generativeqc_batch_get_last_fock_builds](#native-c-generativeqc-batch-get-last-fock-builds)
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
+- [generativeqc_hf_physical_audit_cpu_query_v1](#native-c-generativeqc-hf-physical-audit-cpu-query-v1)
+- [generativeqc_hf_physical_audit_cpu_v1](#native-c-generativeqc-hf-physical-audit-cpu-v1)
 - [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
@@ -544,6 +547,39 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-hf-verify-final-v1)=
+## generativeqc_hf_verify_final_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_verify_final_v1 ( const generativeqc_hf_verification_descriptor_v1 * descriptor , generativeqc_hf_verification_result_v1 * output ) ;
+```
+
+**Behavior.** Derive progressive-HF final acceptance from observed metadata. Audit
+maximum commutator takes precedence over native RMS; budget exhaustion takes
+status precedence without erasing target failures. Empirical/unknown accuracy
+never becomes verified. Numeric equality meets a gate.
+
+**Inputs.** Full current-ABI descriptors; positive finite convergence tolerances,
+declared flags and accuracy code, exact counts and caller-validated identities.
+Present audit diagnostics must be finite and nonnegative. Nonfinite actual
+energy/change/density/native residual are physical failures, not API errors.
+
+**Outputs.** Atomically publishes every target/budget failure and final disposition.
+
+**Errors.** Null pointers, unknown flags/codes or malformed controls return
+INVALID_ARGUMENT; incompatible complete headers return ABI_MISMATCH. Failed
+calls leave output unchanged, including when input and output storage overlap.
+
+**Lifetime.** Borrows input only during the call; retains no calculation or device.
+
+**Execution.** Constant-storage synchronous host metadata only; no scientific
+reevaluation, callback, Python/compiler import or retry with a different policy.
+
+**Units.** Energy and energy differences are Hartree; density and physical residual
+retain their target solver definitions. Work counts include declared audit work.
 
 (native-c-generativeqc-response-recycle-capacity-v1-get)=
 ## generativeqc_response_recycle_capacity_v1_get
@@ -1592,6 +1628,74 @@ to the caller. Keep the owner and its context alive throughout the call.
 and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Overlap is dimensionless; system geometry uses Bohr.
+
+(native-c-generativeqc-hf-physical-audit-cpu-query-v1)=
+## generativeqc_hf_physical_audit_cpu_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_query_v1 ( const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , generativeqc_hf_physical_audit_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query a conservative native CPU capacity for an independent
+fixed-density RHF/UHF Direct/DF physical audit before any provider execution.
+
+**Inputs.** Live normalized orbital system, optional auxiliary system and complete
+controls/output ABI headers. A null auxiliary selects the orbital basis for DF;
+an unused auxiliary is ignored. Controls/output records must not overlap.
+
+**Outputs.** Atomically publishes AO/spin/array counts and provider/workspace/total
+numeric byte bounds. A below-limit budget still returns the required capacity.
+
+**Errors.** Invalid controls/count overflow return INVALID_ARGUMENT; incompatible
+headers ABI_MISMATCH; ECP or beyond-g topology NOT_IMPLEMENTED. Output is unchanged.
+
+**Lifetime.** Borrows systems and records for this call; retains no arrays or owners.
+
+**Execution.** Synchronous CPU metadata only, without scientific array allocation,
+integral evaluation, provider initialization or accelerator access.
+
+**Units.** Geometry is Bohr; counts are FP64 elements and capacities are bytes.
+
+(native-c-generativeqc-hf-physical-audit-cpu-v1)=
+## generativeqc_hf_physical_audit_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , const double * density , uint64_t density_count , double target_energy , generativeqc_hf_physical_audit_result_v1 * output ) ;
+```
+
+**Behavior.** Rebuild one exact requested physical HF Fock at the supplied final
+density and audit FDS-SDF through shared native mean-field implementations.
+This does not run SCF, certify convergence or replace the requested model.
+
+**Inputs.** CPU context, normalized systems and complete controls/output headers.
+Density is finite row-major [spin,AO,AO] with the exact queried count; RHF uses
+double occupation, UHF unit-occupation spin blocks. Target energy is finite.
+Output overlap meets the queried capacity and does not alias density, controls
+or output record. Controls, density and the output record are mutually disjoint.
+
+**Outputs.** Publishes overlap, fixed-density energy, energy difference, residual
+maximum/RMS and actual Fock/rank counts only after the entire audit succeeds.
+Unused output tails and all borrowed inputs remain unchanged.
+
+**Errors.** Invalid metadata, ranges, aliasing or nonfinite input return
+INVALID_ARGUMENT; incompatible headers ABI_MISMATCH; unsupported domain or
+non-CPU context NOT_IMPLEMENTED. Below-limit admission returns OUT_OF_MEMORY before
+provider construction. Scientific/provider failures propagate with context
+details and no partial publication or fallback retry.
+
+**Lifetime.** Borrows inputs synchronously. Native provider, density and residual
+workspaces are destroyed before return; detached outputs belong to the caller.
+
+**Execution.** Synchronous CPU FP64 using the existing Direct/DF Fock, energy and
+physical residual owners. Serialize shared-context calls and destruction.
+No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
+
+**Units.** Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
+use the declared AO convention. Numeric capacities are bytes, not RSS.
 
 (native-c-generativeqc-basis-projection-query-v1)=
 ## generativeqc_basis_projection_query_v1

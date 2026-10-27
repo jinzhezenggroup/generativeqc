@@ -1617,6 +1617,80 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_scf_effort_verify_v1(const generativeqc_scf_effort_final_descriptor_v1* descriptor,
                                   generativeqc_scf_effort_verification_v1* output);
 
+/** Observed facts for progressive-HF final verification. Identity comparison,
+ * object validation and finite force-array shape checking belong to the typed
+ * caller; flags are observations, never permission to skip a numerical gate. */
+enum {
+  GENERATIVEQC_HF_VERIFY_MODEL_MATCHES = 1u << 0,
+  GENERATIVEQC_HF_VERIFY_PROVIDER_MATCHES = 1u << 1,
+  GENERATIVEQC_HF_VERIFY_HASHES_MATCH = 1u << 2,
+  GENERATIVEQC_HF_VERIFY_SUCCEEDED = 1u << 3,
+  GENERATIVEQC_HF_VERIFY_CONVERGED = 1u << 4,
+  GENERATIVEQC_HF_VERIFY_RESIDUAL_PRESENT = 1u << 5,
+  GENERATIVEQC_HF_VERIFY_AUDIT_PRESENT = 1u << 6,
+  GENERATIVEQC_HF_VERIFY_AUDIT_TARGET_MATCHES = 1u << 7,
+  GENERATIVEQC_HF_VERIFY_AUDIT_FAILED = 1u << 8,
+  GENERATIVEQC_HF_VERIFY_AUDIT_BUDGET_EXHAUSTED = 1u << 9,
+  GENERATIVEQC_HF_VERIFY_OBSERVABLES_COMPLETE = 1u << 10,
+  GENERATIVEQC_HF_VERIFY_PRECISION_MATCHES = 1u << 11,
+  GENERATIVEQC_HF_VERIFY_FINAL_FP64 = 1u << 12,
+  GENERATIVEQC_HF_VERIFY_AUTOMATIC_PRECISION = 1u << 13,
+  GENERATIVEQC_HF_VERIFY_STRICT_REFINEMENT = 1u << 14,
+  GENERATIVEQC_HF_VERIFY_ACCURACY_PRESENT = 1u << 15,
+  GENERATIVEQC_HF_VERIFY_ACCURACY_TARGET_MATCHES = 1u << 16,
+  GENERATIVEQC_HF_VERIFY_FOCK_LIMIT_PRESENT = 1u << 17,
+  GENERATIVEQC_HF_VERIFY_FOCK_COUNT_PRESENT = 1u << 18
+};
+
+/** Final observed values and explicit limits; no serialized status is accepted.
+ * accuracy: 0 unverified, 1 unconverged, 2 observed_unmet,
+ * 3 estimated_above_target, 4 observed_met, 5 estimated_below_target,
+ * 6 another non-certifying disposition. Unused optional numeric fields are
+ * ignored. Counts are exact nonnegative metadata, without truncating overflow. */
+typedef struct generativeqc_hf_verification_descriptor_v1 {
+  uint32_t struct_size, abi_version, flags, accuracy;
+  uint64_t iterations, iteration_limit, fock_builds, fock_limit;
+  double energy, energy_change, density_rms, residual_rms;
+  double audit_rms, audit_max, audit_energy_difference;
+  double energy_tolerance, density_tolerance, residual_tolerance;
+} generativeqc_hf_verification_descriptor_v1;
+
+/** Detached decision. status: 0 unverified, 1 verified, 2 unmet, 3 budget_exhausted.
+ * target_reasons bits 0..16: model, provider, provider hashes, convergence,
+ * nonfinite energy, energy change, density, audit target, audit energy,
+ * failed audit, unavailable residual, residual gate, missing observables,
+ * requested precision, final FP64, missing strict cleanup, accuracy target.
+ * budget_reasons bits 0..3: audit host budget, iterations, unavailable Fock
+ * count, Fock count limit. target_established is equivalent to no target reasons.
+ * cleanup: 0 unavailable, 1 missing, 2 applied, 3 not_required_fp64.
+ * accuracy retains a matching observation, otherwise becomes unverified (0). */
+typedef struct generativeqc_hf_verification_result_v1 {
+  uint32_t struct_size, abi_version, status, target_reasons, budget_reasons, cleanup, accuracy;
+} generativeqc_hf_verification_result_v1;
+
+/** @native-contract generativeqc_hf_verify_final_v1
+ * @behavior Derive progressive-HF final acceptance from observed metadata. Audit
+ * maximum commutator takes precedence over native RMS; budget exhaustion takes
+ * status precedence without erasing target failures. Empirical/unknown accuracy
+ * never becomes verified. Numeric equality meets a gate.
+ * @inputs Full current-ABI descriptors; positive finite convergence tolerances,
+ * declared flags and accuracy code, exact counts and caller-validated identities.
+ * Present audit diagnostics must be finite and nonnegative. Nonfinite actual
+ * energy/change/density/native residual are physical failures, not API errors.
+ * @outputs Atomically publishes every target/budget failure and final disposition.
+ * @errors Null pointers, unknown flags/codes or malformed controls return
+ * INVALID_ARGUMENT; incompatible complete headers return ABI_MISMATCH. Failed
+ * calls leave output unchanged, including when input and output storage overlap.
+ * @lifetime Borrows input only during the call; retains no calculation or device.
+ * @execution Constant-storage synchronous host metadata only; no scientific
+ * reevaluation, callback, Python/compiler import or retry with a different policy.
+ * @units Energy and energy differences are Hartree; density and physical residual
+ * retain their target solver definitions. Work counts include declared audit work.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_hf_verify_final_v1(const generativeqc_hf_verification_descriptor_v1* descriptor,
+                                generativeqc_hf_verification_result_v1* output);
+
 /** Opaque CPU retained response-vector owner; it owns no physical method state. */
 typedef struct generativeqc_response_recycle generativeqc_response_recycle;
 
@@ -2547,6 +2621,93 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds(
 GENERATIVEQC_API generativeqc_status generativeqc_system_cross_overlap_cpu(
     generativeqc_context* context, const generativeqc_system* target,
     const generativeqc_system* source, double* output, size_t output_count);
+
+/** Fixed-density HF audit controls. unrestricted and density_fitted are 0/1;
+ * reserved is zero. A strictly positive maximum_host_bytes bounds conservative
+ * numeric/value metadata, excluding allocator/provider overhead and process RSS.
+ * DIIS history preserves the full-HF capacity envelope but no SCF is run.
+ * Screening is finite nonnegative; the metric threshold is strictly in (0,1).
+ */
+typedef struct generativeqc_hf_physical_audit_controls_v1 {
+  uint32_t struct_size, abi_version;
+  uint32_t unrestricted, density_fitted, diis_history, reserved;
+  uint64_t maximum_host_bytes;
+  double screening_tolerance, metric_relative_threshold;
+} generativeqc_hf_physical_audit_controls_v1;
+
+/** Counts use FP64 elements. Provider and additional audit workspace are
+ * separate numeric allowances; required_host_bytes is their checked sum.
+ */
+typedef struct generativeqc_hf_physical_audit_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t ao_count, spin_count, density_count, overlap_count;
+  uint64_t provider_bytes, workspace_bytes, required_host_bytes;
+} generativeqc_hf_physical_audit_capacity_v1;
+
+/** Caller-owned square row-major overlap output and detached audit scalars.
+ * overlap_capacity is in doubles; only ao_count squared elements are written.
+ * Energy includes nuclear repulsion; energy_difference is absolute relative to
+ * the supplied target energy. Residual maximum and RMS use all spin entries.
+ * A successful call reports exactly one physical Fock build, with no SCF.
+ */
+typedef struct generativeqc_hf_physical_audit_result_v1 {
+  uint32_t struct_size, abi_version;
+  double* overlap;
+  uint64_t overlap_capacity;
+  double energy, energy_difference, maximum_commutator, rms_commutator;
+  uint64_t fock_builds, auxiliary_rank;
+} generativeqc_hf_physical_audit_result_v1;
+
+/** @native-contract generativeqc_hf_physical_audit_cpu_query_v1
+ * @behavior Query a conservative native CPU capacity for an independent
+ * fixed-density RHF/UHF Direct/DF physical audit before any provider execution.
+ * @inputs Live normalized orbital system, optional auxiliary system and complete
+ * controls/output ABI headers. A null auxiliary selects the orbital basis for DF;
+ * an unused auxiliary is ignored. Controls/output records must not overlap.
+ * @outputs Atomically publishes AO/spin/array counts and provider/workspace/total
+ * numeric byte bounds. A below-limit budget still returns the required capacity.
+ * @errors Invalid controls/count overflow return INVALID_ARGUMENT; incompatible
+ * headers ABI_MISMATCH; ECP or beyond-g topology NOT_IMPLEMENTED. Output is unchanged.
+ * @lifetime Borrows systems and records for this call; retains no arrays or owners.
+ * @execution Synchronous CPU metadata only, without scientific array allocation,
+ * integral evaluation, provider initialization or accelerator access.
+ * @units Geometry is Bohr; counts are FP64 elements and capacities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_query_v1(
+    const generativeqc_system* system, const generativeqc_system* auxiliary,
+    const generativeqc_hf_physical_audit_controls_v1* controls,
+    generativeqc_hf_physical_audit_capacity_v1* output);
+
+/** @native-contract generativeqc_hf_physical_audit_cpu_v1
+ * @behavior Rebuild one exact requested physical HF Fock at the supplied final
+ * density and audit FDS-SDF through shared native mean-field implementations.
+ * This does not run SCF, certify convergence or replace the requested model.
+ * @inputs CPU context, normalized systems and complete controls/output headers.
+ * Density is finite row-major [spin,AO,AO] with the exact queried count; RHF uses
+ * double occupation, UHF unit-occupation spin blocks. Target energy is finite.
+ * Output overlap meets the queried capacity and does not alias density, controls
+ * or output record. Controls, density and the output record are mutually disjoint.
+ * @outputs Publishes overlap, fixed-density energy, energy difference, residual
+ * maximum/RMS and actual Fock/rank counts only after the entire audit succeeds.
+ * Unused output tails and all borrowed inputs remain unchanged.
+ * @errors Invalid metadata, ranges, aliasing or nonfinite input return
+ * INVALID_ARGUMENT; incompatible headers ABI_MISMATCH; unsupported domain or
+ * non-CPU context NOT_IMPLEMENTED. Below-limit admission returns OUT_OF_MEMORY before
+ * provider construction. Scientific/provider failures propagate with context
+ * details and no partial publication or fallback retry.
+ * @lifetime Borrows inputs synchronously. Native provider, density and residual
+ * workspaces are destroyed before return; detached outputs belong to the caller.
+ * @execution Synchronous CPU FP64 using the existing Direct/DF Fock, energy and
+ * physical residual owners. Serialize shared-context calls and destruction.
+ * No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
+ * @units Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
+ * use the declared AO convention. Numeric capacities are bytes, not RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_system* auxiliary,
+    const generativeqc_hf_physical_audit_controls_v1* controls, const double* density,
+    uint64_t density_count, double target_energy, generativeqc_hf_physical_audit_result_v1* output);
 
 /** Borrowed real row-major basis transport. input_kind is 0 for occupied
  * columns (source_AO by occupied), 1 for a pure source_AO-square HF density.

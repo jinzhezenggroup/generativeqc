@@ -4,11 +4,11 @@
 # manifests/stationary_aot_profiles.json.
 
 STATIONARY_AOT_BUILD_PROFILES = (
-    ("lda", 0, "LDA_XC_PW", True),
-    ("pbe", 1, "PBE", True),
-    ("r2scan", 2, "R2SCAN", True),
-    ("pbe0", 1, "PBE0", False),
-    ("b3lyp", 3, "B3LYP", False),
-    ("m06_2x", 131522, "M06-2X", False),
-    ("wb97mv", 4, "WB97M-V", False),
+    ("lda", 0, "LDA_XC_PW", True, None),
+    ("pbe", 1, "PBE", True, None),
+    ("r2scan", 2, "R2SCAN", True, None),
+    ("pbe0", 1, "PBE0", False, None),
+    ("b3lyp", 3, "B3LYP", False, None),
+    ("m06_2x", 131522, "M06-2X", False, None),
+    ("wb97mv", 4, "WB97M-V", False, "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
 )

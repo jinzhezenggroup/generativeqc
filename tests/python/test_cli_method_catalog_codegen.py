@@ -36,19 +36,28 @@ class NativeMethodirProjectionTests(unittest.TestCase):
 
     def test_automatic_bulk_selectors_preserve_the_public_resolver(self) -> None:
         from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+        from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
+        from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 
         table = {row.name: row for row in rows()}
-        for selector, spin in (
-            ("libxc:gga_x_apbe", "unpolarized"),
-            ("libxc-uks:gga_x_apbe", "polarized"),
+        for functional, domain in (
+            ("LDA_C_CHACHIYO", DENSITY_WORK_DOMAIN),
+            ("GGA_X_APBE", LIBXC_WORK_DOMAIN),
+            ("MGGA_X_LTA", LIBXC_WORK_DOMAIN),
         ):
-            row = table[selector]
-            resolved = resolve_bulk_ks("GGA_X_APBE", spin=spin)
-            self.assertEqual(row.identity, resolved.method.identity)
-            self.assertEqual(row.components, (("GGA_X_APBE", 1.0),))
-            self.assertTrue(row.cpu)
-            self.assertFalse(row.cuda)
-            self.assertEqual(row.exchange, ())
+            for prefix, spin in (
+                ("libxc:", "unpolarized"),
+                ("libxc-uks:", "polarized"),
+            ):
+                with self.subTest(functional=functional, spin=spin):
+                    row = table[prefix + functional.lower()]
+                    resolved = resolve_bulk_ks(functional, spin=spin)
+                    self.assertEqual(row.identity, resolved.method.identity)
+                    self.assertEqual(row.components, ((functional, 1.0),))
+                    self.assertEqual(row.domain, domain)
+                    self.assertTrue(row.cpu)
+                    self.assertFalse(row.cuda)
+                    self.assertEqual(row.exchange, ())
 
     def test_semantic_projection_and_backend_gates(self) -> None:
         table = {row.name: row for row in rows()}

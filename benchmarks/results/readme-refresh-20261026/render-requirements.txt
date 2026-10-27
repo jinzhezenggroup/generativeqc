@@ -1,0 +1,2 @@
+# Match the original README renderer for byte-identical figure replay.
+matplotlib==3.11.2

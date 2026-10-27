@@ -1,0 +1,90 @@
+{
+  "variant": "phase-four-provider-v2",
+  "source": {
+    "base": "a0ab11b4de322bf5aa5e74d53ea9d338c92b1460",
+    "modified": [
+      ".agents/notes/implemented/performance/2026-10-26-df-cholesky-whitening.md",
+      "cmake/GenerativeQCSources.cmake",
+      "manifests/maintenance/vendor_boundaries.json",
+      "src/scf/cuda/df_scf_library.cpp",
+      "src/solver/cuda/cholesky_provider.cpp",
+      "src/solver/cuda/cholesky_provider.hpp"
+    ],
+    "archive_sha256": "86f4d8ebbdb757670234f705b85ed6d40f2f37d34e90e8f63e9b7e6f4eeff37b",
+    "patch_sha256": "c2ec5f7fe95ce8cbfead758b45031b696d5cad9a26468db4961caf6113604292"
+  },
+  "source_audit": {
+    "original_inputs": 1853,
+    "changed_or_added": [
+      {
+        "file": "cmake/GenerativeQCSources.cmake",
+        "measured": "48f9b58c357911ae4ee1f229fbae7051552fa3225f137a55681ea891c1627366",
+        "current": "14a56557d987448999c78ef9a9fe1cd32e5def780a932abcead223994ce4e425"
+      },
+      {
+        "file": "python/generativeqc/resources_ks.py",
+        "measured": "6bc23d63d4242589a5dd2f674b0c69b5bf0163b8d3a6b171e64845384f35a45d",
+        "current": "2928f6bef70caa66867f6ffb659bf53b10e06202bad9dc42fc391651b7090b69"
+      },
+      {
+        "file": "src/runtime/nvidia_host_api/generativeqc_nvidia_host_functions.h",
+        "measured": "5901575a2eb3325d3c7a8199bdbb83807abdd1cfa2a7a399039ce3ab0c86ed81",
+        "current": "c451f489221055603c8da3967a7d8c7dcc853609306b319f9514d7571dbdb68a"
+      },
+      {
+        "file": "src/scf/cuda/df_scf_library.cpp",
+        "measured": "c303e070ccc3b3914c5005baa9f3b1fcb8b09c235c3473f30cfe73d93d9a8692",
+        "current": "f50fd7e4730a3a76eb3b06abaa1ad290c86b7c29b08074f47e9bce9353f6e6c4"
+      },
+      {
+        "file": "src/solver/cuda/cholesky_provider.cpp",
+        "measured": null,
+        "current": "5a5d0fb8e60cefcb7241a8de6747f830fc1524498485a09c013ec89c3905059a"
+      },
+      {
+        "file": "src/solver/cuda/cholesky_provider.hpp",
+        "measured": null,
+        "current": "3fb157aec81252c9ed4cf5b32ea86cbbbf1ed40ed6b85b1d3b5dd1209f5beda7"
+      }
+    ]
+  },
+  "endpoints": [
+    {
+      "method": "hf",
+      "sha256": "f1f5c2c097c74d88b88166bc25e16ece72f1bb984b14818797ebc32c3bf8a5b7",
+      "baseline_sha256": "c0e48cc11aa6a9ff4c191beada03f0bf817a54551340138333d506a993530b59",
+      "job": "14415",
+      "seconds": [
+        19.161727160215378,
+        4.087191250175238,
+        4.088268056511879,
+        4.063493546098471
+      ],
+      "max_energy_difference": 0.0,
+      "max_force_difference": 3.8546943414985435e-13
+    },
+    {
+      "method": "pbe0",
+      "sha256": "5f5a384cc0c779b00a9ae4be1985fc8a3fe716ce1931b29789bf736c6c20cc28",
+      "baseline_sha256": "85acac30d5d0065bee8d28211e7cf9e9ace937f6419cd27438e15c739a54b285",
+      "job": "14415",
+      "seconds": [
+        24.760191723704338,
+        8.141029208898544,
+        8.132332023233175,
+        8.098017949610949
+      ],
+      "max_energy_difference": 0.0,
+      "max_force_difference": 5.903194599810035e-13
+    }
+  ],
+  "validation_log_sha256": "c8a4e1b4c28bd3b9b8594bf4dcbfa39506f9f1d608e9ccdcede08fd2f632ba10",
+  "build": {
+    "cache-after.txt": "8be9cd2929f0d3ac790c8fae460e34f255b86a47bfd61aa7671de8abafc5f526",
+    "allocation.txt": "f7f3cd49c72010925a14e1a2c1dbdf02f24e77310549805157868614312687ac",
+    "library-sha256.txt": "63e5578ef727e1476f9da9c353dd5f2c3180332008df189e61721eb59f232fd3",
+    "cache-before.txt": "650b6c4886b8da5aacdeed122d2699254faad74705d582f1b5c2901e560d1345",
+    "cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+    "compiler-commands.txt": "cf8fa01dd0b59a11c28a9bf1dd4be7cd9ec7c677089b298ac8cdb2a58bf4a490"
+  }
+}

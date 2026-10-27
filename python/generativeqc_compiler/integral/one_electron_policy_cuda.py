@@ -24,7 +24,7 @@ def one_electron_policy_inventory() -> typing.Any:
         "outputs": ["overlap", "hcore", "kinetic", "attraction"],
         "normalization": "public_ao_expansion_and_primitive_coefficients",
         "nuclear_attraction": "signed_unit_charge_times_current_nuclear_charge",
-        "schedules": ["thread", "shell_warp"],
+        "schedules": ["thread", "shell_warp", "nucleus_8", "nucleus_32"],
     }
 
 
@@ -64,14 +64,25 @@ struct ValuePolicy {
   template<class View>
   __device__ static void accumulate(Accumulator& result, const PairGeometry& pair,
       unsigned first, unsigned second, double weight, const View& batch, long long system) {
-    const auto st = overlap_kinetic(pair, first, second);
+    accumulate_partition(result, pair, first, second, weight, batch, system, 0, 1);
+  }
+  // A disjoint nuclear partition shares the same scalar IR. Only its owner
+  // evaluates S/T; the runtime reduces projected channels in FP64 afterwards.
+  template<class View>
+  __device__ static void accumulate_partition(Accumulator& result, const PairGeometry& pair,
+      unsigned first, unsigned second, double weight, const View& batch, long long system,
+      unsigned lane, unsigned lanes) {
+    if (lane == 0) {
+      const auto st = overlap_kinetic(pair, first, second);
+      result.overlap += weight * st.overlap;
+      result.kinetic += weight * st.kinetic;
+    }
     double v = 0.0;
-    for (auto atom = batch.atom_offsets[system]; atom < batch.atom_offsets[system + 1]; ++atom) {
+    for (auto atom = batch.atom_offsets[system] + lane;
+         atom < batch.atom_offsets[system + 1]; atom += lanes) {
       const double* C = batch.positions + 3 * atom;
       v += batch.atomic_numbers[atom] * attraction(pair, first, second, C[0], C[1], C[2]);
     }
-    result.overlap += weight * st.overlap;
-    result.kinetic += weight * st.kinetic;
     result.attraction += weight * v;
   }
   __device__ static void project(const Accumulator& result, double (&values)[channels]) {

@@ -17,7 +17,7 @@ OUTPUT = (
 SCHEMA = "generativeqc.stationary-aot-build-profiles.v1"
 
 
-def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
+def load_profiles() -> tuple[tuple[str, int, str, bool, str | None], ...]:
     data = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if data.get("schema") != SCHEMA:
         raise ValueError("invalid stationary CUDA AOT profile schema")
@@ -31,11 +31,14 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
     codes.update(
         {f"split:{name}": record["functional_code"] for name, record in split.items()}
     )
-    result: list[tuple[str, int, str, bool]] = []
+    result: list[tuple[str, int, str, bool, str | None]] = []
     names: set[str] = set()
     legacy_codes: set[int] = set()
     for record in data["profiles"]:
-        if set(record) != {"name", "family", "method", "legacy"}:
+        if set(record) not in (
+            {"name", "family", "method", "legacy"},
+            {"name", "family", "method", "legacy", "point_model"},
+        ):
             raise ValueError("invalid stationary CUDA AOT profile")
         name, family, method, legacy = (
             record["name"],
@@ -43,6 +46,7 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
             record["method"],
             record["legacy"],
         )
+        point_model = record.get("point_model")
         if (
             not isinstance(name, str)
             or not name
@@ -51,6 +55,10 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
             or not method
             or family not in codes
             or type(legacy) is not bool
+            or (
+                point_model is not None
+                and (not isinstance(point_model, str) or not point_model)
+            )
         ):
             raise ValueError("invalid or duplicated stationary CUDA AOT profile")
         names.add(name)
@@ -59,7 +67,7 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
             if code in legacy_codes:
                 raise ValueError("ambiguous legacy stationary CUDA AOT transport")
             legacy_codes.add(code)
-        result.append((name, code, method, legacy))
+        result.append((name, code, method, legacy, point_model))
     if not result or not legacy_codes:
         raise ValueError("empty stationary CUDA AOT inventory")
     return tuple(result)
@@ -75,8 +83,9 @@ def emit_python() -> str:
         "STATIONARY_AOT_BUILD_PROFILES = (",
     ]
     lines.extend(
-        f"    ({json.dumps(name)}, {code}, {json.dumps(method)}, {legacy}),"
-        for name, code, method, legacy in load_profiles()
+        f"    ({json.dumps(name)}, {code}, {json.dumps(method)}, {legacy}, "
+        f"{json.dumps(point_model) if point_model is not None else 'None'}),"
+        for name, code, method, legacy, point_model in load_profiles()
     )
     return "\n".join((*lines, ")", ""))
 

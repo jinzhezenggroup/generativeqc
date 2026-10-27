@@ -1,0 +1,13 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "fea25e83c84d1e14efebb72a0797c7969ba3fcdb",
+  "file_count": 1,
+  "total_bytes": 818152,
+  "files": [
+    {
+      "path": "benchmarks/results/r2scan-endpoints-20261025/exploration-00.json.xz",
+      "bytes": 818152,
+      "sha256": "ce0d5e65cd5eb00f5c5b580dde29308b54d0db94413393182915599e4f384f19"
+    }
+  ]
+}

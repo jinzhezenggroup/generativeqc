@@ -1,0 +1,55 @@
+{
+  "schema": "generativeqc.provider-initialization-retention.v1",
+  "classification": "standalone engineering diagnostic only; no scientific acceptance",
+  "refs": [
+    2809,
+    2727
+  ],
+  "files": [
+    {
+      "path": "library-locator-stdout.utf8.xz",
+      "bytes": 396,
+      "sha256": "a1a619a7da9ec3f6ccba24ea4b205dbaeefa9f6c666073e3d78a3886599d4268"
+    },
+    {
+      "path": "observation.json.xz",
+      "bytes": 1540,
+      "sha256": "fd01935b08d64b1f118453b18c04d00533fc3267cf74ac8a7d70f15d84e383ee"
+    },
+    {
+      "path": "platform-observation.json",
+      "bytes": 686,
+      "sha256": "66cf2a018f5c39a08b09947b3798474a85b87f1c480399f250fc4d2c2ac9bc08"
+    },
+    {
+      "path": "preparation-history.json",
+      "bytes": 1275,
+      "sha256": "df70a7421b44dd14fbbd3d17370b9bc0bb26c80225b8ddaa18678706820d95d6"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 4940,
+      "sha256": "f376f009b551ad6fd8c3766f229dcd0f208b9ef7a47e5129086eb54abb83ab14"
+    },
+    {
+      "path": "provider-stdout.utf8.xz",
+      "bytes": 1548,
+      "sha256": "65bb70351c387ff69eef0801dd667600aff86e279eb85db8247f2b56f4296282"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6514,
+      "sha256": "f2087aa4fff16df538568ff7862e8a4e0cc623789ae256de3fff06dccbc8ec2e"
+    },
+    {
+      "path": "replay.py",
+      "bytes": 10486,
+      "sha256": "df9634ef8ed30847d918e0331b5b0213cd7d6eac45200936bd29f618c188f715"
+    },
+    {
+      "path": "reproduce.py",
+      "bytes": 7305,
+      "sha256": "45c0f2ed0584b1717fc05685e57c8ae7985bb8ab962361219e05af34242a79c0"
+    }
+  ]
+}

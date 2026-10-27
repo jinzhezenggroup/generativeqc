@@ -126,6 +126,10 @@ def test_public_force_preserves_admission_and_selected_policy(
         "requires_composite_stationary_cuda",
         lambda _: composite,
     )
+    # This forwarding fixture isolates policy admission from package selection.
+    monkeypatch.setattr(
+        _stationary_composite_cuda, "composite_stationary_aot_profile", lambda _: None
+    )
     monkeypatch.setattr(
         _stationary_composite_cuda, "PreparedCompositeStationaryCudaGradient", Composite
     )

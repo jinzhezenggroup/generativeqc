@@ -465,13 +465,16 @@ __global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_
 /** Schwarz bounds in public AO order, including sparse spherical expansions. */
 template <bool Cartesian, unsigned Order, bool Specialized = false>
 __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure,
-                                             const std::int32_t* ao_order) {
+                                             const std::int32_t* ao_order, bool canonical) {
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (item >= static_cast<std::size_t>(batch.batch_size) * matrix) return;
   const auto system = static_cast<std::int32_t>(item / matrix);
   const auto row = static_cast<std::int32_t>((item % matrix) / n);
   const auto column = static_cast<std::int32_t>(item % n);
+  // Symmetry ownership: (ij|ij)=(ji|ji). A unique owner in the scheduling
+  // order publishes both public-AO bounds without changing the evaluator.
+  if (canonical && column > row) return;
   const auto i = ao_order ? ao_order[system * n + row] : row;
   const auto j = ao_order ? ao_order[system * n + column] : column;
   if (!schwarz_order_matches<Order, Cartesian>(batch, system, i, j)) return;
@@ -482,7 +485,9 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
     value = schwarz_diagonal<Order, Cartesian>(batch, system, i, j);
   // NaN bounds must never masquerade as screened-out quartets.
   if (!isfinite(value)) atomicExch(failure, 1);
-  bounds[system * matrix + i * n + j] = sqrt(fabs(value));
+  const double bound = sqrt(fabs(value));
+  bounds[system * matrix + i * n + j] = bound;
+  if (canonical && i != j) bounds[system * matrix + j * n + i] = bound;
 }
 
 /** One output owner reduces all density pairs; no ERI tensor or atomics.
@@ -1050,16 +1055,19 @@ void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shar
   // retain the same dense public bounds and existing allocation/failure ABI.
   const auto* selection = std::getenv("GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ");
   const bool specialized = !selection || std::string_view(selection) != "0";
+  // Every unordered public AO pair has one owner; that owner publishes both
+  // symmetric entries, including when the scheduling AO order is permuted.
+  constexpr bool canonical = true;
   for_each_schwarz_order(batch, [&]<unsigned Order>() {
     if (cartesian)
       independent_jk_bounds_kernel<true, Order>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order, canonical);
     else if (specialized)
       independent_jk_bounds_kernel<false, Order, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order, canonical);
     else
       independent_jk_bounds_kernel<false, Order>
-          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order);
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure, ao_order, canonical);
   });
 }
 

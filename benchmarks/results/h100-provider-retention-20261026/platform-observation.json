@@ -1,0 +1,24 @@
+{
+  "scope": "selected engineering resource fields extracted from actual pre-run platform receipt",
+  "source_raw_bytes": 760,
+  "source_raw_sha256": "641121490673c8dfea5c1f4eb6e1e3b6fbf4bac966765d0edbdbccd46df9d283",
+  "observation": {
+    "name": "vibeqc-h100-resident-1026-pub",
+    "status": "RUNNING",
+    "image": "generativeqc-science-py311-cuda129:20261015",
+    "resource": {
+      "gpu_count": 1,
+      "gpu_type": "H100",
+      "cpu_count": 20,
+      "memory_gib": 200
+    },
+    "node": {
+      "name": "qb-prod-gpu412",
+      "status": "READY"
+    },
+    "priority": "4",
+    "priority_level": "NORMAL",
+    "shared_memory_gib": 32,
+    "created_at": "1792991777000"
+  }
+}

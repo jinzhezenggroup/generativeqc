@@ -55,8 +55,29 @@ def checked_file(path: Path, expected: str) -> Path:
 
 def checked_source_tree(root: Path, inventory: Path, expected: str) -> dict:
     inventory = checked_file(inventory, expected)
-    files = load_json(inventory)["source_tree"]
+    record = load_json(inventory)
     actual = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+    if record.get("schema") == "generativeqc.h100-source-identity.v1":
+        count = record.get("file_count")
+        if type(count) is not int or count <= 0 or count != len(actual):
+            raise ValueError("frozen source tree contains missing or extra files")
+        observed = {}
+        for relative in sorted(actual):
+            path = root / relative
+            if path.name == ".env" or not path.resolve(strict=True).is_relative_to(
+                root
+            ):
+                raise ValueError("invalid frozen source inventory path")
+            observed[relative] = {
+                "mode": oct(stat.S_IMODE(path.stat().st_mode)),
+                "bytes": path.stat().st_size,
+                "sha256": digest(path),
+            }
+        encoded = json.dumps(observed, sort_keys=True, separators=(",", ":")).encode()
+        if hashlib.sha256(encoded).hexdigest() != record.get("source_tree_sha256"):
+            raise ValueError("frozen source content, path, mode or size differs")
+        return {"inventory_sha256": expected, "verified_files": count}
+    files = record["source_tree"]
     if actual != set(files):
         raise ValueError("frozen source tree contains missing or extra files")
     for relative, identity in files.items():

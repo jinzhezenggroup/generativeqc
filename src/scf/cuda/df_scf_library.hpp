@@ -22,6 +22,16 @@ namespace generativeqc::scf::cuda_df {
 generativeqc_status prepare_df_blas(CudaDensityFittingJkPlan& plan, std::string& detail);
 void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept;
 
+/** Full-rank whitening primitives on the plan stream. The caller
+ * supplies bounded existing setup scratch and reads info after stream drain.
+ * No handle, allocation, rank policy or fallback is hidden in these adapters. */
+generativeqc_status scf_metric_cholesky(CudaDensityFittingJkPlan& plan, double* matrix,
+                                        void* scratch, std::size_t scratch_bytes, int* info,
+                                        bool& admitted, std::string& detail);
+generativeqc_status scf_metric_lower_solve(CudaDensityFittingJkPlan& plan, std::size_t columns,
+                                           const double* lower, double* values,
+                                           std::string& detail);
+
 /** Explicit Gram operation. Lower-triangle publication is a semantic request,
  * not a vendor selector: if SYRK is unavailable the incumbent full GEMM is
  * preserved. The caller mirrors the lower triangle only when actually used.

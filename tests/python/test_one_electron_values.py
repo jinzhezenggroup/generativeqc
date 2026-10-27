@@ -376,7 +376,7 @@ def test_one_electron_inventory_retains_operator_and_output_contracts() -> None:
     inventory = one_electron_program_inventory()
     assert len(inventory["programs"]) == 48
     assert inventory["precision"] == "fp64"
-    assert inventory["schedules"] == ["thread", "shell_warp"]
+    assert inventory["schedules"] == ["thread", "shell_warp", "nucleus_8", "nucleus_32"]
     from generativeqc_compiler.integral.capabilities import query_integral_capability
 
     request = build_one_electron_value_ir("kinetic", (3, 3))

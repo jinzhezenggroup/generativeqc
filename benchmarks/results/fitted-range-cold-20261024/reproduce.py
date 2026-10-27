@@ -42,19 +42,24 @@ for item in json.loads((ROOT / "history-storage.json").read_text())["files"]:
 packet = unpack(ROOT/'endpoints.json.xz')
 provenance = unpack(ROOT/'provenance.json.xz')
 previous = unpack(ROOT.parent/'xc-bounded-cross-20261024/provenance.json.xz')
-base_raw = previous['source_manifests']['guarded']
-base = json.loads(base_raw)
-assert base['source_revision'] == provenance['base_revision']
+sources = previous["source_identities"]
+assert digest(json.dumps(sources, sort_keys=True, separators=(",", ":"))) == previous["source_identities_sha256"]
+base = sources["guarded"]
+assert base["manifest_sha256"] == previous["source_manifest_sha256"]["guarded"]
+assert base["revision"] == provenance["base_revision"]
+projection = base["downstream_base_files"]
 manifests = {}
-for name, delta in provenance['source_manifest_deltas'].items():
-    assert digest(base_raw) == delta['base_manifest_sha256']
-    files = dict(base['files'])
-    for p in delta['removed']:
-        del files[p]
-    files.update(delta['changed'])
-    value = dict(source_revision=delta['source_revision'],files=dict(sorted(files.items())))
-    assert digest(json.dumps(value,indent=2)+'\n') == delta['manifest_sha256']
-    manifests[name] = value
+for name, delta in provenance["source_manifest_deltas"].items():
+    assert digest(json.dumps(delta, sort_keys=True, separators=(",", ":"))) == base["downstream_delta_sha256"][name]
+    assert delta["base_manifest_sha256"] == base["manifest_sha256"]
+    assert not delta["removed"]
+    assert set(delta["changed"]) <= set(projection)
+    files = {path: value for path, value in projection.items() if value is not None}
+    files.update(delta["changed"])
+    count = base["files_verified"] + sum(projection[path] is None for path in delta["changed"])
+    # This is the complete changed-path projection, not a reconstructed full manifest.
+    manifests[name] = dict(source_revision=delta["source_revision"], files=files,
+                           files_verified=count, manifest_sha256=delta["manifest_sha256"])
 for revision, patch in provenance['patches'].items():
     assert digest(patch) == provenance['patch_sha256'][revision]
 for name, raw in provenance['support'].items():
@@ -64,7 +69,7 @@ for stage in (26,27,28,29,33):
     manifest = manifests[f'stage{stage}-source-inputs.json']
     verified = json.loads(support[f'stage{stage}-source-verification.json'])
     assert verified['source_revision'] == manifest['source_revision']
-    assert not verified['mismatches'] and verified['files_verified'] == len(manifest['files'])
+    assert not verified['mismatches'] and verified['files_verified'] == manifest['files_verified']
 for stage in (26,27):
     built = manifests[f'stage{stage}-source-inputs.json']
     tested = manifests[f'stage{stage}-test-source-inputs-v2.json']
@@ -112,7 +117,7 @@ for path, raw in packet['records'].items():
         assert record['source_revision'] == 'ebe88719525b70aaf00b9c62267e165778c0adeb'
     else:
         assert record['arm'] == 'standard' and record['atoms'] == 96
-    manifest = base if record['source_revision'] == base['source_revision'] else manifests[f'stage{stage}-source-inputs.json']
+    manifest = dict(files=projection) if record['source_revision'] == base['revision'] else manifests[f'stage{stage}-source-inputs.json']
     assert record['runner_sha256'] == manifest['files']['benchmarks/readme_defaults.py']
     view = copy.deepcopy(record)
     if path.startswith(('stage29-moved-df/','stage33-moved-df/')) and record['arm'] == 'standard':

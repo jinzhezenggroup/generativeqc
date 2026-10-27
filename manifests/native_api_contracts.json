@@ -2182,6 +2182,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_hf_verify_final_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "1c0bdbdce71a19c19a0674e58f483ed94f2603c75deba2a495ffdabea45c8446",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_initial_guess_auto_kind_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -2879,6 +2895,38 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "87b84b79b00e1617b4e91734edb8c5369871a460b180efdb5f8aed6166dbdda5",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_hf_physical_audit_cpu_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "548a5e31cfe9d2965e9dec8c49c43aec24a4c9a50a0910ec9a4a4cc2473705fa",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_hf_physical_audit_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "858fd729e2aa0148c2bedee00e98d7facc3fd69433f428602716c62e87d5fc1d",
       "required_facets": [
         "behavior",
         "errors",

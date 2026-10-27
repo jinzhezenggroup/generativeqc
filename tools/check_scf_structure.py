@@ -189,6 +189,7 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
     "scf/application_precision.hpp",
+    "solver/cuda/cholesky_provider.hpp",
     "solver/cuda/generalized_eigen.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",
@@ -280,6 +281,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
 )
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
+    "scf/provider_initialization.hpp",
     "solver/cuda/symmetric_eigen_handles.hpp",
     "scf/cuda/resources.",
     "scf/cuda/eigensolver.",
@@ -287,6 +289,11 @@ CUDA_ALLOWED["cuda_resources"] = (
     "runtime/resource_cuda.cuh",
     "runtime/residency_cuda.cuh",
     "runtime/allocation_measurement.hpp",
+)
+CUDA_MODULES["cuda_provider_initialization"] = ("provider_initialization",)
+CUDA_ALLOWED["cuda_provider_initialization"] = (
+    "scf/provider_initialization.hpp",
+    "tensor/cuda_error.hpp",
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
 CUDA_ALLOWED["cuda_matrix_library"] = (
@@ -800,6 +807,7 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
     "posthf/capacity.hpp",
     "runtime/allocation_measurement.hpp",
     "scf/cuda/reference_export.cuh",
+    "scf/cuda/provider_initialization.cuh",
     "scf/cuda/reference_eri_policy.hpp",
     "scf/mean_field.hpp",
     "tensor/metrics.hpp",

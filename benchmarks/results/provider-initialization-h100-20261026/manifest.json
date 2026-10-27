@@ -1,0 +1,1088 @@
+{
+  "schema": "generativeqc.provider-init-engineering-evidence.v1",
+  "family": "provider-initialization-h100-20261026",
+  "measured_head": "e87cad557a81ff956e210efa2d76c770f0fdd41f",
+  "test_fixture_followup": "a50d1114a752fe211b97b3df3ef9e745311e0e4f",
+  "root_decision_sha256": "8e48205880e766a03bf5b14341f829c5c143809b38c976383230712185fb089b",
+  "files": [
+    {
+      "path": "inputs.json.xz",
+      "group": "inputs",
+      "bytes": 228780,
+      "sha256": "d9593b5045852e9f78038dbe2761b19c625ffbf219043ee6479eb8a1de801f60",
+      "expanded_bytes": 1921721,
+      "expanded_sha256": "1022b28a763f73c38783198b5c7340ce017cef687fbed00337f96ec29b099420",
+      "members": 7
+    },
+    {
+      "path": "observations.json.xz",
+      "group": "observations",
+      "bytes": 21468,
+      "sha256": "068f67d40dcdc80ce32baceeef3617b05dc47d6bf5e1858554722820bd2c49ec",
+      "expanded_bytes": 474180,
+      "expanded_sha256": "84f9ab014c14547dd0c80d3daf256c8373e9acc99f6adad2491eda9c2c009d52",
+      "members": 45
+    }
+  ],
+  "members": [
+    {
+      "name": "frozen-executed-inputs/collect_root_cli.py",
+      "group": "inputs",
+      "bytes": 7171,
+      "sha256": "bcc8807e6db9433462750f2478265af40148b32b483a18b921df12dded13495e",
+      "mode": "0o644",
+      "original_bytes": 7172,
+      "original_sha256": "c3ebf98f605156f96ddef24301b63599fa2ff884ad5efd2f9ff5ca45d05a714d",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "collector.argv",
+          "line": 110,
+          "kind": "<ACCOUNT_ALIAS>"
+        },
+        {
+          "field": "collector.argv",
+          "line": 113,
+          "kind": "<NOTEBOOK_NAME>"
+        }
+      ]
+    },
+    {
+      "name": "frozen-executed-inputs/e87-source-packet.json",
+      "group": "inputs",
+      "bytes": 598871,
+      "sha256": "78b0faa04e19e773bf6223e4fb3650eaa0befcbc1eb6823757b647c9c06795f4",
+      "mode": "0o644",
+      "original_bytes": 598871,
+      "original_sha256": "78b0faa04e19e773bf6223e4fb3650eaa0befcbc1eb6823757b647c9c06795f4",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "frozen-executed-inputs/literal-payload.json",
+      "group": "inputs",
+      "bytes": 578595,
+      "sha256": "86318e9d6e5c0a77c1a088d10a1ce4dad88a7d15e3410497b3510ca5137ee579",
+      "mode": "0o644",
+      "original_bytes": 578595,
+      "original_sha256": "86318e9d6e5c0a77c1a088d10a1ce4dad88a7d15e3410497b3510ca5137ee579",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "frozen-executed-inputs/preparation-report.json",
+      "group": "inputs",
+      "bytes": 6260,
+      "sha256": "9f32f8e7c2e6c3891c10d39caabfb447c9e566eaa0a7ecce872788d621b80b34",
+      "mode": "0o644",
+      "original_bytes": 6260,
+      "original_sha256": "9f32f8e7c2e6c3891c10d39caabfb447c9e566eaa0a7ecce872788d621b80b34",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "frozen-executed-inputs/source-files.json",
+      "group": "inputs",
+      "bytes": 18357,
+      "sha256": "00c1baab1fd649f82454b5796f5a2645d299cbc2e53e11ec2241dffd90410023",
+      "mode": "0o644",
+      "original_bytes": 18357,
+      "original_sha256": "00c1baab1fd649f82454b5796f5a2645d299cbc2e53e11ec2241dffd90410023",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "frozen-executed-inputs/staging-commands-win-v1.json",
+      "group": "inputs",
+      "bytes": 629147,
+      "sha256": "0e92f3ae6606536aabc853a62a42a2341796f5ca79f637520428aa40cac54007",
+      "mode": "0o644",
+      "original_bytes": 629147,
+      "original_sha256": "0e92f3ae6606536aabc853a62a42a2341796f5ca79f637520428aa40cac54007",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "Root-bound-parameters.json",
+      "group": "inputs",
+      "bytes": 3109,
+      "sha256": "db4e1868804feeda664371ee7b84665f394e72bd3890fb5a5a3d99a09ae5a901",
+      "mode": "0o644",
+      "original_bytes": 3109,
+      "original_sha256": "db4e1868804feeda664371ee7b84665f394e72bd3890fb5a5a3d99a09ae5a901",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "dispatch-v1/command-00.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "f129cbd4bf6fd68beafa6e30acaf5c0a109c44cd32237cdab92b7820b44879fe",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "829336d11576af0d46517df8c8f06eefe8e5ef28283ada76b1ea0e14066ce380",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-01.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "9eac6c201c9cef99049b46b526307b95258416d2619f6ab2fd8d97b3acce06db",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "133691cdd01cddcaad02348c5690a9458e7df954224c1f52c68daee4c4e4d0b5",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-02.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "a8c8383f0a57fc6df4143232a320a4fa6dfb19d6d0ab8401f736f567af8bbbf0",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "cf64b1bdfda2de54e6a8a3466236c43d2653a0efb1e4df468506a5a1af29bdf9",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-03.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "377a2cededa32874ea2e0576a6baf483c3bab0f8815f95fd46d0f3f215bd223b",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "5f59f9770dbe6e13ace58b98b494e90840feeb1931208b2663311ec440a19aac",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-04.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "270a8a6bc2d0a78d4f8d9e6f138b01ef9a7d896004b65cc91b2de2ff45684300",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "3d51440a825c60c27e23432fa402ed26dab880515123b266274a085daa4e6d9f",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-05.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "5d15faeeec908ad91556689a00dc68f0f2f06679c4292d0cace158c34ad87137",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "3d0f3159a7efd88c9847718b3ab34a5f9d1b276234b71b40fbe62c0f6f5c994b",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-06.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "3254e3738538be064a53bed08f6a750b196dab35e089e49aadbf86a782d0c1be",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "3ffdfce4dab868029602ff974def00faac7ac5ebcc4a2c4928dd62489666ea72",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-07.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "bbf38aee768f2d88adb80fb23a16cb8fcf7114067da214c525f07acf1d1a109c",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "eb1d73fc62d1309bf830c6a22534fa9f2f3b6fc8c85b2e3f67e58834db017083",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-08.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "e884b36883f3e6a80b6cdd43af781e0328ac1c18e57a13e92e02a759ca8c19f0",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "63d88aa2205687dc10f0c0ce8db811a25907c23cdd548124ce08aa01efbd2840",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-09.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "fd6e8bc1f77a6abc88bb4e9edfdea9a80ec1f5a9a576a2b018f978e0d1f72a36",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "3386fb73b3e8ce5fa42b0af74b0a5fb8685a3218afdcafe0b74edfe1e352e77d",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-10.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "7a3f5a891bdc42865cd13f8ef55588bb5e3a7d09ced231049f5c251226f10c55",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "fb0319ddf38a6fdd942d163ec26121a6c610941bd5abe8e28091bf7afd4c1646",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-11.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "4be4e4ca5508c1bbb3fbb1d18d89be3c5b4ec55f85df51cb9273aee61031af3e",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "d070ae476d7ad3af433f8c2cb334e25a001068cb00ca7995dc47f73985a7e845",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-12.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "56338c84c21397aebe170159273cb02e4ab45bbc6cd0d8f4e5977757e0ef7791",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "ea84fc5f878ed2310b2bea69c2df193adab8f5d8d266e1b7abc76dd93f3c2767",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-13.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "e1ec12b3083c98d91d4e243bd8d7a6922428d00c9dd7982e127b7fd62f7eac74",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "a6b149fe8ac8b88e316ae31908cf2c94bf449574d294ab3d2d517dc674399536",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-14.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "316f25b967434015b15fd82f86d909f0a18450ec78c6fc84d25625a70bbe6b92",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "37424081a532d200c59e6820476c593e2259c7e489d303f6ed65c9905f0b3608",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-15.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "f52793e6f10437730a9c6275bff1da1e9618fa71a6992ccd31eb7d5eda5e7c37",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "bd1d008da42214956a3d16f163f950e222ae862c3be48cc0addc01be57390ac0",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-16.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "91819607fb816b1cce411fa6ee51c9a23c0c9680a461861859d5755b2de3e255",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "55a06af915e4bff5e31fb5238597a896b4f5fc233ea9a45c9f423d15feec51e6",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-17.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "6a5467b305a38a5e37420738be629254ded6ca9ed3f121e523e82f0e2a50ada6",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "72fe1bf33f7f10d59febd2688dac17014a56a05637c0b2693242909f25e8d71a",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-18.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "23424b9933891673dd8023abaea8fbf4b72835c918e5de769009412469e063dd",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "a17b1df5cd15c1643b7ca3848838760e4563caeda9be23386a85eddfd2e25ed3",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-19.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "27ed3ec50ed41b35a0a3e747ae73a0080e4469488924f6bc77e0e5f30d75a63d",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "7d0a320c314ab0c4147c8928697dbb7b238c074935917e72a5078ba1f0d94f15",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-20.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "ad87632e67db1bb1a4578e10f14e914adbdfef4cbdee294f41b442967b6a8049",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "fcdd957baf8288b4831ed14aed57cfc5446cb5a54e4774d040b48497adeef8cb",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-21.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "62245c036a17971da44974bdf6c241274f6b489449603de6e93b5f6c487d661d",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "97f82afa671693ea3c972aba79d65ab5c0a38b5635640bac5c21de3044d3489a",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-22.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "33a54ff4c63e28308814c3cce5905c558e18de3fdbd7bf9bd8fa48fbd7cc1529",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "dfba288e68d882edb6fbacd91e6e252b103f2a347049ad3368102772647df6aa",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-23.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "b75d7837731e0cd6a7a2374dc547d3c58d181b0c36b4ac132fed56983cfa6057",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "e0a5e7a7622af35b389e999b546eda86f9ed99ad47fd6e5edf876e13125bdaab",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-24.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "f6e5e2eae2edad285de4a90cdb8e69f631f85a52d4c2139236d02ec10e6d181f",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "94fb25c275fbc9116e9e86c3b5571ce1e14ed15bf230b53dadc60dd6335cde66",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-25.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "497b2df1620a9d15b0727a5cbd6391d32d17f5f260e6cf2f9ac6b8b2177d6259",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "fcc7a345cd1b67759fed98614c66446987a5d448a5d79de4ba2b04e340b39592",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-26.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "188e58fb04d03bf9c33037855db36dbaeba4e5cc5588419c094f460aa4ae3d76",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "793c619ec778056d485cbe174d13a8450a8a8b467ef6f466a4d4ceed3a754b5e",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-27.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "f0f38d80c5c0461c4a1662765377dfd5359ff53ac91dbbe7a519c835a42d1a97",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "ed5ebbdf44d3fd615fe22b20a48972e2cd76dd4f16e180bccdf377e1c415be4b",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-28.json",
+      "group": "observations",
+      "bytes": 894,
+      "sha256": "bbcced9906a0e0eb255215594e5dc2a1e73a66fc98f4a297a209099fb97f463a",
+      "mode": "0o644",
+      "original_bytes": 966,
+      "original_sha256": "e31e8a8bb32e86653fc4c0ec9074a26a7c2c41f600c3d5982d4257821c7dc810",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-29.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "8a111300046b85ae1a6b4d7eed85764e98176393f42b3c06d5a050c4ec5c6fa2",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "2030e646e00251b85b5833f1aacb7ce7a795416f260e7d15b1e51a13f7f7350e",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-30.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "1d3b6d6e6ca374f4d947be9c1803d85c060607be0afeab6579fc978b0956d586",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "16844849ba78cc8fa1ab9d2ae7b0f0b95a0e44535149fe2e53c08ee2c2cd5954",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-31.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "877ae527b487cc0e26fc1bfbcb7be2dcaa3229918507e67f40dbe2e4f9eb46b9",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "bb102400f0da0141ad9a1ba5e37fa9040e2a822604c697a248a5744bc9f269ad",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-32.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "7a76a308f74b3b19206a07bd8131d5b1a7fba575b505ac02d5745ce47fa4c77c",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "6e932df4aa876845ffa6e2ff26ef9805c9d52987ffc5dbc22a080a534770c95a",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-33.json",
+      "group": "observations",
+      "bytes": 893,
+      "sha256": "7c5000ffbe79555d0956e4268e3ef2f7942998f378f38b6a7728f2d1796c6abf",
+      "mode": "0o644",
+      "original_bytes": 965,
+      "original_sha256": "b94b4dcb4cd00e5b3d880a636351178f9a683c7ef53a15ed598d38d8a88f61e2",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-34.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "084b29f53b888d5f1d0e60336bce32f23cb4fbaaf3eca4753916c0adb7d33b37",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "93e4715e93294cac85acdfba4c7cbcc17618d7efb7c184d78647f155576ea7c7",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-35.json",
+      "group": "observations",
+      "bytes": 956,
+      "sha256": "64599336b1339cb157caba90c9bb308989528240700a7d7b28ce9ed163880866",
+      "mode": "0o644",
+      "original_bytes": 1028,
+      "original_sha256": "d14d99d9b706dac01db898d1a9332d0775320dd824aa31347aa4b558aaf1e2de",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-36.json",
+      "group": "observations",
+      "bytes": 892,
+      "sha256": "02ccf5966125236ba959d8ea0549143bad0608310ba349b834b192c02316cf19",
+      "mode": "0o644",
+      "original_bytes": 964,
+      "original_sha256": "43525062acb7c334b4d56115fa25ad7b191a2b5a6f9d9f2cdfe88c34d8213b9d",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/command-37.json",
+      "group": "observations",
+      "bytes": 145995,
+      "sha256": "7b0cdfe2b7c34fca855453649ad24003c9118f92a34984625f765b500c437a50",
+      "mode": "0o644",
+      "original_bytes": 146067,
+      "original_sha256": "162dfdd1a231086a3e30c66d575bd45028c9a68698002d62c9b0994bf4a8e35b",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    },
+    {
+      "name": "dispatch-v1/input-identities.json",
+      "group": "observations",
+      "bytes": 356,
+      "sha256": "ad5f0e8d6b223239f9358f7f99b23a00dd21ab2e17d8a10640e16b81d272150c",
+      "mode": "0o644",
+      "original_bytes": 356,
+      "original_sha256": "ad5f0e8d6b223239f9358f7f99b23a00dd21ab2e17d8a10640e16b81d272150c",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "actual-runner-events.json",
+      "group": "observations",
+      "bytes": 178475,
+      "sha256": "76eec16de607e102c82590c928f2806685bef38b58a76c4efcf3354e0f6b2899",
+      "mode": "0o644",
+      "original_bytes": 178475,
+      "original_sha256": "76eec16de607e102c82590c928f2806685bef38b58a76c4efcf3354e0f6b2899",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "actual-bridge-events.json",
+      "group": "observations",
+      "bytes": 6680,
+      "sha256": "5c49086b1429d2948b8593840242933cb828c64c8e6839f66e88d81359ae9820",
+      "mode": "0o644",
+      "original_bytes": 6680,
+      "original_sha256": "5c49086b1429d2948b8593840242933cb828c64c8e6839f66e88d81359ae9820",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "Root-readonly-intake-result.json",
+      "group": "observations",
+      "bytes": 8031,
+      "sha256": "f1c984c51d036b44fffeb07327d051845f25636d6be6b3db3627a0934485dd1c",
+      "mode": "0o644",
+      "original_bytes": 8045,
+      "original_sha256": "25cf0a818d7558d25ff94c90892dc5683c621d8b8e1102f7f6a77c92d5958446",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "container.hostname",
+          "kind": "notebook-derived-hostname-prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Root-readonly-intake-transport.json",
+      "group": "observations",
+      "bytes": 7891,
+      "sha256": "ffc7e6e4a4ebaaaab234747391f42c7f1df6c16f118823175b0be35d6bf95638",
+      "mode": "0o644",
+      "original_bytes": 7977,
+      "original_sha256": "858baff05801403e803a8b5420311430108dbd78b0a57e2100877d6603a325bc",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        },
+        {
+          "field": "stdout.container.hostname",
+          "kind": "notebook-derived-hostname-prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Root-terminal-inventory-result.json",
+      "group": "observations",
+      "bytes": 16592,
+      "sha256": "e24f67667c3abab238649765a0a5747120c217844a781dc550ff05f5dfe5c5b1",
+      "mode": "0o644",
+      "original_bytes": 16592,
+      "original_sha256": "e24f67667c3abab238649765a0a5747120c217844a781dc550ff05f5dfe5c5b1",
+      "byte_identical_to_original": true,
+      "redactions": []
+    },
+    {
+      "name": "Root-terminal-inventory-transport.json",
+      "group": "observations",
+      "bytes": 14175,
+      "sha256": "9822f496fb0807dc48abb8fe04bbdbf5fe967a59927309feeb50ef6d3cad91b8",
+      "mode": "0o644",
+      "original_bytes": 14247,
+      "original_sha256": "f15957cedad4238356b10c794b5110afb6de238db6a9f430675f0cb8aa4de8f5",
+      "byte_identical_to_original": false,
+      "redactions": [
+        {
+          "field": "stderr",
+          "kind": "local-user-path",
+          "count": 3,
+          "original_bytes": 438,
+          "original_sha256": "7038ecf5a7c043086e7fcfcc008edd518664cf5149b7e01842fc550f4918517a",
+          "public_bytes": 378,
+          "public_sha256": "1ff448af1bbdd73eb0ada90f490f544cf217d127facb2ead9a086d5846f7c53e"
+        }
+      ]
+    }
+  ],
+  "preexisting_cli_stdout_redactions": [
+    {
+      "index": 37,
+      "raw_bytes": 131790,
+      "raw_sha256": "73317dd71c5a7e793c755a71605fa3a6fde016af2e7166e9466180b6cd2fc8fc",
+      "captured_bytes": 131771,
+      "captured_sha256": "edd63a195bcf68f69d60f7bd7ccc8ad75c8462eef7611b74bdd66b8974a53081",
+      "redacted_URLs": 1,
+      "raw_pre_scrub_bytes": "UNAVAILABLE; original collector retained a digest and redacted captured text"
+    }
+  ],
+  "restorable_executed_files": 53,
+  "actual_owned_inventory_files": 56,
+  "actual_owned_inventory_bytes": 838711,
+  "compiled_inventory_only": [
+    {
+      "name": "native_init_bridge",
+      "bytes": 105208,
+      "sha256": "66368b2330f3b0b37bb703eebf1b872262e39c533d877948fc3f741cbe42483c",
+      "mode": "0o755",
+      "device": 2097266,
+      "inode": 6703796449,
+      "mtime_ns": 1793029429019678141
+    },
+    {
+      "name": "native_init_bridge.o",
+      "bytes": 130280,
+      "sha256": "7cfe4f594c20263d9649b7cdd143e498f51e3a0cce632f73c7651bd16709ea69",
+      "mode": "0o640",
+      "device": 2097266,
+      "inode": 6703796447,
+      "mtime_ns": 1793029428943679810
+    },
+    {
+      "name": "runtime_identity.o",
+      "bytes": 38504,
+      "sha256": "7891c4991c353a9f5a1c4ba7a9bc9822e2ece7e3d1db4ac5526c57cc664cd6c8",
+      "mode": "0o640",
+      "device": 2097266,
+      "inode": 6703796445,
+      "mtime_ns": 1793029426591731436
+    }
+  ],
+  "compiled_contents": "NOT_PUBLISHED; remote-retained only; hashes do not reconstruct binaries",
+  "private_control_material": "Excluded: private decisions/controllers, account/session bindings, chats and personal policies; decision is an opaque digest only",
+  "public_redaction_scope": "Collector account/notebook literals, notebook-derived hostname prefix in read-only intake and local user paths in transport stderr only; original raw digests retained, originals immutable and private",
+  "source_identity": "Exact executed source and metadata, plus source packet's original 21-file LF/mode identities; no whole-new-head device acceptance",
+  "qualification": "PASS_ENGINEERING_NATIVE_INIT_SUBCONTRACT_ONLY",
+  "limits": {
+    "default_allowance_per_provider_bytes": 100663296,
+    "experiment_allowance_bytes": 536870912,
+    "B_ref_reservation_lower_bound_only_bytes": 1073741824,
+    "observed_delta_bytes": 375390208,
+    "vendor_owners": 1,
+    "guard_calls": 2,
+    "numeric_solver_matrix_geometry_model_SCI_calls": 0,
+    "full_SDK_RHF_scientific_acceptance": false,
+    "whole_RHF_budget_peak_billing": null,
+    "selected_allowance_is_global_policy_or_peak_bound": false
+  },
+  "actual_vendor_child_stdout": {
+    "bytes": 5278,
+    "sha256": "34167df89da20deafcf7d44a5eee3cc1c3d7f3e28a277c2c7e49dab3e388a467",
+    "availability": "BYTE_IDENTICAL_VERIFIED_FROM_CAPTURED_NATIVE_CHILD_STDOUT; separate from unavailable pre-scrub outer CLI37 stdout"
+  }
+}

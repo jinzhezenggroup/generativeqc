@@ -23,11 +23,11 @@ __host__ __device__ inline double md_j_primitive_allowance(MdJView md, double sc
   if (!target_count) target_count = md.maximum_pair_primitives;
   if (!source_count) source_count = md.primitive_count;
 #ifdef __CUDA_ARCH__
-  return __ddiv_rd(__ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(target_count)),
+  return __ddiv_rd(__ddiv_rd(fmin(screening, md.density_error_cap), double(target_count)),
                    double(source_count));
 #else
   return std::nextafter(
-      std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(target_count), 0.0) /
+      std::nextafter(std::fmin(screening, md.density_error_cap) / double(target_count), 0.0) /
           double(source_count),
       0.0);
 #endif
@@ -128,7 +128,7 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
         // density envelope. Either direction can keep this q-sorted position.
         bound.qd = output[position].qd;
         const auto pair = md.pairs[primitive.pair];
-        const double budget = fmin(screening, kMdJDensityErrorCap);
+        const double budget = fmin(screening, md.density_error_cap);
         const auto multiplicity = pair.primitive_end - pair.primitive_begin;
         // Each threshold independently bounds the complete omitted source
         // sum by epsilon/m. Choosing the larger selects one complete proof;
@@ -177,7 +177,7 @@ __device__ inline bool md_j_engine_direction(MdJView md, std::uint32_t output, s
   const auto density = md.density_bounds[input];
   const auto contribution =
       __dmul_ru(__dmul_ru(md.maximum_bounds[output], md.maximum_bounds[input]), density);
-  const auto allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
+  const auto allowance = __ddiv_rd(fmin(screening, md.density_error_cap), double(md.pair_count));
   return density != 0.0 && contribution >= allowance;
 }
 
@@ -208,7 +208,7 @@ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angula
     // These max-source/min-threshold reductions conservatively enclose every
     // leaf comparison, including unknown bounds and a zero screening cutoff.
     return (ket.qd != 0.0 && ket.qd >= bra.minimum) || (bra.qd != 0.0 && bra.qd >= ket.minimum);
-  const double allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
+  const double allowance = __ddiv_rd(fmin(screening, md.density_error_cap), double(md.pair_count));
   return (ket.density != 0.0 && md_j_screen_density_bound(bra, ket) >= allowance) ||
          (bra.density != 0.0 && md_j_screen_density_bound(ket, bra) >= allowance);
 }

@@ -141,6 +141,10 @@ struct CudaDfWhitenedTensorView {
   // The eigensystem and owner identity bind E's auxiliary coordinates. To
   // recover A M^-1, multiply E by lambda^-1/2 Q^T, never by M^-1/2.
   bool spectral_basis{};
+  // Optional explicit nonsymmetric W for F=W*A, with W^T*W=M^-1.
+  // Physical response is F^T*W; this pointer shares the forward owner's lease.
+  // It never replaces the symmetric root or eigensystem in metric.
+  const double* factor_response_root{};
 };
 /** Exclusive, stream-ordered borrow from the existing J/K tensor allocation.
  * Dense plans keep two mutable buffers; the third is immutable when resident_raw
