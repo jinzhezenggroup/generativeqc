@@ -18,6 +18,22 @@ def main() -> None:
         )
         loaded[name] = json.loads(lzma.decompress(data))
     source = loaded["source-closure.json.xz"]
+    assert source["schema"] == "generativeqc.h100-owner-v7-source-delta.v1"
+    ancestor = source["base_archive"]
+    assert ancestor["path"] == "../v6/source-closure.json.xz"
+    base_bytes = (root.parent / "v6/source-closure.json.xz").read_bytes()
+    assert len(base_bytes) == ancestor["bytes"]
+    assert hashlib.sha256(base_bytes).hexdigest() == ancestor["sha256"]
+    base_sources = json.loads(lzma.decompress(base_bytes))["sources"]
+    assert source["changed_sources"].keys() <= source["manifest"]["files"].keys()
+    source["sources"] = {
+        name: (
+            source["changed_sources"][name]
+            if name in source["changed_sources"]
+            else base_sources[name]
+        )
+        for name in source["manifest"]["files"]
+    }
     assert source["manifest"]["base_commit"] == summary["measured_source_base_commit"]
     for name, row in source["manifest"]["files"].items():
         data = source["sources"][name].encode()

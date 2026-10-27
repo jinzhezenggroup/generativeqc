@@ -33,8 +33,8 @@
       "sha256": "c78aeb32930bb0d558e1d55d21ceefb108b5d846801a94abccd67b7115c61bd6"
     },
     "source-closure.json.xz": {
-      "bytes": 186576,
-      "sha256": "2be8553ac22a8b00d6d050032de6610cbdd78012f0a0194b17b2e6b2c24c3953"
+      "bytes": 58788,
+      "sha256": "7c7672b228ea1f6bd9bb23d86c82bb3d6cd0581535c301081a7ae591d47bd20c"
     }
   },
   "compacted_link_map": {
@@ -42,5 +42,11 @@
     "original_sha256": "830235468fe2cdb93139031d08d37e8a7aa34036741eea72dc14e4d04fef976a",
     "retained_excerpt_bytes": 5170,
     "full_text_in_current_capsule": false
+  },
+  "source_recovery": {
+    "mode": "V7 delta against immutable V6 archive",
+    "source_inputs": 102,
+    "changed_source_inputs": 3,
+    "base_sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
   }
 }

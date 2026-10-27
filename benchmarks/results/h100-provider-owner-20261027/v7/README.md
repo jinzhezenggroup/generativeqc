@@ -39,6 +39,12 @@ from the same capsule path at Git commit `e944b34082d1856d9a50dc235a5c9cfadf751d
 The current capsule does not claim to contain that complete map. All status,
 failure, source and build/loaded-library identity records remain retained.
 
+The source archive stores the complete V7 manifest and changed source texts
+against the immutable `../v6/source-closure.json.xz`. Replay first verifies that
+ancestor's byte length and SHA-256, reconstructs all 102 measured inputs, then
+verifies every input against the V7 manifest. Both archives are required for
+offline replay; no source, digest or qualification is silently substituted.
+
 Optional capability bits remain zero. Installed SDK acceptance is
 **INCOMPLETE** and scientific qualification is **NOT_RUN**. No molecule, SCF,
 correlated-method, energy or force endpoint was requested. Parent scientific
