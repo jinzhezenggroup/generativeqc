@@ -52,6 +52,7 @@ def test_partial_report_is_not_whole_owner_close(owner_probe: Path) -> None:
         "missing-operation",
         "duplicate-schema",
         "uncertain-close-retry",
+        "finalization-throws",
     ],
 )
 def test_concrete_owner_retention(owner_probe: Path, mode: str) -> None:

@@ -60,6 +60,8 @@ class _Transaction:
         self.budget_lease = None
         self.native_close = close
         self.shutdown_unavailable = False
+        self._executing = True
+        self._execution_thread = threading.get_ident()
 
     def open_context(self, descriptor: _native.ContextDescriptor) -> ctypes.c_void_p:
         if self.context_owner is not None:
@@ -73,7 +75,7 @@ class _Transaction:
             )
         return self.context
 
-    def close(self) -> None:
+    def close(self, *, _finish_execution: bool = True) -> None:
         # Match the scalar transaction's lock order. Never acquire a context
         # owner lock while already holding the root lock.
         guard = (
@@ -82,6 +84,18 @@ class _Transaction:
         with guard, self.root.lock:
             if self.root.active is not self:
                 return
+            if self._executing:
+                if (
+                    not _finish_execution
+                    or threading.get_ident() != self._execution_thread
+                ):
+                    raise RuntimeError(
+                        "provider transaction is still executing; owner retained"
+                    )
+                # Only the executing scalar call's finally path can end use.
+                # Public close cannot retire a not-yet-created context or any
+                # handle between prepare, execute and diagnostic reads.
+                self._executing = False
             if self.context.value:
                 status = int(self.native_close(self.context))
                 if status:
@@ -135,9 +149,11 @@ class _Transaction:
             if primary is None:
                 raise
             primary.provider_initialization_close_error = close_error
-            BaseException.add_note(
-                primary, f"Secondary provider close failure: {close_error}"
-            )
+            # Python 3.10 has no exception notes; the attached secondary error
+            # still preserves the close failure without replacing the primary.
+            add_note = getattr(BaseException, "add_note", None)
+            if add_note is not None:
+                add_note(primary, f"Secondary provider close failure: {close_error}")
 
 
 class _LifetimeRoot:
@@ -206,4 +222,4 @@ def close_retained_owner() -> None:
     with _root.lock:
         active = _root.active
     if active is not None:
-        active.close()
+        active.close(_finish_execution=False)

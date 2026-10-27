@@ -6,11 +6,14 @@ which storage survives each stage and the retained-input budget handoff.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,6 +43,15 @@ struct ElectronInteractionSource {
 };
 }
 namespace scf {
+struct AbsentProviderOwner {
+  struct CloseReport { bool confirmed() const { return false; } };
+  CloseReport close_current() {
+    throw std::logic_error("legacy source fixture entered opt-in close");
+  }
+};
+struct ReferenceOptions {
+  std::shared_ptr<AbsentProviderOwner> reference_provider_initialization_owner;
+};
 struct CudaRhfBucketPlan {};
 std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* p) noexcept { delete p; }
@@ -125,11 +137,10 @@ Problem build_problem(int system, const integrals::ElectronInteractionSource* so
 
 
 @pytest.fixture(scope="module")
-def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    cache = shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("host C++ compiler and ccache required")
+def source_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    compiler, cache = native_cxx.compiler, native_cxx.cache
     mp2 = (ROOT / "src/methods/mp2_method.cpp").read_text()
     cc = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     mp2_setup = mp2.split("      std::unique_ptr<posthf::RawSource> raw_source;", 1)[
@@ -199,6 +210,7 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=f
   }
   int system=43, reference_value=0, provider_work=0, provider_metrics=0;
   SolverOptions solver_options, correlation_options;
+  scf::ReferenceOptions reference_options;
   scf::CudaRhfBucketPlan** cuda_reference_plan=nullptr;
   const auto retained_plan_bytes=[] { return std::size_t{0}; };
   const auto* reference=&reference_value;
@@ -287,11 +299,9 @@ def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> N
         assert process.returncode == 0, (mode, process.returncode, process.stderr)
 
 
-def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("host C++ compiler and ccache required")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
+def test_device_interaction_source_defaults_fail_closed(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     source = tmp_path / "device_source_contract.cpp"
     executable = tmp_path / "device_source_contract"
     source.write_text(
@@ -337,26 +347,19 @@ int main() {
 }
 """
     )
-    compiled = subprocess.run(
-        [
-            cache,
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-O0",
             "-I",
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+        ),
+        compile_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     process = subprocess.run(
         [str(executable)],
         capture_output=True,

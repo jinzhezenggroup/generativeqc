@@ -1,8 +1,10 @@
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "scf/provider_initialization_generation.hpp"
@@ -53,7 +55,24 @@ class ProviderOwnerRetentionCell {
       const auto close = [&] {
         cleanup_attempted_ = true;
         auto raw = owner_->close_current_context();
-        return verify_provider_owner_teardown(schema, before, owner_->inventory(), std::move(raw));
+        auto verified =
+            verify_provider_owner_teardown(schema, before, owner_->inventory(), std::move(raw));
+        if (verified.confirmed()) {
+          // Finalization can allocate while checking concrete member state.
+          // Keep its failure unconfirmed, with the physical receipt retained,
+          // before the generation releases pins or caches a successful close.
+          try {
+            owner_->mark_teardown_complete();
+          } catch (const std::exception& error) {
+            return ProviderInitializationTeardownReport{
+                std::move(verified.steps),
+                std::string("teardown unavailable: owner finalization failed: ") + error.what()};
+          } catch (...) {
+            return ProviderInitializationTeardownReport{
+                std::move(verified.steps), "teardown unavailable: owner finalization failed"};
+          }
+        }
+        return verified;
       };
       const bool empty = std::none_of(before.resources.begin(), before.resources.end(),
                                       [](const auto& resource) { return resource.token != 0; });
@@ -67,7 +86,6 @@ class ProviderOwnerRetentionCell {
       else
         last_ = owner_->generation().retire_current(std::forward<Observe>(observe), close);
       if (last_.confirmed()) {
-        owner_->mark_teardown_complete();
         owner_.reset();  // Deletion begins only after real full inventory closure.
       }
       return last_;

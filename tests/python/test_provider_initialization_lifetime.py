@@ -108,7 +108,10 @@ def test_primary_error_survives_secondary_close_failure(lifetime: Any) -> None:
         lifetime.ProviderInitializationCloseUnavailable,
     )
     assert lifetime.has_pending_owner()
-    assert any("Secondary provider close failure" in note for note in primary.__notes__)
+    if hasattr(BaseException, "add_note"):
+        assert any(
+            "Secondary provider close failure" in note for note in primary.__notes__
+        )
 
 
 def test_success_closes_dependents_before_releasing_transaction(lifetime: Any) -> None:
@@ -167,4 +170,59 @@ def test_shared_context_survives_confirmed_provider_close(lifetime: Any) -> None
     assert ("context", 11) not in library.calls
     assert transaction.context.value == 11
     assert not owner._provider_initialization_retained
+    assert not lifetime.has_pending_owner()
+
+
+@pytest.mark.parametrize("phase", ["before_create", "during_create", "after_create"])
+def test_public_close_cannot_retire_an_executing_transaction(
+    lifetime: Any, monkeypatch: pytest.MonkeyPatch, phase: str
+) -> None:
+    admitted, resume = threading.Event(), threading.Event()
+    library = Library()
+    failures: list[BaseException] = []
+
+    def pause() -> None:
+        admitted.set()
+        assert resume.wait(5), "public-close interleaving did not resume"
+
+    def create(descriptor: Any, output: Any) -> int:
+        if phase == "during_create":
+            pause()
+        output._obj.value = 11
+        library.calls.append(("create", 11))
+        return 0
+
+    library.generativeqc_context_create = Function(create)
+    monkeypatch.setattr(
+        lifetime._native, "check", lambda library, status: None, raising=False
+    )
+
+    def execute() -> None:
+        transaction = lifetime.begin(library, None)
+        try:
+            if phase == "before_create":
+                pause()
+            transaction.open_context(ctypes.c_int())
+            if phase == "after_create":
+                pause()
+        except BaseException as error:  # noqa: BLE001 - report worker failures in the asserting thread
+            failures.append(error)
+        finally:
+            transaction.close_preserving_primary(None)
+
+    worker = threading.Thread(target=execute)
+    worker.start()
+    try:
+        assert admitted.wait(5)
+        with pytest.raises(RuntimeError, match="still executing"):
+            lifetime.close_retained_owner()
+        assert lifetime.has_pending_owner()
+        with pytest.raises(RuntimeError, match="still retained"):
+            lifetime.begin(Library(), None)
+        assert library.calls == ([] if phase != "after_create" else [("create", 11)])
+    finally:
+        resume.set()
+        worker.join(5)
+    assert not worker.is_alive() and not failures
+    assert library.calls == [("create", 11), ("close", 11), ("context", 11)]
     assert not lifetime.has_pending_owner()

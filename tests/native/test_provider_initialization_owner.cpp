@@ -44,7 +44,8 @@ struct WholeOwner {
                                 {"workspace", ProviderOwnedResourceKind::device_buffer, 4},
                                 {"host", ProviderOwnedResourceKind::host_buffer, 5},
                                 {"unused", ProviderOwnedResourceKind::device_buffer, 0}}};
-  bool fail_drain{}, omit_operation{}, managed{}, closed{};
+  bool fail_drain{}, omit_operation{}, managed{}, closed{}, fail_finalization{};
+  int finalizations{};
   ~WholeOwner() {
     ++destroyed;
     for (const auto& resource : state.resources)
@@ -61,7 +62,11 @@ struct WholeOwner {
   }
   ProviderOwnerInventory inventory() const { return state; }
   void enter_explicit_retirement_protocol() { managed = true; }
-  void mark_teardown_complete() { closed = true; }
+  void mark_teardown_complete() {
+    ++finalizations;
+    if (fail_finalization) throw std::runtime_error("owner finalization allocation failed");
+    closed = true;
+  }
   ProviderInitializationTeardownReport close_current_context() {
     ProviderInitializationTeardownReport report;
     const std::vector<std::string> actions{
@@ -160,6 +165,25 @@ int run_owner(const std::string& mode) {
   require(!weak.expired() && !cell.can_destroy() &&
               cell.retained_budget()->allowance_bytes == budget.allowance_bytes,
           "retention lost whole owner or original budget before close");
+  if (mode == "finalization-throws") {
+    weak.lock()->fail_finalization = true;
+    ProviderInitializationTeardownReport first;
+    try {
+      first = cell.try_close_current(observe);
+    } catch (const std::runtime_error&) {
+      // A throwing finalization must remain unavailable on every later close.
+    }
+    const auto physical_calls = calls;
+    weak.lock()->fail_finalization = false;
+    const auto repeated = cell.try_close_current(observe);
+    require(!first.confirmed() && !repeated.confirmed() && !cell.can_destroy() &&
+                !weak.expired() && !weak.lock()->closed && weak.lock()->finalizations == 1 &&
+                calls == physical_calls && cell.retained_budget() == budget && !pins[1].expired(),
+            "failed finalization was confirmed, retried or lost original custody");
+    require(repeated.reported_steps_succeeded() && !repeated.detail.empty(),
+            "failed finalization lost its raw successful physical-close receipt");
+    return 0;
+  }
   if (mode == "uncertain-close-retry") {
     weak.lock()->fail_drain = true;
     auto failed = cell.try_close_current(observe);
