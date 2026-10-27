@@ -8,6 +8,7 @@ from generativeqc_compiler.xc import automatic_semilocal, libxc_bulk
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, UnsupportedXC
+
 from tools import generate_libxc_semilocal_cpu_registry as registry
 
 
