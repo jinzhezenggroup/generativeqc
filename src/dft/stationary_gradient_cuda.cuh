@@ -429,11 +429,11 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
             center_pairs, error, phased.seeds, false, radii);
     cuda_check(cudaPeekAtLastError());
   } else if (owner.becke_threads_per_point > 1)
-#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
-    geometry_cooperative_kernel<true, double>
-#else
+    // The template flag denotes a fully prepared phased-Becke seed, not merely
+    // an external XC value. Staged points still need geometry_point_setup to
+    // form that seed and either publish it or contract inline partition motion.
+    // Selecting <true> here silently drops Becke response on nonphased tiles.
     geometry_cooperative_kernel<false, double>
-#endif
         <<<geometry_lanes, owner.becke_threads_per_point,
            owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
             view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,

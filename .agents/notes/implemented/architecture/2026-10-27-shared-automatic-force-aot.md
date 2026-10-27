@@ -44,6 +44,13 @@ fallback.
   channels need not have been initialized by the grid owner.
 - Producer errors are sticky and prevent reading stale point values. Launch
   errors are checked before the consumer can observe the intermediate.
+- A staged XC value is not a prepared Becke seed. The existing cooperative
+  template's `precomputed_point` path assumes phased partition response and
+  skips inline Becke contraction. Ordinary staged tiles must still run point
+  setup and either contract partition response or publish its phased seed.
+  A complete H4/APBE force-vector requalification exposed a 0.0212945 Ha/bohr
+  error when that flag was selected unconditionally; energies and densities
+  were unchanged, so point-only and SCF checks could not catch the omission.
 - Tile bytes and point launches/counts are explicit costs, including the minimum
   workspace alternative. No extra full-grid allocation or host transfer appears.
 - RKS density-only forces use the existing unpolarized point convention; other
