@@ -117,7 +117,8 @@ def test_runtime_and_tuning_api_share_cuda_target_info() -> None:
         "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
         in direct
     )
-    assert "resolve_direct_jk_schedule_policy(direct_target)" in direct
+    # Compiled precision-policy tests check the resolver's resource decisions;
+    # this boundary audit must not pin its argument spelling or arity.
     # The common facts owner retains the authoritative full-property fallback.
     assert "cudaGetDeviceProperties(&properties, device)" in facts
     assert "candidate = cuda_target_info_from_properties(properties)" in facts

@@ -779,20 +779,26 @@
         "src/api/c_api_resource_ledger_plan.cpp",
         "src/runtime/resource_ledger_plan.cpp",
         "src/molecule/basis.hpp",
-        "src/molecule/basis.cpp"
+        "src/molecule/basis.cpp",
+        "src/runtime/prepared_device_resources.hpp",
+        "src/api/c_api_device_resources.cpp"
       ],
       "native_callers": [
         "src/api/c_api_resources.cpp",
         "src/cli/resources.cpp",
         "src/dft/dispersion/d3_runtime.cpp",
         "src/api/c_api_resource_planning.cpp",
-        "src/api/c_api_resource_ledger_plan.cpp"
+        "src/api/c_api_resource_ledger_plan.cpp",
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/methods/dft_method.cpp"
       ],
       "remaining_python_runtime": [
         "CPU HF/KS compact expanded-contraction topology counts use an additive native query on the selected library, sharing AO representation arithmetic with normalized native systems. Python still expands basis records and owns mathematical provenance, capability checks and ECP descriptors. Missing-symbol, library-free and CUDA shape plans retain explicit portable arithmetic. Native refusal does not retry portable sizing; shape counts are not full allocation/provider/lease authority.",
         "CPU HF and CPU/CUDA KS host per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit CPU transient floor or CUDA retained consumer allowances to the native fleet peak check without transferring consumer eligibility/admission policy; the ordinary native CLI excludes Python snapshot/force consumers. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. D3(BJ) retained plan/execution, table and workspace capacities query the same native layout used by D3Plan::prepare, including a shape-only CUDA selector. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python retains consumer allowance/eligibility policy and method/provider inventory construction.",
         "CUDA KS device per-item setup, retained arena/provider sums, serialized rebuild excess and minimum/cached stationary declared-device peaks use discovered native fleet composition, shared with native CLI ordinary-energy dry runs. Python obtains the existing native allocator leaves, marshals topology/consumer inventories and publishes resource metadata; missing-symbol libraries retain explicit legacy per-item composition. Native refusal or inconsistent publication never retries Python sizing. This does not transfer consumer admission or establish complete physical/provider/lease/RSS authority.",
-        "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query."
+        "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query.",
+        "With the additive prepared-resource ABI, Calculation and PreparedBatch pass the selected inventory once and native owners retain admission across construction, execution, independent ports and destruction. Python reads snapshots without owning those binding scopes; absent-symbol libraries alone retain the explicit older observation adapter. Numeric-cap strict-FP64 all-electron s/p PBE/PBE0 KS has native mandatory fleet promises and unpromised optional XC admission; unsupported controls and capacity misses retain bounded incumbent admission. Selected external inventories keep dense/single-tile behavior. This does not transfer all Python inventory selection, admit public CUDA DF KS forces, or establish complete opaque provider/RSS accounting."
       ],
       "tests": [
         "tests/python/test_resources.py",
@@ -814,7 +820,10 @@
         "tests/native/test_resource_planning.cpp",
         "tests/python/test_native_resource_ledger_plan.py",
         "tests/native/test_resource_ledger_plan.cpp",
-        "tests/python/test_device_ledger_requested_bytes.py"
+        "tests/python/test_device_ledger_requested_bytes.py",
+        "tests/native/test_device_resources.cpp",
+        "tests/native/test_ks_capacity_cuda.cpp",
+        "tests/python/test_native_prepared_resources.py"
       ],
       "trackers": [
         "#933",
@@ -901,6 +910,26 @@
           "path": "python/generativeqc/projection.py",
           "symbol": "_project_density_python",
           "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/_hf_physical_native.py",
+          "symbol": "audit",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/progressive_controller.py",
+          "symbol": "_audit_target_physical_residual_python",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/progressive_controller.py",
+          "symbol": "finalize_hf_verification",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/progressive_controller.py",
+          "symbol": "_finalize_hf_verification_python",
+          "classification": "compatibility"
         }
       ],
       "native_scientific_sources": [
@@ -910,16 +939,22 @@
         "src/scf/progressive_hf.hpp",
         "src/scf/effort_policy.hpp",
         "src/scf/initial_guess/density.cpp",
-        "src/scf/occupied_projection.cpp"
+        "src/scf/occupied_projection.cpp",
+        "src/scf/hf_physical_audit.hpp",
+        "src/scf/progressive_verification.hpp",
+        "src/scf/system_projection.hpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
         "src/api/c_api_common.cpp",
         "src/api/c_api_scf_effort.cpp",
-        "src/api/c_api_projection.cpp"
+        "src/api/c_api_projection.cpp",
+        "src/api/c_api_hf_physical_audit.cpp",
+        "src/api/c_api_hf_verification.cpp"
       ],
       "remaining_python_runtime": [
-        "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. Python retains typed planning, projection/audit adapters, physical-residual assembly and final verification; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence."
+        "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. For all-electron CPU RHF/UHF Direct/DF, the physical fixed-density audit uses one native scope for preparation, Fock/overlap, shared residual reduction and cleanup. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition. Python retains typed planning, resource preflight, audit transport/presentation, typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility; unsupported audit domains and missing protocols retain explicit compatibility, never a retry after admitted native refusal; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence.",
+        "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
@@ -928,7 +963,13 @@
         "tests/native/test_progressive_hf.cpp",
         "tests/python/test_native_scf_effort.py",
         "tests/native/test_scf_effort_sdk.cpp",
-        "tests/python/test_native_basis_projection.py"
+        "tests/python/test_native_basis_projection.py",
+        "tests/python/test_native_hf_physical_audit.py",
+        "tests/native/test_hf_physical_audit.cpp",
+        "tests/native/test_hf_verification.cpp",
+        "tests/python/test_native_hf_verification.py",
+        "tests/python/test_native_system_projection.py",
+        "tests/native/test_system_projection_sdk.cpp"
       ],
       "trackers": [
         "#933"
@@ -1446,11 +1487,13 @@
       ],
       "native_callers": [],
       "remaining_python_runtime": [
-        "Keep older-library Hcore and separately qualified stationary-force behavior until native per-prepared admission is positively available."
+        "Keep older-library Hcore and separately qualified stationary-force behavior until native per-prepared admission is positively available.",
+        "Missing prepared-resource symbols select the older Python observation/binding adapter. A partial ABI or a refused native create/prepare never retries unbudgeted preparation; frontend handle closure cannot detach an admitted native owner."
       ],
       "tests": [
         "tests/python/test_initial_guess_capabilities.py",
-        "tests/python/test_dft_batch.py"
+        "tests/python/test_dft_batch.py",
+        "tests/python/test_native_prepared_resources.py"
       ],
       "trackers": [
         "#933"

@@ -35,7 +35,9 @@ struct OneElectronDeviceView {
 
 /** Launch normalized S/Hcore, optionally retaining separate T/V diagnostics.
  * Schedule 0 assigns each lower-triangular AO pair to a thread; schedule 1
- * assigns each shell pair to a warp with component lanes. One owner writes
+ * assigns each shell pair to a warp with component lanes. Schedules 2 and 3
+ * partition nuclear sources across eight and 32 lanes, respectively, using
+ * FP64 subgroup reduction of the existing scalar policy. One owner writes
  * both symmetric entries (the diagonal once). Matrices use a full per-system
  * layout; symmetry makes row/column-major storage equivalent here.
  * The caller supplies existing output buffers. No allocation or host/device

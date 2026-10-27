@@ -938,7 +938,7 @@ QUALIFIED_SPD_COMPONENTS = ("", "x", "xx", "xy", "xz", "y", "yy", "yz", "z", "zz
 QUALIFIED_SPD_AOT_SHARD_WIDTH = 16
 QUALIFIED_SPD_AOT_SHARDS = 23
 QUALIFIED_FUNCTIONALS = tuple(
-    sorted({code for _, code, _, legacy in STATIONARY_AOT_BUILD_PROFILES if legacy})
+    sorted({code for _, code, _, legacy, _ in STATIONARY_AOT_BUILD_PROFILES if legacy})
 )
 QUALIFIED_SPINS = ("unpolarized", "polarized")
 QUALIFIED_PARTITION_ITERATIONS = 3
@@ -953,18 +953,23 @@ class StationaryAotProfile:
     method: str
     spin: str
     legacy: bool = False
+    # Composite default-grid plans bind the actual native point-model domain.
+    # Keep that identity explicit; a matching functional code is insufficient.
+    point_model: str = SCF_POINT_MODEL
 
     @property
     def plan(self) -> StationaryGradientPlan:
         return StationaryGradientPlan(
             resolve_method(self.method, spin=self.spin),
-            StationaryMeanField(SCF_POINT_MODEL),
+            StationaryMeanField(self.point_model),
         )
 
 
 QUALIFIED_STATIONARY_AOT_PROFILES = tuple(
-    StationaryAotProfile(name, functional, method, spin, legacy)
-    for name, functional, method, legacy in STATIONARY_AOT_BUILD_PROFILES
+    StationaryAotProfile(
+        name, functional, method, spin, legacy, point_model or SCF_POINT_MODEL
+    )
+    for name, functional, method, legacy, point_model in STATIONARY_AOT_BUILD_PROFILES
     for spin in QUALIFIED_SPINS
 )
 QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
@@ -985,6 +990,7 @@ STATIONARY_AOT_ASSETS = (
     "src/runtime/cuda_device_scope.hpp",
     "src/runtime/resource_cuda.cuh",
     "src/runtime/resource_ledger.hpp",
+    "src/runtime/resource_usage.hpp",
     "src/runtime/residency_boundaries.hpp",
     "src/runtime/residency_observer.hpp",
     "src/tensor/cuda_error.hpp",
@@ -1894,6 +1900,7 @@ def compile_stationary_cuda(
             "src/runtime/cuda_device_scope.hpp",
             "src/runtime/resource_cuda.cuh",
             "src/runtime/resource_ledger.hpp",
+            "src/runtime/resource_usage.hpp",
             "src/runtime/residency_boundaries.hpp",
             "src/runtime/residency_observer.hpp",
             "src/tensor/cuda_error.hpp",

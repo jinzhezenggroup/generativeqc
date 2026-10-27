@@ -776,7 +776,7 @@ def test_native_geometry_composition_and_snapshot_pullback(
     options = {
         "backend": backend,
         "cache": tmp_path,
-        "cuda_arch": os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"),
+        "cuda_arch": os.environ.get("GENERATIVEQC_TENSOR_ARCH"),
     }
     compiled = xp.value_and_grad(expression, argnums=(0, 1), **options)
     calculator = Calculator(
@@ -885,7 +885,7 @@ def test_real_cuda_molecular_endpoint(
         lambda coordinates: rhf(coordinates),
         backend="cuda",
         cache=tmp_path,
-        cuda_arch=os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"),
+        cuda_arch=os.environ.get("GENERATIVEQC_TENSOR_ARCH"),
     )
     calculator = Calculator(
         method="rhf",

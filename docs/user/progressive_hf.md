@@ -48,6 +48,17 @@ run = run_progressive_hf(plan, source, target, atoms)
 print(run.target.energy, run.verification.status)
 ```
 
+CPU all-electron RHF/UHF initialization with the built-in projection policy uses
+one native system-projection owner for overlap preparation and all spin channels.
+It validates identical ordered nuclei, geometry and electron/spin state, then
+publishes a seed only after every channel passes. `projection_owners` records
+`native_cpu_system` for that path. Old libraries, custom policies and unsupported
+backend/model domains retain explicit preparation compatibility; an admitted
+native error never retries it. The native matrix-capacity query adds live metrics
+and detached spin results to the existing projection workspace. Prepared fleets,
+caller buffers and opaque provider overhead are separate; this is not an RSS bound.
+Python still owns per-item eligibility/reporting and transactional seed installation.
+
 ## Immutable target and typed plan
 
 `TargetProblem` snapshots the resolved scientific model, prepared-provider
@@ -99,7 +110,16 @@ relaxing tolerances.
 `FinalVerification` checks the actual resolved target identity, prepared-provider
 identity, basis mathematical/source hashes, native success/convergence,
 energy/density gates, physical SCF residual, requested energy/force capabilities,
-effective final FP64 arithmetic and complete execution budgets. It distinguishes:
+effective final FP64 arithmetic and complete execution budgets.
+
+The shared native `generativeqc_hf_verify_final_v1` policy owns scalar acceptance,
+strict-cleanup requirements and budget precedence. A running controller uses its
+selected target library; standalone verification uses the first configured
+library. Python validates typed identities and observable array shape and
+presents the native decision. Missing older-library protocols and Python integer
+metadata outside the fixed-width ABI retain explicit compatibility; a native
+error never triggers another verifier. This metadata policy does not rebuild the
+physical target or certify an empirical accuracy estimate.
 
 A force capability is established only by a finite, real numerical array with
 shape exactly `(TargetProblem.atom_count, 3)`. Empty, partial, extra-atom,
@@ -112,6 +132,22 @@ records the Fock execution identity, density/overlap hashes, RMS and maximum
 `FDS-SDF`, and fixed-density energy agreement. This audit is included in target
 time and counts as one target Fock build; its failure makes target verification
 fail closed. It is a state audit, not an observable-error certificate.
+
+For all-electron CPU RHF/UHF Direct/DF inputs within the native through-g domain,
+the fixed-density audit uses one native scope for preparation, Fock construction,
+overlap, residual reduction and cleanup. Its additive C ABI exposes a capacity
+query and transactional execution for SDK callers. The existing complete HF
+resource preflight remains an additional frontend gate; native execution also
+checks the conservative numeric envelope before constructing a provider. This
+does not establish complete allocator/provider/RSS accounting.
+
+The native receipt keeps the maximum and RMS distinct, counts one physical Fock
+build, and binds the density/overlap bytes and versioned operator/execution
+identity. It creates no AO-grid packing owner. Missing protocols, non-CPU and
+unsupported metadata domains retain explicit compatibility; an admitted native
+failure never retries Python or changes the requested model or budget.
+
+Final disposition distinguishes:
 
 - `verified`: exact target gates passed and an independent assessment has
   status `observed_met`;

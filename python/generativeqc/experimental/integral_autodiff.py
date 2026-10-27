@@ -13,6 +13,7 @@ from __future__ import annotations
 import ctypes as ct
 import math
 import os
+import weakref
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -29,7 +30,9 @@ from generativeqc_compiler.integral.parameter_ad import emit_integral_program
 from generativeqc_compiler.integral.shell_spec import cartesian_components
 from generativeqc_compiler.method.rhf_integral_ad import (
     emit_spin_integral_weights,
+    emit_streamed_hf_consumers,
 )
+from typing_extensions import Self
 
 from generativeqc import Atom, BasisSet, Calculator, Primitive, Shell, _native
 from generativeqc.elements import atomic_number, checked_integer
@@ -40,6 +43,7 @@ if TYPE_CHECKING:
 __all__ = [
     "IntegralGradient",
     "IntegralHF",
+    "IntegralHFState",
     "IntegralRHF",
     "IntegralUHF",
     "IntegralValues",
@@ -125,6 +129,7 @@ class IntegralHF:
         method: str = "rhf",
         spin_multiplicity: int = 1,
         derivative_order: int = 1,
+        integral_storage: str = "dense",
         backend: str = "cpu",
         device: int = 0,
         cuda_arch: str = "sm_120",
@@ -168,6 +173,11 @@ class IntegralHF:
             raise ValueError("derivative_order must be 1 or 2")
         if backend not in ("cpu", "cuda"):
             raise ValueError("backend must be cpu or cuda")
+        if integral_storage not in ("dense", "direct"):
+            raise ValueError("integral_storage must be dense or direct")
+        if integral_storage == "direct" and backend != "cpu":
+            raise ValueError("direct integral AD storage currently requires CPU")
+        object.__setattr__(self, "integral_storage", integral_storage)
         checked_integer(device, "device", low=0, high=2**31 - 1)
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
@@ -279,7 +289,14 @@ class IntegralHF:
         object.__setattr__(
             self,
             "numeric_peak_bytes",
-            8 * (8 * n**4 + 600 * n**2 + 64 * n + 32 * p + 64 * a)
+            8
+            * (
+                (8 * n**4 if integral_storage == "dense" else 0)
+                + 600 * n**2
+                + 64 * n
+                + 32 * p
+                + 64 * a
+            )
             + (
                 (8 << 20) + 8 * (4 * n**4 + 200 * n**2 + 1024 * p + 384 * a)
                 if backend == "cuda"
@@ -289,6 +306,7 @@ class IntegralHF:
         primitive_aos = sum(
             len(cartesian_components(l)) * count for _, l, count in topology
         )
+        object.__setattr__(self, "eri_primitive_evaluations", primitive_aos**4)
         object.__setattr__(
             self,
             "primitive_evaluations",
@@ -310,6 +328,7 @@ class IntegralHF:
                 )
                 + "\n"
                 + emit_spin_integral_weights()
+                + (emit_streamed_hf_consumers() if integral_storage == "direct" else "")
             )
         object.__setattr__(
             self,
@@ -330,6 +349,8 @@ class IntegralHF:
         cache_source(path, source)
         header = asset_path("src/integrals/parameter_ad_runtime.hpp")
         headers = (header,)
+        if integral_storage == "direct":
+            headers += (asset_path("src/integrals/parameter_ad_direct_runtime.hpp"),)
         if derivative_order == 2 or backend == "cuda":
             headers += (asset_path("src/integrals/parameter_ad_tape.hpp"),)
         compiler: Any = CppCompilerAdapter(
@@ -354,17 +375,36 @@ class IntegralHF:
             compiler, cache, path, headers=headers, options=options
         )
         object.__setattr__(self, "_library", ct.CDLL(str(artifact.library)))
-        object.__setattr__(self, "_execute", self._library.integral_ad_execute)
+        object.__setattr__(
+            self,
+            "_execute",
+            getattr(
+                self._library,
+                "integral_ad_direct_execute"
+                if integral_storage == "direct"
+                else "integral_ad_execute",
+            ),
+        )
+        object.__setattr__(self, "_execute_dense", self._library.integral_ad_execute)
         self._execute.argtypes = ([ct.c_int] if backend == "cuda" else []) + [
             _DOUBLE
         ] * 5
         self._execute.restype = ct.c_int
+        self._execute_dense.argtypes = self._execute.argtypes
+        self._execute_dense.restype = ct.c_int
         object.__setattr__(self, "_weights", self._library.integral_ad_hf_weights)
         self._weights.argtypes = [ct.c_size_t, _DOUBLE, _DOUBLE, _DOUBLE, _DOUBLE]
         self._weights.restype = ct.c_int
         if derivative_order == 2:
             object.__setattr__(
-                self, "_directional", self._library.integral_ad_directional
+                self,
+                "_directional",
+                getattr(
+                    self._library,
+                    "integral_ad_direct_directional"
+                    if integral_storage == "direct"
+                    else "integral_ad_directional",
+                ),
             )
             self._directional.argtypes = ([ct.c_int] if backend == "cuda" else []) + [
                 _DOUBLE
@@ -403,16 +443,26 @@ class IntegralHF:
         return xyz, alpha, raw
 
     def _evaluate(
-        self, inputs: tuple[np.ndarray, ...], seeds: np.ndarray | None = None
+        self,
+        inputs: tuple[np.ndarray, ...],
+        seeds: np.ndarray | None = None,
+        *,
+        dense: bool = False,
     ) -> np.ndarray:
         n = self.nao
         count = (
-            2 * n**2 + n**4 + 1
+            2 * n**2 + (n**4 if dense or self.integral_storage == "dense" else 0) + 1
             if seeds is None
             else 3 * len(self.numbers) + 2 * self.nprimitive
         )
+        if (
+            dense
+            and self.integral_storage == "direct"
+            and self.numeric_peak_bytes + 16 * n**4 > self.max_bytes
+        ):
+            raise ValueError("dense integral publication exceeds max_bytes")
         output = np.empty(count)
-        status = self._execute(
+        status = (self._execute_dense if dense else self._execute)(
             *([self.device] if self.backend == "cuda" else []),
             *map(_pointer, inputs),
             None if seeds is None else _pointer(seeds),
@@ -440,7 +490,9 @@ class IntegralHF:
         Inputs follow the constructor's units/order; invalid data fail before
         native evaluation. Returned FP64 arrays are immutable owned snapshots.
         """
-        values = self._evaluate(self._inputs(coordinates, exponents, coefficients))
+        values = self._evaluate(
+            self._inputs(coordinates, exponents, coefficients), dense=True
+        )
         n, n2 = self.nao, self.nao**2
         return IntegralValues(
             immutable(values[:n2].reshape(n, n)),
@@ -476,14 +528,13 @@ class IntegralHF:
                 ),
             )
         )
-        return self._gradient(self._evaluate(inputs, seeds))
+        return self._gradient(self._evaluate(inputs, seeds, dense=True))
 
-    def _solve(
+    def _prepare_state(
         self,
         inputs: tuple[np.ndarray, ...],
         values: np.ndarray,
-        direction: np.ndarray | None = None,
-    ) -> tuple[float, np.ndarray, dict[str, Any], np.ndarray | None]:
+    ) -> IntegralHFState:
         xyz, alpha, raw = inputs
         shells, begin = [], 0
         for shell in self.shells:
@@ -501,11 +552,34 @@ class IntegralHF:
             begin += count
         calculator = self._calculator
         library = calculator._library
-        function = library.generativeqc_integral_ad_hf_v2
+        direct = self.integral_storage == "direct"
+        function = (
+            library.generativeqc_integral_ad_direct_prepare_v1
+            if direct
+            else library.generativeqc_integral_ad_hf_prepare_v1
+        )
+        extra_types = [ct.c_void_p, _DOUBLE, ct.c_size_t, ct.c_size_t] if direct else []
+        parameters = np.concatenate([value.ravel() for value in inputs])
+        max_builds = max(
+            0,
+            (self.max_work - 3 * self.primitive_evaluations)
+            // self.eri_primitive_evaluations,
+        )
+        if direct and not max_builds:
+            raise ValueError("direct integral AD exceeds max_work before SCF")
+        extra_values = (
+            [
+                ct.cast(self._library.integral_ad_direct_fock, ct.c_void_p),
+                _pointer(parameters),
+                parameters.size,
+                max_builds,
+            ]
+            if direct
+            else []
+        )
         function.argtypes = [
             ct.c_void_p,
             _DOUBLE,
-            _DOUBLE,
             ct.c_size_t,
             ct.c_int,
             ct.c_int,
@@ -515,7 +589,8 @@ class IntegralHF:
             ct.c_double,
             ct.c_double,
             ct.c_size_t,
-            _DOUBLE,
+            *extra_types,
+            ct.POINTER(ct.c_void_p),
             _DOUBLE,
             _DOUBLE,
             ct.c_char_p,
@@ -523,12 +598,9 @@ class IntegralHF:
         ]
         function.restype = ct.c_int
         context, system = ct.c_void_p(), ct.c_void_p()
+        handle = ct.c_void_p()
         n, n2 = self.nao, self.nao**2
-        state, state_direction, receipt = (
-            np.empty(4 * n2),
-            np.empty(4 * n2),
-            np.empty(8),
-        )
+        state, receipt = np.empty(4 * n2), np.empty(8)
         detail = ct.create_string_buffer(1024)
         try:
             _native.check(
@@ -549,7 +621,6 @@ class IntegralHF:
             status = function(
                 system,
                 _pointer(values),
-                None if direction is None else _pointer(direction),
                 n,
                 int(self.method == "uhf"),
                 int(self.backend == "cuda"),
@@ -559,8 +630,9 @@ class IntegralHF:
                 self.energy_tolerance,
                 self.density_tolerance,
                 self.max_bytes,
+                *extra_values,
+                ct.byref(handle),
                 _pointer(state),
-                _pointer(state_direction),
                 _pointer(receipt),
                 detail,
                 len(detail),
@@ -572,24 +644,18 @@ class IntegralHF:
                 library.generativeqc_system_destroy(system)
             if context.value:
                 library.generativeqc_context_destroy(context)
-        seeds = np.empty_like(values)
-        seed_direction = None if direction is None else np.empty_like(values)
-        if self._weights(
-            n,
-            _pointer(state),
-            None if direction is None else _pointer(state_direction),
-            _pointer(seeds),
-            None if seed_direction is None else _pointer(seed_direction),
-        ):
-            raise ArithmeticError("generated stationary integral pullback failed")
         diagnostics = {
+            "energy": float(receipt[0]),
             "derivative": f"stationary-{self.method}-through-integral-ad-v2",
-            "derivative_order": 1 if direction is None else 2,
+            "derivative_order": 1,
+            "scf_solves": 1,
+            "response_solves": 0,
             "response_residual": float(receipt[6]),
             "response_operator_actions": int(receipt[7]),
             "integral_identity": self.identity,
             "backend": f"native-{self.backend}-fp64",
             "solver_control": "host-scf-and-krylov",
+            "integral_storage": self.integral_storage,
             "integral_execution": self.backend,
             "fock_execution": self.backend,
             "eigen_execution": self.backend,
@@ -598,11 +664,29 @@ class IntegralHF:
             "fock_builds": int(receipt[3]),
             "energy_change": float(receipt[4]),
             "density_rms": float(receipt[5]),
-            "primitive_value_evaluations": self.primitive_evaluations,
-            "primitive_pullback_evaluations": self.primitive_evaluations,
+            "primitive_value_evaluations": self.primitive_evaluations
+            if not direct
+            else (
+                self.primitive_evaluations
+                - self.eri_primitive_evaluations
+                + int(receipt[3]) * self.eri_primitive_evaluations
+            ),
+            "primitive_pullback_evaluations": 0,
             "numeric_peak_bytes_bound": self.numeric_peak_bytes,
         }
-        return float(receipt[0]), seeds, diagnostics, seed_direction
+        return IntegralHFState(self, inputs, handle, state, diagnostics)
+
+    def prepare(
+        self, coordinates: Any, *, exponents: Any = None, coefficients: Any = None
+    ) -> IntegralHFState:
+        """Solve once and retain an immutable state for gradients and response.
+
+        The returned context owns its native provider and copies every continuous
+        input. It remains usable after this owner closes. Close it explicitly or
+        use a context manager; separate states are required for concurrent calls.
+        """
+        inputs = self._inputs(coordinates, exponents, coefficients)
+        return self._prepare_state(inputs, self._evaluate(inputs))
 
     def value_and_grad(
         self, coordinates: Any, *, exponents: Any = None, coefficients: Any = None
@@ -614,22 +698,22 @@ class IntegralHF:
         before the integral/normalization pullback. No analytic force endpoint
         is called. Only a converged physical state is eligible for publication.
         """
-        inputs = self._inputs(coordinates, exponents, coefficients)
-        values = self._evaluate(inputs)
-        energy, seeds, diagnostics, _ = self._solve(inputs, values)
-        gradient = self._gradient(self._evaluate(inputs, seeds))
-        object.__setattr__(self, "_diagnostics", diagnostics)
-        return energy, gradient
+        with self.prepare(
+            coordinates, exponents=exponents, coefficients=coefficients
+        ) as state:
+            gradient = state.gradient()
+            object.__setattr__(self, "_diagnostics", state.diagnostics())
+            return state.energy, gradient
 
     def energy(
         self, coordinates: Any, *, exponents: Any = None, coefficients: Any = None
     ) -> float:
-        """Return the converged scalar energy using generated integral values only."""
-        inputs = self._inputs(coordinates, exponents, coefficients)
-        value, _, diagnostics, _ = self._solve(inputs, self._evaluate(inputs))
-        diagnostics["primitive_pullback_evaluations"] = 0
-        object.__setattr__(self, "_diagnostics", diagnostics)
-        return value
+        """Return converged energy without evaluating the integral pullback."""
+        with self.prepare(
+            coordinates, exponents=exponents, coefficients=coefficients
+        ) as state:
+            object.__setattr__(self, "_diagnostics", state.diagnostics())
+            return state.energy
 
     def _direction(self, direction: IntegralGradient) -> np.ndarray:
         if self.derivative_order < 2:
@@ -654,10 +738,31 @@ class IntegralHF:
         direction: np.ndarray,
         seeds: np.ndarray | None = None,
         seed_direction: np.ndarray | None = None,
+        *,
+        dense: bool = False,
     ) -> np.ndarray:
-        count = (2 * self.nao**2 + self.nao**4 + 1) if seeds is None else direction.size
+        count = (
+            (
+                2 * self.nao**2
+                + (self.nao**4 if dense or self.integral_storage == "dense" else 0)
+                + 1
+            )
+            if seeds is None
+            else direction.size
+        )
+        if (
+            dense
+            and self.integral_storage == "direct"
+            and self.numeric_peak_bytes + 16 * self.nao**4 > self.max_bytes
+        ):
+            raise ValueError("dense integral JVP publication exceeds max_bytes")
         result = np.empty(count)
-        status = self._directional(
+        function = self._library.integral_ad_directional if dense else self._directional
+        function.argtypes, function.restype = (
+            self._directional.argtypes,
+            self._directional.restype,
+        )
+        status = function(
             *([self.device] if self.backend == "cuda" else []),
             *map(_pointer, inputs),
             _pointer(direction),
@@ -685,6 +790,7 @@ class IntegralHF:
         values = self._evaluate_direction(
             self._inputs(coordinates, exponents, coefficients),
             self._direction(direction),
+            dense=True,
         )
         n, n2 = self.nao, self.nao**2
         return IntegralValues(
@@ -708,29 +814,15 @@ class IntegralHF:
         orbital response. This includes mixed geometry/basis derivatives and
         requires derivative_order=2; it never differences energies or gradients.
         """
-        inputs = self._inputs(coordinates, exponents, coefficients)
-        result, diagnostics = self._hvp(inputs, direction)
-        object.__setattr__(self, "_diagnostics", diagnostics)
-        return result
-
-    def _hvp(
-        self,
-        inputs: tuple[np.ndarray, np.ndarray, np.ndarray],
-        direction: IntegralGradient,
-    ) -> tuple[IntegralGradient, dict[str, Any]]:
-        """Stage an HVP without publishing diagnostics of a partial Hessian."""
-        vector = self._direction(direction)
+        self._direction(direction)
         if 4 * self.primitive_evaluations > self.max_work:
             raise ValueError("integral AD Hessian-vector product exceeds max_work")
-        values = self._evaluate(inputs)
-        motion = self._evaluate_direction(inputs, vector)
-        _, seeds, diagnostics, seed_direction = self._solve(inputs, values, motion)
-        result = self._gradient(
-            self._evaluate_direction(inputs, vector, seeds, seed_direction)
-        )
-        diagnostics["primitive_value_evaluations"] = 2 * self.primitive_evaluations
-        diagnostics["primitive_pullback_evaluations"] = self.primitive_evaluations
-        return result, diagnostics
+        with self.prepare(
+            coordinates, exponents=exponents, coefficients=coefficients
+        ) as state:
+            result = state.hvp(direction)
+            object.__setattr__(self, "_diagnostics", state.diagnostics())
+            return result
 
     def hessian(
         self,
@@ -740,70 +832,19 @@ class IntegralHF:
         coefficients: Any = None,
         parameters: tuple[str, ...] = ("coordinates", "exponents", "coefficients"),
     ) -> np.ndarray:
-        """Return the full analytic joint Hessian, ordered xyz, exponents, coefficients.
+        """Return raw joint Hessian columns sharing one converged HF state.
 
-        Each column uses the bounded HVP endpoint. The total primitive work and
-        retained matrix are admitted before execution. No symmetrization hides
-        response errors; each returned column is the actual differentiated result.
+        Axes follow the requested parameter order, flattening each input. Output
+        and minimum work budgets are checked before SCF; direct source work is
+        additionally bounded during execution. No symmetrization or projection
+        changes the actual directional derivatives.
         """
         inputs = self._inputs(coordinates, exponents, coefficients)
-        names = ("coordinates", "exponents", "coefficients")
-        if (
-            not isinstance(parameters, tuple)
-            or not parameters
-            or len(set(parameters)) != len(parameters)
-            or any(name not in names for name in parameters)
-        ):
-            raise ValueError(
-                "Hessian parameters must select distinct continuous inputs"
-            )
-        offsets = np.cumsum([0, *(array.size for array in inputs)])
-        selected = np.concatenate(
-            [
-                np.arange(offsets[names.index(name)], offsets[names.index(name) + 1])
-                for name in parameters
-            ]
-        )
-        size = selected.size
-        if self.numeric_peak_bytes + 8 * size * size > self.max_bytes:
-            raise ValueError("integral AD Hessian exceeds max_bytes")
-        if 4 * size * self.primitive_evaluations > self.max_work:
-            raise ValueError("integral AD Hessian exceeds max_work")
-        result = np.empty((size, size))
-        diagnostics: dict[str, Any] = {}
-        counters = (
-            "iterations",
-            "fock_builds",
-            "response_operator_actions",
-            "primitive_value_evaluations",
-            "primitive_pullback_evaluations",
-        )
-        for column in range(size):
-            vector = np.zeros(offsets[-1])
-            vector[selected[column]] = 1
-            gradient, evidence = self._hvp(inputs, self._gradient(vector))
-            if not diagnostics:
-                diagnostics = evidence
-            else:
-                for name in counters:
-                    diagnostics[name] += evidence[name]
-                for name in ("physical_residual", "response_residual"):
-                    diagnostics[name] = max(diagnostics[name], evidence[name])
-            result[:, column] = np.concatenate(
-                (
-                    gradient.coordinates.ravel(),
-                    gradient.exponents,
-                    gradient.coefficients,
-                )
-            )[selected]
-        # Commit evidence only after every column succeeded, just like the
-        # native state publication. Work counts describe the complete endpoint.
-        result = immutable(result)
-        diagnostics["hessian_columns"] = int(size)
-        diagnostics["hessian_parameters"] = parameters
-        diagnostics["numeric_peak_bytes_bound"] += 8 * size * size
-        object.__setattr__(self, "_diagnostics", diagnostics)
-        return result
+        _hessian_selection(self, inputs, parameters)
+        with self._prepare_state(inputs, self._evaluate(inputs)) as state:
+            result = state.hessian(parameters=parameters)
+            object.__setattr__(self, "_diagnostics", state.diagnostics())
+            return result
 
     def diagnostics(self) -> dict[str, Any]:
         """Return detached work/provenance evidence for the last successful call."""
@@ -813,6 +854,245 @@ class IntegralHF:
         """Close the owner; immutable results outlive it and later calls raise."""
         self._calculator.clear_cache()
         object.__setattr__(self, "_closed", True)
+
+
+def _hessian_selection(
+    owner: IntegralHF, inputs: tuple[np.ndarray, ...], parameters: tuple[str, ...]
+) -> np.ndarray:
+    """Validate selected axes and all-column work before any expensive action."""
+    names = ("coordinates", "exponents", "coefficients")
+    if (
+        not isinstance(parameters, tuple)
+        or not parameters
+        or len(set(parameters)) != len(parameters)
+        or any(name not in names for name in parameters)
+    ):
+        raise ValueError("Hessian parameters must select distinct continuous inputs")
+    if owner.derivative_order < 2:
+        raise ValueError("construct with derivative_order=2 for integral JVP/HVP")
+    offsets = np.cumsum([0, *(array.size for array in inputs)])
+    selected = np.concatenate(
+        [
+            np.arange(offsets[names.index(name)], offsets[names.index(name) + 1])
+            for name in parameters
+        ]
+    )
+    if owner.numeric_peak_bytes + 8 * selected.size**2 > owner.max_bytes:
+        raise ValueError("integral AD Hessian exceeds max_bytes")
+    if (1 + 3 * selected.size) * owner.primitive_evaluations > owner.max_work:
+        raise ValueError("integral AD Hessian exceeds max_work")
+    return selected
+
+
+class IntegralHFState:
+    """Owned converged HF snapshot with reusable analytic directional response.
+
+    Geometry, basis parameters, provider and determinant are fixed for its whole
+    lifetime. HVPs reuse primal integrals/SCF and allocate no full Hessian. Work
+    diagnostics are cumulative successful actions; failed actions publish no
+    derivative or partial diagnostic. This owner is not concurrently reentrant.
+    """
+
+    def __init__(
+        self,
+        owner: IntegralHF,
+        inputs: tuple[np.ndarray, ...],
+        handle: ct.c_void_p,
+        state: np.ndarray,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        """Bind an internal native handle; callers obtain states with prepare()."""
+        self._owner = owner
+        self._inputs = tuple(immutable(value) for value in inputs)
+        self._handle, self._state = handle, state
+        self._diagnostics = dict(diagnostics)
+        self._energy = float(diagnostics["energy"])
+        self._preparation_work = diagnostics["primitive_value_evaluations"]
+        self._gradient_value: IntegralGradient | None = None
+        self._seeds: np.ndarray | None = None
+        library = owner._calculator._library
+        destroy = library.generativeqc_integral_ad_hf_destroy_v1
+        destroy.argtypes, destroy.restype = [ct.c_void_p], None
+        self._release = weakref.finalize(self, destroy, handle)
+        self._response = (
+            library.generativeqc_integral_ad_direct_response_v1
+            if owner.integral_storage == "direct"
+            else library.generativeqc_integral_ad_hf_response_v1
+        )
+        self._response.argtypes = [
+            ct.c_void_p,
+            _DOUBLE,
+            *([_DOUBLE, ct.c_size_t] if owner.integral_storage == "direct" else []),
+            _DOUBLE,
+            _DOUBLE,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        self._response.restype = ct.c_int
+
+    @property
+    def energy(self) -> float:
+        """The converged snapshot energy in Hartree, valid after close."""
+        return self._energy
+
+    def _check_open(self) -> None:
+        if not self._release.alive:
+            raise RuntimeError("integral AD stationary state is closed")
+
+    def _weights(
+        self, motion: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        owner = self._owner
+        if owner.integral_storage == "direct":
+            return self._state, motion
+        seeds = np.empty(2 * owner.nao**2 + owner.nao**4 + 1)
+        direction = None if motion is None else np.empty_like(seeds)
+        if owner._weights(
+            owner.nao,
+            _pointer(self._state),
+            None if motion is None else _pointer(motion),
+            _pointer(seeds),
+            None if direction is None else _pointer(direction),
+        ):
+            raise ArithmeticError("generated stationary integral pullback failed")
+        return seeds, direction
+
+    def gradient(self) -> IntegralGradient:
+        """Return the immutable first derivative, computed at most once."""
+        self._check_open()
+        if self._gradient_value is None:
+            seeds, _ = self._weights()
+            value = self._owner._gradient(self._owner._evaluate(self._inputs, seeds))
+            self._seeds, self._gradient_value = seeds, value
+            self._diagnostics["primitive_pullback_evaluations"] += (
+                self._owner.primitive_evaluations
+            )
+        return self._gradient_value
+
+    def hvp(self, direction: IntegralGradient) -> IntegralGradient:
+        """Apply the relaxed energy Hessian once, without a dense Hessian."""
+        return self._hvp(direction, self._owner.max_work - self._base_work())
+
+    def _base_work(self) -> int:
+        """Charge a shared value/gradient source once before response actions."""
+        return self._preparation_work + (
+            self._owner.primitive_evaluations if self._gradient_value is not None else 0
+        )
+
+    def _hvp(
+        self, direction: IntegralGradient, remaining_work: int
+    ) -> IntegralGradient:
+        """Reserve source work before native response, including prior columns."""
+        self._check_open()
+        owner = self._owner
+        vector = owner._direction(direction)
+        if 4 * owner.primitive_evaluations > owner.max_work:
+            raise ValueError("integral AD Hessian-vector product exceeds max_work")
+        direct = owner.integral_storage == "direct"
+        max_builds = 0
+        if direct:
+            # One-electron tangent and full stationary pullback flank response.
+            # Its native J/K consumer must fit the same complete endpoint budget,
+            # rather than independently spending another max_work allowance.
+            fixed_work = (
+                2 * owner.primitive_evaluations - owner.eri_primitive_evaluations
+            )
+            max_builds = (
+                remaining_work - fixed_work
+            ) // owner.eri_primitive_evaluations
+            if max_builds <= 0:
+                raise ValueError("direct integral AD response exceeds max_work")
+        motion = owner._evaluate_direction(self._inputs, vector)
+        state_direction, receipt = np.empty_like(self._state), np.empty(8)
+        detail = ct.create_string_buffer(1024)
+        if self._response(
+            self._handle,
+            _pointer(motion),
+            *([_pointer(vector), max_builds] if direct else []),
+            _pointer(state_direction),
+            _pointer(receipt),
+            detail,
+            len(detail),
+        ):
+            raise RuntimeError(detail.value.decode())
+        seeds, seed_direction = self._weights(state_direction)
+        result = owner._gradient(
+            owner._evaluate_direction(self._inputs, vector, seeds, seed_direction)
+        )
+        evidence = dict(self._diagnostics)
+        evidence["derivative_order"] = 2
+        evidence["response_solves"] += 1
+        evidence["response_residual"] = max(
+            evidence["response_residual"], float(receipt[6])
+        )
+        evidence["response_operator_actions"] += int(receipt[7])
+        evidence["fock_builds"] += int(receipt[3])
+        evidence["primitive_value_evaluations"] += (
+            owner.primitive_evaluations
+            if owner.integral_storage == "dense"
+            else owner.primitive_evaluations
+            - owner.eri_primitive_evaluations
+            + int(receipt[3]) * owner.eri_primitive_evaluations
+        )
+        evidence["primitive_pullback_evaluations"] += owner.primitive_evaluations
+        self._diagnostics = evidence
+        return result
+
+    def hessian(
+        self,
+        *,
+        parameters: tuple[str, ...] = ("coordinates", "exponents", "coefficients"),
+    ) -> np.ndarray:
+        """Assemble selected raw columns from this same stationary snapshot."""
+        self._check_open()
+        selected = _hessian_selection(self._owner, self._inputs, parameters)
+        result = np.empty((selected.size, selected.size))
+        previous = dict(self._diagnostics)
+        remaining_work = self._owner.max_work - self._base_work()
+        try:
+            for column, index in enumerate(selected):
+                vector = np.zeros(sum(value.size for value in self._inputs))
+                vector[index] = 1
+                value = self._hvp(self._owner._gradient(vector), remaining_work)
+                if self._owner.integral_storage == "direct":
+                    work = self._base_work() + sum(
+                        self._diagnostics[key] - previous[key]
+                        for key in (
+                            "primitive_value_evaluations",
+                            "primitive_pullback_evaluations",
+                        )
+                    )
+                    remaining_work = self._owner.max_work - work
+                result[:, column] = np.concatenate(
+                    (value.coordinates.ravel(), value.exponents, value.coefficients)
+                )[selected]
+        except BaseException:
+            self._diagnostics = previous
+            raise
+        self._diagnostics.update(
+            hessian_columns=int(selected.size),
+            hessian_parameters=parameters,
+            numeric_peak_bytes_bound=self._owner.numeric_peak_bytes + result.nbytes,
+        )
+        return immutable(result)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return a detached receipt for successfully completed work."""
+        return dict(self._diagnostics)
+
+    def close(self) -> None:
+        """Release the native provider; detached numerical results stay valid."""
+        self._release()
+        self._seeds = None
+
+    def __enter__(self) -> Self:
+        """Borrow this open state for deterministic context-managed cleanup."""
+        self._check_open()
+        return self
+
+    def __exit__(self, *unused: object) -> None:
+        """Close the native state, including when the context exits by error."""
+        self.close()
 
 
 @dataclass(frozen=True, init=False, repr=False, eq=False)

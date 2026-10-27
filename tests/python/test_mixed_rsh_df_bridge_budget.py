@@ -288,6 +288,7 @@ _PREFIX = r"""
 #include <vector>
 
 #include "dft/mixed_rsh_df_sources.hpp"
+#include "runtime/resource_ledger.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 using namespace generativeqc;
 using cudaStream_t = void*;
@@ -438,6 +439,7 @@ std::size_t ks_provider_bytes(const System&, generativeqc_backend, unsigned,
 }
 class Harness {
  public:
+  const runtime::DeviceCapacityReservation* capacity_{};
   System system_;
   scf::PreparedFockPlan fock_;
   std::optional<scf::ResolvedFockBuild> range_strategy_;

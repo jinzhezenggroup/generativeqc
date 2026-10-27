@@ -99,6 +99,9 @@ set(GENERATIVEQC_CUDA_PROVIDER "nvidia" CACHE STRING
 set_property(CACHE GENERATIVEQC_CUDA_PROVIDER PROPERTY STRINGS nvidia cumetal)
 set(GENERATIVEQC_AOT_PROFILE "auto" CACHE STRING
     "AOT profile for every target: strict auto, explicit portable, sm_XX, or a named profile")
+set(GENERATIVEQC_AOT_SHELL_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+    CACHE FILEPATH "Accepted generated shell classes for production CUDA")
 set(GENERATIVEQC_AOT_PROFILES "" CACHE STRING
     "Optional explicit list of AOT profiles, independent of architecture order")
 set(GENERATIVEQC_AOT_SHARDS "8" CACHE STRING

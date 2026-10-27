@@ -259,6 +259,14 @@ Missing coherent class-major topology or explicit cooperative disable (`0` or
 `none`) keeps the previous two-owner
 generic-plus-dddd control. These native selectors are enabled when unset.
 
+Within that admitted bounded s/p/d domain, the materialized dddd owner also
+uses the immutable class-major dd x dd topology by default. It retains the same
+physical-pair canonicalization, screening, generated exclusions and contraction.
+`GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR=0` restores generic acquisition;
+the diagnostic name remains supported and participates in prepared-plan policy
+identity. A missing materialized cache or coherent topology retains the bounded
+generic fallback without a new queue or resident allocation.
+
 The cooperative workspace is bounded below 44 KiB. Its kernel omits the generic
 per-AO recurrence frame rather than carrying it in an unused runtime branch.
 Mixed f bases, an unproved angular bound, missing pair caches, custom bounded

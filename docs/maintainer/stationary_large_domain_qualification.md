@@ -66,8 +66,9 @@ still return complete native integral derivatives at runtime. This result proves
 neither GPU execution nor numerical or performance qualification. Private
 `diagnostic_admission` retains its own whole-grid failures separately.
 
-Package inventory is availability-only evidence: semilocal public rows select
-packaged AOT, whereas global hybrids select the runtime-compiler path. Neither a
+Package inventory is availability-only evidence: represented semilocal and
+global-hybrid public rows select packaged AOT by their exact plan; unrepresented
+compositions retain bounded runtime compilation. Neither a
 package declaration nor static admission qualifies its executable. Historical v1
 reports, frozen inputs and receipts remain unchanged; do not reinterpret their
 older admission fields as v2 results.

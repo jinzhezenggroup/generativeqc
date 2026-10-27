@@ -54,6 +54,12 @@ SOURCE_EXACT_ALLOWED = {
         "scf/solver/cpu_target_eigen.hpp",
         "scf/solver/diis.hpp",
     ),
+    # Production capacity shares scalar AO dimensions and overflow-checked byte
+    # arithmetic. This grants no provider/solver ownership to other guess code.
+    "scf/initial_guess/huckel_capacity.hpp": (
+        "molecule/basis.hpp",
+        "runtime/bounded_workspace.hpp",
+    ),
 }
 # CUDA planning and linear algebra have separate rebuild ownership. Enumerate
 # these extracted owners rather than exempting all historical cuda/ fragments.
@@ -183,6 +189,7 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
     "scf/application_precision.hpp",
+    "solver/cuda/cholesky_provider.hpp",
     "solver/cuda/generalized_eigen.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",
@@ -274,6 +281,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
 )
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
+    "scf/provider_initialization.hpp",
     "solver/cuda/symmetric_eigen_handles.hpp",
     "scf/cuda/resources.",
     "scf/cuda/eigensolver.",
@@ -281,6 +289,11 @@ CUDA_ALLOWED["cuda_resources"] = (
     "runtime/resource_cuda.cuh",
     "runtime/residency_cuda.cuh",
     "runtime/allocation_measurement.hpp",
+)
+CUDA_MODULES["cuda_provider_initialization"] = ("provider_initialization",)
+CUDA_ALLOWED["cuda_provider_initialization"] = (
+    "scf/provider_initialization.hpp",
+    "tensor/cuda_error.hpp",
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
 CUDA_ALLOWED["cuda_matrix_library"] = (
@@ -794,6 +807,7 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
     "posthf/capacity.hpp",
     "runtime/allocation_measurement.hpp",
     "scf/cuda/reference_export.cuh",
+    "scf/cuda/provider_initialization.cuh",
     "scf/cuda/reference_eri_policy.hpp",
     "scf/mean_field.hpp",
     "tensor/metrics.hpp",

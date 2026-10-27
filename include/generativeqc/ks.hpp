@@ -183,7 +183,8 @@ class KsComposition {
    * @behavior Prepare a native calculation from a snapshot of this explicit KS composition.
    * @inputs context and system must be valid; descriptor must have its ABI header initialized
    * and its method equal to this builder's DFT carrier. Replaces descriptor.ks_options in the
-   * local descriptor copy; other options retain their ordinary native contract.
+   * local descriptor copy; other options retain their ordinary native contract. Optional
+   * resources selects the same native prepared device owner as ordinary Calculation.
    * @outputs Returns an owned Calculation; no energy or forces are computed here.
    * @lifetime Native preparation copies all pointer-backed composition data before returning.
    * The builder and input system need not survive the calculation; its Context must survive it.
@@ -194,8 +195,9 @@ class KsComposition {
    * @units Grid radii/tolerances use Bohr, exchange range uses inverse Bohr, and energies use
    * Hartree when the returned calculation is subsequently executed.
    */
-  [[nodiscard]] Calculation prepare(Context& context, const System& system,
-                                    generativeqc_method_descriptor descriptor) const {
+  [[nodiscard]] Calculation prepare(
+      Context& context, const System& system, generativeqc_method_descriptor descriptor,
+      const generativeqc_device_resources* resources = nullptr) const {
     if (descriptor.method != carrier_)
       throw std::invalid_argument("KS carrier and method descriptor must match");
     if (method_capabilities(carrier_).family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
@@ -229,7 +231,7 @@ class KsComposition {
     options.exchange_term_count = static_cast<std::uint32_t>(exchange_.size());
 
     descriptor.ks_options = &options;
-    return Calculation(context, system, descriptor);
+    return Calculation(context, system, descriptor, resources);
   }
 
  private:

@@ -19,11 +19,15 @@ capability authorities, serialization, and status handling.
 - [generativeqc_initial_guess_auto_system_kind_v2](#native-c-generativeqc-initial-guess-auto-system-kind-v2)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
+- [generativeqc_device_resources_create](#native-c-generativeqc-device-resources-create)
+- [generativeqc_device_resources_destroy](#native-c-generativeqc-device-resources-destroy)
+- [generativeqc_device_resources_read](#native-c-generativeqc-device-resources-read)
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
 - [generativeqc_get_source_identity](#native-c-generativeqc-get-source-identity)
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
 - [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
 - [generativeqc_response_recycle_state_v1_get](#native-c-generativeqc-response-recycle-state-v1-get)
@@ -63,6 +67,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_one_electron_gradient_cuda](#native-c-generativeqc-system-one-electron-gradient-cuda)
 - [generativeqc_batch_get_last_fock_builds](#native-c-generativeqc-batch-get-last-fock-builds)
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
+- [generativeqc_hf_physical_audit_cpu_query_v1](#native-c-generativeqc-hf-physical-audit-cpu-query-v1)
+- [generativeqc_hf_physical_audit_cpu_v1](#native-c-generativeqc-hf-physical-audit-cpu-v1)
+- [generativeqc_hf_system_projection_query_v1](#native-c-generativeqc-hf-system-projection-query-v1)
+- [generativeqc_hf_system_project_cpu_v1](#native-c-generativeqc-hf-system-project-cpu-v1)
 - [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
@@ -70,6 +78,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_calculation_prepare_with_device_resources](#native-c-generativeqc-calculation-prepare-with-device-resources)
+- [generativeqc_calculation_get_device_resources](#native-c-generativeqc-calculation-get-device-resources)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
 - [generativeqc_calculation_get_supported_properties_v1](#native-c-generativeqc-calculation-get-supported-properties-v1)
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
@@ -88,6 +98,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_batch_get_incremental_direct_jk_diagnostic](#native-c-generativeqc-batch-get-incremental-direct-jk-diagnostic)
 - [generativeqc_batch_get_precision_work](#native-c-generativeqc-batch-get-precision-work)
 - [generativeqc_batch_prepare](#native-c-generativeqc-batch-prepare)
+- [generativeqc_batch_prepare_with_device_resources](#native-c-generativeqc-batch-prepare-with-device-resources)
+- [generativeqc_batch_get_device_resources](#native-c-generativeqc-batch-get-device-resources)
 - [generativeqc_batch_destroy](#native-c-generativeqc-batch-destroy)
 - [generativeqc_batch_get_system_count](#native-c-generativeqc-batch-get-system-count)
 - [generativeqc_batch_get_last_shell_class_profile](#native-c-generativeqc-batch-get-last-shell-class-profile)
@@ -175,6 +187,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Calculation::operator=-copy](#native-cpp-generativeqc-calculation-copy-assignment-copy)
 - [generativeqc::Calculation::Calculation-move](#native-cpp-generativeqc-calculation-calculation-move)
 - [generativeqc::Calculation::supported_properties](#native-cpp-generativeqc-calculation-supported-properties)
+- [generativeqc::Calculation::initial_guess_diagnostic](#native-cpp-generativeqc-calculation-initial-guess-diagnostic)
 - [generativeqc::Calculation::execute](#native-cpp-generativeqc-calculation-execute)
 - [generativeqc::BatchItemResult](#native-cpp-generativeqc-batchitemresult)
 - [generativeqc::DensityFittingMetricDiagnostic](#native-cpp-generativeqc-densityfittingmetricdiagnostic)
@@ -406,6 +419,82 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Capacity is bytes and preparation_seconds is seconds; work counters are counts.
 
+(native-c-generativeqc-device-resources-create)=
+## generativeqc_device_resources_create
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_device_resources_create ( const generativeqc_device_resource_descriptor * descriptor , generativeqc_device_resources * * resources ) ;
+```
+
+**Behavior.** Derive allowance-separated numeric admission from selected capacity lifetimes.
+
+**Inputs.** Initialize descriptor with sizeof and GENERATIVEQC_ABI_VERSION. buffers contains
+buffer_count valid entries; count is positive. admission explicitly selects an external
+inventory or raw numeric cap; unknown values are rejected. resources points to a NULL handle and
+is disjoint from descriptor and buffers. Any global selection/admission remains caller-owned; an
+explicit numeric cap does not assert complete-plan feasibility.
+
+**Outputs.** Publish one owning metadata handle only after all admission/allocation succeeds.
+
+**Lifetime.** Copies all input metadata. Destroy the returned handle with the matching function.
+Prepared batches retain the underlying owner independently of this metadata handle.
+
+**Errors.** Invalid fields/overflow return INVALID_ARGUMENT, incompatible descriptors return
+ABI_MISMATCH, missing/multiple devices return NOT_IMPLEMENTED, metadata allocation failure
+returns OUT_OF_MEMORY. Every rejection leaves the output slot and inputs unchanged.
+
+**Execution.** Synchronous, CUDA-context-free metadata operation; no Python or runtime compiler.
+
+**Units.** Capacities are bytes; device is the scheduler-visible ordinal, not a physical GPU ID.
+
+(native-c-generativeqc-device-resources-destroy)=
+## generativeqc_device_resources_destroy
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_device_resources_destroy ( generativeqc_device_resources * resources ) ;
+```
+
+**Behavior.** Release one metadata handle without detaching retained native buffers or leases.
+
+**Inputs.** Pass a matching live handle, or NULL for a no-op; never a dangling/foreign handle.
+
+**Lifetime.** Batches and actual allocation/provider owners keep their own shared lifetime.
+
+**Errors.** No status is returned; double destruction or concurrent use of this handle is invalid.
+
+**Execution.** Synchronous metadata release; no CUDA operation or Python dependency.
+
+(native-c-generativeqc-device-resources-read)=
+## generativeqc_device_resources_read
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_device_resources_read ( const generativeqc_device_resources * resources , generativeqc_device_resource_diagnostic * out ) ;
+```
+
+**Behavior.** Read one locked snapshot of actual instrumented charges and admission reservations.
+
+**Inputs.** A live metadata handle and initialized diagnostic with sizeof/GENERATIVEQC_ABI_VERSION.
+
+**Outputs.** Publish the complete diagnostic on success; requested-byte overflow is explicitly
+unavailable, not a fabricated zero-byte replay. Failure leaves the output unchanged.
+
+**Lifetime.** The copied snapshot belongs to the caller; do not destroy/use the metadata handle
+concurrently. Native batch execution may independently update the shared owner.
+
+**Errors.** NULL inputs return INVALID_ARGUMENT; incompatible output returns ABI_MISMATCH.
+
+**Execution.** Synchronous locked metadata snapshot; no device synchronization or allocation.
+
+**Units.** Byte capacities exclude context/graph/pool/runtime and uninstrumented library storage.
+Iteration-boundary host/arena samples are unavailable when their sample count is zero;
+they are not complete endpoint allocation peaks. Existing outer observers remain independent.
+
 (native-c-generativeqc-get-abi-version)=
 ## generativeqc_get_abi_version
 
@@ -543,6 +632,39 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-hf-verify-final-v1)=
+## generativeqc_hf_verify_final_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_verify_final_v1 ( const generativeqc_hf_verification_descriptor_v1 * descriptor , generativeqc_hf_verification_result_v1 * output ) ;
+```
+
+**Behavior.** Derive progressive-HF final acceptance from observed metadata. Audit
+maximum commutator takes precedence over native RMS; budget exhaustion takes
+status precedence without erasing target failures. Empirical/unknown accuracy
+never becomes verified. Numeric equality meets a gate.
+
+**Inputs.** Full current-ABI descriptors; positive finite convergence tolerances,
+declared flags and accuracy code, exact counts and caller-validated identities.
+Present audit diagnostics must be finite and nonnegative. Nonfinite actual
+energy/change/density/native residual are physical failures, not API errors.
+
+**Outputs.** Atomically publishes every target/budget failure and final disposition.
+
+**Errors.** Null pointers, unknown flags/codes or malformed controls return
+INVALID_ARGUMENT; incompatible complete headers return ABI_MISMATCH. Failed
+calls leave output unchanged, including when input and output storage overlap.
+
+**Lifetime.** Borrows input only during the call; retains no calculation or device.
+
+**Execution.** Constant-storage synchronous host metadata only; no scientific
+reevaluation, callback, Python/compiler import or retry with a different policy.
+
+**Units.** Energy and energy differences are Hartree; density and physical residual
+retain their target solver definitions. Work counts include declared audit work.
 
 (native-c-generativeqc-response-recycle-capacity-v1-get)=
 ## generativeqc_response_recycle_capacity_v1_get
@@ -1592,6 +1714,137 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Overlap is dimensionless; system geometry uses Bohr.
 
+(native-c-generativeqc-hf-physical-audit-cpu-query-v1)=
+## generativeqc_hf_physical_audit_cpu_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_query_v1 ( const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , generativeqc_hf_physical_audit_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query a conservative native CPU capacity for an independent
+fixed-density RHF/UHF Direct/DF physical audit before any provider execution.
+
+**Inputs.** Live normalized orbital system, optional auxiliary system and complete
+controls/output ABI headers. A null auxiliary selects the orbital basis for DF;
+an unused auxiliary is ignored. Controls/output records must not overlap.
+
+**Outputs.** Atomically publishes AO/spin/array counts and provider/workspace/total
+numeric byte bounds. A below-limit budget still returns the required capacity.
+
+**Errors.** Invalid controls/count overflow return INVALID_ARGUMENT; incompatible
+headers ABI_MISMATCH; ECP or beyond-g topology NOT_IMPLEMENTED. Output is unchanged.
+
+**Lifetime.** Borrows systems and records for this call; retains no arrays or owners.
+
+**Execution.** Synchronous CPU metadata only, without scientific array allocation,
+integral evaluation, provider initialization or accelerator access.
+
+**Units.** Geometry is Bohr; counts are FP64 elements and capacities are bytes.
+
+(native-c-generativeqc-hf-physical-audit-cpu-v1)=
+## generativeqc_hf_physical_audit_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_physical_audit_cpu_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_system * auxiliary , const generativeqc_hf_physical_audit_controls_v1 * controls , const double * density , uint64_t density_count , double target_energy , generativeqc_hf_physical_audit_result_v1 * output ) ;
+```
+
+**Behavior.** Rebuild one exact requested physical HF Fock at the supplied final
+density and audit FDS-SDF through shared native mean-field implementations.
+This does not run SCF, certify convergence or replace the requested model.
+
+**Inputs.** CPU context, normalized systems and complete controls/output headers.
+Density is finite row-major [spin,AO,AO] with the exact queried count; RHF uses
+double occupation, UHF unit-occupation spin blocks. Target energy is finite.
+Output overlap meets the queried capacity and does not alias density, controls
+or output record. Controls, density and the output record are mutually disjoint.
+
+**Outputs.** Publishes overlap, fixed-density energy, energy difference, residual
+maximum/RMS and actual Fock/rank counts only after the entire audit succeeds.
+Unused output tails and all borrowed inputs remain unchanged.
+
+**Errors.** Invalid metadata, ranges, aliasing or nonfinite input return
+INVALID_ARGUMENT; incompatible headers ABI_MISMATCH; unsupported domain or
+non-CPU context NOT_IMPLEMENTED. Below-limit admission returns OUT_OF_MEMORY before
+provider construction. Scientific/provider failures propagate with context
+details and no partial publication or fallback retry.
+
+**Lifetime.** Borrows inputs synchronously. Native provider, density and residual
+workspaces are destroyed before return; detached outputs belong to the caller.
+
+**Execution.** Synchronous CPU FP64 using the existing Direct/DF Fock, energy and
+physical residual owners. Serialize shared-context calls and destruction.
+No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
+
+**Units.** Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
+use the declared AO convention. Numeric capacities are bytes, not RSS.
+
+(native-c-generativeqc-hf-system-projection-query-v1)=
+## generativeqc_hf_system_projection_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_projection_query_v1 ( const generativeqc_system * target , const generativeqc_system * source , const generativeqc_hf_system_projection_controls_v1 * controls , generativeqc_hf_system_projection_capacity_v1 * output ) ;
+```
+
+**Behavior.** Validate the system-to-system HF transfer domain and query matrix capacity.
+
+**Inputs.** Live all-electron source/target systems with identical ordered nuclei, geometry,
+charge and spin. Initialize versioned controls/output; unrestricted is 0 or 1, reserved
+is zero, maximum_ao and maximum_host_bytes are positive. Policy thresholds follow the
+existing occupied projection contract. Input and output descriptors do not overlap.
+
+**Outputs.** Publishes AO/spin dimensions, occupations, density counts and numeric byte bound.
+A below-bound host budget does not suppress the metadata-only capacity report.
+
+**Errors.** Invalid metadata/overflow or ABI mismatch preserve the output. Unsupported ECP
+or beyond-g domains return NOT_IMPLEMENTED; mismatched model identity is INVALID_ARGUMENT.
+
+**Lifetime.** Systems and descriptors are borrowed for the call; nothing is retained.
+
+**Execution.** Synchronous metadata-only query without overlap/eigen work or GPU access.
+Matrix capacity excludes caller buffers, prepared fleets, metadata and opaque overhead.
+
+**Units.** Coordinates are Bohr, occupations are electron counts and capacity is bytes.
+
+(native-c-generativeqc-hf-system-project-cpu-v1)=
+## generativeqc_hf_system_project_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_project_cpu_v1 ( generativeqc_context * context , const generativeqc_system * target , const generativeqc_system * source , const generativeqc_hf_system_projection_controls_v1 * controls , const double * density , uint64_t density_count , generativeqc_basis_projection_output_v1 * outputs , uint64_t output_count ) ;
+```
+
+**Behavior.** Own three overlap matrices and all spin projections in one native scope,
+reusing existing overlap and occupied-projection mathematics. This proposes a seed only.
+
+**Inputs.** Explicit CPU context, query-compatible source/target systems and controls, finite
+spin-major source density with the exact queried count, and one versioned projection
+output per spin. Each output has target_AO-square density storage and target_AO by occupied
+coefficient storage. Written ranges are disjoint from all inputs/descriptors and each other.
+Empty-spin coefficients may be NULL; output descriptor count must equal spin_count.
+
+**Outputs.** Publishes every spin's detached density, coefficients and invariant diagnostics
+only after all channels succeed; output tails and source density remain unchanged.
+
+**Errors.** Invalid/aliased/nonfinite/count errors return INVALID_ARGUMENT; insufficient
+numeric budget returns OUT_OF_MEMORY before overlap work. Unsupported contexts/domains
+return NOT_IMPLEMENTED. Any failure preserves all output records/buffers; no Python retry.
+
+**Lifetime.** Synchronous borrowed inputs and caller-owned outputs; all native scratch closes
+before return. Serialize operations and destruction sharing the context or system owners.
+
+**Execution.** Explicit CPU FP64 overlap/projection; no SCF, device probe or hidden GPU transfer.
+The numeric bound excludes caller buffers, prepared fleets and opaque provider overhead.
+
+**Units.** Densities and coefficients follow each system's public AO normalization; occupation
+and electron trace count electrons, diagnostic residuals are dimensionless, capacity is bytes.
+
 (native-c-generativeqc-basis-projection-query-v1)=
 ## generativeqc_basis_projection_query_v1
 
@@ -1814,6 +2067,62 @@ identity checks and execution-control-only ks_options.
 **Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
+
+(native-c-generativeqc-calculation-prepare-with-device-resources)=
+## generativeqc_calculation_prepare_with_device_resources
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_device_resources ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * descriptor , const generativeqc_device_resources * resources , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Prepare the same scientific calculation with native-owned device admission.
+The native owner binds around preparation and every execution, including component returns,
+without Python observation control. Admission owns the serialized host-workspace schedule.
+
+**Inputs.** Ordinary calculation_prepare inputs plus a live selected device-resources handle.
+The context must execute CUDA on the same visible device. The caller owns any matching
+global-plan admission; an explicit cap is not full-plan or model-identity validation.
+
+**Outputs.** Follow calculation_prepare's output contract. Refusal never retries unbudgeted math.
+
+**Lifetime.** Retains the underlying resource owner; the metadata handle may close after success.
+Keep the context alive through calculation destruction. Actual buffers/providers release their
+charges with their real lifetimes, independently of frontend observation handles.
+
+**Errors.** Preserve ordinary preparation statuses. NULL resources/device mismatch/foreign or
+concurrent resource binding return INVALID_ARGUMENT; CPU contexts return NOT_IMPLEMENTED;
+numeric allocation shortage returns OUT_OF_MEMORY.
+
+**Execution.** Synchronous; serialize this calculation/context. Uses normal device visibility.
+
+**Units.** Numeric byte limits exclude separately declared runtime/library allowances, not RSS.
+
+(native-c-generativeqc-calculation-get-device-resources)=
+## generativeqc_calculation_get_device_resources
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_device_resources ( const generativeqc_calculation * calculation , generativeqc_device_resources * * resources ) ;
+```
+
+**Behavior.** Return another metadata handle for this calculation's actual native resource owner.
+
+**Inputs.** A live calculation and disjoint NULL output handle; serialize owner destruction.
+
+**Outputs.** Publish one owning metadata handle on success; failures leave the output unchanged.
+
+**Lifetime.** The metadata handle may outlive the calculation to observe real final releases;
+it does not keep the scientific calculation or context alive. Destroy it independently.
+
+**Errors.** Invalid inputs return INVALID_ARGUMENT; an unbudgeted calculation returns
+NOT_IMPLEMENTED; metadata allocation failure returns OUT_OF_MEMORY.
+
+**Execution.** Synchronous metadata operation under the context lock; no CUDA/Python work.
+
+**Units.** Same instrumented numeric/reservation/sample scope as device_resources_read, not RSS.
 
 (native-c-generativeqc-calculation-destroy)=
 ## generativeqc_calculation_destroy
@@ -2423,6 +2732,62 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Prepared xyz are Bohr, energies Hartree, force buffers Hartree/Bohr; resource options
 are byte counts.
+
+(native-c-generativeqc-batch-prepare-with-device-resources)=
+## generativeqc_batch_prepare_with_device_resources
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_with_device_resources ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , generativeqc_batch_flags flags , const generativeqc_device_resources * resources , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare the same scientific batch with native-owned device admission and lifetime.
+The native owner binds around preparation and every execution without a Python observation.
+
+**Inputs.** All ordinary batch_prepare inputs plus a live selected device-resources handle.
+The context must execute CUDA on that same visible device. The caller owns any matching
+global-plan admission; an explicit cap is not full-plan or model-identity validation.
+
+**Outputs.** Use batch_prepare's output/validation contract. No unbudgeted retry follows refusal.
+
+**Lifetime.** The batch retains its own resource owner. The metadata handle may close after
+successful preparation; retained buffers/providers remain charged until their actual release.
+Keep the context alive until the batch is destroyed, as for the ordinary batch API.
+
+**Errors.** Ordinary preparation errors are preserved. NULL resources, device mismatch and
+foreign/concurrent resource binding return INVALID_ARGUMENT; allocation shortage returns
+OUT_OF_MEMORY. CPU contexts return NOT_IMPLEMENTED, not unbudgeted CPU execution.
+
+**Execution.** Synchronous; serialize the batch/context. Same-owner nesting preserves counters;
+foreign native owners never silently share one active scope. Normal device visibility applies.
+
+**Units.** Numeric limits are bytes, excluding separately declared runtime/library allowances.
+
+(native-c-generativeqc-batch-get-device-resources)=
+## generativeqc_batch_get_device_resources
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_device_resources ( const generativeqc_batch * batch , generativeqc_device_resources * * resources ) ;
+```
+
+**Behavior.** Return another metadata handle for the actual prepared resource owner.
+
+**Inputs.** A live batch and disjoint NULL output handle; serialize with batch destruction.
+
+**Outputs.** Publish one owning handle on success; every failure leaves the slot unchanged.
+
+**Lifetime.** Destroy the returned handle independently; it may outlive the batch to observe
+final buffer/provider releases. It does not keep the scientific batch or context alive.
+
+**Errors.** NULL/nonempty outputs return INVALID_ARGUMENT; unbudgeted batches return
+NOT_IMPLEMENTED. Metadata allocation failure returns OUT_OF_MEMORY.
+
+**Execution.** Synchronous metadata operation under the batch context lock; no CUDA/Python work.
+
+**Units.** Same numeric capacity/reservation scope as device_resources_read, never RSS coverage.
 
 (native-c-generativeqc-batch-destroy)=
 ## generativeqc_batch_destroy
@@ -4462,16 +4827,18 @@ does not provide independent thread-safe execution.
 Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
 
 ```cpp
-Calculation ( Context & context , const System & system , const generativeqc_method_descriptor & method )
+Calculation ( Context & context , const System & system , const generativeqc_method_descriptor & method , const generativeqc_device_resources * resources = nullptr )
 ```
 
 **Behavior.** Construct and own a prepared native calculation.
 
 **Inputs.** Supply a live Context, System and initialized method descriptor. C descriptor
-initialization/admission rules apply.
+initialization/admission rules apply. Optional device resources select native CUDA
+admission during preparation and execution; unsupported requests fail without retry.
 
 **Lifetime.** Copies system/method configuration and retains the context; the System may be
-destroyed after construction.
+destroyed after construction. A supplied resource owner is shared internally, so its
+metadata handle may be destroyed after construction without detaching retained charges.
 
 **Errors.** Throws Error on native validation/preparation failure; no live wrapper is returned.
 Allocation failures may throw standard exceptions.
@@ -4596,6 +4963,31 @@ remains borrowed by this wrapper during the call.
 
 **Execution.** Synchronous, Python-free; serialize against execute/destruction.
 
+(native-cpp-generativeqc-calculation-initial-guess-diagnostic)=
+## generativeqc::Calculation::initial_guess_diagnostic
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+[[ nodiscard ]] std :: optional < generativeqc_initial_guess_diagnostic > initial_guess_diagnostic ( ) const
+```
+
+**Behavior.** Copy the most recent native preliminary-density diagnostic.
+
+**Inputs.** A live Calculation; no preparation or execution is requested.
+
+**Outputs.** Returns an owned scalar record, or nullopt when no record exists.
+Preparation failure/budget refusal is recorded separately from target SCF
+convergence; an absent record must not be interpreted as successful preparation.
+
+**Lifetime.** The returned value survives the calculation and subsequent execution.
+
+**Errors.** Throws Error on query failure other than NOT_IMPLEMENTED.
+
+**Execution.** Synchronous and Python-free; serialize against execute/destruction.
+
+**Units.** Numeric capacity is bytes; preparation time is seconds.
+
 (native-cpp-generativeqc-calculation-execute)=
 ## generativeqc::Calculation::execute
 
@@ -4709,16 +5101,19 @@ does not provide independent thread-safe execution.
 Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
 
 ```cpp
-Batch ( Context & context , std :: span < const System * const > systems , const generativeqc_method_descriptor & method , generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS )
+Batch ( Context & context , std :: span < const System * const > systems , const generativeqc_method_descriptor & method , generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS , const generativeqc_device_resources * resources = nullptr )
 ```
 
 **Behavior.** Construct and own a prepared native batch.
 
 **Inputs.** Supply a live Context, a nonempty span of nonnull System pointers, initialized
 method descriptor and batch flags. C descriptor initialization/admission rules apply.
+Optional device resources select native CUDA admission for the entire fleet; unsupported
+requests fail without an unbudgeted retry.
 
 **Lifetime.** Copies every system and method configuration; the span and source Systems may be
-destroyed after construction. Retains the context.
+destroyed after construction. Retains the context and shares any supplied resource owner;
+the frontend resource metadata handle may be destroyed after construction.
 
 **Errors.** Throws Error on native failure; no live wrapper is returned. Batch also rejects a
 null System element before preparation; allocation failures may throw standard exceptions.
@@ -5140,14 +5535,15 @@ physical fraction; omega is the range parameter and defaults to zero.
 Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 
 ```cpp
-[[ nodiscard ]] Calculation prepare ( Context & context , const System & system , generativeqc_method_descriptor descriptor ) const
+[[ nodiscard ]] Calculation prepare ( Context & context , const System & system , generativeqc_method_descriptor descriptor , const generativeqc_device_resources * resources = nullptr ) const
 ```
 
 **Behavior.** Prepare a native calculation from a snapshot of this explicit KS composition.
 
 **Inputs.** context and system must be valid; descriptor must have its ABI header initialized
 and its method equal to this builder's DFT carrier. Replaces descriptor.ks_options in the
-local descriptor copy; other options retain their ordinary native contract.
+local descriptor copy; other options retain their ordinary native contract. Optional
+resources selects the same native prepared device owner as ordinary Calculation.
 
 **Outputs.** Returns an owned Calculation; no energy or forces are computed here.
 

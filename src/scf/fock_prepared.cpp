@@ -15,6 +15,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_density_fitting_md.hpp"
+#include "scf/df_fock_capacity.hpp"
 #include "scf/df_response_weights.hpp"
 #include "scf/explicit_integral_backend.hpp"
 #include "scf/initial_guess/overlap.hpp"
@@ -122,6 +123,46 @@ bool same_system(const core::System& a, const core::System& b) noexcept {
 }
 }  // namespace
 
+PreparedFockDeviceCapacity prepared_fock_device_capacity(
+    const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
+    std::size_t device_budget_bytes, std::size_t exact_device_bytes,
+    unsigned retained_fitted_derivative_order,
+    FockOccupiedProjectionReservation projection_reservation) {
+  validate_resolved_fock_build(strategy);
+  for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange})
+    if (term->present && term->approximation != FockApproximation::Exact &&
+        term->approximation != FockApproximation::DensityFitted)
+      throw std::invalid_argument("CUDA Fock capacity requires Direct or DF providers");
+  const bool has_df = needs(strategy.spec, FockApproximation::DensityFitted);
+  const bool has_exact = needs(strategy.spec, FockApproximation::Exact);
+  if (strategy.backend != FockBackend::Cuda || retained_fitted_derivative_order > 1 ||
+      (retained_fitted_derivative_order && !has_df) || (has_exact != (exact_device_bytes != 0)))
+    throw std::invalid_argument("invalid prepared CUDA Fock capacity request");
+  if (!has_df) {
+    const auto cap = device_budget_bytes ? device_budget_bytes : kDefaultDeviceBudget;
+    const auto bytes = std::min(exact_device_bytes, cap);
+    return {bytes, bytes};
+  }
+  const auto& aux = auxiliary ? *auxiliary : orbital;
+  const DfBudgetWorkload workload{
+      molecule::ao_count(orbital),
+      molecule::ao_count(aux),
+      orbital.atoms.size(),
+      1,
+      0,
+      strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0};
+  const bool coulomb_only_packing =
+      strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+      !strategy.spec.exchange.present;
+  const auto capacity = df_fock_device_capacity(
+      workload, device_budget_bytes, exact_device_bytes, df_source_bytes(orbital, aux),
+      projection_reservation.restricted_rank, coulomb_only_packing,
+      requested_df_pair_storage_request() == DfPairStorageRequest::Automatic);
+  return {capacity.retained_response_bytes,
+          std::max(capacity.retained_response_bytes, capacity.source_setup_bytes)};
+}
+
 struct PreparedFockPlan::Impl {
   core::System orbital;
   std::optional<core::System> auxiliary;
@@ -143,6 +184,7 @@ struct PreparedFockPlan::Impl {
   unsigned retained_fitted_derivative_order{};
   FockOccupiedProjectionReservation projection_reservation;
   bool external_integrals{};
+  ExternalBuilder external_builder;
   std::unique_ptr<ExplicitIntegralBackend> explicit_backend;
 
   const integrals::IntegralData& one_electron() const {
@@ -150,19 +192,21 @@ struct PreparedFockPlan::Impl {
   }
 
   Impl(const core::System& system, integrals::IntegralData values, FockSpin spin,
-       FockBackend backend, int device, std::size_t budget)
+       FockBackend backend, int device, std::size_t budget, ExternalBuilder builder)
       : orbital(system),
         device_id(-1),
         requested_budget(0),
         exact(std::move(values)),
-        external_integrals(true) {
+        external_integrals(true),
+        external_builder(std::move(builder)) {
     auto spec = make_hf_fock_spec(spin);
     spec.derivative_order = 0;
     diagnostic.strategy = resolve_fock_build(spec, backend, 0.0);
     const auto n = molecule::ao_count(system);
     if (!n || n != exact.nbf || n > 256 || exact.overlap.size() != n * n ||
-        exact.hcore.size() != n * n || exact.eri.size() != n * n * n * n || exact.ncoord != 0 ||
-        !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
+        exact.hcore.size() != n * n ||
+        (external_builder ? !exact.eri.empty() : exact.eri.size() != n * n * n * n) ||
+        exact.ncoord != 0 || !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
         !exact.eri_derivative.empty())
       throw std::invalid_argument("external HF integral layout is invalid");
     const auto finite = [](const auto& array) {
@@ -171,7 +215,10 @@ struct PreparedFockPlan::Impl {
     if (!finite(exact.overlap) || !finite(exact.hcore) || !finite(exact.eri) ||
         !std::isfinite(exact.nuclear_repulsion))
       throw std::invalid_argument("external HF integrals must be finite");
-    if (backend == FockBackend::Cuda) {
+    if (external_builder) {
+      if (backend != FockBackend::Cpu)
+        throw std::invalid_argument("streamed external integral provider requires CPU");
+    } else if (backend == FockBackend::Cuda) {
       explicit_backend = make_cuda_explicit_integrals(device, n, exact.eri, budget);
       device_id = device;
     } else {
@@ -564,8 +611,9 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
 PreparedFockPlan::~PreparedFockPlan() = default;
 PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values,
                                    FockSpin spin, FockBackend backend, int device,
-                                   std::size_t budget)
-    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget)) {}
+                                   std::size_t budget, ExternalBuilder builder)
+    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget,
+                                   std::move(builder))) {}
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
@@ -669,6 +717,7 @@ bool PreparedFockPlan::matches_system(const core::System& system) const noexcept
 }
 DirectJkMatrices PreparedFockPlan::build(const std::vector<double>& density,
                                          const std::vector<double>& beta) const {
+  if (impl_->external_builder) return impl_->external_builder(strategy().spec, density, beta);
   if (impl_->explicit_backend)
     return impl_->explicit_backend->build(strategy().spec, density, beta);
   return impl_->cpu_view ? impl_->cpu_view->build(density, beta)

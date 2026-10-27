@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-refresh-20261025",
+  "owner": "Final default-only HF/DFT README refresh",
+  "reason": "All 128 source-matched populations and 512 complete cold/warm E/F samples retain full-precision observables, controls and work. Independent failures remain visible. Intrusive diagnostics are separate and excluded from figures; no new optimization or statistical ranking is promoted. Compact storage stays within unchanged limits.",
+  "review_document": "benchmarks/results/readme-refresh-20261025/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-refresh-20261025/gpu4pyscf.json.xz",
+      "family": "readme-refresh-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 64 complete cold/three-warm populations with E/F values, actual work and immutable producer identities",
+      "bytes": 187896,
+      "sha256": "59d4159f51e9ce6a994e92bdf192925a7992e4801fde9419713365f84febc2ae"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261025/standard.json.xz",
+      "family": "readme-refresh-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 64 complete cold/three-warm populations with E/F values, actual work and immutable producer identities",
+      "bytes": 211680,
+      "sha256": "61b4f46ed84ace2e378b768601938132e00106e5f49b7fc25bdb355209f2a60d"
+    }
+  ]
+}

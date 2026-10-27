@@ -231,9 +231,9 @@ jobs:
       actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
-    # Cold GCC coverage can spend 6.5 minutes compiling and 8 minutes in CTest.
+    # Cold GCC coverage can spend 6 minutes compiling and 13 minutes in CTest.
     # Leave room for lcov and artifacts without enlarging plain-build budgets.
-    timeout-minutes: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 20 || 15 }}
+    timeout-minutes: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 25 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -413,10 +413,10 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # Keep the prerequisite (10m) and full runtime build (30m) independently
+    # Keep the prerequisite (10m) and full runtime build (45m) independently
     # bounded, with 10m for setup, required probes and diagnostic cleanup.
     # The outer cap must not truncate a build still within its phase budget.
-    timeout-minutes: 50
+    timeout-minutes: 65
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
@@ -668,7 +668,7 @@ jobs:
           CCACHE_NORESHARE: "true"
       - name: Compile production CUDA and runtime CTest
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        timeout-minutes: 30
+        timeout-minutes: 45
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.

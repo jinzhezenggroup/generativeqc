@@ -1,0 +1,24 @@
+{
+  "id": "scf.dddd-class-major-force",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR"
+  ],
+  "owner_issues": [
+    2476
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "python/generativeqc/resources_ks.py",
+    "src/scf/cuda/direct_coulomb.cpp",
+    "src/scf/cuda/direct_bounded_fallback.cu"
+  ],
+  "rationale": "The existing materialized dddd owner uses the admitted class-major dd by dd topology by default, avoiding repeated scans of unrelated shell-pair classes. The exact recurrence, physical pair orientation, screening and FP64 contraction remain shared with the generic owner. Missing materialized cache, coherent topology or proved s/p/d domain retains the bounded generic fallback. Explicit 0 selects that control. Independent derivative/work census, both spin and AO representations, sanitizer checks and fresh complete cold/warm/moved endpoints qualify this guarded default.",
+  "revisit_condition": "Requalify complete cold/warm/moved endpoints, J-prime/K-prime for both spins and representations, and bounded fallback behavior before changing default admission or source enumeration.",
+  "evidence": [
+    "tests/python/test_direct_force_scheduling_cuda.py",
+    ".agents/notes/implemented/performance/2026-10-14-bounded-dft-performance-experiments.md",
+    "benchmarks/results/cold-r2-defaults-20261026/README.md",
+    ".agents/notes/implemented/performance/2026-10-26-direct-r2-cold-defaults.md"
+  ]
+}

@@ -51,8 +51,11 @@ The [DF decision note](../../../.agents/notes/implemented/performance/2026-10-25
 and [Direct decision note](../../../.agents/notes/implemented/performance/2026-10-25-large-direct-cold-endpoints.md)
 record the mechanisms and rejected alternatives. Further Schwarz-width,
 provisional-cutoff and force-layout experiments were not promoted. Their raw
-records, including cancelled partial trials, remain in the exploration bundle;
-none contributes a timing point to these figures.
+records, including cancelled partial trials, are indexed in
+`exploration-index.json.xz`; none contributes a timing point to these figures.
+The original exploration bundle is recoverable from the pinned existing Git
+revision in `exploration-history.json`. Complete figure populations, independent
+oracles, endpoint validation and regression checks remain in this checkout.
 
 ## Accuracy and validation
 
@@ -106,7 +109,28 @@ PYTHONPATH=python:. python benchmarks/results/r2scan-endpoints-20261025/reproduc
 ```
 
 This recomputes qualification, wins, target comparisons and work tables, verifies
-all publication hashes, and redraws both figures byte for byte. It also checks
-that the CBS figure is unchanged. If Direct cold work is revisited later,
+all publication hashes, and redraws both original figures byte for byte using
+their recorded hashes. The [final refresh](../readme-refresh-20261025/README.md)
+supersedes the homepage figures and verifies that CBS is unchanged. If Direct cold work is revisited later,
 preparation and SCF operator work remain the useful focus; this campaign stops
 at the validated improvements above.
+
+## Historical exploration storage
+
+The 2026-10-26 refresh exceeded the unchanged aggregate evidence budget. Only
+the superseded exploration archive moved to existing Git history; the compact
+index retains every member identity and all discovered endpoint timing/work
+summaries, including unsuccessful trials. This storage change does not alter
+any accepted endpoint, accuracy gate, published figure or required replay input.
+Recover the exact original bytes into ignored storage with:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/r2scan-endpoints-20261025/exploration-00.json.xz \
+  --manifest benchmarks/results/r2scan-endpoints-20261025/exploration-history.json \
+  --output .artifacts/r2scan-exploration-original.json.xz
+```
+
+The helper verifies SHA-256 and size against existing Git objects. In a shallow
+clone it reports the exact revision to fetch; no release asset or external
+archive host is involved. Ordinary figure replay requires no historical fetch.

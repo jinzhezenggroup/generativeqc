@@ -24,6 +24,7 @@
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -125,9 +126,11 @@ int generativeqc_residency_observer_unbind_v1(generativeqc::runtime::ResidencyOb
 void* generativeqc_resource_ledger_create_v1(std::size_t bytes, int device) {
   if (device < 0) return nullptr;
   try {
-    return new std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>(
-        std::make_shared<generativeqc::runtime::DeviceResourceLedger>(
-            generativeqc::runtime::DeviceResourceLedger{bytes, device}));
+    auto ledger = std::make_shared<generativeqc::runtime::DeviceResourceLedger>();
+    ledger->limit = bytes;
+    ledger->device = device;
+    ledger->declared_peak = bytes;
+    return new std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>(std::move(ledger));
   } catch (const std::bad_alloc&) {
     return nullptr;
   }
@@ -144,19 +147,9 @@ int generativeqc_resource_ledger_bind_v1(void* handle) {
   using namespace generativeqc::runtime;
   if (!cpu_resource_observation.active || active_device_resource_ledger || handle == nullptr)
     return 1;
-  auto ledger = *static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
-  std::lock_guard<std::mutex> lock(device_resource_mutex);
-  if (ledger->active) return 1;
-  ledger->active = true;
-  ledger->peak = ledger->live;
-  ledger->allocations = 0;
-  ledger->rejected = 0;
-  ledger->requested_bytes = 0;
-  ledger->requested_bytes_overflow = false;
-  ledger->provider_reservation_peak = ledger->provider_reserved;
-  ledger->admission_peak = ledger->live + ledger->provider_reserved;
-  active_device_resource_ledger = std::move(ledger);
-  return 0;
+  return bind_device_resource_ledger(*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle))
+             ? 0
+             : 1;
 }
 
 int generativeqc_resource_ledger_read_v1(void* handle, std::uint64_t* values) {
@@ -518,7 +511,10 @@ int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::siz
 int generativeqc_resource_tracking_begin_v1(unsigned cpu_worker_limit) {
   auto& observation = generativeqc::runtime::cpu_resource_observation;
   if (observation.active || cpu_worker_limit > 1) return 1;
+  const auto generation = generativeqc::runtime::next_cpu_resource_observation_generation();
+  if (!generation) return 1;
   observation = {true, 0, 0, cpu_worker_limit};
+  observation.generation = generation;
   return 0;
 }
 
@@ -532,11 +528,7 @@ int generativeqc_resource_tracking_end_v1(std::uint64_t* peak, std::uint64_t* sa
   *samples = observation.samples;
   observation.active = false;
   observation.cpu_worker_limit = 0;
-  if (generativeqc::runtime::active_device_resource_ledger) {
-    std::lock_guard<std::mutex> lock(generativeqc::runtime::device_resource_mutex);
-    generativeqc::runtime::active_device_resource_ledger->active = false;
-  }
-  generativeqc::runtime::active_device_resource_ledger.reset();
+  generativeqc::runtime::unbind_device_resource_ledger();
   return 0;
 }
 
@@ -792,6 +784,38 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
   try {
     const auto value = generativeqc::scf::initial_guess::preliminary_minao_numeric_capacity(
         target_aos, atomic_numbers, atom_count);
+    *output = value;
+    return 0;
+  } catch (const std::exception&) {
+    return 1;
+  }
+}
+
+/** Private compact-topology query for the native Huckel preparation allowance.
+ * Atomic occupied-channel selection and the numeric polynomial are shared with
+ * actual admission. Borrows immutable arrays, uses O(atoms) metadata scratch,
+ * and never constructs scientific state. Failure leaves output unchanged.
+ */
+int generativeqc_resource_huckel_numeric_capacity_v1(
+    const std::int32_t* atomic_numbers, std::size_t atom_count, const std::uint32_t* shell_atoms,
+    const std::uint32_t* angular_momenta, const std::uint64_t* primitive_counts,
+    std::size_t shell_count, int representation, std::uint32_t diis_history,
+    std::uint64_t* output) {
+  if (!atomic_numbers || !shell_atoms || !angular_momenta || !primitive_counts || !output ||
+      !diis_history || diis_history > 16)
+    return 1;
+  try {
+    using namespace generativeqc::scf::initial_guess;
+    const auto shape = huckel_capacity_shape(
+        atom_count, shell_count, representation,
+        [&](std::size_t index) { return atomic_numbers[index]; },
+        [&](std::size_t index) {
+          if (primitive_counts[index] > std::numeric_limits<std::size_t>::max())
+            throw std::overflow_error("Huckel primitive count exceeds size_t");
+          return HuckelShellShape{shell_atoms[index], angular_momenta[index],
+                                  static_cast<std::size_t>(primitive_counts[index])};
+        });
+    const auto value = huckel_numeric_capacity(shape, diis_history);
     *output = value;
     return 0;
   } catch (const std::exception&) {

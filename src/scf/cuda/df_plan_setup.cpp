@@ -44,6 +44,24 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
                                         const double* scaled_eigenvectors,
                                         const double* eigenvalues, std::string& detail) {
   const auto offset = system * plan.naux * plan.naux;
+  if (plan.resident_cholesky_factors) {
+    // In-place TRSM halves the dense whitening arithmetic. The immutable raw
+    // panel and the retained factor have distinct lifetimes, so copy first.
+    const auto error = cudaMemcpyAsync(output, raw, pairs * plan.naux * sizeof(double),
+                                       cudaMemcpyDeviceToDevice, plan.stream);
+    if (error != cudaSuccess) return cuda_failure(error, "stage DF Cholesky panel", detail);
+    const auto status =
+        runtime::cuda_trace::trace_call("resident_metric_triangular_solve", plan.stream, [&] {
+          return scf_metric_lower_solve(plan, pairs, scaled_eigenvectors + offset, output, detail);
+        });
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    runtime::cuda_trace::trace_counter("resident_whitening_cholesky_basis", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_panels", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_solves", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_flops",
+                                       pairs * plan.naux * plan.naux);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
   auto* projected = plan.resident_spectral_factors ? output : plan.exchange_intermediate;
   auto status =
       runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream, [&] {
@@ -292,7 +310,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   const bool packed = df_packed_pairs(storage.pairs);
   if ((storage.pairs != DfPairStorage::Dense && !packed) || storage.rank_capacity > nbf ||
       (!packed && storage.rank_capacity) ||
-      (packed && (!integral_source || !retain_three_center))) {
+      (packed && (!integral_source || !retain_three_center)) ||
+      (storage.metric_whitening != DfMetricWhitening::Automatic &&
+       storage.metric_whitening != DfMetricWhitening::Spectral &&
+       storage.metric_whitening != DfMetricWhitening::Cholesky)) {
     detail =
         "packed DF values require an explicit retained physical source and valid rank capacity";
     return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -814,6 +835,49 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                                        true},
                                       "construct CUDA DF metric inverse square root", detail);
   if (metric_product != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, metric_product);
+  // Single packed, full rank, and sufficient existing setup/response staging.
+  // Large auxiliary dimensions amortize the extra factorization and inverse
+  // across many raw panels. This typed selection is immutable for the owner;
+  // native controls can retain spectral whitening without ambient cache state.
+  // Preserve the spectral policy if Cholesky reports
+  // nonpositive definiteness; no partially factored matrix may be published.
+  const bool cholesky_requested =
+      storage.metric_whitening == DfMetricWhitening::Cholesky ||
+      (storage.metric_whitening == DfMetricWhitening::Automatic && naux >= 1024);
+  if (cholesky_requested && candidate->resident_spectral_factors && batch_size == 1 &&
+      candidate->panel_capacity >= metric_elements) {
+    cuda_error = cudaMemcpyAsync(setup.scaled_eigenvectors, metrics.data(), metric_bytes,
+                                 cudaMemcpyHostToDevice, candidate->stream);
+    if (cuda_error != cudaSuccess)
+      return fail_plan(candidate, cuda_failure(cuda_error, "upload Cholesky metric", detail));
+    launch_symmetrize_metrics_kernel(symmetric_blocks, symmetric_threads, 0, candidate->stream,
+                                     naux, setup.scaled_eigenvectors);
+    bool admitted = false;
+    status =
+        scf_metric_cholesky(*candidate, setup.scaled_eigenvectors, setup.solver_workspace,
+                            solver_device_workspace_bytes, setup.solver_info, admitted, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+    int factor_info = -1;
+    if (admitted) {
+      cuda_error = cudaMemcpyAsync(&factor_info, setup.solver_info, sizeof(int),
+                                   cudaMemcpyDeviceToHost, candidate->stream);
+      if (cuda_error == cudaSuccess) cuda_error = cudaStreamSynchronize(candidate->stream);
+      if (cuda_error != cudaSuccess)
+        return fail_plan(candidate, cuda_failure(cuda_error, "read Cholesky status", detail));
+      if (factor_info < 0) {
+        detail = "invalid CUDA DF metric Cholesky argument";
+        return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
+      }
+    }
+    candidate->resident_cholesky_factors = admitted && factor_info == 0;
+    if (candidate->resident_cholesky_factors) candidate->resident_spectral_factors = false;
+    runtime::df_progress::number("metric_cholesky_admitted", candidate->resident_cholesky_factors);
+    if (metric_progress.enabled())
+      runtime::df_progress::label("metric_condition_number",
+                                  std::to_string(diagnostics[0].condition_number).c_str());
+    // Spectral single-packed whitening uses Q and lambda directly, so a
+    // declined factorization does not require restoring the now-dead scaled Q slot.
+  }
   if (metric_progress.enabled()) {
     // The journal needs a completed boundary before raw generation starts.
     // The ordinary, unprofiled path retains its existing stream ordering.
@@ -889,6 +953,21 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     if (materialization_status != GENERATIVEQC_STATUS_SUCCESS)
       return fail_plan(candidate, materialization_status);
   }
+  if (candidate->resident_cholesky_factors) {
+    // L is no longer needed once every B panel exists. Build W=L^-1 in bounded
+    // K staging, then retain it in the same setup slot for F^T*W force response.
+    launch_metric_identity(candidate->stream, naux, candidate->exchange_intermediate);
+    cuda_error = cudaPeekAtLastError();
+    if (cuda_error != cudaSuccess)
+      return fail_plan(candidate, cuda_failure(cuda_error, "initialize DF inverse factor", detail));
+    status = scf_metric_lower_solve(*candidate, naux, setup.scaled_eigenvectors,
+                                    candidate->exchange_intermediate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+    cuda_error = cudaMemcpyAsync(setup.scaled_eigenvectors, candidate->exchange_intermediate,
+                                 metric_bytes, cudaMemcpyDeviceToDevice, candidate->stream);
+    if (cuda_error != cudaSuccess)
+      return fail_plan(candidate, cuda_failure(cuda_error, "retain DF inverse factor", detail));
+  }
   // Source force replay borrows these original device factors. Transfer them
   // only after the final stream drain below, so setup still owns error cleanup.
   // Publish a conservative allocation accounting record. Setup scratch and
@@ -916,12 +995,12 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       6 * matrix_bytes + auxiliary_bytes + (candidate->streamed ? 0 : tensor_bytes) +
       projection_bytes + 2 * tile_bytes + (candidate->packed_raw ? tensor_bytes : 0) +
       matrix_bytes + (candidate->streamed ? tile_bytes : 0) + persistent_scf_bytes +
-      2 * metric_bytes + auxiliary_vector_bytes +
+      (candidate->resident_cholesky_factors ? 3 : 2) * metric_bytes + auxiliary_vector_bytes +
       (candidate->integral_source != nullptr
            ? cuda_density_fitting_integral_source_device_bytes(candidate->integral_source)
            : 0);
   const std::size_t setup_device_bytes =
-      metric_bytes + auxiliary_vector_bytes +
+      (candidate->resident_cholesky_factors ? 0 : metric_bytes) + auxiliary_vector_bytes +
       (candidate->streamed || candidate->integral_source ? 0 : tensor_bytes) +
       solver_device_workspace_bytes + solver_info_bytes;
   // This record covers the value/SCF plan and its setup. Generated force
@@ -998,6 +1077,8 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   candidate->inverse_square_roots = std::exchange(setup.inverse_square_roots, nullptr);
   candidate->metric_eigenvectors = std::exchange(setup.metrics, nullptr);
   candidate->metric_eigenvalues = std::exchange(setup.eigenvalues, nullptr);
+  if (candidate->resident_cholesky_factors)
+    candidate->cholesky_response_root = std::exchange(setup.scaled_eigenvectors, nullptr);
   *plan = candidate;
   return GENERATIVEQC_STATUS_SUCCESS;
 }

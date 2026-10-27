@@ -1,0 +1,196 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json.gz",
+      "sha256": "f9e4ce628fc760cf1583192b3694c8c78e9fbc20536307240f832ff6e2832cd6"
+    },
+    {
+      "path": "build-receipts.json.gz",
+      "sha256": "b1fc7ae6a88788c76b7d9b88eb2fcdb1d58c2583da53c67d87438963478c0d72"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "cpu_endpoint_energy": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        672
+      ]
+    },
+    "cpu_endpoint_forces": {
+      "atol": 1e-12,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "cuda_endpoint_energy": {
+      "atol": 1e-12,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.04263256414560601,
+      "passed": true,
+      "rms_error": 7.944109290391274e-15,
+      "rtol": 0,
+      "shape": [
+        672
+      ]
+    },
+    "cuda_endpoint_forces": {
+      "atol": 1e-12,
+      "max_absolute_error": 1.0429157537572564e-14,
+      "max_scaled_error": 0.010429157537572564,
+      "passed": true,
+      "rms_error": 1.024214291353086e-15,
+      "rtol": 0,
+      "shape": [
+        504,
+        3,
+        3
+      ]
+    },
+    "installed_energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 2.1316282072803006e-14,
+      "max_scaled_error": 2.1316282072803006e-06,
+      "passed": true,
+      "rms_error": 1.8875398912922532e-14,
+      "rtol": 0,
+      "shape": [
+        26
+      ]
+    },
+    "installed_forces": {
+      "atol": 1e-06,
+      "max_absolute_error": 3.020903382999762e-08,
+      "max_scaled_error": 0.030209033829997622,
+      "passed": true,
+      "rms_error": 1.0255187939891318e-08,
+      "rtol": 0,
+      "shape": [
+        26,
+        6
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Verified cached Release builds passed; cold compilation cost was not measured.",
+    "seconds": null
+  },
+  "device": {
+    "cpu_host": "node3",
+    "cuda_host": "n1/node1",
+    "gpu": "RTX 5090",
+    "jobs": [
+      14434
+    ],
+    "visibility": "1"
+  },
+  "hardware": {
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "The follow-up zero-initializes a descriptor and then sets ABI fields; scientific equations and native providers are unchanged.",
+    "ir": "Descriptor initialization introduces no scientific IR."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "8f5909331210e74f2d24611e1922e23da8c19104a2adc37fbafde7a9608a46ac",
+    "source": "e0d1557aaeab029975b2eb134d9669f0a32ec62487f4d24c891ba17ac6dd6f84"
+  },
+  "inputs_hash": "efe5eefec26e00c99afc11f7ed61d1c583f865c07694dd799a385ea9b554dc1c",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Preparation cap boundaries checked; whole-endpoint allocations/provider storage/RSS were not measured."
+  },
+  "performance": {
+    "reason": "All 16 scoped default CLI timing gates pass, but full performance promotion requires complete work/allocation and compile-cost evidence.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "ffc6537b15b7df10240a1b9bb94f6f6190715408",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "baseline": "40c31f7bd6130903ade0cd87ef60fb06c56d9d8b",
+    "companion_backend": "cpu_reference",
+    "device": "cuda",
+    "endpoint_parity_gate": 1e-12,
+    "exact_metadata_and_iterations": true,
+    "measured_source_dirty": false,
+    "orders": [
+      "ABBA",
+      "BAAB"
+    ],
+    "prior_evidence": "The original 824b94bde measurements remain unchanged in native-cli-initial-guess-20261026. This bundle is a separate fresh source qualification.",
+    "ratio_gate": 1.05,
+    "runtime_path": "/nonexistent",
+    "samples_per_block": 21,
+    "scope": "Complete fresh-process default CLI calls and installed policy/oracle/diagnostic probes on rebuilt ffc6537b products.",
+    "unavailable_work": "CLI exposes iterations, not independently measured Fock/transfer/launch counts or per-iteration residual traces.",
+    "warmups": 3
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "cpu_ctests": 119,
+      "cuda_preliminary_contracts": 1,
+      "python_subtests": 25,
+      "reason": null,
+      "sdk_memcheck_errors": 0,
+      "status": "pass",
+      "targeted_python_tests": 24
+    },
+    "endpoint": {
+      "case_order_gates": 16,
+      "maximum_ratio": 1.0195187718426835,
+      "reason": null,
+      "status": "pass",
+      "timed_endpoints": 1344
+    },
+    "numerical": {
+      "independent_installed_cli_publications": 26,
+      "oracle": "Frozen independent PySCF 2.14.0 reference; explicit contractions/full DF auxiliary response/PBE level3 grid",
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "revision": "ffc6537b15b7df10240a1b9bb94f6f6190715408",
+      "status": "pass"
+    }
+  },
+  "subject": "Native CLI initial-guess initializer follow-up qualification",
+  "tier": "endpoint",
+  "timings": [],
+  "toolchain": {
+    "architecture": "sm_120",
+    "build": "Release",
+    "cache": "sccache 0.16.0",
+    "cuda": "12.9.1",
+    "cuda_fast_compile": false,
+    "threads": 1
+  }
+}

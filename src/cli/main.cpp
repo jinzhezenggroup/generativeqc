@@ -12,6 +12,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -232,9 +233,14 @@ void print_usage(std::ostream& out) {
          "  --auxiliary-basis NAME   Optional bundled auxiliary basis; default is orbital basis\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
+         "  --owned-device-bytes N   Run-only native numeric allocation cap (not total GPU/RSS)\n"
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --diis-history N         SCF history length (default: 8)\n"
+         "  --initial-guess none|hf|lda|minao|huckel  Explicit run-only cold start (default: "
+         "none)\n"
+         "  --initial-guess-max-iterations N  Preliminary iteration limit (native default: 32)\n"
+         "  --initial-guess-bytes N   Preliminary numeric cap; 0 selects native 256 MiB default\n"
          "  --precision fp64|auto    Native precision admission (default: fp64)\n"
          "  --density-fitting-threshold F --density-fitting-memory-bytes N\n"
          "  --correlation-memory-bytes N --mp2-denominator-threshold F\n"
@@ -436,6 +442,7 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.ccsd_denominator_threshold = options.ccsd_denominator_threshold;
   descriptor.ccsd_damping = options.ccsd_damping;
   descriptor.ccsd_level_shift = options.ccsd_level_shift;
+  descriptor.initial_guess = options.initial_guess.kind ? &options.initial_guess : nullptr;
   return descriptor;
 }
 
@@ -545,9 +552,34 @@ RunOptions parse_run(int argc, char** argv) {
       // The native descriptor treats zero as its eight-vector default, not disabled DIIS.
       // Resolve that sentinel before sharing controls with metadata-only planning.
       options.diis_history = parsed == 0 ? 8u : static_cast<std::uint32_t>(parsed);
+    } else if (option == "--initial-guess") {
+      options.initial_guess_name = lower(std::string(value()));
+      const auto& selected = options.initial_guess_name;
+      if (selected == "none")
+        options.initial_guess.kind = 0;
+      else if (selected == "hf")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HF;
+      else if (selected == "lda")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_LDA;
+      else if (selected == "minao")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+      else if (selected == "huckel")
+        options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+      else
+        throw UsageError("--initial-guess must be none, hf, lda, minao, or huckel");
+      options.initial_guess_explicit = true;
+    } else if (option == "--initial-guess-max-iterations") {
+      options.initial_guess.max_iterations =
+          parse_positive_u32(value(), "initial-guess iterations");
+      options.initial_guess_controls_explicit = true;
+    } else if (option == "--initial-guess-bytes") {
+      options.initial_guess.maximum_numeric_bytes = parse_bytes(value(), "initial-guess bytes");
+      options.initial_guess_controls_explicit = true;
     } else if (resources && option == "--batch") {
       options.batch = parse_positive_u32(value(), "batch");
       if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
+    } else if (std::string_view(argv[1]) == "run" && option == "--owned-device-bytes") {
+      options.owned_device_bytes = parse_bytes(value(), "owned device bytes");
     } else if (resources && option == "--host-bytes") {
       options.host_bytes = parse_bytes(value(), "host bytes");
     } else if (resources && option == "--device-bytes") {
@@ -690,6 +722,15 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if (options.composition && options.owned_device_bytes.has_value())
+    throw UsageError("--owned-device-bytes is not supported for named KS preparation");
+  if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) &&
+      std::string_view(argv[1]) != "run")
+    throw UsageError("initial-guess controls currently require the run command");
+  if (options.initial_guess_controls_explicit && !options.initial_guess.kind)
+    throw UsageError("initial-guess limits require --initial-guess hf, lda, minao, or huckel");
+  if (is_gfn2(options) && options.initial_guess.kind)
+    throw UsageError("initial-guess preparation requires a Gaussian HF/DFT method");
   if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit ||
                            options.density_fitting_explicit || options.auxiliary_basis_explicit))
     throw UsageError(
@@ -740,6 +781,27 @@ RunOptions parse_run(int argc, char** argv) {
 }
 
 std::string json_escape(std::string_view value);
+
+// Publish the native state-machine result, including bounded fallback, without
+// inferring preparation success from the target's convergence or iteration count.
+std::string_view initial_guess_outcome_name(std::uint32_t outcome) {
+  switch (outcome) {
+    case 0:
+      return "disabled";
+    case 1:
+      return "existing_density_bypass";
+    case 2:
+      return "used";
+    case 3:
+      return "preparation_failed";
+    case 4:
+      return "budget_skipped";
+    case 5:
+      return "target_failed_core_retry";
+    default:
+      return "unknown";
+  }
+}
 
 int run(RunOptions options) {
   const std::vector<generativeqc_atom> atoms = read_xyz(options);
@@ -816,9 +878,26 @@ int run(RunOptions options) {
 
   const generativeqc_method_descriptor method =
       method_descriptor(options, auxiliary_basis ? &*auxiliary_basis : nullptr);
+  std::unique_ptr<generativeqc_device_resources, decltype(&generativeqc_device_resources_destroy)>
+      resources(nullptr, generativeqc_device_resources_destroy);
+  if (options.owned_device_bytes) {
+    const std::array<generativeqc_device_resource_buffer_v1, 1> capacities{
+        {{*options.owned_device_bytes, 4, static_cast<std::uint64_t>(options.device_id), 0, 0, 0}}};
+    generativeqc_device_resource_descriptor inventory{};
+    inventory.struct_size = sizeof(inventory);
+    inventory.abi_version = GENERATIVEQC_ABI_VERSION;
+    inventory.buffers = capacities.data();
+    inventory.buffer_count = capacities.size();
+    inventory.admission = GENERATIVEQC_DEVICE_RESOURCE_NUMERIC_CAP;
+    generativeqc_device_resources* owner = nullptr;
+    generativeqc::check(generativeqc_device_resources_create(&inventory, &owner));
+    resources.reset(owner);
+  }
   generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
     const auto* row = options.composition;
-    if (!row) return {context, system, method};
+    if (!row) return {context, system, method, resources.get()};
+    if (resources)
+      throw UsageError("named KS native preparation does not support --owned-device-bytes");
     return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
                                           options.grid, options.nonlocal_memory_bytes,
                                           options.dispersion_memory_bytes, row->identity.data());
@@ -832,6 +911,18 @@ int run(RunOptions options) {
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
+  const auto guess =
+      options.initial_guess.kind ? calculation.initial_guess_diagnostic() : std::nullopt;
+  if (options.initial_guess.kind && !guess)
+    throw std::runtime_error("native initial-guess execution did not publish its diagnostic");
+  std::optional<generativeqc_device_resource_diagnostic> resource_diagnostic;
+  if (resources) {
+    generativeqc_device_resource_diagnostic snapshot{};
+    snapshot.struct_size = sizeof(snapshot);
+    snapshot.abi_version = GENERATIVEQC_ABI_VERSION;
+    generativeqc::check(generativeqc_device_resources_read(resources.get(), &snapshot));
+    resource_diagnostic = snapshot;
+  }
 
   std::cout << std::setprecision(17);
   if (options.json) {
@@ -853,6 +944,40 @@ int run(RunOptions options) {
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
+    if (guess) {
+      std::cout << ",\"initial_guess\":{\"kind\":\"" << options.initial_guess_name
+                << "\",\"outcome\":\"" << initial_guess_outcome_name(guess->outcome)
+                << "\",\"outcome_code\":" << guess->outcome
+                << ",\"preliminary_iterations\":" << guess->preliminary_iterations
+                << ",\"preliminary_fock_builds\":" << guess->preliminary_fock_builds
+                << ",\"target_attempts\":" << guess->target_attempts
+                << ",\"discarded_target_iterations\":" << guess->discarded_target_iterations
+                << ",\"discarded_target_fock_builds\":" << guess->discarded_target_fock_builds
+                << ",\"preparation_numeric_capacity\":" << guess->preparation_numeric_capacity
+                << ",\"preparation_seconds\":" << guess->preparation_seconds
+                << ",\"work_counters_complete\":"
+                << (guess->work_counters_complete ? "true" : "false") << "}";
+    }
+    if (resource_diagnostic) {
+      const auto& snapshot = *resource_diagnostic;
+      std::cout
+          << ",\"owned_device_resources\":{\"owner\":\"native-prepared-owner\","
+          << "\"device\":" << snapshot.device
+          << ",\"numeric_limit_bytes\":" << snapshot.numeric_limit
+          << ",\"numeric_live_bytes\":" << snapshot.numeric_live_bytes
+          << ",\"numeric_peak_bytes\":" << snapshot.numeric_peak_bytes
+          << ",\"allocations\":" << snapshot.allocations
+          << ",\"rejected_allocations\":" << snapshot.rejected_allocations
+          << ",\"requested_bytes\":"
+          << (snapshot.requested_bytes_available ? std::to_string(snapshot.requested_bytes)
+                                                 : "null")
+          << ",\"provider_reserved_bytes\":" << snapshot.provider_reserved_bytes
+          << ",\"capacity_reserved_bytes\":" << snapshot.capacity_reserved_bytes
+          << ",\"admission\":\"numeric-cap\""
+          << ",\"combined_peak_bytes\":" << snapshot.combined_peak_bytes
+          << ",\"complete_plan_peak\":false,"
+          << "\"scope\":\"instrumented numeric CUDA buffers and provider reservations, not RSS\"}";
+    }
     if (result.forces) {
       std::cout << ",\"forces_hartree_per_bohr\":[";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {
@@ -881,6 +1006,11 @@ int run(RunOptions options) {
     }
     std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
+    if (guess)
+      std::cout << "initial_guess: " << options.initial_guess_name << '\n'
+                << "initial_guess_outcome: " << initial_guess_outcome_name(guess->outcome) << '\n'
+                << "initial_guess_numeric_capacity_bytes: " << guess->preparation_numeric_capacity
+                << '\n';
     if (result.forces) {
       std::cout << "forces_hartree_per_bohr:\n";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {

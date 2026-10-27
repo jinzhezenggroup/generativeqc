@@ -198,7 +198,7 @@ def test_full_hessian_matches_direction_and_replay(model: IntegralHF) -> None:
     evidence = model.diagnostics()
     assert evidence["hessian_columns"] == hessian.shape[0]
     assert evidence["primitive_value_evaluations"] == (
-        2 * hessian.shape[0] * model.primitive_evaluations
+        (1 + hessian.shape[0]) * model.primitive_evaluations
     )
     assert evidence["primitive_pullback_evaluations"] == (
         hessian.shape[0] * model.primitive_evaluations
@@ -228,18 +228,21 @@ def test_failed_hessian_preserves_last_successful_diagnostics(
     """Failure after a completed column must not publish a partial receipt."""
     model.energy(XYZ)
     previous = model.diagnostics()
-    solve = IntegralHF._solve
+    library = model._calculator._library
+    solve = library.generativeqc_integral_ad_hf_response_v1
     calls = 0
 
-    def fail_during_hessian(self: IntegralHF, *args: Any, **kwargs: Any) -> Any:
+    def fail_during_hessian(*args: Any) -> Any:
         nonlocal calls
         calls += 1
         if calls == 2:
             raise RuntimeError("injected response failure")
-        return solve(self, *args, **kwargs)
+        return solve(*args)
 
     with monkeypatch.context() as context:
-        context.setattr(IntegralHF, "_solve", fail_during_hessian)
+        context.setattr(
+            library, "generativeqc_integral_ad_hf_response_v1", fail_during_hessian
+        )
         with pytest.raises(RuntimeError, match="injected response failure"):
             model.hessian(XYZ, parameters=("coordinates",))
     assert model.diagnostics() == previous
@@ -308,3 +311,56 @@ def _one_electron_response(backend: str, tmp_path: Any) -> None:
 
 def test_one_electron_empty_response_space(tmp_path: Any) -> None:
     _one_electron_response("cpu", tmp_path)
+
+
+def test_retained_response_snapshot_and_recovery(model: IntegralHF) -> None:
+    """Owned snapshots replay after caller mutation and reject invalid motion."""
+    xyz, alpha = XYZ.copy(), model.exponents.copy()
+    direction = _direction(model)
+    expected = model.hvp(xyz, direction, exponents=alpha)
+    with model.prepare(xyz, exponents=alpha) as state:
+        xyz[:] = 99
+        alpha[:] = 0.5
+        before = state.diagnostics()
+        np.testing.assert_allclose(
+            _flat(state.hvp(direction)), _flat(expected), atol=3e-10
+        )
+        after = state.diagnostics()
+        assert after["iterations"] == before["iterations"]
+        assert after["scf_solves"] == before["scf_solves"]
+        bad = IntegralGradient(
+            np.full_like(XYZ, np.nan), direction.exponents, direction.coefficients
+        )
+        with pytest.raises(ValueError):
+            state.hvp(bad)
+        assert state.diagnostics() == after
+        np.testing.assert_allclose(
+            _flat(state.hvp(direction)), _flat(expected), atol=3e-10
+        )
+    state.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        state.hvp(direction)
+
+
+def test_hvp_fits_without_full_hessian_budget(tmp_path: Any) -> None:
+    """A single response remains usable when all-column work is inadmissible."""
+    owner = IntegralHF(
+        ("H", "H"),
+        basis=BASIS,
+        derivative_order=2,
+        max_work=4 * (4**4 + 4 * 4**2 + 1),
+        cache=tmp_path,
+    )
+    try:
+        with owner.prepare(XYZ) as state:
+            direction = _direction(owner)
+            value = state.hvp(direction)
+            assert np.isfinite(_flat(value)).all()
+            with pytest.raises(ValueError, match="max_work"):
+                state.hessian()
+            owner.close()
+            np.testing.assert_allclose(
+                _flat(state.hvp(direction)), _flat(value), atol=3e-10
+            )
+    finally:
+        owner.close()

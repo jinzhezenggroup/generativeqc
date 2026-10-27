@@ -74,6 +74,7 @@ struct CudaDensityFittingJkPlan {
   double values[64]{};
   double *three_center=values,*auxiliary_tile_values=values,*inverse_square_roots=values;
   double *metric_eigenvectors=values,*metric_eigenvalues=values,*primary_density=values;
+  double* cholesky_response_root=nullptr;
   double *exchange_intermediate=values,*exchange_contributions=values,*packed_raw=nullptr;
   const double* response_host_raw=nullptr;
   const core::Atom *response_orbital_atoms=nullptr,*response_auxiliary_atoms=nullptr;

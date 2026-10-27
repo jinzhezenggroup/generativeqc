@@ -243,6 +243,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_occupied_projection_tests tests/native/test_occupied_projection.cpp)
     generativeqc_native_test(generativeqc_basis_projection_sdk_tests tests/native/test_basis_projection_sdk.cpp NO_SRC_INCLUDE)
+    generativeqc_native_test(generativeqc_system_projection_sdk_tests tests/native/test_system_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
@@ -300,11 +301,14 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_spherical_eri_projection_tests tests/native/test_spherical_eri_projection.cpp)
   generativeqc_native_test(generativeqc_basis_contract_tests tests/native/test_basis_contract.cpp)
   generativeqc_native_test(generativeqc_progressive_hf_tests tests/native/test_progressive_hf.cpp)
+  generativeqc_native_test(generativeqc_hf_physical_audit_tests tests/native/test_hf_physical_audit.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_hf_verification_tests tests/native/test_hf_verification.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_named_ks_catalog_tests tests/native/test_named_ks_catalog.cpp)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_resource_planning_tests tests/native/test_resource_planning.cpp)
   generativeqc_native_test(generativeqc_resource_ledger_plan_tests tests/native/test_resource_ledger_plan.cpp)
+  generativeqc_native_test(generativeqc_device_resources_tests tests/native/test_device_resources.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
   generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
@@ -589,6 +593,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_cuda_host_resources.cpp)
   generativeqc_native_test(generativeqc_ks_device_resource_tests
                        tests/native/test_ks_device_resources.cpp)
+  generativeqc_native_test(generativeqc_df_fock_capacity_tests
+                       tests/native/test_df_fock_capacity.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
   generativeqc_native_test(generativeqc_hf_cuda_resource_tests
@@ -688,6 +694,15 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_native_stationary_cuda_binding_tests
                        tests/native/test_native_stationary_cuda_binding.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    if(TARGET generativeqc_stationary_pbe0_rks_manifest)
+      # This lifecycle gate executes complete prepared forces as well as lazy
+      # derivative ports, so its native stationary binding must be available.
+      generativeqc_native_test(generativeqc_ks_capacity_cuda_tests
+                         tests/native/test_ks_capacity_cuda.cpp
+                         LIBRARIES CUDA::cudart SKIP_77)
+      add_dependencies(generativeqc_ks_capacity_cuda_tests generativeqc_stationary_pbe0_rks_manifest)
+      set_tests_properties(generativeqc_ks_capacity_cuda_tests PROPERTIES TIMEOUT 300)
+    endif()
   endif()
 
   if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AOT_SHELLS)

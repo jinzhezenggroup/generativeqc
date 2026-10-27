@@ -55,7 +55,7 @@ For example, formaldehyde warm ranges are 269.931–790.783 ms baseline and
 254.131–641.978 ms candidate; all tails remain in the evidence. The candidate
 formaldehyde pooled warm median is still **3.72× PySCF's** on this campaign.
 
-`summary.json` is the readable reduction, including ranges, iteration/energy/work
+`derived/summary.json.xz` is the readable reduction, including ranges, iteration/energy/work
 inventories, and every process pair. `paired-process-confidence.json` retains all
 ratios and intervals. The full original summaries and every process output/log
 are retained in the compressed capsules; `confidence.py` recomputes the intervals from
@@ -281,3 +281,10 @@ outlier, failure, source identity and numerical value. `manifest.json` records
 the decoded byte count and SHA256; stored identities and reader links are updated.
 The offline verifier and confidence reconstruction above read both gzip and XZ.
 This is storage-only; no experiment was rerun or reclassified.
+
+## Lossless summary storage
+
+The tracked derived summary uses standard XZ. Read it with
+`xz -dc derived/summary.json.xz`; its decompressed bytes retain SHA-256
+`2769aa31fa925425cffa2eca52e7ea0e1e7b703b7e4a0292e8f5cc9315937fb3`. New collection runs still write
+plain `summary.json`. Original observations and all acceptance results are unchanged.

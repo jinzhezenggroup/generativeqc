@@ -84,8 +84,9 @@ def test_incremental_cold_warm_reset_against_full_density_reference(
 
 
 @pytest.mark.parametrize("exchange", (False, True))
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
 def test_provisional_screening_preserves_prepared_operator(
-    exchange: bool, monkeypatch: pytest.MonkeyPatch
+    exchange: bool, representation: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Signed delta actions cannot alter subsequent physical J/K on the owner."""
     from dataclasses import replace
@@ -98,11 +99,12 @@ def test_provisional_screening_preserves_prepared_operator(
 
     assert os.environ.get("SLURM_JOB_ID")
     monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", "primitive")
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
     spec = FockBuildSpec.hf("restricted", derivative_order=0)
     if not exchange:
         spec = replace(spec, exchange=FockTerm(False))
-    with NativeAO(atoms, "def2-svp", representation="spherical") as basis:
+    with NativeAO(atoms, "def2-svp", representation=representation) as basis:
         mol, scales = reference_molecule(basis)
         eri = mol.intor("int2e") * np.einsum(
             "i,j,k,l->ijkl", scales, scales, scales, scales
@@ -113,11 +115,12 @@ def test_provisional_screening_preserves_prepared_operator(
         expected_j = np.einsum("ijkl,kl->ij", eri, density)
         expected_k = np.einsum("ikjl,kl->ij", eri, density)
         with ResidentMdJProbe(basis, spec, screening_tolerance=1e-13) as owner:
+            assert owner.diagnostics["direct_schedule"].startswith("md-j-primitive/")
             original = owner.evaluate(density)
             for scale in (1e-3, -2e-4):
                 proposed = owner.evaluate_proposal(scale * density, 1e-9)
                 np.testing.assert_allclose(
-                    proposed.coulomb, scale * expected_j, atol=2e-7, rtol=0
+                    proposed.coulomb, scale * expected_j, atol=1.1e-9, rtol=0
                 )
                 if exchange:
                     np.testing.assert_allclose(
@@ -131,7 +134,16 @@ def test_provisional_screening_preserves_prepared_operator(
             np.testing.assert_allclose(
                 restored.coulomb, original.coulomb, atol=3e-13, rtol=0
             )
+            # Capture immediately after a proposal: the graph must borrow the
+            # prepared physical owner, never the invocation's temporary cap.
+            owner.evaluate_proposal(-2e-4 * density, 1e-9)
+            owner.capture_graph()
+            captured = owner.evaluate_graph(density)
+            np.testing.assert_allclose(captured.coulomb, expected_j, atol=3e-11, rtol=0)
             if exchange:
+                np.testing.assert_allclose(
+                    captured.exchange, expected_k, atol=3e-11, rtol=0
+                )
                 np.testing.assert_allclose(
                     restored.exchange, expected_k, atol=3e-11, rtol=0
                 )

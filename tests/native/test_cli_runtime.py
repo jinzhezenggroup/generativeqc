@@ -76,6 +76,235 @@ class RuntimeTests(unittest.TestCase):
             *arguments,
         )
 
+    def test_explicit_native_initial_guesses_and_budget_boundary(self) -> None:
+        """Exercise installed-style execution, native fallback, and oracle E/F."""
+        arguments = (
+            "run",
+            str(SOURCE / "tests/data/h2_bohr.xyz"),
+            "--units",
+            "bohr",
+            "--method",
+            "rhf",
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+            "--json",
+        )
+        # Independent PySCF/STO-3G H2 at 1.4 bohr; signs are physical forces.
+        expected_energy = -1.1167143251757508
+        for kind in ("none", "hf", "lda", "minao", "huckel"):
+            with self.subTest(kind=kind):
+                result = self.cli(*arguments, "--initial-guess", kind)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertAlmostEqual(
+                    payload["energy_hartree"], expected_energy, delta=1e-8
+                )
+                if kind == "none":
+                    self.assertNotIn("initial_guess", payload)
+                else:
+                    diagnostic = payload["initial_guess"]
+                    self.assertEqual(diagnostic["kind"], kind)
+                    self.assertEqual(diagnostic["outcome"], "used")
+                    self.assertTrue(diagnostic["work_counters_complete"])
+                    self.assertEqual(diagnostic["target_attempts"], 1)
+                    self.assertGreater(diagnostic["preparation_numeric_capacity"], 0)
+                if kind == "huckel":
+                    capacity = payload["initial_guess"]["preparation_numeric_capacity"]
+        for cap, outcome in (
+            (0, "used"),
+            (capacity, "used"),
+            (capacity - 1, "budget_skipped"),
+        ):
+            with self.subTest(cap=cap):
+                result = self.cli(
+                    *arguments,
+                    "--initial-guess",
+                    "huckel",
+                    "--initial-guess-bytes",
+                    str(cap),
+                    "--forces",
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertAlmostEqual(
+                    payload["energy_hartree"], expected_energy, delta=1e-8
+                )
+                self.assertAlmostEqual(
+                    payload["forces_hartree_per_bohr"][0][2],
+                    0.028454057162506152,
+                    delta=1e-6,
+                )
+                self.assertAlmostEqual(
+                    payload["forces_hartree_per_bohr"][1][2],
+                    -0.02845405716250593,
+                    delta=1e-6,
+                )
+                diagnostic = payload["initial_guess"]
+                self.assertEqual(diagnostic["outcome"], outcome)
+                self.assertEqual(diagnostic["preparation_numeric_capacity"], capacity)
+                if outcome == "budget_skipped":
+                    self.assertEqual(diagnostic["preliminary_fock_builds"], 0)
+
+    def test_preliminary_iteration_limit_preserves_target_fallback(self) -> None:
+        """Exhausting atomic preparation reports its failure and still solves the target."""
+        molecule = self.root / "water.xyz"
+        molecule.write_text(
+            "3\nwater in bohr\nO 0 0 0\n"
+            "H 0 -1.43233673 1.10715266\nH 0 1.43233673 1.10715266\n"
+        )
+        args = ("run", str(molecule), "--units", "bohr", "--method", "rhf", "--json")
+        core = self.cli(*args)
+        bounded = self.cli(
+            *args, "--initial-guess", "huckel", "--initial-guess-max-iterations", "1"
+        )
+        self.assertEqual(core.returncode, 0, core.stdout + core.stderr)
+        self.assertEqual(bounded.returncode, 0, bounded.stdout + bounded.stderr)
+        expected, actual = json.loads(core.stdout), json.loads(bounded.stdout)
+        self.assertAlmostEqual(
+            actual["energy_hartree"], expected["energy_hartree"], delta=1e-10
+        )
+        self.assertEqual(actual["initial_guess"]["outcome"], "preparation_failed")
+        self.assertGreater(actual["initial_guess"]["preliminary_fock_builds"], 0)
+
+    def test_initial_guess_invalid_and_unsupported_choices(self) -> None:
+        """A requested policy must fail explicitly rather than be ignored."""
+        input_path = str(SOURCE / "tests/data/h2_bohr.xyz")
+        for command, flags in (
+            ("run", ("--initial-guess", "unknown")),
+            ("run", ("--initial-guess-bytes", "1")),
+            ("run", ("--initial-guess", "none", "--initial-guess-bytes", "1")),
+            ("run", ("--initial-guess", "huckel", "--initial-guess-bytes", "-1")),
+            (
+                "run",
+                ("--initial-guess", "huckel", "--initial-guess-max-iterations", "0"),
+            ),
+            ("resources", ("--initial-guess", "huckel")),
+            ("optimize", ("--initial-guess", "huckel")),
+            ("hessian", ("--initial-guess", "huckel")),
+            ("run", ("--method", "gfn2-xtb", "--initial-guess", "huckel")),
+            ("run", ("--method", "mp2", "--initial-guess", "huckel")),
+            (
+                "run",
+                ("--method", "uhf", "--multiplicity", "3", "--initial-guess", "huckel"),
+            ),
+        ):
+            with self.subTest(command=command, flags=flags):
+                result = self.cli(
+                    command, input_path, "--units", "bohr", "--method", "rhf", *flags
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn("energy_hartree", result.stdout)
+
+    def test_owned_device_cap_is_run_only_and_never_falls_back_to_cpu(self) -> None:
+        arguments = (
+            str(SOURCE / "tests/data/h2_bohr.xyz"),
+            "--units",
+            "bohr",
+            "--method",
+            "rhf",
+            "--basis",
+            "sto-3g",
+            "--backend",
+            "cpu",
+            "--json",
+        )
+        ordinary = self.cli("run", *arguments)
+        self.assertEqual(ordinary.returncode, 0, ordinary.stderr)
+        payload = json.loads(ordinary.stdout)
+        self.assertNotIn("owned_device_resources", payload)
+        self.assertAlmostEqual(payload["energy_hartree"], -1.1167143251757694, places=9)
+        for limit in ("0", "4096"):
+            refused = self.cli("run", *arguments, "--owned-device-bytes", limit)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertNotIn('"energy_hartree"', refused.stdout)
+            self.assertTrue(refused.stderr)
+        for invalid in ("-1", "18446744073709551616", "not-bytes"):
+            refused = self.cli("run", *arguments, "--owned-device-bytes", invalid)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+        for command in ("resources", "hessian", "optimize"):
+            refused = self.cli(command, *arguments, "--owned-device-bytes", "4096")
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+
+    def test_named_ks_owned_device_cap_rejected_before_input(self) -> None:
+        """Reject an unimplemented ownership cap before file or device work."""
+        missing = str(self.root / "missing.xyz")
+        for method in ("pbe0-rks", "r2scan-3c-rks"):
+            for backend in ("cpu", "cuda"):
+                for limit in ("0", "4096"):
+                    method_flags = ("--method", method)
+                    cap_flags = ("--owned-device-bytes", limit)
+                    for flags in (
+                        (*method_flags, *cap_flags),
+                        (*cap_flags, *method_flags),
+                    ):
+                        with self.subTest(
+                            method=method, backend=backend, limit=limit, flags=flags
+                        ):
+                            result = self.cli(
+                                "run", missing, "--backend", backend, *flags
+                            )
+                            self.assertEqual(result.returncode, 2, result.stderr)
+                            diagnostic = result.stderr.partition("\n")[0]
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
+                            self.assertEqual(result.stdout, "")
+
+    def test_owned_device_cap_uses_final_method_selection(self) -> None:
+        """A superseded selector must neither reject RHF nor admit named KS."""
+        missing = str(self.root / "missing.xyz")
+        for backend in ("cpu", "cuda"):
+            for limit in ("0", "4096"):
+                for first, last in (("pbe0-rks", "rhf"), ("rhf", "pbe0-rks")):
+                    with self.subTest(backend=backend, limit=limit, final=last):
+                        result = self.cli(
+                            "run",
+                            missing,
+                            "--backend",
+                            backend,
+                            "--method",
+                            first,
+                            "--owned-device-bytes",
+                            limit,
+                            "--method",
+                            last,
+                        )
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        diagnostic = result.stderr.partition("\n")[0]
+                        if last == "rhf":
+                            self.assertIn("cannot open XYZ", diagnostic)
+                            self.assertNotIn("named KS", diagnostic)
+                        else:
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
+
+    def test_named_ks_without_owned_cap_still_reads_input(self) -> None:
+        """Omitting the cap leaves ordinary named-program input handling intact."""
+        missing = str(self.root / "missing.xyz")
+        for method in ("pbe0-rks", "r2scan-3c-rks"):
+            for backend in ("cpu", "cuda"):
+                with self.subTest(method=method, backend=backend):
+                    result = self.cli(
+                        "run",
+                        missing,
+                        "--method",
+                        method,
+                        "--backend",
+                        backend,
+                    )
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    # Usage lists every option; inspect the actual error, not its help.
+                    diagnostic = result.stderr.partition("\n")[0]
+                    self.assertEqual(
+                        diagnostic, f"generativeqc: cannot open XYZ input: {missing}"
+                    )
+                    self.assertNotIn("--owned-device-bytes", diagnostic)
+                    self.assertEqual(result.stdout, "")
+
     def bundle(self) -> Path:
         directory = self.root / "bundle"
         directory.mkdir()
@@ -1264,32 +1493,34 @@ class RuntimeTests(unittest.TestCase):
         table = {entry["name"]: entry for entry in json.loads(listing.stdout)}
         self.assertEqual(table["libxc:gga_x_apbe"]["aliases"], ["libxc-rks:gga_x_apbe"])
         self.assertFalse(table["libxc-uks:gga_x_apbe"]["cuda"])
-        energies = []
-        for selector in (
-            "libxc:GGA_X_APBE",
-            "LIBXC-RKS:GGA_X_APBE",
-            "libxc-uks:GGA_X_APBE",
-        ):
-            result = self.cli(
-                "run",
-                str(SOURCE / "tests/data/h2_bohr.xyz"),
-                "--units",
-                "bohr",
-                "--method",
-                selector,
-                "--json",
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            payload = json.loads(result.stdout)
-            spin = "polarized" if "uks" in selector else "unpolarized"
-            self.assertEqual(
-                payload["method_ir_identity"],
-                resolve_bulk_ks("GGA_X_APBE", spin=spin).method.identity,
-            )
-            self.assertTrue(math.isfinite(payload["energy_hartree"]))
-            energies.append(payload["energy_hartree"])
-        self.assertAlmostEqual(energies[0], energies[1], places=12)
-        self.assertAlmostEqual(energies[0], energies[2], places=8)
+        # Exercise both numerical domains through the installed-style process
+        # with no interpreter/toolchain on PATH. GGA alone cannot catch a stale
+        # generic domain on a density-only LDA catalog entry.
+        for functional in ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"):
+            energies = []
+            for prefix in ("libxc:", "LIBXC-RKS:", "libxc-uks:"):
+                with self.subTest(functional=functional, prefix=prefix):
+                    result = self.cli(
+                        "run",
+                        str(SOURCE / "tests/data/h2_bohr.xyz"),
+                        "--units",
+                        "bohr",
+                        "--method",
+                        prefix + functional,
+                        "--json",
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    payload = json.loads(result.stdout)
+                    spin = "polarized" if "uks" in prefix else "unpolarized"
+                    self.assertEqual(
+                        payload["method_ir_identity"],
+                        resolve_bulk_ks(functional, spin=spin).method.identity,
+                    )
+                    self.assertTrue(math.isfinite(payload["energy_hartree"]))
+                    energies.append(payload["energy_hartree"])
+            self.assertEqual(len(energies), 3)
+            self.assertAlmostEqual(energies[0], energies[1], places=12)
+            self.assertAlmostEqual(energies[0], energies[2], places=8)
         rejected = self.cli(
             "run",
             str(SOURCE / "tests/data/h2_bohr.xyz"),

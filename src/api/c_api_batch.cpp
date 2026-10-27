@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 
+#include "api/device_resources.hpp"
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
@@ -132,12 +133,11 @@ generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(batch->initial_guesses[index], out);
 }
 
-static generativeqc_status prepare_batch(generativeqc_context* context,
-                                         const generativeqc_system* const* systems,
-                                         uint32_t system_count,
-                                         const generativeqc_method_descriptor* descriptor,
-                                         generativeqc_batch_flags flags, generativeqc_batch** batch,
-                                         const generativeqc_named_ks_descriptor* named) {
+static generativeqc_status prepare_batch(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
+    const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
+    generativeqc_batch** batch, const generativeqc_named_ks_descriptor* named) {
   generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
@@ -152,6 +152,13 @@ static generativeqc_status prepare_batch(generativeqc_context* context,
 
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
+    if (resource_owner) {
+      if (context->state.executed_backend != generativeqc::core::kCudaBackend)
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      if (context->state.device_id != resource_owner->device)
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
     if (named) {
       named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
@@ -178,6 +185,7 @@ static generativeqc_status prepare_batch(generativeqc_context* context,
     }
     auto candidate = std::make_unique<generativeqc_batch>();
     candidate->context = context;
+    candidate->resource_ledger = resource_owner;
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
@@ -207,7 +215,7 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
                                                const generativeqc_method_descriptor* descriptor,
                                                generativeqc_batch_flags flags,
                                                generativeqc_batch** batch) {
-  return prepare_batch(context, systems, system_count, descriptor, flags, batch, nullptr);
+  return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, nullptr);
 }
 
 generativeqc_status generativeqc_batch_prepare_named_ks_v1(
@@ -216,7 +224,30 @@ generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     generativeqc_batch_flags flags, generativeqc_batch** batch) {
   if (batch) *batch = nullptr;
   if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return prepare_batch(context, systems, system_count, descriptor, flags, batch, name);
+  return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name);
+}
+
+generativeqc_status generativeqc_batch_prepare_with_device_resources(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
+    const generativeqc_device_resources* resources, generativeqc_batch** batch) {
+  if (!resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return prepare_batch(context, systems, system_count, descriptor, flags,
+                       generativeqc::api::device_resource_owner(resources), batch, nullptr);
+}
+
+generativeqc_status generativeqc_batch_get_device_resources(
+    const generativeqc_batch* batch, generativeqc_device_resources** resources) {
+  if (!batch || !resources || *resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  if (!batch->resource_ledger) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    auto handle = std::make_unique<generativeqc::api::DeviceResourceHandle>(batch->resource_ledger);
+    *resources = generativeqc::api::device_resource_handle(handle.release());
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
 }
 
 void generativeqc_batch_destroy(generativeqc_batch* batch) {
@@ -752,6 +783,7 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  std::optional<generativeqc::runtime::DeviceResourceScope> resource_scope;
   generativeqc::api::PreparedPublication publication(*batch->plan);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
@@ -766,6 +798,7 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
+    resource_scope.emplace(batch->resource_ledger);
     batch->plan->invalidate_result();
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);

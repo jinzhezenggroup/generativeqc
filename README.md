@@ -43,7 +43,7 @@ independent scientific references—not replaced by a learned surrogate.
 - **More chemistry.** GFN2-xTB energies and forces; Cartesian and spherical
   Gaussian bases, custom basis input, and scalar Gaussian ECPs.
 - **One native core, several interfaces.** Python, C, C++, and a Python-free
-  native CLI, plus PyTorch and JAX integration.
+  native CLI, plus PyTorch integration and an experimental differentiable Array API.
 
 ## Install
 
@@ -124,20 +124,27 @@ print(first.energies)
 
 ## Benchmarks
 
-**HF/DFT energy + analytic forces — RTX 5090**
+**Historical HF/DFT energy + analytic forces — RTX 5090 (2026-10-26 frozen cohort)**
 
-With default settings, GenerativeQC outperforms GPU4PySCF in **64/64** measured warm cases.
-For 96-atom Direct ωB97M-V, the measured warm speedup is **4.18×**.
+With the frozen cohort's then-default settings, GenerativeQC was faster than
+GPU4PySCF in **64/64** measured warm cases. For 96-atom Direct ωB97M-V,
+the measured warm speedup was **4.22×**.
 
-![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
+These figures preserve the `46b916ac` image after the DF screening-headroom
+repair, not current-master performance. That image enabled screened Direct HF
+by default; the current source keeps that route explicit opt-in after a stronger
+force diagnostic failed. These historical timings do not qualify the restored
+ordinary-HF default, and no new integrated-image GPU measurements are claimed.
 
-![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+![Historical frozen-image Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
-Default XC/VV10 grids, native SCF policies and full grid-response forces;
+![Historical frozen-image density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+
+The measured image used its default XC/VV10 grids, native SCF policies and full grid-response forces;
 all complete performance points are shown, including accuracy failures.
 Cold includes setup; warm is the median of three frozen-density calls.
 Independent energy/force accuracy results remain in the detailed tables.
-See [measurements and conditions](benchmarks/results/r2scan-endpoints-20261025/README.md)
+See [measurements and conditions](benchmarks/results/readme-refresh-20261026/README.md)
 for accuracy checks and detailed comparisons.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**

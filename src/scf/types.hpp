@@ -14,6 +14,7 @@
 #include "scf/fock_build.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/precision_work.hpp"
+#include "scf/provider_initialization.hpp"
 
 namespace generativeqc::scf {
 
@@ -82,7 +83,8 @@ struct PrecisionProvenance {
   uint32_t refinement_iterations{0};
   /** Complete mixed-stage Fock/operator applications for this item. */
   uint64_t mixed_stage_fock_builds{0};
-  /** Complete strict-FP64 SCF-stage Fock/operator applications for this item. */
+  /** Complete FP64 SCF-stage applications, including screened FP64 proposals.
+   * refinement_iterations separately identifies the target-operator tail. */
   uint64_t strict_stage_fock_builds{0};
   /** Additional strict physical-Fock builds performed after SCF convergence. */
   uint64_t post_scf_fock_builds{0};
@@ -145,6 +147,9 @@ struct ScfOptions {
   /** Correlated energy consumers require values-only, bounded direct RHF. */
   bool export_physical_reference{false};
   std::size_t reference_memory_budget_bytes{};
+  /** Native-only immutable request; absent preserves legacy provider admission.
+   * No public method-descriptor transport is provided by this internal field. */
+  std::optional<ProviderInitializationRequest> reference_provider_initialization;
   /**
    * Requested floating-point execution policy. \p std::nullopt (absent) preserves
    * the legacy GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch; an

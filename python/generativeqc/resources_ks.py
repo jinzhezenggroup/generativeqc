@@ -1082,6 +1082,9 @@ def ks_resource_request(
             one_electron_mapping=os.environ.get(
                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
             ),
+            dddd_force_class_major=os.environ.get(
+                "GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR"
+            ),
         )
     if incremental_requested:
         controls["incremental_direct_jk"] = incremental_controls

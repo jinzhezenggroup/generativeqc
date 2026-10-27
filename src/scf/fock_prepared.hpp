@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 #define GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 
+#include <functional>
 #include <memory>
 
 #include "runtime/cuda_provider.hpp"
@@ -52,6 +53,24 @@ struct FockOccupiedProjectionReservation {
   bool operator==(const FockOccupiedProjectionReservation&) const = default;
 };
 
+/** Pre-construction numeric capacities for the geometry-backed CUDA Fock
+ * owner. The supplied exact_device_bytes must come from the native Direct
+ * allocator's capacity query, or be zero when the strategy has no exact term.
+ * No GPU probe, source packing or integral evaluation is performed. Setup
+ * includes retained providers and the temporary DF source metric, but excludes
+ * one-electron/ECP export and opaque-provider allowances; enclosing method
+ * planners must compose those independent lifetimes before reserving a fleet.
+ */
+struct PreparedFockDeviceCapacity {
+  std::size_t retained_response_bytes{}, setup_bytes{};
+};
+
+[[nodiscard]] PreparedFockDeviceCapacity prepared_fock_device_capacity(
+    const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
+    std::size_t device_budget_bytes, std::size_t exact_device_bytes,
+    unsigned retained_fitted_derivative_order = 0,
+    FockOccupiedProjectionReservation projection_reservation = {});
+
 /** Immutable geometry/semantic owner for the common Fock provider views.
  * CPU numerical sources use the existing reference integrals; CUDA uses
  * the existing direct evaluator and source-backed DF tile generator. The
@@ -77,9 +96,14 @@ class PreparedFockPlan {
    * No integral or force provider is evaluated during construction. Such a plan
    * cannot match a geometry-only cache lookup: its tensors are part of its
    * scientific identity, and its caller owns their differentiated provenance. */
+  /** A compiler-generated source may stream J/K directly from its immutable
+   * differentiated parameters. It owns no geometry-only provider or dense ERI.
+   * The callback must validate finite output and retain all input lifetimes. */
+  using ExternalBuilder = std::function<DirectJkMatrices(
+      const FockBuildSpec&, const std::vector<double>&, const std::vector<double>&)>;
   PreparedFockPlan(const core::System& orbital, integrals::IntegralData values,
                    FockSpin spin = FockSpin::Restricted, FockBackend backend = FockBackend::Cpu,
-                   int device = 0, std::size_t device_budget = 0);
+                   int device = 0, std::size_t device_budget = 0, ExternalBuilder builder = {});
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;

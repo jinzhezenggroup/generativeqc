@@ -515,20 +515,27 @@ class Calculation {
   /** @native-contract generativeqc::Calculation::Calculation
    * @behavior Construct and own a prepared native calculation.
    * @inputs Supply a live Context, System and initialized method descriptor. C descriptor
-   * initialization/admission rules apply.
+   * initialization/admission rules apply. Optional device resources select native CUDA
+   * admission during preparation and execution; unsupported requests fail without retry.
    * @lifetime Copies system/method configuration and retains the context; the System may be
-   * destroyed after construction.
+   * destroyed after construction. A supplied resource owner is shared internally, so its
+   * metadata handle may be destroyed after construction without detaching retained charges.
    * @errors Throws Error on native validation/preparation failure; no live wrapper is returned.
    * Allocation failures may throw standard exceptions.
    * @execution Synchronous construction; serialize with operations on the same Context.
    * @units Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
    * forces; memory limits are bytes.
    */
-  Calculation(Context& context, const System& system, const generativeqc_method_descriptor& method)
+  Calculation(Context& context, const System& system, const generativeqc_method_descriptor& method,
+              const generativeqc_device_resources* resources = nullptr)
       : context_(context.get()),
         atom_count_(system.atom_count()),
         capabilities_(method_capabilities(method.method)) {
-    check(generativeqc_calculation_prepare(context_, system.get(), &method, &handle_));
+    if (resources)
+      check(generativeqc_calculation_prepare_with_device_resources(context_, system.get(), &method,
+                                                                   resources, &handle_));
+    else
+      check(generativeqc_calculation_prepare(context_, system.get(), &method, &handle_));
   }
   /** @native-contract generativeqc::Calculation::Calculation-named-ks
    * @behavior Prepare a complete named KS graph through the native C API.
@@ -599,6 +606,28 @@ class Calculation {
     generativeqc_property_flags properties{};
     check(generativeqc_calculation_get_supported_properties_v1(handle_, &properties));
     return properties;
+  }
+
+  /** @native-contract generativeqc::Calculation::initial_guess_diagnostic
+   * @behavior Copy the most recent native preliminary-density diagnostic.
+   * @inputs A live Calculation; no preparation or execution is requested.
+   * @outputs Returns an owned scalar record, or nullopt when no record exists.
+   * Preparation failure/budget refusal is recorded separately from target SCF
+   * convergence; an absent record must not be interpreted as successful preparation.
+   * @lifetime The returned value survives the calculation and subsequent execution.
+   * @errors Throws Error on query failure other than NOT_IMPLEMENTED.
+   * @execution Synchronous and Python-free; serialize against execute/destruction.
+   * @units Numeric capacity is bytes; preparation time is seconds.
+   */
+  [[nodiscard]] std::optional<generativeqc_initial_guess_diagnostic> initial_guess_diagnostic()
+      const {
+    generativeqc_initial_guess_diagnostic diagnostic{};
+    diagnostic.struct_size = sizeof(diagnostic);
+    diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+    const auto status = generativeqc_calculation_get_initial_guess_diagnostic(handle_, &diagnostic);
+    if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) return std::nullopt;
+    check(status);
+    return diagnostic;
   }
 
   /** @native-contract generativeqc::Calculation::execute
@@ -742,8 +771,11 @@ class Batch {
    * @behavior Construct and own a prepared native batch.
    * @inputs Supply a live Context, a nonempty span of nonnull System pointers, initialized
    * method descriptor and batch flags. C descriptor initialization/admission rules apply.
+   * Optional device resources select native CUDA admission for the entire fleet; unsupported
+   * requests fail without an unbudgeted retry.
    * @lifetime Copies every system and method configuration; the span and source Systems may be
-   * destroyed after construction. Retains the context.
+   * destroyed after construction. Retains the context and shares any supplied resource owner;
+   * the frontend resource metadata handle may be destroyed after construction.
    * @errors Throws Error on native failure; no live wrapper is returned. Batch also rejects a
    * null System element before preparation; allocation failures may throw standard exceptions.
    * @execution Synchronous construction; serialize with operations on the same Context.
@@ -752,7 +784,8 @@ class Batch {
    */
   Batch(Context& context, std::span<const System* const> systems,
         const generativeqc_method_descriptor& method,
-        generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS)
+        generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+        const generativeqc_device_resources* resources = nullptr)
       : atom_counts_(systems.size()) {
     std::vector<const generativeqc_system*> handles(systems.size());
     for (std::size_t i = 0; i < systems.size(); ++i) {
@@ -762,9 +795,14 @@ class Batch {
       handles[i] = systems[i]->get();
       atom_counts_[i] = systems[i]->atom_count();
     }
-    check(generativeqc_batch_prepare(context.get(), handles.data(),
-                                     static_cast<std::uint32_t>(handles.size()), &method, flags,
-                                     &handle_));
+    if (resources)
+      check(generativeqc_batch_prepare_with_device_resources(
+          context.get(), handles.data(), static_cast<std::uint32_t>(handles.size()), &method, flags,
+          resources, &handle_));
+    else
+      check(generativeqc_batch_prepare(context.get(), handles.data(),
+                                       static_cast<std::uint32_t>(handles.size()), &method, flags,
+                                       &handle_));
   }
   /** @native-contract generativeqc::Batch::~Batch
    * @behavior Destroy the owned native batch and release resources.

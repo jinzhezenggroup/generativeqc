@@ -380,6 +380,9 @@ def test_complete_cuda_force_matches_independent_engine(
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc_compiler.dft.nonlocal_policy import (
+        MOLECULAR_VV10_DENSITY_THRESHOLD,
+    )
 
     primitive_gate = os.environ.get("GENERATIVEQC_WB97MV_BECKE_PRIMITIVE_TEST") == "1"
     if primitive_gate:
@@ -429,8 +432,15 @@ def test_complete_cuda_force_matches_independent_engine(
         [atoms], multiplicities=[spin + 1], warm_start=True
     ) as batch:
         assert batch.capabilities == calc.capabilities
+        # The declared default point model is packaged for both spin channels.
+        # Guard actual compiler/source owners across cold, reuse and geometry
+        # changes so an already-populated JIT cache cannot disguise a regression.
+        from test_stationary_aot_cuda import _forbid_aot_generation
+
+        _forbid_aot_generation(monkeypatch, batch)
         cold = batch.execute(strict=True).items[0]
         cold_work = batch._stationary_cuda_execution.last_work
+        assert cold_work["stationary_artifact_kind"] == "packaged-aot"
         warm = batch.execute(strict=True).items[0]
         if spin == 0 and not primitive_gate:
             assert warm.iterations == 1
@@ -490,7 +500,11 @@ def test_complete_cuda_force_matches_independent_engine(
         assert energy_only.forces is None
         np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
         assert abs(energy_only.energy - cold.energy) < 1e-9
-        with reference_vv10_domain(1e-8):
+        # Both engines must integrate the current molecular density domain.
+        # The historical 1e-8 reference mask excludes tails now retained by
+        # native VV10 (1e-10), producing a model mismatch above the energy gate.
+        density_threshold = float(MOLECULAR_VV10_DENSITY_THRESHOLD)
+        with reference_vv10_domain(density_threshold):
             oracle = reference_sample(
                 reference_engine(atoms, reference_basis, grid, spin=spin), cp
             )
@@ -516,28 +530,28 @@ def test_complete_cuda_force_matches_independent_engine(
                 energies.append(result.energy)
             errors.append(abs((energies[1] - energies[0]) / (2 * step) - analytic))
         assert errors[0] < 1e-5 and max(errors[1:]) < 2e-6, errors
-        if primitive_gate:
-            # A moved force must consume the refreshed public snapshot, not the
-            # old cold-grid/cache. Keep the oracle outside production execution.
-            moved_coordinates = coordinates.copy()
-            moved_coordinates[-1] += (0.02, -0.01, 0.03)
-            moved = batch.execute([moved_coordinates], strict=True).items[0]
-            moved_work = batch._stationary_cuda_execution.last_work
-            moved_atoms = [
-                (symbol, tuple(position))
-                for (symbol, _), position in zip(atoms, moved_coordinates, strict=True)
-            ]
-            with reference_vv10_domain(1e-8):
-                moved_oracle = reference_sample(
-                    reference_engine(moved_atoms, reference_basis, grid, spin=spin), cp
-                )
-            np.testing.assert_allclose(
-                moved.forces,
-                moved_oracle["forces_hartree_per_bohr"][0],
-                atol=1e-7,
-                rtol=0,
+        # A moved force must consume the refreshed public snapshot, not the
+        # old cold-grid/cache. Keep the oracle outside production execution.
+        moved_coordinates = coordinates.copy()
+        moved_coordinates[-1] += (0.02, -0.01, 0.03)
+        moved = batch.execute([moved_coordinates], strict=True).items[0]
+        moved_work = batch._stationary_cuda_execution.last_work
+        moved_atoms = [
+            (symbol, tuple(position))
+            for (symbol, _), position in zip(atoms, moved_coordinates, strict=True)
+        ]
+        with reference_vv10_domain(density_threshold):
+            moved_oracle = reference_sample(
+                reference_engine(moved_atoms, reference_basis, grid, spin=spin), cp
             )
-            assert abs(moved.energy - moved_oracle["energies_hartree"][0]) < 1e-8
+        np.testing.assert_allclose(
+            moved.forces,
+            moved_oracle["forces_hartree_per_bohr"][0],
+            atol=1e-7,
+            rtol=0,
+        )
+        assert abs(moved.energy - moved_oracle["energies_hartree"][0]) < 1e-8
+        if primitive_gate:
             for observed in (cold_work, work, moved_work):
                 owners = observed["stationary_source_work"]
                 assert set(owners) == {"semilocal", "nonlocal"}
@@ -549,90 +563,86 @@ def test_complete_cuda_force_matches_independent_engine(
                     assert metrics["becke_primitive_reverse_pair_visits"] == (
                         observed["grid_points"] * len(atoms) * (len(atoms) - 1) // 2
                     )
-            if directory := os.environ.get("GENERATIVEQC_WB97MV_BECKE_EVIDENCE"):
-                destination = Path(directory)
-                destination.mkdir(parents=True, exist_ok=True)
-                payload = {
-                    "method": method,
-                    "atoms": atoms,
-                    "spin": spin,
-                    "basis": basis,
-                    "slurm_job": os.environ["SLURM_JOB_ID"],
-                    "cold_energy": cold.energy,
-                    "cold_reference_energy": oracle["energies_hartree"][0],
-                    "cold_forces": cold.forces.tolist(),
-                    "cold_reference_forces": oracle["forces_hartree_per_bohr"][0],
-                    "moved_energy": moved.energy,
-                    "moved_reference_energy": moved_oracle["energies_hartree"][0],
-                    "moved_forces": moved.forces.tolist(),
-                    "moved_reference_forces": moved_oracle["forces_hartree_per_bohr"][
-                        0
-                    ],
-                    "source_artifacts": {
-                        name: {
-                            "library": str(owner.artifact.library),
-                            "metadata": owner.artifact.metadata,
-                            "objects": {
-                                item["key"]: json.loads(
-                                    (
-                                        owner.artifact.library.parent.parent
-                                        / item["key"]
-                                        / "artifact.json"
-                                    ).read_text()
-                                )
-                                for item in owner.artifact.metadata["identity"][
-                                    "objects"
-                                ]
-                            },
-                        }
-                        for name, owner in (
-                            ("semilocal", batch._stationary_cuda_execution.sources),
-                            (
-                                "nonlocal",
-                                batch._stationary_cuda_execution.nonlocal_sources,
-                            ),
-                        )
-                    },
-                    "energy_error": abs(cold.energy - oracle["energies_hartree"][0]),
-                    "force_max_error": float(
-                        np.max(
-                            np.abs(cold.forces - oracle["forces_hartree_per_bohr"][0])
-                        )
-                    ),
-                    "moved_energy_error": abs(
-                        moved.energy - moved_oracle["energies_hartree"][0]
-                    ),
-                    "moved_force_max_error": float(
-                        np.max(
-                            np.abs(
-                                moved.forces
-                                - moved_oracle["forces_hartree_per_bohr"][0]
+        if directory := os.environ.get("GENERATIVEQC_WB97MV_BECKE_EVIDENCE"):
+            destination = Path(directory)
+            destination.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "method": method,
+                "atoms": atoms,
+                "spin": spin,
+                "basis": basis,
+                "slurm_job": os.environ["SLURM_JOB_ID"],
+                "vv10_density_threshold": density_threshold,
+                "cold_energy": cold.energy,
+                "cold_reference_energy": oracle["energies_hartree"][0],
+                "cold_forces": cold.forces.tolist(),
+                "cold_reference_forces": oracle["forces_hartree_per_bohr"][0],
+                "moved_energy": moved.energy,
+                "moved_reference_energy": moved_oracle["energies_hartree"][0],
+                "moved_forces": moved.forces.tolist(),
+                "moved_reference_forces": moved_oracle["forces_hartree_per_bohr"][0],
+                "source_artifacts": {
+                    name: {
+                        "library": str(owner.artifact.library),
+                        "metadata": owner.artifact.metadata,
+                        "objects": {
+                            item["key"]: json.loads(
+                                (
+                                    owner.artifact.library.parent.parent
+                                    / item["key"]
+                                    / "artifact.json"
+                                ).read_text()
                             )
+                            for item in owner.artifact.metadata["identity"].get(
+                                "objects", ()
+                            )
+                        },
+                    }
+                    for name, owner in (
+                        ("semilocal", batch._stationary_cuda_execution.sources),
+                        (
+                            "nonlocal",
+                            batch._stationary_cuda_execution.nonlocal_sources,
+                        ),
+                    )
+                },
+                "energy_error": abs(cold.energy - oracle["energies_hartree"][0]),
+                "force_max_error": float(
+                    np.max(np.abs(cold.forces - oracle["forces_hartree_per_bohr"][0]))
+                ),
+                "moved_energy_error": abs(
+                    moved.energy - moved_oracle["energies_hartree"][0]
+                ),
+                "moved_force_max_error": float(
+                    np.max(
+                        np.abs(
+                            moved.forces - moved_oracle["forces_hartree_per_bohr"][0]
                         )
-                    ),
-                    "warm_force_max_error": float(
-                        np.max(np.abs(warm.forces - cold.forces))
-                    ),
-                    "finite_difference_errors": errors,
-                    "actual_iterations": [
-                        cold.iterations,
-                        warm.iterations,
-                        moved.iterations,
-                    ],
-                    "actual_fock_builds": [
-                        cold.fock_builds,
-                        warm.fock_builds,
-                        moved.fock_builds,
-                    ],
-                    "source_work": [
-                        observed["stationary_source_work"]
-                        for observed in (cold_work, work, moved_work)
-                    ],
-                    "scope": "complete public nonlocal RKS/UKS physical forces; both actual source owners",
-                }
-                (destination / f"{method}-sto-3g.json").write_text(
-                    json.dumps(payload, indent=2) + "\n"
-                )
+                    )
+                ),
+                "warm_force_max_error": float(
+                    np.max(np.abs(warm.forces - cold.forces))
+                ),
+                "finite_difference_errors": errors,
+                "actual_iterations": [
+                    cold.iterations,
+                    warm.iterations,
+                    moved.iterations,
+                ],
+                "actual_fock_builds": [
+                    cold.fock_builds,
+                    warm.fock_builds,
+                    moved.fock_builds,
+                ],
+                "source_work": [
+                    observed["stationary_source_work"]
+                    for observed in (cold_work, work, moved_work)
+                ],
+                "scope": "complete public nonlocal RKS/UKS physical forces; both actual source owners",
+            }
+            (destination / f"{method}-{basis}.json").write_text(
+                json.dumps(payload, indent=2) + "\n"
+            )
 
 
 def test_cuda_force_rebuild_failure_isolation_and_stale_snapshot() -> None:

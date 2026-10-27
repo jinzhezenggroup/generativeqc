@@ -391,9 +391,11 @@ extern "C" generativeqc_status generativeqc_fock_plan_diagnostic(
                   "cpu-reference");
   }
   std::snprintf(out.one_electron_value_mapping, sizeof(out.one_electron_value_mapping), "%s",
-                !cuda                                     ? "dense"
-                : info.variant.one_electron_value_mapping ? "shell-warp"
-                                                          : "pair-thread");
+                !cuda                                          ? "dense"
+                : info.variant.one_electron_value_mapping == 3 ? "nucleus-32"
+                : info.variant.one_electron_value_mapping == 2 ? "nucleus-8"
+                : info.variant.one_electron_value_mapping == 1 ? "shell-warp"
+                                                               : "pair-thread");
   // Prepared one-electron response owns the Dual pair-kernel matrices;
   // fused force-bridge environment selectors do not affect this source.
   std::snprintf(out.one_electron_response_mapping, sizeof(out.one_electron_response_mapping), "%s",

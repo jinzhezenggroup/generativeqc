@@ -75,6 +75,8 @@ struct MdJPrimitiveScreenState {
  * quartets; partially screened quartets keep the exact original AO mask.
  */
 struct MdJView {
+  /** Invocation-local absolute omission allowance; physical owners retain 1e-12. */
+  double density_error_cap{kMdJDensityErrorCap};
   MdJPair* pairs{};
   MdJPrimitive* primitives{};
   const std::int64_t *shell_offsets{}, *pair_offsets{}, *primitive_offsets{};

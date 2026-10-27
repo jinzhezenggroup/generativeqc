@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/provider_initialization.cuh",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Bind native current-context/loaded-build observations to an explicit initialization allowance, preserving typed errors; no scientific equations or provider selection.",
+  "regions": []
+}

@@ -159,6 +159,9 @@ the compiler's structural admission and explicit blacklist at build time.
 `libxc-uks:GGA_X_APBE` selects UKS. These programs execute through the existing
 native CPU KS lowerer, without importing Python at runtime. CUDA and mixed
 automatic component graphs remain unavailable rather than changing the method.
+The generated catalog retains each worker's numerical domain: density-only LDA
+uses its distinct total-density RKS and spin-resolved UKS contract, while GGA
+and tau meta-GGA retain the general Libxc work domain.
 
 MethodIR compositions have a separate build-time generated catalog. Query the
 full list, including backend qualification and unsupported-graph reasons:
@@ -220,6 +223,23 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --max-iterations 200 --energy-tolerance 1e-12 \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
+
+Named KS methods currently reject an explicit `--owned-device-bytes` limit,
+including zero, before profile activation or native allocation. Their named
+preparation endpoint does not yet accept a device-resource owner; the limit is
+never silently ignored. Ordinary methods retain their native-owned resource path.
+
+For an ordinary-method CUDA `run`, `--owned-device-bytes N` selects native
+prepared admission for instrumented numeric buffers and retained provider
+reservations, including preparation and execution. It is **not** a total GPU,
+process RSS or complete-plan limit. A successful JSON result adds
+`owned_device_resources` with the measured instrumented charges, requested bytes
+(or `null` if unavailable), and `complete_plan_peak: false`. An insufficient cap
+or unsupported CPU/backend request fails without retrying an unbudgeted solve.
+This run-only option does not change the `resources --device-bytes` dry-run
+budget or the response-specific Hessian/HVP budgets. See the
+[native admission contract](../maintainer/resource_planning.md#native-prepared-admission-lifetime)
+for inventory, lifetime and observation boundaries.
 
 For ordinary Gaussian HF/KS methods, `run` and geometry `optimize` now use
 the same SCF stopping defaults as Python `Calculator`: 100 iterations,
@@ -488,6 +508,36 @@ Loader selection currently requires paths without spaces or colons. CPU runs
 never select profiles. DFT schedule-only winners are validated and reported,
 but not automatically applied: their workload-specific KS admission cannot be
 replaced by a binary-only shortcut.
+
+## Choose a preliminary density
+
+`run --initial-guess none|hf|lda|minao|huckel` forwards an explicit cold-start
+policy to native preparation. The CLI default is `none`, which retains the
+core-density start. Provider admission and bounded fallback follow the same
+[initial-guess contract](initial_guesses.md) as the SDK and Python API.
+
+```bash
+generativeqc run molecule.xyz --method rhf --basis sto-3g \
+  --initial-guess huckel --initial-guess-bytes 268435456 --forces --json
+```
+
+`--initial-guess-max-iterations` limits preliminary iterations; its native
+default is 32. `--initial-guess-bytes` bounds preliminary numeric payloads;
+zero selects the native 256 MiB default. This is separate from the retained
+target calculation and allocator/provider overhead. A cap too small for the
+preparation records `budget_skipped` and uses the native core-density fallback.
+The target's convergence controls remain `--max-iterations`,
+`--energy-tolerance` and `--density-tolerance`.
+
+An explicit provider adds an `initial_guess` JSON record with the actual
+outcome, preliminary work, target attempts, discarded target work, numeric
+capacity and preparation time. Text output reports the provider, outcome and
+numeric capacity. SDK callers can copy the same native record through
+`Calculation::initial_guess_diagnostic()`; an unavailable record is `nullopt`.
+
+These controls currently apply to `run`. Other commands reject them rather
+than ignoring a requested policy or omitting its capacity from a dry-run plan.
+Unsupported method/backend/provider combinations fail at native admission.
 
 ## Run correlated methods
 

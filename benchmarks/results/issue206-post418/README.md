@@ -118,7 +118,13 @@ checks and medians without a GPU:
 ```bash
 python benchmarks/results/issue206-post418/reproduction/analyze.py \
   benchmarks/results/issue206-post418/raw /tmp/post418-summary.json
-cmp benchmarks/results/issue206-post418/summary.json /tmp/post418-summary.json
+xz -dc benchmarks/results/issue206-post418/summary.json.xz > /tmp/post418-retained-summary.json
+python - <<'PYVERIFY'
+import json
+with open("/tmp/post418-retained-summary.json") as retained:
+    with open("/tmp/post418-summary.json") as replayed:
+        assert json.load(retained) == json.load(replayed)
+PYVERIFY
 ```
 
 The archived controller/qualifier are exact original scripts. To reproduce on
@@ -133,3 +139,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 
 The controller deliberately refuses an existing result directory. Any new
 experiment must use a separate location and preserve this failed campaign.
+
+## Lossless summary storage
+
+`summary.json.xz` preserves all 72,523 original summary bytes, including
+every retained measurement. Decompressed SHA-256: `30d6d281dfe5b7e4e430ed0fd32f60db8c038f32b5ef03105688c15ec23088eb`.
+Read with `xz -dc benchmarks/results/issue206-post418/summary.json.xz`;
+no scientific record or acceptance gate was removed.

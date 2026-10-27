@@ -42,7 +42,7 @@ from generativeqc_compiler.method.spec import (
 from generativeqc_compiler.xc._generated_split_hybrids import (
     SPLIT_HYBRIDS,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
+from generativeqc_compiler.xc.automatic_semilocal import automatic_scf_domain
 from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 
@@ -316,7 +316,11 @@ def rows() -> tuple[Row, ...]:
                 source=resolution.method.identifier,
                 identity=resolution.method.identity,
                 spin=1 if spin == "unpolarized" else 2,
-                domain=LIBXC_WORK_DOMAIN,
+                # The installed catalog must carry the same numerical contract
+                # as the point worker. Density-only LDA has separate RKS/UKS
+                # layouts in its own domain; using the generic work domain
+                # rejects CLI preparation and bypasses native Python selection.
+                domain=automatic_scf_domain(functional_name),
                 components=tuple(
                     (component, float(coefficient))
                     for component, coefficient in resolution.plan.semilocal.functional.components

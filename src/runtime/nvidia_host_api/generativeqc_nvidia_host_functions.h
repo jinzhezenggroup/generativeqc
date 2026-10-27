@@ -20,6 +20,7 @@ cublasStatus_t cublasDscal_v2(cublasHandle_t arg0, int arg1, const double* arg2,
 cublasStatus_t cublasDsyr2k_v2(cublasHandle_t arg0, cublasFillMode_t arg1, cublasOperation_t arg2, int arg3, int arg4, const double* arg5, const double* arg6, int arg7, const double* arg8, int arg9, const double* arg10, double* arg11, int arg12);
 cublasStatus_t cublasDsyrk_v2(cublasHandle_t arg0, cublasFillMode_t arg1, cublasOperation_t arg2, int arg3, int arg4, const double* arg5, const double* arg6, int arg7, const double* arg8, double* arg9, int arg10);
 cublasStatus_t cublasDtrsmBatched(cublasHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, cublasDiagType_t arg4, int arg5, int arg6, const double* arg7, const double*const* arg8, int arg9, double*const* arg10, int arg11, int arg12);
+cublasStatus_t cublasDtrsm_v2(cublasHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, cublasDiagType_t arg4, int arg5, int arg6, const double* arg7, const double* arg8, int arg9, double* arg10, int arg11);
 cublasStatus_t cublasGetMathMode(cublasHandle_t arg0, cublasMath_t* arg1);
 cublasStatus_t cublasGetPointerMode_v2(cublasHandle_t arg0, cublasPointerMode_t* arg1);
 cublasStatus_t cublasGetProperty(libraryPropertyType arg0, int* arg1);
@@ -39,7 +40,9 @@ cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t arg0);
 cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t arg0);
 cusolverStatus_t cusolverDnDormtr(cusolverDnHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, int arg4, int arg5, double* arg6, int arg7, double* arg8, double* arg9, int arg10, double* arg11, int arg12, int* arg13);
 cusolverStatus_t cusolverDnDormtr_bufferSize(cusolverDnHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, int arg4, int arg5, const double* arg6, int arg7, const double* arg8, const double* arg9, int arg10, int* arg11);
+cusolverStatus_t cusolverDnDpotrf(cusolverDnHandle_t arg0, cublasFillMode_t arg1, int arg2, double* arg3, int arg4, double* arg5, int arg6, int* arg7);
 cusolverStatus_t cusolverDnDpotrfBatched(cusolverDnHandle_t arg0, cublasFillMode_t arg1, int arg2, double** arg3, int arg4, int* arg5, int arg6);
+cusolverStatus_t cusolverDnDpotrf_bufferSize(cusolverDnHandle_t arg0, cublasFillMode_t arg1, int arg2, double* arg3, int arg4, int* arg5);
 cusolverStatus_t cusolverDnDsyevjBatched(cusolverDnHandle_t arg0, cusolverEigMode_t arg1, cublasFillMode_t arg2, int arg3, double* arg4, int arg5, double* arg6, double* arg7, int arg8, int* arg9, syevjInfo_t arg10, int arg11);
 cusolverStatus_t cusolverDnDsyevjBatched_bufferSize(cusolverDnHandle_t arg0, cusolverEigMode_t arg1, cublasFillMode_t arg2, int arg3, const double* arg4, int arg5, const double* arg6, int* arg7, syevjInfo_t arg8, int arg9);
 cusolverStatus_t cusolverDnDsytrd(cusolverDnHandle_t arg0, cublasFillMode_t arg1, int arg2, double* arg3, int arg4, double* arg5, double* arg6, double* arg7, double* arg8, int arg9, int* arg10);
@@ -66,6 +69,7 @@ cusolverStatus_t cusolverGetProperty(libraryPropertyType arg0, int* arg1);
 #define cublasDscal cublasDscal_v2
 #define cublasDsyr2k cublasDsyr2k_v2
 #define cublasDsyrk cublasDsyrk_v2
+#define cublasDtrsm cublasDtrsm_v2
 #define cublasGetPointerMode cublasGetPointerMode_v2
 #define cublasGetStream cublasGetStream_v2
 #define cublasGetVersion cublasGetVersion_v2

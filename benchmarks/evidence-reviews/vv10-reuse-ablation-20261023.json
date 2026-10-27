@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "vv10-reuse-ablation-20261023",
   "owner": "VV10 same-binary reuse ablation (#2677)",
-  "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
+  "reason": "Activated generated source, runtime identities and the failed intrusive journal remain unchanged audit inputs. The frozen clean Git source tree replaces its redundant full-repository listing; its original manifest digest and consumed solver identity remain bound. Numerical observations, failure history and mixed protocol/hardware limits are unchanged; no performance or default promotion.",
   "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md",
   "files": [
     {
@@ -28,14 +28,6 @@
       "role": "Qualified recorded Python, distribution and runtime-file identity manifest for source-bound audit.",
       "bytes": 132904,
       "sha256": "f27a781ffc34d9b6c7c018f213bfc705504a336d7d74c8c1b79a94c9654f9288"
-    },
-    {
-      "path": "benchmarks/results/vv10-reuse-ablation-20261023/sdk-source-identities.json.xz",
-      "family": "vv10-reuse-ablation-20261023",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
-      "bytes": 768632,
-      "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
     }
   ]
 }

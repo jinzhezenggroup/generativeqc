@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import typing
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -343,19 +344,21 @@ def test_benchmark_toolchain_metadata_prefers_cuda_path(
     assert metadata["host_cxx"]["version"] == "version:c++"
 
 
-def test_cuda_metadata_records_scheduler_visible_power_state(
+@pytest.mark.parametrize("visible", ["3,5", "GPU-first,GPU-second"])
+def test_cuda_metadata_records_executed_device_power_state(
     monkeypatch: typing.Any,
+    visible: str,
 ) -> None:
-    """Preserve the post-run GPU state required by the issue-41 protocol."""
+    """CUDA ordinals need not match NVML indices; bind telemetry by PCI identity."""
 
     support = _benchmark_support_module()
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
     monkeypatch.setattr(support.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
     observed = []
 
     def command_output(arguments: typing.Any) -> typing.Any:
         observed.append(arguments)
-        return "P2, 421.5, 575.0, 2407, 1750, 61"
+        return "P2, 421.5, 575.0, 2407, 1750, 61, GPU-test-uuid"
 
     monkeypatch.setattr(support, "_command_output", command_output)
     cupy = SimpleNamespace(
@@ -372,21 +375,34 @@ def test_cuda_metadata_records_scheduler_visible_power_state(
                 },
                 driverGetVersion=lambda: 13000,
                 runtimeGetVersion=lambda: 12090,
+                deviceGetPCIBusId=lambda device: "0000:41:00.0",
             ),
         )
     )
 
-    metadata = support.cuda_accelerator_metadata(cupy)
-    assert "--id=5" in observed[0]
-    assert metadata["nvidia_smi"] == {
+    metadata = support.cuda_accelerator_metadata(
+        cupy, sampling_point="before benchmark measurements"
+    )
+    assert "--id=0000:41:00.0" in observed[0]
+    assert metadata["pci_bus_id"] == "0000:41:00.0"
+    state = metadata["nvidia_smi"]
+    assert (
+        datetime.fromisoformat(state.pop("timestamp_utc")).utcoffset().total_seconds()
+        == 0
+    )
+    assert state == {
         "performance_state": "P2",
         "power_draw_watts": 421.5,
         "power_limit_watts": 575.0,
         "sm_clock_mhz": 2407.0,
         "memory_clock_mhz": 1750.0,
         "temperature_celsius": 61.0,
-        "sampling_point": "after benchmark measurements",
+        "uuid": "GPU-test-uuid",
+        "sampling_point": "before benchmark measurements",
     }
+    assert support.cuda_accelerator_metadata(cupy)["nvidia_smi"]["sampling_point"] == (
+        "at metadata collection"
+    )
 
 
 def test_issue174_fock_profile_parser_preserves_precision_work_counts() -> None:

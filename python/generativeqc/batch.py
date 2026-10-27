@@ -300,6 +300,7 @@ class PreparedBatch:
             )
         self.resource_diagnostics = None
         self._resource_ledger = None
+        self._resource_prepare = None
         dispersion_request = None
         if resource_plan is not None or calculator._resource_budget is not None:
             request = calculator._resource_request(
@@ -344,8 +345,12 @@ class PreparedBatch:
                 from .resources_native import NativeDeviceLedger
 
                 self._resource_ledger = NativeDeviceLedger(
-                    self._library, self.resource_plan, owner=request.name
+                    self._library,
+                    self.resource_plan,
+                    owner=request.name,
+                    prepared_kind="batch",
                 )
+                self._resource_prepare = self._resource_ledger.prepared_call
             if request.identity.backend == "cuda" and (
                 shell_class_profiling or inactive_eigensolver_profiling
             ):
@@ -441,6 +446,16 @@ class PreparedBatch:
                         calculator._dispersion_method_ir,
                         calculator._dispersion_memory_budget_bytes,
                     )
+                if self._resource_prepare is not None:
+                    return self._resource_prepare(
+                        self._context,
+                        handle_array,
+                        count,
+                        ctypes.byref(method),
+                        flags,
+                        self._resource_ledger.handle,
+                        ctypes.byref(self._batch),
+                    )
                 return self._library.generativeqc_batch_prepare(
                     self._context,
                     handle_array,
@@ -481,6 +496,7 @@ class PreparedBatch:
                     prepare,
                     owner=request.name,
                     phase="preparation",
+                    native_managed=self._resource_prepare is not None,
                 )
                 check_resource_status(self._library, status, self.resource_diagnostics)
                 from .resources_ks import configure_native_cuda_stationary_batch
@@ -726,6 +742,7 @@ class PreparedBatch:
         from ._snapshot_grid_cache import SnapshotGridCache
         from ._stationary_composite_cuda import (
             PreparedCompositeStationaryCudaGradient,
+            composite_stationary_aot_profile,
             requires_composite_stationary_cuda,
         )
         from ._stationary_cuda import (
@@ -826,7 +843,12 @@ class PreparedBatch:
                     forces, work = prepared.execute(
                         state,
                         basis,
-                        compiler=self._stationary_cuda_compiler(),
+                        compiler=(
+                            None
+                            if composite_stationary_aot_profile(state) is not None
+                            else self._stationary_cuda_compiler()
+                        ),
+                        target=target,
                         cache=Path(
                             os.environ.get(
                                 "GENERATIVEQC_STATIONARY_CACHE",
@@ -1403,6 +1425,7 @@ class PreparedBatch:
                 ),
                 owner=current.name,
                 previous=self.resource_diagnostics,
+                native_managed=self._resource_prepare is not None,
             )
         if self.resource_diagnostics is None:
             _native.check(self._library, status)
