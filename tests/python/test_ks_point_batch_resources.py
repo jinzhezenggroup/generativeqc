@@ -100,6 +100,7 @@ def native_probe(
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
+#include "dft/cuda_stationary_binding.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -117,6 +118,12 @@ def native_probe(
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/generated_shell_task.hpp"
 using namespace generativeqc;
+namespace generativeqc::dft {
+// This allocation-double probe has no packaged automatic stationary artifacts.
+const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel&) noexcept {
+  return nullptr;
+}
+}
 namespace generativeqc::dft::generated {
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
 }
