@@ -90,6 +90,8 @@ set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING
     "Optional native CUDA compiler job limit; empty follows the build tool parallelism")
 set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING
     "Optional independent generated-AOT CUDA job limit; empty follows native CUDA scheduling")
+set(GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE "" CACHE PATH
+    "Optional shared target-independent stationary source cache across AOT build directories")
 set(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "1" CACHE STRING
     "NVCC split-compile threads for generated AOT kernels; 1 preserves production code generation")
 set(GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS "1" CACHE STRING

@@ -119,7 +119,7 @@ def test_hit_skips_both_producers_and_keeps_binary_identity(
 
 @pytest.mark.parametrize(
     "change",
-    ("requests", "domain", "iterations", "method", "target", "dependency", "abi"),
+    ("requests", "domain", "iterations", "method", "dependency", "abi"),
 )
 def test_semantic_changes_invalidate(
     compile_recipe: Callable[..., CudaArtifact],
@@ -141,10 +141,6 @@ def test_semantic_changes_invalidate(
             resolve_method("PBE", spin="unpolarized"),
             StationaryMeanField(SCF_POINT_MODEL),
         )
-    elif change == "target":
-        kwargs["compiler"] = CudaCompilerAdapter(
-            Path("nvcc"), cuda_target_info("sm_100")
-        )
     else:
         original = lowering.source_hashes
         monkeypatch.setattr(
@@ -161,6 +157,50 @@ def test_semantic_changes_invalidate(
     assert changed[product]["key"] != first[product]["key"]
     if change in ("method", "iterations"):
         assert changed["primitive"]["hit"]
+
+
+def test_target_change_reuses_sources(
+    compile_recipe: Callable[..., CudaArtifact],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = compile_recipe().metadata["source_cache"]
+
+    def forbidden(*args: Any, **kwargs: Any) -> str:
+        raise AssertionError("target change repeated architecture-independent lowering")
+
+    monkeypatch.setattr(primitives, "emit_first_derivative_cuda", forbidden)
+    monkeypatch.setattr(lowering, "emit_stationary_wrapper_cuda", forbidden)
+    changed = compile_recipe(
+        compiler=CudaCompilerAdapter(Path("nvcc"), cuda_target_info("sm_100"))
+    ).metadata["source_cache"]
+    for product in ("primitive", "wrapper"):
+        assert changed[product]["hit"]
+        assert changed[product]["key"] == first[product]["key"]
+    assert changed["primitive"]["requested_target"]["architecture"] == "sm_100"
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {"declare_primitive": False},
+        {"include_reduction": False},
+        {"staged_point": True},
+        {"primitive_shards": 23, "primitive_shard_width": 16},
+    ],
+)
+def test_aot_wrapper_execution_abi_is_part_of_source_identity(
+    tmp_path: Path, selection: dict[str, Any]
+) -> None:
+    plan = StationaryGradientPlan(
+        resolve_method("PBE0", spin="unpolarized"), StationaryMeanField(SCF_POINT_MODEL)
+    )
+    kwargs = {"cache": tmp_path, "plan": plan, "functional": 1}
+    original, first = lowering.cached_stationary_wrapper_cuda(**kwargs)
+    source, changed = lowering.cached_stationary_wrapper_cuda(**kwargs, **selection)
+    assert not changed["hit"] and changed["key"] != first["key"]
+    assert source != original
+    replay, work = lowering.cached_stationary_wrapper_cuda(**kwargs, **selection)
+    assert work["hit"] and replay == source
 
 
 def test_incompatible_demand_is_rejected(
@@ -216,10 +256,10 @@ plan = StationaryGradientPlan(resolve_method('PBE0', spin='unpolarized'), Statio
 artifact = lowering.compile_stationary_cuda(
     lambda: primitives.cached_derivative_cuda_source(
         derivative_requests(('',)), component_domain=('',),
-        cache=Path(sys.argv[1]), target=cuda_target_info('sm_120'),
+        cache=Path(sys.argv[1]), target=cuda_target_info('sm_80' if sys.argv[2] == 'miss' else 'sm_120'),
     ), primitive_shard_width=16,
     functional=1, plan=plan, iterations=3,
-    compiler=CudaCompilerAdapter(Path('nvcc'), cuda_target_info('sm_120')), cache=Path(sys.argv[1]),
+    compiler=CudaCompilerAdapter(Path('nvcc'), cuda_target_info('sm_80' if sys.argv[2] == 'miss' else 'sm_120')), cache=Path(sys.argv[1]),
 )
 print(json.dumps(artifact.metadata))
 """

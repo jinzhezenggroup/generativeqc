@@ -1,0 +1,27 @@
+{
+  "generativeqc_native_stationary_codegen": {
+    "cache_path_with_spaces_preserved": true,
+    "missing_dependencies": [],
+    "recipe_inputs": 556
+  },
+  "generativeqc_stationary_pbe_rks_codegen": {
+    "cache_path_with_spaces_preserved": true,
+    "missing_dependencies": [],
+    "recipe_inputs": 556
+  },
+  "generativeqc_stationary_pbe_rks_spd_codegen": {
+    "cache_path_with_spaces_preserved": true,
+    "missing_dependencies": [],
+    "recipe_inputs": 556
+  },
+  "generativeqc_stationary_sp_primitives_codegen": {
+    "cache_path_with_spaces_preserved": true,
+    "missing_dependencies": [],
+    "recipe_inputs": 244
+  },
+  "generativeqc_stationary_spd_primitives_codegen": {
+    "cache_path_with_spaces_preserved": true,
+    "missing_dependencies": [],
+    "recipe_inputs": 244
+  }
+}

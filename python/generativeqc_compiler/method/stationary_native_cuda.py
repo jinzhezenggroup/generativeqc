@@ -11,6 +11,7 @@ import json
 import re
 from fractions import Fraction
 from functools import cache
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
@@ -40,6 +41,10 @@ from .stationary_cuda import (
     stationary_aot_profile_contract_identity,
     stationary_runtime_sources,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 NATIVE_STATIONARY_CUDA_PROFILES = (
     tuple(
@@ -130,7 +135,7 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
 
 
 def emit_native_stationary_profile_cuda(
-    profile: str, *, staged_point: bool = False
+    profile: str, *, staged_point: bool = False, source_cache: Path | None = None
 ) -> str:
     """Isolate one unchanged scientific wrapper and emit its typed native table.
 
@@ -174,9 +179,12 @@ def emit_native_stationary_profile_cuda(
             plan=plan,
             include_reduction=False,
             staged_point=True,
+            source_cache=source_cache,
         )
         if staged_point
-        else emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
+        else emit_stationary_profile_aot_wrapper_cuda(
+            profile, include_reduction=False, source_cache=source_cache
+        )
     )
     runtime = asset_path("src/dft/stationary_gradient_cuda.cuh").read_text()
     transport = asset_path("src/dft/native_stationary_runtime.cuh").read_text()
