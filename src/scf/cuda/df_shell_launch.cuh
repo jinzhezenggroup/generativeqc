@@ -265,14 +265,23 @@ cudaError_t dispatch_screening(double budget, Launch&& launch) {
   return launch.template operator()<Rys, false>();
 }
 
-/** Instantiate all supported schedules, independent of production-policy bytes. */
+/** Keep every policy choice, compiling equal resolved schedules only once.
+ * The compiler compares complete cooperative/storage contracts within a shell
+ * class. Algebra, screening and precision keep their own specializations; no
+ * launch dimensions, reduction order or strict-retry behavior are changed. */
 template <unsigned A, unsigned B, unsigned C, class Launch>
 cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&& launch) {
   auto variant = [&]<bool Rys, bool Screening>() -> cudaError_t {
     const auto arithmetic = [&]<bool Mixed>() -> cudaError_t {
-      if (context.variant == 0) return launch.template operator()<0, Rys, Screening, Mixed>();
-      if (context.variant == 1) return launch.template operator()<1, Rys, Screening, Mixed>();
-      if (context.variant == 2) return launch.template operator()<2, Rys, Screening, Mixed>();
+      if (context.variant == 0)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 0>::execution_variant, Rys, Screening, Mixed>();
+      if (context.variant == 1)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 1>::execution_variant, Rys, Screening, Mixed>();
+      if (context.variant == 2)
+        return launch.template
+        operator()<generated::Schedule<A, B, C, 2>::execution_variant, Rys, Screening, Mixed>();
       return cudaErrorInvalidValue;
     };
     // Strict Gaussian/root preparation dominates the s/p bra lowerings; their
