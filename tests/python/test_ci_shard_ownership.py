@@ -535,11 +535,17 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         assert sum(targets.count(path) for _, targets, _ in selections.values()) == (
             1 if tracked else 0
         )
-        assert not any(
-            path in argument
-            for _, _, arguments in selections.values()
-            for argument in arguments
-        )
+        for shard, (_, _, arguments) in selections.items():
+            expected = (
+                [f"--ci-fresh-priority={path}"]
+                if tracked
+                and path == "tests/python/test_correlation_convergence.py"
+                and shard == "uccsd-forces"
+                else []
+            )
+            # Priority changes scheduling only; no path-specific deselection or
+            # duplicate/wrong-owner priority may accompany this intact transfer.
+            assert [argument for argument in arguments if path in argument] == expected
     for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         distribution, targets, _ = selections[shard]
         assert distribution == "worksteal"
@@ -548,6 +554,45 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             for index, path in enumerate(inventory)
             if owners.get(path) == shard or (path not in owners and index % 3 == bucket)
         ]
+
+
+@pytest.mark.parametrize(
+    "mutation", ("missing", "duplicate", "wrong_owner", "deselect")
+)
+def test_convergence_priority_contract_rejects_changed_arguments(
+    mutation: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = _selection
+    path = "tests/python/test_correlation_convergence.py"
+    priority = f"--ci-fresh-priority={path}"
+
+    def altered(
+        event: str,
+        shard: str,
+        *,
+        root: Path = ROOT,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[str, list[str], list[str]]:
+        distribution, targets, arguments = original(
+            event, shard, root=root, environment=environment
+        )
+        arguments = list(arguments)
+        if shard == "uccsd-forces":
+            if mutation in {"missing", "wrong_owner"}:
+                arguments.remove(priority)
+            elif mutation == "duplicate":
+                arguments.append(priority)
+            elif mutation == "deselect":
+                arguments.extend(("--deselect", path))
+        if shard == "core-b" and mutation == "wrong_owner":
+            arguments.append(priority)
+        return distribution, targets, arguments
+
+    monkeypatch.setitem(globals(), "_selection", altered)
+    with pytest.raises(AssertionError):
+        test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
+            "pull_request", "tracked", (), tmp_path
+        )
 
 
 @pytest.mark.parametrize(
