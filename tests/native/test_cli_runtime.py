@@ -246,9 +246,10 @@ class RuntimeTests(unittest.TestCase):
                                 "run", missing, "--backend", backend, *flags
                             )
                             self.assertEqual(result.returncode, 2, result.stderr)
-                            self.assertIn("--owned-device-bytes", result.stderr)
-                            self.assertIn("named KS", result.stderr)
-                            self.assertNotIn("cannot open XYZ", result.stderr)
+                            diagnostic = result.stderr.partition("\n")[0]
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
                             self.assertEqual(result.stdout, "")
 
     def test_owned_device_cap_uses_final_method_selection(self) -> None:
@@ -272,30 +273,36 @@ class RuntimeTests(unittest.TestCase):
                         )
                         self.assertEqual(result.returncode, 2, result.stderr)
                         self.assertEqual(result.stdout, "")
+                        diagnostic = result.stderr.partition("\n")[0]
                         if last == "rhf":
-                            self.assertIn("cannot open XYZ", result.stderr)
-                            self.assertNotIn("named KS", result.stderr)
+                            self.assertIn("cannot open XYZ", diagnostic)
+                            self.assertNotIn("named KS", diagnostic)
                         else:
-                            self.assertIn("--owned-device-bytes", result.stderr)
-                            self.assertIn("named KS", result.stderr)
-                            self.assertNotIn("cannot open XYZ", result.stderr)
+                            self.assertIn("--owned-device-bytes", diagnostic)
+                            self.assertIn("named KS", diagnostic)
+                            self.assertNotIn("cannot open XYZ", diagnostic)
 
     def test_named_ks_without_owned_cap_still_reads_input(self) -> None:
         """Omitting the cap leaves ordinary named-program input handling intact."""
+        missing = str(self.root / "missing.xyz")
         for method in ("pbe0-rks", "r2scan-3c-rks"):
             for backend in ("cpu", "cuda"):
                 with self.subTest(method=method, backend=backend):
                     result = self.cli(
                         "run",
-                        str(self.root / "missing.xyz"),
+                        missing,
                         "--method",
                         method,
                         "--backend",
                         backend,
                     )
                     self.assertEqual(result.returncode, 2, result.stderr)
-                    self.assertIn("cannot open XYZ", result.stderr)
-                    self.assertNotIn("--owned-device-bytes", result.stderr)
+                    # Usage lists every option; inspect the actual error, not its help.
+                    diagnostic = result.stderr.partition("\n")[0]
+                    self.assertEqual(
+                        diagnostic, f"generativeqc: cannot open XYZ input: {missing}"
+                    )
+                    self.assertNotIn("--owned-device-bytes", diagnostic)
                     self.assertEqual(result.stdout, "")
 
     def bundle(self) -> Path:
