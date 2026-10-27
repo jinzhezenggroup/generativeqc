@@ -8,12 +8,15 @@ not a new artifact-cache owner or qualification of optional CUDA mechanisms.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Literal
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
+from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.xc.automatic_cuda import (
     emit_automatic_cuda_descriptor,
     emit_automatic_cuda_provider,
@@ -22,7 +25,10 @@ from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry,
     automatic_registry_entries,
 )
-from generativeqc_compiler.xc.parameter_cuda_package import parameterized_cuda_package
+from generativeqc_compiler.xc.parameter_cuda_package import (
+    parameter_worker_groups,
+    parameterized_cuda_package,
+)
 
 from tools.generate_libxc_semilocal_cpu_registry import write_if_changed
 
@@ -97,6 +103,7 @@ def emit_shard(
     entries: tuple[AutomaticRegistryEntry, ...],
     *,
     share_parameters: bool = True,
+    parameter_policy: Literal["qualified", "discover"] = "qualified",
 ) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
@@ -104,7 +111,7 @@ def emit_shard(
     selected = entries[index::SHARD_COUNT]
     if share_parameters:
         workers, registrations = parameterized_cuda_package(
-            tuple(entry.name for entry in entries)
+            tuple(entry.name for entry in entries), policy=parameter_policy
         )
         providers = [registrations[entry.name] for entry in selected]
     else:
@@ -154,7 +161,18 @@ def main() -> None:
         "--share-parameters",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="share audited parameter-family workers by default; --no-share-parameters retains literal specialization",
+        help="share qualified workers by default; --no-share-parameters retains literal specialization",
+    )
+    parser.add_argument(
+        "--parameter-policy",
+        choices=("qualified", "discover"),
+        default="qualified",
+        help="discover also emits compatible catalog-wide candidates for explicit qualification",
+    )
+    parser.add_argument(
+        "--sharing-report",
+        type=Path,
+        help="write selected groups, coefficient ABI sizes and retained specializations as JSON",
     )
     parser.add_argument(
         "--functional",
@@ -166,6 +184,10 @@ def main() -> None:
         parser.error("--functional cannot be combined with --disabled")
     if args.disabled and args.share_parameters:
         parser.error("--share-parameters cannot be combined with --disabled")
+    if args.disabled and args.sharing_report:
+        parser.error("--sharing-report cannot be combined with --disabled")
+    if args.disabled and args.parameter_policy != "qualified":
+        parser.error("--parameter-policy discover cannot be combined with --disabled")
     try:
         entries = () if args.disabled else select_entries(args.functional)
     except ValueError as error:
@@ -184,9 +206,46 @@ def main() -> None:
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",
             emit_shard(
-                index, entries, share_parameters=args.share_parameters is not False
+                index,
+                entries,
+                share_parameters=args.share_parameters is not False,
+                parameter_policy=args.parameter_policy,
             ),
         )
+    if args.sharing_report:
+        names = tuple(entry.name for entry in entries)
+        candidates = parameter_worker_groups(names)
+        groups = (
+            parameter_worker_groups(
+                names, include_candidates=args.parameter_policy == "discover"
+            )
+            if args.share_parameters is not False
+            else ()
+        )
+        shared = {name for group in groups for name in group.names}
+        report = {
+            "schema": "generativeqc.xc-parameter-sharing-plan.v1",
+            "policy": args.parameter_policy
+            if args.share_parameters is not False
+            else "specialized",
+            "registrations": len(names),
+            "shared_registrations": len(shared),
+            "candidate_groups": [
+                {
+                    "names": group.names,
+                    "strategy": group.strategy,
+                    "contract_identity": canonical_hash(group.contract),
+                    "parameter_bytes": 8 * len(group.providers[0].point.parameters),
+                    "selected": set(group.names) <= shared,
+                    "default_qualified": group.strategy == "prepared-products",
+                }
+                for group in candidates
+            ],
+            "specialized_registrations": sorted(set(names) - shared),
+            "point_kernels": 4 * (len(names) - len(shared) + len(groups)),
+            "qualification": "structural compatibility; no performance or public admission claim",
+        }
+        write_if_changed(args.sharing_report, json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

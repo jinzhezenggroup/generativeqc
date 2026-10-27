@@ -210,12 +210,14 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "p.add_argument('--disabled', action='store_true')\n"
         "p.add_argument('--functional', action='append')\n"
         "p.add_argument('--share-parameters', action=argparse.BooleanOptionalAction, default=False)\n"
+        "p.add_argument('--parameter-policy', choices=('qualified', 'discover'), default='qualified')\n"
         "a = p.parse_args()\n"
         "a.output_directory.mkdir(parents=True, exist_ok=True)\n"
         "counter = a.output_directory / 'runs.txt'\n"
         "counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))\n"
         "(a.output_directory / 'functionals.txt').write_text(';'.join(a.functional or []))\n"
         "(a.output_directory / 'sharing.txt').write_text(str(a.share_parameters))\n"
+        "(a.output_directory / 'policy.txt').write_text(a.parameter_policy)\n"
         "names = ['registry.hpp', 'registry.cpp']\n"
         f"if not a.disabled: names += [str(i) + '{'.cu' if backend == 'cuda' else '.cpp'}' for i in range({32 if backend == 'cuda' else 8})]\n"
         "for name in names:\n"
@@ -230,7 +232,7 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if enabled else 'OFF'})\n"
         f'set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "{";".join(functionals)}")\n'
         f"set(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS {'ON' if share_parameters else 'OFF'})\n"
-        + declaration
+        "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY discover)\n" + declaration
     )
     build = tmp_path / "build"
     subprocess.run(
@@ -262,6 +264,9 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
     assert (
         build / f"generated/libxc_semilocal_{backend}/sharing.txt"
     ).read_text() == str(share_parameters)
+    assert (build / f"generated/libxc_semilocal_{backend}/policy.txt").read_text() == (
+        "discover" if share_parameters else "qualified"
+    )
     expected = 1
     identity_only = (
         ("python/generativeqc_compiler/xc/automatic_cuda.py",)

@@ -149,8 +149,10 @@ public backend admission, or resource/performance qualification. See
 [equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
 
 `GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS` defaults to `ON` when CUDA and
-automatic XC AOT are enabled. A package containing multiple KTBM registrations
-shares their parameterized CUDA workers. Set the option to `OFF` to retain
+automatic XC AOT are enabled. The default
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=qualified` selects the measured
+prepared-coefficient KTBM workers when multiple compatible registrations are
+packaged. Set the sharing option to `OFF` to retain
 literal specialization; the standalone generator provides `--no-share-parameters`
 for the same fallback. Automatic XC AOT itself remains opt-in.
 
@@ -162,8 +164,37 @@ never mutate shared coefficient state. Density thresholds,
 work-domain guards, physical derivative conventions and spin layouts remain
 part of the compiled contract. Both general and equal-spin parameterized bodies,
 ordered parameter names and complete point layouts must agree before sharing.
-Other families and singleton selections retain their specialized point emitters.
+Other families and singleton selections retain their specialized point emitters
+under the qualified policy.
 This controls executable reuse, not functional admission or supported products.
+
+The explicit `discover` policy analyzes the entire selected structural catalog.
+After ordinary literal specialization and differentiation, it lifts arithmetic
+constants and compares both complete spin bodies and execution ABIs, without a
+source-entry or functional-name restriction. Predicate dependencies, fixed powers,
+zero terms, binary scaling constants and existing CSE remain specialized.
+Coefficients common to a group become literals again; equal coefficient columns
+share one launch slot. LDA retains separate unpolarized RKS and polarized UKS
+contracts, even when the equal-spin optimization is disabled. Groups exceeding
+the portable launch-data budget and unmatched/singleton bodies remain specialized.
+
+Discovery is a qualification tool: structural compatibility alone does not
+establish point or complete-endpoint performance. Enable it in CMake with
+`-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover`, or use
+`--parameter-policy discover` with the standalone generator. The default policy
+continues to select previously qualified workers. A report can show both
+discovered candidates and the workers actually selected:
+
+```bash
+python tools/generate_libxc_semilocal_cuda_registry.py \
+  --output-directory .cache/xc-cuda \
+  --sharing-report .cache/xc-cuda-sharing.json
+```
+
+The report includes coefficient ABI sizes, exact contract identities, selection
+status, retained specializations and point-kernel counts. See the
+[discovery decision](../../.agents/notes/implemented/architecture/2026-10-28-xc-structural-parameter-discovery.md)
+for measured reasons to keep discovery separate from default promotion.
 
 Each registration retains its canonical coefficient-bound mathematical identity
 for CPU/CUDA admission. Its source identity authenticates the shared worker's

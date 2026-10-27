@@ -100,3 +100,9 @@ Expand a family only after complete parameterized expression and ABI comparison,
 independent numerical acceptance, measured object/compile savings and complete
 endpoint plus point-worker performance qualification. Preserve specialization
 for cases where lost constant folding costs runtime performance.
+
+## Catalog discovery follow-up
+
+The [structural discovery decision](2026-10-28-xc-structural-parameter-discovery.md)
+adds catalog-wide candidate discovery after literal specialization. The measured
+KTBM default remains separate from that explicit qualification policy.
