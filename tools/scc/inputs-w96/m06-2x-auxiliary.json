@@ -1,0 +1,426 @@
+{
+  "schema": "generativeqc.basis",
+  "schema_version": 1,
+  "name": "GPU4PySCF-default-m06-2x",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "22068343E-6",
+            "43905712E-7",
+            "10540787E-7"
+          ],
+          "coefficients": [
+            [
+              "53033986E-9",
+              "3946522022E-10",
+              "9172987712E-10"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "2717874E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "18529979E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "3881034E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "25579933E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "3292649E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        }
+      ],
+      "nuclear_charge": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null
+    },
+    {
+      "atomic_number": 8,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "6252829811E-7",
+            "2539327418E-7",
+            "1090492955E-7",
+            "494230056E-7",
+            "235805211E-7"
+          ],
+          "coefficients": [
+            [
+              "1847924989E-10",
+              "1922460578E-10",
+              "59372043E-8",
+              "6059346397E-10",
+              "457419336E-9"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "118077591E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "61827814E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "33709061E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "19042805E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "11085447E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "6609886E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "4010814E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "2459769E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "exponents": [
+            "1513939E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "776874838E-7",
+            "224153884E-7",
+            "98906463E-7"
+          ],
+          "coefficients": [
+            [
+              "3901010435E-10",
+              "8379348266E-10",
+              "3816888815E-10"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "54848863E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "29732983E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "1473526E-6"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "7360341E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "3697414E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "1863721E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "exponents": [
+            "949906E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "377071074E-7",
+            "147752543E-7",
+            "584709E-5"
+          ],
+          "coefficients": [
+            [
+              "778600156E-10",
+              "3135520627E-10",
+              "9463735636E-10"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "23304365E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "9328267E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "exponents": [
+            "3739285E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 3,
+          "exponents": [
+            "30293422E-7"
+          ],
+          "coefficients": [
+            [
+              "7615479114E-10"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 3,
+          "exponents": [
+            "924849E-6"
+          ],
+          "coefficients": [
+            [
+              "6481086164E-10"
+            ]
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 4,
+          "exponents": [
+            "16934809E-7"
+          ],
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "source_group": 0
+        }
+      ],
+      "nuclear_charge": 8,
+      "ecp_core_electrons": 0,
+      "ecp_data": null
+    }
+  ],
+  "provenance": {
+    "source": "pyscf.df.addons.make_auxmol(default)",
+    "version": "2.14.0",
+    "license": "Apache-2.0 (PySCF distribution)",
+    "checksum": "b5c6f6dafcf126bdc4eff3f68322a0996468ffef38e5baeb63745302f1f977e5"
+  },
+  "representation": "spherical",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "exponent_units": "bohr^-2",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "checksum": "65cd098ac8a268e7f8db56f5cfbdc98ab6ff7c8184abb8a9300e07bb57d4ede6"
+}
