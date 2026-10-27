@@ -125,6 +125,11 @@ def main() -> None:
         for row in payload["rows"]:
             receipt = row["artifact"]
             joined = audit_receipt(receipt, library, resources)
+            # Becke geometry uses dynamic shared storage, which cuobjdump's
+            # static SHARED counter cannot describe. Bind its execution value
+            # to the same explicit per-block ceiling as the static audit.
+            if not 0 <= receipt["stationary_work_v1"][22] <= args.max_shared:
+                raise ValueError("executed Becke dynamic shared memory exceeds limit")
             profile = joined["profile"]
             if profile not in profiles:
                 source = (

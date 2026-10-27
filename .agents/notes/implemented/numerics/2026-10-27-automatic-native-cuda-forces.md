@@ -65,6 +65,16 @@ whole-endpoint all-attempt work accounting. Cubin stack/local counts do not
 prove zero compiler spills. Auxiliary zero-register device-function records
 are retained, while an all-empty resource scope fails.
 
+Rebasing changed the upstream RHF integral-AD compiler input. The stationary
+contract conservatively hashes the whole method compiler family, so force
+identities correctly changed even though generated force bodies changed only
+their identity literal. The first reference-reuse run rejected that mismatch.
+An explicit source-transition audit then checked all 22 executed profiles and
+the compiler input difference. Fresh forces and center oracles reuse the
+unchanged scientific reference task, with old/new identities kept distinct.
+This is independent-reference reuse, not an old artifact accepted under a new
+cache key. The full automatic AOT package is rebuilt on the new baseline.
+
 ## Evidence and limits
 
 The retained campaign is in
