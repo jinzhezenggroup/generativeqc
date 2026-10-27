@@ -116,6 +116,12 @@ class _Executor:
         compiler = CudaCompilerAdapter(
             nvcc, target, compile_timeout=self.options["compile_timeout"]
         )
+        # Tensor-only execution does not load the chemistry library, whose
+        # loader normally preloads optional CUDA providers. Apply the same
+        # configured-prefix discovery before dlopen of this independent JIT DSO.
+        from generativeqc._cuda_runtime import preload_cuda_runtime_libraries
+
+        preload_cuda_runtime_libraries()
         return PreparedCuda(
             plan, compile_cuda(plan, compiler, cache), device=self.options["device"]
         )

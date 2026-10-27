@@ -21,6 +21,7 @@ import hashlib
 import platform
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from time import perf_counter
 
@@ -37,6 +38,7 @@ from generativeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
+from generativeqc_compiler.common.provenance import find_nvcc
 from generativeqc_compiler.xc import build_program, functional
 from generativeqc_compiler.xc.capabilities import query_capability
 from generativeqc_compiler.xc.cuda import (
@@ -294,10 +296,10 @@ def main() -> None:
         required=True,
     )
     parser.add_argument("--output", type=Path, default=Path(".artifacts/benchmarks/xc"))
-    parser.add_argument("--cache", type=Path, default=Path("/tmp/xc161-cuda-cache"))
     parser.add_argument(
-        "--nvcc", type=Path, default=Path("/group/software/cuda-12.9.1/bin/nvcc")
+        "--cache", type=Path, default=Path(tempfile.gettempdir()) / "xc161-cuda-cache"
     )
+    parser.add_argument("--nvcc", type=Path, default=find_nvcc())
     parser.add_argument(
         "--target", help="explicit CUDA target architecture (e.g. sm_90)"
     )
@@ -324,6 +326,8 @@ def main() -> None:
     parser.add_argument("--points", type=int, default=4096)
     parser.add_argument("--repeats", type=int, default=5)
     args = parser.parse_args()
+    if args.tier != "cpu" and args.nvcc is None:
+        parser.error("CUDA validation requires --nvcc or a configured CUDA toolkit")
     if args.tier != "cpu" and not args.target:
         parser.error("CUDA validation tiers require --target")
     if args.points < 1 or args.repeats < 1:

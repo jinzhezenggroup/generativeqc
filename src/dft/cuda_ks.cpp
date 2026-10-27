@@ -455,7 +455,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
            range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES") == range_host_tile_policy &&
            range_policy_value("GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES") == range_disk_policy &&
            range_policy_value("GENERATIVEQC_KS_RANGE_DISK_BUCKET_MASK") == range_disk_mask_policy &&
-           range_policy_value("GENERATIVEQC_ERI_TMPDIR") == range_disk_directory_policy &&
+           runtime::TemporaryCacheFile::default_directory(std::getenv("GENERATIVEQC_ERI_TMPDIR"))
+                   .string() == range_disk_directory_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
            !runtime::active_device_resource_ledger;
   }
@@ -602,8 +603,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::invalid_argument("invalid KS host ERI cache capacity, bucket mask or tile size");
     // Local temporary spill is independently bounded and only considered for
     // repeated strict sources. A RAM-file/network directory has zero capacity.
-    const auto* configured_directory = std::getenv("GENERATIVEQC_ERI_TMPDIR");
-    const std::string disk_directory = configured_directory ? configured_directory : "/tmp";
+    const std::string disk_directory =
+        runtime::TemporaryCacheFile::default_directory(std::getenv("GENERATIVEQC_ERI_TMPDIR"))
+            .string();
     const auto* disk_limit =
         std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES"
                                          : "GENERATIVEQC_KS_DISK_MAX_BYTES");
@@ -721,7 +723,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_host_tile_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES");
       range_disk_policy = range_policy_value("GENERATIVEQC_KS_RANGE_DISK_MAX_BYTES");
       range_disk_mask_policy = range_policy_value("GENERATIVEQC_KS_RANGE_DISK_BUCKET_MASK");
-      range_disk_directory_policy = range_policy_value("GENERATIVEQC_ERI_TMPDIR");
+      range_disk_directory_policy = disk_directory;
     }
     phase_device_bytes = phase_source->device_bytes();
     phase_host_bytes = phase_source->capacity_bytes() - phase_device_bytes;

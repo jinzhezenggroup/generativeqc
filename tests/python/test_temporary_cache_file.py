@@ -13,6 +13,44 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_spill_directory_respects_environment(
+    tmp_path: Path, native_cxx: NativeCxx, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resolve TMPDIR at runtime; an unusable optional spill stays disabled."""
+    source = tmp_path / "directory.cpp"
+    source.write_text("""
+#include "runtime/temporary_cache_file.hpp"
+#include <iostream>
+int main() {
+  std::cout << generativeqc::runtime::TemporaryCacheFile::default_directory(std::getenv("GENERATIVEQC_ERI_TMPDIR")).string();
+}
+""")
+    executable = tmp_path / "directory"
+    native_cxx.build_executable(
+        [source], executable, compile_args=("-std=c++20", f"-I{ROOT / 'src'}")
+    )
+    monkeypatch.delenv("GENERATIVEQC_ERI_TMPDIR", raising=False)
+    for variable in ("TMP", "TEMP", "TEMPDIR"):
+        monkeypatch.delenv(variable, raising=False)
+
+    def selected() -> str:
+        return subprocess.run(
+            [str(executable)], check=True, capture_output=True, text=True, timeout=10
+        ).stdout
+
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    assert Path(selected()) == tmp_path
+    override = tmp_path / "override"
+    override.mkdir()
+    monkeypatch.setenv("GENERATIVEQC_ERI_TMPDIR", str(override))
+    assert Path(selected()) == override
+    monkeypatch.setenv("GENERATIVEQC_ERI_TMPDIR", "")
+    assert selected() == ""
+    monkeypatch.delenv("GENERATIVEQC_ERI_TMPDIR")
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "missing"))
+    assert selected() == ""
+
+
 def test_temporary_cache_file_lifetime_and_io(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
