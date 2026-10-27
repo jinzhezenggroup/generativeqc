@@ -62,6 +62,7 @@ def test_single_and_batch_share_descriptor_admission(
     unit.write_text(
         r"""
 #include <cassert>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,6 +94,14 @@ const MethodDefinition& require_available(generativeqc_method method) {
 }
 void validate_system(const MethodDefinition&,const core::System&) {}
 void validate_preliminary_system(const generativeqc_method_descriptor&,const core::System&) {}
+namespace detail {
+std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(const Capabilities&,
+ core::ContextState&,const core::System&,const generativeqc_method_descriptor&,
+ const core::System*,const named_ks::Dispersion&,std::uint64_t) {std::abort();}
+std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(const Capabilities&,core::ContextState&,
+ std::vector<core::System>,const generativeqc_method_descriptor&,generativeqc_batch_flags,
+ const core::System*,const named_ks::Dispersion&,std::uint64_t) {std::abort();}
+}
 """
         + definition("void validate_option_family(")
         + "\n"

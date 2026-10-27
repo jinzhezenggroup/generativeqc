@@ -3,7 +3,7 @@
 This is one model-free run of the pending native provider owner on an H100 80GB,
 driver 595.58.03, CUDA runtime 12.9. It qualifies initialization, bounded resources,
 source/event/graph ownership, and explicit teardown. It requests no geometry,
-matrix solve, SCF, energy, forces or independent scientific reference.
+molecular SCF/correlated solve, energy, forces or independent scientific reference.
 
 The explicit initialization reservation is 512 MiB inside separate 2 GiB
 reference and downstream envelopes. The synchronized free-memory difference was
@@ -48,3 +48,7 @@ Replay without a GPU, compiler, network or new model call:
 ```console
 python benchmarks/results/h100-provider-owner-20261027/replay.py
 ```
+
+The [v6 follow-up](v6/README.md) retains the post-fix resource-lifecycle run
+and its unchanged finite grant/native limits. Each capsule keeps its own
+measured source and binary identity; neither qualifies a later installed SDK.

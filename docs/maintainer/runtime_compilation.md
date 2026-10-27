@@ -187,7 +187,9 @@ lookup/generation spans and inclusive artifact lookup/compile spans must not be
 added as independent endpoint time or treated as exact compiler subprocess time.
 
 NVCC discovery is [explicitly implemented][provenance]: `GENERATIVEQC_NVCC`,
-`CUDACXX`, `CUDA_PATH/bin/nvcc`, then `PATH`. Toolchain identity also queries
+`CUDACXX`, then `bin/nvcc` under `CUDAToolkit_ROOT`, `CUDA_PATH`, or `CUDA_HOME`,
+then `PATH`. An unavailable explicit compiler or root fails discovery instead
+of silently selecting another toolkit. Toolchain identity also queries
 the sibling `ptxas`; object identity uses `NVCC_CCBIN` or discovered `gcc` for
 host facts. Actual compatibility remains the selected toolkit's obligation.
 No NVRTC invocation was observed in these traced public call chains; NVIDIA

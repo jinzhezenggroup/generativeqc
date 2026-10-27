@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "dft/nonlocal_correlation/vv10_capacity.hpp"
 #include "generativeqc/generativeqc.h"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -89,23 +90,6 @@ class Vv10Plan {
 };
 
 #if GENERATIVEQC_HAS_CUDA
-struct Vv10CudaDeviceLayout {
-  std::size_t point_count{};
-  std::size_t tile_points{};
-  std::size_t workspace_bytes{};
-  bool features{};
-  bool geometry{};
-  bool mask_zero_weight_rows{};
-};
-
-/** Exact caller-owned workspace for resident CUDA VV10/rVV10 execution.
- * Input/output arrays and the numerical-error slot are caller-owned and are
- * not included in workspace_bytes.
- */
-Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry,
-                                             bool mask_zero_weight_rows = false);
-
 /** Enqueue one resident fixed-grid evaluation on the caller stream.
  * All scientific inputs and outputs are device-resident. No allocation,
  * host transfer or synchronization occurs here. energy may alias workspace

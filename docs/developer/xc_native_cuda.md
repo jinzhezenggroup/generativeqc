@@ -556,8 +556,10 @@ defaults to at most 64 GiB and one quarter of local available disk space.
 Full-range sources retain Direct by default because qualified local-NVMe replay
 is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
 enables controlled full-range experiments. Explicit `0` disables that tier; the matching
-`DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
-or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
+`DISK_BUCKET_MASK` controls restrict selected buckets. The directory follows
+the platform temporary-directory setting (including `TMPDIR`), overridden by
+`GENERATIVEQC_ERI_TMPDIR` when set. An unavailable directory or an empty explicit
+override disables optional spilling. RAM filesystems and common network
 filesystems are refused. Complete GPU residency creates no temporary file.
 
 The file is physically preallocated and immediately unlinked, so its owning

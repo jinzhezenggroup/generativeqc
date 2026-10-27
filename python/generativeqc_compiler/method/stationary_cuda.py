@@ -64,7 +64,9 @@ _FUSED_WEIGHT_SOURCES = ("one_electron", "coulomb", "overlap_pulay")
 _SPLIT_COMPILE_THREADS_ENV = "GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS"
 
 
-def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
+def stationary_runtime_sources(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> tuple[str, ...]:
     """Retain plan order for contributions owned by the bounded CUDA arena.
 
     ECP and range/nonlocal providers retain separate ownership. Full-range
@@ -74,7 +76,8 @@ def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
     return tuple(
         source
         for source in plan.source_names
-        if source in (*STATIONARY_RUNTIME_SOURCE_NAMES, "exact_exchange")
+        if include_external
+        or source in (*STATIONARY_RUNTIME_SOURCE_NAMES, "exact_exchange")
     )
 
 
@@ -98,8 +101,10 @@ def stationary_external_provider_sources(
     )
 
 
-def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
-    sources = stationary_runtime_sources(plan)
+def _runtime_layout_cuda(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> str:
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     integral_slots = [
         sources.index(s)
         for s in (*_FUSED_WEIGHT_SOURCES, "exact_exchange")
@@ -146,7 +151,9 @@ def _split_compile_options(
     return () if threads == 1 else (f"--split-compile={threads}",)
 
 
-def emit_stationary_weight_cuda(plan: typing.Any) -> str:
+def emit_stationary_weight_cuda(
+    plan: typing.Any, *, include_external: bool = False
+) -> str:
     """Emit pointwise device weights directly from StationaryGradientPlan TensorIR."""
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError(
@@ -157,7 +164,7 @@ def emit_stationary_weight_cuda(plan: typing.Any) -> str:
         f"// stationary-plan: {plan.identity}",
     ]
     dispatch: list[str] = []
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     for source in (
         *_FUSED_WEIGHT_SOURCES,
         *(("exact_exchange",) if plan.exchange is not None else ()),
@@ -868,14 +875,16 @@ __global__ void geometry_reduce(const double* partial, size_t na, size_t geometr
 """
 
 
-def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
+def emit_stationary_reduction_cuda(
+    plan: StationaryGradientPlan, *, include_external: bool = False
+) -> str:
     """Specialize the authoritative ordered TensorIR sum for native source storage."""
     lines = [
         "namespace generativeqc_stationary_cuda {",
         "__global__ void source_reduce(const double* input, size_t na, double* output, int* error) {",
         "  if (*error) return;",
     ]
-    sources = stationary_runtime_sources(plan)
+    sources = stationary_runtime_sources(plan, include_external=include_external)
     if plan.source_names != sources:
         # ECP/range/nonlocal sources still have separately owned providers.
         lines += ["  atomicExch(error, 1);", "}", "}", ""]
@@ -910,13 +919,17 @@ def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
 
 
 def emit_stationary_scientific_kernels(
-    plan: typing.Any, *, include_reduction: bool = True
+    plan: typing.Any, *, include_reduction: bool = True, include_external: bool = False
 ) -> str:
     """Emit XC geometry with an optional independently compiled final reduction."""
     return (
-        emit_stationary_weight_cuda(plan)
+        emit_stationary_weight_cuda(plan, include_external=include_external)
         + _STATIONARY_SCIENTIFIC_KERNELS
-        + (emit_stationary_reduction_cuda(plan) if include_reduction else "")
+        + (
+            emit_stationary_reduction_cuda(plan, include_external=include_external)
+            if include_reduction
+            else ""
+        )
     )
 
 
@@ -1236,6 +1249,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
     include_reduction: bool = True,
+    include_external: bool = False,
 ) -> str:
     """Emit an exact-plan s/p wrapper for the shared, separably compiled primitives.
 
@@ -1252,6 +1266,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
         plan=selected.plan,
         iterations=iterations,
         include_reduction=include_reduction,
+        include_external=include_external,
     )
 
 
@@ -1696,6 +1711,7 @@ def emit_stationary_wrapper_cuda(
     primitive_shards: int | None = None,
     primitive_shard_width: int | None = None,
     include_reduction: bool = True,
+    include_external: bool = False,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
 
@@ -1734,13 +1750,18 @@ def emit_stationary_wrapper_cuda(
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr unsigned stationary_spin_blocks = {plan.spin_blocks};\n"
         + "constexpr bool stationary_native_reduction_supported = "
-        + str(plan.source_names == stationary_runtime_sources(plan)).lower()
+        + str(
+            plan.source_names
+            == stationary_runtime_sources(plan, include_external=include_external)
+        ).lower()
         + ";\n"
         + "}\n"
-        + _runtime_layout_cuda(plan)
+        + _runtime_layout_cuda(plan, include_external=include_external)
         + emit_stationary_phased_becke_cuda(iterations=iterations)
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
-        + emit_stationary_scientific_kernels(plan, include_reduction=include_reduction)
+        + emit_stationary_scientific_kernels(
+            plan, include_reduction=include_reduction, include_external=include_external
+        )
     )
 
 

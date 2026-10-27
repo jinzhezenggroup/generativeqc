@@ -20,6 +20,22 @@
       "role": "Actual finite probe, real API forwarders, lifecycle harness and source/build-input closure needed to reproduce this engineering binary.",
       "bytes": 184588,
       "sha256": "09a4c84312d389d0ef29b6fe430df338f2f1dac7d4a46b26fc820dbe1d2d3fa5"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/receipt.json.xz",
+      "family": "h100-provider-owner-20261027",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Follow-up bounded model-free owner validation after lifecycle fixes; explicit privacy and installed-SDK limits.",
+      "bytes": 195520,
+      "sha256": "e5d88204fe18aea3c450975dfdd49496d4587140fb21e8f0b1e80e7ac99d90a6"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/source-closure.json.xz",
+      "family": "h100-provider-owner-20261027",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Follow-up bounded model-free owner validation after lifecycle fixes; explicit privacy and installed-SDK limits.",
+      "bytes": 185568,
+      "sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
     }
   ]
 }

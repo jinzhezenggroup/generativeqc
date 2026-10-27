@@ -5,8 +5,11 @@ from __future__ import annotations
 import ctypes
 import functools
 import os
+import platform
+import shutil
 import site
 import sys
+import sysconfig
 from pathlib import Path
 
 # Keep this list in dependency-friendly load order. libcuda is deliberately
@@ -34,7 +37,40 @@ def _runtime_search_dirs() -> list[Path]:
     if user_site and (site.ENABLE_USER_SITE or user_site in sys.path):
         site_packages.append(user_site)
 
-    dirs: list[Path] = []
+    # Explicit deployment locations take precedence over bundled providers.
+    # Empty loader-path components must not introduce the working directory.
+    dirs = [
+        Path(entry).expanduser()
+        for entry in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep)
+        if entry
+    ]
+    machine = platform.machine()
+    target = "aarch64" if machine == "arm64" else machine
+    roots: list[str | None] = []
+    # A compiler selected outside PATH also identifies its runtime prefix.
+    # This is filesystem discovery only; no compiler or CUDA context is started.
+    configured_compiler = os.environ.get("GENERATIVEQC_NVCC") or os.environ.get(
+        "CUDACXX"
+    )
+    if configured_compiler and (
+        compiler := shutil.which(str(Path(configured_compiler).expanduser()))
+    ):
+        roots.append(str(Path(compiler).resolve().parent.parent))
+    roots.extend(
+        os.environ.get(name) for name in ("CUDAToolkit_ROOT", "CUDA_PATH", "CUDA_HOME")
+    )
+    for root in roots:
+        if root:
+            prefix = Path(root).expanduser()
+            dirs.extend(
+                (
+                    prefix / "lib64",
+                    prefix / "lib",
+                    prefix / "targets" / f"{target}-linux" / "lib",
+                )
+            )
+    # Conda/venv installs need not live below /usr/local or site-packages/nvidia.
+    dirs.append(Path(sys.prefix) / "lib")
     for entry in dict.fromkeys(site_packages):
         nvidia_root = Path(entry) / "nvidia"
         if not nvidia_root.is_dir():
@@ -45,18 +81,19 @@ def _runtime_search_dirs() -> list[Path]:
             if (provider / "lib").is_dir()
         )
 
+    multiarch = sysconfig.get_config_var("MULTIARCH")
     for candidate in (
         "/usr/local/cuda/lib64",
-        "/usr/local/cuda/targets/x86_64-linux/lib",
+        f"/usr/local/cuda/targets/{target}-linux/lib",
         "/usr/local/lib",
-        "/usr/lib/x86_64-linux-gnu",
+        f"/usr/lib/{multiarch}" if multiarch else "/usr/lib",
     ):
         path = Path(candidate)
         if path.is_dir():
             dirs.append(path)
 
     # Preserve discovery order while avoiding repeated dlopen attempts.
-    return list(dict.fromkeys(path.resolve() for path in dirs))
+    return list(dict.fromkeys(path.resolve() for path in dirs if path.is_dir()))
 
 
 def preload_cuda_runtime_libraries() -> tuple[str, ...]:

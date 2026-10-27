@@ -241,6 +241,7 @@ class PreparedBatch:
             raise ValueError("a batch requires at least one system")
         self._last_statuses = None
         self._dispersion_batch: typing.Any = None
+        self._native_dispersion: typing.Any = None
         self._intrinsic_dispersion_energy = (
             calculator._method == _native.METHOD_PBE_D4_RKS
         )
@@ -413,7 +414,38 @@ class PreparedBatch:
             if inactive_eigensolver_profiling:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
+            native_name = None
+            if (
+                calculator._dispersion_method_ir is not None
+                and self.resource_plan is None
+                and calculator._precision_mode == _native.PRECISION_FP64
+            ):
+                from ._named_ks import select_named_program
+
+                native_name = select_named_program(
+                    self._library,
+                    calculator._dispersion_method_ir,
+                    _native.BACKEND_CUDA
+                    if calculator._device_name == "cuda"
+                    else _native.BACKEND_CPU_REFERENCE,
+                )
+
             def prepare() -> typing.Any:
+                if native_name is not None:
+                    from ._named_ks import prepare_named_batch
+
+                    return prepare_named_batch(
+                        self._library,
+                        self._context,
+                        handle_array,
+                        count,
+                        method,
+                        flags,
+                        ctypes.byref(self._batch),
+                        native_name,
+                        calculator._dispersion_method_ir,
+                        calculator._dispersion_memory_budget_bytes,
+                    )
                 if self._resource_prepare is not None:
                     return self._resource_prepare(
                         self._context,
@@ -472,7 +504,17 @@ class PreparedBatch:
                 configure_native_cuda_stationary_batch(
                     self._library, self._batch, self.resource_plan
                 )
-            if calculator._dispersion_method_ir is not None:
+            if native_name is not None:
+                from ._named_ks import NativeKsDispersion
+
+                self._native_dispersion = NativeKsDispersion(
+                    self, calculator._dispersion_method_ir
+                )
+                self._intrinsic_dispersion_energy = True
+            if (
+                calculator._dispersion_method_ir is not None
+                and self._native_dispersion is None
+            ):
                 from generativeqc_compiler.method import (
                     D4Spec,
                     DispersionCorrectionPrimitive,
@@ -607,8 +649,10 @@ class PreparedBatch:
 
     @property
     def dispersion_diagnostic(self) -> typing.Any:
-        """Return the retained external-correction diagnostic, if present."""
+        """Return current native or compatibility correction-owner diagnostics."""
         self._ensure_open()
+        if self._native_dispersion is not None:
+            return self._native_dispersion.diagnostic()
         return (
             None
             if self._dispersion_batch is None
@@ -1387,7 +1431,14 @@ class PreparedBatch:
 
         correction_results = None
         if (
+            self._native_dispersion is not None
+            and any(compatibility_forces)
+            and self._dispersion_batch is None
+        ):
+            self._dispersion_batch = self._native_dispersion.compatibility_owner()
+        if (
             self._dispersion_batch is None
+            and self._native_dispersion is None
             and self._intrinsic_dispersion_energy
             and compute_forces
         ):
@@ -1455,6 +1506,14 @@ class PreparedBatch:
             dispersion = (
                 None if correction_results is None else correction_results[index]
             )
+            if (
+                succeeded
+                and self._native_dispersion is not None
+                and not compatibility_forces[index]
+            ):
+                dispersion = self._native_dispersion.result(
+                    index, native_compute_forces[index]
+                )
             dispersion_failure_message = None
             if succeeded and dispersion is not None and not dispersion.ok:
                 output.status = dispersion.status
@@ -1529,7 +1588,14 @@ class PreparedBatch:
                 if succeeded and native_compute_forces[index]
                 else None
             )
-            if succeeded and dispersion is not None and compute_forces:
+            if (
+                succeeded
+                and dispersion is not None
+                and compute_forces
+                and not (
+                    self._native_dispersion is not None and native_dft_forces[index]
+                )
+            ):
                 if dispersion.gradient is None:
                     raise RuntimeError(
                         "successful external correction omitted requested dE/dR"
@@ -1843,6 +1909,7 @@ class PreparedBatch:
 
     def close(self) -> None:
         """Release cached execution, correction, batch, context, and ledger resources."""
+        self._native_dispersion = None
         if self._snapshot_grid_cache is not None:
             self._snapshot_grid_cache.clear()
             self._snapshot_grid_cache = None

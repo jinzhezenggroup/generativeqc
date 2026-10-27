@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from generativeqc import _cuda_device, profiles
+from generativeqc import _cuda_device, _cuda_runtime, profiles
 from generativeqc.experimental import array_api as xp
 
 
@@ -95,12 +95,15 @@ def test_array_api_compiles_for_detected_or_explicit_target(
         cuda_adapter, "CudaCompilerAdapter", lambda *args, **kwargs: None
     )
     targets = []
+    preloaded = Mock()
+    monkeypatch.setattr(_cuda_runtime, "preload_cuda_runtime_libraries", preloaded)
 
     def compile_plan(plan: Any, compiler: Any, cache: Path) -> None:
         targets.append(plan.target.architecture)
 
     def prepare(plan: Any, artifact: Any, *, device: int) -> SimpleNamespace:
         assert device == 2
+        assert preloaded.called, "tensor JIT must resolve providers before dlopen"
         return SimpleNamespace(
             execute=lambda feeds: SimpleNamespace(outputs={"output": feeds["values"]}),
             close=lambda: None,
@@ -116,6 +119,7 @@ def test_array_api_compiles_for_detected_or_explicit_target(
     values = np.asarray([1.0, 2.0])
     compiled.lower(values)
     assert not probe.called
+    assert not preloaded.called
     compiled(values)
     assert targets == [explicit or "sm_86"]
     if explicit is None:

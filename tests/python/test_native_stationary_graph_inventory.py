@@ -140,7 +140,10 @@ const CudaStationaryBinding& native_stationary_profile_m06_2x_rks() {
 namespace generativeqc::methods::detail {
 struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
-  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{};
+  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{}, density_fitted_range_exchange{};
+  double short_range_exchange{}, long_range_exchange{}, range_omega{};
+  struct { double b{}, c{}, coefficient{1.0}; } nonlocal_parameters;
+  dft::SemilocalFamily semilocal_family{dft::SemilocalFamily::Pbe};
 };
 unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
 unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }

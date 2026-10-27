@@ -1093,12 +1093,29 @@ int main() {
     const double r2scan_rks_energy = result.energy;
     result.forces = forces.data();
     result.force_count = static_cast<uint32_t>(forces.size());
+    generativeqc_property_flags r2scan_properties{};
+    require(generativeqc_calculation_get_supported_properties_v1(calculation, &r2scan_properties) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "r2SCAN RKS prepared force capability query failed");
+    const bool r2scan_force_eligible = r2scan_properties & GENERATIVEQC_PROPERTY_FORCES;
+    forces.fill(1234.0);
     require(generativeqc_calculation_execute(calculation, &result) ==
-                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "r2SCAN RKS force request was not rejected");
-    detail = generativeqc_context_get_last_detail(fixture.context);
-    require(detail != nullptr && std::string(detail).find("issue #164") != std::string::npos,
-            "r2SCAN force rejection omitted its #164 capability boundary");
+                (r2scan_force_eligible ? GENERATIVEQC_STATUS_SUCCESS
+                                       : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+            "r2SCAN RKS force execution disagrees with its prepared capability");
+    if (r2scan_force_eligible) {
+      require(result.converged && std::abs(result.energy - r2scan_rks_energy) < 2e-12 &&
+                  std::all_of(forces.begin(), forces.end(),
+                              [](double value) { return std::isfinite(value); }),
+              "native r2SCAN RKS forces changed the energy or published nonfinite values");
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        require(std::abs(forces[axis] + forces[3 + axis]) < 2e-5,
+                "native r2SCAN RKS forces violate translation invariance");
+    } else {
+      require(
+          std::all_of(forces.begin(), forces.end(), [](double value) { return value == 1234.0; }),
+          "unqualified r2SCAN RKS context published partial forces");
+    }
     generativeqc_calculation_destroy(calculation);
 
     method = lda_method();
@@ -1199,8 +1216,9 @@ int main() {
                   GENERATIVEQC_STATUS_SUCCESS,
               "UKS prepared force capability query failed");
       const bool eligible = available & GENERATIVEQC_PROPERTY_FORCES;
-      require(!eligible || spin_method == GENERATIVEQC_METHOD_PBE_UKS,
-              "UKS widened the native force owner beyond canonical PBE");
+      require(!eligible || spin_method == GENERATIVEQC_METHOD_PBE_UKS ||
+                  spin_method == GENERATIVEQC_METHOD_R2SCAN_UKS,
+              "UKS widened the native force owner beyond canonical PBE/r2SCAN");
       forces.fill(1234.0);
       result.forces = forces.data();
       result.force_count = static_cast<uint32_t>(forces.size());

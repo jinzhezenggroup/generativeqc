@@ -250,6 +250,20 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::Calculation::Calculation-named-ks": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "ef03373f921546105a88c5ef181834a2091db5a9f00722b870159108f6fc1db8",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::Calculation::execute": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -901,6 +915,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::System::System-named-ks": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "9f9c7299ffd93d0d3068722de5d4383ac0d861dd3199a4b3f8c8a7b14b6c04a6",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::System::atom_count": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -992,6 +1021,22 @@
         "inputs",
         "lifetime",
         "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::prepare_named_ks": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "da29ae7e4f734673b59268ef1e5beb5c05d5a61ef5952fdab1e24d10ee439638",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
       ],
       "fields": [],
       "field_declarations": []
@@ -1422,6 +1467,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_batch_prepare_named_ks_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "cf80f38d76563b55cbecae93c645d2040beb4e0fe3bf03257c544b57089bd545",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_batch_prepare_with_device_resources": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -1788,6 +1849,22 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "db0fe476752e214d8b604b1ae524e1436fb7c3db8b3d9f58d5abfd4925687c41",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_calculation_prepare_named_ks_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "39b2d05c255686202dad12b71f92e1ac650b3977b42011bf39856eb73b3cdf28",
       "required_facets": [
         "behavior",
         "errors",
@@ -2834,6 +2911,22 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "967dedde3cb69b184171cf3232649892335206a92c4815f72252c19ae1f627aa",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_system_create_named_ks_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "8bcb53252193c008223676b30ec1d6b8e050d6545875393c9127a5df94027a95",
       "required_facets": [
         "behavior",
         "errors",

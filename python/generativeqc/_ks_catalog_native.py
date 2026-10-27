@@ -59,14 +59,22 @@ def select_catalog_plan(
     controls_start = _native.KsOptionsDescriptor.grid_version.offset
     controls_end = _native.KsOptionsDescriptor.spin_channels.offset
     extension_offset = ctypes.sizeof(_native.KsOptionsDescriptor)
+    budget_offset = _native.KsOptionsDescriptor.nonlocal_maximum_bytes.offset
     # The catalog owns only domain/scientific fields, not execution controls or
     # size-tagged application extensions beyond the stable descriptor prefix.
     if (
         after[:domain_offset] != before[:domain_offset]
         or after[controls_start:controls_end] != before[controls_start:controls_end]
         or after[extension_offset:] != before[extension_offset:]
+        or after[budget_offset:extension_offset]
+        != before[budget_offset:extension_offset]
     ):
         raise RuntimeError("native KS catalog changed caller execution controls")
+    from generativeqc_compiler.method import NonlocalCorrelationPrimitive
+
+    has_nonlocal = any(
+        isinstance(node, NonlocalCorrelationPrimitive) for node in method.primitives
+    )
     if (
         selected.value != 1
         or prefix.abi_version != _native.ABI_VERSION
@@ -75,7 +83,7 @@ def select_catalog_plan(
         or not prefix.semilocal_component_count
         or not prefix.semilocal_components
         or (prefix.exchange_term_count and not prefix.exchange_terms)
-        or prefix.has_nonlocal_correlation
+        or prefix.has_nonlocal_correlation != int(has_nonlocal)
     ):
         raise RuntimeError(
             "native KS catalog returned an inconsistent compiled program"

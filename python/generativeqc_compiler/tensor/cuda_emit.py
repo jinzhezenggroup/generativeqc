@@ -975,6 +975,12 @@ extern "C" int {_name(prefix, "tensor_static_initialize")}(void* pointer, const 
     std::unique_lock<std::mutex> lock(ctx.mutex, std::try_to_lock);
     if (!lock.owns_lock()) {{ error_text(error, size, "tensor plan is already executing"); return 1; }}
     bool uploading = false;
+    // Keep the owner device selected through failure-drain as well as upload;
+    // restore the caller's previous device only after the catch has completed.
+    generativeqc::runtime::CudaDeviceScope device_guard(ctx.device, std::nothrow);
+    if (device_guard.status() != cudaSuccess) {{
+        error_text(error, size, cudaGetErrorString(device_guard.status())); return 1;
+    }}
     try {{
         ctx.check_device();
         if (ctx.static_ready)
@@ -1029,6 +1035,11 @@ static int {_name(prefix, "tensor_run_impl")}(void* pointer, const void* const* 
     auto& ctx = *static_cast<GraphContext*>(static_cast<Context*>(pointer));
     std::unique_lock<std::mutex> lock(ctx.mutex, std::try_to_lock);
     if (!lock.owns_lock()) {{ error_text(error, size, "tensor plan is already executing"); return 1; }}
+    // Selection outlives error cleanup, which may still own queued host copies.
+    generativeqc::runtime::CudaDeviceScope device_guard(ctx.device, std::nothrow);
+    if (device_guard.status() != cudaSuccess) {{
+        error_text(error, size, cudaGetErrorString(device_guard.status())); return 1;
+    }}
     try {{
         ctx.check_device();
         if (!ctx.static_ready) throw std::runtime_error("tensor static data is not initialized");
@@ -1082,6 +1093,10 @@ extern "C" int {_name(prefix, "tensor_graph_configure")}(void* pointer, int enab
     auto& ctx = *static_cast<GraphContext*>(static_cast<Context*>(pointer));
     std::unique_lock<std::mutex> lock(ctx.mutex, std::try_to_lock);
     if (!lock.owns_lock()) {{ error_text(error, size, "tensor plan is already executing"); return 1; }}
+    generativeqc::runtime::CudaDeviceScope device_guard(ctx.device, std::nothrow);
+    if (device_guard.status() != cudaSuccess) {{
+        error_text(error, size, cudaGetErrorString(device_guard.status())); return 1;
+    }}
     try {{ ctx.configure_graph(enabled != 0, identity); return 0; }}
     catch (const std::exception& e) {{ error_text(error, size, e.what()); return 1; }}
 }}

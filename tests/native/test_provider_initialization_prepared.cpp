@@ -1,4 +1,5 @@
 // Exercise the actual C API publisher and resource owner with metadata-only factories.
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -7,6 +8,7 @@
 #include "api/device_resources.hpp"
 #include "api/handles.hpp"
 #include "api/provider_initialization_intent.hpp"
+#include "methods/named_ks_catalog.hpp"
 #include "methods/provider_initialization_intent.hpp"
 #include "methods/provider_initialization_lifetime.hpp"
 #include "runtime/resource_ledger.hpp"
@@ -61,7 +63,10 @@ generativeqc_device_resources* make_resources() {
 namespace generativeqc::methods {
 std::unique_ptr<PreparedCalculation> prepare_calculation(core::ContextState&, const core::System&,
                                                          const generativeqc_method_descriptor&,
-                                                         const core::System*) {
+                                                         const core::System*,
+                                                         const named_ks::Dispersion* dispersion,
+                                                         std::uint64_t dispersion_bytes) {
+  require(!dispersion && !dispersion_bytes, "legacy metadata factory received named dispersion");
   return std::make_unique<MetadataPlan>();
 }
 void prepare_calculation_with_provider_initialization_intent_into(
@@ -72,6 +77,13 @@ void prepare_calculation_with_provider_initialization_intent_into(
   destination = std::make_unique<MetadataPlan>();
 }
 const Capabilities* find_capabilities(generativeqc_method) noexcept { return nullptr; }
+namespace named_ks {
+// This fixture covers legacy/pending publisher ownership; actual named models
+// have their own native catalog and SDK qualification tests.
+const Method* find_method(std::string_view) noexcept { std::abort(); }
+void electronic_options(const Method&, generativeqc_ks_options&) noexcept { std::abort(); }
+void validate_bound_basis(const Method&, const core::System&) { std::abort(); }
+}  // namespace named_ks
 }  // namespace generativeqc::methods
 
 int main(int argc, char** argv) {

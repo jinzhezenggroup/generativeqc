@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/gcp_cuda.cu",
+  "role": "runtime",
+  "subsystem": "gcp",
+  "reason": "Bounded deterministic atom/pair traversal, resident buffers, status-gated publication and energy reduction. The pair scalar and radial derivative come from the shared audited gcp_r2scan3c.hpp contract.",
+  "regions": []
+}

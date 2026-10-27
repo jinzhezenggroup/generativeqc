@@ -203,6 +203,11 @@ cudaError_t consume_generated_full_range_energy_derivatives(
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell
  * traversal. */
+cudaError_t consume_generated_rsh_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double cj, double short_ck, double long_ck, double omega,
+    const std::function<void(const CudaDerivativeSourceView&)>& consumer);
+
 cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& plan, bool unrestricted,
                                                      const double* alpha, const double* beta,
                                                      double coulomb_coefficient,
