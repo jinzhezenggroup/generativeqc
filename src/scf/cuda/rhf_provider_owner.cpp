@@ -62,8 +62,15 @@ class NativePendingReferenceOwner final
     bucket_ = bucket;
     // The method already owns this inert state. The manual cell is established
     // before this call returns and before the driver creates any CUDA object.
-    if (!cell_.adopt(shared_from_this(), budget_))
-      throw ProviderInitializationUnavailable("pending reference retention cell is occupied");
+    try {
+      if (!cell_.adopt(shared_from_this(), budget_))
+        throw ProviderInitializationUnavailable("pending reference retention cell is occupied");
+    } catch (...) {
+      // Adoption has not changed either concrete retirement protocol on error.
+      // Leave the inert bucket with the driver's ordinary rollback deleter.
+      bucket_ = nullptr;
+      throw;
+    }
     retained_ = true;
   }
   CudaRhfBucketPlan* bucket() const noexcept override { return bucket_; }
@@ -244,7 +251,6 @@ class NativePendingReferenceOwner final
     return true;
   }
   void enter_explicit_retirement_protocol() {
-    bucket_->resources.enter_explicit_retirement_protocol();
     const auto weak = weak_from_this();
     bucket_->graphs.enter_provider_retirement(
         [weak] {
@@ -255,6 +261,9 @@ class NativePendingReferenceOwner final
         [weak](const std::string& op, std::optional<std::uint32_t> status) {
           if (auto self = weak.lock()) self->mark_uncertain(op, status);
         });
+    // Callback construction and graph inventory validation may allocate. Only
+    // after they succeed may the remaining no-throw resource transition commit.
+    bucket_->resources.enter_explicit_retirement_protocol();
   }
   ProviderInitializationTeardownReport close_current_context() {
     if (bucket_) return bucket_->resources.close_current_context(this);
