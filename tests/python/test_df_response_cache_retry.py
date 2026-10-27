@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cc_owner_test_support import compile_owner
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -296,24 +297,8 @@ def test_native_df_cache_retry_policy(tmp_path: Path) -> None:
     source = tmp_path / "df_cache_retry_policy.cpp"
     source.write_text(_HOST_CASES)
     binary = tmp_path / "df_cache_retry_policy"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O0",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-I" + str(ROOT / "src"),
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
+    # Production-style host compilation: verified sccache/ccache launcher.
+    compile_owner(compiler, tmp_path, [source], binary)
     subprocess.run(
         [str(binary)], check=True, capture_output=True, text=True, timeout=15
     )
