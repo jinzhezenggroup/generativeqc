@@ -249,7 +249,16 @@ def test_cpu_stationary_force_profiles_are_generated_admission_not_method_names(
             "semilocal_correlation": "1",
         }
     ]
-    assert not any(profiles[item] for item in ("Lda", "R2scan", "Wb97mv"))
+    assert not profiles["Lda"]
+    for family, exchange in (("R2scan", "0"), ("Wb97mv", "3/20")):
+        assert profiles[family] == [
+            {
+                "spins": [1, 2],
+                "exact_exchange": exchange,
+                "semilocal_exchange": "1",
+                "semilocal_correlation": "1",
+            }
+        ]
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
     start = source.index("bool supports_native_gga_force() const noexcept")
     end = source.index(

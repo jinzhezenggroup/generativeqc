@@ -703,6 +703,19 @@ typedef struct generativeqc_ks_options {
   uint64_t nonlocal_maximum_bytes;
 } generativeqc_ks_options;
 
+/** Select a complete build-time MethodIR program, including geometry-only
+ * dispersion. Strings are NUL-terminated and borrowed through preparation.
+ * identity may be NULL; otherwise it must match the exact 64-character MethodIR
+ * digest. A positive dispersion budget is required by corrected programs. For
+ * batches it bounds the aggregate correction owners, divided equally per item. */
+typedef struct generativeqc_named_ks_descriptor {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  const char* name;
+  const char* identity;
+  uint64_t dispersion_maximum_bytes;
+} generativeqc_named_ks_descriptor;
+
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
 /** @native-contract generativeqc_ks_options_version
  * @behavior Return the KS options schema version (currently 1).
@@ -3004,6 +3017,58 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_df_gradient_cuda(
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_system_create_named_ks_v1
+ * @behavior Create a system with the immutable orbital basis defining a named composite.
+ * @inputs context/input/name/output are required with current ABI headers. input supplies
+ * atoms, charge and multiplicity; shell/primitive pointers and counts must be zero. The
+ * method supplies representation. name follows exact named-program identity admission.
+ * @outputs Clears the output on entry; success publishes a normalized owned system.
+ * @lifetime Copies atoms and compiled basis data. The ordinary system destroy API applies.
+ * @errors Unbound or unavailable programs return NOT_IMPLEMENTED. Invalid atom/basis domains,
+ * ABI, allocation and system validation retain the ordinary system-construction statuses.
+ * @execution Synchronous native template expansion and normalization; no files or Python.
+ * @units Coordinates in Bohr, charge in electron-charge units.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* input,
+    const generativeqc_named_ks_descriptor* name, generativeqc_system** system);
+
+/** @native-contract generativeqc_calculation_prepare_named_ks_v1
+ * @behavior Prepare a complete compiled KS program, including its dispersion terms.
+ * @inputs context/system/descriptor/name/output are required. Both descriptors need ABI
+ * headers. descriptor.method must be the PBE_RKS/PBE_UKS transport carrier matching the
+ * named program's spin. ks_options, when supplied, contributes execution controls only;
+ * the catalog owns every scientific primitive. NULL ks_options selects level-3 quadrature,
+ * device-fused XC and a 256 MiB nonlocal budget.
+ * @outputs Clears the output slot on entry and publishes an owned calculation on success.
+ * @lifetime Copies all inputs; context must outlive the returned calculation.
+ * @errors Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
+ * and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
+ * actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
+ * @execution Synchronous native preparation, without Python, SCF or reference engines.
+ * @units Energy in Hartree, coordinates in Bohr, capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_batch_prepare_named_ks_v1
+ * @behavior Prepare a complete named KS program for an input-ordered native batch.
+ * @inputs systems/system_count and flags follow generativeqc_batch_prepare. The method and
+ * named descriptors follow generativeqc_calculation_prepare_named_ks_v1, including exact
+ * identity checks and execution-control-only ks_options.
+ * @outputs Clears the output slot on entry; success publishes one owning batch.
+ * @lifetime Copies inputs and retains the context, which must outlive the batch.
+ * @errors Uses the same fail-closed preparation statuses as the single-system endpoint.
+ * @execution Synchronous; replay and failure isolation use the ordinary native batch API.
+ * @units Coordinates in Bohr, energies in Hartree and capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, generativeqc_batch** batch);
 
 /** @native-contract generativeqc_calculation_prepare_with_device_resources
  * @behavior Prepare the same scientific calculation with native-owned device admission.

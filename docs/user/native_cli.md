@@ -224,7 +224,12 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
 
-For an explicitly bounded CUDA `run`, `--owned-device-bytes N` selects native
+Named KS methods currently reject an explicit `--owned-device-bytes` limit,
+including zero, before profile activation or native allocation. Their named
+preparation endpoint does not yet accept a device-resource owner; the limit is
+never silently ignored. Ordinary methods retain their native-owned resource path.
+
+For an ordinary-method CUDA `run`, `--owned-device-bytes N` selects native
 prepared admission for instrumented numeric buffers and retained provider
 reservations, including preparation and execution. It is **not** a total GPU,
 process RSS or complete-plan limit. A successful JSON result adds
@@ -344,10 +349,12 @@ The CLI method catalog is generated **at build time** from
 `generativeqc_compiler.method.spec.METHOD_CATALOG`, its upstream aliases, and
 `compile_ks_execution_plan`, not from handwritten method-name branches. The
 generated C++ constants carry the exact semilocal components, coefficients,
-full-range exchange contributions, SCF domain, spin and MethodIR identity.
+full-/short-/long-range exchange, nonlocal correlation, supported D3/D4 corrections,
+SCF domain, spin and MethodIR identity.
 The native method manifest remains the authority for stable C ABI IDs; these
-composition names are not new ABI IDs. C++ `KsComposition` and the CLI use the
-same native prepared-calculation owner.
+composition names are not new ABI IDs. CLI singlepoints and optimization use
+the [named C/C++ preparation API](native_cpp.md#complete-named-ks-programs), which
+owns complete method assembly and execution.
 
 ```bash
 generativeqc run molecule.xyz --method pbe0-rks --basis sto-3g \
@@ -375,16 +382,50 @@ Compiler-generated compositions accept `--grid-level 0..9`. Their existing
 select an explicit legacy version-1 tensor grid and cannot be combined with
 `--grid-level`. Native-manifest methods use the common native default.
 
-**Representation is not execution qualification.** Methods requiring
-unrepresented range-separated exchange, VV10/rVV10 nonlocal correlation,
-or a D3/D4/gCP/basis correction (such as WB97M-V or r²SCAN-3c) are currently
-listed as unavailable instead of silently dropping operators or returning a
-partial energy. Newly generated MethodIR rows do not automatically gain
-native capability: preparation remains authoritative.
+Canonical `wb97m-v-rks` and `wb97m-v-uks` execute their complete semilocal,
+short-/long-range exchange and self-consistent VV10 energy. Native D3(BJ),
+D3(BJ)-ATM, D3(0), and functional-specific D4-EEQ compositions use the generated
+parameter records and the same native KS owner. For example:
+
+```bash
+generativeqc run molecule.xyz --method wb97m-v-rks --basis def2-svp --json
+generativeqc run molecule.xyz --method 'pbe0-d3(bj)-rks' --basis def2-svp --forces --json
+generativeqc run molecule.xyz --method 'b3lyp-d4(bj-eeq-atm)-rks' --basis def2-svp --json
+```
+
+`--nonlocal-memory-bytes` and `--dispersion-memory-bytes` each default to
+256 MiB and bound their respective native owners. Zero or insufficient capacity
+fails the applicable calculation. Dispersion compositions require FP64. An
+energy-only request skips correction gradients; forces subtract the correction's
+`dE/dR` exactly once after the electronic stationary force. Corrected methods
+advertise forces only when their prepared electronic context qualifies. The
+resource dry-run currently rejects these complete compositions because its
+inventory does not include their additional owners.
+
+Canonical `r2scan-3c-rks` and `r2scan-3c-uks` run complete CPU/CUDA energies with the
+method-owned spherical H–Ar `def2-mTZVPP` basis, special D4-EEQ profile and gCP.
+Omit `--basis` or name `def2-mTZVPP`; the C API expands its compiled snapshot.
+Explicit local basis files are accepted only when their actual normalized data
+match that snapshot. A different basis or Cartesian representation fails.
+
+```bash
+generativeqc run molecule.xyz --method r2scan-3c-rks --backend cpu --json
+```
+
+Native r²SCAN-3c also admits complete analytic forces on qualified CPU Direct/DF
+and CUDA Direct contexts. CUDA evaluates gCP on device, alongside native D4;
+there is no host gCP numerical fallback in this named route. See its
+[capability contract](r2scan3c.md) for basis and derivative bounds.
+Canonical WB97M-V admits complete native Direct forces on CPU and CUDA in the
+bounded domain described below.
+Exact backend/basis/property preparation remains authoritative. Independent
+small-grid PySCF/correction references and reconverged energy differences check
+implementation parity, not grid convergence. Real-device named CLI qualification
+runs `tests/native/test_cli_cuda_named.py` inside a finite Slurm GPU allocation.
 
 ### Context-qualified native DFT analytic forces
 
-A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0 RKS/UKS and B3LYP RKS** force path composes
+A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0/r²SCAN RKS/UKS and B3LYP RKS** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -435,31 +476,53 @@ A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 
 Strict PBE0/RKS also admits the native d-shell force consumer for 24–384 AOs
-and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
+and 2–32 atoms. Strict r²SCAN RKS/UKS also admits s/p/d bases through checked native source,
+work and device-memory admission, including the defining r²SCAN-3c water basis. This exact executor improvement is shared with ordinary FP64;
 the Python [application precision policy](application_precision.md) separately
 selects budget-qualified FP32 arithmetic.
 
-CUDA DF DFT forces, ECP, remaining d/f-shell and correction-bearing MethodIR
-contexts are **not** enabled by this native CUDA CLI path, and CPU B3LYP UKS
-also remains unqualified. This is a statement about the native C force actions
-that the CLI can invoke; it is not a statement that the physics is unavailable.
-WB97M-V and other Python-composed stationary endpoints reach analytic forces
-through the execution-context layer documented in
+Canonical WB97M-V RKS/UKS forces include the complete short-/long-range
+exchange, meta-GGA, VV10 AO/point/weight response, moving grid and nuclear
+terms. Both backends require all-electron Direct and complete derivative sources.
+The former method-specific 8-atom, 64-AO and 8192-nonlocal-point admission
+windows have been removed. CPU retains s/p/d orbitals and the bounded Direct
+primitive/quadrature-work gate, and charges its per-atom range accumulator
+to the live numeric budget. CUDA admits s/p/d orbital sources with strict FP64,
+device-fused XC and three partition iterations. Its generated stationary executor
+still enforces implementation shape limits (128 atoms, 2048 AOs, 16384
+primitives and 4096-point tiles), the exact linked source and actual device
+memory budgets. These are executor limits, not evidence of numerical or timing
+qualification at every size. Separate XC and VV10 grids are supported, including Treutler grids.
+The nonlocal sub-budget and complete stationary device allowance both apply.
+For example, an implementation-parity calculation on a small explicit grid is:
+
+```bash
+generativeqc run h2.xyz --method wb97m-v-rks --basis sto-3g \
+  --backend cuda --grid-radial-points 8 --grid-polar-points 4 \
+  --grid-azimuth-points 8 --forces --json
+```
+
+These small grids do not establish production quadrature accuracy. Larger native
+contexts still require independent numerical and complete-endpoint qualification;
+missing sources, incompatible models or insufficient resources fail explicitly.
+CUDA DF DFT forces, ECP and remaining d/f-shell force contexts
+are **not** enabled by this native CUDA path. Named D3/D4 compositions retain
+their underlying electronic force gate. CPU B3LYP UKS
+also remains unqualified. Unsupported `--forces` requests fail before execution
+rather than publishing incomplete gradients. For Python execution-context routes, see
 [WB97M-V CUDA energy and forces](wb97mv_cuda.md) and
-[density-fitted DFT](../user/dft_density_fitting.md). Unsupported `--forces`
-requests fail before execution rather than publishing incomplete gradients. Run
+[density-fitted DFT](../user/dft_density_fitting.md). Run
 `python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
 under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
 finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
 linked symbols, but has no GPU and cannot supply numerical device evidence.
-Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
-RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
-context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
+Native **prepared batches** reuse the complete CPU/CUDA force consumers above
+only when every member has a qualified prepared context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
 native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
-whitelist in Python. Native CUDA and other Direct DFT batch forces
-remain separate work.
+whitelist in Python. Native batches publish forces only after the complete
+source inventory and final-state token pass their gates.
 See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation

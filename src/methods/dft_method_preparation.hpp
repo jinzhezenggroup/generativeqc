@@ -6,6 +6,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generativeqc/generativeqc.h"
+#include "methods/named_ks_catalog.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::core {
@@ -39,6 +40,10 @@ struct NativeKsExecutionPlan {
   bool generated_split_hybrid{};
   const dft::SemilocalPointProgram* automatic_program{};
   const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
+  /** Geometry-only terms do not change the electronic Hamiltonian/token.
+   * Their force is applied after the qualified stationary electronic force. */
+  named_ks::Dispersion dispersion{};
+  std::uint64_t dispersion_maximum_bytes{};
 };
 
 bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept;

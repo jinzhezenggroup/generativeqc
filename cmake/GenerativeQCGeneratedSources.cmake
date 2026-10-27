@@ -22,6 +22,8 @@ function(generativeqc_register_named_ks_catalog target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     DEPENDS ${_generativeqc_named_ks_inputs}
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/basis.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     COMMENT "Generating the shared MethodIR-owned native KS catalog")
 endfunction()
@@ -196,6 +198,24 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_cpu_derivative_dispatch.hpp"
          --enabled ${_generativeqc_stationary_dispatch_enabled}
     COMMENT "Generating native bindings to packaged stationary CPU derivatives")
+
+  set(_native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.hpp")
+  if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    list(APPEND _native_range_force_outputs "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_native_range_force.cpp")
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_native_range_force_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_range_force.py"
+    OUTPUTS ${_native_range_force_outputs}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/range_exchange_cpu.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+         --enabled ${_generativeqc_stationary_dispatch_enabled}
+    COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+    COMMENT "Packaging shared host range derivative for native forces")
 
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_DIRECTORY

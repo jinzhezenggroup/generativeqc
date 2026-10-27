@@ -1308,17 +1308,18 @@ int stationary_geometry_external_device_molecular_enqueue(
   });
 }
 
-int stationary_geometry_external_device_molecular_resident_weights_enqueue(
+static int stationary_geometry_external_device_molecular_resident_weights_to_source(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
     size_t owner_offset, size_t points_per_atom, const double* device_weights,
     const double* device_raw, const double* external_device, size_t external_stride,
-    size_t external_offset, char* error, size_t size) {
+    size_t external_offset, size_t source_slot, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !device_weights || !device_raw || !external_device ||
+        source_slot + 3 > stationary_source_count ||
         !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom) ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident-weight nonlocal geometry lease");
@@ -1338,7 +1339,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
                     external_stride, external_offset, geometry_lanes, p->partial, p->scratch,
                     p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * source_slot * p->atoms,
         p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
@@ -1350,6 +1351,17 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
+}
+
+int stationary_geometry_external_device_molecular_resident_weights_enqueue(
+    void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
+  return stationary_geometry_external_device_molecular_resident_weights_to_source(
+      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw,
+      external_device, external_stride, external_offset,
+      generativeqc_stationary_cuda::stationary_xc_source, error, size);
 }
 
 static int stationary_geometry_molecular_resident_weights_enqueue_impl(

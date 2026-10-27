@@ -2393,6 +2393,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                         native.DENSITY_FITTING_CPU_REFERENCE
                     )
                     calculator._method = native.METHOD_PBE_RKS
+                    calculator._dispersion_method_ir = None
                     calculator._composite_rks_second_order = False
                     calculator._library = SimpleNamespace(
                         generativeqc_system_create=capture_system,

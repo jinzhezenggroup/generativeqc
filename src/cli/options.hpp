@@ -40,6 +40,9 @@ struct RunOptions {
   bool representation_explicit{false};
   bool density_fitting_explicit{false};
   const method_generated::Method* composition{nullptr};
+  // A method-defined orbital template can also serve a cheaper Gaussian
+  // optimization stage; its source stays separate from that stage's model.
+  const method_generated::Method* basis_program{nullptr};
   bool grid_explicit{false};
   generativeqc::KsGrid grid{};
   bool forces{false};
@@ -62,6 +65,7 @@ struct RunOptions {
   double headroom_fraction{0};
   generativeqc_precision_mode precision{GENERATIVEQC_PRECISION_FP64};
   std::uint64_t correlation_memory_bytes{0}, density_fitting_memory_bytes{0};
+  std::uint64_t nonlocal_memory_bytes{256ull << 20}, dispersion_memory_bytes{256ull << 20};
   double density_fitting_threshold{1e-10}, mp2_denominator_threshold{1e-10};
   std::uint32_t ccsd_max_iterations{100}, ccsd_diis_history{6};
   double ccsd_energy_tolerance{1e-11}, ccsd_residual_tolerance{1e-9};
@@ -76,6 +80,14 @@ struct RunOptions {
   double optimization_max_step{0.35};  // Bohr per atom
   bool optimization_plan_only{false};
 };
+
+inline System create_method_basis_system(Context& context, std::span<const generativeqc_atom> atoms,
+                                         const RunOptions& options) {
+  const auto& program = *options.basis_program;
+  const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
+                                               program.name.data(), program.identity.data(), 0};
+  return System(context, atoms, named, options.charge, options.multiplicity);
+}
 
 // One policy for run/optimize and resource planning; independent of numerical
 // screening, which retains its existing CLI defaults. Correlated methods

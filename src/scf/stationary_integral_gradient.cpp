@@ -6,6 +6,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include "dft/ao_grid.hpp"
+#include "generated_native_range_force.hpp"
 #include "generated_stationary_integral_weights.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
@@ -215,6 +217,64 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   runtime::df_progress::number("eri_primitive_evaluations", result.primitive_evaluations);
   runtime::df_progress::label("eri_primitive_backend", "packaged_cpu_aot");
   runtime::df_progress::number("owned_numeric_capacity_bytes", result.numeric_capacity);
+  return result;
+}
+std::vector<double> cpu_stationary_range_correction(const PreparedFockPlan& target,
+                                                    const ResolvedFockBuild& correction,
+                                                    std::span<const double> density,
+                                                    std::span<const double> beta_density,
+                                                    std::size_t maximum_bytes) {
+  const auto& term = correction.spec.exchange;
+  const auto& primary = target.strategy();
+  const dft::AoBasis basis(target.system());
+  const auto n = basis.nao, matrix = n * n, nc = 3 * basis.natom;
+  const bool uks = primary.spec.spin == FockSpin::Unrestricted;
+  if (!native_range_force_available || term.omega != native_range_force_omega ||
+      correction.backend != FockBackend::Cpu || correction.spec.coulomb.present ||
+      correction.spec.spin != primary.spec.spin || !term.present ||
+      term.op != FockOperator::LongRange || term.approximation != FockApproximation::Exact ||
+      !std::isfinite(term.coefficient) || density.size() != matrix ||
+      (uks ? beta_density.size() != matrix : !beta_density.empty()) ||
+      !cpu_stationary_direct_force_work_admitted(target.system(), true, 0, 1))
+    throw std::invalid_argument("native CPU range force exceeds its operator/work domain");
+  constexpr std::size_t tile = 256;
+  std::vector<std::int64_t> indices;
+  std::vector<double> weights, result(nc), partial(nc);
+  indices.reserve(4 * tile);
+  weights.reserve(tile);
+  // The generated range derivative holds another O(natom) transactional vector.
+  const auto bytes =
+      runtime::size_add(runtime::vector_capacities(basis.packed, indices, weights, result, partial),
+                        runtime::size_mul(nc, sizeof(double)));
+  if (bytes > maximum_bytes) throw std::bad_alloc();
+  runtime::sample_cpu_capacity(bytes);
+  auto submit = [&] {
+    if (weights.empty()) return;
+    std::uint64_t visits[2]{};
+    if (generativeqc_native_range_force_cpu(basis.packed.data(), basis.natom, basis.nprimitive, n,
+                                            indices.data(), weights.data(), weights.size(), false,
+                                            partial.data(), visits))
+      throw std::runtime_error("native CPU range derivative failed");
+    for (std::size_t c = 0; c < nc; ++c) result[c] += partial[c];
+    indices.clear();
+    weights.clear();
+  };
+  for (std::size_t a = 0; a < n; ++a)
+    for (std::size_t b = 0; b < n; ++b)
+      for (std::size_t c = 0; c < n; ++c)
+        for (std::size_t d = 0; d < n; ++d) {
+          // Same ordered exchange cotangent as the full-range provider.
+          double pairing = density[a * n + c] * density[b * n + d];
+          if (uks) pairing += beta_density[a * n + c] * beta_density[b * n + d];
+          const double weight = 0.5 * term.coefficient * pairing;
+          if (weight == 0) continue;
+          indices.insert(indices.end(),
+                         {static_cast<std::int64_t>(a), static_cast<std::int64_t>(b),
+                          static_cast<std::int64_t>(c), static_cast<std::int64_t>(d)});
+          weights.push_back(weight);
+          if (weights.size() == tile) submit();
+        }
+  submit();
   return result;
 }
 }  // namespace generativeqc::scf

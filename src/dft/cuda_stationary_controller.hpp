@@ -34,7 +34,8 @@ class CudaStationaryController {
  public:
   CudaStationaryController(const core::System& system, const AoBasis& basis,
                            const MolecularGrid& grid, const CudaStationaryBinding& binding,
-                           int device, std::size_t tile_points, std::size_t maximum_device_bytes);
+                           int device, std::size_t tile_points, std::size_t maximum_device_bytes,
+                           const MolecularGrid* nonlocal_grid = nullptr);
   ~CudaStationaryController();
   CudaStationaryController(const CudaStationaryController&) = delete;
   CudaStationaryController& operator=(const CudaStationaryController&) = delete;
@@ -45,7 +46,9 @@ class CudaStationaryController {
                                const std::function<bool()>& token_current,
                                std::vector<double>& output, std::string& detail,
                                bool allow_spatial_default = false,
-                               scf::DirectForcePrecisionRequest* precision = nullptr);
+                               scf::DirectForcePrecisionRequest* precision = nullptr,
+                               const scf::ResolvedFockBuild* range = nullptr,
+                               const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:
@@ -61,5 +64,7 @@ class CudaStationaryController {
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
   std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;
   CudaStationaryResources resources_;
+  struct NonlocalOwner;
+  std::unique_ptr<NonlocalOwner> nonlocal_;
 };
 }  // namespace generativeqc::dft

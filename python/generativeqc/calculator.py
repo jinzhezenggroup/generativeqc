@@ -2063,6 +2063,32 @@ class Calculator:
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
         from . import _basis_builtin
 
+        if (
+            basis is None
+            and self._dispersion_method_ir is not None
+            and self._dispersion_method_ir.basis is not None
+            and hasattr(self._library, "generativeqc_system_create_named_ks_v1")
+        ):
+            from generativeqc_compiler.method.basis_binding import (
+                validate_basis_snapshot,
+            )
+
+            from ._named_ks import create_named_system, select_named_program
+
+            graph = self._dispersion_method_ir
+            validate_basis_snapshot(graph.basis, selected_basis)
+            name = select_named_program(
+                self._library,
+                graph,
+                _native.BACKEND_CUDA
+                if self._device_name == "cuda"
+                else _native.BACKEND_CPU_REFERENCE,
+            )
+            if name is not None:
+                return create_named_system(
+                    self._library, context, atoms, charge, multiplicity, name, graph
+                )
+
         correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
             "df_metric"
         )

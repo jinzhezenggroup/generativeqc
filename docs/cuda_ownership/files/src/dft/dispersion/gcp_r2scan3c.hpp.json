@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/gcp_r2scan3c.hpp",
+  "role": "scientific",
+  "subsystem": "gcp",
+  "reason": "Audited shared CPU/device r2SCAN-3c gCP overlap, pair energy and radial derivative mathematics with pinned H-Ar tables; independently checked against upstream and finite differences.",
+  "regions": []
+}

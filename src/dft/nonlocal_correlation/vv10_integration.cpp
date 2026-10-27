@@ -11,6 +11,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
+#include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "xc_cpu_generated.hpp"
 
@@ -201,6 +202,113 @@ SpinVv10Integral integrate_vv10_uks(const AoBasis& basis, const MolecularGrid& g
   result.potential[1] = std::move(common.potential);
   result.owned_numeric_bytes = runtime::add_capacity(
       common.owned_numeric_bytes, runtime::vector_capacities(total, result.potential[0]));
+  return result;
+}
+
+std::vector<double> stationary_vv10_derivative(const AoBasis& basis, const MolecularGrid& grid,
+                                               const std::vector<std::vector<double>>& density,
+                                               Vv10Plan& plan, std::size_t tile_points,
+                                               Vv10DensityDomain domain,
+                                               std::size_t maximum_bytes) {
+  if (density.size() != 1 && density.size() != 2)
+    throw std::invalid_argument("VV10 stationary density requires RKS or UKS");
+  for (const auto& block : density) validate_density(basis, grid, block, tile_points);
+  const auto n = basis.nao, points = grid.point_count(), nc = 3 * basis.natom;
+  if (plan.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+      plan.resources().point_count != points ||
+      (domain != Vv10DensityDomain::StrictPositive && domain != Vv10DensityDomain::MolecularV1))
+    throw std::invalid_argument("invalid CPU stationary VV10 pair plan/domain");
+  const auto elements =
+      runtime::size_add(runtime::size_add(runtime::size_mul(12, points),
+                                          runtime::size_mul(10 * std::min(tile_points, points), n)),
+                        runtime::size_add(n * n + 4 * n, 2 * nc));
+  if (runtime::size_mul(elements, sizeof(double)) > maximum_bytes) throw std::bad_alloc();
+  std::vector<double> total = density[0];
+  if (density.size() == 2)
+    for (std::size_t k = 0; k < total.size(); ++k) total[k] += density[1][k];
+  std::vector<double> rho(points), grad(3 * points), vrho(points), vsigma(points),
+      point(3 * points), weight(points), effective = grid.weights(), ao, result(nc), dphi(n),
+                                         djet(3 * n);
+  const auto& xyz = grid.points();
+  for (std::size_t begin = 0; begin < points; begin += tile_points) {
+    const auto count = std::min(tile_points, points - begin);
+    ao.resize(4 * count * n);
+    basis.evaluate(xyz.data() + 3 * begin, count, 1, 0, n, ao.data(), ao.size());
+    for (std::size_t p = 0; p < count; ++p)
+      accumulate_features(ao.data() + p * n, ao.data() + (count + p) * n,
+                          ao.data() + (2 * count + p) * n, ao.data() + (3 * count + p) * n, n,
+                          total, rho[begin + p], grad.data() + 3 * (begin + p));
+  }
+  // Preserve the original active-domain decision. A dummy density must never
+  // re-enter the weight derivative when its quadrature weight was masked out.
+  std::vector<unsigned char> active(points, 1);
+  for (std::size_t p = 0; p < points; ++p) {
+    if (!std::isfinite(rho[p]) || rho[p] < 0 ||
+        !std::all_of(
+            grad.begin() + 3 * p, grad.begin() + 3 * p + 3,
+            [](double x) { return std::isfinite(x); }))
+      throw std::domain_error("invalid stationary VV10 density/gradient");
+    if (domain == Vv10DensityDomain::MolecularV1 &&
+        rho[p] < generated::kMolecularVv10DensityThreshold) {
+      active[p] = 0;
+      effective[p] = 0;
+      rho[p] = 1;
+      std::fill_n(grad.data() + 3 * p, 3, 0.0);
+    }
+  }
+  double energy = 0;
+  std::string detail;
+  const auto status =
+      plan.execute(xyz, effective, rho, grad, energy, vrho, vsigma, point, weight, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS)
+    throw std::runtime_error(detail.empty() ? "stationary VV10 pairs failed" : detail);
+  constexpr unsigned hessian[3][3]{{4, 5, 6}, {5, 7, 8}, {6, 8, 9}};
+  const auto records = 3 * basis.natom + 2 * basis.nprimitive;
+  for (std::size_t begin = 0; begin < points; begin += tile_points) {
+    const auto count = std::min(tile_points, points - begin);
+    ao.resize(10 * count * n);
+    basis.evaluate(xyz.data() + 3 * begin, count, 2, 0, n, ao.data(), ao.size());
+    for (std::size_t local = 0; local < count; ++local) {
+      const auto p = begin + local;
+      if (!active[p]) {
+        weight[p] = 0;
+        continue;
+      }
+      const auto owner = static_cast<std::size_t>(grid.owners()[p]);
+      std::array<const double*, 10> jet{};
+      for (unsigned k = 0; k < 10; ++k) jet[k] = ao.data() + (k * count + local) * n;
+      std::fill(dphi.begin(), dphi.end(), 0);
+      std::fill(djet.begin(), djet.end(), 0);
+      for (std::size_t mu = 0; mu < n; ++mu)
+        for (std::size_t nu = 0; nu < n; ++nu) {
+          dphi[mu] += total[mu * n + nu] * jet[0][nu];
+          for (unsigned k = 0; k < 3; ++k) djet[3 * mu + k] += total[mu * n + nu] * jet[k + 1][nu];
+        }
+      for (unsigned axis = 0; axis < 3; ++axis) result[3 * owner + axis] += point[3 * p + axis];
+      for (std::size_t mu = 0; mu < n; ++mu) {
+        const auto center = static_cast<std::size_t>(basis.packed[records + 16 * mu]);
+        if (center == owner) continue;
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          double value = 2 * vrho[p] * jet[axis + 1][mu] * dphi[mu];
+          for (unsigned k = 0; k < 3; ++k)
+            value += 4 * vsigma[p] * grad[3 * p + k] *
+                     (jet[hessian[axis][k]][mu] * dphi[mu] + jet[axis + 1][mu] * djet[3 * mu + k]);
+          value *= effective[p];
+          result[3 * owner + axis] += value;
+          result[3 * center + axis] -= value;
+        }
+      }
+    }
+  }
+  const auto partition = grid.contract_weight_derivative(weight);
+  const auto bytes =
+      runtime::vector_capacities(total, rho, grad, vrho, vsigma, point, weight, effective, ao,
+                                 result, dphi, djet, active, partition);
+  if (bytes > maximum_bytes) throw std::bad_alloc();
+  runtime::sample_cpu_capacity(bytes);
+  for (std::size_t c = 0; c < nc; ++c) result[c] += partition[c];
+  if (!std::all_of(result.begin(), result.end(), [](double x) { return std::isfinite(x); }))
+    throw std::runtime_error("nonfinite stationary VV10 gradient");
   return result;
 }
 

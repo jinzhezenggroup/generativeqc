@@ -259,6 +259,17 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
                                                  generativeqc_batch_flags flags,
                                                  const core::System* auxiliary_basis = nullptr);
 
+/** Complete named composition, reusing the ordinary KS owner and final-state
+ * ports. Geometry corrections are computed and published inside its replay. */
+std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(
+    const Capabilities&, core::ContextState&, const core::System&,
+    const generativeqc_method_descriptor&, const core::System*, const named_ks::Dispersion&,
+    std::uint64_t maximum_bytes);
+std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(
+    const Capabilities&, core::ContextState&, std::vector<core::System>,
+    const generativeqc_method_descriptor&, generativeqc_batch_flags, const core::System*,
+    const named_ks::Dispersion&, std::uint64_t maximum_bytes);
+
 }  // namespace generativeqc::methods::detail
 
 #endif

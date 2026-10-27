@@ -37,6 +37,41 @@ struct KsGrid {
   std::uint64_t tile_points{256};
 };
 
+/** @native-contract generativeqc::prepare_named_ks
+ * @behavior Prepare a catalog KS graph, including range exchange, nonlocal correlation and
+ * dispersion when present. The native library owns scientific assembly and admission.
+ * @inputs name is a generated selector; identity optionally pins its exact MethodIR. method
+ * supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
+ * execution policy; this helper replaces method.ks_options with those controls.
+ * @outputs Returns one owned Calculation.
+ * @lifetime All inputs are copied at preparation; context must outlive the calculation.
+ * @errors Throws Error on unsupported methods, identity mismatch or native admission failure.
+ * @execution Synchronous, with no Python or external reference execution.
+ * @units Grid coordinates in Bohr, memory budgets in bytes.
+ */
+inline Calculation prepare_named_ks(Context& context, const System& system,
+                                    generativeqc_method_descriptor method, const std::string& name,
+                                    KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
+                                    std::uint64_t dispersion_bytes = 256ull << 20,
+                                    const char* identity = nullptr) {
+  generativeqc_ks_options options{};
+  options.struct_size = sizeof(options);
+  options.abi_version = GENERATIVEQC_ABI_VERSION;
+  options.grid_version = grid.version;
+  options.radial_points = grid.radial_points;
+  options.angular_polar = grid.angular_polar;
+  options.angular_azimuth = grid.angular_azimuth;
+  options.partition_iterations = grid.partition_iterations;
+  options.coincident_tolerance = grid.coincident_tolerance;
+  options.tile_points = grid.tile_points;
+  options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
+  options.nonlocal_maximum_bytes = nonlocal_bytes;
+  method.ks_options = &options;
+  const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
+                                               name.c_str(), identity, dispersion_bytes};
+  return Calculation(context, system, method, named);
+}
+
 /** Build a compiler-equivalent explicit KS composition in plain C++.
  *
  * This is a transport builder, not a second scientific functional registry:
