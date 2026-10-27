@@ -125,6 +125,13 @@ def test_native_schedule_target_energy_and_forces_against_pyscf(
     pyscf = pytest.importorskip("pyscf")
     from generativeqc import progressive_controller as controller
 
+    def forbidden_audit(*args: object, **kwargs: object) -> None:
+        raise AssertionError("native progressive endpoint used Python physical audit")
+
+    monkeypatch.setattr(
+        controller, "_audit_target_physical_residual_python", forbidden_audit
+    )
+
     def forbidden_policy(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("native progressive endpoint used Python final acceptance")
 
