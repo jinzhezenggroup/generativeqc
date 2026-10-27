@@ -54,6 +54,7 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
                                    Release release, bool* host_oom = nullptr) {
   if (host_oom) *host_oom = false;
   auto ledger = active_device_resource_ledger;
+  auto promise = active_device_capacity_promise;
   if (!ledger) return allocate();
   if (output == nullptr) return cudaErrorInvalidValue;
   *output = nullptr;
@@ -65,8 +66,7 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
   // call: a driver callback may destroy another registered resource.
   {
     std::lock_guard<std::mutex> lock(device_resource_mutex);
-    if (ledger->live > ledger->limit || ledger->provider_reserved > ledger->limit - ledger->live ||
-        bytes > ledger->limit - ledger->live - ledger->provider_reserved) {
+    if (!device_resource_claim(ledger, promise, bytes)) {
       ++ledger->rejected;
       return cudaErrorMemoryAllocation;
     }
@@ -85,12 +85,13 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
       const auto old = device_allocation_owners.find(*output);
       if (old != device_allocation_owners.end()) {
         old->second.ledger->live -= old->second.bytes;
+        device_resource_restore(old->second.promise, old->second.bytes);
         if (old->second.ledger->journal)
           old->second.ledger->journal->record(1, old->second.generation, old->second.bytes);
         device_allocation_owners.erase(old);
       }
       device_allocation_owners.emplace(
-          *output, DeviceAllocationOwner{ledger, bytes, ++device_allocation_generation});
+          *output, DeviceAllocationOwner{ledger, bytes, ++device_allocation_generation, promise});
       if (ledger->journal) ledger->journal->record(0, device_allocation_generation, bytes);
       ledger->peak = std::max(ledger->peak, ledger->live);
       ledger->admission_peak =
@@ -112,6 +113,7 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
   {
     std::lock_guard<std::mutex> lock(device_resource_mutex);
     ledger->live -= bytes;
+    device_resource_restore(promise, bytes);
     // Registry metadata can fail on the host after a successful CUDA call.
     // Preserve an unknown-space OOM in that case instead of authorizing a
     // device-specific retry based on a host bookkeeping failure.
@@ -160,6 +162,7 @@ inline void resource_cuda_forget(void* pointer, std::uint64_t generation) {
   const auto found = device_allocation_owners.find(pointer);
   if (found == device_allocation_owners.end() || found->second.generation != generation) return;
   found->second.ledger->live -= found->second.bytes;
+  device_resource_restore(found->second.promise, found->second.bytes);
   if (found->second.ledger->journal)
     found->second.ledger->journal->record(1, found->second.generation, found->second.bytes);
   device_allocation_owners.erase(found);

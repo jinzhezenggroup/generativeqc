@@ -34,10 +34,12 @@
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_precision.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
+#include "scf/ks_device_resources.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -46,7 +48,9 @@
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_xc.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/cuda_fock_execution.hpp"
@@ -431,6 +435,108 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   return binding;
 }
 
+/** Reserve the counted native CUDA owners before constructing any fleet item.
+ * The initial domain is strict all-electron s/p PBE/PBE0 Direct/DF, without
+ * preliminary guesses or independent corrections. Unsupported configurations
+ * and insufficient caps retain the incumbent admission path. This is a numeric
+ * and declared-provider bound, not a CUDA-context/opaque-runtime measurement.
+ */
+std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservation(
+    const std::vector<core::System>& systems, const NativeKsExecutionPlan& execution_plan,
+    const scf::ScfOptions& options, const dft::GridSpec& grid, generativeqc_backend backend,
+    const std::optional<core::System>& auxiliary) {
+#if GENERATIVEQC_HAS_CUDA
+  const auto ledger = runtime::active_device_resource_ledger;
+  if (!ledger || ledger->admission != runtime::DeviceResourceAdmission::NumericCap ||
+      backend != GENERATIVEQC_BACKEND_CUDA || systems.empty() ||
+      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
+      execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
+      execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
+      execution_plan.d4_correction || options.preliminary_guess || options.nonlocal_grid_spec ||
+      options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
+      options.incremental_direct_jk || !options.resolved_fock_build ||
+      std::any_of(options.application_precision_budget.begin(),
+                  options.application_precision_budget.end(), [](double v) { return v != 0; }) ||
+      std::getenv("GENERATIVEQC_EXPERIMENTAL_PBE_POINT_FP32") ||
+      std::getenv("GENERATIVEQC_EXPERIMENTAL_PBE_POINT_KEEP_DIIS"))
+    return {};
+  const auto& strategy = *options.resolved_fock_build;
+  const auto approximation = strategy.spec.coulomb.approximation;
+  if (!strategy.spec.coulomb.present || (approximation != scf::FockApproximation::Exact &&
+                                         approximation != scf::FockApproximation::DensityFitted))
+    return {};
+  for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange})
+    if (term->present && (term->approximation != approximation ||
+                          term->op != scf::FockOperator::FullRange || term->omega != 0))
+      return {};
+  scf::CudaKsDeviceFleetResources fleet;
+  for (const auto& system : systems) {
+    if (!system.ecp_terms.empty() ||
+        std::any_of(system.atoms.begin(), system.atoms.end(),
+                    [](const auto& atom) { return atom.ecp_core != 0; }) ||
+        std::any_of(system.shells.begin(), system.shells.end(),
+                    [](const auto& shell) { return shell.angular_momentum > 1; }))
+      return {};
+    const auto n = molecule::ao_count(system), cart = molecule::cartesian_ao_count(system);
+    const auto atoms = system.atoms.size(), shells = system.shells.size();
+    std::size_t primitives = 0, angular = 0;
+    for (const auto& shell : system.shells) {
+      primitives = runtime::size_add(primitives, shell.primitives.size());
+      angular = std::max(angular, std::size_t{shell.angular_momentum});
+    }
+    const auto points = dft::grid_point_count(system, grid);
+    const auto direct =
+        approximation == scf::FockApproximation::Exact
+            ? ks_provider_bytes(system, backend,
+                                ks_direct_derivative_order(strategy, backend, execution_plan))
+            : 0;
+    const auto aux = ks_auxiliary_for_system(system, auxiliary);
+    const auto fock = scf::prepared_fock_device_capacity(
+        system, aux ? &*aux : nullptr, strategy,
+        direct ? direct : ks_fitted_provider_budget(options, execution_plan, false), direct,
+        approximation == scf::FockApproximation::DensityFitted ? 1U : 0U,
+        ks_fitted_projection_reservation(system, execution_plan, strategy));
+    const auto xc = dft::cuda_xc_layout_shape(
+        atoms, primitives, n, points, ks_xc_functional_code(execution_plan),
+        execution_plan.spin_channels == 2, options.xc_tile_points, false,
+        dft::CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
+        options.semilocal_correlation_scale, true);
+    std::size_t stationary = 0;
+    if (approximation == scf::FockApproximation::Exact) {
+      const auto* binding =
+          native_cuda_stationary_binding(execution_plan, options, grid, true, angular, n, atoms);
+      if (!binding) return {};
+      const auto force = dft::cuda_stationary_capacity(*binding, atoms, n, primitives, points,
+                                                       options.xc_tile_points, false);
+      stationary = std::max(force.minimum_device_bytes, force.cached_device_bytes);
+    }
+    // The DIIS Gram diagnostic can be changed before a geometry rebuild.
+    // Reserve its full history-square buffer even when currently disabled.
+    const auto state = runtime::size_add(
+        dft::cuda_ks_state_bytes(n, execution_plan.spin_channels, options.diis_history,
+                                 strategy.spec.exchange.present),
+        runtime::size_mul(sizeof(double),
+                          runtime::size_mul(options.diis_history, options.diis_history)));
+    fleet.append({cart, atoms, shells, primitives, state,
+                  runtime::size_add(xc.device_bytes, dft::cuda_resident_grid_bytes(points, atoms)),
+                  fock.retained_response_bytes, dft::cuda_quadrature_bytes(atoms, points),
+                  scf::cuda_execution::MatrixLibraryOwner::provider_allowance(static_cast<int>(n)),
+                  0, true, stationary, stationary, fock.setup_bytes,
+                  scf::cuda_ks_one_electron_capacity(cart, atoms, shells, primitives, true)});
+  }
+  return runtime::DeviceCapacityReservation::try_create(ledger, fleet.inventory()[8]);
+#else
+  (void)systems;
+  (void)execution_plan;
+  (void)options;
+  (void)grid;
+  (void)backend;
+  (void)auxiliary;
+  return {};
+#endif
+}
+
 /** Retained scientific state for one item. Execution policy belongs to
  * KsPreparedBatch for both public single calculations and ragged batches. */
 class KsPreparedState final : public KsSingleOwnerPort {
@@ -438,12 +544,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
   KsPreparedState(Capabilities capabilities, core::System system,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device,
-                  const std::optional<core::System>& auxiliary)
+                  const std::optional<core::System>& auxiliary,
+                  const runtime::DeviceCapacityReservation* capacity)
       : capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
         backend_(backend),
+        capacity_(capacity),
         fock_(system_, auxiliary ? &*auxiliary : nullptr, *options_.resolved_fock_build, device,
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_provider_bytes(system_, backend,
@@ -619,6 +727,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   /** Explicit output/rebuild export. Ordinary CUDA replays keep this on device. */
   std::vector<double> warm_density() {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->warm_density();
 #endif
@@ -634,6 +743,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   std::optional<std::vector<double>> prepare_cold_initial_guess(
       scf::initial_guess::PreliminaryDiagnostic& diagnostic) const {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     if (!options_.preliminary_guess) return std::nullopt;
     scf::initial_guess::validate_preliminary_target(system_, fock_.strategy(), options_);
     diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
@@ -683,6 +793,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   generativeqc_status final_state_token(dft::CudaKsFinalStateToken& token,
                                         std::string& detail) const override {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->final_state_token(token, detail);
 #endif
@@ -700,6 +811,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                        bool compute_weighted_density,
                                        dft::VerifiedKsFinalState& state,
                                        std::string& detail) override {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->read_final_state(expected, compute_weighted_density, state, detail);
 #endif
@@ -736,6 +848,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   generativeqc_status resident_orbital_frame(const dft::CudaKsFinalStateToken& expected,
                                              dft::CudaKsResidentOrbitalFrameBinding& binding,
                                              std::string& detail, bool prepare) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     binding = {};
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
@@ -753,6 +866,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   generativeqc_status resident_fock_sources(const dft::CudaKsFinalStateToken& expected,
                                             dft::CudaKsResidentFockBinding& binding,
                                             std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     binding = {};
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->resident_final_fock_sources(expected, binding, detail);
@@ -764,6 +878,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   generativeqc_status resident_grid_reference(const dft::CudaKsFinalStateToken& expected,
                                               dft::CudaKsResidentGridBinding& binding,
                                               std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     binding = {};
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->resident_final_grid(expected, binding, detail);
@@ -776,6 +891,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                        const double*& alpha, const double*& beta,
                                        std::size_t& matrix_elements, unsigned& spins,
                                        void*& source_stream, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     device = -1;
     alpha = nullptr;
     beta = nullptr;
@@ -809,6 +925,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   generativeqc_status fixed_density_profile(const dft::CudaKsFinalStateToken& expected,
                                             KsFixedDensityProfile& profile, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     profile = {};
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
@@ -829,6 +946,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                     const double*& points, const double*& weights,
                                     const double*& atomic_weights, std::size_t& point_count,
                                     std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     device = -1;
     points = nullptr;
     weights = nullptr;
@@ -870,6 +988,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                                  int& device, const double*& density,
                                                  const double*& gradient, std::size_t& point_count,
                                                  void*& source_stream, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     device = -1;
     density = nullptr;
     gradient = nullptr;
@@ -901,6 +1020,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   generativeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
                                             KsDerivativeSnapshot& output, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     output = {};
     dft::VerifiedKsFinalState state;
 #if GENERATIVEQC_HAS_CUDA
@@ -924,6 +1044,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   generativeqc_status read_derivative_sources(const dft::CudaKsFinalStateToken& expected,
                                               KsDerivativeSnapshot& output, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     output = {};
     dft::CudaKsFinalStateToken current;
     const auto status = final_state_token(current, detail);
@@ -961,6 +1082,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       bool allow_mixed_rsh_primary = false,
       std::optional<std::size_t> one_electron_device_maximum_bytes = std::nullopt) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
@@ -1182,6 +1304,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>& density,
       const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) override {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
     if (!system_.ecp_terms.empty() ||
@@ -1263,6 +1386,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   generativeqc_status cuda_full_range_integral_derivatives(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     output.clear();
     if (!cuda_ || !system_.ecp_terms.empty() || range_strategy_ ||
@@ -1309,6 +1433,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                                 std::size_t additional_device_bytes,
                                                 std::array<std::uint64_t, 4>& receipt,
                                                 std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     receipt = {};
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_)
@@ -1323,6 +1448,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   generativeqc_status cuda_integral_gradient_additional_device_bytes(
       const dft::CudaKsFinalStateToken& expected, std::size_t& bytes, std::string& detail) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     bytes = 0;
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || backend_ != GENERATIVEQC_BACKEND_CUDA) {
@@ -1372,6 +1498,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>* cached_density,
       const std::vector<scf::reference::Matrix>* cached_weighted_density,
       std::span<const double> cpu_lr_correction = {}) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
     // AUTO retains its descriptor spelling after resolving a CUDA DF primary.
@@ -1619,6 +1746,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
       bool combined_two_electron = false) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
@@ -1828,6 +1956,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const dft::CudaKsFinalStateToken& expected, std::size_t maximum_device_bytes,
       std::vector<double>& output, dft::CudaStationaryResources& resources, std::string& detail,
       scf::DirectForcePrecisionRequest* precision = nullptr) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     resources = {};
     detail.clear();
 #if GENERATIVEQC_HAS_CUDA
@@ -2049,6 +2178,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
    * token-qualified stationary derivative sources and one complete force sink.
    * This is intentionally not a second batch-specific DFT force equation. */
   void add_prepared_native_forces(Result& result) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_);
     if (!supports_native_gga_force())
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
@@ -2377,6 +2507,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
   NativeKsExecutionPlan execution_plan_;
   scf::ScfOptions options_;
   generativeqc_backend backend_;
+  // Borrowed from the batch, whose promise outlives all geometry owners.
+  const runtime::DeviceCapacityReservation* capacity_{};
   scf::PreparedFockPlan fock_;
   std::optional<scf::ResolvedFockBuild> range_strategy_;
   std::unique_ptr<scf::PreparedFockPlan> range_correction_;
@@ -2425,6 +2557,8 @@ class KsPreparedBatch final : public PreparedBatch,
         warm_enabled_(warm_enabled),
         auxiliary_(std::move(auxiliary)),
         items_(systems_.size()) {
+    capacity_ = ks_device_capacity_reservation(systems_, execution_plan_, options_, grid_spec_,
+                                               backend_, auxiliary_);
     for (std::size_t i = 0; i < size(); ++i) {
       runtime::CpuRetainedCapacity neighbors(host_numeric_capacity());
       items_[i].plan = make_plan(systems_[i]);
@@ -2459,6 +2593,7 @@ class KsPreparedBatch final : public PreparedBatch,
    * SCF scheduler, warm policy, state generations and error isolation. */
   std::vector<BatchItemResult> execute_items(const Coordinates& coordinates, bool compute_forces,
                                              std::span<const std::uint8_t> selected_forces) {
+    runtime::DeviceCapacityScope capacity_scope(capacity_.get());
     const auto wants_forces = [&](std::size_t index) {
       return selected_forces.empty() ? compute_forces : selected_forces[index] != 0;
     };
@@ -2712,6 +2847,7 @@ class KsPreparedBatch final : public PreparedBatch,
   }
 
   void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
+    runtime::DeviceCapacityScope capacity_scope(capacity_.get());
     if (!warm_enabled_ || states.size() != size())
       throw std::invalid_argument("KS seed restore requires a matching warm-enabled batch");
     for (std::size_t i = 0; i < size(); ++i) {
@@ -3077,9 +3213,10 @@ class KsPreparedBatch final : public PreparedBatch,
   std::unique_ptr<KsPreparedState> make_plan(
       const core::System& system,
       std::optional<std::size_t> stationary_device_allowance = {}) const {
-    auto plan = std::make_unique<KsPreparedState>(capabilities_, system, execution_plan_, options_,
-                                                  grid_spec_, backend_, device_,
-                                                  ks_auxiliary_for_system(system, auxiliary_));
+    runtime::DeviceCapacityScope capacity_scope(capacity_.get());
+    auto plan = std::make_unique<KsPreparedState>(
+        capabilities_, system, execution_plan_, options_, grid_spec_, backend_, device_,
+        ks_auxiliary_for_system(system, auxiliary_), capacity_.get());
     if (stationary_device_allowance) {
       std::string detail;
       const auto status = plan->native_cuda_stationary_limit(*stationary_device_allowance, detail);
@@ -3102,6 +3239,8 @@ class KsPreparedBatch final : public PreparedBatch,
   int device_;
   bool warm_enabled_, warm_updates_{true};
   std::optional<core::System> auxiliary_;
+  // Declared before items: their allocations retire while the promise is open.
+  std::unique_ptr<runtime::DeviceCapacityReservation> capacity_;
   std::vector<Item> items_;
 };
 

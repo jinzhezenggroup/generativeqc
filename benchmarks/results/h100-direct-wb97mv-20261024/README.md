@@ -30,7 +30,10 @@ API allocation, source/environment/DSO, physical device and process birth witnes
 It imports no archived executable code. The archived platform witnesses prove
 what was observed during execution; this is not a live platform query.
 
-`summary.json` is derived output for inspection. It is never read as an oracle.
+`summary.json.xz` is the losslessly compressed derived output for inspection.
+Read it with `xz -dc summary.json.xz`; it is never read as an oracle.
+New reader runs still emit ordinary JSON. The decompressed snapshot retains
+SHA-256 `347da594e81adcec91e8a9161861d793b3cf0b12211fdef9a16f80bcff3959ea`.
 The original endpoint timer statements, scientific expressions and each process's
 immutable cold-density warm seed were preserved. Added retention occurs after
 the timer. Removing observer AST additions recovers the original statements;

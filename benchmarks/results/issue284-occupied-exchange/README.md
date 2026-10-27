@@ -8,7 +8,7 @@ Timed molecules are RHF water clusters with spherical def2-SVP, Naux = NAO, and 
 
 ## Fixed-density K
 
-Five dense/occupied pairs per domain, including density/factor upload and K readback. Offline orbital construction is outside the call. Setup, factor rank, explicit transfer sizes, full arrays and component traces are retained in `summary.json` and the raw archive.
+Five dense/occupied pairs per domain, including density/factor upload and K readback. Offline orbital construction is outside the call. Setup, factor rank, explicit transfer sizes, full arrays and component traces are retained in `summary.json.xz` and the raw archive.
 
 | Domain | AO / aux / rank | Dense (s) | Occupied (s) | Dense / occupied |
 |---|---:|---:|---:|---:|
@@ -44,7 +44,7 @@ All 50 endpoint pairs pass the energy/force gates. Matching dense/occupied itera
 
 All 16 cases and 80 raw VibeQC/GPU4PySCF warm pairs pass independent numerical checks, covering both policies, energy/force, 96/192 AOs and batch 1/4. Maximum energy error is 2.80806e-11 Eh, and maximum force error is 9.00003e-11 Eh/bohr. Cross-engine warm densities and iteration branches can differ, so this matrix does not establish an iteration-matched speed comparison.
 
-Full per-case timing, iteration arrays and energy/force errors are in `summary.json`. The fastest measured RI-K execution should be used in #246 crossover studies for its matching domain; complete endpoint results determine the default policy.
+Full per-case timing, iteration arrays and energy/force errors are in `summary.json.xz`. The fastest measured RI-K execution should be used in #246 crossover studies for its matching domain; complete endpoint results determine the default policy.
 
 ## Dense compatibility and resource boundaries
 
@@ -56,7 +56,7 @@ The initial implementation regressed the 192-AO dense energy endpoint by about 3
 
 ## Validation and retention
 
-`summary.json` records the exact validation counts and limitations. CPU/CUDA Release builds, host/native/resource/SCF tests, occupied reruns, memcheck (zero errors) and hooks pass. One existing CUDA MP2 status tier and six host-only optional GPU cases are explicitly skipped.
+`summary.json.xz` records the exact validation counts and limitations. CPU/CUDA Release builds, host/native/resource/SCF tests, occupied reruns, memcheck (zero errors) and hooks pass. One existing CUDA MP2 status tier and six host-only optional GPU cases are explicitly skipped.
 
 Value-plan diagnostics and declared DF budgets are capacity accounting, not measured global GPU peaks; opaque library retention is separate. Trace timings are diagnostic, and graph-capture records describe construction. The original input-preparation log predates a text-only symbol-to-integer-Z correction; input metadata/manifests hash the actual GPU inputs.
 
@@ -94,3 +94,10 @@ python tools/restore_retained_evidence.py benchmarks/results/issue284-occupied-e
 
 Archive restoration is only needed for historical raw-run inspection. New runs
 keep full logs, profiles and retries outside Git.
+
+## Lossless summary storage
+
+The tracked derived summary uses standard XZ. Read it with
+`xz -dc summary.json.xz`; its decompressed bytes retain SHA-256
+`11732d890034fcfc0edcdeae9ac7a5164b04924f341d71365430bba56a4c50d1`. New collection runs still write
+plain `summary.json`. Original observations and all acceptance results are unchanged.

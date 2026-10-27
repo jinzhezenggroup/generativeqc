@@ -4,10 +4,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import test_preliminary_cuda_control as preliminary_control
 from conftest import NativeCxx
 from test_preliminary_cuda_control import probe
 
-pytest_plugins = ("test_preliminary_cuda_control",)
+# Re-export the shared fixture explicitly. Registering a test module as a plugin
+# makes fixture discovery depend on whether that module was collected earlier.
+cuda_control_probe = preliminary_control.cuda_control_probe
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -26,9 +26,20 @@ struct CpuResourceObservation {
   std::uint64_t cuda_arena_samples{};
   /** Buffers retained by a synchronous outer owner, absent from item samples. */
   std::size_t outer_host_bytes{};
+  /** Nonzero begin identity; an inactive predecessor may be restored, but a later
+   * successful begin must never be mistaken for that predecessor's interval. */
+  std::uint64_t generation{};
 };
 
 inline thread_local CpuResourceObservation cpu_resource_observation;
+inline thread_local std::uint64_t cpu_resource_observation_generation{};
+
+/** Reserve a thread-local interval identity independently of restored snapshots.
+ * Exhaustion refuses a new begin rather than wrapping into a stale owner's ID. */
+inline std::uint64_t next_cpu_resource_observation_generation() noexcept {
+  if (cpu_resource_observation_generation == std::numeric_limits<std::uint64_t>::max()) return 0;
+  return ++cpu_resource_observation_generation;
+}
 
 inline std::size_t add_capacity(std::size_t first, std::size_t second) noexcept {
   const auto maximum = std::numeric_limits<std::size_t>::max();
@@ -62,15 +73,20 @@ inline void sample_cpu_capacity(std::size_t bytes) noexcept {
 class CpuRetainedCapacity {
  public:
   explicit CpuRetainedCapacity(std::size_t bytes) noexcept
-      : previous_(cpu_resource_observation.outer_host_bytes) {
+      : previous_(cpu_resource_observation.outer_host_bytes),
+        generation_(cpu_resource_observation.generation) {
     cpu_resource_observation.outer_host_bytes = add_capacity(previous_, bytes);
   }
-  ~CpuRetainedCapacity() { cpu_resource_observation.outer_host_bytes = previous_; }
+  ~CpuRetainedCapacity() {
+    if (cpu_resource_observation.generation == generation_)
+      cpu_resource_observation.outer_host_bytes = previous_;
+  }
   CpuRetainedCapacity(const CpuRetainedCapacity&) = delete;
   CpuRetainedCapacity& operator=(const CpuRetainedCapacity&) = delete;
 
  private:
   std::size_t previous_;
+  std::uint64_t generation_;
 };
 
 /** Samples owned direct-HF arenas; graph/driver allocations are excluded. */

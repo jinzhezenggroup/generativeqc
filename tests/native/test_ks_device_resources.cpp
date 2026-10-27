@@ -151,6 +151,22 @@ void test_df_setup_lifetime() {
   }
   require(refused && fleet.inventory() == before,
           "overflowing DF setup changed a previously admitted fleet");
+  item.fock_setup = 5000;
+  item.deferred_setup = 9000;
+  CudaKsDeviceFleetResources late;
+  late.append(item, 3);
+  require(late.inventory()[7] == 13050 && late.inventory()[8] == 13650,
+          "late derivative export borrowed storage from still-live SCF/Fock owners");
+  require(cuda_ks_one_electron_capacity(1, 1, 1, 1) == 448,
+          "shared one-electron capacity changed its existing small-shape envelope");
+  // Atoms may have no orbital shells. The paired bridge still uploads their
+  // charges/positions and retains both coordinate-major gradient outputs.
+  // This sparse topology exposes a missing second output hidden by AO storage
+  // in ordinary molecular bases.
+  constexpr std::uint64_t atoms = 1000;
+  const auto atom_payload = atoms * (sizeof(std::int32_t) + 9 * sizeof(double));
+  require(cuda_ks_one_electron_capacity(1, atoms, 1, 1, true) >= atom_payload,
+          "paired one-electron capacity omitted atoms outside the orbital space");
 }
 }  // namespace
 

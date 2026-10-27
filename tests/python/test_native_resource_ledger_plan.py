@@ -42,8 +42,9 @@ def selected_plan(estimates: tuple[ResourceEstimate, ...]) -> ResourcePlan:
 
 
 @pytest.mark.parametrize("seed", range(80))
+@pytest.mark.parametrize("prepared_kind", [None, "calculation", "batch"])
 def test_native_limit_matches_independent_lifetime_oracle(
-    library: Any, monkeypatch: pytest.MonkeyPatch, seed: int
+    library: Any, monkeypatch: pytest.MonkeyPatch, seed: int, prepared_kind: str | None
 ) -> None:
     randomizer = random.Random(seed)
     device = randomizer.choice((0, 7, 2**31 - 1))
@@ -72,7 +73,7 @@ def test_native_limit_matches_independent_lifetime_oracle(
         )
 
     monkeypatch.setattr(resources_native, "_account", forbidden_portable_accounting)
-    ledger = NativeDeviceLedger(library, plan)
+    ledger = NativeDeviceLedger(library, plan, prepared_kind=prepared_kind)
     try:
         assert ledger.device == device and ledger.limit == expected
         receipt = ledger.to_dict()
@@ -82,6 +83,9 @@ def test_native_limit_matches_independent_lifetime_oracle(
         }
         assert receipt["live_bytes"] == receipt["allocations"] == 0
         assert receipt["admission"]["limit_bytes"] == expected
+        if prepared_kind is not None:
+            assert ledger.prepared_call is not None
+            assert ledger.native_observation()["samples"] is None
     finally:
         ledger.close()
 

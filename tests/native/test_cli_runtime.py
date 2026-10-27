@@ -197,6 +197,36 @@ class RuntimeTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertNotIn("energy_hartree", result.stdout)
 
+    def test_owned_device_cap_is_run_only_and_never_falls_back_to_cpu(self) -> None:
+        arguments = (
+            str(SOURCE / "tests/data/h2_bohr.xyz"),
+            "--units",
+            "bohr",
+            "--method",
+            "rhf",
+            "--basis",
+            "sto-3g",
+            "--backend",
+            "cpu",
+            "--json",
+        )
+        ordinary = self.cli("run", *arguments)
+        self.assertEqual(ordinary.returncode, 0, ordinary.stderr)
+        payload = json.loads(ordinary.stdout)
+        self.assertNotIn("owned_device_resources", payload)
+        self.assertAlmostEqual(payload["energy_hartree"], -1.1167143251757694, places=9)
+        for limit in ("0", "4096"):
+            refused = self.cli("run", *arguments, "--owned-device-bytes", limit)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertNotIn('"energy_hartree"', refused.stdout)
+            self.assertTrue(refused.stderr)
+        for invalid in ("-1", "18446744073709551616", "not-bytes"):
+            refused = self.cli("run", *arguments, "--owned-device-bytes", invalid)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+        for command in ("resources", "hessian", "optimize"):
+            refused = self.cli(command, *arguments, "--owned-device-bytes", "4096")
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+
     def bundle(self) -> Path:
         directory = self.root / "bundle"
         directory.mkdir()

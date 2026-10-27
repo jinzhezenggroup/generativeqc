@@ -12,6 +12,10 @@
 #include "methods/method.hpp"
 #include "scf/types.hpp"
 
+namespace generativeqc::runtime {
+struct DeviceResourceLedger;
+}
+
 struct generativeqc_context {
   mutable std::recursive_mutex mutex;
   generativeqc::core::ContextState state;
@@ -68,6 +72,8 @@ inline bool valid_system_roles(const generativeqc_system& orbital,
 
 struct generativeqc_calculation {
   generativeqc_context* context{};
+  /** Survives metadata-handle close; declared first so the plan releases last charges. */
+  std::shared_ptr<generativeqc::runtime::DeviceResourceLedger> resource_ledger;
   std::unique_ptr<generativeqc::methods::PreparedCalculation> plan;
   /** How the precision policy resolved for the most recent successful run. */
   generativeqc::scf::PrecisionProvenance precision{};
@@ -86,6 +92,9 @@ struct generativeqc_calculation {
 
 struct generativeqc_batch {
   generativeqc_context* context{};
+  /** Declared before the scientific plan so providers/buffers release first.
+   * Frontend metadata handles may close without detaching retained charges. */
+  std::shared_ptr<generativeqc::runtime::DeviceResourceLedger> resource_ledger;
   std::unique_ptr<generativeqc::methods::PreparedBatch> plan;
   generativeqc_batch_flags flags{};
   std::vector<std::uint32_t> atom_counts;

@@ -333,6 +333,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   CudaXcAoSelectionWork prepared_ao_work;
   std::uint64_t initial_xc_evaluations{};
   std::unique_ptr<OrdinaryStreamEigensolver> eigensolver;
+  // Selected external inventories withhold this allowance independently.
+  // A native fleet promise instead converts its own credit into this lease.
+  std::optional<runtime::DeviceProviderAllowance> matrix_provider_allowance;
   scf::ScfResult output;
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
@@ -1843,11 +1846,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
-    // Public ledgers reserve dense XC, later fleet owners and force storage,
-    // not optional retained maps. Spare capacity is not a map allowance, even
-    // for an explicit request or an unlimited public ResourceBudget().
-    bool admit_ao = select_ao && !runtime::active_device_resource_ledger &&
-                    ao_selection_bound.host_peak_bytes <= ao_map_host_budget;
+    // Only a complete native promise protects later fleet/force owners. An
+    // externally selected inventory alone supplies no optional-XC authority.
+    const bool optional_xc_admitted =
+        !runtime::active_device_resource_ledger || runtime::active_device_capacity_promise;
+    const auto optional_device_capacity = [&]() {
+      runtime::DeviceUnpromisedCapacityScope optional_scope;
+      return optional_xc_admitted ? runtime::device_resource_available(device) : std::size_t{0};
+    };
+    // Maps share one arena with dense scratch. Charge that entire optional
+    // arena outside the promise, retaining its dense credit for fallback.
+    bool admit_ao = select_ao && optional_xc_admitted &&
+                    ao_selection_bound.host_peak_bytes <= ao_map_host_budget &&
+                    ao_selection_bound.device_bytes <= optional_device_capacity();
     if (host_unfused &&
         (options.semilocal_exchange_scale != 1.0 || options.semilocal_correlation_scale != 1.0))
       throw std::invalid_argument("scaled CUDA XC requires device-fused execution");
@@ -1966,12 +1977,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
+      if (runtime::active_device_capacity_promise)
+        matrix_provider_allowance.emplace(
+            device, MatrixLibraryOwner::provider_allowance(static_cast<int>(n)));
       check(matrix_products.prepare(stream, static_cast<int>(n), 1, static_cast<int>(spins),
                                     static_cast<int>(fock_binding.direct_nbf)),
             "CUDA KS matrix provider preparation failed");
       if (matrix_products.library_enabled())
         resource.provider_device_bytes =
             sum(resource.provider_device_bytes, MatrixLibraryOwner::kProviderAllowance);
+      else
+        matrix_provider_allowance.reset();
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
@@ -1983,7 +1999,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(runtime::resource_cuda_malloc(&nonlocal_xc_arena, nonlocal_xc_layout.device_bytes));
       if (resource.xc_device_bytes) {
         bool host_oom = false;
-        auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
+        const auto allocate_xc = [&]() {
+          return runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
+        };
+        auto status = cudaSuccess;
+        if (admit_ao) {
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          status = allocate_xc();
+        } else {
+          status = allocate_xc();
+        }
         if (admit_ao && status == cudaErrorMemoryAllocation && !host_oom) {
           const auto pending = cudaGetLastError();
           if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
@@ -2033,20 +2058,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
         // Keep the canonical resident quadrature for grid-response forces.
-        // The optional semilocal execution copy changes only point order and
-        // is excluded under a public ledger until a fleet planner reserves it.
+        // The optional semilocal execution copy changes only point order.
+        // Its allocation cannot consume any fleet member's mandatory credit.
         const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
         // Unset/1 keeps qualified center grouping; 2 is the explicit tile-aligned
         // bisection candidate. Explicit 0 keeps canonical execution order.
         const bool bisected = spatial_choice && std::string_view(spatial_choice) == "2";
         if ((!spatial_choice || std::string_view(spatial_choice) == "1" || bisected) && admit_ao &&
-            borrow_resident_grid && !nonlocal_correlation &&
-            !runtime::active_device_resource_ledger) {
+            borrow_resident_grid && !nonlocal_correlation && optional_xc_admitted) {
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
                                          sizeof(std::size_t)));
-          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes, bisected);
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
+          xc->prepare_spatial_grid(grid, host_bytes,
+                                   std::min(spatial_bytes, optional_device_capacity()), bisected);
           resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
         }
         if (admit_ao) {
@@ -2080,7 +2106,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         }
         // Default batching retains the compiler's bounded admission and the
         // one-tile fallback. Overrides keep the incumbent available for ablations;
-        // the public inventory currently reserves only incumbent XC storage.
+        // a complete native promise protects the incumbent XC storage.
         const auto point_batch_size = [](const char* name, std::size_t fallback) {
           const char* value = std::getenv(name);
           if (!value) return fallback;
@@ -2115,18 +2141,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
               point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0;
           const bool ragged_point_batches =
               point_batch_size("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", 1) != 0;
-          // A live public ledger also reserves later fleet owners and force
-          // workspace. Its currently unused bytes are not an optional allowance,
-          // even with an unlimited user budget. Keep the incumbent until a plan
-          // explicitly accounts for optional panels across those lifetimes.
+          // Reuse the compiler's bounded panel planner with only unpromised
+          // capacity. Allocation races retain its existing one-tile fallback.
+          runtime::DeviceUnpromisedCapacityScope optional_scope;
           xc->prepare_point_batches(point_batch_tiles,
-                                    runtime::active_device_resource_ledger ? 0 : point_batch_budget,
+                                    std::min(point_batch_budget, optional_device_capacity()),
                                     compact_point_batches, ragged_point_batches);
-          if (!explicit_point_batch_budget && !runtime::active_device_resource_ledger &&
+          if (!explicit_point_batch_budget && optional_xc_admitted &&
               automatic_point_batch_budget > incumbent_point_batch_budget &&
               xc->point_batch_plan().tiles == 1)
-            xc->prepare_point_batches(point_batch_tiles, incumbent_point_batch_budget,
-                                      compact_point_batches, ragged_point_batches);
+            xc->prepare_point_batches(
+                point_batch_tiles,
+                std::min(incumbent_point_batch_budget, optional_device_capacity()),
+                compact_point_batches, ragged_point_batches);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
@@ -2169,6 +2196,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_xc.reset();
     eigensolver.reset();
     matrix_products.reset();
+    matrix_provider_allowance.reset();
     if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
