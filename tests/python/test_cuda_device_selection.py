@@ -123,3 +123,28 @@ def test_array_api_compiles_for_detected_or_explicit_target(
     else:
         assert not probe.called
     compiled.close()
+
+
+@pytest.mark.parametrize("explicit", [None, "sm_90"])
+@pytest.mark.parametrize("operation", ["where", "comparison"])
+def test_unsupported_ir_is_rejected_before_device_discovery(
+    monkeypatch: pytest.MonkeyPatch, explicit: str | None, operation: str
+) -> None:
+    """Unsupported CUDA IR must fail even when no driver is available."""
+    from generativeqc_compiler.tensor import cuda_execute
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("unsupported IR reached a device or compiler")
+
+    monkeypatch.setattr(_cuda_device, "device_architecture", forbidden)
+    monkeypatch.setattr(profiles, "find_nvcc", forbidden)
+    monkeypatch.setattr(cuda_execute, "PreparedCuda", forbidden)
+    function = (
+        (lambda values: xp.where(values > 0, values, 0))
+        if operation == "where"
+        else (lambda values: values > 0)
+    )
+    compiled = xp.compile(function, backend="cuda", cuda_arch=explicit)
+    with pytest.raises(ValueError, match="where" if operation == "where" else "bool"):
+        compiled(np.ones(2))
+    compiled.close()

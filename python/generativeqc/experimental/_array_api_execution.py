@@ -90,8 +90,14 @@ class _Executor:
 
         architecture = self.options["cuda_arch"]
         if architecture is None:
+            from generativeqc_compiler.tensor.optimize import prepare_for_backend
+
             from generativeqc._cuda_device import device_architecture
 
+            # Reject architecture-independent unsupported IR before touching a
+            # driver. Keep the original program for the authoritative plan below
+            # so discovery does not change optimization or precision semantics.
+            prepare_for_backend(program, "cuda")
             architecture = device_architecture(self.options["device"])
         # An explicit target keeps planning independent of a device. Automatic
         # selection queries only device identity, without creating a context or
