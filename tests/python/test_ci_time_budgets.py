@@ -19,7 +19,7 @@ def _assert_cpu_budget(workflow: str) -> None:
     )
     assert match, "instrumented GCC needs time for cold build, tests, and coverage"
     coverage, plain = map(int, match.groups())
-    assert (coverage, plain) == (20, 15)
+    assert (coverage, plain) == (25, 15)
     assert "compiler: [gcc, clang]" in header
     assert "fail-fast: false" in header
     assert "continue-on-error:" not in header
@@ -118,6 +118,34 @@ def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
     _assert_cpu_budget(path.read_text())
 
 
+@pytest.mark.parametrize("compiler", ["gcc", "clang"])
+@pytest.mark.parametrize(
+    "event", ["pull_request", "merge_group", "schedule", "workflow_dispatch"]
+)
+def test_cpu_extended_budget_is_only_for_instrumented_gcc(
+    compiler: str, event: str
+) -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text().split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
+    )
+    budget = re.search(r"^    timeout-minutes: (.+)$", section, re.MULTILINE)
+    assert budget
+    context = {"matrix.compiler": compiler, "github.event_name": event}
+    instrumented = compiler == "gcc" and event != "merge_group"
+    assert expression(budget[1], context) == (25 if instrumented else 15)
+    for flag, enabled in (
+        (
+            "COVERAGE_COMPILE_FLAGS",
+            "-fprofile-arcs -ftest-coverage -fprofile-update=atomic",
+        ),
+        ("COVERAGE_LINK_FLAGS", "--coverage"),
+    ):
+        value = re.search(rf"^          {flag}: (.+)$", section, re.MULTILINE)
+        assert value
+        assert expression(value[1], context) == (enabled if instrumented else "")
+
+
 def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
     _assert_cpu_work_and_cache_lifecycle(path.read_text())
@@ -126,7 +154,8 @@ def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() 
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ("&& 20 || 15", "&& 19 || 15"),
+        ("&& 25 || 15", "&& 20 || 15"),
+        ("&& 25 || 15", "&& 25 || 25"),
         (
             "run: cmake --build build --parallel",
             "if: false\n        run: cmake --build build --parallel",

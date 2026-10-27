@@ -30,6 +30,19 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+@pytest.mark.parametrize("standard", ("c++17", "c++20"))
+def test_ledger_header_compiles_without_cmake_source_include_path(
+    tmp_path: Path, required_native_cxx: NativeCxx, standard: str
+) -> None:
+    """Offline generated providers include runtime headers without CMake's -I src."""
+    source = tmp_path / "ledger_header.cpp"
+    source.write_text(f'#include "{ROOT / "src/runtime/resource_ledger.hpp"}"\n')
+    required_native_cxx.compile_object(
+        source, tmp_path / "ledger_header.o", args=(f"-std={standard}",)
+    )
+
+
 CUDA_STUB = r"""
 #pragma once
 #include <cstddef>
@@ -58,7 +71,9 @@ DRIVER = r"""
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include "runtime/resource_cuda.cuh"
+#include "api/device_resources.hpp"
 
 extern "C" {
 void* generativeqc_resource_ledger_create_v1(std::size_t, int);
@@ -274,6 +289,161 @@ void failures(bool planned = false) {
   require(generativeqc_resource_ledger_read_v2(observation.handle, nullptr, 5) != 0, "null output");
 }
 
+// Exercise the real allocator wrapper and provider allowance with host CUDA
+// doubles. Promises must protect future owners, not merely today's live bytes.
+void capacity_reservations() {
+  generativeqc_device_resource_buffer_v1 row{128, 4, 0, 0, 0, 0};
+  generativeqc_device_resource_descriptor descriptor{
+      sizeof(descriptor), GENERATIVEQC_ABI_VERSION, &row, 1,
+      GENERATIVEQC_DEVICE_RESOURCE_NUMERIC_CAP};
+  generativeqc_device_resources* handle{};
+  require(generativeqc_device_resources_create(&descriptor, &handle) ==
+              GENERATIVEQC_STATUS_SUCCESS, "raw numeric-cap metadata creation failed");
+  std::unique_ptr<generativeqc_device_resources, decltype(&generativeqc_device_resources_destroy)>
+      owner(handle, generativeqc_device_resources_destroy);
+  auto ledger = generativeqc::api::device_resource_owner(handle);
+  const auto snapshot = [&](std::size_t numeric, std::size_t provider, std::size_t unused) {
+    generativeqc_device_resource_diagnostic value{};
+    value.struct_size = sizeof(value);
+    value.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc_device_resources_read(handle, &value) == GENERATIVEQC_STATUS_SUCCESS &&
+                value.admission == GENERATIVEQC_DEVICE_RESOURCE_NUMERIC_CAP &&
+                value.numeric_live_bytes == numeric && value.provider_reserved_bytes == provider &&
+                value.capacity_reserved_bytes == unused,
+            "public diagnostic conflated promises, numeric allocations or provider allowances");
+  };
+  DeviceResourceScope observation(ledger);
+  auto first = std::make_unique<DeviceCapacityReservation>(ledger, 80);
+  auto second = std::make_unique<DeviceCapacityReservation>(ledger, 32);
+  snapshot(0, 0, 112);
+  require(device_resource_available(0) == 16 && ledger->live == 0,
+          "future promises were reported as free or allocated");
+  bool rejected = false;
+  try { DeviceCapacityReservation extra(ledger, 17); }
+  catch (const std::bad_alloc&) { rejected = true; }
+  require(rejected && device_resource_available(0) == 16,
+          "over-limit promise modified available capacity");
+  require(!DeviceCapacityReservation::try_create(ledger, 17) &&
+              device_resource_available(0) == 16,
+          "optional promise admission changed capacity on a miss");
+  auto exact_capacity = DeviceCapacityReservation::try_create(ledger, 16);
+  require(exact_capacity && device_resource_available(0) == 0,
+          "optional promise admission refused its exact remaining capacity");
+  exact_capacity.reset();
+  snapshot(0, 0, 112);
+  void* optional{};
+  require(resource_cuda_malloc(&optional, 16) == cudaSuccess, "exact optional allowance");
+  void* denied{};
+  require(resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation && !denied,
+          "optional allocation consumed a later owner's promise");
+  void* retained{};
+  std::unique_ptr<DeviceProviderAllowance> provider;
+  {
+    DeviceCapacityScope scope(*first);
+    require(device_resource_available(0) == 80, "owner cannot use its promised capacity");
+    {
+      DeviceCapacityScope unpromised_owner(nullptr);
+      require(device_resource_available(0) == 0 &&
+                  resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
+              "nested owner without a promise borrowed another owner's capacity");
+    }
+    require(device_resource_available(0) == 80,
+            "unpromised nested owner lost its caller's promise");
+    {
+      DeviceUnpromisedCapacityScope optional_scope;
+      require(device_resource_available(0) == 0 &&
+                  resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
+              "optional scope borrowed its parent's mandatory promise");
+    }
+    require(device_resource_available(0) == 80, "optional scope lost its parent's promise");
+    require(resource_cuda_malloc(&retained, 64) == cudaSuccess, "promised numeric allocation");
+    provider = std::make_unique<DeviceProviderAllowance>(0, 16);
+    snapshot(80, 16, 32);
+    require(device_resource_available(0) == 0 && ledger->capacity_reserved == 32,
+            "numeric/provider charge did not convert its promise exactly once");
+    require(resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
+            "owner exceeded its declared bound");
+    {
+      DeviceCapacityScope nested(*second);
+      require(device_resource_available(0) == 32, "nested owner borrowed wrong promise");
+      void* temporary{};
+      require(resource_cuda_malloc_async(&temporary, 32, nullptr) == cudaSuccess,
+              "later owner was starved by optional storage");
+      require(resource_cuda_free_async(temporary, nullptr) == cudaSuccess &&
+                  device_resource_available(0) == 32, "rebuild capacity was not restored");
+    }
+    require(device_resource_available(0) == 0, "nested scope did not restore parent promise");
+  }
+  // Closing one metadata owner preserves both another owner's future and all
+  // allocations that outlive the closed promise; frees may happen elsewhere.
+  first.reset();
+  std::thread release([&] { resource_cuda_free(retained); provider.reset(); });
+  release.join();
+  snapshot(16, 0, 32);
+  require(ledger->live == 16 && ledger->provider_reserved == 0 &&
+              ledger->capacity_reserved == 32 && device_resource_available(0) == 80,
+          "late close/free leaked or resurrected a closed promise");
+  {
+    DeviceCapacityScope scope(*second);
+    void* pointer{};
+    require(resource_cuda_allocate(&pointer, 32, [] { return cudaErrorMemoryAllocation; },
+                                    [] { return cudaSuccess; }) == cudaErrorMemoryAllocation &&
+                device_resource_available(0) == 32, "driver rollback lost promised capacity");
+    const auto generation = device_allocation_generation;
+    device_allocation_generation = std::numeric_limits<std::uint64_t>::max();
+    bool host_oom = false;
+    require(resource_cuda_malloc(&pointer, 32, &host_oom) == cudaErrorMemoryAllocation && host_oom,
+            "registry failure was misclassified");
+    device_allocation_generation = generation;
+    require(!pointer && device_resource_available(0) == 32,
+            "registry rollback leaked promise or allocation");
+    // Address reuse retires the old generation once. A delayed free for that
+    // generation must not credit the new allocation or spend its capacity.
+    double storage{};
+    auto allocate = [&] { pointer = &storage; return cudaSuccess; };
+    auto noop = [] { return cudaSuccess; };
+    require(resource_cuda_allocate(&pointer, 8, allocate, noop) == cudaSuccess, "first address");
+    const auto old = resource_cuda_generation(pointer);
+    require(resource_cuda_allocate(&pointer, 16, allocate, noop) == cudaSuccess, "reused address");
+    const auto current = resource_cuda_generation(pointer);
+    resource_cuda_forget(pointer, old);
+    require(device_resource_available(0) == 16, "stale free restored reused capacity");
+    resource_cuda_forget(pointer, current);
+    require(device_resource_available(0) == 32, "current free did not restore capacity");
+    // A failed foreign-ledger bind leaves the active promise unchanged.
+    auto foreign = std::make_shared<DeviceResourceLedger>();
+    foreign->limit = 32;
+    DeviceCapacityReservation other(foreign, 32);
+    rejected = false;
+    try { DeviceCapacityScope invalid(other); }
+    catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected && device_resource_available(0) == 32, "foreign scope replaced owner");
+  }
+  second.reset();
+  snapshot(16, 0, 0);
+  require(ledger->capacity_reserved == 0 && device_resource_available(0) == 112,
+          "reservation close leaked unused capacity");
+  require(resource_cuda_free(optional) == cudaSuccess && device_resource_available(0) == 128,
+          "optional cleanup changed reservation accounting");
+  auto closing = std::make_unique<DeviceCapacityReservation>(ledger, 128);
+  {
+    DeviceCapacityScope scope(*closing);
+    closing.reset();
+    require(device_resource_available(0) == 0 &&
+                resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
+            "a closed promise was silently replaced with unbounded capacity");
+  }
+  require(device_resource_available(0) == 128, "closed scope failed to restore ordinary binding");
+  auto maximum = std::make_shared<DeviceResourceLedger>();
+  maximum->limit = std::numeric_limits<std::size_t>::max();
+  DeviceCapacityReservation near_limit(maximum, maximum->limit - 1);
+  rejected = false;
+  try { DeviceCapacityReservation overflowed(maximum, 2); }
+  catch (const std::bad_alloc&) { rejected = true; }
+  require(rejected && maximum->capacity_reserved == maximum->limit - 1,
+          "promise sum overflow admitted excess capacity");
+}
+
 void overflow() {
   Observation observation;
   auto ledger = active_device_resource_ledger;
@@ -302,6 +472,7 @@ int main(int argc, char** argv) {
     else if (scenario == "journal-lifetime") journal_lifetime();
     else if (scenario == "journal-loss") journal_loss();
     else if (scenario == "journal-reuse") journal_reused_address();
+    else if (scenario == "capacity-reservations") capacity_reservations();
     else throw std::runtime_error("unknown scenario");
     require(device_allocation_owners.empty(), "owners leaked");
     std::cout << scenario << " passed\n";
@@ -357,6 +528,8 @@ def ledger_probe(
         [
             ROOT / "src/api/c_api_resources.cpp",
             ROOT / "src/api/c_api_resource_ledger_plan.cpp",
+            ROOT / "src/api/c_api_device_resources.cpp",
+            ROOT / "src/api/error.cpp",
             ROOT / "src/runtime/resource_ledger_plan.cpp",
             ROOT / "src/runtime/resource_planning.cpp",
             source,
@@ -390,6 +563,7 @@ def ledger_probe(
         "journal-lifetime",
         "journal-loss",
         "journal-reuse",
+        "capacity-reservations",
     ),
 )
 def test_native_requested_byte_accounting(ledger_probe: Path, scenario: str) -> None:

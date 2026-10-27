@@ -1,20 +1,21 @@
 """Host-execute the actual resident-grid gate with explicit lease stand-ins."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_resident_grid_fallback_preserves_token_and_device_admission(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires host C++ compiler")
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
     begin = source.index("  generativeqc_status resident_grid(")
     end = source.index("  generativeqc_status resident_nonlocal_features(", begin)
@@ -23,6 +24,8 @@ def test_resident_grid_fallback_preserves_token_and_device_admission(
 #include <cassert>
 #include <cstddef>
 #include <string>
+#include "runtime/resource_ledger.hpp"
+namespace runtime = generativeqc::runtime;
 #define GENERATIVEQC_HAS_CUDA 1
 using generativeqc_status = int;
 constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=1,
@@ -59,14 +62,19 @@ struct GridOwner {
 struct Owner {
   DensityOwner density; DensityOwner* cuda_=&density;
   GridOwner grid_; scf::ScfOptions options_;
+  const runtime::DeviceCapacityReservation* capacity_{};
 """
     driver = r"""
 };
 int main() {
   for(bool host:{false,true})for(bool grid:{false,true})
   for(bool density:{false,true})for(bool stale:{false,true})
-  for(bool wrong_device:{false,true}) {
+  for(bool wrong_device:{false,true})for(bool bounded:{false,true}) {
+    auto ledger=std::make_shared<runtime::DeviceResourceLedger>();
+    ledger->limit=64; ledger->device=2;
+    runtime::DeviceCapacityReservation reservation(ledger,64);
     Owner owner;
+    if(bounded)owner.capacity_=&reservation;
     if(host)owner.options_.xc_execution_schedule=scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     owner.grid_.view.valid=grid;owner.grid_.view.device=wrong_device?3:2;
     owner.density.valid=density;
@@ -76,6 +84,8 @@ int main() {
     const int result=owner.resident_grid(token,device,points,weights,raw,count,detail);
     const int expected=stale?3:!density?2:!grid&&host?1:!grid||wrong_device?2:0;
     assert(result==expected);
+    assert(!ledger->active&&!runtime::active_device_resource_ledger&&
+           !runtime::active_device_capacity_promise&&ledger->capacity_reserved==64);
     assert(owner.density.calls==1&&owner.grid_.calls==int(!stale));
     if(result)assert(device==-1&&!points&&!weights&&!raw&&count==0);
     else assert(device==2&&points==owner.grid_.data&&weights==points+1&&raw==points+2&&count==3);
@@ -89,11 +99,9 @@ int main() {
 """
     unit, binary = tmp_path / "resident.cpp", tmp_path / "resident"
     unit.write_text(prefix + method + driver)
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(unit), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=["-std=c++20", "-O0", "-I", str(ROOT / "src")],
     )
     subprocess.run([str(binary)], check=True, timeout=10)

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/prepared_device_resources.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_ledger_plan.hpp"
 
@@ -52,17 +53,12 @@ int generativeqc_resource_ledger_create_from_buffers_v1(const std::uint64_t* buf
       capacities.push_back(
           {row[0], static_cast<std::size_t>(row[1]), row[2], row[3], row[4], bool(row[5])});
     }
-    const auto admission = resources::device_ledger_admission(capacities);
-    if (!admission) return 4;
-    if (admission->numeric_limit > std::numeric_limits<std::size_t>::max())
-      throw std::overflow_error("native device ledger capacity exceeds size_t");
-    auto ledger = std::make_unique<std::shared_ptr<DeviceResourceLedger>>(
-        std::make_shared<DeviceResourceLedger>());
-    (*ledger)->limit = static_cast<std::size_t>(admission->numeric_limit);
-    (*ledger)->device = admission->device;
-    receipt[0] = static_cast<std::uint64_t>(admission->device);
-    receipt[1] = admission->numeric_limit;
-    receipt[2] = admission->declared_peak;
+    auto owner = resources::prepare_device_resources(capacities);
+    if (!owner) return 4;
+    auto ledger = std::make_unique<std::shared_ptr<DeviceResourceLedger>>(std::move(owner));
+    receipt[0] = static_cast<std::uint64_t>((*ledger)->device);
+    receipt[1] = (*ledger)->limit;
+    receipt[2] = (*ledger)->declared_peak;
     *handle = ledger.release();
     return 0;
   } catch (const std::bad_alloc&) {

@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 17925,
-      "sha256": "8ce988d08730f9dea7e4cadaa889f01d3503baac71348602cedd0cee6452e5ec"
+      "bytes": 18283,
+      "sha256": "dd4f8fb3ab3acc310b33f3d5a4e0ead29368456d12dac2b150907432663b56c3"
     },
     {
       "path": "auxiliary-validation.json.xz",
@@ -68,9 +68,11 @@
       "sha256": "01b77c42cc2c42697c480f703d2dc2949c3faee96d8014f2d6a391f5650d332e"
     },
     {
-      "path": "summary.json",
-      "bytes": 94243,
-      "sha256": "2769aa31fa925425cffa2eca52e7ea0e1e7b703b7e4a0292e8f5cc9315937fb3"
+      "path": "derived/summary.json.xz",
+      "bytes": 12120,
+      "sha256": "1ed97e1d89dada77fae141ecafcceeb1c1def383f32632870beba0a772207c72",
+      "decoded_bytes": 94243,
+      "decoded_sha256": "2769aa31fa925425cffa2eca52e7ea0e1e7b703b7e4a0292e8f5cc9315937fb3"
     },
     {
       "path": "supporting-evidence.json.xz",

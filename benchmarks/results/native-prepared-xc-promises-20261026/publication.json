@@ -1,0 +1,183 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent science and bounded admission pass; original timing/work nonregression passes separately, without a significant-speedup promotion claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6027,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "2c813dce387d90347308be546fa91e2b0a2ddfbb3adac0d19df5904e48d20126"
+    },
+    {
+      "bytes": 35172,
+      "path": "blocks/abba-a1-cli.json.xz",
+      "role": "samples",
+      "sha256": "b7560a4b311252bdcbcb0219328e5257ec4ebf1e2e07d69f97ee6d57384021ad"
+    },
+    {
+      "bytes": 7592,
+      "path": "blocks/abba-a1-sdk.json.xz",
+      "role": "samples",
+      "sha256": "6e0ed05304e528547bdd69a6ee9abe7cf1cc9a3998738f2a82d593c4336be404"
+    },
+    {
+      "bytes": 35064,
+      "path": "blocks/abba-a2-cli.json.xz",
+      "role": "samples",
+      "sha256": "35cbadf144a8f51f00f866f8b85129944379ef227d9ef260d31fe403b7c292e1"
+    },
+    {
+      "bytes": 7648,
+      "path": "blocks/abba-a2-sdk.json.xz",
+      "role": "samples",
+      "sha256": "7821d7c25c19d828d10bd23f5128abbc712de34c461d6d134bbf6612b5c9557a"
+    },
+    {
+      "bytes": 37100,
+      "path": "blocks/abba-b1-cli.json.xz",
+      "role": "samples",
+      "sha256": "ebb2bc7fadd864e60bdfec6bad578d7c0fe0d9e95bc08198ec7e6d05faf54d24"
+    },
+    {
+      "bytes": 9772,
+      "path": "blocks/abba-b1-sdk.json.xz",
+      "role": "samples",
+      "sha256": "33d1fa13ee2565f897e5680c7c759735192fb5f707527439762a0959a5f91c48"
+    },
+    {
+      "bytes": 37020,
+      "path": "blocks/abba-b2-cli.json.xz",
+      "role": "samples",
+      "sha256": "dad7c80878fd9608fcb267d52c10f5cd6270c685b225cd02cd8906fc66739e15"
+    },
+    {
+      "bytes": 9700,
+      "path": "blocks/abba-b2-sdk.json.xz",
+      "role": "samples",
+      "sha256": "5dc2023d159bab7b40d5d9e8e6d34f95308f9c0fcaa753e31b69fa41a6a92af9"
+    },
+    {
+      "bytes": 35048,
+      "path": "blocks/baab-a1-cli.json.xz",
+      "role": "samples",
+      "sha256": "c8e5d5bdbf75f4c184e7a6a9452573cda6b0e0ba112e48411804e43441e99534"
+    },
+    {
+      "bytes": 7636,
+      "path": "blocks/baab-a1-sdk.json.xz",
+      "role": "samples",
+      "sha256": "11d5268a170e2ebd65630815f23c05aef4f25c8d529bb0910161562e8f32663f"
+    },
+    {
+      "bytes": 34840,
+      "path": "blocks/baab-a2-cli.json.xz",
+      "role": "samples",
+      "sha256": "0fd0bc45b51e646c1687438bbcd042b0063f1b9efc655b251495d5e36c77d8ca"
+    },
+    {
+      "bytes": 7548,
+      "path": "blocks/baab-a2-sdk.json.xz",
+      "role": "samples",
+      "sha256": "42ef3683badcb842566ee8f4d429c950c63e86d4378f291f7896dacbcf22a3b7"
+    },
+    {
+      "bytes": 36592,
+      "path": "blocks/baab-b1-cli.json.xz",
+      "role": "samples",
+      "sha256": "15329216b638dae514f09bd9b16b0d9863f2de201bdb06095be8629a326f7ba4"
+    },
+    {
+      "bytes": 9600,
+      "path": "blocks/baab-b1-sdk.json.xz",
+      "role": "samples",
+      "sha256": "4cd8a813ca45ae34ed5e031f0acba49b9ae2af8b88834276074176b3d0e2e294"
+    },
+    {
+      "bytes": 36728,
+      "path": "blocks/baab-b2-cli.json.xz",
+      "role": "samples",
+      "sha256": "23175827265cb23579e487aa6d6a85d6a7549c54ad5a51813ad9bb56fdd7a6b1"
+    },
+    {
+      "bytes": 9576,
+      "path": "blocks/baab-b2-sdk.json.xz",
+      "role": "samples",
+      "sha256": "a748fb53fdfb36497c0096bfb5783e8eb74ccf8b2066ad15e752296e5692ed6d"
+    },
+    {
+      "bytes": 59780,
+      "path": "candidate.patch.xz",
+      "role": "source-patch",
+      "sha256": "b9e007737a97e39d0f54ceb0838103d8bf11ab324b5283dfd6104c8b54f30b05"
+    },
+    {
+      "bytes": 26872,
+      "path": "controls.json.xz",
+      "role": "samples",
+      "sha256": "6f8bd60ae382fa54c7bb64564f296461a6407521df429b72a053947e01f6fad5"
+    },
+    {
+      "bytes": 1904,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "02da4e835ae12053c0fd423bbae8fdbe11c0a03c3b083d1be1f8b21377e25d04"
+    },
+    {
+      "bytes": 54820,
+      "path": "frozen-inputs.json.xz",
+      "role": "samples",
+      "sha256": "efb60b37dcf9245e4e975c0a9d924b9699876d095b9377cb30082306586e0b73"
+    },
+    {
+      "bytes": 64152,
+      "path": "frozen-sources.json.xz",
+      "role": "reproduction",
+      "sha256": "33695b6e2213f5e0fb53fb974e7e47d0979840fca191226dffc38d08a711ed90"
+    },
+    {
+      "bytes": 49360,
+      "path": "profiles.json.xz",
+      "role": "samples",
+      "sha256": "309d3bfc6876a2761ed18c976911603a9001c7091cf60c32b19efd698f2470fe"
+    },
+    {
+      "bytes": 2032,
+      "path": "references.json.xz",
+      "role": "input",
+      "sha256": "9b1539f460f4ee19d074b60e839424326c35fef30fbc4569594461d1d8ba2ac6"
+    },
+    {
+      "bytes": 20841,
+      "path": "replay.py",
+      "role": "reproduction",
+      "sha256": "fdf3bfee2148c1f0ce02a1b55970b2a24bd7f09d682f4201eff4b9282a898b3e"
+    },
+    {
+      "bytes": 4152,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "7551db0568d2dcd8f89f7d816d002f25ad8cf9e9a8d9f3ae2732239ca4f61e90"
+    },
+    {
+      "bytes": 3156,
+      "path": "summary.json.xz",
+      "role": "summary",
+      "sha256": "6a3a108dd136f2bdceb0d4368289c7049ef6ea2ea95356297c9168f35f65fd06"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "replay.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "1ec57de7eefd523f1a079351faf142fce6b74135"
+  }
+}

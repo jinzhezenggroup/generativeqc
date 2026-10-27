@@ -46,6 +46,7 @@ HARNESS = r"""
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/compiled_execution_region.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "scf/coulomb_exchange_work.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/target_fock_work.hpp"
@@ -54,6 +55,8 @@ namespace initial_guess = scf::initial_guess;
 namespace runtime {
 using generativeqc::runtime::CompiledExecutionBinding;
 using generativeqc::runtime::CompiledExecutionRegion;
+using generativeqc::runtime::DeviceCapacityReservation;
+using generativeqc::runtime::DeviceCapacityScope;
 struct ExecutionResourceSnapshot {};
 struct CpuRetainedCapacity { explicit CpuRetainedCapacity(std::size_t) {} };
 void sample_cpu_capacity(std::size_t) {}
@@ -300,6 +303,7 @@ struct Owner : PreparedBatch, BatchWarmStarts {
     std::optional<std::size_t> stationary_device_allowance;
   };
   std::vector<System> systems_{1};
+  std::unique_ptr<runtime::DeviceCapacityReservation> capacity_;
   std::vector<Item> items_{1};
   bool warm_enabled_{true}, warm_updates_{true};
   generativeqc_backend backend_{GENERATIVEQC_BACKEND_CUDA};
