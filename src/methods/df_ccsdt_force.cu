@@ -10,6 +10,7 @@
 #include "cc/phase_observation.hpp"
 #include "integrals/electron_interaction_source.hpp"
 #include "methods/df_ccsdt_force.hpp"
+#include "methods/df_ccsdt_retry_policy.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "posthf/capacity.hpp"
@@ -162,18 +163,17 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       reference_seed ? checked_mul(reference_seed->capacity(), sizeof(double)) : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
-  auto state =
-      replay_state
-          ? std::move(*replay_state)
-          : run_rccsd_native_state(
-                execution, system, descriptor, nullptr, reference_seed,
-                reference_experiment ? &reference_experiment->seed_fallback : nullptr,
-                checked_add(seed_bytes,
-                            checked_add(recycle_bytes,
-                                        physical_replay ? physical_replay->output_bytes : 0)),
-                &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2,
-                demand.df_reference, convergence);
+  auto state = replay_state
+                   ? std::move(*replay_state)
+                   : run_rccsd_native_state(
+                         execution, system, descriptor, nullptr, reference_seed,
+                         reference_experiment ? &reference_experiment->seed_fallback : nullptr,
+                         df_retry::attempt_reservation(
+                             seed_bytes, recycle_bytes,
+                             physical_replay ? physical_replay->output_bytes : 0, checked_add),
+                         &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit,
+                         derived_denominators, packed_diis, ccsd_mixed_precision,
+                         ccsd_mixed_switch_residual, demand.mp2, demand.df_reference, convergence);
   if (retained_host_bytes >= state.budget)
     throw std::length_error("DF correlation retained caller state exhausts complete budget");
   if (demand.mp2 && !state.df_mp2_mode) {
@@ -879,13 +879,8 @@ DFCCSDTResult run_df_ccsdt_native(
       system, auxiliary, descriptor, recycling ? recycling->storage_bytes() : 0,
       execution.cuda_requested() ? execution.device_id() : -1,
       !demand.df_reference && !diagnostic->disable_preconvergence && !diagnostic->initial_density);
-  const auto* const borrowed_seed = diagnostic->initial_density;
+  df_retry::RestoreSeed restore_seed(*diagnostic);
   if (!guess.density.empty()) diagnostic->initial_density = &guess.density;
-  struct RestoreSeed {
-    DFCCSDTReferenceExperiment* diagnostic;
-    const std::vector<double>* seed;
-    ~RestoreSeed() { diagnostic->initial_density = seed; }
-  } restore_seed{diagnostic, borrowed_seed};
   const auto finish = [&](DFCCSDTResult result) {
     result.primal.reference_seconds += guess.seconds;
     result.total_seconds = elapsed(started);
@@ -906,26 +901,8 @@ DFCCSDTResult run_df_ccsdt_native(
         diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
         lambda_resident_krylov, ccsd_mixed_switch_residual, demand, convergence);
   };
-  try {
-    return finish(attempt());
-  } catch (const MethodError& error) {
-    if (!had_retained_cache || !recycling->storage_bytes() ||
-        error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
-      throw;
-  } catch (const std::length_error&) {
-    if (!had_retained_cache || !recycling->storage_bytes()) throw;
-  } catch (const std::bad_alloc&) {
-    if (!had_retained_cache || !recycling->storage_bytes()) throw;
-  }
-  // The failed attempt has unwound every phase owner and drained its streams.
-  // A retained cache can constrain triples/Lambda/source as well as the primal.
-  // Release it before one complete cold retry; other physical/CUDA errors pass
-  // through unchanged, and a second resource failure propagates normally.
-  recycling->clear();
-  auto result = attempt();
-  result.recycling_discarded_primal_attempt = true;
-  result.total_seconds = elapsed(started);
-  return finish(std::move(result));
+  return df_retry::retry_retained_cache_once<MethodError>(
+      recycling, had_retained_cache, GENERATIVEQC_STATUS_OUT_OF_MEMORY, attempt, finish);
 }
 DFCCSDTResult run_df_correlation_group_native(
     runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
@@ -938,26 +915,18 @@ DFCCSDTResult run_df_correlation_group_native(
   // Strict mixed warmup costs a fresh FP64 iteration/history. Lambda's shared
   // transpose contractions amortize that work earlier than energy-only CCSD.
   // Small strict endpoints retain FP64; explicit Mixed remains an ablation.
-  const auto n = molecule::ao_count(system);
-  const std::size_t o = system.electron_count > 0 ? system.electron_count / 2 : 0;
-  const auto v = n > o ? n - o : 0;
-  const bool automatic_shape =
-      forces ? o >= 9 && v >= 48 : cc::default_df_ccsd_mixed_precision(o, v);
-  const bool mixed =
-      !demand.mp2 && (preconvergence == core::DfPreconvergence::Mixed ||
-                      (preconvergence == core::DfPreconvergence::Legacy && convergence.relaxed()) ||
-                      (preconvergence == core::DfPreconvergence::Automatic &&
-                       (convergence.relaxed() || automatic_shape)));
-  const bool lambda_mixed = mixed && forces;
-  // The experimental Lambda owner halves the requested cap for its shared
-  // FP32 scratch epoch. Compensate here to preserve the ordinary Q32 ceiling
-  // for the later FP64 solve/audit. Its bounded planner may still choose less.
-  const std::size_t lambda_cap = lambda_mixed ? 64 : 32;
-  const double mixed_switch = std::max(cc::SolverOptions{}.df_mixed_precision_switch_residual,
-                                       100.0 * convergence.cc_residual());
+  const auto selection = df_retry::select_group_schedule(
+      forces, demand.mp2, molecule::ao_count(system), system.electron_count, preconvergence,
+      convergence, cc::SolverOptions{}.df_mixed_precision_switch_residual,
+      [](std::size_t occupied, std::size_t virtuals) {
+        return cc::default_df_ccsd_mixed_precision(occupied, virtuals);
+      });
+  // Preserve strict FP64 replay/audit after a mixed Lambda epoch. The planner
+  // may select a smaller Q than the requested upper limit.
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, lambda_cap, 0, {}, true, false, true, false, true, {}, 30,
-                             true, true, true, nullptr, true, mixed, lambda_mixed, false,
-                             mixed_switch, demand, convergence);
+                             true, true, selection.lambda_batch_limit, 0, {}, true, false, true,
+                             false, true, {}, 30, true, true, true, nullptr, true,
+                             selection.mixed_ccsd, selection.mixed_lambda, false,
+                             selection.mixed_switch_residual, demand, convergence);
 }
 }  // namespace generativeqc::methods::detail
