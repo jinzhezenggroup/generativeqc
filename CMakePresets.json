@@ -36,6 +36,38 @@
       }
     },
     {
+      "name": "cuda-release-sm70",
+      "displayName": "CUDA release (sm_70) \u2014 V100",
+      "description": "Production sm_70 AOT manifest for V100, derived from cuda-release-sm120.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cuda-release-sm70",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "70",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+        "GENERATIVEQC_AOT_PROFILE": "sm_70"
+      }
+    },
+    {
+      "name": "cuda-release-sm80",
+      "displayName": "CUDA release (sm_80) \u2014 A100",
+      "description": "Production sm_80 AOT manifest for A100, derived from cuda-release-sm120.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cuda-release-sm80",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "80",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+        "GENERATIVEQC_AOT_PROFILE": "sm_80"
+      }
+    },
+    {
       "name": "cuda-release-cli-sm120",
       "displayName": "Standalone native CUDA CLI distribution (sm_120)",
       "description": "Single native C++/CUDA executable: production AOT compiled into core, no Python-only stationary plug-ins; ccache/PCH enabled.",
@@ -67,6 +99,14 @@
     {
       "name": "cuda-release-sm120",
       "configurePreset": "cuda-release-sm120"
+    },
+    {
+      "name": "cuda-release-sm70",
+      "configurePreset": "cuda-release-sm70"
+    },
+    {
+      "name": "cuda-release-sm80",
+      "configurePreset": "cuda-release-sm80"
     },
     {
       "name": "cuda-release-cli-sm120",

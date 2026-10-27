@@ -8,6 +8,8 @@ __pycache__/
 *.dll
 *.egg-info/
 /.venv/
+# tools/scc/env.sh places the site venv inside the checkout.
+/.venv-scc/
 /_references/
 /.artifacts/
 # Current CUDA ownership is derived from source + the semantic ledger and belongs
