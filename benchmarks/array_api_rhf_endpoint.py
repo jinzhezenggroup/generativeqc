@@ -64,13 +64,17 @@ def main() -> None:
     )
     parser.add_argument("--molecule", choices=("h2", "water"), default="water")
     parser.add_argument("--basis", default="sto-3g")
-    parser.add_argument("--cuda-arch", default="sm_120")
+    parser.add_argument("--cuda-arch", help="default: detect the selected visible GPU")
     parser.add_argument("--repeats", type=int, default=10)
     parser.add_argument("--output", type=raw_output_path)
     arguments = parser.parse_args()
     if not 3 <= arguments.repeats <= 100:
         parser.error("--repeats must lie in [3, 100]")
     _scheduler_guard(arguments.backend)
+    if arguments.backend == "cuda" and arguments.cuda_arch is None:
+        from generativeqc._cuda_device import device_architecture
+
+        arguments.cuda_arch = device_architecture()
     if arguments.profile_molecular:
         os.environ["GENERATIVEQC_ARRAY_API_PROFILE"] = "1"
     if arguments.molecule == "h2":
