@@ -68,6 +68,10 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
     assert content.count(addition) == 1
     old_selector = tmp_path / "original-selector.sh"
     old_selector.write_text(content.replace(addition, "", 1), encoding="utf-8")
+    shutil.copyfile(
+        selector.with_name("ci_prioritize_posthf_files.sh"),
+        old_selector.with_name("ci_prioritize_posthf_files.sh"),
+    )
 
     def run(path: Path, shard: str) -> tuple[str, list[str], list[str], list[str]]:
         script = f"source {shlex.quote(str(path))}\n"
@@ -89,7 +93,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
         fields = result.stdout.decode().split("\0")[:-1]
         ci = fields.index("--coverage--")
         ei = fields.index("--extra--")
-        return fields[0], fields[1:ci], fields[ci + 1:ei], fields[ei + 1:]
+        return fields[0], fields[1:ci], fields[ci + 1 : ei], fields[ei + 1 :]
 
     old = {shard: run(old_selector, shard) for shard in SHARDS}
     new = {shard: run(selector, shard) for shard in SHARDS}
@@ -103,9 +107,7 @@ def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> 
     assert old_counts[module] == 1
     original_owners = [shard for shard in SHARDS if module in old[shard][1]]
     assert len(original_owners) == 1 and original_owners[0].startswith("core-")
-    assert [shard for shard in SHARDS if module in new[shard][1]] == [
-        "runtime-heavy"
-    ]
+    assert [shard for shard in SHARDS if module in new[shard][1]] == ["runtime-heavy"]
     for shard in SHARDS:
         assert old[shard][0] == new[shard][0]  # distribution
         assert old[shard][2] == new[shard][2]  # coverage
