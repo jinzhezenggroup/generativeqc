@@ -1,0 +1,75 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "d2d6b91eefb0928b69f47cb2d6ab16cd0ef892c9",
+    "dirty": true
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "replay.py"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "reproduction",
+      "bytes": 5689,
+      "sha256": "f940325fcde04395f2953d999cecda476766adb75b6a10143c416b44deaaa221"
+    },
+    {
+      "path": "candidate.patch.xz",
+      "role": "source-patch",
+      "bytes": 16384,
+      "sha256": "abf9e984e19e3db07ec7c10c74caa9efd9b2daf2d527b1346d50f2b4c3aa8ca0"
+    },
+    {
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "bytes": 1920,
+      "sha256": "a805ad7b18c978b87b662bd4d0151a60368e7c01d37b4c73e0a9a202aa54ee3a"
+    },
+    {
+      "path": "frozen-sources.json.xz",
+      "role": "reproduction",
+      "bytes": 11284,
+      "sha256": "f48b2529e2b871a178c7cd90fc796ee45c9e1ffd78d702c862c6b0c336e49d4b"
+    },
+    {
+      "path": "head-validation.json.xz",
+      "role": "reproduction",
+      "bytes": 16316,
+      "sha256": "ae950c681454d9a410b64eca87ac1b3b63586ba1e90cea1a1905404019e118df"
+    },
+    {
+      "path": "reference.json.xz",
+      "role": "input",
+      "bytes": 3652,
+      "sha256": "e4b9c95bf68804a8bef6b2f853863086985c834279b77bd652eda2639a7bb89b"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 8203,
+      "sha256": "0fd4ab7ea7f5a6c43bf7aaa60f31bb181d7c2a0067484711da362d6b864f3ca6"
+    },
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "bytes": 12224,
+      "sha256": "23c9ce23c3775f2cbe9d35bc86f1df5e05c4e9297fc9a7d39ea8651c2e241670"
+    },
+    {
+      "path": "summary.json.xz",
+      "role": "summary",
+      "bytes": 32828,
+      "sha256": "ca533ec4358230291a4b68507e6174f08bb7fcab814e441a1411445ad6520870"
+    }
+  ],
+  "archives": [],
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "All independent E/F/D gates pass; all eight original 1.05 endpoint nonregression gates pass separately without a significant-speedup claim."
+  }
+}
