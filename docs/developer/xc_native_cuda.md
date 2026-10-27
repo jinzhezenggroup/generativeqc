@@ -114,14 +114,15 @@ semicolon-separated list of exact structural registration names, for example
 must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
 remains off by default. Selected entries retain their original codes,
-mathematical/source identities and ordinary/batched providers. Omitted entries
+scientific contracts and ordinary/batched providers. Packaged source identities
+record their actual entry-point sets. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
 or reordered requests do not change structural shard order. Regeneration
 rewrites all shards, removing omitted dispatch cases from shrinking packages.
 Selection controls installed artifact content, not scientific admission,
-public capability promotion, executable alias reuse or a complete persistent
-binary-cache dependency closure.
+public capability promotion or a complete persistent binary-cache dependency
+closure.
 
 `GENERATIVEQC_STATIONARY_AOT_PROFILES=auto` follows the selected automatic energy
 package for native RKS/UKS force profiles. An explicit profile list bounds the
@@ -129,8 +130,41 @@ force package further; an empty list omits forces. Automatic profile names are
 `libxc_<native-code>_rks` and `libxc_<native-code>_uks`. They require the matching
 energy provider. Automatic forces do not add legacy Python s/p or s/p/d DSOs;
 the native package shares its integral primitives and source reduction kernels.
+Automatic profiles default to staged point evaluation followed by a shared
+force consumer. Consumers are compiled per ingredient/spin/derivative ABI,
+strict precision, partition and geometry schedule, rather than per registration.
+`xc/automatic_cuda_package.py` deduplicates point workers only when the exact
+emitted mathematics, work domain, outputs and execution ABI agree. Registration
+codes, canonical expression identities and capability evidence remain separate.
+For example, the unpolarized VWN 1–4 bodies share an executable; their polarized
+bodies do not. Similar formulas with different work floors do not share.
+
+The shared `DevicePointValue` tile is charged inside the existing stationary
+arena. Its producer consumes the grid's physical `[2,5,points]` feature layout
+and writes energy, density derivatives, Cartesian gradient derivatives and the
+existing half-vtau coefficients. It reads only the declared ingredients. The
+producer and geometry consumer use the same borrowed stream and retained owner;
+no host repacking, transfer or CPU evaluation is inserted. Sticky producer
+errors prevent consuming stale point values. The minimum-workspace schedule
+also charges the point tile and remains an explicit bounded alternative.
+
+`GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES` is an explicit semicolon-separated
+subset of the selected automatic force profiles. Those entries retain static
+fused point/geometry code. Package qualification compares complete cold, warm
+and moved SCF+E+F endpoints against the per-functional AOT incumbent; the default
+selection must remain within 5% median regression. Select a fused specialization
+when measured staged cost breaches that gate, retaining its compile/size cost.
 Generation and compiler-cache use are build-time operations. Ordinary installed
 execution never generates code or runs a compiler, Libxc, Maple or PySCF.
+
+Executable source identities are not persistent binary-cache keys. CMake tracks
+generator/scientific inputs and compiler depfiles, and the verified compiler
+cache owns command/toolchain/header invalidation. Final installed receipts bind
+actual loaded library bytes. The explicit offline
+[CUDA closure collector](libxc_cuda_aot_closure.md) retains its narrower admitted
+whole-program domain; unsupported native package targets/device-link recipes
+cannot be published through that object store as reusable closures. Incomplete
+closure assertions remain fail closed.
 
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
@@ -206,6 +240,10 @@ execution. It does not infer register pressure from workspace sizes.
 `tools/audit_native_automatic_aot.py` joins these receipts with matching generated
 sources, objects and `cuobjdump` register/stack/local/shared counters under explicit
 resource limits. This offline evidence supplements numerical endpoint gates.
+Diagnostic v2 additionally records the shared consumer and both point executable
+identities, the actual callback modules, and point tile bytes/launches/points.
+The original v1 extents remain available to older readers. ELF base mappings
+authenticate both read-only and BSS registration storage, as well as callbacks.
 
 ### Curated execution
 

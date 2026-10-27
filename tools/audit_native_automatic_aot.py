@@ -42,22 +42,62 @@ def audit_receipt(
         "minimum-workspace",
     ):
         raise ValueError("receipt does not certify a completed native force")
-    for kind in ("point_artifact", "force_artifact"):
+    artifact_kinds = ("point_artifact", "force_artifact")
+    if receipt.get("schema") == "generativeqc.native-automatic-artifact.v2":
+        artifact_kinds += ("point_executable_artifact", "force_executable_artifact")
+        for field in (
+            "polarized_executable_identity",
+            "restricted_executable_identity",
+        ):
+            if not re.fullmatch(r"[0-9a-f]{64}", receipt.get(field, "")):
+                raise ValueError("missing or invalid point executable identity")
+    for kind in artifact_kinds:
         if (
-            receipt[kind]["sha256"] != library["sha256"]
-            or receipt[kind]["bytes"] != library["bytes"]
+            not isinstance(receipt.get(kind), dict)
+            or receipt[kind].get("sha256") != library["sha256"]
+            or receipt[kind].get("bytes") != library["bytes"]
         ):
             raise ValueError("executed artifact differs from the inspected binary")
     profile = receipt["force_profile"]
     if not re.fullmatch(r"libxc_[0-9]+_(rks|uks)", profile):
         raise ValueError("receipt is not an automatic native force profile")
     point = "automatic_" + receipt["identifier"].lower() + "_point_provider"
+    executable_keys = tuple(
+        filter(
+            None,
+            (
+                receipt.get("polarized_executable_identity"),
+                receipt.get("restricted_executable_identity"),
+            ),
+        )
+    )
+    if any(not re.fullmatch(r"[0-9a-f]{64}", key) for key in executable_keys):
+        raise ValueError("invalid point executable identity")
+    consumer = receipt.get("force_consumer_profile") or profile
+    if not re.fullmatch(r"shared_[0-9a-f]{24}|libxc_[0-9]+_(rks|uks)", consumer):
+        raise ValueError("invalid force consumer identity")
+    if consumer.startswith("shared_"):
+        if not re.fullmatch(
+            r"[0-9a-f]{64}", receipt.get("force_consumer_identity", "")
+        ):
+            raise ValueError("missing or invalid force consumer source identity")
+        point_work = receipt.get("staged_point_work", {})
+        if any(
+            point_work.get(field, 0) <= 0
+            for field in ("tile_bytes", "launches", "points")
+        ):
+            raise ValueError("staged point storage/work is not accounted")
     scopes = {
-        "point": {name: row for name, row in resources.items() if point in name},
+        "point": {
+            name: row
+            for name, row in resources.items()
+            if any("executable_" + key in name for key in executable_keys)
+            or (not executable_keys and point in name)
+        },
         "force": {
             name: row
             for name, row in resources.items()
-            if "generativeqc_native_" + profile + "_" in name
+            if "generativeqc_native_" + consumer + "_" in name
         },
     }
     for scope, rows in scopes.items():
@@ -115,7 +155,15 @@ def main() -> None:
     automatic_blocks = [
         match[0]
         for match in re.finditer(r"[ \t]*Function (\w+):\n[^\n]+", dump.stdout)
-        if "automatic_" in match[1] or "generativeqc_native_libxc_" in match[1]
+        if any(
+            marker in match[1]
+            for marker in (
+                "automatic_",
+                "executable_",
+                "generativeqc_native_libxc_",
+                "generativeqc_native_shared_",
+            )
+        )
     ]
     resources = cuobjdump_resources("\n".join(automatic_blocks))
     profiles = {}
@@ -132,12 +180,18 @@ def main() -> None:
                 raise ValueError("executed Becke dynamic shared memory exceeds limit")
             profile = joined["profile"]
             if profile not in profiles:
+                consumer = receipt.get("force_consumer_profile") or profile
+                staged = consumer.startswith("shared_")
                 source = (
                     args.build_tree
                     / "generated/stationary_force"
-                    / f"native_{profile}.cu"
+                    / (
+                        f"native_{consumer}_bindings.cpp"
+                        if staged
+                        else f"native_{profile}.cu"
+                    )
                 )
-                objects = list(args.build_tree.rglob(f"native_{profile}.cu.o"))
+                objects = list(args.build_tree.rglob(source.name + ".o"))
                 if len(objects) != 1:
                     raise ValueError(f"expected one compiled object for {profile}")
                 identity = receipt["force_source_identity"].encode()
@@ -189,6 +243,65 @@ def main() -> None:
                     "point_source_identity": receipt["point_source_identity"],
                     "scopes": joined["scopes"],
                 }
+                if staged:
+                    shared_source = source.with_name(f"native_{consumer}.cu")
+                    shared_objects = list(
+                        args.build_tree.rglob(shared_source.name + ".o")
+                    )
+                    shared_identity = receipt["force_consumer_identity"].encode()
+                    if (
+                        len(shared_identity) != 64
+                        or len(shared_objects) != 1
+                        or shared_identity not in shared_source.read_bytes()
+                        or shared_identity not in shared_objects[0].read_bytes()
+                    ):
+                        raise ValueError(
+                            "shared consumer is not bound to its compiled object"
+                        )
+                    profiles[profile]["shared_consumer"] = {
+                        "source": artifact(shared_source),
+                        "object": artifact(shared_objects[0]),
+                        "identity": receipt["force_consumer_identity"],
+                    }
+                executable_objects = {}
+                for key in set(
+                    filter(
+                        None,
+                        (
+                            receipt.get("polarized_executable_identity"),
+                            receipt.get("restricted_executable_identity"),
+                        ),
+                    )
+                ):
+                    marker = (
+                        "namespace generativeqc::dft::cuda_xc_detail::executable_"
+                        + key
+                        + " {\nusing generativeqc_tensor::I;"
+                    ).encode()
+                    worker_sources = [
+                        path
+                        for path in (
+                            args.build_tree / "generated/libxc_semilocal_cuda"
+                        ).glob("*.cu")
+                        if marker in path.read_bytes()
+                    ]
+                    worker_objects = (
+                        list(args.build_tree.rglob(worker_sources[0].name + ".o"))
+                        if len(worker_sources) == 1
+                        else []
+                    )
+                    if (
+                        len(worker_objects) != 1
+                        or key.encode() not in worker_objects[0].read_bytes()
+                    ):
+                        raise ValueError(
+                            "point executable has no unique compiled source/object"
+                        )
+                    executable_objects[key] = {
+                        "source": artifact(worker_sources[0]),
+                        "object": artifact(worker_objects[0]),
+                    }
+                profiles[profile]["point_executables"] = executable_objects
             executions.append(
                 {
                     "receipt": str(path),

@@ -8,6 +8,7 @@
 #include "scf/cuda_derivative_sources.hpp"
 
 namespace generativeqc::dft {
+struct CudaXcPointProgram;
 struct GridTaskView;
 
 /** Exact scientific execution key emitted from MethodIR and point metadata.
@@ -59,6 +60,15 @@ struct CudaStationaryBinding {
   /** Build-time compiler/header closure; the runtime receipt additionally
    * binds this actual descriptor's loaded native module, never just source. */
   const char* source_identity{};
+  /** Optional shared-consumer binding. The scientific descriptor remains per
+   * registration; its immutable point producer is attached before any source
+   * execution and never changed during the prepared owner's lifetime. */
+  const CudaXcPointProgram* point_program{};
+  int (*bind_point)(void*, const CudaXcPointProgram*, char*, std::size_t){};
+  const char* consumer_identity{};
+  const char* consumer_profile{};
+  /** Charged tile bytes and cumulative point launches/evaluations, when staged. */
+  int (*point_metrics)(void*, std::uint64_t*, std::size_t){};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */

@@ -153,7 +153,9 @@ def _split_compile_options(
     return () if threads == 1 else (f"--split-compile={threads}",)
 
 
-def emit_stationary_weight_cuda(plan: typing.Any) -> str:
+def emit_stationary_weight_cuda(
+    plan: typing.Any, *, include_plan_identity: bool = True
+) -> str:
     """Emit pointwise device weights directly from StationaryGradientPlan TensorIR."""
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError(
@@ -161,7 +163,7 @@ def emit_stationary_weight_cuda(plan: typing.Any) -> str:
         )
     functions = [
         "namespace generativeqc_stationary_cuda {",
-        f"// stationary-plan: {plan.identity}",
+        *([f"// stationary-plan: {plan.identity}"] if include_plan_identity else []),
     ]
     dispatch: list[str] = []
     sources = stationary_runtime_sources(plan)
@@ -379,6 +381,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     double* grad, StationaryPointValue& xc, double& becke_seed, int* error,
     bool bound_point = false) {
   const size_t np = view.npoint;
+#if !defined(GENERATIVEQC_NATIVE_STAGED_POINT)
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
   // Consume the emitted ingredient layout, never a functional's numeric code.
   if (stationary_coefficients > 1)
@@ -386,8 +389,16 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
       for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
   if (stationary_coefficients == 5)
     for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
+#endif
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // In this compiled ABI, external is the owner's typed point tile. The
+  // ordinary six-channel nonlocal seed ABI remains in the fused consumers.
+  // Its allocation, producer and same-stream lifetime are bound by the owner.
+  if (!external || *error) { atomicExch(error, 1); return false; }
+  xc = reinterpret_cast<const StationaryPointValue*>(external)[p];
+#else
   if constexpr (std::is_same_v<Arithmetic, float>) {
     if (external) {
       atomicExch(error, 1);
@@ -437,6 +448,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     else
       xc = stationary_evaluate_point(rho, g, tau);
   }
+#endif
   if (!xc.valid) {
     atomicExch(error, 1);
     return false;
@@ -671,11 +683,16 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       if constexpr (precomputed_point) control.valid = control.valid && !*error;
       if (control.valid) {
         if constexpr (precomputed_point) {
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+          control.valid = geometry_point_setup(view, p, owner, na, raw, external,
+              external_stride, external_offset, grad, *point_value, control.seed, error);
+#else
           *point_value = *reinterpret_cast<const StationaryPointValue*>(ws);
           control.seed = phase_seeds[p];
           for (size_t axis = 0; axis < 3; ++axis)
             grad[3 * na + 3 * owner + axis] += ws[3 * na + 3 * owner + axis];
-          if (!cooperative_ao)
+#endif
+          if (control.valid && !cooperative_ao)
             control.valid = geometry_point_ao_prepared(view, work, ao_atoms, p, owner, na,
                                                        weights, *point_value, grad, error);
         } else {
@@ -917,11 +934,11 @@ def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
 
 
 def emit_stationary_scientific_kernels(
-    plan: typing.Any, *, include_reduction: bool = True
+    plan: typing.Any, *, include_reduction: bool = True, staged_point: bool = False
 ) -> str:
     """Emit XC geometry with an optional independently compiled final reduction."""
     return (
-        emit_stationary_weight_cuda(plan)
+        emit_stationary_weight_cuda(plan, include_plan_identity=not staged_point)
         + _STATIONARY_SCIENTIFIC_KERNELS
         + (emit_stationary_reduction_cuda(plan) if include_reduction else "")
     )
@@ -1736,6 +1753,7 @@ def emit_stationary_wrapper_cuda(
     primitive_shards: int | None = None,
     primitive_shard_width: int | None = None,
     include_reduction: bool = True,
+    staged_point: bool = False,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
 
@@ -1770,6 +1788,7 @@ def emit_stationary_wrapper_cuda(
             pbe=pbe,
             iterations=iterations,
             semilocal=semilocal,
+            staged_point=staged_point,
         )
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr unsigned stationary_spin_blocks = {plan.spin_blocks};\n"
@@ -1780,7 +1799,9 @@ def emit_stationary_wrapper_cuda(
         + _runtime_layout_cuda(plan)
         + emit_stationary_phased_becke_cuda(iterations=iterations)
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
-        + emit_stationary_scientific_kernels(plan, include_reduction=include_reduction)
+        + emit_stationary_scientific_kernels(
+            plan, include_reduction=include_reduction, staged_point=staged_point
+        )
     )
 
 

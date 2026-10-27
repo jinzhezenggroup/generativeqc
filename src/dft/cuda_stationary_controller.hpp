@@ -22,6 +22,7 @@ struct CudaStationaryResources {
   /** Optional center/phase geometry cache selected from the same fleet budget. */
   bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
+  std::array<std::uint64_t, 3> point_work{};
   AoGridWork grid_work;
 };
 

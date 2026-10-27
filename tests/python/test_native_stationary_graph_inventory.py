@@ -42,32 +42,45 @@ def test_inventory_is_generated_from_compiler_method_ir() -> None:
     assert native == qualified("--list-profiles")
 
 
-def test_single_graph_generation_matches_independent_codegen(tmp_path: Path) -> None:
+@pytest.mark.parametrize("fused", (False, True))
+def test_group_generation_matches_declared_inventory_and_reuses_files(
+    tmp_path: Path, fused: bool
+) -> None:
     names = qualified("--list-profiles")
     assert len(names) >= 2
     selected = (names[0], names[-1])
-    output = tmp_path / "group"
-    actual = generate(
-        "--all-profiles", "--output-dir", str(output), "--profiles", *selected
+    package = (
+        "--profiles",
+        *selected,
+        "--fused-profiles",
+        *((name for name in selected if name.startswith("libxc_")) if fused else ()),
     )
+    output = tmp_path / "group"
+    actual = generate("--all-profiles", "--output-dir", str(output), *package)
     assert actual.returncode == 0, actual.stderr
+    declared = qualified("--list-sources", *package)
+    assert {path.name for path in output.iterdir()} == set(declared)
     snapshots: dict[str, tuple[bytes, int]] = {}
+    for filename in declared:
+        candidate = output / filename
+        snapshots[filename] = (candidate.read_bytes(), candidate.stat().st_mtime_ns)
     for name in selected:
+        if name.startswith("libxc_") and not fused:
+            continue
         candidate = output / f"native_{name}.cu"
         assert candidate.is_file()
         old = tmp_path / f"single_{name}.cu"
         separate = generate("--output", str(old), "--profile", name)
         assert separate.returncode == 0, separate.stderr
         assert candidate.read_bytes() == old.read_bytes()
-        snapshots[name] = (candidate.read_bytes(), candidate.stat().st_mtime_ns)
 
-    second = generate(
-        "--all-profiles", "--output-dir", str(output), "--profiles", *selected
-    )
+    second = generate("--all-profiles", "--output-dir", str(output), *package)
     assert second.returncode == 0, second.stderr
-    for name in selected:
-        candidate = output / f"native_{name}.cu"
-        assert (candidate.read_bytes(), candidate.stat().st_mtime_ns) == snapshots[name]
+    for filename in declared:
+        candidate = output / filename
+        assert (candidate.read_bytes(), candidate.stat().st_mtime_ns) == snapshots[
+            filename
+        ]
 
 
 @pytest.mark.parametrize("profiles", [("invalid_profile",), ("pbe_rks", "pbe_rks")])

@@ -41,7 +41,9 @@ def test_generated_descriptor_authenticates_individual_cpu_contracts(
         "const double*) {}\n"
         "void launch_batch(cudaStream_t, const double*, const double*, std::size_t, "
         "std::size_t, double*, double*, int*, std::uint32_t, double, double, "
-        "std::size_t) {}\n}\n"
+        "std::size_t) {}\n"
+        "void launch_stationary(cudaStream_t, const double*, std::size_t, "
+        "std::size_t, DevicePointValue*, int*, const int*) {}\n}\n"
         + emit_automatic_cuda_descriptor(provider)
         + f"""
 int main() {{

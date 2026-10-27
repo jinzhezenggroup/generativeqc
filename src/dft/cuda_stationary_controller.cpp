@@ -6,6 +6,7 @@
 
 #include "dft/cuda_grid_api.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
+#include "dft/cuda_xc_point_program.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda_fock_execution.hpp"
@@ -51,6 +52,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
                   [](const auto& atom) { return atom.ecp_core != 0; }))
     throw std::invalid_argument(
         "native CUDA stationary owner has no qualified profile/grid domain");
+  if (binding_->bind_point &&
+      (!binding_->point_program ||
+       binding_->point_program->functional_code != binding_->model.functional ||
+       binding_->point_program->domain_version != binding_->model.domain_version))
+    throw std::invalid_argument("stationary point producer differs from its scientific model");
   points_per_atom_ = grid.spec().version == 4 ? 0 : grid_points_per_atom(grid.spec());
   coincident_tolerance_ = grid.spec().coincident_tolerance;
   const auto capacity = cuda_stationary_capacity(*binding_, basis.natom, aos_, basis.nprimitive,
@@ -92,6 +98,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
                          stationary_budget, capacity.geometry_lanes, capacity.geometry_threads,
                          &stationary_, error.data(), error.size()),
         error);
+    if (binding_->bind_point) {
+      require_stationary_call(
+          binding_->bind_point(stationary_, binding_->point_program, error.data(), error.size()),
+          error);
+    }
     if (grid.spec().version == 4) {
       if (!binding_->grid_topology)
         throw std::invalid_argument("stationary binding lacks variable atom grid support");
@@ -270,6 +281,10 @@ generativeqc_status CudaStationaryController::gradient(
     require_stationary_call(binding_->metrics(stationary_, resources_.stationary_work.data(),
                                               resources_.stationary_work.size()),
                             error);
+    if (binding_->point_metrics)
+      require_stationary_call(binding_->point_metrics(stationary_, resources_.point_work.data(),
+                                                      resources_.point_work.size()),
+                              error);
     require_grid_call(
         grid_cuda_work_metrics_v1(grid_, &resources_.grid_work, error.data(), error.size()), error);
     if (!token_current()) throw std::invalid_argument("native stationary terminal token changed");

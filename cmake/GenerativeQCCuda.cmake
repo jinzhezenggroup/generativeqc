@@ -491,12 +491,20 @@ macro(generativeqc_configure_cuda_backend target)
          GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND
          CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
         list(APPEND _generativeqc_native_stationary_profiles "${_native_profile}")
-        set(_native_source
-            "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/native_${_native_profile}.cu")
-        list(APPEND _generativeqc_native_stationary_sources "${_native_source}")
       endif()
     endforeach()
     if(_generativeqc_native_stationary_profiles)
+      execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+                --list-sources --profiles ${_generativeqc_native_stationary_profiles}
+                --fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}
+        OUTPUT_VARIABLE _native_package_sources
+        OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+      foreach(_native_source IN LISTS _native_package_sources)
+        list(APPEND _generativeqc_native_stationary_sources
+             "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/${_native_source}")
+      endforeach()
       # One compiler process owns the complete selected MethodIR inventory.
       # This reuses Python-side graph lowering/caches instead of executing the
       # same import and independent source lowering once for every method.
@@ -509,16 +517,20 @@ macro(generativeqc_configure_cuda_backend target)
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.hpp"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.cu"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_stationary_binding.hpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_value.hpp"
         ARGS --output-dir "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}" --all-profiles
              --profiles ${_generativeqc_native_stationary_profiles}
+             --fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}
         COMMENT "Generating compiler-selected CUDA stationary force graphs")
       add_library(generativeqc_native_stationary STATIC
                   src/dft/native_stationary_shared_kernels.cu
                   ${_generativeqc_native_stationary_sources}
                   $<TARGET_OBJECTS:generativeqc_stationary_sp_primitives>)
-      add_dependencies(generativeqc_native_stationary generativeqc_native_stationary_codegen)
+      add_dependencies(generativeqc_native_stationary generativeqc_native_stationary_codegen
+                       generativeqc_libxc_semilocal_cuda_codegen)
       target_include_directories(generativeqc_native_stationary PRIVATE
-          "${CMAKE_CURRENT_SOURCE_DIR}/src")
+          "${CMAKE_CURRENT_SOURCE_DIR}/src"
+          "$<TARGET_PROPERTY:generativeqc_libxc_semilocal_cuda,INCLUDE_DIRECTORIES>")
       target_compile_definitions(generativeqc_native_stationary PRIVATE GENERATIVEQC_HAS_CUDA=1)
       target_compile_options(generativeqc_native_stationary PRIVATE
           $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>

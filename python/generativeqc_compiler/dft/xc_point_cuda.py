@@ -99,9 +99,43 @@ bool use_equal_spin_points(std::size_t spins) {
 """
 
 
-def emit_device_point_value() -> str:
+def emit_device_point_value(*, shared: bool = False) -> str:
     """Emit the existing physical E/vxc ABI, including the half-vtau coefficient."""
+    if shared:
+        return "using DevicePointValue = ::generativeqc::dft::DevicePointValue;\n"
     return _POINT_VALUE
+
+
+def emit_stationary_point_kernel() -> str:
+    """Publish the same point differential for a staged resident force tile.
+
+    Geometry already owns paired physical spin features, including the RKS
+    half-density embedding. No host repack or second density policy is needed.
+    """
+    return r"""
+template <I feature_terms, class PointEvaluator>
+__global__ void stationary_evaluate_points(const double* features, std::size_t count,
+    DevicePointValue* output, int* error, const int* producer_error) {
+  const auto point = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (point >= count) return;
+  if ((producer_error && *producer_error) || *error) {
+    atomicExch(error, 1);
+    return;
+  }
+  double rho[2]{}, gradient[2][3]{}, tau[2]{};
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    rho[spin] = features[5 * spin * count + point];
+    if constexpr (feature_terms >= 4)
+      for (unsigned axis = 0; axis < 3; ++axis)
+        gradient[spin][axis] = features[(5 * spin + axis + 1) * count + point];
+    if constexpr (feature_terms == 5)
+      tau[spin] = features[(5 * spin + 4) * count + point];
+  }
+  const auto value = PointEvaluator::physical_point(0, rho, gradient, tau, 1.0, 1.0);
+  output[point] = value;
+  if (!value.valid) atomicCAS(error, 0, 3);
+}
+"""
 
 
 def emit_point_traversal() -> str:

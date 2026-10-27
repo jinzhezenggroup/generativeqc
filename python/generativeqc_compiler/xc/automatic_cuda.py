@@ -14,6 +14,7 @@ from generativeqc_compiler.dft.xc_point_cuda import (
     emit_device_point_value,
     emit_equal_spin_point_selector,
     emit_point_traversal,
+    emit_stationary_point_kernel,
 )
 
 from .automatic_point import (
@@ -134,13 +135,14 @@ def emit_automatic_cuda_provider(name: str) -> AutomaticCudaPointProvider:
             f"namespace generativeqc::dft::cuda_xc_detail::{provider_name} {{",
             "using generativeqc_tensor::I;",
             "using generativeqc_tensor::finite;",
-            emit_device_point_value(),
+            emit_device_point_value(shared=True),
             point.source,
             restricted.source,
             _emit_adapter(provider_name, point.function_name),
             _emit_adapter(f"{provider_name}_equal_spin", restricted.function_name),
             emit_point_traversal(),
             emit_automatic_point_kernel(),
+            emit_stationary_point_kernel(),
             emit_equal_spin_point_selector(),
             _emit_launchers(
                 code, feature_terms, provider_name, density_only=density_only
@@ -181,6 +183,23 @@ def _emit_launchers(
         "  (void)use_equal_spin_points(spins);\n" if density_only else ""
     )
     return f"""
+void launch_stationary(cudaStream_t stream, const double* features, std::size_t count,
+                      std::size_t spins, DevicePointValue* output, int* error,
+                      const int* producer_error) {{
+  if ((spins != 1 && spins != 2) || !features || !output || !error || !count ||
+      count > std::size_t{{std::numeric_limits<I>::max()}} / 10)
+    throw std::invalid_argument("incompatible automatic stationary point tile");
+  // Preserve the force contract: U1 for density-only RKS, P2 otherwise.
+  // Equal-spin SCF scheduling must not silently change this point differential.
+  if ({"spins == 1" if density_only else "false"})
+    stationary_evaluate_points<{feature_terms}, {provider_name}_equal_spin>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, count, output, error, producer_error);
+  else
+    stationary_evaluate_points<{feature_terms}, {provider_name}>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, count, output, error, producer_error);
+}}
 void validate_launch(std::size_t count, std::size_t spins, std::uint32_t functional,
                      double exchange_scale, double correlation_scale) {{
   if (functional != 0x{code:x}U || (spins != 1 && spins != 2) ||
@@ -246,6 +265,6 @@ const CudaXcPointProgram program{{
     "{point.name}", "{provider.expression_identity}", "{provider.source_identity}",
     0x{code:x}U, {point.ingredient_mask}U, {point.domain_version}U,
     {provider.feature_terms}, &launch, &launch_batch, {{}},
-    "{point.expression_identity}", {restricted_identity}}};
+    "{point.expression_identity}", {restricted_identity}, &launch_stationary}};
 }}
 """

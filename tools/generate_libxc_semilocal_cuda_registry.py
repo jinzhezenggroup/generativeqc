@@ -14,10 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.xc.automatic_cuda import (
-    emit_automatic_cuda_descriptor,
-    emit_automatic_cuda_provider,
-)
+from generativeqc_compiler.xc.automatic_cuda_package import automatic_cuda_package
 from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry,
     automatic_registry_entries,
@@ -91,19 +88,26 @@ const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) noexcep
 """
 
 
-def emit_shard(index: int, entries: tuple[AutomaticRegistryEntry, ...]) -> str:
+def emit_shard(
+    index: int,
+    entries: tuple[AutomaticRegistryEntry, ...],
+    *,
+    force_profiles: tuple[str, ...] | None = None,
+) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
-    providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
+    workers, registrations = automatic_cuda_package(
+        tuple(entry.name for entry in entries), force_profiles
+    )
     definitions = "\n".join(
-        provider.source + emit_automatic_cuda_descriptor(provider)
-        for provider in providers
+        [worker.source for worker in tuple(workers.values())[index::SHARD_COUNT]]
+        + [registrations[entry.name] for entry in selected]
     )
     cases = "\n".join(
-        f"    case 0x{entry.code:x}U: return &{provider.namespace}::program;"
-        for entry, provider in zip(selected, providers, strict=True)
+        f"    case 0x{entry.code:x}U: return &cuda_xc_detail::automatic_{entry.name.lower()}_point_provider::program;"
+        for entry in selected
     )
     return f"""// Generated automatic Libxc CUDA point programs; do not edit.
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -124,6 +128,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--disabled", action="store_true")
+    parser.add_argument("--stationary-all", action="store_true")
+    parser.add_argument("--stationary-profile", action="append", default=[])
     parser.add_argument(
         "--functional",
         action="append",
@@ -149,7 +155,13 @@ def main() -> None:
     for index in range(SHARD_COUNT):
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",
-            emit_shard(index, entries),
+            emit_shard(
+                index,
+                entries,
+                force_profiles=None
+                if args.stationary_all
+                else tuple(args.stationary_profile),
+            ),
         )
 
 

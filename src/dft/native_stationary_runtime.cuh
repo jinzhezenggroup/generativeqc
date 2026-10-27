@@ -97,6 +97,36 @@ int native_create(int device, int major, int minor, size_t atoms, size_t aos, si
   });
 }
 
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+int native_point_metrics(void* pointer, uint64_t* output, size_t count) {
+  const auto* owner = static_cast<const NativeOwner*>(pointer);
+  if (!owner || !output || count != 3) return 1;
+  const auto& scientific = *owner->scientific;
+  output[0] = scientific.points * sizeof(StationaryPointValue);
+  output[1] = scientific.staged_point_launches;
+  output[2] = scientific.staged_point_count;
+  return 0;
+}
+
+/** Attach one process-lifetime point program before topology or source work.
+ * A shared consumer cannot substitute another ingredient layout, and immutable
+ * attachment prevents warm/replay calls from switching science under a token. */
+int native_bind_point(void* pointer, const generativeqc::dft::CudaXcPointProgram* program,
+                      char* error, size_t error_size) {
+  auto* owner = static_cast<NativeOwner*>(pointer);
+  return guarded(owner ? owner->scientific : nullptr, error, error_size, [&] {
+    constexpr unsigned mask = stationary_coefficients == 1   ? 1
+                              : stationary_coefficients == 4 ? 7
+                                                             : 15;
+    if (!owner || !program || !program->launch_stationary || program->ingredient_mask != mask ||
+        owner->scientific->point_launcher || owner->scientific->topology_ready ||
+        owner->scientific->geometry_pending)
+      throw std::invalid_argument("invalid staged stationary point binding");
+    owner->scientific->point_launcher = program->launch_stationary;
+  });
+}
+#endif
+
 int native_topology(void* pointer, const double* primitives, const int64_t* ranges,
                     const double* norms, const int64_t* ao_atoms, char* error, size_t error_size) {
   auto* owner = static_cast<NativeOwner*>(pointer);

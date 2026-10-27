@@ -75,3 +75,41 @@ def test_audit_fails_closed_on_stale_or_missing_evidence(damage: str) -> None:
         next(iter(resources.values()))["REG"] = 256
     with pytest.raises(ValueError):
         audit_receipt(receipt, binary, resources)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    (None, "callback", "point-key", "consumer-key", "tile", "launches", "points"),
+)
+def test_shared_audit_requires_actual_executables_and_accounted_point_work(
+    damage: str | None,
+) -> None:
+    receipt, binary, resources = inputs()
+    receipt.update(
+        schema="generativeqc.native-automatic-artifact.v2",
+        point_executable_artifact=binary.copy(),
+        force_executable_artifact=binary.copy(),
+        polarized_executable_identity="b" * 64,
+        restricted_executable_identity="c" * 64,
+        force_consumer_profile="shared_" + "d" * 24,
+        force_consumer_identity="e" * 64,
+        staged_point_work={"tile_bytes": 4096, "launches": 2, "points": 64},
+    )
+    point, force = resources.values()
+    resources = {
+        "executable_" + "b" * 64 + "_point_kernel": point,
+        "generativeqc_native_shared_" + "d" * 24 + "_geometry_kernel": force,
+    }
+    if damage == "callback":
+        receipt["force_executable_artifact"]["sha256"] = "f" * 64
+    elif damage == "point-key":
+        receipt["polarized_executable_identity"] = ""
+    elif damage == "consumer-key":
+        receipt["force_consumer_identity"] = ""
+    elif damage:
+        receipt["staged_point_work"]["tile_bytes" if damage == "tile" else damage] = 0
+    if damage:
+        with pytest.raises(ValueError):
+            audit_receipt(receipt, binary, resources)
+    else:
+        assert all(audit_receipt(receipt, binary, resources)["scopes"].values())

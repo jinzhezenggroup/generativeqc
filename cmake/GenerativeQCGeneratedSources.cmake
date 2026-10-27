@@ -1350,6 +1350,18 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.cpp")
   set(_generativeqc_libxc_cuda_registry_args)
+  if(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA)
+    if(GENERATIVEQC_STATIONARY_AOT_PROFILES STREQUAL "auto")
+      list(APPEND _generativeqc_libxc_cuda_registry_args --stationary-all)
+    else()
+      foreach(_point_force_profile IN LISTS GENERATIVEQC_STATIONARY_AOT_PROFILES)
+        if(_point_force_profile MATCHES "^libxc_")
+          list(APPEND _generativeqc_libxc_cuda_registry_args
+               --stationary-profile "${_point_force_profile}")
+        endif()
+      endforeach()
+    endif()
+  endif()
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
     # Packaging selects structural registrations, never numerical admission.
@@ -1387,6 +1399,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       ${_generativeqc_libxc_cuda_science_inputs}
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_program.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_value.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_runtime.cuh"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/xc_point_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_cuda.py"
@@ -1411,6 +1424,11 @@ macro(generativeqc_register_cuda_generated_sources target)
   endif()
   set_target_properties(generativeqc_libxc_semilocal_cuda PROPERTIES
     POSITION_INDEPENDENT_CODE ON CXX_STANDARD 20 CUDA_STANDARD 20
+    # Shared workers and their validation wrappers are one private module.
+    # Prevent another loaded core from interposing a worker behind the callback
+    # whose module is authenticated by the runtime artifact receipt.
+    # The CXX registry lookup retains its existing native qualification ABI.
+    CUDA_VISIBILITY_PRESET hidden
     CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
   generativeqc_set_cuda_compile_pool(generativeqc_libxc_semilocal_cuda "${_generativeqc_cuda_compile_pool}")
   target_sources(${target} PRIVATE $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>)
