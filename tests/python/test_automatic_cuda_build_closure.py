@@ -162,17 +162,22 @@ _SCIENCE_INPUTS = (
 
 
 @pytest.mark.parametrize(
-    ("backend", "enabled", "functionals"),
+    ("backend", "enabled", "functionals", "share_parameters"),
     (
-        ("cuda", False, ()),
-        ("cuda", True, ()),
-        ("cuda", True, ("GGA_X_APBE", "MGGA_X_LTA")),
-        ("cpu", True, ()),
+        ("cuda", False, (), False),
+        ("cuda", True, (), False),
+        ("cuda", True, ("GGA_X_APBE", "MGGA_X_LTA"), False),
+        ("cuda", True, ("MGGA_X_KTBM_0", "MGGA_X_KTBM_1"), True),
+        ("cpu", True, (), False),
     ),
-    ids=("cuda-off", "cuda-full", "cuda-selected", "cpu"),
+    ids=("cuda-off", "cuda-full", "cuda-selected", "cuda-shared", "cpu"),
 )
 def test_registry_incremental_build_tracks_science_only_when_enabled(
-    tmp_path: Path, backend: str, enabled: bool, functionals: tuple[str, ...]
+    tmp_path: Path,
+    backend: str,
+    enabled: bool,
+    functionals: tuple[str, ...],
+    share_parameters: bool,
 ) -> None:
     """Both registries must invalidate on hashed bytes absent from import depfiles."""
     cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
@@ -202,11 +207,13 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "p.add_argument('--output-directory', type=pathlib.Path)\n"
         "p.add_argument('--disabled', action='store_true')\n"
         "p.add_argument('--functional', action='append')\n"
+        "p.add_argument('--share-parameters', action='store_true')\n"
         "a = p.parse_args()\n"
         "a.output_directory.mkdir(parents=True, exist_ok=True)\n"
         "counter = a.output_directory / 'runs.txt'\n"
         "counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))\n"
         "(a.output_directory / 'functionals.txt').write_text(';'.join(a.functional or []))\n"
+        "(a.output_directory / 'sharing.txt').write_text(str(a.share_parameters))\n"
         "names = ['registry.hpp', 'registry.cpp']\n"
         f"if not a.disabled: names += [str(i) + '{'.cu' if backend == 'cuda' else '.cpp'}' for i in range({32 if backend == 'cuda' else 8})]\n"
         "for name in names:\n"
@@ -220,6 +227,7 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if enabled else 'OFF'})\n"
         f'set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "{";".join(functionals)}")\n'
+        f"set(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS {'ON' if share_parameters else 'OFF'})\n"
         + declaration
     )
     build = tmp_path / "build"
@@ -249,6 +257,9 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
     assert (
         build / f"generated/libxc_semilocal_{backend}/functionals.txt"
     ).read_text() == ";".join(functionals)
+    assert (
+        build / f"generated/libxc_semilocal_{backend}/sharing.txt"
+    ).read_text() == str(share_parameters)
     expected = 1
     identity_only = (
         ("python/generativeqc_compiler/xc/automatic_cuda.py",)
@@ -306,7 +317,10 @@ def test_explicit_package_requires_cuda_and_opt_in(
     assert "requires CUDA and automatic CUDA AOT" in " ".join(result.stderr.split())
 
 
-def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> None:
+@pytest.mark.parametrize("share_parameters", (False, True))
+def test_explicit_package_rejects_cuda_detection_fallback(
+    tmp_path: Path, share_parameters: bool
+) -> None:
     """A requested package cannot quietly disappear if nvcc is unavailable."""
     cmake = shutil.which("cmake")
     if cmake is None:
@@ -316,10 +330,12 @@ def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> Non
         'if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND'
     )
     end = source.index("# Scoped GenerativeQC-owned GFN2", start)
+    functionals = '""' if share_parameters else "GGA_X_APBE"
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
         "project(AutomaticCudaFallback LANGUAGES NONE)\n"
-        "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS GGA_X_APBE)\n"
+        f"set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS {functionals})\n"
+        f"set(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS {'ON' if share_parameters else 'OFF'})\n"
         "set(GENERATIVEQC_ENABLE_CUDA OFF)\n" + source[start:end]
     )
     result = subprocess.run(
@@ -333,3 +349,36 @@ def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> Non
     assert "cannot use the CPU-only compiler fallback" in " ".join(
         result.stderr.split()
     )
+
+
+@pytest.mark.parametrize(("cuda", "aot"), ((False, True), (True, False), (True, True)))
+def test_parameter_sharing_is_explicit_and_requires_cuda_aot(
+    tmp_path: Path, cuda: bool, aot: bool
+) -> None:
+    """The artifact-size option cannot change defaults or silently lose its backend."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("option guard requires CMake")
+    source = (ROOT / "CMakeLists.txt").read_text()
+    start = source.index("option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS")
+    end = source.index('set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS ""', start)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\nproject(ParameterSharing LANGUAGES NONE)\n"
+        f"set(GENERATIVEQC_ENABLE_CUDA {'ON' if cuda else 'OFF'})\n"
+        f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if aot else 'OFF'})\n"
+        + source[start:end]
+        + 'file(WRITE "${CMAKE_BINARY_DIR}/sharing.txt" "${GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS}")\n'
+    )
+    command = [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")]
+    subprocess.run(command, check=True, capture_output=True, timeout=30)
+    assert (tmp_path / "build/sharing.txt").read_text() == "OFF"
+    result = subprocess.run(
+        [*command, "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=ON"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert (result.returncode == 0) == (cuda and aot)
+    if result.returncode:
+        assert "requires CUDA and automatic CUDA AOT" in " ".join(result.stderr.split())

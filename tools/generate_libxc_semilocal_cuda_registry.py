@@ -22,6 +22,7 @@ from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry,
     automatic_registry_entries,
 )
+from generativeqc_compiler.xc.parameter_cuda_package import parameterized_cuda_package
 
 from tools.generate_libxc_semilocal_cpu_registry import write_if_changed
 
@@ -91,15 +92,40 @@ const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) noexcep
 """
 
 
-def emit_shard(index: int, entries: tuple[AutomaticRegistryEntry, ...]) -> str:
+def emit_shard(
+    index: int,
+    entries: tuple[AutomaticRegistryEntry, ...],
+    *,
+    share_parameters: bool = False,
+) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
-    providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
-    definitions = "\n".join(
-        provider.source + emit_automatic_cuda_descriptor(provider)
-        for provider in providers
+    if share_parameters:
+        workers, registrations = parameterized_cuda_package(
+            tuple(entry.name for entry in entries)
+        )
+        providers = [registrations[entry.name] for entry in selected]
+    else:
+        # Keep constant specialization as the default: sharing has a measured
+        # small runtime cost and is an explicit artifact-size tradeoff.
+        workers = {}
+        providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
+    # Registration placement stays stable. Each private family worker has one
+    # CUDA owner; other shards reference its host launcher through declarations.
+    shared = "\n".join(
+        source
+        for identity, source in workers.items()
+        if int(identity[:16], 16) % SHARD_COUNT == index
+    )
+    definitions = (
+        shared
+        + "\n"
+        + "\n".join(
+            provider.source + emit_automatic_cuda_descriptor(provider)
+            for provider in providers
+        )
     )
     cases = "\n".join(
         f"    case 0x{entry.code:x}U: return &{provider.namespace}::program;"
@@ -125,6 +151,11 @@ def main() -> None:
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--disabled", action="store_true")
     parser.add_argument(
+        "--share-parameters",
+        action="store_true",
+        help="share audited parameter-family workers instead of literal specialization",
+    )
+    parser.add_argument(
         "--functional",
         action="append",
         help="package only requested structural registrations (repeatable)",
@@ -132,6 +163,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.disabled and args.functional:
         parser.error("--functional cannot be combined with --disabled")
+    if args.disabled and args.share_parameters:
+        parser.error("--share-parameters cannot be combined with --disabled")
     try:
         entries = () if args.disabled else select_entries(args.functional)
     except ValueError as error:
@@ -149,7 +182,7 @@ def main() -> None:
     for index in range(SHARD_COUNT):
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",
-            emit_shard(index, entries),
+            emit_shard(index, entries, share_parameters=args.share_parameters),
         )
 
 

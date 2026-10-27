@@ -1382,6 +1382,9 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(_generativeqc_libxc_cuda_registry_args)
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+    if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS)
+      list(APPEND _generativeqc_libxc_cuda_registry_args --share-parameters)
+    endif()
     # Packaging selects structural registrations, never numerical admission.
     # Unpackaged codes retain the null-descriptor, fail-closed runtime path.
     foreach(_generativeqc_libxc_cuda_functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
@@ -1420,6 +1423,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_runtime.cuh"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/xc_point_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/parameter_cuda_package.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_point.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_semilocal.py"
     ARGS --output-directory "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}" ${_generativeqc_libxc_cuda_registry_args}

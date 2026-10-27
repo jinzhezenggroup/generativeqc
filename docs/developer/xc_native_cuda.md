@@ -106,8 +106,10 @@ semicolon-separated list of exact structural registration names, for example
 `"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
 must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
-remains off by default. Selected entries retain their original codes,
-mathematical/source identities and ordinary/batched providers. Omitted entries
+remains off by default. Selected entries retain their original codes, canonical
+mathematical identities and ordinary/batched ABI. Literal providers keep their
+source identities across selections; opting into parameter sharing binds the
+selected shared worker and parameter table as described below. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
 or reordered requests do not change structural shard order. Regeneration
@@ -145,6 +147,27 @@ bounded traversal. The descriptor's exact source identity covers both bodies
 and the selector. This does not add response support, installed variants,
 public backend admission, or resource/performance qualification. See
 [equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
+
+Set `GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=ON` to share parameterized
+CUDA workers in an automatic AOT package containing multiple KTBM registrations.
+The option defaults to `OFF`, preserving literal constant specialization and its
+runtime performance. Sharing is an explicit package-size tradeoff: coefficient
+loads and reduced constant folding can add point-evaluation overhead. Scalar mathematical
+coefficients become immutable device-constant table rows; density thresholds,
+work-domain guards, physical derivative conventions and spin layouts remain
+part of the compiled contract. Both general and equal-spin parameterized bodies,
+ordered parameter names and complete point layouts must agree before sharing.
+Other families and singleton selections retain their specialized point emitters.
+This controls executable reuse, not functional admission or supported products.
+
+Each registration retains its canonical coefficient-bound mathematical identity
+for CPU/CUDA admission. Its source identity authenticates the shared worker's
+complete source and immutable parameter table, plus its own selected row and
+host validation wrapper. One CUDA shard owns the worker; other shards call its
+private host launchers, so no cross-translation-unit device linking is needed.
+The GPU sees one uniform parameter row per launch and has no per-point
+functional switch. Host registration wrappers include only descriptor headers,
+without emitting unrelated tensor conversion kernels.
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that

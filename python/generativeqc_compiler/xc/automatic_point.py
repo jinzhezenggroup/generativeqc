@@ -103,6 +103,7 @@ def emit_automatic_point(
     backend: Literal["cpu", "cuda"] = "cpu",
     equal_spin: bool = False,
     spin: Literal["polarized", "unpolarized"] = "polarized",
+    parameter_names: tuple[str, ...] = (),
 ) -> AutomaticPointSource:
     """Lower one ordinary semilocal Graph into the native physical-spin ABI.
 
@@ -121,6 +122,11 @@ def emit_automatic_point(
     density before any worker floor, and the scalar derivative is duplicated
     only for the existing native half-channel contraction. This is not the
     polarized equal-spin optimization, which retains P2 derivative roots.
+
+    Explicit parameter_names add a final read-only coefficient pointer to the
+    emitted point ABI. The caller supplies values in that exact order; fixed
+    worker thresholds and physical-input guards remain outside the parameters.
+    Parameters are held constant during feature-coordinate differentiation.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
@@ -138,6 +144,7 @@ def emit_automatic_point(
         name,
         spin=spin,
         order=1,
+        parameter_names=parameter_names,
         **({"domain": DENSITY_WORK_DOMAIN} if density_only else {}),
     )
     features = program.spec.features
@@ -165,6 +172,9 @@ def emit_automatic_point(
     else:
         work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
+    variables.update(
+        {name: f"parameters[{index}]" for index, name in enumerate(parameter_names)}
+    )
     roots, physical_kinetic = bind_physical_kinetic_predicate(
         program.graph, program.roots
     )
@@ -213,7 +223,9 @@ def emit_automatic_point(
 
     lines = [
         f"{qualifier}{value_type} {function_name}(",
-        "    const double rho[2], const double (&gradient)[2][3], const double tau[2]) {",
+        "    const double rho[2], const double (&gradient)[2][3], const double tau[2]"
+        + (", const double* parameters" if parameter_names else "")
+        + ") {",
         f"  if (!{finite}(rho[0]) || !{finite}(rho[1]) ||",
         "      rho[0] < 0.0 || rho[1] < 0.0)",
         reject("requires finite nonnegative density"),

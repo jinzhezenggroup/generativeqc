@@ -34,6 +34,13 @@ if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
 endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS
+       "Share audited parameter-family CUDA workers (smaller packages, less constant folding)" OFF)
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND
+   (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
+  message(FATAL_ERROR
+    "GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS requires CUDA and automatic CUDA AOT")
+endif()
 set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "" CACHE STRING
     "Semicolon-separated automatic CUDA AOT registrations; empty selects the opt-in full catalog")
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
@@ -308,6 +315,10 @@ if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
    NOT GENERATIVEQC_ENABLE_CUDA)
   message(FATAL_ERROR
     "The selected automatic CUDA AOT package cannot use the CPU-only compiler fallback")
+endif()
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR
+    "Automatic CUDA parameter sharing cannot use the CPU-only compiler fallback")
 endif()
 
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.
