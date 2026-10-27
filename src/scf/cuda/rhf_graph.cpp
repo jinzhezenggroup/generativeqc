@@ -1,5 +1,6 @@
 #include "scf/cuda/rhf_graph.hpp"
 
+#include <exception>
 #include <mutex>
 
 #include "runtime/allocation_measurement.hpp"

@@ -113,9 +113,9 @@
     "src/scf/cuda/resources.cpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests. The opt-in explicit close reports the actual vendor destroy result separately from legacy destruction.",
       "references": {
-        "cublasDestroy": 1
+        "cublasDestroy": 2
       }
     },
     "src/scf/cuda_eigensolver_policy.hpp": {
@@ -508,6 +508,15 @@
         "cublasCreate": 1,
         "cublasDestroy": 1,
         "cublasSetStream": 1
+      }
+    },
+    "src/scf/cuda/rhf_provider_owner.cpp": {
+      "classification": "infrastructure",
+      "contract": "src/runtime/cuda_provider_identity.hpp",
+      "reason": "Only takes provider function addresses for actual current-context and loaded-DSO identity observation. It adds no dense-algebra submission or independent vendor-handle creation path.",
+      "references": {
+        "cublasCreate": 1,
+        "cusolverDnCreate": 1
       }
     }
   }
