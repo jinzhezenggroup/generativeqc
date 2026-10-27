@@ -197,6 +197,15 @@ the native direct kernel owners, while
 owners. Both default to `1` because split compilation can change optimizer
 resource choices; use the normal settings for performance and release binaries.
 
+## Prebuilt CUDA wheel coverage
+
+Wheel CI builds native images for `80`, `86`, `89`, `90`, `100`, and `120`, with
+PTX for `120` for forward compatibility. It selects portable shell profiles
+for the other targets and the measured profile for `120`. This is binary
+coverage, not a claim of measured performance parity across those GPUs. Existing
+archives explicitly named `sm120` remain architecture-specific; source builds
+must select the architecture of the deployment GPU.
+
 ## Install a native SDK/runtime
 
 Install a configured native build into a relocatable prefix:
