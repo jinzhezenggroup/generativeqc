@@ -262,6 +262,10 @@ measured_core_runtime_paths=(
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  # Run 40450776430 exhausted core-a twice; this intact corrected-Lambda
+  # module used 269-351 s per worker while uccsd-forces finished in 559 s.
+  # Preserve its ordinary core slot and all cases on existing worksteal workers.
+  tests/python/test_uccsd_t_lambda.py
   "${measured_core_runtime_paths[@]}"
   # Run 39351749228 reached minute 28 before the final tight VV10 case.
   # Preserve the core modulo slot, but transfer the complete endpoint file
@@ -352,23 +356,14 @@ nightly_hessian_paths=(
 # originally totaled about 0.7k observed worker-seconds per group. Later
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
-# Dedicated UCCSD force tests no longer occupy the broad core queues;
-# corrected Lambda stays an independent prioritized core-a owner.
-core_fresh_frontier_a=(
-  tests/python/test_uccsd_t_lambda.py
-)
+# Dedicated UCCSD force and corrected-Lambda tests use the existing force lane.
 core_hotspots_a=(
   # Runs 40123113539 / 40124170599 exhausted core-c while core-a
   # completed in 20m49s in the latter. Keep the intact ~305-worker-second
   # Lambda reuse module on core-a without removing its ordinary slot.
   tests/python/test_df_lambda_core_reuse.py
-  # Run 39378471974 timed out core-c with no recorded failures while core-a
-  # finished in 17m45s. Transfer the complete corrected-Lambda family
-  # (965 observed worker-seconds), preserving its priority and ordinary slots.
-  "${core_fresh_frontier_a[@]}"
-  # Run 38867209562 delayed cold RKS water by 352 s behind corrected Lambda.
-  # Keep all three fresh Hessian/Lambda families on distinct stable owners,
-  # without removing their original slots from the ordinary modulo split.
+  # Historical pins retain ordinary modulo slots. Dedicated complete-file
+  # transfers above take precedence over these earlier core owners.
   tests/python/test_wb97mv_hessian.py
   tests/python/test_mixed_rsh_df_forces.py
   # Keep complete high-angular HF parallel with its original core slot;
@@ -436,16 +431,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${core_hotspots_c[@]}"; do
       pinned_core_owner["${path}"]=2
     done
-    # Keep the remaining function-scoped UKS HVP and corrected Lambda early.
+    # Keep the remaining function-scoped UKS HVP early.
     # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
       tests/python/test_wb97mv_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a)
-        target_bucket=0
-        fresh_frontier_paths+=("${core_fresh_frontier_a[@]}")
-        ;;
+      core-a) target_bucket=0 ;;
       core-b) target_bucket=1 ;;
       core-c)
         target_bucket=2
@@ -504,13 +496,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite shares this existing lighter lane. Put it
     # first so its long water HVP starts before the complete force matrices;
     # worksteal keeps their independent function-scoped cases parallel.
+    # Corrected Lambda retains its fresh priority without sharing function fixtures.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
       tests/python/test_wb97mv_hessian.py \
       tests/python/test_uccsd_gradient.py \
-      tests/python/test_uccsd_t_gradient.py; do
+      tests/python/test_uccsd_t_gradient.py \
+      tests/python/test_uccsd_t_lambda.py; do
       # Select tracked files even when missing on disk, to fail closed; avoid
       # inventing future files on pre-merge branches or synthetic inventories.
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then

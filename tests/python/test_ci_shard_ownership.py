@@ -406,6 +406,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_wb97mv_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
+            "test_uccsd_t_lambda.py",
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
@@ -417,7 +418,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "core-a": (
             "test_cc_triples_tiles.py",
-            "test_uccsd_t_lambda.py",
             "test_df_lambda_core_reuse.py",
         ),
         "core-b": (
@@ -561,6 +561,7 @@ def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
         "tests/python/test_wb97mv_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
+        "tests/python/test_uccsd_t_lambda.py",
     ]
     assert distribution == "worksteal"
     assert targets == expected
@@ -652,7 +653,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_uccsd_t_lambda.py": "core-a",
+        "tests/python/test_uccsd_t_lambda.py": "uccsd-forces",
     }
     owners = {
         **parallel,
@@ -716,7 +717,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         priority = {
             "tests/python/test_uccsd_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
-            "tests/python/test_uccsd_t_lambda.py": "core-a",
+            "tests/python/test_uccsd_t_lambda.py": "uccsd-forces",
         }
         for shard, (_, _, arguments) in selections.items():
             selected_priority = [
@@ -797,7 +798,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
     frontiers = {
         "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
-        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-a"),
+        "lambda": ("tests/python/test_uccsd_t_lambda.py", "uccsd-forces"),
         "order5": ("tests/python/test_direct_order5_sources.py", "core-c"),
     }
     owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
@@ -1436,8 +1437,9 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
         "test_wb97mv_hessian.py",
         "test_uccsd_gradient.py",
         "test_uccsd_t_gradient.py",
+        "test_uccsd_t_lambda.py",
     )
-    counts = (10, 24, 24)
+    counts = (10, 24, 24, 17)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     directory = tmp_path / "tests/python"
     directory.mkdir(parents=True)
@@ -1451,9 +1453,15 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     )
     for name, count in zip(names, counts, strict=True):
         (directory / name).write_text(
-            "import pytest\n"
+            "import json, os\nfrom pathlib import Path\nimport pytest\n"
+            "@pytest.fixture\n"
+            "def fresh(request):\n"
+            "    with Path('fresh-setups.jsonl').open('a') as output:\n"
+            "        output.write(json.dumps([request.node.nodeid, "
+            "os.environ['PYTEST_XDIST_WORKER']]) + '\\n')\n"
+            "    return object()\n"
             f"@pytest.mark.parametrize('value', range({count}))\n"
-            "def test_case(value):\n    assert value >= 0\n",
+            "def test_case(value, fresh):\n    assert value >= 0\n",
             encoding="utf-8",
         )
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
@@ -1507,3 +1515,10 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
         for value in range(count)
     )
     assert Counter(node for entries in records for node in entries) == expected
+    setups = [
+        json.loads(line)
+        for line in (tmp_path / "fresh-setups.jsonl").read_text().splitlines()
+    ]
+    # Every selected case owns one fresh setup; no duplicate or shared fixture
+    # is introduced by adding a complete module to the existing priority lane.
+    assert Counter(node for node, _ in setups) == expected
