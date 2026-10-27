@@ -200,6 +200,7 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_rccsd_codegen_no_numpy.py",
         "test_dft_mp_v1_capacity.py",
         "test_df_lambda_frontier.py",
+        "test_native_stationary_phased_budget.py",
     ):
         assert f"tests/python/{filename}" in targets
 
@@ -225,6 +226,8 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     (
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
+        ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -274,6 +277,8 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
     (
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
+        ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -396,6 +401,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         # Landed dedicated transfers supersede historical core pins.
         "ecp-forces": ("test_mixed_rsh_df_forces.py",),
         "compiler-heavy": (
+            "test_native_stationary_phased_budget.py",
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
             "test_cc_native_tensor_cpu.py",
@@ -410,6 +416,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
+            "test_correlation_convergence.py",
             "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
@@ -421,7 +428,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_lambda_core_reuse.py",
         ),
         "core-b": (
-            "test_correlation_convergence.py",
             "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -482,7 +488,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
-        "tests/python/test_correlation_convergence.py": "core-b",
+        "tests/python/test_correlation_convergence.py": "runtime-heavy",
+        "tests/python/test_native_stationary_phased_budget.py": "compiler-heavy",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
@@ -499,6 +506,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_correlation_convergence_next.py",
+            "test_native_stationary_phased_budget_next.py",
             "test_cpu_semilocal_force_contract_next.py",
             "test_df_lambda_core_reuse_next.py",
             "test_df_lambda_mixed_precision_next.py",
