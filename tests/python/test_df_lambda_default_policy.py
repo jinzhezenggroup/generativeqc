@@ -670,6 +670,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
 #include <cstddef>
 #include <optional>
 #include "cc/solver.hpp"
+#include "methods/df_ccsdt_retry_policy.hpp"
 struct generativeqc_method_descriptor {};
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
@@ -780,3 +781,4 @@ int main() { return generativeqc::methods::detail::probe(); }
         timeout=60,
     )
     subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
+
