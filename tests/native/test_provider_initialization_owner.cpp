@@ -176,8 +176,8 @@ int run_owner(const std::string& mode) {
     const auto physical_calls = calls;
     weak.lock()->fail_finalization = false;
     const auto repeated = cell.try_close_current(observe);
-    require(!first.confirmed() && !repeated.confirmed() && !cell.can_destroy() &&
-                !weak.expired() && !weak.lock()->closed && weak.lock()->finalizations == 1 &&
+    require(!first.confirmed() && !repeated.confirmed() && !cell.can_destroy() && !weak.expired() &&
+                !weak.lock()->closed && weak.lock()->finalizations == 1 &&
                 calls == physical_calls && cell.retained_budget() == budget && !pins[1].expired(),
             "failed finalization was confirmed, retried or lost original custody");
     require(repeated.reported_steps_succeeded() && !repeated.detail.empty(),
