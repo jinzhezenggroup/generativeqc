@@ -57,6 +57,7 @@ struct RunOptions {
   bool initial_guess_explicit{false}, initial_guess_controls_explicit{false};
   std::uint32_t batch{1};
   std::optional<std::uint64_t> host_bytes, device_bytes, pinned_host_bytes;
+  std::optional<std::uint64_t> owned_device_bytes;
   std::uint64_t host_reserve_bytes{0}, device_reserve_bytes{0};
   double headroom_fraction{0};
   generativeqc_precision_mode precision{GENERATIVEQC_PRECISION_FP64};

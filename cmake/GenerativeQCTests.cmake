@@ -308,6 +308,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_resource_planning_tests tests/native/test_resource_planning.cpp)
   generativeqc_native_test(generativeqc_resource_ledger_plan_tests tests/native/test_resource_ledger_plan.cpp)
+  generativeqc_native_test(generativeqc_device_resources_tests tests/native/test_device_resources.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
   generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
@@ -685,6 +686,15 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_native_stationary_cuda_binding_tests
                        tests/native/test_native_stationary_cuda_binding.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    if(TARGET generativeqc_stationary_pbe0_rks_manifest)
+      # This lifecycle gate executes complete prepared forces as well as lazy
+      # derivative ports, so its native stationary binding must be available.
+      generativeqc_native_test(generativeqc_ks_capacity_cuda_tests
+                         tests/native/test_ks_capacity_cuda.cpp
+                         LIBRARIES CUDA::cudart SKIP_77)
+      add_dependencies(generativeqc_ks_capacity_cuda_tests generativeqc_stationary_pbe0_rks_manifest)
+      set_tests_properties(generativeqc_ks_capacity_cuda_tests PROPERTIES TIMEOUT 300)
+    endif()
   endif()
 
   if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AOT_SHELLS)

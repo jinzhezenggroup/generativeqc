@@ -190,6 +190,76 @@ allowance-only inventory has a zero numeric limit, not a fabricated allocation.
 Retained native buffers/reservations continue to outlive observation scopes and
 closed frontend handles until their actual owners release them.
 
+### Native prepared admission lifetime
+
+The public `generativeqc_device_resources_create` accepts the selected inventory
+as typed `generativeqc_device_resource_buffer_v1` records with descriptor
+`admission = GENERATIVEQC_DEVICE_RESOURCE_SELECTED_INVENTORY` (zero). A raw cap
+requires `GENERATIVEQC_DEVICE_RESOURCE_NUMERIC_CAP` and exactly one positive
+device row with zero phases and no runtime allowance, as the CLI run-only option
+provides. A single selected row remains selected inventory: native methods may
+not reinterpret it as spare capacity for optional storage. The private inventory
+ABI retains selected-inventory behavior. Neither mode claims that a complete
+global plan has been selected or admitted, or grants exclusive use of the handle.
+The interface shares the native
+lifetime sweep with the older private metadata interface; it does not perform a
+second global selection or validate model identity. Host-only metadata creation
+and snapshots do not initialize CUDA or certify scientific backend support.
+
+Pass this handle to `generativeqc_calculation_prepare_with_device_resources` or
+`generativeqc_batch_prepare_with_device_resources` (or the optional resource
+argument of the C++ `Calculation`, `Batch` and `KsComposition::prepare` wrappers).
+The native prepared owner binds admission during both construction and each
+synchronous execution, including ragged fleets. It retains shared ownership
+until its scientific buffers and providers are destroyed. Closing the frontend
+metadata handle cannot detach admission or retained charges. The matching
+`*_get_device_resources` query returns a separately destroyable metadata handle
+to that same owner, not a new budget.
+
+Same-owner nested operations borrow the active binding without resetting work
+or allocation counters. A different already-bound owner or concurrent use of
+the same owner is rejected, never silently substituted. Exceptions restore the
+prior binding. Native operations serialize the bounded host workspace even when
+no Python observation exists. When they own a sampling scope they retain its
+host/arena samples in the public diagnostic; an outer observer is borrowed and
+is not misreported as isolated native sampling. A zero sample count means that
+sampled peak is unavailable, not proof of zero memory use. Requested-byte
+counter overflow likewise makes that quantity unavailable without relaxing
+admission. Numeric allocations and provider reservations remain distinct.
+The snapshot echoes the admission mode and reports unused native owner promises
+as `capacity_reserved_bytes`. These promises are excluded from allocated-byte
+counts, requested bytes and `combined_peak_bytes`; current numeric bytes plus
+provider reservations plus unused promises must fit `numeric_limit`.
+
+For an explicit numeric cap, strict FP64 all-electron s/p PBE/PBE0 KS with
+homogeneous full-range Direct or DF providers can reserve the native mandatory
+fleet before constructing its first item. The bound includes serialized rebuild
+excess and deferred consumers; each independently callable prepared-owner port
+uses its owner's promise. Optional mapped AO storage, spatial grid copies and
+point batches can spend only capacity left after those promises. The dense XC
+fallback remains reserved even while optional storage is live. Shared resource
+handles retain separate promises for separate prepared owners.
+
+Selected external inventories retain the dense/single-tile path. Preliminary
+guesses, range/nonlocal/D4 corrections, automatic/generated-split programs,
+explicit incremental J/K, application precision budgets and experimental PBE
+point precision retain incumbent admission. A native bound that does not fit
+also retains incumbent admission; this is a bounded fallback under the same
+cap. It does not authorize an unbudgeted retry or expand supported properties.
+In particular, public CUDA DF KS forces remain unsupported.
+
+The Python adapter uses this public preparation and snapshot path whenever the
+matching native preparation symbol exists, without frontend observation/binding
+control. Only absence of that symbol selects the explicit old-library path;
+partial ABIs, refused creation/preparation, or inconsistent diagnostics never
+retry an unbudgeted path. CPU resource-aware preparation is unsupported rather
+than silently running without the requested device owner.
+
+This establishes native ownership of the admitted numeric capacity, not complete
+provider-internal allocation coverage, global physical-memory authority, RSS
+measurement or a new force/HVP capability. The separate global planner and
+explicit allowances retain their existing scope.
+
 ## CUDA KS to force handoff
 
 CUDA KS keeps its admitted optional ERI value cache and Fast anchor matrices

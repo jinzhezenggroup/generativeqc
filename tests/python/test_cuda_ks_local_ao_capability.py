@@ -105,6 +105,8 @@ def test_prepared_density_preserves_local_ao_component_precision(
         "  static constexpr std::size_t host_reservation"
     )
     reservation_end = panel_header.index(";", reservation_start) + 1
+    optional_start = source.index("    const bool optional_xc_admitted =")
+    optional_end = source.index("    // Maps share one arena", optional_start)
     prepare_start = source.index(
         "        const auto admitted_precision = resolve_cuda_ks_iteration_precision("
     )
@@ -235,6 +237,10 @@ int main() {
   for (bool budgeted : {false, true}) {
     runtime::active_device_resource_ledger = budgeted
         ? std::make_shared<runtime::DeviceResourceLedger>() : nullptr;
+    const int device = 0;
+"""
+        + source[optional_start:optional_end]
+        + r"""
   for (unsigned batching = 0; batching < 6; ++batching) {
     unsetenv("GENERATIVEQC_CUDA_XC_BATCH_TILES");
     unsetenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES");
@@ -516,7 +522,8 @@ def test_selected_physical_layout_propagates_back_to_the_ks_owner(
 ) -> None:
     """Execute publication/refusal using the owner's real admission block."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    start = source.index("        if (admit_ao) {")
+    selection = source.index("          if (!xc->select_local_ao(")
+    start = source.rindex("        if (admit_ao) {", 0, selection)
     end = source.index("        const auto admitted_precision", start)
     probe = tmp_path / "publication.cpp"
     probe.write_text(

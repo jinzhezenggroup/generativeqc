@@ -13,6 +13,7 @@
 
 #include "molecule/basis.hpp"
 #include "runtime/host_component_trace.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
@@ -323,7 +324,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
     // An accepted global CPU resource plan may require serialized items.
     // This explicit cap is independent of the hardware thread count; without
     // it a largest-item workspace estimate would undercount concurrent solves.
-    const auto requested_workers = runtime::cpu_resource_observation.cpu_worker_limit;
+    const auto requested_workers = runtime::resource_cpu_worker_limit();
     const std::size_t worker_count = std::min(
         bucket_size, requested_workers ? std::min<std::size_t>(hardware_threads, requested_workers)
                                        : hardware_threads);

@@ -92,6 +92,7 @@ def admission_probe(
     unit.write_text(
         r"""
 #include <algorithm>
+#include <cassert>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
@@ -148,6 +149,7 @@ int main(int argc, char** argv) {
   const bool host_unfused = mode == "host";
   const bool automatic = std::string(argv[5]) == "auto";
   const bool nonlocal = std::string(argv[6]) == "nonlocal";
+  const int device = 0;
   try {
     auto xc_layout = cuda_xc_layout_shape(
         3, 9, mode == "budget" ? 4096 : (mode == "large" ? 1664 : 12),
@@ -162,9 +164,26 @@ int main(int argc, char** argv) {
     if (mode == "zero-tile") xc_layout.tile_points = 0;
     if (mode == "ledger")
       runtime::active_device_resource_ledger=std::make_shared<runtime::DeviceResourceLedger>();
+    std::unique_ptr<runtime::DeviceCapacityReservation> reservation;
+    std::unique_ptr<runtime::DeviceCapacityScope> capacity_scope;
+    if (mode == "promise-headroom" || mode == "promise-full") {
+      auto ledger = std::make_shared<runtime::DeviceResourceLedger>();
+      ledger->limit = 128U << 20;
+      reservation = std::make_unique<runtime::DeviceCapacityReservation>(
+          ledger, mode == "promise-full" ? ledger->limit : 1U << 20);
+      capacity_scope = std::make_unique<runtime::DeviceCapacityScope>(*reservation);
+    }
+
 """
         + guard
         + r"""
+    if (reservation) {
+      const auto ledger = runtime::active_device_resource_ledger;
+      assert(runtime::active_device_capacity_promise);
+      assert(ledger->capacity_reserved ==
+             (mode == "promise-full" ? ledger->limit : 1U << 20));
+      assert(ledger->live == 0 && ledger->rejected == 0);
+    }
     // Emulate a successful owner's selected layout without any CUDA execution.
     // Empty maps are legal; this tests the arithmetic contract, not the cutoff.
     if (admit_ao) {
@@ -370,7 +389,9 @@ def test_independent_grid_keeps_dense_fallback_and_failure_cleanup(
         .replace("SECONDARY", secondary)
         .replace("CLEANUP", cleanup)
     )
-    native_cxx.build_executable([unit], executable, compile_args=("-std=c++20", "-O0"))
+    native_cxx.build_executable(
+        [unit], executable, compile_args=("-std=c++20", "-O0", "-I" + str(ROOT / "src"))
+    )
     result = subprocess.run(
         [str(executable)], check=False, capture_output=True, text=True, timeout=10
     )
@@ -384,13 +405,17 @@ _INDEPENDENT_GRID_ALLOCATION_HARNESS = r"""
 #include <map>
 #include <memory>
 #include <new>
+#include <optional>
 #include <vector>
+#include "runtime/resource_ledger.hpp"
 constexpr int cudaSuccess=0,cudaErrorMemoryAllocation=2,cudaErrorUnknown=9;
 int cudaGetLastError(){return 0;}int cudaGetDevice(int* p){*p=0;return 0;}int cudaSetDevice(int){return 0;}
 int cudaStreamSynchronize(void*){return 0;}
 void check(int s){if(s==2)throw std::bad_alloc();if(s)throw s;}
 std::size_t sum(std::size_t a,std::size_t b){return a+b;}
 namespace runtime {
+using generativeqc::runtime::DeviceUnpromisedCapacityScope;
+using generativeqc::runtime::DeviceProviderAllowance;
 std::size_t free_bytes;std::vector<std::size_t> requests;std::map<void*,std::size_t> owned;int failure=0;bool host_fail=false;std::size_t failing_bytes=0;
 int resource_cuda_malloc(void** pointer,std::size_t bytes,bool* host_oom=nullptr){
  requests.push_back(bytes);if(host_oom)*host_oom=false;
@@ -415,6 +440,7 @@ struct Fixture {
  struct{bool nonlocal_grid;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;}options;
  void *xc_arena=nullptr,*nonlocal_xc_arena=nullptr,*fast_anchor_arena=nullptr,*nonlocal_arena=nullptr,*arena=nullptr;
  std::unique_ptr<CudaXcPlan> xc,nonlocal_xc,eigensolver;Resettable matrix_products;
+ std::optional<runtime::DeviceProviderAllowance> matrix_provider_allowance;
  struct{void* stream=nullptr;}range_fock_binding;void retire_phase_source(bool){}
  int basis=0,spins=1,tile=64,device=0,functional=1;void* stream=nullptr;Grid grid,nonlocal_grid;
  Fixture(bool maps,bool split):resource{(maps?96u:64u)*1024},admit_ao(maps),options{split}{}
@@ -452,3 +478,12 @@ int main(){
  std::cout<<"12 allocator failure cases and both constructor failures preserve cleanup; host/runtime failures are not retried\n";
 }
 """
+
+
+@pytest.mark.parametrize(
+    "mode, expected", [("promise-headroom", "local:0:0"), ("promise-full", "dense:0:0")]
+)
+def test_optional_ao_spends_only_unpromised_capacity(
+    admission_probe: Path, mode: str, expected: str
+) -> None:
+    assert _run(admission_probe, "1", mode=mode) == expected

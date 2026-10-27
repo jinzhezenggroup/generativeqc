@@ -144,6 +144,7 @@ typedef struct generativeqc_context generativeqc_context;
 typedef struct generativeqc_system generativeqc_system;
 typedef struct generativeqc_calculation generativeqc_calculation;
 typedef struct generativeqc_batch generativeqc_batch;
+typedef struct generativeqc_device_resources generativeqc_device_resources;
 
 typedef struct generativeqc_d3_batch generativeqc_d3_batch;
 typedef struct generativeqc_d4_batch generativeqc_d4_batch;
@@ -1427,6 +1428,101 @@ typedef struct generativeqc_batch_item_result_descriptor {
   int32_t warm_start_used;
   int32_t warm_start_fallback;
 } generativeqc_batch_item_result_descriptor;
+
+/** One selected inventory capacity. Atomic spaces are 2=pinned host,
+ * 3=pageable host and 4=device. Host entries require device=0. Inclusive
+ * lifetime phases may be sparse. runtime_allowance is exactly 0 or 1;
+ * allowances count toward declared peaks but cannot fund numeric allocations. */
+typedef struct generativeqc_device_resource_buffer_v1 {
+  uint64_t bytes, space, device, first_phase, last_phase, runtime_allowance;
+} generativeqc_device_resource_buffer_v1;
+
+/** Authority behind the capacity rows. Zero preserves selected-inventory
+ * behavior, including consumers outside the prepared native method. */
+typedef enum generativeqc_device_resource_admission {
+  GENERATIVEQC_DEVICE_RESOURCE_SELECTED_INVENTORY = 0,
+  GENERATIVEQC_DEVICE_RESOURCE_NUMERIC_CAP = 1
+} generativeqc_device_resource_admission;
+
+/** Caller-selected capacities for one visible CUDA device: selected buffers
+ * from an externally admitted plan, or an explicitly identified numeric cap.
+ * Construction copies metadata only. Neither form is global-plan/model identity
+ * validation, physical allocation coverage, provider capability or an RSS cap. */
+typedef struct generativeqc_device_resource_descriptor {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  const generativeqc_device_resource_buffer_v1* buffers;
+  uint32_t buffer_count;
+  /** NUMERIC_CAP requires exactly one positive device row with zero phases and
+   * no runtime allowance. Row count never implies the admission mode. */
+  generativeqc_device_resource_admission admission;
+} generativeqc_device_resource_descriptor;
+
+/** Actual native-owned numeric charges and distinct provider reservations.
+ * Zero counts describe only this instrumented owner, not complete device work.
+ * requested_bytes is unavailable when requested_bytes_available is zero. */
+typedef struct generativeqc_device_resource_diagnostic {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint64_t numeric_limit, declared_device_peak;
+  uint64_t numeric_live_bytes, numeric_peak_bytes, allocations, rejected_allocations;
+  uint64_t requested_bytes, provider_reserved_bytes, provider_reservation_peak_bytes;
+  uint64_t combined_peak_bytes;
+  uint64_t sampled_host_peak_bytes, host_samples;
+  uint64_t sampled_cuda_arena_peak_bytes, cuda_arena_samples;
+  int32_t device;
+  int32_t requested_bytes_available;
+  /** Unspent native owner promises, excluded from numeric/provider charges and
+   * combined_peak_bytes. Live numeric + provider + unused promises <= limit. */
+  uint64_t capacity_reserved_bytes;
+  generativeqc_device_resource_admission admission;
+} generativeqc_device_resource_diagnostic;
+
+/** @native-contract generativeqc_device_resources_create
+ * @behavior Derive allowance-separated numeric admission from selected capacity lifetimes.
+ * @inputs Initialize descriptor with sizeof and GENERATIVEQC_ABI_VERSION. buffers contains
+ * buffer_count valid entries; count is positive. admission explicitly selects an external
+ * inventory or raw numeric cap; unknown values are rejected. resources points to a NULL handle and
+ * is disjoint from descriptor and buffers. Any global selection/admission remains caller-owned; an
+ * explicit numeric cap does not assert complete-plan feasibility.
+ * @outputs Publish one owning metadata handle only after all admission/allocation succeeds.
+ * @lifetime Copies all input metadata. Destroy the returned handle with the matching function.
+ * Prepared batches retain the underlying owner independently of this metadata handle.
+ * @errors Invalid fields/overflow return INVALID_ARGUMENT, incompatible descriptors return
+ * ABI_MISMATCH, missing/multiple devices return NOT_IMPLEMENTED, metadata allocation failure
+ * returns OUT_OF_MEMORY. Every rejection leaves the output slot and inputs unchanged.
+ * @execution Synchronous, CUDA-context-free metadata operation; no Python or runtime compiler.
+ * @units Capacities are bytes; device is the scheduler-visible ordinal, not a physical GPU ID.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_device_resources_create(const generativeqc_device_resource_descriptor* descriptor,
+                                     generativeqc_device_resources** resources);
+
+/** @native-contract generativeqc_device_resources_destroy
+ * @behavior Release one metadata handle without detaching retained native buffers or leases.
+ * @inputs Pass a matching live handle, or NULL for a no-op; never a dangling/foreign handle.
+ * @lifetime Batches and actual allocation/provider owners keep their own shared lifetime.
+ * @errors No status is returned; double destruction or concurrent use of this handle is invalid.
+ * @execution Synchronous metadata release; no CUDA operation or Python dependency.
+ */
+GENERATIVEQC_API void generativeqc_device_resources_destroy(
+    generativeqc_device_resources* resources);
+
+/** @native-contract generativeqc_device_resources_read
+ * @behavior Read one locked snapshot of actual instrumented charges and admission reservations.
+ * @inputs A live metadata handle and initialized diagnostic with sizeof/GENERATIVEQC_ABI_VERSION.
+ * @outputs Publish the complete diagnostic on success; requested-byte overflow is explicitly
+ * unavailable, not a fabricated zero-byte replay. Failure leaves the output unchanged.
+ * @lifetime The copied snapshot belongs to the caller; do not destroy/use the metadata handle
+ * concurrently. Native batch execution may independently update the shared owner.
+ * @errors NULL inputs return INVALID_ARGUMENT; incompatible output returns ABI_MISMATCH.
+ * @execution Synchronous locked metadata snapshot; no device synchronization or allocation.
+ * @units Byte capacities exclude context/graph/pool/runtime and uninstrumented library storage.
+ * Iteration-boundary host/arena samples are unavailable when their sample count is zero;
+ * they are not complete endpoint allocation peaks. Existing outer observers remain independent.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_device_resources_read(
+    const generativeqc_device_resources* resources, generativeqc_device_resource_diagnostic* out);
 
 /** Return the ABI version implemented by the loaded shared library. */
 /** @native-contract generativeqc_get_abi_version
@@ -2908,6 +3004,42 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_df_gradient_cuda(
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_calculation_prepare_with_device_resources
+ * @behavior Prepare the same scientific calculation with native-owned device admission.
+ * The native owner binds around preparation and every execution, including component returns,
+ * without Python observation control. Admission owns the serialized host-workspace schedule.
+ * @inputs Ordinary calculation_prepare inputs plus a live selected device-resources handle.
+ * The context must execute CUDA on the same visible device. The caller owns any matching
+ * global-plan admission; an explicit cap is not full-plan or model-identity validation.
+ * @outputs Follow calculation_prepare's output contract. Refusal never retries unbudgeted math.
+ * @lifetime Retains the underlying resource owner; the metadata handle may close after success.
+ * Keep the context alive through calculation destruction. Actual buffers/providers release their
+ * charges with their real lifetimes, independently of frontend observation handles.
+ * @errors Preserve ordinary preparation statuses. NULL resources/device mismatch/foreign or
+ * concurrent resource binding return INVALID_ARGUMENT; CPU contexts return NOT_IMPLEMENTED;
+ * numeric allocation shortage returns OUT_OF_MEMORY.
+ * @execution Synchronous; serialize this calculation/context. Uses normal device visibility.
+ * @units Numeric byte limits exclude separately declared runtime/library allowances, not RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_device_resources(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor,
+    const generativeqc_device_resources* resources, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_calculation_get_device_resources
+ * @behavior Return another metadata handle for this calculation's actual native resource owner.
+ * @inputs A live calculation and disjoint NULL output handle; serialize owner destruction.
+ * @outputs Publish one owning metadata handle on success; failures leave the output unchanged.
+ * @lifetime The metadata handle may outlive the calculation to observe real final releases;
+ * it does not keep the scientific calculation or context alive. Destroy it independently.
+ * @errors Invalid inputs return INVALID_ARGUMENT; an unbudgeted calculation returns
+ * NOT_IMPLEMENTED; metadata allocation failure returns OUT_OF_MEMORY.
+ * @execution Synchronous metadata operation under the context lock; no CUDA/Python work.
+ * @units Same instrumented numeric/reservation/sample scope as device_resources_read, not RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_device_resources(
+    const generativeqc_calculation* calculation, generativeqc_device_resources** resources);
 /** Release a prepared calculation and its retained execution resources. */
 /** @native-contract generativeqc_calculation_destroy
  * @behavior Release the calculation exactly once.
@@ -3321,6 +3453,42 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_batch_prepare(generativeqc_context* context, const generativeqc_system* const* systems,
                            uint32_t system_count, const generativeqc_method_descriptor* descriptor,
                            generativeqc_batch_flags flags, generativeqc_batch** batch);
+
+/** @native-contract generativeqc_batch_prepare_with_device_resources
+ * @behavior Prepare the same scientific batch with native-owned device admission and lifetime.
+ * The native owner binds around preparation and every execution without a Python observation.
+ * @inputs All ordinary batch_prepare inputs plus a live selected device-resources handle.
+ * The context must execute CUDA on that same visible device. The caller owns any matching
+ * global-plan admission; an explicit cap is not full-plan or model-identity validation.
+ * @outputs Use batch_prepare's output/validation contract. No unbudgeted retry follows refusal.
+ * @lifetime The batch retains its own resource owner. The metadata handle may close after
+ * successful preparation; retained buffers/providers remain charged until their actual release.
+ * Keep the context alive until the batch is destroyed, as for the ordinary batch API.
+ * @errors Ordinary preparation errors are preserved. NULL resources, device mismatch and
+ * foreign/concurrent resource binding return INVALID_ARGUMENT; allocation shortage returns
+ * OUT_OF_MEMORY. CPU contexts return NOT_IMPLEMENTED, not unbudgeted CPU execution.
+ * @execution Synchronous; serialize the batch/context. Same-owner nesting preserves counters;
+ * foreign native owners never silently share one active scope. Normal device visibility applies.
+ * @units Numeric limits are bytes, excluding separately declared runtime/library allowances.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_with_device_resources(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
+    const generativeqc_device_resources* resources, generativeqc_batch** batch);
+
+/** @native-contract generativeqc_batch_get_device_resources
+ * @behavior Return another metadata handle for the actual prepared resource owner.
+ * @inputs A live batch and disjoint NULL output handle; serialize with batch destruction.
+ * @outputs Publish one owning handle on success; every failure leaves the slot unchanged.
+ * @lifetime Destroy the returned handle independently; it may outlive the batch to observe
+ * final buffer/provider releases. It does not keep the scientific batch or context alive.
+ * @errors NULL/nonempty outputs return INVALID_ARGUMENT; unbudgeted batches return
+ * NOT_IMPLEMENTED. Metadata allocation failure returns OUT_OF_MEMORY.
+ * @execution Synchronous metadata operation under the batch context lock; no CUDA/Python work.
+ * @units Same numeric capacity/reservation scope as device_resources_read, never RSS coverage.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_device_resources(
+    const generativeqc_batch* batch, generativeqc_device_resources** resources);
 
 /** Release a prepared ragged batch and its persistent workspaces/warm state. */
 /** @native-contract generativeqc_batch_destroy
