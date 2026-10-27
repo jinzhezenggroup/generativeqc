@@ -116,6 +116,10 @@ under finite Slurm allocations before considering promotion.
 
 ## References
 
+- Follow-up: [native endpoint qualification](../../rejected/2026-10-27-lambda-multisecant-default-promotion.md)
+  found no complete CBS E+F speedup under current Standard/auto controls and
+  rejected default promotion of the measured diagnostic candidate. The original
+  host-screen measurements above remain unchanged.
 - `src/cc/cuda_solver.cu`: Anderson pairing, mixed epoch reset and ring lifetime.
 - `python/generativeqc_compiler/cc/pair_coordinates.py`: DIIS storage ordering.
 - `src/cc/lambda_response_cuda.cu`: Lambda coordinates, host/resident schedules.
