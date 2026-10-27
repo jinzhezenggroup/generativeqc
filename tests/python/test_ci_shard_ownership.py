@@ -467,6 +467,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_triples_fock_response.py",
         ),
         "uccsd-forces": (
+            "test_correlation_convergence.py",
             "test_wb97mv_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
@@ -486,7 +487,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_lambda_core_reuse.py",
         ),
         "core-b": (
-            "test_correlation_convergence.py",
             "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -548,7 +548,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
-        "tests/python/test_correlation_convergence.py": "core-b",
+        "tests/python/test_correlation_convergence.py": "uccsd-forces",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
@@ -601,11 +601,17 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         assert sum(targets.count(path) for _, targets, _ in selections.values()) == (
             1 if tracked else 0
         )
-        assert not any(
-            path in argument
-            for _, _, arguments in selections.values()
-            for argument in arguments
-        )
+        for shard, (_, _, arguments) in selections.items():
+            expected = (
+                [f"--ci-fresh-priority={path}"]
+                if tracked
+                and path == "tests/python/test_correlation_convergence.py"
+                and shard == "uccsd-forces"
+                else []
+            )
+            # Priority changes scheduling only; no path-specific deselection or
+            # duplicate/wrong-owner priority may accompany this intact transfer.
+            assert [argument for argument in arguments if path in argument] == expected
     for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         distribution, targets, _ = selections[shard]
         assert distribution == "worksteal"
@@ -614,6 +620,45 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             for index, path in enumerate(inventory)
             if owners.get(path) == shard or (path not in owners and index % 3 == bucket)
         ]
+
+
+@pytest.mark.parametrize(
+    "mutation", ("missing", "duplicate", "wrong_owner", "deselect")
+)
+def test_convergence_priority_contract_rejects_changed_arguments(
+    mutation: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = _selection
+    path = "tests/python/test_correlation_convergence.py"
+    priority = f"--ci-fresh-priority={path}"
+
+    def altered(
+        event: str,
+        shard: str,
+        *,
+        root: Path = ROOT,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[str, list[str], list[str]]:
+        distribution, targets, arguments = original(
+            event, shard, root=root, environment=environment
+        )
+        arguments = list(arguments)
+        if shard == "uccsd-forces":
+            if mutation in {"missing", "wrong_owner"}:
+                arguments.remove(priority)
+            elif mutation == "duplicate":
+                arguments.append(priority)
+            elif mutation == "deselect":
+                arguments.extend(("--deselect", path))
+        if shard == "core-b" and mutation == "wrong_owner":
+            arguments.append(priority)
+        return distribution, targets, arguments
+
+    monkeypatch.setitem(globals(), "_selection", altered)
+    with pytest.raises(AssertionError):
+        test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
+            "pull_request", "tracked", (), tmp_path
+        )
 
 
 @pytest.mark.parametrize(
@@ -627,6 +672,7 @@ def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
         "tests/python/test_wb97mv_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
+        "tests/python/test_correlation_convergence.py",
     ]
     assert distribution == "worksteal"
     assert targets == expected
@@ -725,6 +771,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_uccsd_gradient.py": "uccsd-forces",
         "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
+        "tests/python/test_correlation_convergence.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
         "tests/python/test_uccsd_native.py": "compiler-heavy",
         "tests/python/test_uccsd_triples_fock_response.py": "compiler-heavy",
@@ -782,6 +829,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         priority = {
             "tests/python/test_uccsd_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
+            "tests/python/test_correlation_convergence.py": "uccsd-forces",
             "tests/python/test_uccsd_t_lambda.py": "core-a",
         }
         for shard, (_, _, arguments) in selections.items():

@@ -367,10 +367,25 @@ inline void execute_strided_fp64_product(generativeqc_tensor::Context& context, 
                                          std::size_t m, std::size_t n, std::size_t k, double alpha,
                                          const double* a, std::size_t lda, const double* b,
                                          std::size_t ldb, double beta, double* c, std::size_t ldc) {
-  generativeqc_tensor::blas_check(cublasDgemm(
-      context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-      static_cast<int>(m), static_cast<int>(n), static_cast<int>(k), &alpha, a,
-      static_cast<int>(lda), b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
+  // Keep the original column-major strides and host alpha/beta pointers.
+  // The shared Tensor provider owns the actual vendor submission.
+  const generativeqc_tensor::ColumnGemmView request{
+      .handle = context.handle,
+      .transpose_left = ta != 'N',
+      .transpose_right = tb != 'N',
+      .rows = static_cast<int>(m),
+      .columns = static_cast<int>(n),
+      .reduction = static_cast<int>(k),
+      .alpha = &alpha,
+      .left = a,
+      .left_ld = static_cast<int>(lda),
+      .right = b,
+      .right_ld = static_cast<int>(ldb),
+      .beta = &beta,
+      .output = c,
+      .output_ld = static_cast<int>(ldc),
+  };
+  generativeqc_tensor::blas_check(generativeqc_tensor::submit_column_gemm(request));
 }
 
 // Pure view packing/scatter. The scientific V products stay compiler-owned.
