@@ -9,7 +9,7 @@ Run with the shared scheduler profile, for example::
 
     GENERATIVEQC_BENCHMARK_GRES=gpu:5090:1 \
       python -m generativeqc_compiler.integral.benchmark \
-      --nvcc /group/software/cuda-12.9.1/bin/nvcc --architecture sm_120
+      --nvcc /path/to/cuda/bin/nvcc --architecture sm_120
 
 The environment selector above is a site-specific example, not a required GPU
 marketing name. Explicit CLI resource flags override environment settings.
@@ -899,7 +899,9 @@ def _persistent_benchmark_snippets(
         "GENERATIVEQC_PERSISTENT_SETUP": """  const std::uint32_t host_task_offset = 0U;
   const std::uint32_t host_task_count = kTaskCount;
   cudaDeviceProp device_properties{};
-  GENERATIVEQC_CUDA_CHECK(cudaGetDeviceProperties(&device_properties, 0));
+  int current_device = 0;
+  GENERATIVEQC_CUDA_CHECK(cudaGetDevice(&current_device));
+  GENERATIVEQC_CUDA_CHECK(cudaGetDeviceProperties(&device_properties, current_device));
   const unsigned persistent_grid_count =
       static_cast<unsigned>(device_properties.multiProcessorCount) * 8U;
   GENERATIVEQC_CUDA_CHECK(cudaMalloc(&device_task_offset, sizeof(std::uint32_t)));
@@ -1346,6 +1348,7 @@ def emit_shell_class_benchmark_cuda(
     persistent_kernel: bool = False,
     oracle_symbol_prefix: str | None = None,
     target: CudaTargetInfo | None = None,
+    device_id: int | None = None,
 ) -> str:
     """Return a self-contained benchmark for one explicit schedule.
 
@@ -1353,6 +1356,9 @@ def emit_shell_class_benchmark_cuda(
     ``KernelIR``. ``schedule`` is the lightweight autotuning entry point.
     Fock timing lowers a joint Fock/force plan because the production source
     deliberately shares one canonical task ABI with the force companion.
+    An explicit ``device_id`` selects a visible ordinal in the standalone host
+    driver. Embedded candidates leave it unset and inherit their outer driver's
+    selection, so they cannot reset a batch to GPU zero.
     """
 
     positive_values = (task_count, primitive_count, iterations, samples)
@@ -1360,6 +1366,10 @@ def emit_shell_class_benchmark_cuda(
         raise ValueError("benchmark sizes must be positive and warmups non-negative")
     if plan is not None and schedule is not None:
         raise ValueError("pass either a fused plan or a schedule, not both")
+    if device_id is not None and (
+        type(device_id) is not int or not 0 <= device_id <= 2**31 - 1
+    ):
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
     selected_consumer = KernelConsumer(consumer)
     consumers = (
         (KernelConsumer.FOCK, KernelConsumer.FORCE)
@@ -1399,6 +1409,12 @@ def emit_shell_class_benchmark_cuda(
     }
     for marker, value in replacements.items():
         host = host.replace(marker, value)
+    if device_id is not None:
+        host = host.replace(
+            "int main() {",
+            f"int main() {{\n  GENERATIVEQC_CUDA_CHECK(cudaSetDevice({device_id}));",
+            1,
+        )
     fused = emit_shell_class_fused_cuda(spec, selected_plan)
     if benchmark_kernel_only:
         fused = _retain_selected_benchmark_kernel(
@@ -1534,11 +1550,8 @@ def _runtime_environment(nvcc: Path) -> dict[str, str]:
     """Make the selected toolkit's CUDA runtime visible to the executable."""
 
     environment = dict(os.environ)
-    # The shared development shell exports an empty value to keep ordinary
-    # tests off the GPU. Treat that sentinel like ``env -u`` for this explicit
-    # benchmark command; non-empty user selections remain authoritative.
-    if environment.get("CUDA_VISIBLE_DEVICES") == "":
-        environment.pop("CUDA_VISIBLE_DEVICES")
+    # Empty visibility intentionally hides all GPUs; it is not an unset value.
+    # Preserve scheduler/user visibility even for an explicit benchmark command.
     library = nvcc.parent.parent / "lib64"
     previous = environment.get("LD_LIBRARY_PATH")
     environment["LD_LIBRARY_PATH"] = (
@@ -1576,6 +1589,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--nvcc", type=Path, required=True)
     parser.add_argument("--architecture", required=True)
+    parser.add_argument("--device-id", type=int, default=0)
     parser.add_argument("--local", action="store_true", default=None)
     parser.add_argument("--srun")
     parser.add_argument("--partition")
@@ -1605,6 +1619,8 @@ def main() -> None:
         help="also write the generated standalone CUDA source to this path",
     )
     arguments = parser.parse_args()
+    if not 0 <= arguments.device_id <= 2**31 - 1:
+        parser.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")
     specification = {
         "dppp": DPPP_SPEC,
         "dpds": DPDS_SPEC,
@@ -1619,6 +1635,7 @@ def main() -> None:
         arguments.samples,
         consumer=arguments.consumer,
         target=cuda_target_info(arguments.architecture),
+        device_id=arguments.device_id,
     )
     if arguments.keep_source is not None:
         arguments.keep_source.parent.mkdir(parents=True, exist_ok=True)

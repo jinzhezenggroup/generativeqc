@@ -1,0 +1,21 @@
+{
+  "base_revision": "cd9ad801b09225d923ae5e2995c70274f76a50cf",
+  "variants": {
+    "strict": {
+      "src/cc/cuda_solver.cu": "77dd14a30c62de63865fe388bee68a945bc3b3e9a2e303faa7cb17bb032568fc",
+      "src/cc/lambda_response_cuda.cu": "6a787f9212f1569b103181bb729d555f45da113899ed84ab5dab8924a604a232",
+      "src/methods/df_ccsdt_force.cu": "3e5a39de9fd8bdc7820288106298e6bdb05deca77086f284d0c02355f7de746c",
+      "src/cc/multisecant_probe.hpp": "48322224435f8a83a638cdae5c9be2d2b5aab728b418c98dde12d465269bca27"
+    },
+    "warmup": {
+      "src/cc/cuda_solver.cu": "77dd14a30c62de63865fe388bee68a945bc3b3e9a2e303faa7cb17bb032568fc",
+      "src/cc/lambda_response_cuda.cu": "f272c30e2a8caaa7a7c76245ca3f1d87b3c881963fe016d054fd2998bf39f286",
+      "src/methods/df_ccsdt_force.cu": "3e5a39de9fd8bdc7820288106298e6bdb05deca77086f284d0c02355f7de746c",
+      "src/cc/multisecant_probe.hpp": "48322224435f8a83a638cdae5c9be2d2b5aab728b418c98dde12d465269bca27"
+    }
+  },
+  "tooling_sha256": {
+    "tools/generativeqc_cc/multisecant.py": "f5dd135658139fbe4a0e2652a714cf86650e246d56e4e5ead59841d59c8f5bc8",
+    "benchmarks/readme_cbs.py": "773745d5816b4a9ca4a778de66e9525cf08b10fda8d0f21b28422e2fd887f003"
+  }
+}

@@ -16,6 +16,8 @@ struct GridTaskView;
 struct CudaStationaryModel {
   std::uint32_t functional{}, domain_version{}, spin_blocks{}, partition_iterations{};
   double semilocal_exchange_scale{}, semilocal_correlation_scale{}, full_range_exchange{};
+  double short_range_exchange{}, long_range_exchange{}, range_omega{};
+  double nonlocal_b{}, nonlocal_c{}, nonlocal_coefficient{};
   bool operator==(const CudaStationaryModel&) const = default;
 };
 
@@ -56,6 +58,10 @@ struct CudaStationaryBinding {
   decltype(geometry) geometry_fp32{};
   /** Optional immutable atom-prefix/radius topology; no per-point owner upload. */
   int (*grid_topology)(void*, const std::size_t*, const double*, std::size_t, char*, std::size_t){};
+  /** Consume resident VV10 cotangents into its distinct AO/grid/weight slots. */
+  int (*nonlocal_geometry)(void*, const GridTaskView*, const double*, std::size_t, std::size_t,
+                           const double*, const double*, const double*, std::size_t, std::size_t,
+                           char*, std::size_t){};
   /** Build-time compiler/header closure; the runtime receipt additionally
    * binds this actual descriptor's loaded native module, never just source. */
   const char* source_identity{};

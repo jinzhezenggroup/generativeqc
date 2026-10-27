@@ -1,0 +1,69 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "c8ba02453b326084d5175ef644c6be1c810afce7",
+    "dirty": true
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "replay.py"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "reproduction",
+      "bytes": 4835,
+      "sha256": "f0f1f2b6df1d850932bfae546d4226c48e79fe0f94471946d479c1c1a8b1814c"
+    },
+    {
+      "path": "candidate.patch.xz",
+      "role": "source-patch",
+      "bytes": 16088,
+      "sha256": "946b9c292cb3142445059cbc70aeaab0690edbfb8d50dac04cb31d0d8cbaf6c0"
+    },
+    {
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "bytes": 1912,
+      "sha256": "4c65489e653a77542683052eeefc4e0e5f2637d2b7cb7440513d9b19afe88119"
+    },
+    {
+      "path": "frozen-sources.json.xz",
+      "role": "reproduction",
+      "bytes": 11184,
+      "sha256": "ef4ee9d7344cbd2129e5306fefc346138a7e5d085efc233e175a6bcc0ccd730c"
+    },
+    {
+      "path": "reference.json.xz",
+      "role": "input",
+      "bytes": 3652,
+      "sha256": "e4b9c95bf68804a8bef6b2f853863086985c834279b77bd652eda2639a7bb89b"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 8203,
+      "sha256": "0fd4ab7ea7f5a6c43bf7aaa60f31bb181d7c2a0067484711da362d6b864f3ca6"
+    },
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "bytes": 12144,
+      "sha256": "18ab0eb318c97d6b4c1ee5c165d498581013a0e63392cd92a3823afb2f3b595d"
+    },
+    {
+      "path": "summary.json.xz",
+      "role": "summary",
+      "bytes": 17296,
+      "sha256": "1714684d374ffc75ab3a0d47929777fda7dfb3548abed65de79f5a01b638252b"
+    }
+  ],
+  "archives": [],
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "All independent E/F/D gates pass; all eight original 1.05 endpoint nonregression gates pass separately without a significant-speedup claim."
+  }
+}

@@ -107,7 +107,14 @@ def build_resident_host(
     library = native_cxx.build_shared(
         [cpp],
         directory / "resident.so",
-        compile_args=["-std=c++17", "-pthread"],
+        compile_args=[
+            "-std=c++17",
+            "-pthread",
+            "-I",
+            str(FIXTURE),
+            "-I",
+            str(ROOT / "src"),
+        ],
         link_args=["-pthread"],
     )
     lib = ctypes.CDLL(str(library))
@@ -157,6 +164,11 @@ def build_resident_host(
         "host_capacity": (None, [ctypes.c_void_p, ctypes.c_size_t]),
         "host_static_ready": (None, [ctypes.c_void_p, ctypes.c_int]),
         "host_failure": (None, [ctypes.c_int]),
+        "host_owner_device": (None, [ctypes.c_void_p, ctypes.c_int]),
+        "host_selected_device": (ctypes.c_int, []),
+        "host_fail_device": (None, [ctypes.c_int]),
+        "host_clear_work_devices": (None, []),
+        "host_work_on_device": (ctypes.c_int, [ctypes.c_int]),
         "host_synchronizations": (ctypes.c_int, []),
         "host_pending_work": (ctypes.c_size_t, []),
         "host_clear_copy_kinds": (None, []),

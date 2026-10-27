@@ -258,7 +258,15 @@ def test_prepared_projection_reports_actual_owner(
     ):
         source.execute(strict=True)
         report = target.initialize_from(source, policy=policy)
-        expected = "python_compatibility" if compatibility else "native_cpu"
+        expected = (
+            "python_compatibility"
+            if compatibility
+            else (
+                "native_cpu_system"
+                if hasattr(native_projection, "generativeqc_hf_system_project_cpu_v1")
+                else "native_cpu"
+            )
+        )
         assert report["items"][0]["projection_owners"] == [expected]
         assert report["target_verification"] == "pending_execute"
 

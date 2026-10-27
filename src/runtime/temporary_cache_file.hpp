@@ -36,6 +36,17 @@ class TemporaryCacheFile {
 #endif
   }
 
+  /** Honor the explicit spill directory, then the platform temporary directory.
+   * An unavailable directory disables optional spilling instead of falling back
+   * to an unrelated filesystem. An explicit empty override also stays disabled.
+   */
+  static std::filesystem::path default_directory(const char* configured = nullptr) {
+    if (configured) return configured;
+    std::error_code error;
+    auto directory = std::filesystem::temp_directory_path(error);
+    return error ? std::filesystem::path{} : directory;
+  }
+
   /** Leave three quarters of local free space available to other users. */
   static std::size_t allowance(const std::filesystem::path& directory) noexcept {
 #if defined(__linux__)

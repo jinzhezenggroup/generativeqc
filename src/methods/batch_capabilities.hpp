@@ -13,6 +13,16 @@
 
 namespace generativeqc::methods {
 
+/** Optional metadata from the geometry-correction owner. A query fills one
+ * matching initialized descriptor without executing or allocating. */
+class BatchDispersionDiagnostics {
+ public:
+  virtual ~BatchDispersionDiagnostics() = default;
+  virtual generativeqc_status dispersion_diagnostic(
+      std::size_t index, generativeqc_d3_runtime_diagnostic* d3,
+      generativeqc_d4_runtime_diagnostic* d4) const = 0;
+};
+
 // Optional batch facets keep warm-state and backend profiling out of the
 // method-neutral PreparedBatch contract. ABI consumers use checked cross-casts.
 struct DirectShellClassProfileEntry {

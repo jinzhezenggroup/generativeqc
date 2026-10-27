@@ -257,6 +257,9 @@ measured_core_runtime_paths=(
   # independent CPU oracles). Runtime-heavy finished in 848s; preserve
   # every case and its core enumeration slot on the loadfile lane.
   tests/python/test_correlation_convergence.py
+  # Move the complete DF mixed-precision module off core-a without changing
+  # the original modulo slot or dropping a single numerical certificate.
+  tests/python/test_df_cc_mixed_precision.py
   # Run 38890127895 left all four ECP Hessian cases in a late serial tail
   # (~453 worker-seconds); runtime-heavy finished in 659 s. Keep every case
   # and the original core slot while moving this complete file to loadfile.

@@ -104,7 +104,7 @@ unchanged AOT defaults. The native candidate source inventory was recomputed
 and matched to the loaded library before measurement.
 
 `observations.json.gz` retains every endpoint and runtime metadata.
-`summary.json` retains per-phase medians/ranges, all raw timing samples, energies,
+`summary.json.xz` retains per-phase medians/ranges, all raw timing samples, energies,
 iterations, and all-repeat errors. `measured-inputs.json.gz` retains the exact
 original script, basis payload and invocation driver, with their SHA256 hashes.
 The readable `benchmark.py` is a formatting, typing, bound-callback and portable
@@ -119,3 +119,10 @@ python run.py --baseline-source /path/to/base --baseline-library /path/to/base/l
 
 No binaries, generated scientific headers, full build logs, Release assets or
 release tags are committed.
+
+## Lossless summary storage
+
+`summary.json.xz` preserves all 66,148 original summary bytes, including
+every retained measurement. Decompressed SHA-256: `751c3a68d9c51e403edac3438107d3526556b2c16959ab8afd5068b3fcbd9353`.
+Read with `xz -dc benchmarks/results/cpu-eri-20261001/summary.json.xz`;
+no scientific record or acceptance gate was removed.

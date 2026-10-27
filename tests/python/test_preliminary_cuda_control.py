@@ -268,7 +268,7 @@ struct Plan {
   void invalidate_final_state() { cuda.invalidate_final_state(); }
   void clear_warm_start() { cuda.clear_warm_start(); }
   void add_prepared_native_forces(Result&) { throw std::logic_error("unexpected force request"); }
-  void apply_d4(Result&) {}
+  void apply_dispersion(Result&) {}
   scf::ScfResult run_cpu(const std::vector<double>*, bool, bool, bool) {
     throw std::logic_error("unexpected CPU execution");
   }

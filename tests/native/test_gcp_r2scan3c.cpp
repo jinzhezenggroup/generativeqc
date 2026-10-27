@@ -4,6 +4,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#ifdef GENERATIVEQC_GCP_CUDA_TEST
+#include "dft/dispersion/gcp_cuda.hpp"
+#endif
 
 #include "dft/dispersion/gcp_r2scan3c.hpp"
 
@@ -28,22 +32,33 @@ constexpr std::array<double, 48> kXyz{
 
 bool near(double a, double b, double tol) { return std::abs(a - b) <= tol; }
 
+GCPStatus evaluate(const std::array<double, 48>& xyz, double* energy, double* gradient) {
+#ifdef GENERATIVEQC_GCP_CUDA_TEST
+  static GcpCudaPlan plan(0, kZ, GcpCudaPlan::numeric_bytes(kZ.size()));
+  plan.execute(xyz, *energy, gradient ? std::span<double>(gradient, 48) : std::span<double>{});
+  return GCPStatus::success;
+#else
+  return evaluate_r2scan3c_gcp(16, kZ.data(), xyz.data(), r2scan3c_gcp_parameters(), energy,
+                               gradient);
+#endif
+}
+
 double energy_of(const std::array<double, 48>& xyz) {
   double energy = 0.0;
-  std::array<double, 48> gradient{};
-  const auto status = evaluate_r2scan3c_gcp(16, kZ.data(), xyz.data(), r2scan3c_gcp_parameters(),
-                                            &energy, gradient.data());
+  const auto status = evaluate(xyz, &energy, nullptr);
   return status == GCPStatus::success ? energy : NAN;
 }
 }  // namespace
 
 int main() {
+#ifdef GENERATIVEQC_GCP_CUDA_TEST
+  if (!std::getenv("SLURM_JOB_ID")) return 77;
+#endif
   double energy = -1.0;
   std::array<double, 48> gradient{};
-  const auto status = evaluate_r2scan3c_gcp(16, kZ.data(), kXyz.data(), r2scan3c_gcp_parameters(),
-                                            &energy, gradient.data());
+  const auto status = evaluate(kXyz, &energy, gradient.data());
   if (status != GCPStatus::success) return 1;
-  if (!near(energy, 0.0113040952, 5.0e-8)) return 2;
+  if (!near(energy, 0.0113040952, 5.0e-8) || energy_of(kXyz) != energy) return 2;
 
   for (int axis = 0; axis < 3; ++axis) {
     double total = 0.0;
@@ -89,5 +104,31 @@ int main() {
                             const_cast<double*>(kXyz.data())) != GCPStatus::invalid_argument) {
     return 7;
   }
+#ifdef GENERATIVEQC_GCP_CUDA_TEST
+  double reference_energy = 0;
+  std::array<double, 48> reference_gradient{};
+  if (evaluate_r2scan3c_gcp(16, kZ.data(), kXyz.data(), r2scan3c_gcp_parameters(),
+                            &reference_energy, reference_gradient.data()) != GCPStatus::success)
+    return 8;
+  for (std::size_t k = 0; k < gradient.size(); ++k)
+    if (!near(gradient[k], reference_gradient[k], 2e-12)) return 9;
+  GcpCudaPlan owner(0, kZ, GcpCudaPlan::numeric_bytes(kZ.size()));
+  auto coincident = kXyz;
+  std::copy_n(coincident.begin(), 3, coincident.begin() + 3);
+  energy = 7;
+  try {
+    owner.execute(coincident, energy, gradient);
+    return 10;
+  } catch (const std::exception&) {
+  }
+  if (energy != 7) return 11;
+  owner.execute(kXyz, energy, gradient);
+  if (!near(energy, reference_energy, 2e-14)) return 12;
+  try {
+    GcpCudaPlan bounded(0, kZ, GcpCudaPlan::numeric_bytes(kZ.size()) - 1);
+    return 13;
+  } catch (const std::bad_alloc&) {
+  }
+#endif
   return 0;
 }

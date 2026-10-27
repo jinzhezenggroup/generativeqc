@@ -157,4 +157,9 @@ generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
+generativeqc_status consume_cuda_direct_shell_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail);
 }  // namespace generativeqc::scf

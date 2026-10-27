@@ -145,7 +145,17 @@
       "incremental_xc": false,
       "stationary_second_order": false,
       "aliases": [],
-      "cpu_stationary_force_profiles": [],
+      "cpu_stationary_force_profiles": [
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "0",
+          "semilocal_exchange": "1",
+          "semilocal_correlation": "1"
+        }
+      ],
       "legacy_cpu_point_response_slot": null
     },
     {
@@ -231,7 +241,17 @@
       "incremental_xc": false,
       "stationary_second_order": false,
       "aliases": [],
-      "cpu_stationary_force_profiles": [],
+      "cpu_stationary_force_profiles": [
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "3/20",
+          "semilocal_exchange": "1",
+          "semilocal_correlation": "1"
+        }
+      ],
       "legacy_cpu_point_response_slot": null
     }
   ]

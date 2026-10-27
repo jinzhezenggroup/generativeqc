@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from generativeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
+from generativeqc_compiler.common.provenance import find_nvcc
 
 
 def main() -> typing.Any:
@@ -43,13 +44,16 @@ def main() -> typing.Any:
         parser.error("--compile-threads must be in [1,32]")
     if args.cooperative_becke and args.cpu_regression:
         parser.error("--cooperative-becke requires the CUDA suite")
-    toolkit = Path(os.environ.get("CUDA_HOME", "/group/software/cuda-12.9.1"))
-    if not (toolkit / "bin/nvcc").is_file():
-        raise SystemExit("set CUDA_HOME to a complete CUDA 12.9 toolkit")
+    nvcc = find_nvcc()
+    if nvcc is None:
+        raise SystemExit(
+            "configure NVCC with GENERATIVEQC_NVCC, CUDACXX, a toolkit root, or PATH"
+        )
+    toolkit = nvcc.parent.parent
     env = dict(os.environ)
     env.update(
         CUDA_HOME=str(toolkit),
-        CUDACXX=str(toolkit / "bin/nvcc"),
+        CUDACXX=str(nvcc),
         PATH=str(toolkit / "bin") + os.pathsep + env.get("PATH", ""),
         LD_LIBRARY_PATH=str(toolkit / "lib64")
         + os.pathsep
@@ -59,8 +63,6 @@ def main() -> typing.Any:
         ),
         OPENBLAS_NUM_THREADS="1",
         OMP_NUM_THREADS="1",
-        CCACHE_DIR="/tmp/generativeqc-163-cuda-ccache",
-        CCACHE_TEMPDIR="/tmp/generativeqc-163-cuda-ccache/tmp",
         GENERATIVEQC_LIBRARY=str(
             args.library
             or os.environ.get("GENERATIVEQC_LIBRARY")

@@ -1236,7 +1236,7 @@ def compile(
     max_work: int = 100_000_000,
     max_nodes: int = 4096,
     compile_timeout: float = 300.0,
-    cuda_arch: str = "sm_120",
+    cuda_arch: str | None = None,
     device: int = 0,
 ) -> (
     CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]
@@ -1249,6 +1249,8 @@ def compile(
     call. Specs optionally declare scientific domains. Cache, byte/work/node
     budgets and finite compiler timeouts apply to native execution. CUDA stages
     host inputs and returns detached CPU arrays; it is not a GPU eager namespace.
+    With ``cuda_arch=None``, first execution queries the selected visible device
+    for its compute capability. An explicit target permits offline planning.
     """
     options = {
         "cache": cache,
