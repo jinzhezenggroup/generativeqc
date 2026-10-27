@@ -37,8 +37,8 @@ std::size_t attempt_reservation(std::size_t seed, std::size_t recycling,
  * exactly as in the original endpoint. No CUDA or scientific equation lives here.
  */
 template <class MethodError, class Cache, class Attempt, class Finish>
-auto retry_retained_cache_once(Cache* recycling, bool had_retained_cache,
-                               int out_of_memory_status, Attempt&& attempt, Finish&& finish) {
+auto retry_retained_cache_once(Cache* recycling, bool had_retained_cache, int out_of_memory_status,
+                               Attempt&& attempt, Finish&& finish) {
   try {
     return finish(attempt());
   } catch (const MethodError& error) {
@@ -67,20 +67,19 @@ struct GroupSelection {
 
 /** Select the preconvergence policy without changing MP2/CC companion demand. */
 template <class Preconvergence, class Convergence, class AutomaticShape>
-GroupSelection select_group_schedule(bool forces, bool mp2, std::size_t nao,
-                                     int electron_count, Preconvergence preconvergence,
-                                     const Convergence& convergence, double strict_switch,
-                                     AutomaticShape&& automatic_shape) {
+GroupSelection select_group_schedule(bool forces, bool mp2, std::size_t nao, int electron_count,
+                                     Preconvergence preconvergence, const Convergence& convergence,
+                                     double strict_switch, AutomaticShape&& automatic_shape) {
   const std::size_t occupied =
       electron_count > 0 ? static_cast<std::size_t>(electron_count / 2) : 0;
   const auto virtuals = nao > occupied ? nao - occupied : 0;
-  const bool default_shape = forces ? occupied >= 9 && virtuals >= 48
-                                    : automatic_shape(occupied, virtuals);
-  const bool mixed = !mp2 &&
-                     (preconvergence == Preconvergence::Mixed ||
-                      (preconvergence == Preconvergence::Legacy && convergence.relaxed()) ||
-                      (preconvergence == Preconvergence::Automatic &&
-                       (convergence.relaxed() || default_shape)));
+  const bool default_shape =
+      forces ? occupied >= 9 && virtuals >= 48 : automatic_shape(occupied, virtuals);
+  const bool mixed =
+      !mp2 &&
+      (preconvergence == Preconvergence::Mixed ||
+       (preconvergence == Preconvergence::Legacy && convergence.relaxed()) ||
+       (preconvergence == Preconvergence::Automatic && (convergence.relaxed() || default_shape)));
   const bool lambda_mixed = mixed && forces;
   return {lambda_mixed ? 64U : 32U, mixed, lambda_mixed,
           std::max(strict_switch, 100.0 * convergence.cc_residual())};

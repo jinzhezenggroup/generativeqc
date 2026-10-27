@@ -163,18 +163,17 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       reference_seed ? checked_mul(reference_seed->capacity(), sizeof(double)) : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
-  auto state =
-      replay_state
-          ? std::move(*replay_state)
-          : run_rccsd_native_state(
-                execution, system, descriptor, nullptr, reference_seed,
-                reference_experiment ? &reference_experiment->seed_fallback : nullptr,
-                df_retry::attempt_reservation(
-                    seed_bytes, recycle_bytes, physical_replay ? physical_replay->output_bytes : 0,
-                    checked_add),
-                &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2,
-                demand.df_reference, convergence);
+  auto state = replay_state
+                   ? std::move(*replay_state)
+                   : run_rccsd_native_state(
+                         execution, system, descriptor, nullptr, reference_seed,
+                         reference_experiment ? &reference_experiment->seed_fallback : nullptr,
+                         df_retry::attempt_reservation(
+                             seed_bytes, recycle_bytes,
+                             physical_replay ? physical_replay->output_bytes : 0, checked_add),
+                         &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit,
+                         derived_denominators, packed_diis, ccsd_mixed_precision,
+                         ccsd_mixed_switch_residual, demand.mp2, demand.df_reference, convergence);
   if (retained_host_bytes >= state.budget)
     throw std::length_error("DF correlation retained caller state exhausts complete budget");
   if (demand.mp2 && !state.df_mp2_mode) {
@@ -925,9 +924,9 @@ DFCCSDTResult run_df_correlation_group_native(
   // Preserve strict FP64 replay/audit after a mixed Lambda epoch. The planner
   // may select a smaller Q than the requested upper limit.
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, selection.lambda_batch_limit, 0, {}, true, false, true, false,
-                             true, {}, 30, true, true, true, nullptr, true, selection.mixed_ccsd,
-                             selection.mixed_lambda, false, selection.mixed_switch_residual,
-                             demand, convergence);
+                             true, true, selection.lambda_batch_limit, 0, {}, true, false, true,
+                             false, true, {}, 30, true, true, true, nullptr, true,
+                             selection.mixed_ccsd, selection.mixed_lambda, false,
+                             selection.mixed_switch_residual, demand, convergence);
 }
 }  // namespace generativeqc::methods::detail
