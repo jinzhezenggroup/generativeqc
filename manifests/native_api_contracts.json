@@ -3019,6 +3019,38 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_hf_system_projection_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "9866552d79eb9ef92a7c79f4e8dc3bc3f950b78e536092cb60e9ea7063337cf3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_hf_system_project_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "b1b406c22d352999933bd560759e8b20d2d6e4624a209f0e7619350fd200869c",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

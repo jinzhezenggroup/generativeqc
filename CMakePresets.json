@@ -4,19 +4,33 @@
     {
       "name": "cuda-dev-fast",
       "displayName": "CUDA development (fast iteration)",
-      "description": "One real device image, Ninja-controlled compile parallelism, and opt-in fast compiler mode.",
+      "description": "Explicit CUDA target, portable kernels, Ninja-controlled compile parallelism, and opt-in fast compiler mode.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/cuda-dev-fast",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "GENERATIVEQC_ENABLE_CUDA": "ON",
-        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120-real",
         "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "2",
         "GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS": "2",
         "GENERATIVEQC_CUDA_FAST_COMPILE": "ON",
         "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
         "GENERATIVEQC_AOT_UNIT_MODE": "class",
-        "GENERATIVEQC_AOT_PROFILE": "sm_120"
+        "GENERATIVEQC_AOT_PROFILE": "portable"
+      }
+    },
+    {
+      "name": "cuda-release",
+      "displayName": "CUDA release (explicit target)",
+      "description": "Release settings for caller-selected CUDA architectures with portable kernels.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cuda-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+        "GENERATIVEQC_AOT_PROFILE": "portable"
       }
     },
     {
@@ -63,6 +77,10 @@
     {
       "name": "cuda-dev-fast",
       "configurePreset": "cuda-dev-fast"
+    },
+    {
+      "name": "cuda-release",
+      "configurePreset": "cuda-release"
     },
     {
       "name": "cuda-release-sm120",

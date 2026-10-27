@@ -69,6 +69,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
 - [generativeqc_hf_physical_audit_cpu_query_v1](#native-c-generativeqc-hf-physical-audit-cpu-query-v1)
 - [generativeqc_hf_physical_audit_cpu_v1](#native-c-generativeqc-hf-physical-audit-cpu-v1)
+- [generativeqc_hf_system_projection_query_v1](#native-c-generativeqc-hf-system-projection-query-v1)
+- [generativeqc_hf_system_project_cpu_v1](#native-c-generativeqc-hf-system-project-cpu-v1)
 - [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
@@ -1777,6 +1779,69 @@ No Python, compiler, new SCF, GPU operation or reference-oracle retry occurs.
 
 **Units.** Energy is Hartree, geometry Bohr, overlap dimensionless; commutators
 use the declared AO convention. Numeric capacities are bytes, not RSS.
+
+(native-c-generativeqc-hf-system-projection-query-v1)=
+## generativeqc_hf_system_projection_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_projection_query_v1 ( const generativeqc_system * target , const generativeqc_system * source , const generativeqc_hf_system_projection_controls_v1 * controls , generativeqc_hf_system_projection_capacity_v1 * output ) ;
+```
+
+**Behavior.** Validate the system-to-system HF transfer domain and query matrix capacity.
+
+**Inputs.** Live all-electron source/target systems with identical ordered nuclei, geometry,
+charge and spin. Initialize versioned controls/output; unrestricted is 0 or 1, reserved
+is zero, maximum_ao and maximum_host_bytes are positive. Policy thresholds follow the
+existing occupied projection contract. Input and output descriptors do not overlap.
+
+**Outputs.** Publishes AO/spin dimensions, occupations, density counts and numeric byte bound.
+A below-bound host budget does not suppress the metadata-only capacity report.
+
+**Errors.** Invalid metadata/overflow or ABI mismatch preserve the output. Unsupported ECP
+or beyond-g domains return NOT_IMPLEMENTED; mismatched model identity is INVALID_ARGUMENT.
+
+**Lifetime.** Systems and descriptors are borrowed for the call; nothing is retained.
+
+**Execution.** Synchronous metadata-only query without overlap/eigen work or GPU access.
+Matrix capacity excludes caller buffers, prepared fleets, metadata and opaque overhead.
+
+**Units.** Coordinates are Bohr, occupations are electron counts and capacity is bytes.
+
+(native-c-generativeqc-hf-system-project-cpu-v1)=
+## generativeqc_hf_system_project_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_system_project_cpu_v1 ( generativeqc_context * context , const generativeqc_system * target , const generativeqc_system * source , const generativeqc_hf_system_projection_controls_v1 * controls , const double * density , uint64_t density_count , generativeqc_basis_projection_output_v1 * outputs , uint64_t output_count ) ;
+```
+
+**Behavior.** Own three overlap matrices and all spin projections in one native scope,
+reusing existing overlap and occupied-projection mathematics. This proposes a seed only.
+
+**Inputs.** Explicit CPU context, query-compatible source/target systems and controls, finite
+spin-major source density with the exact queried count, and one versioned projection
+output per spin. Each output has target_AO-square density storage and target_AO by occupied
+coefficient storage. Written ranges are disjoint from all inputs/descriptors and each other.
+Empty-spin coefficients may be NULL; output descriptor count must equal spin_count.
+
+**Outputs.** Publishes every spin's detached density, coefficients and invariant diagnostics
+only after all channels succeed; output tails and source density remain unchanged.
+
+**Errors.** Invalid/aliased/nonfinite/count errors return INVALID_ARGUMENT; insufficient
+numeric budget returns OUT_OF_MEMORY before overlap work. Unsupported contexts/domains
+return NOT_IMPLEMENTED. Any failure preserves all output records/buffers; no Python retry.
+
+**Lifetime.** Synchronous borrowed inputs and caller-owned outputs; all native scratch closes
+before return. Serialize operations and destruction sharing the context or system owners.
+
+**Execution.** Explicit CPU FP64 overlap/projection; no SCF, device probe or hidden GPU transfer.
+The numeric bound excludes caller buffers, prepared fleets and opaque provider overhead.
+
+**Units.** Densities and coefficients follow each system's public AO normalization; occupation
+and electron trace count electrons, diagnostic residuals are dimensionless, capacity is bytes.
 
 (native-c-generativeqc-basis-projection-query-v1)=
 ## generativeqc_basis_projection_query_v1
