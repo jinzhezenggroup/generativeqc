@@ -96,7 +96,7 @@ def emit_shard(
     index: int,
     entries: tuple[AutomaticRegistryEntry, ...],
     *,
-    share_parameters: bool = False,
+    share_parameters: bool = True,
 ) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
@@ -108,8 +108,8 @@ def emit_shard(
         )
         providers = [registrations[entry.name] for entry in selected]
     else:
-        # Keep constant specialization as the default: sharing has a measured
-        # small runtime cost and is an explicit artifact-size tradeoff.
+        # Explicit specialization remains available for qualification and for
+        # toolchains/devices outside the measured shared-worker population.
         workers = {}
         providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
     # Registration placement stays stable. Each private family worker has one
@@ -152,8 +152,9 @@ def main() -> None:
     parser.add_argument("--disabled", action="store_true")
     parser.add_argument(
         "--share-parameters",
-        action="store_true",
-        help="share audited parameter-family workers instead of literal specialization",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="share audited parameter-family workers by default; --no-share-parameters retains literal specialization",
     )
     parser.add_argument(
         "--functional",
@@ -182,7 +183,9 @@ def main() -> None:
     for index in range(SHARD_COUNT):
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",
-            emit_shard(index, entries, share_parameters=args.share_parameters),
+            emit_shard(
+                index, entries, share_parameters=args.share_parameters is not False
+            ),
         )
 
 

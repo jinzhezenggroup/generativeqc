@@ -108,7 +108,7 @@ must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
 remains off by default. Selected entries retain their original codes, canonical
 mathematical identities and ordinary/batched ABI. Literal providers keep their
-source identities across selections; opting into parameter sharing binds the
+source identities across selections; parameter sharing binds the
 selected shared worker and parameter table as described below. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
@@ -148,12 +148,17 @@ and the selector. This does not add response support, installed variants,
 public backend admission, or resource/performance qualification. See
 [equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
 
-Set `GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=ON` to share parameterized
-CUDA workers in an automatic AOT package containing multiple KTBM registrations.
-The option defaults to `OFF`, preserving literal constant specialization and its
-runtime performance. Sharing is an explicit package-size tradeoff: coefficient
-loads and reduced constant folding can add point-evaluation overhead. Scalar mathematical
-coefficients become immutable device-constant table rows; density thresholds,
+`GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS` defaults to `ON` when CUDA and
+automatic XC AOT are enabled. A package containing multiple KTBM registrations
+shares their parameterized CUDA workers. Set the option to `OFF` to retain
+literal specialization; the standalone generator provides `--no-share-parameters`
+for the same fallback. Automatic XC AOT itself remains opt-in.
+
+Scalar mathematical coefficients and their fixed products are prepared after
+differentiation using the existing Graph algebra, before equal-spin projection.
+An immutable host table supplies one row by value in CUDA launch parameter space;
+fixed offsets avoid dynamic device-table addressing, and concurrent launches
+never mutate shared coefficient state. Density thresholds,
 work-domain guards, physical derivative conventions and spin layouts remain
 part of the compiled contract. Both general and equal-spin parameterized bodies,
 ordered parameter names and complete point layouts must agree before sharing.
@@ -168,6 +173,11 @@ private host launchers, so no cross-translation-unit device linking is needed.
 The GPU sees one uniform parameter row per launch and has no per-point
 functional switch. Host registration wrappers include only descriptor headers,
 without emitting unrelated tensor conversion kernels.
+
+The [default-promotion decision](../../.agents/notes/implemented/performance/2026-10-28-xc-prepared-parameters.md)
+links the numerical, complete-SCF and point-kernel evidence on NVCC 12.9.1 / SM120.
+It does not establish performance on every architecture. Explicit specialization
+remains available for qualification on other toolchains and devices.
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that

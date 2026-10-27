@@ -32,13 +32,18 @@ PARAMETERS = tuple(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", params=(False, True))
 def parameter_point(
-    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
-) -> ctypes.CDLL:
+    tmp_path_factory: pytest.TempPathFactory,
+    native_cxx: NativeCxx,
+    request: pytest.FixtureRequest,
+) -> tuple[ctypes.CDLL, bool]:
     """Compile one mathematical body and reuse it with every registered row."""
     directory = tmp_path_factory.mktemp("parameterized-xc")
-    point = emit_automatic_point("MGGA_X_KTBM_0", parameter_names=PARAMETERS)
+    prepared = bool(request.param)
+    point = emit_automatic_point(
+        "MGGA_X_KTBM_0", parameter_names=PARAMETERS, precompute_parameters=prepared
+    )
     source = directory / "point.cpp"
     source.write_text(
         '#include <cmath>\n#include <stdexcept>\n#include "dft/xc.hpp"\n'
@@ -86,18 +91,22 @@ extern "C" int evaluate(const double* input, const double* parameters,
     vector = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     library.evaluate.argtypes = (vector, vector, vector, ctypes.c_size_t)
     library.evaluate.restype = ctypes.c_int
-    return library
+    return library, prepared
 
 
 @pytest.mark.parametrize("name", tuple(RECORDS))
 @pytest.mark.parametrize("spin", (0, 1))
 def test_parameter_rows_match_independent_libxc(
-    parameter_point: ctypes.CDLL, name: str, spin: int
+    parameter_point: tuple[ctypes.CDLL, bool], name: str, spin: int
 ) -> None:
+    library, prepared = parameter_point
     inputs = np.ascontiguousarray(_inputs(name, spin))
-    parameters = np.array([float(RECORDS[name]["bindings"][p]) for p in PARAMETERS])
+    point = emit_automatic_point(
+        name, parameter_names=PARAMETERS, precompute_parameters=prepared
+    )
+    parameters = np.array([value for _, value in point.parameters])
     actual = np.empty((len(inputs), 11))
-    assert parameter_point.evaluate(inputs, parameters, actual, len(inputs)) == 0
+    assert library.evaluate(inputs, parameters, actual, len(inputs)) == 0
     assert np.all(actual[[0, 4]] == 0)
     observed = (
         actual
@@ -144,6 +153,47 @@ def test_symbolic_program_retains_registered_values() -> None:
     other = build_bulk_runtime_program("MGGA_X_KTBM_0", parameter_names=PARAMETERS)
     assert symbolic.expression_hash != other.expression_hash
     assert not np.allclose(symbolic.evaluate(x), other.evaluate(x))
+
+
+def test_prepared_products_preserve_lazy_input_arithmetic() -> None:
+    """Preparation cannot speculate a singular inactive arm onto the host."""
+    from generativeqc_compiler.integral.expr import Graph
+    from generativeqc_compiler.xc.parameter_products import prepare_parameter_products
+
+    graph = Graph()
+    x, coefficient = graph.variable("x"), graph.variable("coefficient")
+    product = graph.multiply_many((coefficient, graph.constant(0.3), x))
+    energy = graph.select_le(x, graph.constant(0), graph.constant(0), product / x)
+    derivative = graph.differentiate(energy, x)
+    parameters = (("coefficient", 1.7),)
+    roots, prepared = prepare_parameter_products(
+        graph, (energy, derivative), parameters
+    )
+    for value in (-1.0, 0.0, 0.1, 2.0):
+        expected = [
+            graph.evaluate(root, {"x": value, **dict(parameters)})
+            for root in (energy, derivative)
+        ]
+        actual = [
+            graph.evaluate(root, {"x": value, **dict(prepared)}) for root in roots
+        ]
+        np.testing.assert_allclose(actual, expected, rtol=1e-14, atol=1e-14)
+    # Paired and general workers must agree on the entire launch-data layout,
+    # including products that occur only in independent polarized derivatives.
+    general = emit_automatic_point(
+        "MGGA_X_KTBM_0",
+        backend="cuda",
+        parameter_names=PARAMETERS,
+        precompute_parameters=True,
+    )
+    paired = emit_automatic_point(
+        "MGGA_X_KTBM_0",
+        backend="cuda",
+        equal_spin=True,
+        parameter_names=PARAMETERS,
+        precompute_parameters=True,
+    )
+    assert general.parameters == paired.parameters
 
 
 @pytest.mark.parametrize(

@@ -34,8 +34,13 @@ if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
 endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+set(_generativeqc_parameter_sharing_default OFF)
+if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+  set(_generativeqc_parameter_sharing_default ON)
+endif()
 option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS
-       "Share audited parameter-family CUDA workers (smaller packages, less constant folding)" OFF)
+       "Share audited CUDA workers with prepared immutable coefficients"
+       ${_generativeqc_parameter_sharing_default})
 if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND
    (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
   message(FATAL_ERROR

@@ -63,6 +63,7 @@ def _contract(point: AutomaticPointSource) -> dict:
         "domain": point.domain,
         "domain_version": point.domain_version,
         "ingredients": point.ingredient_mask,
+        "parameters": tuple(name for name, _ in point.parameters),
     }
 
 
@@ -87,9 +88,9 @@ def _worker(
             _body(point, function)
             + f"""
 struct {label} {{
-  __device__ static DevicePointValue physical_point(I row, const double rho[2],
+  __device__ static DevicePointValue physical_point(const ParameterRow& row, const double rho[2],
       const double (&gradient)[2][3], const double tau[2], double, double) {{
-    return {function}(rho, gradient, tau, coefficients[row]);
+    return {function}(rho, gradient, tau, row.values);
   }}
 }};
 """
@@ -104,11 +105,11 @@ void {name}(cudaStream_t stream, const double* features, const double* weights,
   if (restricted)
     automatic_evaluate_points<{provider.feature_terms}, {str(batched).lower()}, Restricted>
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
-            features, weights, count, spins, coefficients, totals, error, row, 1.0, 1.0, tile_points);
+            features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
   else
     automatic_evaluate_points<{provider.feature_terms}, {str(batched).lower()}, General>
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
-            features, weights, count, spins, coefficients, totals, error, row, 1.0, 1.0, tile_points);
+            features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
 }}
 """
     return f"""{_PRELUDE}{_PRIVATE_BEGIN}
@@ -116,13 +117,16 @@ namespace {namespace} {{
 using generativeqc_tensor::I;
 using generativeqc_tensor::finite;
 {emit_device_point_value()}
-// Each grid uses one authenticated parameter row. No per-point method switch.
-__device__ __constant__ double coefficients[{len(values)}][{len(parameters)}] = {{
+// The host authenticates one immutable row and CUDA copies it into launch
+// parameter space. Fixed offsets avoid per-thread device-table address loads;
+// concurrent launches never mutate shared device state.
+struct ParameterRow {{ double values[{len(parameters)}]; }};
+constexpr ParameterRow parameter_rows[{len(values)}] = {{
 {table}
 }};
 {adapters}
-{emit_point_traversal()}
-{emit_automatic_point_kernel()}
+{emit_point_traversal(parameter_type="const ParameterRow&")}
+{emit_automatic_point_kernel(parameter_type="const ParameterRow")}
 {launches}
 }}
 {_PRIVATE_END}
@@ -195,10 +199,19 @@ def parameterized_cuda_package(
         parameters = tuple(
             sorted(key for key in record["bindings"] if key.startswith("params_a_"))
         )
-        point = emit_automatic_point(name, backend="cuda", parameter_names=parameters)
-        restricted = emit_automatic_point(
-            name, backend="cuda", equal_spin=True, parameter_names=parameters
+        point = emit_automatic_point(
+            name, backend="cuda", parameter_names=parameters, precompute_parameters=True
         )
+        restricted = emit_automatic_point(
+            name,
+            backend="cuda",
+            equal_spin=True,
+            parameter_names=parameters,
+            precompute_parameters=True,
+        )
+        if point.parameters != restricted.parameters:
+            raise ValueError("shared XC point paths require the same parameter row")
+        parameters = tuple(name for name, _ in point.parameters)
         provider = replace(original, point=point, restricted=restricted)
         key = canonical_hash(
             {
@@ -208,7 +221,7 @@ def parameterized_cuda_package(
                 "restricted": _contract(restricted),
             }
         )
-        values = [float(record["bindings"][key]) for key in parameters]
+        values = [value for _, value in point.parameters]
         groups.setdefault(key, []).append((name, provider, parameters, values))
     workers = {}
     for key, members in sorted(groups.items()):

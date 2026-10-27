@@ -1,5 +1,9 @@
 # Optional KTBM CUDA parameter sharing
 
+Historical opt-in implementation. The
+[prepared-coefficient follow-up](../xc-prepared-parameters-20261028/README.md)
+removes its measured point regression and supersedes the default policy below.
+
 This is an **opt-in size/runtime tradeoff**, not a default performance promotion.
 `GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=OFF` retains literal constant
 specialization. With automatic CUDA AOT enabled, setting it to `ON` shares the

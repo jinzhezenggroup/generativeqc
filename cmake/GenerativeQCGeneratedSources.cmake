@@ -1384,6 +1384,8 @@ macro(generativeqc_register_cuda_generated_sources target)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
     if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS)
       list(APPEND _generativeqc_libxc_cuda_registry_args --share-parameters)
+    else()
+      list(APPEND _generativeqc_libxc_cuda_registry_args --no-share-parameters)
     endif()
     # Packaging selects structural registrations, never numerical admission.
     # Unpackaged codes retain the null-descriptor, fail-closed runtime path.

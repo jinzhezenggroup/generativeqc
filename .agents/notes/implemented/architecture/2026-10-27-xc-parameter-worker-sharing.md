@@ -1,5 +1,9 @@
 # Decision: share audited automatic XC parameter-family workers
 
+The opt-in runtime tradeoff below is superseded by
+[prepared launch coefficients](../performance/2026-10-28-xc-prepared-parameters.md).
+This note retains the original measurements and rationale.
+
 Status: implemented as an opt-in artifact-size tradeoff
 Date: 2026-10-27
 

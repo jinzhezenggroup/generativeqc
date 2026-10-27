@@ -23,6 +23,7 @@ from .libxc_work import (
     automatic_work_policy,
     polarized_work_setup,
 )
+from .parameter_products import prepare_parameter_products
 from .physical_kinetic_predicate import (
     PREDICATE_VARIABLE,
     bind_physical_kinetic_predicate,
@@ -65,6 +66,7 @@ class AutomaticPointSource:
     spin: Literal["polarized", "unpolarized"]
     domain: str
     domain_version: int
+    parameters: tuple[tuple[str, float], ...] = ()
 
     @property
     def mathematical_contract(self) -> dict:
@@ -93,6 +95,7 @@ class AutomaticPointSource:
                 "backend": self.backend,
                 "mathematics": self.mathematical_contract,
                 "source": self.source,
+                **({"parameters": self.parameters} if self.parameters else {}),
             }
         )
 
@@ -104,6 +107,7 @@ def emit_automatic_point(
     equal_spin: bool = False,
     spin: Literal["polarized", "unpolarized"] = "polarized",
     parameter_names: tuple[str, ...] = (),
+    precompute_parameters: bool = False,
 ) -> AutomaticPointSource:
     """Lower one ordinary semilocal Graph into the native physical-spin ABI.
 
@@ -127,6 +131,8 @@ def emit_automatic_point(
     emitted point ABI. The caller supplies values in that exact order; fixed
     worker thresholds and physical-input guards remain outside the parameters.
     Parameters are held constant during feature-coordinate differentiation.
+    With precompute_parameters, coefficient/literal products are prepared after
+    AD. The returned parameters describe the complete ordered launch-data ABI.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
@@ -172,11 +178,14 @@ def emit_automatic_point(
     else:
         work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
-    variables.update(
-        {name: f"parameters[{index}]" for index, name in enumerate(parameter_names)}
-    )
     roots, physical_kinetic = bind_physical_kinetic_predicate(
         program.graph, program.roots
+    )
+    parameters = program.parameters
+    if precompute_parameters:
+        roots, parameters = prepare_parameter_products(program.graph, roots, parameters)
+    variables.update(
+        {name: f"parameters[{index}]" for index, (name, _) in enumerate(parameters)}
     )
     if equal_spin:
         roots = equal_spin_roots(program.graph, roots)
@@ -336,4 +345,5 @@ def emit_automatic_point(
         domain_version=(
             DENSITY_WORK_DOMAIN_VERSION if density_only else LIBXC_WORK_DOMAIN_VERSION
         ),
+        parameters=parameters,
     )
