@@ -1,8 +1,10 @@
 """Replay retained engineering outcomes; no model/library/GPU execution."""
 
 import hashlib
+import io
 import json
 import lzma
+import tarfile
 from pathlib import Path
 
 
@@ -17,6 +19,25 @@ def main() -> None:
             and hashlib.sha256(data).hexdigest() == row["sha256"]
         )
         loaded[name] = json.loads(lzma.decompress(data))
+    shared = summary["receipt_storage"]
+    assert shared["path"] in {"v4-v6-receipts.tar.xz", "../v4-v6-receipts.tar.xz"}
+    pool_root = root.parent if shared["path"].startswith("../") else root
+    pool_bytes = (pool_root / "v4-v6-receipts.tar.xz").read_bytes()
+    assert (
+        len(pool_bytes) == shared["bytes"]
+        and hashlib.sha256(pool_bytes).hexdigest() == shared["sha256"]
+    )
+    with tarfile.open(fileobj=io.BytesIO(pool_bytes), mode="r:xz") as archive:
+        assert set(archive.getnames()) == {"v4/receipt.json", "v6/receipt.json"}
+        entry = archive.getmember(shared["member"])
+        assert entry.isfile()
+        receipt_bytes = archive.extractfile(entry).read()
+    assert hashlib.sha256(receipt_bytes).hexdigest() == shared["uncompressed_sha256"]
+    recovered_receipt = lzma.compress(receipt_bytes, preset=9)
+    original_receipt = summary["original_archives"]["receipt.json.xz"]
+    assert len(recovered_receipt) == original_receipt["bytes"]
+    assert hashlib.sha256(recovered_receipt).hexdigest() == original_receipt["sha256"]
+    loaded["receipt.json.xz"] = json.loads(receipt_bytes)
     source = loaded["source-closure.json.xz"]
     for name, row in source["manifest"]["files"].items():
         data = source["sources"][name].encode()

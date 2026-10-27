@@ -1,8 +1,10 @@
 """Replay retained engineering outcomes; no model/library/GPU execution."""
 
 import hashlib
+import io
 import json
 import lzma
+import tarfile
 from pathlib import Path
 
 
@@ -17,7 +19,59 @@ def main() -> None:
             and hashlib.sha256(data).hexdigest() == row["sha256"]
         )
         loaded[name] = json.loads(lzma.decompress(data))
-    source = loaded["source-closure.json.xz"]
+    shared = summary["receipt_storage"]
+    assert shared["path"] in {"v4-v6-receipts.tar.xz", "../v4-v6-receipts.tar.xz"}
+    pool_root = root.parent if shared["path"].startswith("../") else root
+    pool_bytes = (pool_root / "v4-v6-receipts.tar.xz").read_bytes()
+    assert (
+        len(pool_bytes) == shared["bytes"]
+        and hashlib.sha256(pool_bytes).hexdigest() == shared["sha256"]
+    )
+    with tarfile.open(fileobj=io.BytesIO(pool_bytes), mode="r:xz") as archive:
+        assert set(archive.getnames()) == {"v4/receipt.json", "v6/receipt.json"}
+        entry = archive.getmember(shared["member"])
+        assert entry.isfile()
+        receipt_bytes = archive.extractfile(entry).read()
+    assert hashlib.sha256(receipt_bytes).hexdigest() == shared["uncompressed_sha256"]
+    recovered_receipt = lzma.compress(receipt_bytes, preset=9)
+    original_receipt = summary["original_archives"]["receipt.json.xz"]
+    assert len(recovered_receipt) == original_receipt["bytes"]
+    assert hashlib.sha256(recovered_receipt).hexdigest() == original_receipt["sha256"]
+    loaded["receipt.json.xz"] = json.loads(receipt_bytes)
+    delta = loaded["source-closure.json.xz"]
+    assert delta["schema"] == "generativeqc.h100-owner-v4-source-delta-proposal.v1"
+    anchor = delta["base_archive"]
+    assert anchor["path"] == "v6/source-closure.json.xz"
+    base_bytes = (root / anchor["path"]).read_bytes()
+    assert (
+        len(base_bytes) == anchor["bytes"]
+        and hashlib.sha256(base_bytes).hexdigest() == anchor["sha256"]
+    )
+    base_sources = json.loads(lzma.decompress(base_bytes))["sources"]
+    source = {
+        "manifest": delta["manifest"],
+        "sources": {
+            name: delta["changed_sources"][name]
+            if name in delta["changed_sources"]
+            else base_sources[name]
+            for name in delta["manifest"]["files"]
+        },
+    }
+    recovered_source_bytes = (
+        json.dumps(source, ensure_ascii=True, separators=(",", ":")) + "\n"
+    ).encode()
+    assert (
+        hashlib.sha256(recovered_source_bytes).hexdigest()
+        == delta["original_uncompressed_sha256"]
+    )
+    recovered_source = lzma.compress(recovered_source_bytes, preset=9)
+    original_source = summary["original_archives"]["source-closure.json.xz"]
+    assert len(recovered_source) == original_source["bytes"]
+    assert (
+        hashlib.sha256(recovered_source).hexdigest()
+        == original_source["sha256"]
+        == delta["original_archive_sha256_witness"]
+    )
     for name, row in source["manifest"]["files"].items():
         data = source["sources"][name].encode()
         assert (

@@ -28,6 +28,12 @@
   "installed_sdk": "INCOMPLETE",
   "privacy_redacted_originals": "UNAVAILABLE_IN_PUBLIC_CAPSULE",
   "archives": {
+    "source-closure.json.xz": {
+      "bytes": 185568,
+      "sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
+    }
+  },
+  "original_archives": {
     "receipt.json.xz": {
       "bytes": 195520,
       "sha256": "e5d88204fe18aea3c450975dfdd49496d4587140fb21e8f0b1e80e7ac99d90a6"
@@ -36,5 +42,13 @@
       "bytes": 185568,
       "sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
     }
-  }
+  },
+  "receipt_storage": {
+    "path": "../v4-v6-receipts.tar.xz",
+    "member": "v6/receipt.json",
+    "bytes": 260056,
+    "sha256": "0aeef5da2c72945093e2098cda0a024cde22a89edab6693e44b510b8b5da2c99",
+    "uncompressed_sha256": "df7db0f9b342bde84446f793fddda35c983e0b9d166a32b7120ce589d251a17e"
+  },
+  "storage_scope": "Lossless representation only; original published privacy-redacted archive bytes reconstruct exactly; no new device/science acceptance"
 }

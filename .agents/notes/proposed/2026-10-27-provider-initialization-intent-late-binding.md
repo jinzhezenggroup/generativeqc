@@ -215,6 +215,26 @@ errors, dependent handle order, cross-library retention and shared-context life.
 The 36-case contract run is HOST evidence, separate from the real H100 resource
 exercise and all future scientific endpoints.
 
+## Shared historical storage after queue composition
+
+The first final-head retention check covered the `1b755bf6d` base. Adding the
+preceding queued KTBM change produced a different tree with 84,043,159 result
+bytes, exceeding the unchanged 80-MiB cap by 157,079 bytes. A passing branch
+check therefore cannot stand in for the actual queued composition.
+
+The bounded repair changes only this owned engineering evidence family. V4/V6
+published receipt JSON shares one TAR/XZ, and the older V4 source is a delta
+against the unchanged V6 source archive. Replays and the explicit restore tool
+reconstruct all three original compressed archives and verify their original
+SHA-256 and lengths. No status, source, failure frame or prior acceptance is
+relabelled. The V6 source remains byte-identical because V7 depends on it.
+
+Reject raising the cap, editing another queued PR's payload, dropping telemetry
+or treating privacy-redacted exports as authenticated remote originals. This
+storage representation introduces no device/scientific run or acceptance. Any
+later change to the anchor or compression recovery must retain exact recovery
+and the unchanged V4/V6/V7 outcome checks.
+
 ## References
 
 - Native foundation: PR #2815, merge `11b7bda884901e94c132433691106100e54b1f55`.
