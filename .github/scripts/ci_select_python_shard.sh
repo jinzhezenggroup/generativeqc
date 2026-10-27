@@ -300,6 +300,12 @@ rebalance_paths=(
   tests/python/test_rccsd_codegen_no_numpy.py
   tests/python/test_dft_mp_v1_capacity.py
   tests/python/test_df_lambda_frontier.py
+  # PR #2820 run 40360994825: core-b reached the 30-minute step cap
+  # at 99% without any reported assertion failure. The complete CBS
+  # convergence module occupied ~537 worker-seconds, including two
+  # independent CPU water oracles at 263-271 s each. Keep its core
+  # enumeration slot while transferring all tests to the force workers.
+  tests/python/test_correlation_convergence.py
   # Measured full Libxc force lifecycles took ~108 s each in run
   # 38113859405. Count this file in core parity before transferring
   # it, so no unrelated file changes owners as the long tail moves.
@@ -386,8 +392,8 @@ core_hotspots_b=(
   # Run 40127914199 completed core-c tests at 1798.9s. Moving these
   # intact ~477-worker-second modules to core-a then exhausted its cold
   # corrected-Lambda lane in run 40135163162; core-b finished in 14m37s.
-  # Keep their ordinary slots and all existing fresh-priority owners.
-  tests/python/test_correlation_convergence.py
+  # Convergence now has a dedicated parallel owner. Preserve the other
+  # stable core-b pins and their existing fresh-priority ownership.
   tests/python/test_cpu_semilocal_force_contract.py
   tests/python/test_wb97mv_uks_hessian.py
   # The added restricted-CUDA test shifted this complete response file
@@ -504,13 +510,16 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite shares this existing lighter lane. Put it
     # first so its long water HVP starts before the complete force matrices;
     # worksteal keeps their independent function-scoped cases parallel.
+    # The complete CBS convergence suite has independent function-scoped
+    # oracles: seed its work across these existing four workers as well.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
       tests/python/test_wb97mv_hessian.py \
       tests/python/test_uccsd_gradient.py \
-      tests/python/test_uccsd_t_gradient.py; do
+      tests/python/test_uccsd_t_gradient.py \
+      tests/python/test_correlation_convergence.py; do
       # Select tracked files even when missing on disk, to fail closed; avoid
       # inventing future files on pre-merge branches or synthetic inventories.
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
