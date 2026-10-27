@@ -224,6 +224,20 @@ int generativeqc_resource_stationary_cuda_v1(const char* profile, std::size_t at
   }
 }
 
+/** Allocation-free model discovery for clients that have no molecule yet.
+ * This is an upper bound, not permission to bypass prepared-item admission. */
+generativeqc_status generativeqc_ks_stationary_cuda_model_available_v1(
+    const generativeqc_method_descriptor* descriptor, int* available) {
+  if (!descriptor || !available) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(descriptor)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    *available = generativeqc::methods::detail::dft_cuda_stationary_model_available(*descriptor);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+}
+
 /** Private shape-only planner authority. Unlike the raw-profile query this
  * parses the production descriptor and shares prepared scientific admission.
  * Unsupported/invalid/unbuilt contexts never mutate the nine-field output. */
@@ -399,15 +413,16 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
     // in for this five-array lifetime, even when XC reads only points/weights.
     const auto xc_and_grid = generativeqc::runtime::size_add(
         xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
-    // Curated exact owners retain first-order J/K leases. Automatic energy-only
-    // owners deliberately omit derivative staging; match their preparation.
-    // A missing automatic provider has already failed the XC layout query.
+    // Match preparation exactly, including an explicitly bounded automatic
+    // force package. Missing force artifacts retain the energy-only storage.
+    const auto* automatic = generativeqc::dft::generated::automatic_cuda_point_entry(
+        static_cast<std::uint32_t>(functional));
     const auto direct = generativeqc::scf::cuda_direct_coulomb_device_bytes(
         1, nao, atoms, shells, primitives,
-        generativeqc::dft::generated::automatic_cuda_point_entry(
-            static_cast<std::uint32_t>(functional))
-            ? 0U
-            : 1U);
+        automatic ? generativeqc::dft::automatic_stationary_derivative_order(
+                        static_cast<std::uint32_t>(functional), automatic->domain_version,
+                        static_cast<std::uint32_t>(spins))
+                  : 1U);
     output[0] = state;
     output[1] = xc_and_grid;
     output[2] = direct;

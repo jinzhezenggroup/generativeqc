@@ -36,7 +36,7 @@ def qualified(*arguments: str) -> tuple[str, ...]:
 
 def test_inventory_is_generated_from_compiler_method_ir() -> None:
     native = qualified("--list-profiles")
-    aot = qualified("--list-aot-profiles")
+    aot = qualified("--list-available-aot-profiles")
     assert native and len(native) == len(set(native))
     assert set(native) <= set(aot)
     assert native == qualified("--list-profiles")
@@ -140,7 +140,7 @@ const CudaStationaryBinding& native_stationary_profile_m06_2x_rks() {
 namespace generativeqc::methods::detail {
 struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
-  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{}, density_fitted_range_exchange{};
+  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{}, density_fitted_range_exchange{}, automatic_program{};
   double short_range_exchange{}, long_range_exchange{}, range_omega{};
   struct { double b{}, c{}, coefficient{1.0}; } nonlocal_parameters;
   dft::SemilocalFamily semilocal_family{dft::SemilocalFamily::Pbe};

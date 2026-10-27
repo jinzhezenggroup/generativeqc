@@ -19,6 +19,8 @@ struct CudaStationaryResources {
   std::size_t grid_provider_retained_bytes{}, grid_prepare_device_delta{};
   std::size_t grid_provider_allowance_bytes{};
   std::size_t minimum_device_bytes{};
+  /** Optional center/phase geometry cache selected from the same fleet budget. */
+  bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
   AoGridWork grid_work;
 };

@@ -50,13 +50,24 @@ def automatic_registry_entries() -> tuple[AutomaticRegistryEntry, ...]:
     Structural representability does not grant endpoint, domain or derivative
     admission. These retain their separate evidence-backed capability gates.
     """
+    # Capture the catalog and source identity once for this enumeration only.
+    # A later call must observe changed catalog/compiler inputs, not a global memo.
+    capabilities = {item.name: item for item in available_capabilities()}
     result = []
     codes = set()
     for name in sorted(AUTO_BULK_COMPONENTS):
-        capability = functional_capability(name)
+        capability = capabilities.get(name)
+        if capability is None:
+            # Preserve the individual lookup's fail-closed diagnostic for a stale
+            # selection whose registration is now missing or no longer imported.
+            capability = functional_capability(name)
         if set(capability.required_ingredients) - _SUPPORTED_INGREDIENTS:
             continue
-        code = automatic_functional_code(name)
+        if not 0 < capability.libxc_id < 0x10000:
+            raise UnsupportedXC(
+                f"automatic Libxc ID is outside the encoded range: {name}"
+            )
+        code = AUTOMATIC_FUNCTIONAL_CODE_BASE | capability.libxc_id
         if code in codes:
             raise ValueError(f"duplicate automatic Libxc functional code: {code:#x}")
         codes.add(code)
@@ -115,12 +126,24 @@ def automatic_functional_ingredients(code: int) -> tuple[str, ...]:
         raise UnsupportedXC("automatic Libxc point code is not registered") from error
 
 
+@cache
+def _automatic_name_registry() -> dict[int, str]:
+    return {entry.code: entry.name for entry in automatic_registry_entries()}
+
+
+def automatic_functional_name(code: int) -> str:
+    """Authenticate a code without granting a backend or derivative capability."""
+    automatic_functional_ingredients(code)
+    return _automatic_name_registry()[code]
+
+
 __all__ = [
     "AUTOMATIC_FUNCTIONAL_CODE_BASE",
     "AUTOMATIC_SCF_DOMAIN",
     "AutomaticRegistryEntry",
     "automatic_functional_code",
     "automatic_functional_ingredients",
+    "automatic_functional_name",
     "automatic_registry_entries",
     "automatic_scf_domain",
 ]

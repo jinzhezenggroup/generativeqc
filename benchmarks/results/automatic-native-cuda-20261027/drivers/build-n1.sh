@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/jzzeng/tmp/qc-1118-native-force-20261027
+export PATH="/home/jzzeng/.local/bin:/group/software/cuda-12.9.1/bin:$PATH"
+export LD_LIBRARY_PATH="/group/software/cuda-12.9.1/lib64:${LD_LIBRARY_PATH:-}"
+mkdir -p evidence
+sccache --version
+sccache --show-stats > evidence/cache-before.txt
+cmake -DCMAKE_PREFIX_PATH=/home/jzzeng/miniconda3 -DOPENSSL_ROOT_DIR=/home/jzzeng/miniconda3 -Dnlohmann_json_DIR=/home/jzzeng/miniconda3/share/cmake/nlohmann_json -S . -B build/native-cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/group/software/cuda-12.9.1/bin/nvcc -DCMAKE_CXX_COMPILER_LAUNCHER=/home/jzzeng/.local/bin/sccache -DCMAKE_CUDA_COMPILER_LAUNCHER=/home/jzzeng/.local/bin/sccache -DPython3_EXECUTABLE=/home/jzzeng/tmp/qc-1118-cuda-force-v9-20261011/.venv/bin/python -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_CUDA_COMPILE_ARCHITECTURES=120-real -DGENERATIVEQC_BUILD_TESTS=ON -DGENERATIVEQC_BUILD_CLI=ON -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF -DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF -DGENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON '-DGENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS=LDA_C_VWN_4;LDA_C_CHACHIYO;LDA_C_PZ_MOD;GGA_X_APBE;GGA_X_PBE_SOL;GGA_X_RPBE;GGA_X_B86;GGA_C_APBE;MGGA_X_LTA;MGGA_X_GVT4;MGGA_C_TPSS' '-DGENERATIVEQC_STATIONARY_AOT_PROFILES=pbe_rks;pbe_uks;libxc_196639_rks;libxc_196639_uks;libxc_196895_rks;libxc_196895_uks;libxc_196618_rks;libxc_196618_uks;libxc_196792_rks;libxc_196792_uks;libxc_196724_rks;libxc_196724_uks;libxc_196725_rks;libxc_196725_uks;libxc_196711_rks;libxc_196711_uks;libxc_196794_rks;libxc_196794_uks;libxc_196809_rks;libxc_196809_uks;libxc_196812_rks;libxc_196812_uks;libxc_196839_rks;libxc_196839_uks' -DGENERATIVEQC_CUDA_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_SPLIT_COMPILE_THREADS=2 -DGENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS=2 -DCMAKE_INSTALL_PREFIX=/home/jzzeng/tmp/qc-1118-native-force-20261027/install > evidence/configure.log 2>&1
+cmake --build build/native-cuda -j 12 --target generativeqc generativeqc_cli generativeqc_dft_cuda_tests generativeqc_ks_cuda_tests > evidence/build.log 2>&1
+sccache --show-stats > evidence/cache-after.txt

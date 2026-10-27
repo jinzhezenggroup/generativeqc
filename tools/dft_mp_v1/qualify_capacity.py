@@ -277,7 +277,7 @@ NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
 # their contracts; structural D4/ECP rejection preserves the admitted D3 owner.
 # Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
+    "d643696b8ba56b118400c0c949d50aba329fb1c9befd03e30590e9367b5ec286"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
@@ -297,7 +297,7 @@ NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
 # The compiler now supplies the inventory and grouped native generation; retain
 # the full wiring/discovery-policy digest so either integration fails closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
+    "a993197b05eb747473f3352ce61ef42565b2f2d402983cc521bda05f2cb5ee16"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"

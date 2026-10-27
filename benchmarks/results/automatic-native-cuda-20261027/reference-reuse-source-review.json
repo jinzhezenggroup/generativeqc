@@ -1,0 +1,191 @@
+{
+  "schema": "generativeqc.native-automatic-reference-source-review.v1",
+  "scope": "independent FD reuse only; no cache hit or unchanged artifact claim",
+  "reason": "stationary contract hashes all method compiler inputs; upstream RHF integral AD change invalidated force artifact identity while emitted source changed only its identity literal",
+  "compiler_closure_inputs_checked": 554,
+  "changed_inputs": [
+    {
+      "path": "python/generativeqc_compiler/method/rhf_integral_ad.py",
+      "previous_sha256": "b32df7b608231739936fde76838d784242cecb8582bac42a28f1403ef9521007",
+      "current_sha256": "87b8150d26410836f27b44852b1b137dd945ba0bae92fcd392f9c0c5d3a09b11"
+    }
+  ],
+  "profiles": {
+    "libxc_196809_uks": {
+      "previous_identity": "0baa21388c1dc144fb6f72738bf2a3f6069dd8992b199d6827eaafb7531aa22d",
+      "current_identity": "b893b8e05841bc0e56fe1a08832f08b1c52fe83d195034733799a294bbe1642b",
+      "previous_source_sha256": "f74bbb9b066e4499d97078de67faa652d478d08d5b96c0be7d77f0ac12a26088",
+      "current_source_sha256": "c1a56f262e2acea7c08f68152e16cb0218cfe21213234045b0ab2f2ed737693e",
+      "normalized_source_sha256": "24964033177d5fbc4b96560b42e55769a15e359f6aa56f4b0753148e921040d2",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196639_rks": {
+      "previous_identity": "72300a0586f0eab765522e222681f01aadb5212a32c3c1fb1100b04ab3971bf8",
+      "current_identity": "1b8c5dda098e12ebe72daa403d1eeaf142edbad69805139ff789a45ac73b6f2f",
+      "previous_source_sha256": "536bee14ff0be55e5085609884853df7c1c5c5db26c1ac5eb7da492889e14552",
+      "current_source_sha256": "5b261b808464a7bb2c1e2d77b04054267f357431983ec8fe537939c673690f3f",
+      "normalized_source_sha256": "cde2babcce9da0740316d531361e0a2ad5547ddc2161abdb33aef1e2632fc771",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196711_uks": {
+      "previous_identity": "a5d0c6a358e20caa16786e9f6eaa825892625732ad8839e5c4227e48af00c545",
+      "current_identity": "9f679f44e9d980583aa28aa1c934fb56ad4566b91f236f7aa740a0088da00db1",
+      "previous_source_sha256": "4e388bc4b44ebf6d4811860ace73d5ce86426cb2e842796e54a78abfafed6fc6",
+      "current_source_sha256": "0fdb8e8c9403864acb6c914b0beb57ffaf86f85951291b376013ba101af9106b",
+      "normalized_source_sha256": "2585f61d2a72c6e7feb53bbe31cba6d09695c153e7dbeb3613ef1ce2071facea",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196895_uks": {
+      "previous_identity": "89a27788473d1b349362f6054716f913e24ba4b20fee2983522d4dfb309e3add",
+      "current_identity": "973e484c1effeb97baa3d90584201e138721e966cd82cc78c69195ca604b7654",
+      "previous_source_sha256": "f6dd1e89871729a997ccdb5bd5d5065e30062ac35e795f381868023544fb87d5",
+      "current_source_sha256": "1da6e35c7e19a239f36d4365c3ac1997a50d3ad58d77173e652986d83f6ecf85",
+      "normalized_source_sha256": "96761d56264d1da6650427226db00e26090a699d5b98d047360f77939c0d1f08",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196724_rks": {
+      "previous_identity": "db8563b6dfa2394a1b5bff3d7b7e71df1eaedbf39392d632688a7b78918f9181",
+      "current_identity": "c9fa94ca179f9c745b41088647cf957d3d7ed4321899481fef7a75125c8abedc",
+      "previous_source_sha256": "b03840c852d016e0505e76d6af0b8261b506b695a0a29bd2ae452a17f8aa69de",
+      "current_source_sha256": "cfbccfbc9625b9a1def3b011aaa752b34937d37c0dd20c4a226ad382125b4c95",
+      "normalized_source_sha256": "ccb45cebc634d46b176b460e29b4c894631a95bb35d6489b36a63a6ea726fab4",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196792_uks": {
+      "previous_identity": "9096d0a777736fb8ba4a55c6e70ebd6db32bfdd82d5cae56173374327be5ed18",
+      "current_identity": "9eab44cc0180c79477fc2fce53694e46e433032e821662b758f47e068264e5db",
+      "previous_source_sha256": "e29d5eb4c281e578b3f966e791a1137da74e71462fa215da02236cfdf034d972",
+      "current_source_sha256": "58f73b6062f9f0f85e10fa78d4a6f1a77c493fc19f2ef3239ba57f5b2f4ce6cc",
+      "normalized_source_sha256": "193f1622d75882fc1c38371bd41aadb41def430190046644dcb2787f5c776a45",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196809_rks": {
+      "previous_identity": "d9f269ddcecc2b27a4aa482aeb620ea4215ddb74cfcac4314b84160d8351e22d",
+      "current_identity": "42f20258395e8bbf4d6482869ba0849a3ad397601e47cb7dec80aaaf8d0a97d0",
+      "previous_source_sha256": "3b3d04cf8541900b5c5d54f2b8e4e3a92dde30809a25453166a2900f73a26399",
+      "current_source_sha256": "414167098fbe8f94062b3dc2bd60b36c0b3f7e7cae438ea49f387ac8f68e50ae",
+      "normalized_source_sha256": "c29ec95598d94fe6afd6fa02b53136d0170a3dbe7720c22389bfc0ef71c56c8c",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196618_rks": {
+      "previous_identity": "ec593caf969d9e3e8e91efdddbb3322e42bb57af374684de080e93ead852f4f4",
+      "current_identity": "9eb2644a223869657936cf790a389b74c3255b8b270264b53a169125e32e1833",
+      "previous_source_sha256": "b0bd29a37c180eb49ae11d5d916e6e6ade106683a49ba563ee21094e37f89d23",
+      "current_source_sha256": "2eeb21b8c4a99147d045680ed9c889670dd3f4400a553f403b5311d4668f17d0",
+      "normalized_source_sha256": "77c91e825bdf885e5ac325078b815d7773a824439e45194cdb1e12e750397af1",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196839_uks": {
+      "previous_identity": "ccab12f99c485ed1d30d584187bfa59d664ec5c06668e5d1b7c2256dc9bb89f9",
+      "current_identity": "e94ac58b3e512e8afdc10e441c0fe6d49923eb4ce7540aa6a3a2d0b51ad012d5",
+      "previous_source_sha256": "2089753983130521d08b526a6f732b310bc0329dde108aec98a3c1c262425f48",
+      "current_source_sha256": "2a7df47ede0b5353d28034ba9dfe2389fdef27ea9dbc2dbc6dccb9f7c06f0a79",
+      "normalized_source_sha256": "0693d83718f78f8aace6418a4bda886072a7996c076450e792f501f74bf8f2f7",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196792_rks": {
+      "previous_identity": "cd03b0440de9e51db352b0dd118efe516899675caca783cc8480cd45c258b154",
+      "current_identity": "10dda5ab0699b87a27a6ef6169e45397deb5d1fe786f365b5438e0c6a1a3c9de",
+      "previous_source_sha256": "736c1adec62e7da4178dda02fa57da8e59104a5b1225de80b70d697280f394e6",
+      "current_source_sha256": "a1c3c50480582ac48780c884097e241e68d1f047fec8f44a2de0727bc0505d26",
+      "normalized_source_sha256": "76bddfaa3828960c4992ab6f6bb2769fd07a9571491b153ad7379f84b66f4c74",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196812_rks": {
+      "previous_identity": "bb96bbe0b387e13e9f277d8a76226c917f5a22eed576e8700bd82745043ba4d1",
+      "current_identity": "6d67e847861531456e062204695f0385f3e8aba34e99201a8d27a6fd639d8159",
+      "previous_source_sha256": "a335cfd34b31962a96895c84bf37efde375fc3f6c20102644893003c46e4d46c",
+      "current_source_sha256": "5946f1be0645d6ad07f95d8a542e65277575359e2e7ab8e0c95934ee74400432",
+      "normalized_source_sha256": "3983e8cef455d6f7ec96439dde99f88f84941d69ed3eaa7537afef30cd033cbf",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196711_rks": {
+      "previous_identity": "2cd47361f2cc1819a44c2965a18d75332d5c2c307eb8dd3b55a896aeb4ed963c",
+      "current_identity": "8c6fa7641adf0d2cd45a73fa07bab6d1870a08b68df84aeb7aa54463404431ae",
+      "previous_source_sha256": "f132d729a88218d01e5dd1143332ec0071974b387ce81d3917c4be453c847fe4",
+      "current_source_sha256": "f916e1e2d88fb8ee32be9b53f0e883a61d625097f8564dcb2775ca26273bcb28",
+      "normalized_source_sha256": "16cbb17111eefedf67ae7bd44b5300c31d7aa0c4c31cde08c284562f577d9b46",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196639_uks": {
+      "previous_identity": "77c17b9341897811de5daa6970723632504f22b596b9574af58bbb6f8c47cb17",
+      "current_identity": "e681a96b50dee38460ecdafdc4046b80d971fb15a787a94ef9db65c8e0cf84f8",
+      "previous_source_sha256": "5dc3fdbde81ac1c526db46529864bd6c4668e86177c8895c4ac6c4b88d688c88",
+      "current_source_sha256": "1bd2998a665d68b65920c8f84dce4f5e32a68a33147114dacee19c0ccc7dcb48",
+      "normalized_source_sha256": "63c6d66228fb68d5e28a5ee16923636452d06f96abc74883b607277312bd6268",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196895_rks": {
+      "previous_identity": "75659c94c805f7afb67876f28911e7ea5411b2a274a4538696ab83425668f6a2",
+      "current_identity": "d63fb91c15e60788a031ce146639b8d8fdfa226f40ca053b9cbc36b5471ea483",
+      "previous_source_sha256": "6fd76188b0e3cf6ec8eac4921a878470a562d25ba521b8ffe934f2ab70481a05",
+      "current_source_sha256": "7bb2ab483e5f7e1e914ace2c34370a8b873eb827bc6cd3ffccc6fbb953a7542e",
+      "normalized_source_sha256": "8487574c3e53bb3a37da934693009aef6b6a1b0064e2b155ed122606e1705e30",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196812_uks": {
+      "previous_identity": "58dbb1473b87145214cd6dcfacd67dbdff3b15cbae240324de49d726e1828533",
+      "current_identity": "b6b32bba9ca67faa646a9f1a10631e407f558a1faaa78c4118be191632f29b1a",
+      "previous_source_sha256": "a7eee3ce15661fbc73b6a0ec9b50090623c3a12bf9d7497834c684966a4f8fa7",
+      "current_source_sha256": "b68720bb1e9ebeb87708d185aa3643d2a4e96eda7a7a859cc3fb6fd6f18184cb",
+      "normalized_source_sha256": "6145ae1d2bdbfda6c6071d2f65670638dfb4737950bc33d7669389598d73af90",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196618_uks": {
+      "previous_identity": "8800a9be8b232d93593966ea2990e3e7f3f2d09856742b007780b1677bc3dd2f",
+      "current_identity": "112a73f3e8a85f3cd902852ef21421eddc3b4901b854e9ca8ece9e56d4c8bd31",
+      "previous_source_sha256": "987aca649bec1de9c69898fc37abb0631c930289666ed8628d3367b700856cee",
+      "current_source_sha256": "f3f0cacbdf40cf3774ed0ba68ae7d09bfedeaad27a8c1b9fd4a7fa1e90a8054d",
+      "normalized_source_sha256": "9d16bee88c09db363155366bb98066a5fe768654ce9d32c1f1aa302b3e298758",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196839_rks": {
+      "previous_identity": "453fbc98119d6f9f0d9d6220af2ae9f720b1c21e6e0ecb04334dd2e74b6cc54f",
+      "current_identity": "10e8a536695e3dcb76247da55e5fb43c21251f889975b99754db65b6c0835a4d",
+      "previous_source_sha256": "f4d26ea4db234c971bb68a58745a4bad8a8456a30d84f2195c6b82159289233d",
+      "current_source_sha256": "9d974087be4463cf2ccdd96dfd5ec766d212d2e37e5530b9e676e62e7d44aaf4",
+      "normalized_source_sha256": "b3db72e93a5cfe7647cedd2298c80275f792f64ade518fa2dc234391bc2058a0",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196725_uks": {
+      "previous_identity": "4cadc51c657b4973044142e66e86b7743c0f88ebb7b1c6cad4cbaf13817bc24e",
+      "current_identity": "b3bda6d95e5ff12f7d865a8ffe3a24ecd4c612404b57de0b47449eed1ea57e8b",
+      "previous_source_sha256": "220a44e714973e6b79040117d77c721cf53d2773153a7b00b607c283b41aaede",
+      "current_source_sha256": "2ec66ea0e6499f23bd0843523fd5d4b42d6d8ba3f2c0930ce66daccc034946fc",
+      "normalized_source_sha256": "62e1cbb4a12389e509f3c938b88a256b0b6ae503ababc43f798e6816f12f3f30",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196724_uks": {
+      "previous_identity": "391dd67e1333d58c03a2afbce295050038c03fc14357cff60cb1d561a4953c1e",
+      "current_identity": "c0b2bf7b0ffafed6f2ced9e5b2a20948e24c6beaac9bbe3d346d27043cf56bd8",
+      "previous_source_sha256": "bd200a194f5770319b00a789674ed1857bb1976c0262fafaf4a24c4b7d543d59",
+      "current_source_sha256": "3ad4f11db2f5187fa64a4ded03b5c73ec60e2b53aa2caaecb1267fbb0c644220",
+      "normalized_source_sha256": "01c38abae7f638c774fd0d72581989de27d53a321a2b16a82f289f27f436d8a0",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196794_rks": {
+      "previous_identity": "09a7faf73d5bb05200e772796c961f125781a65925a6583e6bc116fa33772339",
+      "current_identity": "05f5c4a1530717b55096f63f74c3f7b5340f7c840ba09456ebeef9d6ec441169",
+      "previous_source_sha256": "4def0e71aeb915328d712d2c236cbcf8aa4f7090755b1761559a06179c864ad6",
+      "current_source_sha256": "6e965e015872077bb4f01d08684bbde763b094cb0028fba6cf1bcf87f743c9e5",
+      "normalized_source_sha256": "9bc2cac791018ef93c901aad04ab79938029abcb120af19e20544affec1aac32",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196725_rks": {
+      "previous_identity": "0821995dbec8a19087d1e200abd34314d43e43aec2404eba2e9275390881a8cc",
+      "current_identity": "69d6393b81c9f1222e6e322a1e859e657bea68608b3eb79345159b2eb660c4d3",
+      "previous_source_sha256": "97bf5baa130541b62927962f12d52ae1439c9fa281dfdd088819caed5465f41c",
+      "current_source_sha256": "d67e4fd0aa0d3a30b49282692a168920cf7631a876c0f2d7e0a70e962894d1c0",
+      "normalized_source_sha256": "d787013c049b9fb9069f3b95b38eb4d65d56ce9de4bdf55679a2cd74b50a8e54",
+      "only_changed_literal": "native binding source_identity"
+    },
+    "libxc_196794_uks": {
+      "previous_identity": "6edcfae3eba1913225c5a833c552704a69aefa6654dae92d8b4e65fd3825ae20",
+      "current_identity": "857227cf4664f3f5891c9bd401a264842ca675229bb5374cec232a949ce4da72",
+      "previous_source_sha256": "c55f036087f510d6d6af5714d0fa66ace89b3bd0d6fbe90e0f0c5bdac98920ae",
+      "current_source_sha256": "83525295f9cf6c943ed67df579931471fb1664279b882ca34eb9bc87503ee341",
+      "normalized_source_sha256": "d3a5f7a321024d2a1efc6a4114f30a3b9808ce4d83fa3a8a0c9bd971d1af9d51",
+      "only_changed_literal": "native binding source_identity"
+    }
+  }
+}

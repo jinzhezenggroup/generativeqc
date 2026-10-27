@@ -93,7 +93,9 @@ def test_sp_primitive_generation_has_no_functional_or_spin_specialization(
     assert output.read_text() == lower.return_value
 
 
-@pytest.mark.parametrize("profile", generator.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+@pytest.mark.parametrize(
+    "profile", stationary_cuda.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+)
 def test_split_sp_wrappers_never_regenerate_integral_primitives(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, profile: str
 ) -> None:
@@ -255,10 +257,18 @@ def test_manifest_integrity_covers_every_payload_field() -> None:
 
 
 @pytest.mark.parametrize(
-    "requested", [None, "pbe0_uks;b3lyp_rks;pbe0_uks", "", "unknown_rks"]
+    ("requested", "automatic"),
+    [
+        (None, False),
+        (None, True),
+        ("pbe0_uks;b3lyp_rks;pbe0_uks", False),
+        ("libxc_196639_rks;libxc_196639_rks", True),
+        ("", False),
+        ("unknown_rks", False),
+    ],
 )
 def test_stationary_packaging_profiles_are_bounded_and_deterministic(
-    tmp_path: Path, requested: str | None
+    tmp_path: Path, requested: str | None, automatic: bool
 ) -> None:
     cmake = shutil.which("cmake")
     if cmake is None:
@@ -270,6 +280,12 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
         f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
         f'set(CMAKE_CURRENT_SOURCE_DIR "{ROOT.as_posix()}")\n'
         f'set(CMAKE_CURRENT_BINARY_DIR "{tmp_path.as_posix()}")\n'
+        + (
+            "set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT ON)\n"
+            "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS LDA_C_VWN_4)\n"
+            if automatic
+            else ""
+        )
         + (
             f'set(GENERATIVEQC_STATIONARY_AOT_PROFILES "{requested}")\n'
             if requested is not None
@@ -296,7 +312,16 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
             sorted(set(requested.split(";")))
             if requested
             else (
-                sorted(generator.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
+                sorted(
+                    (
+                        *stationary_cuda.QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+                        *(
+                            ("libxc_196639_rks", "libxc_196639_uks")
+                            if automatic
+                            else ()
+                        ),
+                    )
+                )
                 if requested is None
                 else []
             )

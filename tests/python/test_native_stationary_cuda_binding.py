@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.method.stationary_cuda import (
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
     emit_stationary_profile_aot_wrapper_cuda,
     qualified_sp_requests,
@@ -20,12 +21,29 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     emit_native_stationary_registry_cpp,
     native_stationary_model,
 )
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_code,
+    automatic_functional_name,
+    automatic_scf_domain,
+)
 from generativeqc_compiler.xc.grid_native import emit_grid_partials
+from test_libxc_automatic_point_native import NAMES
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+# Keep required-CI generation bounded while spanning every supported ingredient
+# and spin layout. The available package inventory itself remains structural.
+TEST_PROFILES = tuple(
+    name
+    for name in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+    if name in NATIVE_STATIONARY_CUDA_PROFILES
+) + tuple(
+    f"libxc_{automatic_functional_code(name)}_{spin}"
+    for name in NAMES
+    for spin in ("rks", "uks")
+)
 
 
 def test_typed_geometry_helpers_link_across_native_profiles(
@@ -64,7 +82,7 @@ def test_typed_geometry_helpers_link_across_native_profiles(
         assert probe() == 10.0
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     """Token ownership changes cannot rewrite equations, literals or IR hashes."""
     wrapper = emit_stationary_profile_aot_wrapper_cuda(
@@ -103,7 +121,7 @@ def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     assert native == emit_native_stationary_profile_cuda(profile)
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
     plan = _qualified_aot_profile(profile).plan
     source = emit_native_stationary_profile_cuda(profile)
@@ -133,7 +151,16 @@ def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks")]
+    "selected",
+    [
+        (),
+        ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks"),
+        tuple(
+            f"libxc_{automatic_functional_code(name)}_{spin}"
+            for name in ("LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_LTA")
+            for spin in ("rks", "uks")
+        ),
+    ],
 )
 def test_native_registry_contains_only_built_profiles(
     selected: tuple[str, ...], tmp_path: Path, native_cxx: NativeCxx
@@ -263,7 +290,7 @@ def test_split_hybrid_model_uses_exact_graph_not_method_label(
         native.native_stationary_model("ignored")
 
 
-@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+@pytest.mark.parametrize("profile", TEST_PROFILES)
 def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
     """The existing SDK transport lowerer independently checks emitted point scales."""
     from generativeqc.ks import (
@@ -282,7 +309,11 @@ def test_native_model_matches_independent_native_ks_lowering(profile: str) -> No
     )
     assert functional == _native_semilocal_code(plan.method)
     expected_domain = (
-        SPLIT_HYBRID_SCF_DOMAIN if domain == 4 else SCF_DOMAIN_BY_VERSION[domain]
+        automatic_scf_domain(automatic_functional_name(functional))
+        if profile.startswith("libxc_")
+        else SPLIT_HYBRID_SCF_DOMAIN
+        if domain == 4
+        else SCF_DOMAIN_BY_VERSION[domain]
     )
     assert expected_domain == _scf_domain_for_ir(plan.method)
     actual_exchange, actual_correlation, _ = ks_coefficients(plan.method)

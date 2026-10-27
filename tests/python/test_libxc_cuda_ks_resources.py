@@ -34,11 +34,21 @@ def derivative_reservation(
     source.write_text(
         '#include "scf/fock_build.hpp"\n'
         '#include "generativeqc/generativeqc.h"\n'
+        '#include "dft/cuda_stationary_binding.hpp"\n'
         "using namespace generativeqc;\n"
-        "struct NativeKsExecutionPlan { const void* automatic_program{}; };\n"
+        "struct NativeKsExecutionPlan { const void* automatic_program{}; unsigned spin_channels{1}; };\n"
+        "unsigned ks_xc_functional_code(const NativeKsExecutionPlan&) { return 196792; }\n"
+        "unsigned ks_scf_domain_version(const NativeKsExecutionPlan&) { return 4; }\n"
+        "namespace generativeqc::dft {\n"
+        "bool packaged{};\n"
+        "const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept {\n"
+        "  static CudaStationaryBinding binding;\n"
+        "  return packaged && model == CudaStationaryModel{196792,4,1,3,1,1,0} ? &binding : nullptr;\n"
+        "}\n}\n"
         + definition
         + r"""
-extern "C" unsigned reservation(bool automatic, bool cuda, bool exact) {
+extern "C" unsigned reservation(bool automatic, bool cuda, bool exact, bool packaged) {
+  dft::packaged = packaged;
   scf::ResolvedFockBuild strategy{};
   strategy.backend = cuda ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
   strategy.spec.coulomb.present = true;
@@ -62,7 +72,7 @@ extern "C" unsigned reservation(bool automatic, bool cuda, bool exact) {
         ),
     )
     library = ctypes.CDLL(str(path))
-    library.reservation.argtypes = [ctypes.c_bool] * 3
+    library.reservation.argtypes = [ctypes.c_bool] * 4
     library.reservation.restype = ctypes.c_uint
     return library.reservation
 
@@ -70,11 +80,16 @@ extern "C" unsigned reservation(bool automatic, bool cuda, bool exact) {
 @pytest.mark.parametrize("automatic", (False, True))
 @pytest.mark.parametrize("cuda", (False, True))
 @pytest.mark.parametrize("exact", (False, True))
-def test_energy_only_automatic_owner_does_not_reserve_derivative_sources(
-    derivative_reservation: Any, automatic: bool, cuda: bool, exact: bool
+@pytest.mark.parametrize("packaged", (False, True))
+def test_automatic_derivative_reservation_matches_linked_force_inventory(
+    derivative_reservation: Any,
+    automatic: bool,
+    cuda: bool,
+    exact: bool,
+    packaged: bool,
 ) -> None:
-    assert derivative_reservation(automatic, cuda, exact) == int(
-        not automatic and cuda and exact
+    assert derivative_reservation(automatic, cuda, exact, packaged) == int(
+        cuda and exact and (not automatic or packaged)
     )
 
 
@@ -326,12 +341,27 @@ def test_missing_packaged_provider_has_no_cpu_or_legacy_shape_fallback(
         )
 
 
+def test_missing_force_artifact_does_not_borrow_energy_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A working energy provider cannot grant an absent stationary consumer."""
+    monkeypatch.setattr(resources_ks, "_cuda_library_identity", lambda _: {})
+    request = resources_ks.ks_resource_request(
+        [H2],
+        method="libxc:GGA_X_APBE",
+        backend="cuda",
+        library=_library([]),
+        include_forces=True,
+    )
+    assert request.candidates == ()
+    assert "packaged native stationary" in request.unsupported_reason
+
+
 @pytest.mark.parametrize(
     ("options", "reason"),
     (
         ({"precision": "auto"}, "strict-FP64"),
         ({"ks_options": KsOptions(xc_schedule="host_unfused")}, "device-fused"),
-        ({"include_forces": True}, "forces are not qualified"),
     ),
 )
 def test_unqualified_policy_fails_before_loading_a_library(
