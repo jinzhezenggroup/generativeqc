@@ -705,6 +705,8 @@ def run(args: typing.Any) -> dict:
                         "--architecture",
                         architecture,
                         "--local",
+                        "--device-id",
+                        str(args.device_id),
                         # This workflow supplies the independent native-object
                         # and endpoint gates required for subgroup promotion.
                         "--allow-experimental-subgroup-winner",
@@ -764,6 +766,7 @@ def run(args: typing.Any) -> dict:
                         target,
                         nvcc,
                         trial_directory / "isolated",
+                        device_id=args.device_id,
                         timeout=min(900, remaining()),
                     )
                     atomic_json(trial_directory / "isolated.json", isolated)
@@ -819,6 +822,7 @@ def run(args: typing.Any) -> dict:
                         target,
                         nvcc,
                         trial_directory / "native-isolated",
+                        device_id=args.device_id,
                         timeout=min(900, remaining()),
                         production_source=production_source,
                         production_object=production_object,
@@ -912,6 +916,7 @@ def run(args: typing.Any) -> dict:
                     target,
                     nvcc,
                     directory / f"final-{name}-{consumer}",
+                    device_id=args.device_id,
                     timeout=min(900, remaining()),
                     production_source=production_source,
                     production_object=production_object,

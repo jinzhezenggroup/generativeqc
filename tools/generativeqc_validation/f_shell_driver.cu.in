@@ -199,6 +199,7 @@ int main(int argc, char** argv) {
     std::uint32_t endian = 1;
     if (*reinterpret_cast<unsigned char*>(&endian) != 1) throw std::runtime_error("fixture driver requires a little-endian host");
     std::cout << std::setprecision(17);
+    check(cudaSetDevice(@DEVICE_ID@));
     device_record();
     for (int i = 1; i < argc; ++i) run_fixture(argv[i], i - 1);
     return 0;

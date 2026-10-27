@@ -28,6 +28,7 @@ from generativeqc_compiler.common.cuda_resources import (
     KernelResources as KernelResources,
 )
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo, cuda_target_info
+from generativeqc_compiler.common.provenance import find_nvcc
 
 from .benchmark import emit_shell_class_benchmark_cuda
 from .ir import KernelConsumer
@@ -445,8 +446,13 @@ def emit_candidate_translation_unit(
     return source.replace(marker, replacement, 1)
 
 
-def emit_batch_driver(specifications: Iterable[ShellClassSpec]) -> str:
-    """Emit the one-process driver that invokes every compiled candidate."""
+def emit_batch_driver(
+    specifications: Iterable[ShellClassSpec], *, device_id: int = 0
+) -> str:
+    """Select one visible GPU before invoking any compiled candidate."""
+
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
 
     specs = tuple(specifications)
     declarations = "\n".join(
@@ -462,7 +468,8 @@ def emit_batch_driver(specifications: Iterable[ShellClassSpec]) -> str:
 {declarations}
 
 int main() {{
-  const cudaError_t initialization = cudaFree(nullptr);
+  const cudaError_t selection = cudaSetDevice({device_id});
+  const cudaError_t initialization = selection == cudaSuccess ? cudaFree(nullptr) : selection;
   if (initialization != cudaSuccess) {{
     std::fprintf(stderr, "CUDA initialization failed: %s\\n",
                  cudaGetErrorString(initialization));
@@ -574,8 +581,7 @@ def _runtime_environment(nvcc: Path) -> dict[str, str]:
     """Expose the selected toolkit runtime without overriding GPU allocation."""
 
     environment = dict(os.environ)
-    if environment.get("CUDA_VISIBLE_DEVICES") == "":
-        environment.pop("CUDA_VISIBLE_DEVICES")
+    # An empty visibility mask must continue hiding all devices in the child.
     library = nvcc.parent.parent / "lib64"
     previous = environment.get("LD_LIBRARY_PATH")
     environment["LD_LIBRARY_PATH"] = (
@@ -648,6 +654,9 @@ def _resource_gate(
 def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
     """Generate, compile, run, and gate one candidate batch."""
 
+    device_id = getattr(arguments, "device_id", 0)
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
     # Keep direct Python callers compatible with the pre-consumer namespace;
     # the CLI always supplies the explicit option.
     selected_consumer = KernelConsumer(
@@ -738,7 +747,10 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
         linked_binary_bytes: int | None = None
         if runnable_specs:
             driver = directory / "batch_driver.cu"
-            driver.write_text(emit_batch_driver(runnable_specs), encoding="utf-8")
+            driver.write_text(
+                emit_batch_driver(runnable_specs, device_id=device_id),
+                encoding="utf-8",
+            )
             executable = directory / "shell_batch_benchmark"
             objects = [
                 str(row["object"]) for row in compile_rows if row["returncode"] == 0
@@ -852,6 +864,7 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
                 "discovered_count": len(specifications) if discovery else None,
             },
             "nvcc": str(arguments.nvcc),
+            "device_id": device_id,
             "single_gpu_process": True,
             "srun": {
                 **execution_profile.to_dict(),
@@ -887,9 +900,10 @@ def main() -> None:
     parser.add_argument(
         "--nvcc",
         type=Path,
-        default=Path("/group/software/cuda-12.9.1/bin/nvcc"),
+        help="CUDA compiler (otherwise use configured toolkit roots or PATH)",
     )
     parser.add_argument("--architecture", required=True)
+    parser.add_argument("--device-id", type=int, default=0)
     parser.add_argument("--local", action="store_true", default=None)
     parser.add_argument("--srun")
     parser.add_argument("--partition")
@@ -946,6 +960,13 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--verbose", action="store_true")
     arguments = parser.parse_args()
+    if not 0 <= arguments.device_id <= 2**31 - 1:
+        parser.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")
+    arguments.nvcc = arguments.nvcc or find_nvcc()
+    if arguments.nvcc is None:
+        parser.error(
+            "CUDA compiler not found; set --nvcc, CUDACXX or a CUDA toolkit root"
+        )
     if arguments.compile_jobs < 1:
         parser.error("--compile-jobs must be positive")
     selected_modes = (

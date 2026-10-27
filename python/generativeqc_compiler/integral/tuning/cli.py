@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 from pathlib import Path
+
+from generativeqc_compiler.common.provenance import find_nvcc
 
 from ..cuda_schedule import (
     ScheduleKind,
@@ -22,9 +23,7 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--nvcc",
         type=Path,
-        default=Path(
-            os.environ.get("GENERATIVEQC_NVCC", shutil.which("nvcc") or "nvcc")
-        ),
+        default=find_nvcc(),
     )
     default_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH")
     parser.add_argument(
@@ -34,6 +33,7 @@ def argument_parser() -> argparse.ArgumentParser:
         help="explicit CUDA target (or set GENERATIVEQC_CUDA_ARCH)",
     )
     parser.add_argument("--srun")
+    parser.add_argument("--device-id", type=int, default=0)
     parser.add_argument("--partition")
     parser.add_argument("--gres")
     parser.add_argument("--nodes", type=int)
@@ -141,6 +141,12 @@ def argument_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = argument_parser()
     arguments = parser.parse_args()
+    if arguments.nvcc is None:
+        parser.error(
+            "CUDA compiler not found; set --nvcc, CUDACXX or a CUDA toolkit root"
+        )
+    if not 0 <= arguments.device_id <= 2**31 - 1:
+        parser.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")
     if arguments.compile_jobs < 1:
         parser.error("--compile-jobs must be positive")
     if arguments.compile_timeout <= 0:
