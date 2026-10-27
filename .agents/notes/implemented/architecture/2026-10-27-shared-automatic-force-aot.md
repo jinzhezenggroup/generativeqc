@@ -52,6 +52,10 @@ fallback.
 - Callback addresses and descriptor addresses both bind the executed module.
   Point workers and their validation wrappers have private ELF visibility, so
   another loaded core cannot interpose a worker behind an authenticated wrapper.
+  Scope hidden visibility to emitted definitions after runtime includes. A
+  target-wide hidden default also hides the inline resource ledger and its TLS
+  owners, splitting allocation/release bookkeeping across native clients and
+  the core. The native KS density-provider destruction gate exposed this.
   Private diagnostic v1 remains 7 identities/2 owners/40 work words; v2 adds
   shared consumer/point identities and costs with 11/4/43 extents.
 - Dynamically initialized static bindings can occupy anonymous ELF BSS pages.

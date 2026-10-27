@@ -1424,11 +1424,6 @@ macro(generativeqc_register_cuda_generated_sources target)
   endif()
   set_target_properties(generativeqc_libxc_semilocal_cuda PROPERTIES
     POSITION_INDEPENDENT_CODE ON CXX_STANDARD 20 CUDA_STANDARD 20
-    # Shared workers and their validation wrappers are one private module.
-    # Prevent another loaded core from interposing a worker behind the callback
-    # whose module is authenticated by the runtime artifact receipt.
-    # The CXX registry lookup retains its existing native qualification ABI.
-    CUDA_VISIBILITY_PRESET hidden
     CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
   generativeqc_set_cuda_compile_pool(generativeqc_libxc_semilocal_cuda "${_generativeqc_cuda_compile_pool}")
   target_sources(${target} PRIVATE $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>)

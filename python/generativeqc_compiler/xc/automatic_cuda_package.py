@@ -28,6 +28,20 @@ from .automatic_semilocal import automatic_functional_code
 if TYPE_CHECKING:
     from .automatic_point import AutomaticPointSource
 
+# Hide generated callbacks and kernel stubs after including shared runtime
+# headers. A target-wide hidden default also localizes their inline allocation
+# ledger/TLS owners, splitting native clients from the core's lifetime records.
+_PRIVATE_BEGIN = """
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility push(hidden)
+#endif
+"""
+_PRIVATE_END = """
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility pop
+#endif
+"""
+
 
 @dataclass(frozen=True)
 class CudaPointExecutable:
@@ -88,6 +102,7 @@ void launch_stationary(cudaStream_t stream, const double* features, std::size_t 
     source = f"""
 #include "tensor/cuda_runtime.cuh"
 #include "dft/cuda_xc_point_program.hpp"
+{_PRIVATE_BEGIN}
 namespace generativeqc::dft::cuda_xc_detail::executable_{identity} {{
 using generativeqc_tensor::I;
 using generativeqc_tensor::finite;
@@ -121,6 +136,7 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
 }}
 {stationary_source}
 }}
+{_PRIVATE_END}
 """
     return CudaPointExecutable(identity, source, stationary)
 
@@ -224,6 +240,7 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
 #include <stdexcept>
 {_declarations(general)}
 {_declarations(restricted)}
+{_PRIVATE_BEGIN}
 namespace {provider.namespace} {{
 {emit_equal_spin_point_selector()}
 {wrapper}
@@ -235,6 +252,7 @@ const CudaXcPointProgram program{{
     {"&launch_stationary" if force_spins else "nullptr"},
     "{general.identity}", "{restricted.identity}"}};
 }}
+{_PRIVATE_END}
 """
 
 
