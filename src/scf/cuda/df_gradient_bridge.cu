@@ -1623,6 +1623,19 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // if shrinking cannot reduce the request, preserve the original error.
       for (;;) {
         const auto elements = workspace_size(tile);
+        // The public cap or active owner's promise can be tighter than the
+        // local response allowance. Retain the already selected algebra and
+        // tensor layout: clipping their earlier policy input can select a
+        // different retained tensor and lose a previously admitted small-cap
+        // fallback. Apply the same panel reduction as physical OOM recovery,
+        // but before making a request known to exceed the bound ledger.
+        if (elements > runtime::device_resource_available(device) / sizeof(double)) {
+          const auto smaller = std::max(std::size_t{1}, tile / 2);
+          if (tile <= 1 || workspace_size(smaller) >= elements) throw std::bad_alloc();
+          tile = smaller;
+          runtime::cuda_trace::trace_counter("response_ledger_panel_replans", 1);
+          continue;
+        }
         try {
           workspace = static_cast<double*>(arena.allocate(elements * sizeof(double)));
           break;

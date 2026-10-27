@@ -78,6 +78,7 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
 @pytest.mark.parametrize(
     "relative",
     (
+        "src/runtime/resource_usage.hpp",
         "src/runtime/residency_boundaries.hpp",
         "src/runtime/residency_observer.hpp",
         "src/dft/becke_scaled_policy.hpp",

@@ -180,3 +180,10 @@ endpoint script and changes neither settings nor timers. Summary and validation
 JSON retain per-phase samples, every numerical error, work counts and limits.
 No binary, generated scientific header, reconstruction patch, Release or tag is
 included.
+
+## Lossless summary storage
+
+The tracked derived summary uses standard XZ. Read it with
+`xz -dc summary.json.xz`; its decompressed bytes retain SHA-256
+`ea066e5050f380e0427c674a991b18a0bc5d1f135c9c8f29e70db3b818f21f0b`. New collection runs still write
+plain `summary.json`. Original observations and all acceptance results are unchanged.
