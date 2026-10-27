@@ -1,5 +1,5 @@
 {
-  "current_default": "Resident native KS uses the shared production point evaluators and ordinary-stream SCF. Qualified Direct and density-fitted CUDA forces use compiler-owned stationary plans, production XC point programs and bounded native source arenas.",
+  "current_default": "Resident native KS uses the shared production point evaluators and ordinary-stream SCF. Qualified Direct and density-fitted CUDA forces use compiler-owned stationary plans, production XC point programs and bounded native source arenas. Opt-in automatic Libxc CUDA AOT packages expose explicit analytic forces through the same native prepared owner when matching point/force bindings are linked.",
   "evidence": [
     "docs/developer/xc_expressions.md",
     "docs/developer/xc_contractions.md",
@@ -14,10 +14,12 @@
     "docs/developer/stationary_cuda_diagnostic.md",
     "tests/python/test_global_hybrid_cuda_forces.py",
     "tests/python/test_global_hybrid_cuda_force_lowering.py",
-    "tests/python/test_dft_df_public.py"
+    "tests/python/test_dft_df_public.py",
+    "tests/python/test_libxc_native_cuda_forces.py",
+    "benchmarks/results/automatic-native-cuda-20261027/README.md"
   ],
-  "generated_capability": "audited scalar XC derivatives and compact native CPU LDA/GGA E/V, spin response and fixed-D geometric partials; compiler-owned AO/feature policies feed prepared CUDA contractions; MethodIR-derived same-spin full-range exchange weights, GGA/meta-GGA geometry and tau pullbacks, and complete plan-source reduction support admitted CUDA RKS/UKS global-hybrid forces; qualified all-electron strict-FP64 density-fitted semilocal and full-range global-hybrid stationary forces reuse the common prepared Fock derivative provider",
-  "missing_capability": "Range-separated/nonlocal DF, ECP-hybrid DF and mixed-precision DF forces remain outside this contract. Whole-KS DF resource-plan admission and broader endpoint performance qualification remain separate gates. Global-hybrid wrappers currently require first-use NVCC rather than packaged AOT.",
+  "generated_capability": "audited scalar XC derivatives and compact native CPU LDA/GGA E/V, spin response and fixed-D geometric partials; compiler-owned AO/feature policies feed prepared CUDA contractions; MethodIR-derived same-spin full-range exchange weights, GGA/meta-GGA geometry and tau pullbacks, and complete plan-source reduction support admitted CUDA RKS/UKS global-hybrid forces; qualified all-electron strict-FP64 density-fitted semilocal and full-range global-hybrid stationary forces reuse the common prepared Fock derivative provider; structural automatic LDA/GGA/tau-MGGA RKS/UKS profiles share canonical point derivatives and all seven native stationary sources, with executed source/object/binary/resource receipts",
+  "missing_capability": "Range-separated/nonlocal DF, ECP-hybrid DF and mixed-precision DF forces remain outside this contract. Whole-KS DF resource-plan admission and broader endpoint performance qualification remain separate gates. Global-hybrid wrappers currently require first-use NVCC rather than packaged AOT. Automatic force admission is restricted to all-electron s/p, direct J, strict FP64, device-fused execution and three partition iterations; empty-spin UKS, higher angular momentum and Hessian/HVP are not promoted.",
   "owner": "xc",
   "retirement_condition": "Retain external/formula oracles. The compiler spatial contraction owns sparse local AO maps and interior-v1 validation; the resident KS contraction owns dense borrowed buffers and the SCF tail/spin domain. They share point algebra and AO/ingredient policies. Retire native contraction glue after an equivalent compiler-owned device consumer passes independent numerical, resource and full endpoint gates. The superseded host-controlled method driver and its RKS LDA-fallback entry point are removed.",
   "status": "resident_prepared_cuda_with_qualified_stationary_forces"
