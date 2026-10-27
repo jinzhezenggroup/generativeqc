@@ -625,6 +625,49 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
 
 
 @pytest.mark.parametrize(
+    "mutation", ("missing", "duplicate", "wrong_owner", "priority", "deselect")
+)
+def test_convergence_owner_contract_rejects_changed_targets_or_arguments(
+    mutation: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = _selection
+    path = "tests/python/test_correlation_convergence.py"
+    priority = f"--ci-fresh-priority={path}"
+
+    def altered(
+        event: str,
+        shard: str,
+        *,
+        root: Path = ROOT,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[str, list[str], list[str]]:
+        distribution, targets, arguments = original(
+            event, shard, root=root, environment=environment
+        )
+        targets = list(targets)
+        arguments = list(arguments)
+        if shard == "runtime-heavy":
+            if mutation in {"missing", "wrong_owner"}:
+                targets.remove(path)
+            elif mutation == "duplicate":
+                targets.append(path)
+            elif mutation == "priority":
+                arguments.append(priority)
+            elif mutation == "deselect":
+                arguments.extend(("--deselect", path))
+        if shard == "uccsd-forces" and mutation == "wrong_owner":
+            targets.append(path)
+            arguments.append(priority)
+        return distribution, targets, arguments
+
+    monkeypatch.setitem(globals(), "_selection", altered)
+    with pytest.raises(AssertionError):
+        test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
+            "pull_request", "tracked", (), tmp_path
+        )
+
+
+@pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
@@ -732,6 +775,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
     owners = {
         **parallel,
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
+        "tests/python/test_correlation_convergence.py": "runtime-heavy",
         "tests/python/test_uccsd_gradient.py": "uccsd-forces",
         "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
