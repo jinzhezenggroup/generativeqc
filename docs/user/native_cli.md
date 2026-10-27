@@ -224,7 +224,12 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
 
-For an explicitly bounded CUDA `run`, `--owned-device-bytes N` selects native
+Named KS methods currently reject an explicit `--owned-device-bytes` limit,
+including zero, before profile activation or native allocation. Their named
+preparation endpoint does not yet accept a device-resource owner; the limit is
+never silently ignored. Ordinary methods retain their native-owned resource path.
+
+For an ordinary-method CUDA `run`, `--owned-device-bytes N` selects native
 prepared admission for instrumented numeric buffers and retained provider
 reservations, including preparation and execution. It is **not** a total GPU,
 process RSS or complete-plan limit. A successful JSON result adds

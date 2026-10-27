@@ -722,6 +722,8 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if (options.composition && options.owned_device_bytes.has_value())
+    throw UsageError("--owned-device-bytes is not supported for named KS preparation");
   if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) &&
       std::string_view(argv[1]) != "run")
     throw UsageError("initial-guess controls currently require the run command");
