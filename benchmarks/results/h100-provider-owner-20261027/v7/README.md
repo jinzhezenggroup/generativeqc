@@ -33,6 +33,12 @@ This public capsule redacts personal paths and transport-redacted boot IDs.
 Its exported text is not the original byte stream: original digest witnesses
 remain, while transformed original bytes are **UNAVAILABLE** here.
 
+The full linker map is unused by replay and is compacted to its original
+digest/length and linked-input excerpt. Its earlier exported text is recoverable
+from the same capsule path at Git commit `e944b34082d1856d9a50dc235a5c9cfadf751d10`.
+The current capsule does not claim to contain that complete map. All status,
+failure, source and build/loaded-library identity records remain retained.
+
 Optional capability bits remain zero. Installed SDK acceptance is
 **INCOMPLETE** and scientific qualification is **NOT_RUN**. No molecule, SCF,
 correlated-method, energy or force endpoint was requested. Parent scientific

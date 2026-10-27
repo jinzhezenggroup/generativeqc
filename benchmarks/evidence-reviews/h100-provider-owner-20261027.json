@@ -38,14 +38,6 @@
       "sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
     },
     {
-      "path": "benchmarks/results/h100-provider-owner-20261027/v7/receipt.json.xz",
-      "family": "h100-provider-owner-20261027",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Bounded model-free H100 owner validation after the allocation-exception fix, including source closure, failure/control HOST tests and explicit original-byte privacy limits.",
-      "bytes": 196568,
-      "sha256": "505a71d3ad3b6c0d90bdcfff92f81a81deb6dfb4358567e8ff595ca0c1a18196"
-    },
-    {
       "path": "benchmarks/results/h100-provider-owner-20261027/v7/source-closure.json.xz",
       "family": "h100-provider-owner-20261027",
       "classification": "required-compact-accepted-evidence",

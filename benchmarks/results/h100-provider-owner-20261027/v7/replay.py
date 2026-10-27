@@ -48,6 +48,14 @@ def main() -> None:
         in payload["host_red_regression"]["stdout"]
     )
     assert payload["formatted_host_regression"]["returncode"] == 0
+    compacted = payload["compacted_generated_members"]["build/link.map"]
+    witness = payload["remote_collection_metadata"]["inventory"]["build/link.map"]
+    assert compacted["original_bytes"] == witness["bytes"]
+    assert compacted["original_sha256"] == witness["sha256"]
+    excerpt = compacted["excerpt"].encode()
+    assert len(excerpt) == compacted["excerpt_bytes"]
+    assert hashlib.sha256(excerpt).hexdigest() == compacted["excerpt_sha256"]
+    assert compacted["full_text_in_this_capsule"] is False
     frames, receipt = payload["frames"], payload["receipt"]
     statuses = [row for row in frames if row["event"] == "raw_api_return"]
     assert len(statuses) == summary["api_success_records"]

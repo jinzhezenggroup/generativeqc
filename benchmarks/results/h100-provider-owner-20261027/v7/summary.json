@@ -29,12 +29,18 @@
   "privacy_redacted_originals": "UNAVAILABLE_IN_PUBLIC_CAPSULE",
   "archives": {
     "receipt.json.xz": {
-      "bytes": 196568,
-      "sha256": "505a71d3ad3b6c0d90bdcfff92f81a81deb6dfb4358567e8ff595ca0c1a18196"
+      "bytes": 77432,
+      "sha256": "c78aeb32930bb0d558e1d55d21ceefb108b5d846801a94abccd67b7115c61bd6"
     },
     "source-closure.json.xz": {
       "bytes": 186576,
       "sha256": "2be8553ac22a8b00d6d050032de6610cbdd78012f0a0194b17b2e6b2c24c3953"
     }
+  },
+  "compacted_link_map": {
+    "original_bytes": 3059232,
+    "original_sha256": "830235468fe2cdb93139031d08d37e8a7aa34036741eea72dc14e4d04fef976a",
+    "retained_excerpt_bytes": 5170,
+    "full_text_in_current_capsule": false
   }
 }
