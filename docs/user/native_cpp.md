@@ -201,3 +201,9 @@ reconverged finite differences, qualify the numerical paths. Native tests also
 cover byte floors, failure cleanup, stale leases and ragged replay. A capability
 query is an execution contract, not a promise of quadrature accuracy or
 convergence for every molecule.
+
+
+A CUDA DF context prepared with a NumericCap capacity promise retains its
+energy path but does not advertise or execute forces: the derivative peak is
+not included in that promise. Query the actual prepared properties; ordinary
+DF force contexts without this promise retain their existing admission.

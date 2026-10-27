@@ -615,12 +615,20 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return options_.preliminary_guess;
   }
 
+  // A NumericCap DF promise currently covers energy preparation/replay only.
+  // Keep that fast path, but do not admit an unreserved stationary consumer.
+  [[nodiscard]] bool has_energy_only_df_capacity_promise() const noexcept {
+    return capacity_ && backend_ == GENERATIVEQC_BACKEND_CUDA &&
+           fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+  }
+
   /** Force capability belongs to the immutable prepared context, never the
    * method-global manifest. The shared point program supplies rho/gradient/tau
    * response; Direct/DF and optional range, nonlocal and ECP sources must all
    * have a derivative owner. CUDA additionally requires an authenticated linked
    * binding and checked capacity. Unsupported inventories remain fail-closed. */
   [[nodiscard]] bool supports_native_gga_force() const noexcept {
+    if (has_energy_only_df_capacity_promise()) return false;
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
       const auto* binding = admitted_cuda_stationary_binding();
       if (!binding) return false;
@@ -681,6 +689,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept {
+    // Method metadata cannot re-enable a force excluded by this prepared owner.
+    if (has_energy_only_df_capacity_promise())
+      return capabilities_.supported_properties & ~GENERATIVEQC_PROPERTY_FORCES;
     return capabilities_.supported_properties |
            (supports_native_gga_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   }
@@ -1093,6 +1104,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       bool allow_mixed_rsh_primary = false,
       std::optional<std::size_t> one_electron_device_maximum_bytes = std::nullopt) {
+    if (has_energy_only_df_capacity_promise()) {
+      output.clear();
+      work = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
@@ -1314,6 +1331,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>& density,
       const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) override {
+    if (has_energy_only_df_capacity_promise()) {
+      output.clear();
+      work = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
@@ -1464,6 +1487,11 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                                 std::size_t additional_device_bytes,
                                                 std::array<std::uint64_t, 4>& receipt,
                                                 std::string& detail) {
+    if (has_energy_only_df_capacity_promise()) {
+      receipt = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     receipt = {};
 #if GENERATIVEQC_HAS_CUDA
@@ -1529,6 +1557,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>* cached_density,
       const std::vector<scf::reference::Matrix>* cached_weighted_density,
       std::span<const double> cpu_lr_correction = {}) {
+    if (has_energy_only_df_capacity_promise()) {
+      output.clear();
+      work = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     output.clear();
     work = {};
@@ -1777,6 +1811,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
       bool combined_two_electron = false) {
+    if (has_energy_only_df_capacity_promise()) {
+      output.clear();
+      work = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -1987,6 +2027,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const dft::CudaKsFinalStateToken& expected, std::size_t maximum_device_bytes,
       std::vector<double>& output, dft::CudaStationaryResources& resources, std::string& detail,
       scf::DirectForcePrecisionRequest* precision = nullptr) {
+    if (has_energy_only_df_capacity_promise()) {
+      output.clear();
+      resources = {};
+      detail = "CUDA DF derivatives are not admitted by this energy-only capacity promise";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     resources = {};
     detail.clear();
@@ -2783,9 +2829,15 @@ class KsPreparedBatch final : public PreparedBatch,
     // Every requested force still needs its exact prepared capability. An
     // energy-only neighbor does not grant or revoke another item's admission.
     bool force_unavailable = false;
-    for (std::size_t i = 0; i < size(); ++i)
+    for (std::size_t i = 0; i < size(); ++i) {
+      if (wants_forces(i) && items_[i].plan &&
+          items_[i].plan->has_energy_only_df_capacity_promise())
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                          "CUDA DF forces are not admitted by this energy-only capacity promise; "
+                          "prepare a separately admitted owner without that promise");
       force_unavailable |=
           wants_forces(i) && !(items_[i].prepared_properties & GENERATIVEQC_PROPERTY_FORCES);
+    }
     if (force_unavailable) {
       const char* issue = execution_plan_.automatic_program ? "#1122"
                           : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)

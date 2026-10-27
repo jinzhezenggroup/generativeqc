@@ -62,3 +62,9 @@ for supported CPU/CUDA energies and analytic forces. Custom graphs, older
 libraries and unsupported contexts retain their explicit compatibility
 routes. See the [shared derivative contract](native_cpp.md#density-fitting-and-derivative-boundary)
 for the native admission boundary.
+
+
+A CUDA DF context prepared with a NumericCap capacity promise retains its
+energy path but does not advertise or execute forces: the derivative peak is
+not included in that promise. Query the actual prepared properties; ordinary
+DF force contexts without this promise retain their existing admission.

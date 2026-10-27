@@ -413,11 +413,12 @@ generativeqc run molecule.xyz --method r2scan-3c-rks --backend cpu --json
 ```
 
 Native r²SCAN-3c also admits complete analytic forces on qualified CPU Direct/DF
-and CUDA Direct contexts. CUDA evaluates gCP on device, alongside native D4;
+and CUDA Direct/DF contexts, subject to the prepared-resource boundary below.
+CUDA evaluates gCP on device, alongside native D4;
 there is no host gCP numerical fallback in this named route. See its
 [capability contract](r2scan3c.md) for basis and derivative bounds.
-Canonical WB97M-V admits complete native Direct forces on CPU and CUDA in the
-bounded domain described below.
+Canonical WB97M-V admits complete native forces on CPU and CUDA only for the
+source model and prepared context described below.
 Exact backend/basis/property preparation remains authoritative. Independent
 small-grid PySCF/correction references and reconverged energy differences check
 implementation parity, not grid convergence. Real-device named CLI qualification
@@ -596,3 +597,9 @@ validation, installation and kernel-library selection. Autotuning that generates
 `python -m generativeqc.tune_cli --quick INPUT.xyz`). It is not a
 `generativeqc` subcommand, and its former profile aliases have been retired.
 Runtime use of already accepted kernels requires neither Python nor a compiler.
+
+
+A CUDA DF context prepared with a NumericCap capacity promise retains its
+energy path but does not advertise or execute forces: the derivative peak is
+not included in that promise. Query the actual prepared properties; ordinary
+DF force contexts without this promise retain their existing admission.
