@@ -781,4 +781,3 @@ int main() { return generativeqc::methods::detail::probe(); }
         timeout=60,
     )
     subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
-
