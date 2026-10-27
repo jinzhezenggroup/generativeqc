@@ -294,10 +294,11 @@ NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
 # The additional native static wrappers reuse the existing primitive objects.
-# The compiler now supplies the inventory and grouped native generation; retain
-# the full wiring/discovery-policy digest so either integration fails closed.
+# The compiler supplies the inventory and grouped native generation, including
+# shared automatic consumers and explicit fused-profile selection. Retain the
+# full wiring/discovery-policy digest; this is not measured GPU qualification.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "a993197b05eb747473f3352ce61ef42565b2f2d402983cc521bda05f2cb5ee16"
+    "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
