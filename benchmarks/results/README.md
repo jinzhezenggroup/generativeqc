@@ -6,6 +6,14 @@ with one measured source, both engines, all independent accuracy failures shown,
 and unchanged CCSD(T)/CBS. The [preceding pure-Coulomb campaign](r2scan-endpoints-20261025/README.md)
 retains its implementation qualification and original figures.
 
+The [remdesivir-77 capacity cohort](remdesivir-77-20261027/README.md) applies the
+same default endpoint framework to a 77-atom drug-like molecule containing a
+third-row element, retaining def2-SVP endpoints for all eight methods, a
+def2-TZVP attempt with its capacity failures, DF-budget and generated-force
+out-of-memory evidence, and a four-point publication-parity check against the
+water cohort. Direct favours the reference engine on this geometry while DF
+favours GenerativeQC in six of seven measured methods.
+
 The [2026-10-25 README comparison](df-dft48-work-20261025/README.md)
 remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
 and one GPU4PySCF default SCF profile. Both engines include complete moving-grid

@@ -1,0 +1,61 @@
+basis,method,mode,engine,status,cold_seconds,warm_median_seconds,warm_min_seconds,warm_max_seconds,warm_n,note
+def2-svp,hf,direct,GenerativeQC Standard,complete,103.194815,14.200450,14.197751,14.206629,3,
+def2-svp,hf,direct,GPU4PySCF 1.8.1,complete,60.255837,11.889259,11.888446,11.893296,3,
+def2-svp,hf,df,GenerativeQC Standard,complete,25.822581,5.929599,5.927478,5.932320,3,
+def2-svp,hf,df,GPU4PySCF 1.8.1,complete,46.444063,19.217049,19.216386,19.219187,3,
+def2-svp,pbe,direct,GenerativeQC Standard,complete,72.847316,33.434207,33.430445,33.469274,3,
+def2-svp,pbe,direct,GPU4PySCF 1.8.1,complete,46.577800,15.496932,15.493031,15.510351,3,
+def2-svp,pbe,df,GenerativeQC Standard,complete,29.959342,5.182613,5.178294,5.217363,3,
+def2-svp,pbe,df,GPU4PySCF 1.8.1,complete,33.668565,9.060085,9.059773,9.060595,3,
+def2-svp,pbe0,direct,GenerativeQC Standard,complete,127.735354,43.385564,43.353303,43.432723,3,
+def2-svp,pbe0,direct,GPU4PySCF 1.8.1,complete,68.143854,23.609033,23.604294,23.616439,3,
+def2-svp,pbe0,df,GenerativeQC Standard,complete,43.281178,11.704832,11.701622,11.728716,3,
+def2-svp,pbe0,df,GPU4PySCF 1.8.1,complete,54.996008,28.104017,28.099341,28.125475,3,
+def2-svp,b3lyp,direct,GenerativeQC Standard,complete,148.189882,43.558182,43.513243,43.567318,3,
+def2-svp,b3lyp,direct,GPU4PySCF 1.8.1,complete,70.917843,16.353111,16.347182,16.366523,3,
+def2-svp,b3lyp,df,GenerativeQC Standard,complete,48.337290,11.758390,11.751575,11.790692,3,
+def2-svp,b3lyp,df,GPU4PySCF 1.8.1,complete,56.580724,23.471279,23.446385,23.472823,3,
+def2-svp,r2scan,direct,GenerativeQC Standard,complete,81.517457,34.451502,34.448823,34.486343,3,
+def2-svp,r2scan,direct,GPU4PySCF 1.8.1,complete,58.170018,22.455094,22.453718,22.470372,3,
+def2-svp,r2scan,df,GenerativeQC Standard,complete,40.164582,6.144865,6.140270,6.184247,3,
+def2-svp,r2scan,df,GPU4PySCF 1.8.1,complete,46.112445,15.977910,15.976569,15.998939,3,
+def2-svp,r2scan-3c,direct,GenerativeQC Standard,complete,253.748414,135.096562,135.083469,135.118380,3,
+def2-svp,r2scan-3c,direct,GPU4PySCF 1.8.1,complete,224.991529,118.916819,118.002276,118.927579,3,
+def2-svp,r2scan-3c,df,GenerativeQC Standard,failed,,,,,,RuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: density-fitted stationary response exceeded the prepared re
+def2-svp,r2scan-3c,df,GPU4PySCF 1.8.1,complete,148.429826,74.957419,74.935235,74.958211,3,
+def2-svp,m06-2x,direct,GenerativeQC Standard,complete,130.251450,44.164950,44.102507,44.185489,3,
+def2-svp,m06-2x,direct,GPU4PySCF 1.8.1,complete,80.284915,21.313014,21.305590,21.317527,3,
+def2-svp,m06-2x,df,GenerativeQC Standard,complete,50.260613,12.570547,12.566253,12.603168,3,
+def2-svp,m06-2x,df,GPU4PySCF 1.8.1,complete,67.491097,28.428053,28.422127,28.439023,3,
+def2-svp,wb97m-v,direct,GenerativeQC Standard,failed,,,,,,RuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: out of memory
+def2-svp,wb97m-v,direct,GPU4PySCF 1.8.1,complete,436.106084,111.324484,111.308868,111.328143,3,
+def2-svp,wb97m-v,df,GenerativeQC Standard,complete,1130.457532,193.456735,193.454100,193.499123,3,
+def2-svp,wb97m-v,df,GPU4PySCF 1.8.1,complete,409.385780,122.549876,122.536060,122.559322,3,
+def2-tzvp,hf,direct,GenerativeQC Standard,failed,,,,,,RuntimeError: batched item failures: 0: out of memory
+def2-tzvp,hf,direct,GPU4PySCF 1.8.1,complete,906.412913,312.293225,311.385838,313.174555,3,
+def2-tzvp,hf,df,GenerativeQC Standard,failed,,,,,,RuntimeError: batched item failures: 0: out of memory
+def2-tzvp,hf,df,GPU4PySCF 1.8.1,failed,,,,,,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory
+def2-tzvp,pbe,direct,GenerativeQC Standard,failed,,,,,,RuntimeError: GENERATIVEQC error 7: std::bad_alloc
+def2-tzvp,pbe,direct,GPU4PySCF 1.8.1,complete,458.040460,291.461972,289.962597,291.525497,3,
+def2-tzvp,pbe,df,GenerativeQC Standard,failed,,,,,,RuntimeError: GENERATIVEQC error 1: DF memory budget cannot hold the metric and one contraction tile
+def2-tzvp,pbe,df,GPU4PySCF 1.8.1,complete,115.156396,55.660860,55.657653,55.671892,3,
+def2-tzvp,pbe0,direct,GenerativeQC Standard,failed,,,,,,RuntimeError: GENERATIVEQC error 7: std::bad_alloc
+def2-tzvp,pbe0,direct,GPU4PySCF 1.8.1,complete,911.618644,202.683816,202.656665,339.623004,3,
+def2-tzvp,pbe0,df,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,pbe0,df,GPU4PySCF 1.8.1,failed,,,,,,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory
+def2-tzvp,b3lyp,direct,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,b3lyp,direct,GPU4PySCF 1.8.1,complete,447.404472,156.713188,156.705050,156.717039,3,
+def2-tzvp,b3lyp,df,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,b3lyp,df,GPU4PySCF 1.8.1,failed,,,,,,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory
+def2-tzvp,r2scan,direct,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,r2scan,direct,GPU4PySCF 1.8.1,complete,249.812233,152.798459,152.795309,152.799089,3,
+def2-tzvp,r2scan,df,GenerativeQC Standard,failed,,,,,,RuntimeError: batched item failures: 0: SCF did not converge
+def2-tzvp,r2scan,df,GPU4PySCF 1.8.1,complete,92.765331,42.055742,42.051219,42.060577,3,
+def2-tzvp,m06-2x,direct,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,m06-2x,direct,GPU4PySCF 1.8.1,complete,473.991495,170.682446,170.677204,170.687661,3,
+def2-tzvp,m06-2x,df,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,m06-2x,df,GPU4PySCF 1.8.1,failed,,,,,,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory
+def2-tzvp,wb97m-v,direct,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,wb97m-v,direct,GPU4PySCF 1.8.1,complete,1107.138507,501.867297,501.866038,501.881867,3,
+def2-tzvp,wb97m-v,df,GenerativeQC Standard,failed,,,,,,interrupted: no endpoint retained (point timeout or job time limit)
+def2-tzvp,wb97m-v,df,GPU4PySCF 1.8.1,failed,,,,,,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory

@@ -1,0 +1,120 @@
+{
+  "schema": "generativeqc.remdesivir-provenance.v1",
+  "system": {
+    "name": "remdesivir",
+    "source": "PubChem CID 121304016 3D conformer",
+    "atoms": 77,
+    "composition": {
+      "C": 27,
+      "H": 35,
+      "N": 6,
+      "O": 8,
+      "P": 1
+    },
+    "charge": 0,
+    "spin": 0,
+    "geometry_sha256": "2bb05380dd5c5d270335daf7b5e73720d41d71ef25a45551112122d80e829410"
+  },
+  "source": {
+    "checkout_revision": "0e33e0276d2f86c9e4678734e23867d351fcc151",
+    "measured_revision": "46b916ac6df0082d56fbc48639bc1261aecc7d04",
+    "source_identity": "2443a52d8f2c97de9d866c8856993641c5b926b7f29823cf8837c0998b787ac8",
+    "native_library_sha256": "fa65de6814a6f45f907218a20af0dc86a3e2cc2950a9693f9152a946f5f22319",
+    "note": "The checkout and 46b916ac produce the same source identity; 46b916ac is the revision recorded by the published README-refresh cohort, so these endpoints share its native source.",
+    "driver_sha256": "6757de7266a5c9241dc37119890d4b4127be1986fbafed93664df5b8f0df9e98",
+    "benchmark_framework": "generativeqc.readme-defaults.v2"
+  },
+  "hardware": {
+    "accelerator": "NVIDIA GeForce RTX 5090",
+    "device_memory_bytes": 33680588800,
+    "compute_capability": [
+      12,
+      0
+    ],
+    "driver_version": 12080,
+    "runtime_version": 12090,
+    "slurm_jobs": [
+      "1871",
+      "1872",
+      "1874"
+    ]
+  },
+  "environment": {
+    "timestamp_utc": "2026-10-26T10:59:40.068113+00:00",
+    "git": {
+      "commit": "0e33e0276d2f86c9e4678734e23867d351fcc151",
+      "dirty": true,
+      "pending_generated_benchmark_artifacts": 0
+    },
+    "host": {
+      "node": "node5",
+      "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "python": {
+      "version": "3.13.17",
+      "executable": "/home/lhshen/gqc-remdesivir/env/bin/python"
+    },
+    "packages": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.8.1",
+      "cupy": "13.6.0",
+      "numpy": "2.4.6"
+    },
+    "runtime": {
+      "generativeqc_library": "/home/lhshen/gqc-remdesivir/src-codex-20261026/build/cuda-release-sm120/libgenerativeqc.so",
+      "cuda_visible_devices": "0"
+    },
+    "toolchain": {
+      "nvcc": {
+        "path": "/group/software/cuda-12.9.1/bin/nvcc",
+        "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "ptxas": {
+        "path": "/group/software/cuda-12.9.1/bin/ptxas",
+        "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "cuobjdump": {
+        "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+        "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+      },
+      "host_cxx": {
+        "path": "/usr/bin/c++",
+        "version": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+      }
+    },
+    "accelerator": null
+  },
+  "thread_controls": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "SLURM_CPUS_PER_TASK": "2"
+  },
+  "protocol": {
+    "cold": "constructor+prepare+SCF+forces+host-export",
+    "warm": "same-owner; frozen engine-local cold density",
+    "grid_overrides": false,
+    "accuracy_qualification": "none (cross-engine differences only)"
+  },
+  "calls": {
+    "cold": "constructor + prepare + SCF + forces + host export",
+    "warm": "same owner, frozen engine-local cold density",
+    "warm_repeats": 3,
+    "fast_arm": "excluded by request; only Standard and GPU4PySCF"
+  },
+  "commands": {
+    "campaign": "BASES=def2-svp METHODS=\"hf pbe pbe0 b3lyp r2scan m06-2x wb97m-v \"MODES=\"direct df\" ARMS=\"standard gpu4pyscf\" ./run_campaign_codex.sh",
+    "tzvp": "BASES=def2-tzvp METHODS=\"hf pbe pbe0 b3lyp r2scan m06-2x wb97m-v\" MODES=\"direct df\" ARMS=\"standard gpu4pyscf\" ./run_campaign_codex.sh",
+    "verification": "python benchmarks/results/remdesivir-77-20261027/verify.py"
+  },
+  "artifacts": {
+    "standard.json.xz": "17ff7bf38e9a992745282a97ea591c996aa2d94cf4768587d38d444359f04f84",
+    "gpu4pyscf.json.xz": "c5069522e18c0f8b7055b1f28446aa6fc2005c9ec26db0300ba7635f5bf94a20",
+    "tzvp-standard.json.xz": "fc456f351cdc0baef9acacaa8846a013cb53312a6698fec3cb073c0aaba329fb",
+    "tzvp-gpu4pyscf.json.xz": "c8b26d88cfb32962f4ef4b40898f4e76d9e5cb08b0171304614fc8c49573a48d",
+    "repeat.json.xz": "c20c8f657e482a01ac7c39c2e488207a9c0bf830e11bd45c2c59dbe97225ed31",
+    "build-check.json.xz": "3ab4908ed0563b7c2f02fbb98f6d7725fb0989fe29f37dd229923e1a8da18aef"
+  }
+}

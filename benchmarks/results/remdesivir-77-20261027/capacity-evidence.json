@@ -1,0 +1,303 @@
+{
+  "schema": "generativeqc.remdesivir-capacity.v1",
+  "hardware_note": "All endpoints used one RTX 5090 with 33668988928 bytes of device memory reported by CUDA. Timeouts are the campaign's 5400-second per-point limit.",
+  "failed_endpoints": [
+    {
+      "basis": "def2-svp",
+      "method": "r2scan-3c",
+      "mode": "df",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: density-fitted stationary response exceeded the prepared resource budget",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 171, in <module>\n    main()\n    ~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 159, in main\n    (rd.run_native if args.arm in (\"standard\", \"fast\") else rd.run_reference)(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        args, atoms, record, retain\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 271, in run_native\n    batch = owner.execute(strict=True, properties=(\"energy\", \"forces\"))\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 1677, in execute\n    result.raise_for_failures()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 137, in raise_for_failures\n    raise RuntimeError(\"batched item failures: \" + \"; \".join(failures))\nRuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: density-fitted stationary response exceeded the prepared resource budget"
+    },
+    {
+      "basis": "def2-svp",
+      "method": "wb97m-v",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 171, in <module>\n    main()\n    ~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 159, in main\n    (rd.run_native if args.arm in (\"standard\", \"fast\") else rd.run_reference)(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        args, atoms, record, retain\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 271, in run_native\n    batch = owner.execute(strict=True, properties=(\"energy\", \"forces\"))\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 1677, in execute\n    result.raise_for_failures()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 137, in raise_for_failures\n    raise RuntimeError(\"batched item failures: \" + \"; \".join(failures))\nRuntimeError: batched item failures: 0: generated force failed (RuntimeError): GENERATIVEQC error 7: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "b3lyp",
+      "mode": "df",
+      "arm": "gpu4pyscf",
+      "status": "failed",
+      "error": "CUDARuntimeError: cudaErrorMemoryAllocation: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 673, in einsum\n    arr_out, sub_out = reduced_binary_einsum(\n                       ~~~~~~~~~~~~~~~~~~~~~^\n        arr0, sub0, arr1, sub1, sub_others)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 418, in reduced_binary_einsum\n    arr_out = cupy.matmul(tmp0, tmp1).reshape(shapes_out)\n              ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_core/_gufuncs.py\", line 669, in __call__\n    outs = cupy.empty(out_shape, dtype=ret_dtype, order=filter_order)\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_creation/basic.py\", line 32, in empty\n    return cupy.ndarray(shape, dtype, order=order)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"cupy/_core/core.pyx\", line 167, in cupy._core.core.ndarray.__new__\n  File \"cupy/_core/core.pyx\", line 254, in cupy._core.core._ndarray_base._init\n  File \"cupy/cuda/memory.pyx\", line 875, in cupy.cuda.memory.alloc\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/gpu4pyscf/lib/cupy_helper.py\", line 1223, in malloc\n    return cuda_malloc(size)\n  File \"cupy/cuda/memory.pyx\", line 737, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 738, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 112, in cupy.cuda.memory.Memory.__init__\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 528, in cupy_backends.cuda.api.runtime.malloc\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 146, in cupy_backends.cuda.api.runtime.check_status\ncupy_backends.cuda.api.runtime.CUDARuntimeError: cudaErrorMemoryAllocation: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "b3lyp",
+      "mode": "df",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "b3lyp",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "hf",
+      "mode": "df",
+      "arm": "gpu4pyscf",
+      "status": "failed",
+      "error": "CUDARuntimeError: cudaErrorMemoryAllocation: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 673, in einsum\n    arr_out, sub_out = reduced_binary_einsum(\n                       ~~~~~~~~~~~~~~~~~~~~~^\n        arr0, sub0, arr1, sub1, sub_others)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 418, in reduced_binary_einsum\n    arr_out = cupy.matmul(tmp0, tmp1).reshape(shapes_out)\n              ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_core/_gufuncs.py\", line 669, in __call__\n    outs = cupy.empty(out_shape, dtype=ret_dtype, order=filter_order)\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_creation/basic.py\", line 32, in empty\n    return cupy.ndarray(shape, dtype, order=order)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"cupy/_core/core.pyx\", line 167, in cupy._core.core.ndarray.__new__\n  File \"cupy/_core/core.pyx\", line 254, in cupy._core.core._ndarray_base._init\n  File \"cupy/cuda/memory.pyx\", line 875, in cupy.cuda.memory.alloc\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/gpu4pyscf/lib/cupy_helper.py\", line 1223, in malloc\n    return cuda_malloc(size)\n  File \"cupy/cuda/memory.pyx\", line 737, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 738, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 112, in cupy.cuda.memory.Memory.__init__\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 528, in cupy_backends.cuda.api.runtime.malloc\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 146, in cupy_backends.cuda.api.runtime.check_status\ncupy_backends.cuda.api.runtime.CUDARuntimeError: cudaErrorMemoryAllocation: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "hf",
+      "mode": "df",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: batched item failures: 0: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 171, in <module>\n    main()\n    ~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 159, in main\n    (rd.run_native if args.arm in (\"standard\", \"fast\") else rd.run_reference)(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        args, atoms, record, retain\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 271, in run_native\n    batch = owner.execute(strict=True, properties=(\"energy\", \"forces\"))\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 1677, in execute\n    result.raise_for_failures()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 137, in raise_for_failures\n    raise RuntimeError(\"batched item failures: \" + \"; \".join(failures))\nRuntimeError: batched item failures: 0: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "hf",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: batched item failures: 0: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 171, in <module>\n    main()\n    ~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 159, in main\n    (rd.run_native if args.arm in (\"standard\", \"fast\") else rd.run_reference)(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        args, atoms, record, retain\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 271, in run_native\n    batch = owner.execute(strict=True, properties=(\"energy\", \"forces\"))\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 1677, in execute\n    result.raise_for_failures()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 137, in raise_for_failures\n    raise RuntimeError(\"batched item failures: \" + \"; \".join(failures))\nRuntimeError: batched item failures: 0: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "m06-2x",
+      "mode": "df",
+      "arm": "gpu4pyscf",
+      "status": "failed",
+      "error": "CUDARuntimeError: cudaErrorMemoryAllocation: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 673, in einsum\n    arr_out, sub_out = reduced_binary_einsum(\n                       ~~~~~~~~~~~~~~~~~~~~~^\n        arr0, sub0, arr1, sub1, sub_others)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 418, in reduced_binary_einsum\n    arr_out = cupy.matmul(tmp0, tmp1).reshape(shapes_out)\n              ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_core/_gufuncs.py\", line 669, in __call__\n    outs = cupy.empty(out_shape, dtype=ret_dtype, order=filter_order)\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_creation/basic.py\", line 32, in empty\n    return cupy.ndarray(shape, dtype, order=order)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"cupy/_core/core.pyx\", line 167, in cupy._core.core.ndarray.__new__\n  File \"cupy/_core/core.pyx\", line 254, in cupy._core.core._ndarray_base._init\n  File \"cupy/cuda/memory.pyx\", line 875, in cupy.cuda.memory.alloc\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/gpu4pyscf/lib/cupy_helper.py\", line 1223, in malloc\n    return cuda_malloc(size)\n  File \"cupy/cuda/memory.pyx\", line 737, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 738, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 112, in cupy.cuda.memory.Memory.__init__\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 528, in cupy_backends.cuda.api.runtime.malloc\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 146, in cupy_backends.cuda.api.runtime.check_status\ncupy_backends.cuda.api.runtime.CUDARuntimeError: cudaErrorMemoryAllocation: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "m06-2x",
+      "mode": "df",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "m06-2x",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "pbe",
+      "mode": "df",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: GENERATIVEQC error 1: DF memory budget cannot hold the metric and one contraction tile",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 265, in run_native\n    owner = calculator.prepare_batch([atoms], warm_start=True)\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/calculator.py\", line 2551, in prepare_batch\n    return PreparedBatch(\n        self,\n    ...<6 lines>...\n        resource_plan=resource_plan,\n    )\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 422, in __init__\n    _native.check(\n    ~~~~~~~~~~~~~^\n        self._library,\n        ^^^^^^^^^^^^^^\n    ...<16 lines>...\n        ),\n        ^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/_native.py\", line 1919, in check\n    raise RuntimeError(f\"GENERATIVEQC error {status}: {message}\")\nRuntimeError: GENERATIVEQC error 1: DF memory budget cannot hold the metric and one contraction tile"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "pbe",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: GENERATIVEQC error 7: std::bad_alloc",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 265, in run_native\n    owner = calculator.prepare_batch([atoms], warm_start=True)\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/calculator.py\", line 2551, in prepare_batch\n    return PreparedBatch(\n        self,\n    ...<6 lines>...\n        resource_plan=resource_plan,\n    )\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 422, in __init__\n    _native.check(\n    ~~~~~~~~~~~~~^\n        self._library,\n        ^^^^^^^^^^^^^^\n    ...<16 lines>...\n        ),\n        ^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/_native.py\", line 1919, in check\n    raise RuntimeError(f\"GENERATIVEQC error {status}: {message}\")\nRuntimeError: GENERATIVEQC error 7: std::bad_alloc"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "pbe0",
+      "mode": "df",
+      "arm": "gpu4pyscf",
+      "status": "failed",
+      "error": "CUDARuntimeError: cudaErrorMemoryAllocation: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 673, in einsum\n    arr_out, sub_out = reduced_binary_einsum(\n                       ~~~~~~~~~~~~~~~~~~~~~^\n        arr0, sub0, arr1, sub1, sub_others)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 418, in reduced_binary_einsum\n    arr_out = cupy.matmul(tmp0, tmp1).reshape(shapes_out)\n              ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_core/_gufuncs.py\", line 669, in __call__\n    outs = cupy.empty(out_shape, dtype=ret_dtype, order=filter_order)\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_creation/basic.py\", line 32, in empty\n    return cupy.ndarray(shape, dtype, order=order)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"cupy/_core/core.pyx\", line 167, in cupy._core.core.ndarray.__new__\n  File \"cupy/_core/core.pyx\", line 254, in cupy._core.core._ndarray_base._init\n  File \"cupy/cuda/memory.pyx\", line 875, in cupy.cuda.memory.alloc\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/gpu4pyscf/lib/cupy_helper.py\", line 1223, in malloc\n    return cuda_malloc(size)\n  File \"cupy/cuda/memory.pyx\", line 737, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 738, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 112, in cupy.cuda.memory.Memory.__init__\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 528, in cupy_backends.cuda.api.runtime.malloc\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 146, in cupy_backends.cuda.api.runtime.check_status\ncupy_backends.cuda.api.runtime.CUDARuntimeError: cudaErrorMemoryAllocation: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "pbe0",
+      "mode": "df",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "pbe0",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: GENERATIVEQC error 7: std::bad_alloc",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 265, in run_native\n    owner = calculator.prepare_batch([atoms], warm_start=True)\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/calculator.py\", line 2551, in prepare_batch\n    return PreparedBatch(\n        self,\n    ...<6 lines>...\n        resource_plan=resource_plan,\n    )\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 422, in __init__\n    _native.check(\n    ~~~~~~~~~~~~~^\n        self._library,\n        ^^^^^^^^^^^^^^\n    ...<16 lines>...\n        ),\n        ^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/_native.py\", line 1919, in check\n    raise RuntimeError(f\"GENERATIVEQC error {status}: {message}\")\nRuntimeError: GENERATIVEQC error 7: std::bad_alloc"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "r2scan",
+      "mode": "df",
+      "arm": "standard",
+      "status": "failed",
+      "error": "RuntimeError: batched item failures: 0: SCF did not converge",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 171, in <module>\n    main()\n    ~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/remdesivir_defaults.py\", line 159, in main\n    (rd.run_native if args.arm in (\"standard\", \"fast\") else rd.run_reference)(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        args, atoms, record, retain\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/benchmarks/readme_defaults.py\", line 271, in run_native\n    batch = owner.execute(strict=True, properties=(\"energy\", \"forces\"))\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 1677, in execute\n    result.raise_for_failures()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/lhshen/gqc-remdesivir/src-codex-20261026/python/generativeqc/batch.py\", line 137, in raise_for_failures\n    raise RuntimeError(\"batched item failures: \" + \"; \".join(failures))\nRuntimeError: batched item failures: 0: SCF did not converge"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "r2scan",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "wb97m-v",
+      "mode": "df",
+      "arm": "gpu4pyscf",
+      "status": "failed",
+      "error": "CUDARuntimeError: cudaErrorMemoryAllocation: out of memory",
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 1,
+        "timeout_s": 5400
+      },
+      "log_excerpt": "  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 673, in einsum\n    arr_out, sub_out = reduced_binary_einsum(\n                       ~~~~~~~~~~~~~~~~~~~~~^\n        arr0, sub0, arr1, sub1, sub_others)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/linalg/_einsum.py\", line 418, in reduced_binary_einsum\n    arr_out = cupy.matmul(tmp0, tmp1).reshape(shapes_out)\n              ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_core/_gufuncs.py\", line 669, in __call__\n    outs = cupy.empty(out_shape, dtype=ret_dtype, order=filter_order)\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/cupy/_creation/basic.py\", line 32, in empty\n    return cupy.ndarray(shape, dtype, order=order)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"cupy/_core/core.pyx\", line 167, in cupy._core.core.ndarray.__new__\n  File \"cupy/_core/core.pyx\", line 254, in cupy._core.core._ndarray_base._init\n  File \"cupy/cuda/memory.pyx\", line 875, in cupy.cuda.memory.alloc\n  File \"/home/lhshen/gqc-remdesivir/env/lib/python3.13/site-packages/gpu4pyscf/lib/cupy_helper.py\", line 1223, in malloc\n    return cuda_malloc(size)\n  File \"cupy/cuda/memory.pyx\", line 737, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 738, in cupy.cuda.memory._malloc\n  File \"cupy/cuda/memory.pyx\", line 112, in cupy.cuda.memory.Memory.__init__\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 528, in cupy_backends.cuda.api.runtime.malloc\n  File \"cupy_backends/cuda/api/runtime.pyx\", line 146, in cupy_backends.cuda.api.runtime.check_status\ncupy_backends.cuda.api.runtime.CUDARuntimeError: cudaErrorMemoryAllocation: out of memory"
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "wb97m-v",
+      "mode": "df",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": null,
+      "log_excerpt": ""
+    },
+    {
+      "basis": "def2-tzvp",
+      "method": "wb97m-v",
+      "mode": "direct",
+      "arm": "standard",
+      "status": "running",
+      "error": null,
+      "observed_samples": 0,
+      "outcome": {
+        "exit_code": 124,
+        "timeout_s": 5400
+      },
+      "log_excerpt": ""
+    }
+  ],
+  "df_memory_budget_probe": {
+    "description": "def2-TZVP HF DF rerun with density_fitting_memory_budget_bytes set to 23622320128 (22 GiB) instead of the automatic policy.",
+    "status": "failed",
+    "error": "RuntimeError: batched item failures: 0: CUDA runtime error",
+    "samples": 0
+  }
+}
