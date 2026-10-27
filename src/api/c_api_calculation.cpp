@@ -231,7 +231,8 @@ generativeqc_status generativeqc_calculation_prepare_with_device_resources(
     const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
   if (!resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return prepare_calculation(context, system, descriptor,
-                             generativeqc::api::device_resource_owner(resources), calculation, nullptr);
+                             generativeqc::api::device_resource_owner(resources), calculation,
+                             nullptr);
 }
 
 generativeqc_status generativeqc_calculation_get_device_resources(
