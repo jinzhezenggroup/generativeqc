@@ -147,6 +147,10 @@ producer and geometry consumer use the same borrowed stream and retained owner;
 no host repacking, transfer or CPU evaluation is inserted. Sticky producer
 errors prevent consuming stale point values. The minimum-workspace schedule
 also charges the point tile and remains an explicit bounded alternative.
+Geometry still forms the Becke cotangent from the point energy and raw weight.
+A resident XC tile alone cannot authorize skipping partition response: bounded
+geometry contracts it inline, while phased geometry publishes its seed to the
+existing partition kernels.
 
 `GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES` is an explicit semicolon-separated
 subset of the selected automatic force profiles. Those entries retain static
@@ -244,6 +248,15 @@ Diagnostic v2 additionally records the shared consumer and both point executable
 identities, the actual callback modules, and point tile bytes/launches/points.
 The original v1 extents remain available to older readers. ELF base mappings
 authenticate both read-only and BSS registration storage, as well as callbacks.
+
+`tools/census_native_automatic_aot.py` measures the active compile inventory,
+linked and installed device images, kernel counts and cubin/ptxas resources.
+Supply cold/cache-hit measurements and complete endpoint evidence separately;
+archive bytes do not describe installed library size. Its capability output uses
+the existing Lane-F `compiled-cuda` envelope and cannot grant molecular forces
+or unsupported derivative, spin, angular, exchange or precision capabilities.
+The [shared AOT qualification](../../benchmarks/results/shared-automatic-aot-20261027/README.md)
+contains the bounded/full package comparison and an explicit offline verifier.
 
 ### Curated execution
 

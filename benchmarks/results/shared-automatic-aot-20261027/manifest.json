@@ -1,0 +1,1415 @@
+{
+  "schema": "generativeqc.shared-automatic-cuda-aot-qualification.v1",
+  "source": {
+    "baseline": "e59942137e48a5c6767a9d330915cbd97761adc5",
+    "candidate": "1447e0667d84cd9b3cbaead86a98a44f2719ac29",
+    "candidate_verification": {
+      "revision": "1447e0667d84cd9b3cbaead86a98a44f2719ac29",
+      "checked_files": 5915,
+      "input_sha256": "5995ced144b42925a55b35437c5562078f61523ab23a678bf9bcb172601eaf3b",
+      "mismatches": []
+    },
+    "parent_head_at_measurement": "92abcbfb231b3ceb1d3f6a931497b6c4b9f447da",
+    "parent_delta_at_measurement": "CI shard script and its test only; computational/build sources unchanged",
+    "parent_head_at_publication": "80616411b4bebd0aef9dbcabfd9da9f12e06884d",
+    "later_parent_delta": "Registry enumeration reuses one per-call capability snapshot plus tests. This changes compiler inventory/provenance; not incorporated or relabeled as the measured baseline. Native runtime/formulas unchanged. No claim about generation time or final artifact identities of this later revision."
+  },
+  "environment": {
+    "node": "node2",
+    "architecture": "120-real",
+    "cuda": "12.9.86",
+    "compiler": "GCC 11",
+    "launcher": "sccache 0.16.0",
+    "cuda_pool": 4,
+    "ninja_jobs": 20,
+    "split_threads": 2,
+    "cpu_linear_algebra": "scalar",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell; exact inventory/visibility per performance record",
+    "reference": "PySCF 2.14.0 / Libxc 7.0.0; pinned tests/data/external_basis/sto-3g-ho.json",
+    "compilation_overlap": "Some incumbent full cold compilation overlapped an earlier candidate diagnostic build; no exclusive-node or statistical compile-speed claim"
+  },
+  "validation": {
+    "schema": "generativeqc.shared-aot-validation-summary.v1",
+    "logs": {
+      "accepted-alias-forces.log": {
+        "raw_log": {
+          "bytes": 360,
+          "sha256": "f9f179ce1d6e6a014decd1666275055ead493c21bd6646c4aa6877b16641768c"
+        },
+        "outcomes": [
+          "LDA_C_VWN_1 1 independent full vector passed",
+          "LDA_C_VWN_2 1 independent full vector passed",
+          "LDA_C_VWN_3 1 independent full vector passed",
+          "LDA_C_VWN_4 1 independent full vector passed",
+          "LDA_C_VWN_1 2 independent full vector passed",
+          "LDA_C_VWN_2 2 independent full vector passed",
+          "LDA_C_VWN_3 2 independent full vector passed",
+          "LDA_C_VWN_4 2 independent full vector passed"
+        ]
+      },
+      "accepted-dft-native.log": {
+        "raw_log": {
+          "bytes": 89,
+          "sha256": "31f398e8c4b5015b4d1950d08b428064c2463b2edeb8d7f0f8354593494dceec"
+        },
+        "outcomes": [
+          "Native device-buffer LDA/PBE/r2SCAN/WB97M-V semilocal RKS/UKS E/V and state gates passed"
+        ]
+      },
+      "accepted-failures.log": {
+        "raw_log": {
+          "bytes": 114,
+          "sha256": "2699225779aaa845c62c701278e1766ac08229023f63f7f7cce6e6314832ccab"
+        },
+        "outcomes": [
+          "4 passed, 34 deselected in 16.02s"
+        ]
+      },
+      "accepted-force-initcheck.log": {
+        "raw_log": {
+          "bytes": 2249,
+          "sha256": "196d965b8dac7d09d5ed328106ba0a7eb0e3ff9f7d1720ff5c33634d333f8c02"
+        },
+        "sanitizer_error_counts": [
+          0
+        ],
+        "force_endpoints": {
+          "slurm_job_id": "3612",
+          "rows": [
+            {
+              "spins": 1,
+              "phase": "cold",
+              "energy": -2.2782578007365233,
+              "forces": [
+                [
+                  -0.2639020537774901,
+                  -0.055426831735373716,
+                  -0.09189240466528936
+                ],
+                [
+                  -0.2312575074141916,
+                  -0.022246888154744873,
+                  -0.02312587262739263
+                ],
+                [
+                  0.2478564094277821,
+                  0.04967722946491203,
+                  0.044478074047219485
+                ],
+                [
+                  0.24730315176389914,
+                  0.02799649042520655,
+                  0.07054020324546229
+                ]
+              ],
+              "iterations": 12
+            },
+            {
+              "spins": 1,
+              "phase": "warm",
+              "energy": -2.2782578007365233,
+              "forces": [
+                [
+                  -0.2639020537774903,
+                  -0.055426831735373716,
+                  -0.09189240466528914
+                ],
+                [
+                  -0.2312575074141916,
+                  -0.022246888154744873,
+                  -0.02312587262739263
+                ],
+                [
+                  0.24785640942778187,
+                  0.04967722946491203,
+                  0.04447807404721993
+                ],
+                [
+                  0.24730315176389925,
+                  0.02799649042520655,
+                  0.07054020324546229
+                ]
+              ],
+              "iterations": 1
+            },
+            {
+              "spins": 1,
+              "phase": "moved",
+              "energy": -2.2760071681189373,
+              "forces": [
+                [
+                  -0.2659563282359858,
+                  -0.05348314045643293,
+                  -0.07191108121511669
+                ],
+                [
+                  -0.23622947097206365,
+                  -0.024865672860351115,
+                  -0.03998690949560324
+                ],
+                [
+                  0.24592458683210594,
+                  0.049557945010577364,
+                  0.04738112409598105
+                ],
+                [
+                  0.2562612123759439,
+                  0.02879086830620672,
+                  0.06451686661473788
+                ]
+              ],
+              "iterations": 22
+            },
+            {
+              "spins": 2,
+              "phase": "cold",
+              "energy": -1.8822103993421992,
+              "forces": [
+                [
+                  -0.18811533179962353,
+                  -0.05337127351363016,
+                  -0.15791448020207455
+                ],
+                [
+                  -0.15952881994142248,
+                  -0.001068668247916689,
+                  0.0832882077503947
+                ],
+                [
+                  0.1656112062704181,
+                  0.04229351374474692,
+                  -0.057522828369641066
+                ],
+                [
+                  0.18203294547062776,
+                  0.012146428016799899,
+                  0.13214910082132136
+                ]
+              ],
+              "iterations": 28
+            },
+            {
+              "spins": 2,
+              "phase": "warm",
+              "energy": -1.8822103993421995,
+              "forces": [
+                [
+                  -0.18811533179962364,
+                  -0.05337127351363022,
+                  -0.15791448020207455
+                ],
+                [
+                  -0.1595288199414222,
+                  -0.001068668247916623,
+                  0.08328820775039458
+                ],
+                [
+                  0.16561120627041803,
+                  0.042293513744746936,
+                  -0.0575228283696409
+                ],
+                [
+                  0.18203294547062793,
+                  0.01214642801679993,
+                  0.13214910082132136
+                ]
+              ],
+              "iterations": 1
+            },
+            {
+              "spins": 2,
+              "phase": "moved",
+              "energy": -1.8872211215468315,
+              "forces": [
+                [
+                  -0.18859302200147232,
+                  -0.049995546063308596,
+                  -0.1340449823864785
+                ],
+                [
+                  -0.16226504674507825,
+                  -0.0047445294274092685,
+                  0.06094833707090286
+                ],
+                [
+                  0.16330192953993183,
+                  0.041968881241070066,
+                  -0.05307480121506597
+                ],
+                [
+                  0.1875561392066185,
+                  0.012771194249647934,
+                  0.12617144653064177
+                ]
+              ],
+              "iterations": 14
+            }
+          ]
+        },
+        "outcomes": []
+      },
+      "accepted-force-memcheck.log": {
+        "raw_log": {
+          "bytes": 2304,
+          "sha256": "cbb8d0df4ebed4574b8a7a569b89ad774bdb6001c5604cccf4efa18fd9e451d1"
+        },
+        "sanitizer_error_counts": [
+          0
+        ],
+        "sanitizer_leaks": [
+          [
+            0,
+            0
+          ]
+        ],
+        "force_endpoints": {
+          "slurm_job_id": "3612",
+          "rows": [
+            {
+              "spins": 1,
+              "phase": "cold",
+              "energy": -2.2782578007365233,
+              "forces": [
+                [
+                  -0.2639020537774903,
+                  -0.05542683173537377,
+                  -0.09189240466528958
+                ],
+                [
+                  -0.2312575074141916,
+                  -0.022246888154744928,
+                  -0.02312587262739285
+                ],
+                [
+                  0.2478564094277821,
+                  0.04967722946491197,
+                  0.04447807404721971
+                ],
+                [
+                  0.24730315176389892,
+                  0.027996490425206494,
+                  0.07054020324546229
+                ]
+              ],
+              "iterations": 12
+            },
+            {
+              "spins": 1,
+              "phase": "warm",
+              "energy": -2.2782578007365233,
+              "forces": [
+                [
+                  -0.26390205377749054,
+                  -0.055426831735373716,
+                  -0.09189240466528958
+                ],
+                [
+                  -0.23125750741419138,
+                  -0.022246888154744928,
+                  -0.023125872627393074
+                ],
+                [
+                  0.2478564094277821,
+                  0.04967722946491203,
+                  0.04447807404721971
+                ],
+                [
+                  0.24730315176389936,
+                  0.02799649042520652,
+                  0.07054020324546229
+                ]
+              ],
+              "iterations": 1
+            },
+            {
+              "spins": 1,
+              "phase": "moved",
+              "energy": -2.2760071681189373,
+              "forces": [
+                [
+                  -0.2659563282359859,
+                  -0.05348314045643299,
+                  -0.07191108121511669
+                ],
+                [
+                  -0.2362294709720632,
+                  -0.024865672860351115,
+                  -0.039986909495602796
+                ],
+                [
+                  0.24592458683210594,
+                  0.04955794501057728,
+                  0.04738112409598061
+                ],
+                [
+                  0.2562612123759437,
+                  0.028790868306206693,
+                  0.06451686661473832
+                ]
+              ],
+              "iterations": 22
+            },
+            {
+              "spins": 2,
+              "phase": "cold",
+              "energy": -1.8822103993421992,
+              "forces": [
+                [
+                  -0.18811533179962342,
+                  -0.05337127351363016,
+                  -0.15791448020207455
+                ],
+                [
+                  -0.1595288199414226,
+                  -0.0010686682479166612,
+                  0.08328820775039458
+                ],
+                [
+                  0.1656112062704181,
+                  0.04229351374474692,
+                  -0.05752282836964129
+                ],
+                [
+                  0.18203294547062798,
+                  0.01214642801679991,
+                  0.13214910082132159
+                ]
+              ],
+              "iterations": 28
+            },
+            {
+              "spins": 2,
+              "phase": "warm",
+              "energy": -1.8822103993421995,
+              "forces": [
+                [
+                  -0.18811533179962364,
+                  -0.05337127351363022,
+                  -0.15791448020207466
+                ],
+                [
+                  -0.15952881994142232,
+                  -0.001068668247916623,
+                  0.08328820775039436
+                ],
+                [
+                  0.16561120627041814,
+                  0.042293513744746936,
+                  -0.0575228283696409
+                ],
+                [
+                  0.18203294547062793,
+                  0.01214642801679993,
+                  0.13214910082132114
+                ]
+              ],
+              "iterations": 1
+            },
+            {
+              "spins": 2,
+              "phase": "moved",
+              "energy": -1.8872211215468315,
+              "forces": [
+                [
+                  -0.18859302200147238,
+                  -0.049995546063308596,
+                  -0.1340449823864785
+                ],
+                [
+                  -0.16226504674507836,
+                  -0.004744529427409282,
+                  0.06094833707090286
+                ],
+                [
+                  0.16330192953993183,
+                  0.04196888124107004,
+                  -0.05307480121506597
+                ],
+                [
+                  0.1875561392066185,
+                  0.012771194249647962,
+                  0.12617144653064177
+                ]
+              ],
+              "iterations": 14
+            }
+          ]
+        },
+        "outcomes": []
+      },
+      "accepted-full-installed.log": {
+        "raw_log": {
+          "bytes": 751,
+          "sha256": "35b4a17a102a43e824e5e06eadb41b6a2766a7826635bd23145502af2f620a40"
+        },
+        "outcomes": [
+          "LDA_C_VWN_4 1 passed 1.781",
+          "LDA_C_CHACHIYO 1 passed 1.79",
+          "LDA_C_PZ_MOD 1 passed 1.786",
+          "GGA_X_APBE 1 passed 1.808",
+          "GGA_X_PBE_SOL 1 passed 1.8",
+          "GGA_X_RPBE 1 passed 1.81",
+          "GGA_X_B86 1 passed 1.805",
+          "GGA_C_APBE 1 passed 1.875",
+          "MGGA_X_LTA 1 passed 1.911",
+          "MGGA_X_GVT4 1 passed 1.831",
+          "MGGA_C_TPSS 1 passed 2.052",
+          "LDA_C_VWN_1 1 passed 1.773",
+          "LDA_C_VWN_2 1 passed 1.787",
+          "LDA_C_VWN_3 1 passed 1.757",
+          "LDA_C_VWN_4 2 passed 1.807",
+          "LDA_C_CHACHIYO 2 passed 1.801",
+          "LDA_C_PZ_MOD 2 passed 1.806",
+          "GGA_X_APBE 2 passed 1.83",
+          "GGA_X_PBE_SOL 2 passed 1.848",
+          "GGA_X_RPBE 2 passed 1.834",
+          "GGA_X_B86 2 passed 1.834",
+          "GGA_C_APBE 2 passed 1.793",
+          "MGGA_X_LTA 2 passed 2.193",
+          "MGGA_X_GVT4 2 passed 1.902",
+          "MGGA_C_TPSS 2 passed 2.209",
+          "LDA_C_VWN_1 2 passed 1.797",
+          "LDA_C_VWN_2 2 passed 1.817",
+          "LDA_C_VWN_3 2 passed 1.768"
+        ]
+      },
+      "accepted-full-parity.log": {
+        "raw_log": {
+          "bytes": 1570,
+          "sha256": "220b83a1ad579eaa384a421c21ebd246833e9c9229ef7b969a3b18bb636496fd"
+        },
+        "outcomes": [
+          "GGA_C_APBE-1-True-False-False-h4.json passed",
+          "GGA_C_APBE-2-True-False-False-h4.json passed",
+          "GGA_X_APBE-1-False-True-True-h4.json passed",
+          "GGA_X_APBE-1-True-False-False-h4.json passed",
+          "GGA_X_APBE-2-False-True-True-h4.json passed",
+          "GGA_X_APBE-2-True-False-False-h4.json passed",
+          "GGA_X_B86-1-True-False-False-h4.json passed",
+          "GGA_X_B86-2-True-False-False-h4.json passed",
+          "GGA_X_PBE_SOL-1-True-False-False-h4.json passed",
+          "GGA_X_PBE_SOL-2-True-False-False-h4.json passed",
+          "GGA_X_RPBE-1-True-False-False-h4.json passed",
+          "GGA_X_RPBE-2-True-False-False-h4.json passed",
+          "LDA_C_CHACHIYO-1-True-False-False-h4.json passed",
+          "LDA_C_CHACHIYO-2-True-False-False-h4.json passed",
+          "LDA_C_PZ_MOD-1-True-False-False-h4.json passed",
+          "LDA_C_PZ_MOD-2-True-False-False-h4.json passed",
+          "LDA_C_VWN_4-1-False-True-True-h4.json passed",
+          "LDA_C_VWN_4-1-True-False-False-h4.json passed",
+          "LDA_C_VWN_4-2-False-True-True-h4.json passed",
+          "LDA_C_VWN_4-2-True-False-False-h4.json passed",
+          "MGGA_C_TPSS-1-True-False-False-h4.json passed",
+          "MGGA_C_TPSS-2-True-False-False-h4.json passed",
+          "MGGA_X_GVT4-1-True-False-False-h4.json passed",
+          "MGGA_X_GVT4-2-True-False-False-h4.json passed",
+          "MGGA_X_LTA-1-False-True-True-h4.json passed",
+          "MGGA_X_LTA-1-True-False-False-h4.json passed",
+          "MGGA_X_LTA-2-False-True-True-h4.json passed",
+          "MGGA_X_LTA-2-True-False-False-h4.json passed",
+          "GGA_X_APBE-1-False-True-False-water.json passed",
+          "GGA_X_APBE-2-False-True-False-water.json passed",
+          "LDA_C_VWN_4-1-False-True-False-water.json passed",
+          "LDA_C_VWN_4-2-False-True-False-water.json passed",
+          "MGGA_C_TPSS-1-False-True-False-water.json passed",
+          "MGGA_C_TPSS-2-False-True-False-water.json passed"
+        ]
+      },
+      "accepted-installed.log": {
+        "raw_log": {
+          "bytes": 684,
+          "sha256": "056a329fe91e99cce1048c6a2ea6b7efaec28199a0551968a13ae56cf9b91abd"
+        },
+        "outcomes": [
+          "LDA_C_VWN_4 1 passed 1.804",
+          "LDA_C_CHACHIYO 1 passed 1.804",
+          "LDA_C_PZ_MOD 1 passed 1.775",
+          "GGA_X_APBE 1 passed 1.868",
+          "GGA_X_PBE_SOL 1 passed 1.866",
+          "GGA_X_RPBE 1 passed 1.823",
+          "GGA_X_B86 1 passed 1.805",
+          "GGA_C_APBE 1 passed 1.836",
+          "MGGA_X_LTA 1 passed 1.905",
+          "MGGA_X_GVT4 1 passed 1.859",
+          "MGGA_C_TPSS 1 passed 2.077",
+          "LDA_C_VWN_4 2 passed 1.825",
+          "LDA_C_CHACHIYO 2 passed 1.824",
+          "LDA_C_PZ_MOD 2 passed 1.764",
+          "GGA_X_APBE 2 passed 1.872",
+          "GGA_X_PBE_SOL 2 passed 1.87",
+          "GGA_X_RPBE 2 passed 1.86",
+          "GGA_X_B86 2 passed 1.869",
+          "GGA_C_APBE 2 passed 1.857",
+          "MGGA_X_LTA 2 passed 2.199",
+          "MGGA_X_GVT4 2 passed 1.937",
+          "MGGA_C_TPSS 2 passed 2.271",
+          "omitted provider rejected: generativeqc: requested capability is not implemented (status 3)"
+        ]
+      },
+      "accepted-ks-native.log": {
+        "raw_log": {
+          "bytes": 7611,
+          "sha256": "3c8494afccc0b658c7d9c00219869c5bc4097d2af440d90eeb2d3aec633e9847"
+        },
+        "outcomes": [
+          "CUDA MINAO GPU preparation and strict seed gates passed",
+          "Native CUDA LDA/PBE/r2SCAN KS SCF, physical-state, warm/failure/resource gates passed"
+        ]
+      },
+      "accepted-ks.log": {
+        "raw_log": {
+          "bytes": 191,
+          "sha256": "04462039b5156eef4ff696e09f3a32f69ed28dc8dc82928444f2ae19b3724fcc"
+        },
+        "outcomes": [
+          "91 passed in 207.09s (0:03:27)"
+        ]
+      },
+      "accepted-parity.log": {
+        "raw_log": {
+          "bytes": 1570,
+          "sha256": "220b83a1ad579eaa384a421c21ebd246833e9c9229ef7b969a3b18bb636496fd"
+        },
+        "outcomes": [
+          "GGA_C_APBE-1-True-False-False-h4.json passed",
+          "GGA_C_APBE-2-True-False-False-h4.json passed",
+          "GGA_X_APBE-1-False-True-True-h4.json passed",
+          "GGA_X_APBE-1-True-False-False-h4.json passed",
+          "GGA_X_APBE-2-False-True-True-h4.json passed",
+          "GGA_X_APBE-2-True-False-False-h4.json passed",
+          "GGA_X_B86-1-True-False-False-h4.json passed",
+          "GGA_X_B86-2-True-False-False-h4.json passed",
+          "GGA_X_PBE_SOL-1-True-False-False-h4.json passed",
+          "GGA_X_PBE_SOL-2-True-False-False-h4.json passed",
+          "GGA_X_RPBE-1-True-False-False-h4.json passed",
+          "GGA_X_RPBE-2-True-False-False-h4.json passed",
+          "LDA_C_CHACHIYO-1-True-False-False-h4.json passed",
+          "LDA_C_CHACHIYO-2-True-False-False-h4.json passed",
+          "LDA_C_PZ_MOD-1-True-False-False-h4.json passed",
+          "LDA_C_PZ_MOD-2-True-False-False-h4.json passed",
+          "LDA_C_VWN_4-1-False-True-True-h4.json passed",
+          "LDA_C_VWN_4-1-True-False-False-h4.json passed",
+          "LDA_C_VWN_4-2-False-True-True-h4.json passed",
+          "LDA_C_VWN_4-2-True-False-False-h4.json passed",
+          "MGGA_C_TPSS-1-True-False-False-h4.json passed",
+          "MGGA_C_TPSS-2-True-False-False-h4.json passed",
+          "MGGA_X_GVT4-1-True-False-False-h4.json passed",
+          "MGGA_X_GVT4-2-True-False-False-h4.json passed",
+          "MGGA_X_LTA-1-False-True-True-h4.json passed",
+          "MGGA_X_LTA-1-True-False-False-h4.json passed",
+          "MGGA_X_LTA-2-False-True-True-h4.json passed",
+          "MGGA_X_LTA-2-True-False-False-h4.json passed",
+          "GGA_X_APBE-1-False-True-False-water.json passed",
+          "GGA_X_APBE-2-False-True-False-water.json passed",
+          "LDA_C_VWN_4-1-False-True-False-water.json passed",
+          "LDA_C_VWN_4-2-False-True-False-water.json passed",
+          "MGGA_C_TPSS-1-False-True-False-water.json passed",
+          "MGGA_C_TPSS-2-False-True-False-water.json passed"
+        ]
+      },
+      "accepted-point-initcheck.log": {
+        "raw_log": {
+          "bytes": 116,
+          "sha256": "8bcaa7592b684e6a3508a08fb97e2f2401c1292f8d256b6af7fc3fce9e42bd2d"
+        },
+        "outcomes": [
+          "24 passed, 100 deselected in 15.87s"
+        ]
+      },
+      "accepted-points.log": {
+        "raw_log": {
+          "bytes": 191,
+          "sha256": "8193c87dcfa127b7fbb1bc6704e5b63a039839ed24b965ebcc9b0663abd67806"
+        },
+        "outcomes": [
+          "124 passed in 98.14s (0:01:38)"
+        ]
+      },
+      "becke-fixed-fd.log": {
+        "raw_log": {
+          "bytes": 125,
+          "sha256": "cb8f25c1f0c817386344ede409733b12e7e3af0d316b2a3e81d4a22d2eca55aa"
+        },
+        "outcomes": [
+          "2 passed, 36 deselected in 122.83s (0:02:02)"
+        ]
+      },
+      "staged-initcheck-689925.log": {
+        "raw_log": {
+          "bytes": 62,
+          "sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+        },
+        "sanitizer_error_counts": [
+          0
+        ],
+        "outcomes": []
+      },
+      "becke-host.log": {
+        "raw_log": {
+          "bytes": 111,
+          "sha256": "f5650a360091f04159d2522b79d12eec82fb2057ac9c74427fb69e3408618d14"
+        },
+        "outcomes": [
+          "34 passed in 116.73s (0:01:56)"
+        ],
+        "phase": "after partition-response repair"
+      },
+      "cache-gates-r2.log": {
+        "raw_log": {
+          "bytes": 191,
+          "sha256": "cac9d0252612925cdb53e4da1677a0a1836497a705586485c26b7bd6dd7e9db9"
+        },
+        "outcomes": [
+          "106 passed, 7 skipped in 5.64s"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      },
+      "closure-r3.log": {
+        "raw_log": {
+          "bytes": 100,
+          "sha256": "9a118ab1e012ee4287645a432fd936e0c14efc1cb1a86b5b6a15b82e19053d0c"
+        },
+        "outcomes": [
+          "25 passed in 12.36s"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      },
+      "focused-r3.log": {
+        "raw_log": {
+          "bytes": 100,
+          "sha256": "ce26b8021b692980d2eca7faee524c04c7f36ac59486ceeda9e426f26fca52e2"
+        },
+        "outcomes": [
+          "30 passed in 41.32s"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      },
+      "shared-r4.log": {
+        "raw_log": {
+          "bytes": 100,
+          "sha256": "41380031dda56bd2faa1abda805de1d6cab44c3a727d335f4648836e2453a035"
+        },
+        "outcomes": [
+          "11 passed in 40.23s"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      },
+      "integration-contracts-r2.log": {
+        "raw_log": {
+          "bytes": 110,
+          "sha256": "ee20e59318d0ff36a75abf8f68b3fb0129630f04c407df493c0e5a79738b54b8"
+        },
+        "outcomes": [
+          "45 passed in 98.00s (0:01:38)"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      },
+      "receipt-test-r2.log": {
+        "raw_log": {
+          "bytes": 99,
+          "sha256": "f3260f2a6ae75d1b4f8ab8e433031fcced88c8b5c2e4fb2ce0652978ad9fee3a"
+        },
+        "outcomes": [
+          "19 passed in 1.13s"
+        ],
+        "phase": "implementation host qualification before partition-response repair"
+      }
+    },
+    "not_executed": [
+      "Seven opt-in immutable NVCC 12.9 Linux sm80 offline-object-store closure tests; this campaign builds sm120 with CMake device linking."
+    ]
+  },
+  "negative_results": {
+    "schema": "generativeqc.shared-aot-negative-results.v1",
+    "partition_response": {
+      "case": "GGA_C_APBE H4 RKS cold full-force vector",
+      "cause": "precomputed_point=true means phased partition seed prepared; a staged XC tile alone did not satisfy that invariant",
+      "repair": "retain geometry point setup and inline/phased partition response with the ordinary cooperative specialization",
+      "records": {
+        "rejected": {
+          "raw_record": {
+            "bytes": 1033972,
+            "sha256": "e5d05a48dd4f1e088b9e0d537b8894ea22e7912bac90c4b92e31ae22646428bf"
+          },
+          "library": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/evidence/narrow-candidate-e599.so",
+          "energy": -0.4492369883760125,
+          "forces": [
+            [
+              -0.3743848001175275,
+              -0.067789918436834,
+              -0.13743869724917146
+            ],
+            [
+              -0.2735539387035468,
+              -0.03361634420144627,
+              -0.06929591338808316
+            ],
+            [
+              0.2921682492296225,
+              0.05146261701667465,
+              0.10104128364004661
+            ],
+            [
+              0.3557704895914517,
+              0.0499436456216055,
+              0.10569332699720879
+            ]
+          ],
+          "artifact": {
+            "identifier": "GGA_C_APBE",
+            "point_expression_identity": "44c8e2f923bfcee766e619982a5035f4da8b1543b1ddcdc995e87da9dd94e76f",
+            "point_source_identity": "e3c4af28d1cccf5db4cabd40327c8b2e807d352f00d66c8dfb951ca8ad86469a",
+            "force_profile": "libxc_196794_rks",
+            "force_plan_identity": "5c1a114a1551fc77132ac197fb2a13ee6f1d7e5f1206fc342a4edbb543934304",
+            "force_source_identity": "012cbdec46a545435ac3f9ca59daaf9aee112298de478bd1eda29da90d1e0028",
+            "fallback_reason": "none",
+            "force_consumer_identity": "cd521ed5bcb87da73baaf04d17edd2ed21ebbfa82037f1470d3527c00f00f6e6",
+            "force_consumer_profile": "shared_a29bc2a0361729cf997085b5",
+            "polarized_executable_identity": "a0c0539ee7326a615e1727beb9fee71fe3124f950d55440b8fbdd11ee066637c",
+            "restricted_executable_identity": "3975eab60b75b0d89068ae3ab84e282d715732e3cc1aa96f97020569355c83a4",
+            "schema": "generativeqc.native-automatic-artifact.v2",
+            "point_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/evidence/narrow-candidate-e599.so",
+              "sha256": "e600ddff98c3220f2ba0f73d9614473ae77d28e5129cc7f5aa9bb562710d71c2",
+              "bytes": 748921512
+            },
+            "force_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/evidence/narrow-candidate-e599.so",
+              "sha256": "e600ddff98c3220f2ba0f73d9614473ae77d28e5129cc7f5aa9bb562710d71c2",
+              "bytes": 748921512
+            },
+            "force_completed": true,
+            "domain_version": 4,
+            "spin_blocks": 1,
+            "source_count": 7,
+            "work_scope": "cumulative retained force owner at the current final token",
+            "capacity": {
+              "device_upper_bytes": 104913648,
+              "minimum_device_bytes": 104913360,
+              "grid_numeric_bytes": 4222464,
+              "stationary_numeric_bytes": 27888,
+              "grid_provider_allowance_bytes": 100663296,
+              "grid_provider_retained_bytes": 8388608
+            },
+            "stationary_work_v1": [
+              27888,
+              448,
+              116,
+              1005,
+              6,
+              12288,
+              147462,
+              579127808,
+              0,
+              0,
+              6,
+              6,
+              6,
+              333,
+              37,
+              32,
+              21312,
+              37,
+              288,
+              6,
+              1,
+              128,
+              400,
+              73728
+            ],
+            "grid_work": {
+              "evaluation_points": 12288,
+              "evaluation_tiles": 333,
+              "ao_jet_values": 491520,
+              "projection_fma_pairs": 786432,
+              "identical_spin_copy_bytes": 1572864,
+              "feature_passes": 333
+            },
+            "staged_point_work": {
+              "tile_bytes": 3552,
+              "launches": 333,
+              "points": 12288
+            },
+            "point_executable_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/evidence/narrow-candidate-e599.so",
+              "sha256": "e600ddff98c3220f2ba0f73d9614473ae77d28e5129cc7f5aa9bb562710d71c2",
+              "bytes": 748921512
+            },
+            "force_executable_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/evidence/narrow-candidate-e599.so",
+              "sha256": "e600ddff98c3220f2ba0f73d9614473ae77d28e5129cc7f5aa9bb562710d71c2",
+              "bytes": 748921512
+            },
+            "force_schedule": "shared-staged"
+          },
+          "density": [
+            [
+              [
+                1.166255898852164,
+                0.7664634629125148,
+                -0.41191465961537654,
+                -0.9557373410803345
+              ],
+              [
+                0.7664634629125148,
+                0.6014581331941931,
+                -0.053762008567189504,
+                -0.42469217418350685
+              ],
+              [
+                -0.41191465961537654,
+                -0.053762008567189504,
+                0.6270430523804312,
+                0.7890859524498922
+              ],
+              [
+                -0.9557373410803345,
+                -0.42469217418350685,
+                0.7890859524498922,
+                1.2065851603622886
+              ]
+            ]
+          ],
+          "energy_error": 3.497202527569243e-15,
+          "force_max_error": 0.02129454482593096,
+          "density_max_error": 6.8833827526759706e-15
+        },
+        "incumbent": {
+          "raw_record": {
+            "bytes": 1033045,
+            "sha256": "5eabab118718a08c61e84c61193dc5798ba04f12e0677921f6a7f008425f0829"
+          },
+          "library": "/home/jzzeng/tmp/qc-1123-baseline-20261027/evidence/narrow-incumbent-e599.so",
+          "energy": -0.449236988376016,
+          "forces": [
+            [
+              -0.38326394129249847,
+              -0.07238818583267259,
+              -0.15843905595908991
+            ],
+            [
+              -0.2836870800627568,
+              -0.03190356811528401,
+              -0.0480013685621522
+            ],
+            [
+              0.30177892570071596,
+              0.055078347980133835,
+              0.08085809154402679
+            ],
+            [
+              0.36517209565453884,
+              0.0492134059678228,
+              0.12558233297721755
+            ]
+          ],
+          "artifact": {
+            "identifier": "GGA_C_APBE",
+            "point_expression_identity": "1ce1a763c7b9a7e072d4d7779e12d29b4cf35e09b80911f163499001eda33217",
+            "point_source_identity": "8b9fb615f35954d61b1527bee0aa18c40b2837adf0ba635261e6273e3f0524b8",
+            "force_profile": "libxc_196794_rks",
+            "force_plan_identity": "be0b8f9095c4ecd33586b0b790cca520aff9b4a4ddb47268508bb5ca6ab47471",
+            "force_source_identity": "c0f5214a4c529707ef8674af0b53a523292162e924a6fda0620cf2b014814bac",
+            "fallback_reason": "none",
+            "schema": "generativeqc.native-automatic-artifact.v1",
+            "point_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-baseline-20261027/evidence/narrow-incumbent-e599.so",
+              "sha256": "cc1e695976a9ef0bc8c5becdcdd35e1f5cfa6f2a4984b68315783251677601fa",
+              "bytes": 772414440
+            },
+            "force_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-baseline-20261027/evidence/narrow-incumbent-e599.so",
+              "sha256": "cc1e695976a9ef0bc8c5becdcdd35e1f5cfa6f2a4984b68315783251677601fa",
+              "bytes": 772414440
+            },
+            "force_completed": true,
+            "domain_version": 4,
+            "spin_blocks": 1,
+            "source_count": 7,
+            "work_scope": "cumulative retained force owner at the current final token",
+            "capacity": {
+              "device_upper_bytes": 104910096,
+              "minimum_device_bytes": 104909808,
+              "grid_numeric_bytes": 4222464,
+              "stationary_numeric_bytes": 24336,
+              "grid_provider_allowance_bytes": 100663296,
+              "grid_provider_retained_bytes": 8388608
+            },
+            "stationary_work_v1": [
+              24336,
+              448,
+              116,
+              672,
+              6,
+              12288,
+              147462,
+              597950000,
+              0,
+              0,
+              6,
+              6,
+              6,
+              333,
+              37,
+              32,
+              21312,
+              37,
+              288,
+              6,
+              1,
+              128,
+              400,
+              73728
+            ],
+            "grid_work": {
+              "evaluation_points": 12288,
+              "evaluation_tiles": 333,
+              "ao_jet_values": 491520,
+              "projection_fma_pairs": 786432,
+              "identical_spin_copy_bytes": 1572864,
+              "feature_passes": 333
+            }
+          },
+          "density": [
+            [
+              [
+                1.1662558988521603,
+                0.7664634629125139,
+                -0.41191465961537116,
+                -0.9557373410803354
+              ],
+              [
+                0.7664634629125139,
+                0.6014581331941931,
+                -0.053762008567187776,
+                -0.42469217418350874
+              ],
+              [
+                -0.41191465961537116,
+                -0.053762008567187776,
+                0.6270430523804255,
+                0.7890859524498895
+              ],
+              [
+                -0.9557373410803354,
+                -0.42469217418350874,
+                0.7890859524498895,
+                1.2065851603622955
+              ]
+            ]
+          ]
+        },
+        "repaired": {
+          "raw_record": {
+            "bytes": 1034021,
+            "sha256": "d096a1cacfd2d84730510b00c139418cb6b4cb961b70e6383ba45d4f658279dc"
+          },
+          "library": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/build/pro6000-cuda/libgenerativeqc.so",
+          "energy": -0.4492369883760125,
+          "forces": [
+            [
+              -0.383263941292497,
+              -0.07238818583267205,
+              -0.15843905595909347
+            ],
+            [
+              -0.2836870800627538,
+              -0.03190356811528357,
+              -0.048001368562153646
+            ],
+            [
+              0.3017789257007085,
+              0.05507834798013253,
+              0.08085809154402601
+            ],
+            [
+              0.36517209565454195,
+              0.04921340596782299,
+              0.12558233297722166
+            ]
+          ],
+          "artifact": {
+            "identifier": "GGA_C_APBE",
+            "point_expression_identity": "44c8e2f923bfcee766e619982a5035f4da8b1543b1ddcdc995e87da9dd94e76f",
+            "point_source_identity": "e3c4af28d1cccf5db4cabd40327c8b2e807d352f00d66c8dfb951ca8ad86469a",
+            "force_profile": "libxc_196794_rks",
+            "force_plan_identity": "5c1a114a1551fc77132ac197fb2a13ee6f1d7e5f1206fc342a4edbb543934304",
+            "force_source_identity": "697cf2843998f665b1860b7d7964bd7d965c65ec802034630102049d066a81a9",
+            "fallback_reason": "none",
+            "force_consumer_identity": "a011b1da2c81293cb503af8c8d759b9ce7f352605e0631c6cab1993cf6fea986",
+            "force_consumer_profile": "shared_a29bc2a0361729cf997085b5",
+            "polarized_executable_identity": "a0c0539ee7326a615e1727beb9fee71fe3124f950d55440b8fbdd11ee066637c",
+            "restricted_executable_identity": "3975eab60b75b0d89068ae3ab84e282d715732e3cc1aa96f97020569355c83a4",
+            "schema": "generativeqc.native-automatic-artifact.v2",
+            "point_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/build/pro6000-cuda/libgenerativeqc.so.0.1.0",
+              "sha256": "a3c326e109a2f097f00c0ef9c6a12ea6ef7c7bfdcb39abbcde86fd2f37e18f9e",
+              "bytes": 750443032
+            },
+            "force_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/build/pro6000-cuda/libgenerativeqc.so.0.1.0",
+              "sha256": "a3c326e109a2f097f00c0ef9c6a12ea6ef7c7bfdcb39abbcde86fd2f37e18f9e",
+              "bytes": 750443032
+            },
+            "force_completed": true,
+            "domain_version": 4,
+            "spin_blocks": 1,
+            "source_count": 7,
+            "work_scope": "cumulative retained force owner at the current final token",
+            "capacity": {
+              "device_upper_bytes": 104913648,
+              "minimum_device_bytes": 104913360,
+              "grid_numeric_bytes": 4222464,
+              "stationary_numeric_bytes": 27888,
+              "grid_provider_allowance_bytes": 100663296,
+              "grid_provider_retained_bytes": 8388608
+            },
+            "stationary_work_v1": [
+              27888,
+              448,
+              116,
+              1005,
+              6,
+              12288,
+              147462,
+              1057055536,
+              0,
+              0,
+              6,
+              6,
+              6,
+              333,
+              37,
+              32,
+              21312,
+              37,
+              288,
+              6,
+              1,
+              128,
+              400,
+              73728
+            ],
+            "grid_work": {
+              "evaluation_points": 12288,
+              "evaluation_tiles": 333,
+              "ao_jet_values": 491520,
+              "projection_fma_pairs": 786432,
+              "identical_spin_copy_bytes": 1572864,
+              "feature_passes": 333
+            },
+            "staged_point_work": {
+              "tile_bytes": 3552,
+              "launches": 333,
+              "points": 12288
+            },
+            "point_executable_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/build/pro6000-cuda/libgenerativeqc.so.0.1.0",
+              "sha256": "a3c326e109a2f097f00c0ef9c6a12ea6ef7c7bfdcb39abbcde86fd2f37e18f9e",
+              "bytes": 750443032
+            },
+            "force_executable_artifact": {
+              "path": "/home/jzzeng/tmp/qc-1123-shared-aot-20261027/build/pro6000-cuda/libgenerativeqc.so.0.1.0",
+              "sha256": "a3c326e109a2f097f00c0ef9c6a12ea6ef7c7bfdcb39abbcde86fd2f37e18f9e",
+              "bytes": 750443032
+            },
+            "force_schedule": "shared-staged"
+          },
+          "density": [
+            [
+              [
+                1.166255898852164,
+                0.7664634629125148,
+                -0.41191465961537654,
+                -0.9557373410803345
+              ],
+              [
+                0.7664634629125148,
+                0.6014581331941931,
+                -0.053762008567189504,
+                -0.42469217418350685
+              ],
+              [
+                -0.41191465961537654,
+                -0.053762008567189504,
+                0.6270430523804312,
+                0.7890859524498922
+              ],
+              [
+                -0.9557373410803345,
+                -0.42469217418350685,
+                0.7890859524498922,
+                1.2065851603622886
+              ]
+            ]
+          ],
+          "energy_error": 3.497202527569243e-15,
+          "force_max_error": 7.438494264988549e-15,
+          "density_max_error": 6.8833827526759706e-15
+        }
+      },
+      "rejected_full_matrix_log": {
+        "bytes": 1895,
+        "sha256": "b55874a5f663db2ac66be45833b3f24fce41acfbf56c84981f7b91cfa6bdd16a"
+      }
+    },
+    "rejected-target-visibility-ks-native.log": {
+      "raw_log": {
+        "bytes": 376,
+        "sha256": "bb79cb39597465670f05fdd645fe9c2f3b978e55319fffa0f76ed18c3c6aed1f"
+      },
+      "diagnostic": "KS control ks_density_provider_cases(): PBE0 density resources survived owner destruction",
+      "resolution": "Target-wide hidden visibility split inline resource ledger/TLS owners. Scoped hidden generated definitions after shared includes preserve ownership."
+    },
+    "rejected-exact-transport-check.log": {
+      "raw_log": {
+        "bytes": 824,
+        "sha256": "be1ff6c0777724813120280fa43156abc25354cbf2aef554e255e9a8cede9e68"
+      },
+      "diagnostic": "AssertionError: (('h4', 'libxc-uks:MGGA_X_LTA', 'cold'), 'transport_delta', {'setup_h2d_bytes': 1069, 'density_h2d_bytes': 0, 'scalar_d2h_bytes': 4496, 'matrix_d2h_bytes': 0, 'synchronizations': 35, 'iterations': 28, 'occupation_stabilized_proposals': 0}, {'setup_h2d_bytes': 1069, 'density_h2d_bytes': 0, 'scalar_d2h_bytes': 4272, 'matrix_d2h_bytes': 0, 'synchronizations': 34, 'iterations': 28, 'occupation_stabilized_proposals': 1})",
+      "resolution": "Same 28 Focks/iterations for cold H4 LTA UKS; existing occupation stabilization adds one proposal/two matrix products and avoids one rejected probe/sync/224 scalar D2H bytes. All other semantic counters stay equal. Original samples retained."
+    },
+    "rejected-cli-exact-iterations.log": {
+      "raw_log": {
+        "bytes": 628,
+        "sha256": "5a4165b9000c8de7ad9bf22ecd1313271f26173049956e2091a857165bb3a3e0"
+      },
+      "diagnostic": "AssertionError",
+      "resolution": "Installed CLI default tile takes 29 candidate versus 28 incumbent H4 LTA UKS iterations. Extra work is retained, numerical and endpoint time gates unchanged, all original samples reanalyzed without rerun."
+    }
+  },
+  "limits": {
+    "energy": 3e-09,
+    "incumbent_force": 3e-08,
+    "independent_fd": 3e-05,
+    "translation": 2e-08,
+    "REG": 255,
+    "STACK": 4096,
+    "LOCAL": 4096,
+    "SHARED": 49152,
+    "endpoint_median_ratio": 1.05
+  },
+  "scope": "Compiled-cuda economics and bounded native force transport; no new scientific admission",
+  "references": {
+    "../automatic-native-cuda-20261027/references.json.gz": {
+      "bytes": 84937,
+      "sha256": "e2a20d246982369d2be1edb98e50aa825ae11b94447629d5c6b88c8b1e0c2b30"
+    },
+    "../automatic-native-cuda-20261027/catalog.json.gz": {
+      "bytes": 97058,
+      "sha256": "d71ff3c2ff564b2c6a14dfd2e915137d4fa87097052f5118f85bfffc674b1e23"
+    },
+    "../automatic-native-cuda-20261027/manifest.json": {
+      "bytes": 61047,
+      "sha256": "15971d121f9261c6ba4b2913fe01506de9e1cb2cb7dd74b4653931d1f6c97427"
+    },
+    "../automatic-native-cuda-20261027/reference-native-source.patch": {
+      "bytes": 224274,
+      "sha256": "6a33dbf90ec0922c499c29068204ac54ae66042a5c50130001aebc57102a7d07"
+    }
+  },
+  "files": {
+    "README.md": {
+      "bytes": 12440,
+      "sha256": "55b405284d1f3ee61da7468ea3cc6a49fe79745975ab9a9182f10f9b4a73fdab"
+    },
+    "audit-aliases.json.gz": {
+      "bytes": 4617,
+      "sha256": "796a63e0e4231e2ea00a494f9f333584b2a742f00f936279e324aba8526593df"
+    },
+    "audit-full.json.gz": {
+      "bytes": 12925,
+      "sha256": "7cde7933e899882530e0cc5cdf518fae939948b14d9ee5d1a859e5177461158b"
+    },
+    "audit-narrow.json.gz": {
+      "bytes": 13234,
+      "sha256": "93d256162bdc9866391bc6d92ea6137bb1bb85020773cccc3fcd5ced3a40934b"
+    },
+    "capabilities.json.gz": {
+      "bytes": 11577,
+      "sha256": "79f44f7806d5119e1712df1b2056ddc39f7a92cbd8dc4ce3f349b9781b50d625"
+    },
+    "cli-cold-full.json.gz": {
+      "bytes": 7787,
+      "sha256": "e70fb819196747ecc3ed9c3af623a8f735fbf87795db46550db79237aa685bd8"
+    },
+    "cli-cold-narrow.json.gz": {
+      "bytes": 7754,
+      "sha256": "c2c8405e921acb9d78233738ff5efc33892b89b141d27296c3271f2024b7b61a"
+    },
+    "compilation.json.gz": {
+      "bytes": 14522,
+      "sha256": "cff1954013ef1aea1fa3dc13876e8ff6272116bc7050468c5e1025a5ff95dcd5"
+    },
+    "drivers/accepted-full-gpu.sh": {
+      "bytes": 1297,
+      "sha256": "f2a8fb243e3dffdba4c4fc93b309d3c5dc6f87ce760fec3bacb2848c1ba524f8"
+    },
+    "drivers/accepted-narrow-gpu.sh": {
+      "bytes": 2160,
+      "sha256": "0350fde8b48af282abd7184a2590e45e9de0a633c7cd8ae45ba893bb085f5232"
+    },
+    "drivers/alias-forces.py": {
+      "bytes": 2266,
+      "sha256": "1c912c643556a0e0c36504395d153150ba7370152370ddc70fe5d97f4b4bda22"
+    },
+    "drivers/analyze-performance.py": {
+      "bytes": 9600,
+      "sha256": "bb91eb657e08359faea8b050483e4156231748d34fcbe96cca866ccaff5a7b19"
+    },
+    "drivers/aot-resource-options.cmake": {
+      "bytes": 337,
+      "sha256": "3833527da9061141eb83e648b4e079b7a204729c093d02eae490a7d60d397ea4"
+    },
+    "drivers/audit-run.py": {
+      "bytes": 1039,
+      "sha256": "c81fdfd9cffb13949fbf50b111fe3f791e54208568b0942e4d8979abc28114f2"
+    },
+    "drivers/bench-cli-cold.py": {
+      "bytes": 6751,
+      "sha256": "a5db05bb86b15abed81c52079d8efd991203acce95b198cea734a1b55f26cad5"
+    },
+    "drivers/bench-native.py": {
+      "bytes": 6492,
+      "sha256": "5e808e42b20926a8a94fc5ecaab9e09c40074a1f6303dd78fd88c61e01486e96"
+    },
+    "drivers/bench-suite.py": {
+      "bytes": 1774,
+      "sha256": "e9f07a9a175d57a8cfb06cea186f0e8c197e1c62d1ea8ba37008e12c2893d74a"
+    },
+    "drivers/freeze-narrow.py": {
+      "bytes": 1218,
+      "sha256": "f6f6bd150263c9479d42a34f15ec6b96fd008a16ad88e58239b68e4216968615"
+    },
+    "drivers/installed-cli.py": {
+      "bytes": 4718,
+      "sha256": "ff7cd71f0b5afd3e635a751f53138399de96ef04a50535a091c37c3e9ac7a0fe"
+    },
+    "drivers/measure-build.py": {
+      "bytes": 4363,
+      "sha256": "d103b8f223921da60097cc2baa29fe7e8c3cf7df33d101fc71c0ac77f02fb164"
+    },
+    "drivers/phased-forces.py": {
+      "bytes": 4886,
+      "sha256": "04a5b74acd1c0d3113521314ff33d257d0e1f46e601cc04af72768a1aa53990e"
+    },
+    "drivers/point-math-census.py": {
+      "bytes": 1275,
+      "sha256": "c597f2cb6e5b76467e8c79dfb2b172f39a12945b81572b2d15957e7e132cd825"
+    },
+    "drivers/qualify-build.py": {
+      "bytes": 10161,
+      "sha256": "73b1b288705577cb7a7c3470675df1b354afe5b8a2afac8adccf48c31b176950"
+    },
+    "drivers/rebind-forces.py": {
+      "bytes": 5177,
+      "sha256": "ec4ef7fa03b66f069bad1b7e3f9322c7116197853529cf31ad582f3b34072376"
+    },
+    "drivers/run-performance-n2.sh": {
+      "bytes": 779,
+      "sha256": "f94a53879074037cef3c820f36c40e8a3a16443a74bb9b47d10165f0f3dd9085"
+    },
+    "drivers/sanitizer-force.py": {
+      "bytes": 1172,
+      "sha256": "75d318143ee11b0629aa8189ed06b7a3f02b66344e595daec432b423d7c77ab6"
+    },
+    "performance-full.json.xz": {
+      "bytes": 62176,
+      "sha256": "43bcd63d778ee5aec155ad2165d8d6cbfdcce65d0c4c63aefe90732cf34d5f4f"
+    },
+    "performance-narrow.json.xz": {
+      "bytes": 68732,
+      "sha256": "4b04a3f27d1a3770d78860a5bbb9c021c362224d85d4c2795c0b4db00bca0e56"
+    },
+    "point-math.json.gz": {
+      "bytes": 40062,
+      "sha256": "068dc5254a44bbefc0e5b0615d19c825d1823108caf5b232227a2fd16d1e9bfd"
+    },
+    "science.json.xz": {
+      "bytes": 95564,
+      "sha256": "817c65c9b0b4ed8ee65b44324862db0590ce2743b49f6627cb9869a0e2949541"
+    },
+    "sharing.json.gz": {
+      "bytes": 1730,
+      "sha256": "ee91f53c48fc456bd66bc4f12d2971fe433b6909826890c3250b255222b72b8a"
+    },
+    "verify.py": {
+      "bytes": 15087,
+      "sha256": "ac4eaf591593dd9c3bd9e0cfc51c8535fb46c5cc9d2b4d29b39138a6b2de2630"
+    }
+  },
+  "reproduction_driver_sources": {
+    "accepted-full-gpu.sh": {
+      "bytes": 1297,
+      "sha256": "f2a8fb243e3dffdba4c4fc93b309d3c5dc6f87ce760fec3bacb2848c1ba524f8"
+    },
+    "accepted-narrow-gpu.sh": {
+      "bytes": 2160,
+      "sha256": "0350fde8b48af282abd7184a2590e45e9de0a633c7cd8ae45ba893bb085f5232"
+    },
+    "alias-forces.py": {
+      "bytes": 2042,
+      "sha256": "7c6bd49abbbbf08c2cef44551b8d8cec9087655ba0f14425e1121fcd7e372ebb"
+    },
+    "analyze-performance.py": {
+      "bytes": 7809,
+      "sha256": "4d632f3289c9416ac7708aa5b5e644903a2fb2a2371acaa4d7b44bdd9853dc33"
+    },
+    "aot-resource-options.cmake": {
+      "bytes": 337,
+      "sha256": "3833527da9061141eb83e648b4e079b7a204729c093d02eae490a7d60d397ea4"
+    },
+    "audit-run.py": {
+      "bytes": 838,
+      "sha256": "07cf82bcee2d5a51bffc17b3248c198ae45d8f4f9488c11352b605b8c0854f69"
+    },
+    "bench-cli-cold.py": {
+      "bytes": 5759,
+      "sha256": "42bae72ec1ecc6880c9bc41c0ba41ee547035d2959d0e1988f57685cc3cc074f"
+    },
+    "bench-native.py": {
+      "bytes": 6482,
+      "sha256": "348aa301c1cee7c35bb70965b4c20bae07a2c3812f86e393e3b1de2e355a2e54"
+    },
+    "bench-suite.py": {
+      "bytes": 1474,
+      "sha256": "7ceda3341892eb8c8c4c68ba77d6e60a3434027732bf863fcff5bf3be8f1bca0"
+    },
+    "freeze-narrow.py": {
+      "bytes": 1108,
+      "sha256": "1eb3b1d5a21ffc8c7e5a3c37cf593044e9ba79df08691188168727c8610302a1"
+    },
+    "installed-cli.py": {
+      "bytes": 3534,
+      "sha256": "c505a28c36456de49e917a090375f7e32782656eaa673d164dab70bd4e0e1181"
+    },
+    "measure-build.py": {
+      "bytes": 4326,
+      "sha256": "0ba674b7c3dab38b04d43e79eccc1c2fcc09c3e79830af9d62f7da57fb020a32"
+    },
+    "phased-forces.py": {
+      "bytes": 4510,
+      "sha256": "4a5bc8b17e90b25424e426a5cdc31836a954f5e0d7dabd77116e020a48d8e8ba"
+    },
+    "point-math-census.py": {
+      "bytes": 953,
+      "sha256": "154b92d267ad2855edb0b560b0538953876733024b1f2d1466c5df78c7e0c5f9"
+    },
+    "qualify-build.py": {
+      "bytes": 9603,
+      "sha256": "1eb9b4bdcd948d4e3f1723de89b899fd9661fca4890c697438619ab392a6efa6"
+    },
+    "rebind-forces.py": {
+      "bytes": 3599,
+      "sha256": "841a52e18d5ea04d871c82cb63a5a819cf7d6110358aeb6ee34659cabb3b5f42"
+    },
+    "run-performance-n2.sh": {
+      "bytes": 779,
+      "sha256": "f94a53879074037cef3c820f36c40e8a3a16443a74bb9b47d10165f0f3dd9085"
+    },
+    "sanitizer-force.py": {
+      "bytes": 888,
+      "sha256": "63e132dfeb98192f4dfcbcfd62c03cc9b1c48cd1176f97f74eaa73bd6fd4667d"
+    }
+  }
+}

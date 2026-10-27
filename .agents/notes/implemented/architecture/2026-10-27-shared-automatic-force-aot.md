@@ -101,9 +101,31 @@ linked/installed bytes, CUDA entry symbols, cubin resources and measured ptxas
 spills. It exports only `compiled-cuda` envelopes through the existing Lane-F
 capability owner; object compilation cannot grant molecular science.
 
-Real-device numerical, resource, lifecycle and endpoint measurements must be
-retained against the exact per-functional incumbent before claiming #1123 done.
-The full catalog build is separate from the narrower force qualification matrix.
+The [retained qualification](../../../../benchmarks/results/shared-automatic-aot-20261027/README.md)
+binds native source `1447e0667d84cd9b3cbaead86a98a44f2719ac29` to the measured
+per-functional incumbent `e59942137e48a5c6767a9d330915cbd97761adc5`. Narrow and
+197-registration packages both execute 180 generic automatic force kernels;
+the full package replaces 394 force CUDA objects with six consumers and six
+host binding objects. Cold/cache-hit compilation, installed bytes, cubin
+resource/spill distributions and exact loaded-object receipts are retained.
+The full catalog build remains separate from molecular-force qualification.
+
+All 42 narrow and 36 full complete-endpoint performance gates pass at the
+original 5% median limit. The 2,080 SDK and 192 installed-process cold samples
+are retained without dropping observations. Independent force-vector checks,
+phased/minimum-workspace comparisons, failure recovery, native lifecycle
+checks and sanitizers pass. The 300 parent finite-difference directions are
+explicitly reused; 120 directions were freshly evaluated for alias/repair cases.
+
+Repackaging can perturb floating-point paths enough to alter the existing SCF
+control flow without changing the accepted physical state. Cold H4 LTA UKS
+keeps 28 SDK Focks but uses one extra occupation-stabilized proposal instead of
+one rejected canonical probe; this adds two matrix products and removes one
+sync and 224 scalar D2H bytes. The CLI's default tile requires 29 rather than
+28 iterations. Retain those exact differences, full vectors and original
+acceptance tolerances rather than labeling all work identical or inferring a
+force-kernel speedup from total time. Future changes must qualify their own
+work, not inherit this campaign-specific allowance.
 
 ## Revisit when
 
