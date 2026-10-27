@@ -1177,6 +1177,16 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_derivative_cuda_shell_aot.cuh")
+  generativeqc_cuda_profile_arguments(_generativeqc_derivative_profile_args)
+  if(NOT GENERATIVEQC_ENABLE_AOT_SHELLS)
+    # No accepted shell bundle is linked. Emit empty derivative registries for
+    # these targets and let the bounded native radial implementation handle them.
+    set(_generativeqc_derivative_profile_args)
+    foreach(architecture IN LISTS _generativeqc_cuda_compile_architectures)
+      list(APPEND _generativeqc_derivative_profile_args --target-architecture "${architecture}")
+    endforeach()
+    list(APPEND _generativeqc_derivative_profile_args --profile portable)
+  endif()
   generativeqc_register_generated_sources(
     NAME generativeqc_derivative_shell_aot_codegen
     TARGET ${target}
@@ -1191,13 +1201,13 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_cost.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_profile.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_selection.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+      "${GENERATIVEQC_AOT_SHELL_MANIFEST}"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
     ARGS
       --output "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
       --radial-manifest "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
-      --production-manifest "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
-      --target-architecture "sm_120"
+      --production-manifest "${GENERATIVEQC_AOT_SHELL_MANIFEST}"
+      ${_generativeqc_derivative_profile_args}
     COMMENT "Generating method-neutral CUDA exact-shell derivative AOT package registry")
 
   set(GENERATIVEQC_DIRECT_RECURRENCE_HEADERS

@@ -24,7 +24,10 @@ def test_cuda_derivative_plans_and_missing_toolchain_fail_closed(
     monkeypatch.setattr(interpreter, "execute", forbidden)
     monkeypatch.setattr(profiles, "find_nvcc", lambda: None)
     compiled = xp.compile(
-        lambda values: xp.sum(values * values), backend="cuda", cache=tmp_path
+        lambda values: xp.sum(values * values),
+        backend="cuda",
+        cache=tmp_path,
+        cuda_arch="sm_80",
     )
     transformed = xp.value_and_grad(compiled)
     values = np.asarray([0.2, 0.7, 1.4], dtype=dtype)
@@ -71,7 +74,7 @@ def test_slurm_native_cuda_primal_and_derivative(
         lambda values: xp.sum(xp.exp(-values * values)),
         backend="cuda",
         cache=tmp_path,
-        cuda_arch=os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"),
+        cuda_arch=os.environ.get("GENERATIVEQC_TENSOR_ARCH"),
     )
     values = np.asarray([0.2, 0.7, 1.4], dtype=dtype)
     expected = np.exp(-values * values)
