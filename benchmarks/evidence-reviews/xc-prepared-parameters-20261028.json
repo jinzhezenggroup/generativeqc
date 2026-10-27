@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "xc-prepared-parameters-20261028",
+  "owner": "Automatic XC compiler and CUDA point qualification",
+  "reason": "Lossless default-promotion evidence retains all 416 paired point measurements, 350 isolated complete SCF calls, 210 separately classified pilot calls, 52 independent public-KS oracle receipts, exact generated sources, reconstruction patches, compiler/cache provenance and rejected ablations. Complete populations are required to assess the sub-percent runtime changes; binaries and raw SASS remain ignored local artifacts.",
+  "review_document": "benchmarks/results/xc-prepared-parameters-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/xc-prepared-parameters-20261028/receipts.json.xz",
+      "family": "xc-prepared-parameters-20261028",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-and-point-qualification",
+      "bytes": 284648,
+      "sha256": "2265560c799872163fd33926ab9eab9d01dc3a00c1849be42207b2d90a5b32a8"
+    }
+  ]
+}
