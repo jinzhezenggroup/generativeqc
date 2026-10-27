@@ -66,6 +66,25 @@ std::uint32_t PreparedSymmetricEigenHandles::configure_jacobi(double tolerance, 
   return static_cast<std::uint32_t>(status);
 }
 
+std::optional<std::uint32_t> PreparedSymmetricEigenHandles::retire_jacobi_current() noexcept {
+  if (!jacobi_) return {};
+  const auto status = cusolverDnDestroySyevjInfo(static_cast<syevjInfo_t>(jacobi_));
+  if (status == CUSOLVER_STATUS_SUCCESS) jacobi_ = nullptr;
+  return static_cast<std::uint32_t>(status);
+}
+std::optional<std::uint32_t> PreparedSymmetricEigenHandles::retire_parameters_current() noexcept {
+  if (!parameters_) return {};
+  const auto status = cusolverDnDestroyParams(static_cast<cusolverDnParams_t>(parameters_));
+  if (status == CUSOLVER_STATUS_SUCCESS) parameters_ = nullptr;
+  return static_cast<std::uint32_t>(status);
+}
+std::optional<std::uint32_t> PreparedSymmetricEigenHandles::retire_solver_current() noexcept {
+  if (!solver_) return {};
+  const auto status = cusolverDnDestroy(static_cast<cusolverDnHandle_t>(solver_));
+  if (status == CUSOLVER_STATUS_SUCCESS) solver_ = nullptr;
+  return static_cast<std::uint32_t>(status);
+}
+
 void PreparedSymmetricEigenHandles::reset() noexcept {
   if (jacobi_) (void)cusolverDnDestroySyevjInfo(static_cast<syevjInfo_t>(jacobi_));
   if (parameters_) (void)cusolverDnDestroyParams(static_cast<cusolverDnParams_t>(parameters_));

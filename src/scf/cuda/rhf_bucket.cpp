@@ -407,6 +407,17 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     const ScfOptions& requested_options,
     const std::vector<const std::vector<double>*>& initial_densities, int device_id,
     bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling) {
+  std::unique_lock<std::recursive_mutex> provider_guard;
+  if (auto owner = requested_options.reference_provider_initialization_owner) {
+    provider_guard = owner->acquire_borrow_lock();
+    owner->require_current();
+    if (!requested_options.reference_provider_initialization_intent ||
+        owner->allowance_bytes() !=
+            requested_options.reference_provider_initialization_intent->allowance_bytes() ||
+        requested_options.reference_provider_initialization || unrestricted || systems.size() != 1)
+      throw std::invalid_argument("pending reference owner/domain mismatch");
+  } else if (requested_options.reference_provider_initialization_intent)
+    throw std::invalid_argument("pending reference intent has no native lifetime owner");
   if (requested_options.hooks || requested_options.strict_initial_density) {
     // Host callbacks are an explicit CPU capability, never a device fallback.
     std::vector<RhfBucketItem> outputs(systems.size());
@@ -501,8 +512,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
        (*plan)->one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        (*plan)->mixed_precision_fock != mixed_precision_fock ||
        (*plan)->mixed_precision_fock_threshold != mixed_precision_fock_threshold)) {
-    delete *plan;
-    *plan = nullptr;
+    if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
+      throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
   }
   bool execution_plan_reused = *plan != nullptr && (*plan)->initialized;
   if (execution_plan_reused) {
@@ -511,11 +522,40 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     (*plan)->options.reference_memory_budget_bytes = options.reference_memory_budget_bytes;
   }
   if (*plan == nullptr) {
-    *plan = new (std::nothrow) CudaRhfBucketPlan{};
-    if (*plan == nullptr) {
-      std::vector<RhfBucketItem> outputs(systems.size());
-      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-      return outputs;
+    if (auto owner = options.reference_provider_initialization_owner) {
+      if (owner->bucket())
+        throw ProviderInitializationUnavailable(
+            "reference source still borrows the original bucket");
+      auto candidate_plan =
+          std::unique_ptr<CudaRhfBucketPlan>(new (std::nothrow) CudaRhfBucketPlan{});
+      if (!candidate_plan) {
+        std::vector<RhfBucketItem> outputs(systems.size());
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+        return outputs;
+      }
+      candidate_plan->options = options;
+      auto* raw = candidate_plan.release();
+      try {
+        owner->attach_bucket(raw);
+      } catch (...) {
+        if (owner->bucket() != raw)
+          delete raw;  // still inert and not adopted
+        else {
+          try {
+            (void)owner->close_current();
+          } catch (...) {
+          }
+        }
+        throw;
+      }
+      *plan = raw;
+    } else {
+      *plan = new (std::nothrow) CudaRhfBucketPlan{};
+      if (*plan == nullptr) {
+        std::vector<RhfBucketItem> outputs(systems.size());
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+        return outputs;
+      }
     }
   }
   std::vector<initial_guess::PreliminaryDiagnostic> seed_diagnostics;
@@ -537,16 +577,18 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     } catch (...) {
       // Publication/allocation failures can leave a partially written arena.
       // Release it before propagating; never certify or reuse that generation.
-      delete *plan;
-      *plan = nullptr;
+      // Preserve the original driver/factory exception on unavailable close.
+      // The context-owned calculation still retains the complete native owner.
+      (void)try_retire_rhf_cuda_bucket_plan(plan);
       throw;
     }
   };
   std::vector<RhfBucketItem> outputs = execute_driver();
-  const bool retry_without_cublas = !(*plan)->initialized && (*plan)->retry_without_cublas;
+  const bool retry_without_cublas = !options.reference_provider_initialization_owner &&
+                                    !(*plan)->initialized && (*plan)->retry_without_cublas;
   if (!(*plan)->initialized) {
-    delete *plan;
-    *plan = nullptr;
+    if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
+      throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
   }
   if (retry_without_cublas) {
     execution_plan_reused = false;
@@ -562,8 +604,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     outputs = execute_driver();
     for (auto& output : outputs) ++output.scf.precision.execution_retries;
     if (!(*plan)->initialized) {
-      delete *plan;
-      *plan = nullptr;
+      if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
+        throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
     }
   }
   for (std::size_t index = 0; index < seed_diagnostics.size(); ++index) {
@@ -602,8 +644,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     // Release the original bucket before a single-item core retry. Never keep
     // two GPU arenas live or rerun already successful peers to repair one seed.
     candidate = cuda_execution::HostBatch{};
-    delete *plan;
-    *plan = nullptr;
+    if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
+      throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
     execution_plan_reused = false;
     auto target_options = options;
     target_options.preliminary_guess.reset();
@@ -642,8 +684,6 @@ std::vector<RhfBucketItem> run_uhf_cuda_bucket_cached(
   return run_hf_cuda_bucket_cached(plan, systems, options, initial_densities, device_id, true,
                                    shell_class_profiling, inactive_eigensolver_profiling);
 }
-
-void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
 
 void set_rhf_cuda_bucket_warm_start_updates(CudaRhfBucketPlan* plan, bool enabled) noexcept {
   if (plan == nullptr || plan->warm_start_updates_enabled == enabled) return;
@@ -748,6 +788,34 @@ std::vector<RhfBucketItem> run_uhf_cuda_bucket(
     destroy_rhf_cuda_bucket_plan(plan);
     throw;
   }
+}
+
+bool try_retire_rhf_cuda_bucket_plan(CudaRhfBucketPlan** slot) noexcept {
+  if (!slot || !*slot) return false;
+  auto* plan = *slot;
+  if (auto owner = plan->options.reference_provider_initialization_owner) {
+    try {
+      if (!owner->close_current().confirmed()) return false;
+      *slot = nullptr;
+      return true;
+    } catch (...) {
+      return false;
+    }
+  }
+  delete std::exchange(*slot, nullptr);
+  return true;
+}
+
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept {
+  if (!plan) return;
+  if (auto owner = plan->options.reference_provider_initialization_owner) {
+    try {
+      (void)owner->close_current();
+    } catch (...) {
+    }
+    return;
+  }
+  delete plan;
 }
 
 }  // namespace generativeqc::scf

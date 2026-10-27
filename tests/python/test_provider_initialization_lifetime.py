@@ -1,0 +1,170 @@
+"""SDK failure and handle-lifetime contracts, without loading a native library."""
+
+from __future__ import annotations
+
+import ctypes
+import importlib
+import sys
+import threading
+import types
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def lifetime(monkeypatch: pytest.MonkeyPatch) -> Any:
+    package = types.ModuleType("_provider_lifetime_contract")
+    package.__path__ = [str(ROOT / "python/generativeqc")]
+    monkeypatch.setitem(sys.modules, package.__name__, package)
+    # These tests exercise the Python ownership transaction. The public C ABI
+    # calls are supplied below, so importing the native library loader is unnecessary.
+    monkeypatch.setitem(
+        sys.modules,
+        package.__name__ + "._native",
+        types.ModuleType(package.__name__ + "._native"),
+    )
+    module = importlib.import_module(
+        package.__name__ + "._provider_initialization_lifetime"
+    )
+    yield module
+    for name in list(sys.modules):
+        if name.startswith(package.__name__ + "."):
+            sys.modules.pop(name, None)
+
+
+class Function:
+    def __init__(self, function: Any) -> None:
+        self.function = function
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *args: Any) -> Any:
+        return self.function(*args)
+
+
+class Library:
+    def __init__(self, status: int = 0) -> None:
+        self.status = status
+        self.calls: list[tuple[str, int | None]] = []
+        self.generativeqc_context_close_provider_initialization_v1 = Function(
+            lambda handle: self.record("close", handle) or self.status
+        )
+        self.generativeqc_context_get_last_detail = Function(
+            lambda handle: b"operation=solver/release;state=returned;raw_status=7"
+        )
+        self.generativeqc_calculation_destroy = Function(
+            lambda handle: self.record("calculation", handle)
+        )
+        self.generativeqc_system_destroy = Function(
+            lambda handle: self.record("system", handle)
+        )
+        self.generativeqc_context_destroy = Function(
+            lambda handle: self.record("context", handle)
+        )
+
+    def record(self, name: str, handle: Any) -> None:
+        self.calls.append((name, handle.value))
+
+
+def populated(lifetime: Any, library: Library, owner: Any = None) -> Any:
+    transaction = lifetime.begin(library, owner)
+    transaction.context = ctypes.c_void_p(11)
+    transaction.system = ctypes.c_void_p(22)
+    transaction.auxiliary_system = ctypes.c_void_p(33)
+    transaction.calculation = ctypes.c_void_p(44)
+    return transaction
+
+
+def test_failed_close_retains_handles_and_native_detail(lifetime: Any) -> None:
+    library = Library(3)
+    transaction = populated(lifetime, library)
+    lease = object()
+    transaction.budget_lease = lease
+    with pytest.raises(lifetime.ProviderInitializationCloseUnavailable) as raised:
+        transaction.close()
+    assert raised.value.status == 3
+    assert (
+        raised.value.detail_bytes
+        == b"operation=solver/release;state=returned;raw_status=7"
+    )
+    assert lifetime.has_pending_owner()
+    assert transaction.calculation.value == 44 and transaction.system.value == 22
+    assert transaction.auxiliary_system.value == 33 and transaction.context.value == 11
+    assert transaction.budget_lease is lease
+    assert library.calls == [("close", 11)]
+
+
+def test_primary_error_survives_secondary_close_failure(lifetime: Any) -> None:
+    primary = ValueError("original scientific error")
+    transaction = populated(lifetime, Library(3))
+    transaction.close_preserving_primary(primary)
+    assert str(primary) == "original scientific error"
+    assert isinstance(
+        primary.provider_initialization_close_error,
+        lifetime.ProviderInitializationCloseUnavailable,
+    )
+    assert lifetime.has_pending_owner()
+    assert any("Secondary provider close failure" in note for note in primary.__notes__)
+
+
+def test_success_closes_dependents_before_releasing_transaction(lifetime: Any) -> None:
+    library = Library()
+    transaction = populated(lifetime, library)
+
+    class Lease:
+        def close(self) -> None:
+            assert lifetime.has_pending_owner()
+            assert transaction.context.value is None
+            library.calls.append(("budget", None))
+
+    transaction.budget_lease = Lease()
+    transaction.close()
+    assert library.calls == [
+        ("close", 11),
+        ("calculation", 44),
+        ("system", 22),
+        ("system", 33),
+        ("context", 11),
+        ("budget", None),
+    ]
+    assert not lifetime.has_pending_owner()
+
+
+def test_retained_owner_blocks_a_second_library(lifetime: Any) -> None:
+    first, second = Library(3), Library()
+    transaction = populated(lifetime, first)
+    with pytest.raises(RuntimeError, match="still retained"):
+        lifetime.begin(second, None)
+    assert second.calls == []
+    with pytest.raises(lifetime.ProviderInitializationCloseUnavailable):
+        transaction.close()
+    with pytest.raises(RuntimeError, match="still retained"):
+        lifetime.begin(second, None)
+
+
+def test_failure_before_context_creation_releases_empty_transaction(
+    lifetime: Any,
+) -> None:
+    library = Library()
+    transaction = lifetime.begin(library, None)
+    transaction.close_preserving_primary(ValueError("context was never created"))
+    assert library.calls == []
+    assert not lifetime.has_pending_owner()
+
+
+def test_shared_context_survives_confirmed_provider_close(lifetime: Any) -> None:
+    owner = types.SimpleNamespace(
+        lock=threading.RLock(), _provider_initialization_retained=False
+    )
+    library = Library()
+    transaction = populated(lifetime, library, owner)
+    assert owner._provider_initialization_retained
+    transaction.close()
+    assert ("context", 11) not in library.calls
+    assert transaction.context.value == 11
+    assert not owner._provider_initialization_retained
+    assert not lifetime.has_pending_owner()

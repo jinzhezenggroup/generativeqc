@@ -200,6 +200,10 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
              second.reference_iteration_screening_tolerance &&
          first.compute_forces == second.compute_forces &&
          first.export_physical_reference == second.export_physical_reference &&
+         first.reference_provider_initialization_intent ==
+             second.reference_provider_initialization_intent &&
+         first.reference_provider_initialization_owner ==
+             second.reference_provider_initialization_owner &&
          same_provider_initialization_request(first.reference_provider_initialization,
                                               second.reference_provider_initialization) &&
          first.precision_mode == second.precision_mode &&

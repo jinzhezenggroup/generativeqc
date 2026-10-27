@@ -12,6 +12,7 @@
 #include "methods/hf_method.hpp"
 #include "methods/method.hpp"
 #include "methods/mp2_method.hpp"
+#include "methods/provider_initialization_intent.hpp"
 #include "methods/rccsd_method.hpp"
 #include "methods/rccsdt_method.hpp"
 #include "methods/uccsd_method.hpp"
@@ -274,6 +275,26 @@ std::unique_ptr<PreparedCalculation> prepare_calculation(
   validate_preliminary_system(descriptor, system);
   return definition.prepare_calculation(definition.provider.domain, context, system, descriptor,
                                         auxiliary_basis);
+}
+
+void prepare_calculation_with_provider_initialization_intent_into(
+    core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis,
+    scf::ProviderInitializationIntent intent, std::unique_ptr<PreparedCalculation>& destination) {
+  require_provider_initialization_intent_scope(context, system, descriptor);
+  const MethodDefinition& definition = require_available(descriptor.method);
+  validate_option_family(definition, descriptor, context.requested_backend);
+  validate_system(definition, system);
+  validate_preliminary_system(descriptor, system);
+  if (descriptor.method == GENERATIVEQC_METHOD_MP2) {
+    detail::prepare_mp2_calculation_with_provider_initialization_intent_into(
+        definition.provider.domain, context, system, descriptor, auxiliary_basis, intent,
+        destination);
+  } else {
+    detail::prepare_rccsd_calculation_with_provider_initialization_intent_into(
+        definition.provider.domain, context, system, descriptor, auxiliary_basis, intent,
+        destination);
+  }
 }
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,

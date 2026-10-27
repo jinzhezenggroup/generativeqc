@@ -138,6 +138,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc_nonlocal_plan_destroy](#native-c-generativeqc-nonlocal-plan-destroy)
 - [generativeqc_nonlocal_plan_get_diagnostic](#native-c-generativeqc-nonlocal-plan-get-diagnostic)
 - [generativeqc_nonlocal_plan_execute](#native-c-generativeqc-nonlocal-plan-execute)
+- [generativeqc_provider_initialization_intent_version](#native-c-generativeqc-provider-initialization-intent-version)
+- [generativeqc_provider_initialization_capabilities_v1](#native-c-generativeqc-provider-initialization-capabilities-v1)
+- [generativeqc_calculation_prepare_with_provider_initialization_v1](#native-c-generativeqc-calculation-prepare-with-provider-initialization-v1)
+- [generativeqc_context_close_provider_initialization_v1](#native-c-generativeqc-context-close-provider-initialization-v1)
 - [generativeqc::Error](#native-cpp-generativeqc-error)
 - [generativeqc::Error::Error](#native-cpp-generativeqc-error-error)
 - [generativeqc::Error::status](#native-cpp-generativeqc-error-status)
@@ -3926,6 +3930,116 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 derived sigma=|grad rho|^2 Bohr^-8; energy Hartree. vrho/vsigma follow the unweighted
 functional-derivative convention before outer quadrature weights. Point/weight outputs
 differentiate independent fixed-grid coordinates/weights, not full nuclear motion.
+
+(native-c-generativeqc-provider-initialization-intent-version)=
+## generativeqc_provider_initialization_intent_version
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_provider_initialization_intent_version ( void ) ;
+```
+
+**Behavior.** Report the supported standalone intent ABI version.
+
+**Inputs.** None.
+
+**Outputs.** Returns 1.
+
+**Errors.** None.
+
+**Lifetime.** Retains no caller storage.
+
+**Execution.** Synchronous host metadata; no device or provider observation.
+
+**Units.** Dimensionless version.
+
+(native-c-generativeqc-provider-initialization-capabilities-v1)=
+## generativeqc_provider_initialization_capabilities_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_provider_initialization_capabilities_v1 ( void ) ;
+```
+
+**Behavior.** Report compiled software transport support, never qualification.
+
+**Inputs.** None.
+
+**Outputs.** Returns supported scalar conventional CUDA MP2/RCCSD bits.
+
+**Errors.** Unsupported builds return zero.
+
+**Lifetime.** Retains no caller storage.
+
+**Execution.** Synchronous host metadata; no context creation or CUDA query.
+
+**Units.** Dimensionless bit mask.
+
+(native-c-generativeqc-calculation-prepare-with-provider-initialization-v1)=
+## generativeqc_calculation_prepare_with_provider_initialization_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_provider_initialization_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * method , const generativeqc_provider_initialization_intent_v1 * intent , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Snapshot pending intent and delegate to the existing private
+candidate/publisher. NULL or a valid LEGACY_DEFAULT intent uses ordinary
+preparation. PENDING is limited to scalar restricted conventional CUDA
+MP2/RCCSD physical references; unsupported domains reject before publication.
+Actual identity is captured later by the native owner in its established
+context, never supplied or certified by this descriptor.
+
+**Inputs.** Valid context/system/method/output plus an optional complete v1 intent.
+
+**Outputs.** SUCCESS publishes one calculation through the existing publisher.
+With otherwise valid pointer arguments, failure leaves *calculation NULL.
+
+**Errors.** Bad intent header/version returns ABI_MISMATCH; malformed controls
+return INVALID_ARGUMENT; unsupported domain/build returns NOT_IMPLEMENTED.
+Existing preparation errors and accounting-basis refusals propagate.
+
+**Lifetime.** Intent storage need only outlive this call; plans own copied values.
+The complete intent is snapshotted before modifying calculation output.
+
+**Execution.** Synchronous preparation; this transport performs no identity probe,
+context create/reset/switch, numerical solve or independent publication.
+
+**Units.** allowance_bytes is a byte reservation, charged by the native owner.
+
+(native-c-generativeqc-context-close-provider-initialization-v1)=
+## generativeqc_context_close_provider_initialization_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_context_close_provider_initialization_v1 ( generativeqc_context * context ) ;
+```
+
+**Behavior.** Close a retained explicit provider owner before deleting SDK handles.
+A context with no explicit owner succeeds without a provider observation.
+
+**Inputs.** A valid live context; no caller identity or qualification metadata.
+
+**Outputs.** SUCCESS confirms owner closure but does not delete a published
+calculation or context. It reclaims an unpublished failed candidate only
+after its complete close is confirmed.
+
+**Errors.** NULL returns INVALID_ARGUMENT. Unavailable or failed owner close
+preserves its native status/detail and retains the original owner and budget.
+
+**Lifetime.** Failed close retains the context, plan, pins and original allowance.
+The caller keeps these handles alive until confirmation; void destroy refuses
+deletion of unconfirmed explicit owners.
+
+**Execution.** Synchronous native close in the original ambient context. Never
+creates, selects, retains or resets a context. An attempted uncertain physical
+close is latched by the physical owner and cannot be retried as cleanup.
+
+**Units.** Dimensionless native status; no allocation or peak is inferred.
 
 (native-cpp-generativeqc-error)=
 ## generativeqc::Error

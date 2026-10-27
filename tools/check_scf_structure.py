@@ -282,6 +282,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "scf/provider_initialization.hpp",
+    "scf/provider_initialization_teardown.hpp",
     "solver/cuda/symmetric_eigen_handles.hpp",
     "scf/cuda/resources.",
     "scf/cuda/eigensolver.",
@@ -289,6 +290,17 @@ CUDA_ALLOWED["cuda_resources"] = (
     "runtime/resource_cuda.cuh",
     "runtime/residency_cuda.cuh",
     "runtime/allocation_measurement.hpp",
+)
+CUDA_MODULES["cuda_provider_owner"] = ("rhf_provider_owner",)
+CUDA_ALLOWED["cuda_provider_owner"] = (
+    "runtime/allocation_measurement.hpp",
+    "runtime/residency_cuda.cuh",
+    "runtime/resource_cuda.cuh",
+    "runtime/resource_usage.hpp",
+    "scf/cuda/direct_tile_validation.hpp",
+    "scf/cuda/rhf_bucket_internal.hpp",
+    "scf/provider_initialization_runtime.hpp",
+    "scf/provider_initialization_owner.hpp",
 )
 CUDA_MODULES["cuda_provider_initialization"] = ("provider_initialization",)
 CUDA_ALLOWED["cuda_provider_initialization"] = (
@@ -671,6 +683,7 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
 )
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
+    "scf/provider_initialization_teardown.hpp",
     "runtime/allocation_measurement.hpp",
     "runtime/residency_cuda.cuh",
     "runtime/residency_observer.hpp",
@@ -823,6 +836,7 @@ CUDA_ALLOWED["cuda_reference_export"] = (
 # or a consumer of solver equations. Only the raw ERI provider surface is used.
 CUDA_MODULES["cuda_rhf_source_handoff"] = ("rhf_source_handoff",)
 CUDA_ALLOWED["cuda_rhf_source_handoff"] = (
+    "scf/cuda/rhf_source_view.hpp",
     "core/types.hpp",
     "integrals/electron_interaction_source.hpp",
     "posthf/capacity.hpp",

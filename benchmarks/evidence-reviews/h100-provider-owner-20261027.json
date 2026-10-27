@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-provider-owner-20261027",
+  "owner": "provider-initialization ownership qualification",
+  "reason": "Retain the exact engineering source closure and privacy-redacted build/native export for the bounded H100 resource-lifetime run. This storage justification does not qualify a scientific endpoint or recover redacted original boot-ID bytes.",
+  "review_document": "benchmarks/results/h100-provider-owner-20261027/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/receipt.json.xz",
+      "family": "h100-provider-owner-20261027",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Model-free engineering API/close records, generated build export and 36-case HOST contract receipt; privacy limitations remain explicit.",
+      "bytes": 176428,
+      "sha256": "b08d6a16f64f4b6e83d1f320db6d75fe8dc7d64f2a038fc8342387ab97b3d6e4"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/source-closure.json.xz",
+      "family": "h100-provider-owner-20261027",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Actual finite probe, real API forwarders, lifecycle harness and source/build-input closure needed to reproduce this engineering binary.",
+      "bytes": 184588,
+      "sha256": "09a4c84312d389d0ef29b6fe430df338f2f1dac7d4a46b26fc820dbe1d2d3fa5"
+    }
+  ]
+}

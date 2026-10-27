@@ -1,0 +1,39 @@
+{
+  "schema": "generativeqc.h100-provider-owner-summary.v1",
+  "source_manifest_sha256": "0be95683a2114662e9ac054bf9850f5a7352fe6f8291ff0d2f67ffc72dc78e9f",
+  "binary": {
+    "bytes": 871240,
+    "sha256": "0a50f36d821ee663e68c202c275fb187390b9b1c178b45fced79bc894202342b",
+    "mode": "0o755",
+    "device_raw": 2097238,
+    "inode": 9210804762,
+    "mtime_ns": 1793084055222498819,
+    "ctime_ns": 1793084055222498819
+  },
+  "A": 536870912,
+  "B_ref": 2147483648,
+  "B_endpoint": 2147483648,
+  "native_returncode": 0,
+  "native_group_absent": true,
+  "native_reaped": true,
+  "original_native_limit_seconds": 90,
+  "api_success_records": 53,
+  "inventory_slots": 21,
+  "close_operations": 24,
+  "observed_synchronized_free_delta_bytes": 375390208,
+  "host_contract_tests": 36,
+  "default_allowance_changed": false,
+  "science": "NOT_RUN",
+  "installed_sdk": "INCOMPLETE",
+  "privacy_redacted_originals": "UNAVAILABLE_IN_PUBLIC_CAPSULE",
+  "archives": {
+    "receipt.json.xz": {
+      "bytes": 176428,
+      "sha256": "b08d6a16f64f4b6e83d1f320db6d75fe8dc7d64f2a038fc8342387ab97b3d6e4"
+    },
+    "source-closure.json.xz": {
+      "bytes": 184588,
+      "sha256": "09a4c84312d389d0ef29b6fe430df338f2f1dac7d4a46b26fc820dbe1d2d3fa5"
+    }
+  }
+}
