@@ -287,6 +287,8 @@ def emit_native_stationary_profile_cuda(
     # profile shares the existing large-system crossover and resource guards.
     metadata = f"""
 namespace generativeqc_stationary_cuda {{
+constexpr double native_short_exchange = {exact_cuda_literal(sr.coefficient if sr else 0)};
+constexpr double native_long_exchange = {exact_cuda_literal(lr.coefficient if lr else 0)};
 constexpr int native_short_exchange_slot = {slots.get("exchange_short_range", -1)};
 constexpr int native_long_exchange_slot = {slots.get("exchange_long_range", -1)};
 constexpr int native_nonlocal_slot = {slots.get("nonlocal_ao", -1)};

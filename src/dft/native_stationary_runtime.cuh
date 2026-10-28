@@ -30,7 +30,8 @@ size_t native_numeric_bytes(size_t atoms, size_t aos, size_t primitives, size_t 
                             size_t tasks, size_t spins, size_t lanes, bool center_cache) {
   const auto bounded =
       allocation(atoms, aos, primitives, points, tasks, spins, lanes, center_cache);
-  return bounded + (center_cache ? native_phased_becke_bytes(atoms, points, lanes) : 0);
+  return generativeqc::runtime::size_add(
+      bounded, center_cache ? native_phased_becke_bytes(atoms, points, lanes) : 0);
 }
 
 /** Disjoint source slots may be populated on the existing provider stream.
@@ -190,8 +191,9 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
     cuda_check(cudaStreamIsCapturing(stream, &capture));
     if (capture != cudaStreamCaptureStatusNone)
       throw std::invalid_argument("native stationary sources require a noncapturing stream");
-    if (owner->integral_pending && owner->integral_stream != stream)
-      throw std::invalid_argument("native stationary integral producer changed before drain");
+    // Independent fitted/range providers retain their ordinary streams. Finish
+    // the preceding borrow before the next provider may read or replace a slot.
+    if (owner->integral_pending && owner->integral_stream != stream) native_drain_integrals(*owner);
     size_t slot = 0;
     uint64_t mask = 0;
     double* second = nullptr;
@@ -199,6 +201,37 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       slot = native_one_electron_slot;
     } else if (view->kind == CudaDerivativeSourceKind::OverlapPulay) {
       slot = native_overlap_slot;
+    } else if (view->kind == CudaDerivativeSourceKind::Coulomb) {
+      slot = native_coulomb_slot;
+    } else if (view->kind == CudaDerivativeSourceKind::Exchange) {
+      if constexpr (native_short_exchange_slot >= 0)
+        slot = size_t(native_short_exchange_slot);
+      else if constexpr (native_exchange_slot >= 0)
+        slot = native_exchange_storage_slot;
+      else
+        throw std::invalid_argument("profile has no exchange source");
+    } else if (view->kind == CudaDerivativeSourceKind::RangeCorrection) {
+      if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {
+        const auto short_mask = uint64_t{1} << native_short_exchange_slot;
+        const auto long_mask = uint64_t{1} << native_long_exchange_slot;
+        if (view->channels != 1 || !(owner->integral_mask & short_mask) ||
+            (owner->integral_mask & long_mask))
+          throw std::invalid_argument("mixed range source is incomplete or duplicated");
+        const auto fraction =
+            native_short_exchange / (native_long_exchange - native_short_exchange);
+        owner->integral_stream = stream;
+        owner->integral_pending = true;
+        cuda_check(generativeqc::dft::launch_native_stationary_range_correction(
+            view->values, view->coordinates, fraction,
+            view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0,
+            scientific.sources + size_t(native_short_exchange_slot) * view->coordinates,
+            scientific.sources + size_t(native_long_exchange_slot) * view->coordinates,
+            scientific.context.error, stream));
+        ++scientific.launches;
+        owner->integral_mask |= long_mask;
+        return;
+      } else
+        throw std::invalid_argument("profile has no range exchange sources");
     } else if (view->kind == CudaDerivativeSourceKind::FullRangeJk) {
       slot = native_coulomb_slot;
       if (view->channels != 2 || view->convention != CudaDerivativeConvention::Force)

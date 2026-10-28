@@ -269,6 +269,9 @@ struct Plan {
   void clear_warm_start() { cuda.clear_warm_start(); }
   void add_prepared_native_forces(Result&) { throw std::logic_error("unexpected force request"); }
   void apply_dispersion(Result&) {}
+  // This fixture models cold preparation without a NumericCap DF reservation.
+  // The production batch preflight must see that there is no energy-only promise.
+  bool has_energy_only_df_capacity_promise() const noexcept { return false; }
   scf::ScfResult run_cpu(const std::vector<double>*, bool, bool, bool) {
     throw std::logic_error("unexpected CPU execution");
   }

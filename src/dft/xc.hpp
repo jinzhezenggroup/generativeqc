@@ -338,6 +338,13 @@ PbeStationaryXcDerivative stationary_curated_xc_derivative(
     const std::vector<std::vector<double>>& density, std::size_t tile_points,
     SemilocalFamily family, double exchange_scale, double correlation_scale);
 
+/** Use the prepared SCF's compiled semilocal program for the same analytic
+ * AO, moving-grid and partition pullback as curated LDA/GGA/meta-GGA methods. */
+PbeStationaryXcDerivative stationary_program_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    const SemilocalPointProgram& program);
+
 }  // namespace generativeqc::dft
 
 #endif

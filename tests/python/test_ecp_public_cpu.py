@@ -144,17 +144,18 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
 def assert_ecp_force_work(
     batch: typing.Any, successful_indices: tuple[int, ...] = (0, 1)
 ) -> list[dict[str, typing.Any]]:
-    """Only successful compatibility consumers publish generated-force work."""
-    assert not batch._native_dft_force_eligible(0)
-    native_fragment = batch._native_dft_force_eligible(1)
-    if batch._calculator._device_name == "cpu":
-        assert native_fragment, "the all-electron fragment lost native force admission"
+    """Native forces own their ledger; only compatibility calls publish here."""
+    native = tuple(batch._native_dft_force_eligible(i) for i in (0, 1))
     selected = getattr(
         batch._library, "generativeqc_ks_batch_execute_selected_forces_v1", None
     )
-    # A library without the additive bridge still routes the whole mixed fleet
-    # through compatibility consumers. Native work belongs to the native ledger.
-    compatibility_indices = (0,) if native_fragment and selected else (0, 1)
+    # Older libraries without selective execution keep a whole-fleet fallback
+    # when only one member is qualified. A fully native fleet needs no bridge.
+    if any(native) and not all(native) and selected is None:
+        native = (False, False)
+    compatibility_indices = tuple(
+        i for i, admitted in enumerate(native) if not admitted
+    )
     work = batch.resource_diagnostics["generated_force"]
     assert [item["index"] for item in work] == [
         index for index in compatibility_indices if index in successful_indices
@@ -208,6 +209,12 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
     with bounded.prepare_batch(
         systems, charges=charges, multiplicities=multiplicities
     ) as batch:
+        if getattr(
+            batch._library, "generativeqc_ks_batch_supported_properties_v1", None
+        ):
+            assert batch._native_dft_force_eligible(), (
+                "ECP and fragment must both be native"
+            )
         started = perf_counter()
         cold = batch.execute(strict=True)
         record_property("batch_cold_seconds", perf_counter() - started)
@@ -262,7 +269,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             else:
                 assert component_execution == "python"
                 assert "component_contract_runtime_compilations" not in generated
-        if d_shell:
+        if d_shell and work:
             schedule = work[0]["work"]
             assert schedule["primitive_compiled_kernels"] == 362
             assert schedule["primitive_translation_units"] == 46
@@ -305,6 +312,11 @@ def test_public_ecp_force_failure_is_transactional_and_closes_snapshot(
 
     with calc.prepare_batch([atoms, fragment]) as batch:
         with monkeypatch.context() as patch:
+            # Exercise the retained old-library consumer explicitly now that
+            # the current prepared ECP owner provides native forces.
+            patch.setattr(
+                batch._library, "generativeqc_ks_batch_supported_properties_v1", None
+            )
             patch.setattr(_stationary_cpu, "complete_rks_gradient_diagnostic", rejected)
             patch.setattr(NativeKsSnapshot, "ecp_derivatives", forbidden)
             result = batch.execute()
@@ -482,6 +494,9 @@ def test_legacy_library_retains_ecp_and_fragment_work(
     monkeypatch.setattr(
         _native.load_library(), "generativeqc_ks_batch_execute_selected_forces_v1", None
     )
+    monkeypatch.setattr(
+        _native.load_library(), "generativeqc_ks_batch_supported_properties_v1", None
+    )
     check_spd_paired_endpoint("spherical", monkeypatch, record_property)
 
 
@@ -515,6 +530,13 @@ def check_spd_paired_endpoint(
             return value
 
         with monkeypatch.context() as patch:
+            # This compares the two retained compatibility component consumers;
+            # native end-to-end ownership has its own independent force gates.
+            patch.setattr(
+                _native.load_library(),
+                "generativeqc_ks_batch_supported_properties_v1",
+                None,
+            )
             patch.setattr(_stationary_cpu, "complete_rks_gradient_diagnostic", selected)
             test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
                 "pbe-rks",
@@ -543,33 +565,38 @@ def check_spd_paired_endpoint(
 
 @pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks"])
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
-def test_ecp_force_promotion_rejects_named_and_custom_hybrids_before_preparation(
+def test_ecp_force_admission_uses_prepared_hybrid_program(
     method: str, representation: str, monkeypatch: typing.Any
 ) -> None:
-    """Only unit semilocal, zero-K compositions may inherit public ECP forces."""
+    """Named and admitted scaled hybrids use native ECP; other graphs stay closed."""
+    from generativeqc.batch import PreparedBatch
+
     spin = int(method.endswith("uks"))
     atoms, record, _ = fixture(spin=spin, representation=representation)
-
-    # Positive controls: the already-qualified pure LDA/PBE ECP endpoints stay public.
     suffix = "uks" if spin else "rks"
-    for pure_method in (f"lda-{suffix}", f"pbe-{suffix}"):
-        pure = calculator(record, pure_method)
-        assert pure.ks_options.coefficients == (1.0, 1.0, 0.0)
-        assert "forces" in pure._capabilities.supported_properties
 
-    named_hybrids = [
-        calculator(record, f"pbe0-{suffix}"),
-        calculator(record, f"b3lyp-{suffix}"),
-    ]
-    for named in named_hybrids:
-        assert named.ks_options.coefficients != (1.0, 1.0, 0.0)
-        assert "forces" not in named._capabilities.supported_properties
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+        pytest.fail("prepared hybrid force admission escaped to Python")
 
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", forbidden)
+    for name in ("lda", "pbe", "pbe0", "b3lyp", "pbe50"):
+        candidate = calculator(record, f"{name}-{suffix}")
+        with candidate.prepare_batch(
+            [atoms], charges=[spin], multiplicities=[spin + 1]
+        ) as batch:
+            assert batch._native_dft_force_eligible()
+            result = batch.execute(strict=True, properties=("energy", "forces")).items[
+                0
+            ]
+            assert result.succeeded and np.isfinite(result.forces).all()
+
+    # PBE37 still has no qualified derivative program. It cannot inherit the
+    # force capability of the named PBE calculator carrying its composition.
     graph = resolve_method(
         MethodSpec(
-            "PBE50-ecp-force-boundary",
-            (("GGA_X_PBE", Fraction(1, 2)), ("GGA_C_PBE", Fraction(1))),
-            exact_exchange=Fraction(1, 2),
+            "PBE37-ecp-force-boundary",
+            (("GGA_X_PBE", Fraction(63, 100)), ("GGA_C_PBE", Fraction(1))),
+            exact_exchange=Fraction(37, 100),
         ),
         spin="polarized" if spin else "unpolarized",
     )
@@ -582,30 +609,23 @@ def test_ecp_force_promotion_rejects_named_and_custom_hybrids_before_preparation
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
     )
-    assert custom.ks_options.coefficients != (1.0, 1.0, 0.0)
-    assert "forces" not in custom._capabilities.supported_properties
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("unqualified hybrid forces reached batch preparation")
-
-    monkeypatch.setattr(Calculator, "prepare_batch", forbidden)
-    for candidate in (*named_hybrids, custom):
+    with custom.prepare_batch(
+        [atoms], charges=[spin], multiplicities=[spin + 1]
+    ) as batch:
+        assert not batch._native_dft_force_eligible()
         with pytest.raises(ValueError, match="does not support properties: forces"):
-            candidate.singlepoint(
-                atoms,
-                charge=spin,
-                multiplicity=spin + 1,
-                properties=("energy", "forces"),
-            )
+            batch.execute(properties=("energy", "forces"))
 
 
-def test_cpu_f_ecp_forces_rejected_before_preparation(monkeypatch: typing.Any) -> None:
+def test_cpu_f_ecp_forces_rejected_by_prepared_owner(monkeypatch: typing.Any) -> None:
     atoms, record, _ = fixture(f_shell=True)
     calc = calculator(record)
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("unqualified f-shell forces reached preparation")
+        pytest.fail("unqualified f-shell forces reached the compatibility consumer")
 
-    monkeypatch.setattr(calc, "prepare_batch", forbidden)
-    with pytest.raises(ValueError, match="forces"):
-        calc.singlepoint(atoms, properties=("energy", "forces"))
+    with calc.prepare_batch([atoms]) as batch:
+        assert not batch._native_dft_force_eligible()
+        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden)
+        with pytest.raises(ValueError, match="forces"):
+            batch.execute(properties=("energy", "forces"))

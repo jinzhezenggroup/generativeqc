@@ -7,7 +7,15 @@ namespace generativeqc::scf {
 
 /** The two existing provider protocols retain their separate source channels.
  * Convention is a transport property, not a new coefficient or force equation. */
-enum class CudaDerivativeSourceKind { OneElectron, OverlapPulay, FullRangeJk, RangeSeparatedJk };
+enum class CudaDerivativeSourceKind {
+  OneElectron,
+  OverlapPulay,
+  FullRangeJk,
+  RangeSeparatedJk,
+  Coulomb,
+  Exchange,
+  RangeCorrection
+};
 enum class CudaDerivativeConvention { EnergyGradient, Force };
 
 /** A callback-scoped source-major device span, never a persistent force lease.

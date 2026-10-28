@@ -68,7 +68,7 @@ def test_compiled_bound_basis_preserves_all_source_shells(
 
 
 @pytest.mark.parametrize(
-    "device,fitting", [("cpu", False), ("cpu", True), ("cuda", False)]
+    "device,fitting", [("cpu", False), ("cpu", True), ("cuda", False), ("cuda", True)]
 )
 def test_native_owner_skips_python_composition_and_revokes_receipts(
     monkeypatch: pytest.MonkeyPatch, device: str, fitting: bool
@@ -76,13 +76,16 @@ def test_native_owner_skips_python_composition_and_revokes_receipts(
     """Both direct and DF forces own the complete scientific composition."""
     from generativeqc import dispersion
     from generativeqc._named_ks import CompositeCorrectionResult
+    from test_r1_native_forces import forbid_python_force
+
+    forbid_python_force(monkeypatch)
 
     if device == "cuda":
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
             pytest.skip("requires a Slurm-allocated CUDA device")
         assert os.environ.get("SLURM_JOB_ID"), "CUDA tests must run through srun"
     options = (
-        {"density_fitting": "cpu", "auxiliary_basis": "def2-svp"} if fitting else {}
+        {"density_fitting": device, "auxiliary_basis": "def2-svp"} if fitting else {}
     )
     calculator = Calculator(
         method="r2scan-3c-rks",

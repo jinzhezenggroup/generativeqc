@@ -153,8 +153,8 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
     std::vector<double>& output,std::string&,DfGradientResources* resources,const CudaDfMetricView*,void*,
     const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView* fitted,
     const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell,
-    const CudaDfRawChargeView* raw_charge) {
-  assert(!raw_charge);
+    const CudaDfRawChargeView* raw_charge, const CudaDfResidentForceRequest* resident_force) {
+  assert(!raw_charge && !resident_force);
   // A retry may drop the final projection, but its immutable forward values
   // must retain the producing plan's auxiliary coordinates.
   if(fitted) assert(fitted->spectral_basis==active->resident_spectral_factors);

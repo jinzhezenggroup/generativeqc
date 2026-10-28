@@ -1,4 +1,4 @@
-"""Run all ten native CUDA DFT energy+force CLI endpoints on a real NVIDIA GPU.
+"""Run the curated native CUDA DFT energy+force CLI endpoints on a real NVIDIA GPU.
 
 Run with the *installed* standalone CLI under a Slurm GPU allocation. This
 executes the C++ binary as a subprocess, not the Python Calculator/science path.
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,12 @@ METHODS = (
     "r2scan-uks",
     "b3lyp-rks",
     "b3lyp-uks",
+    "wb97m-v-rks",
+    "wb97m-v-uks",
+    "m06-2x-rks",
+    "m06-2x-uks",
+    "mn15-rks",
+    "mn15-uks",
 )
 # Non-symmetry-aligned H2 coordinates, in Bohr; only s shell functions.
 BASE_COORDS = ((0.12, -0.09, -0.71), (-0.08, 0.13, 0.79))
@@ -41,7 +48,7 @@ def write_xyz(path: Path, displacement: float = 0.0) -> None:
     )
 
 
-def calculate(cli: Path, xyz: Path, method: str, *, forces: bool) -> dict:
+def calculate(cli: Path, xyz: Path, method: str, *, forces: bool, fitting: str) -> dict:
     open_shell = method.endswith("-uks")
     command = [
         str(cli),
@@ -58,7 +65,7 @@ def calculate(cli: Path, xyz: Path, method: str, *, forces: bool) -> dict:
         "--representation",
         "cartesian",
         "--density-fitting",
-        "none",
+        fitting,
         "--precision",
         "fp64",
         "--charge",
@@ -76,7 +83,16 @@ def calculate(cli: Path, xyz: Path, method: str, *, forces: bool) -> dict:
         command.append("--forces")
     command.append("--json")
     run = subprocess.run(
-        command, check=False, capture_output=True, text=True, timeout=180
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env={
+            **os.environ,
+            "PATH": "/no-python-or-compiler",
+            "GENERATIVEQC_PROFILE": "off",
+        },
     )
     if run.returncode:
         raise AssertionError(
@@ -91,11 +107,11 @@ def calculate(cli: Path, xyz: Path, method: str, *, forces: bool) -> dict:
     return result
 
 
-def check_method(cli: Path, tmp: Path, method: str) -> None:
+def check_method(cli: Path, tmp: Path, method: str, fitting: str) -> None:
     xyz = tmp / "h2.xyz"
     write_xyz(xyz)
-    baseline = calculate(cli, xyz, method, forces=False)
-    result = calculate(cli, xyz, method, forces=True)
+    baseline = calculate(cli, xyz, method, forces=False, fitting=fitting)
+    result = calculate(cli, xyz, method, forces=True, fitting=fitting)
     if abs(baseline["energy_hartree"] - result["energy_hartree"]) > 5e-8:
         raise AssertionError(f"{method}: E+F changed the converged SCF energy")
     vectors = result.get("forces_hartree_per_bohr")
@@ -118,7 +134,9 @@ def check_method(cli: Path, tmp: Path, method: str) -> None:
         displaced = tmp / f"{tag}.xyz"
         write_xyz(displaced, shift)
         energies.append(
-            calculate(cli, displaced, method, forces=False)["energy_hartree"]
+            calculate(cli, displaced, method, forces=False, fitting=fitting)[
+                "energy_hartree"
+            ]
         )
     reference_force = -(energies[0] - energies[1]) / (2 * BOHR_STEP)
     if abs(vectors[1][2] - reference_force) > 2e-3:
@@ -127,7 +145,7 @@ def check_method(cli: Path, tmp: Path, method: str) -> None:
             f"fully reconverged finite difference {reference_force:.9g}"
         )
     print(
-        f"PASS {method}: energy, full analytic forces, translation and reconverged FD",
+        f"PASS {method}/{fitting}: energy, full analytic forces, translation and reconverged FD",
         flush=True,
     )
 
@@ -135,14 +153,16 @@ def check_method(cli: Path, tmp: Path, method: str) -> None:
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: test_cli_cuda_stationary.py /path/to/bin/generativeqc")
+    assert os.environ.get("SLURM_JOB_ID"), "run this gate through srun"
     cli = Path(sys.argv[1]).resolve()
     if not cli.is_file():
         raise SystemExit(f"no CLI executable: {cli}")
     with tempfile.TemporaryDirectory(prefix="generativeqc-cli-cuda-ef-") as directory:
         tmp = Path(directory)
         for method in METHODS:
-            check_method(cli, tmp, method)
-    print(f"PASS all {len(METHODS)} native CUDA CLI E+F endpoints")
+            for fitting in ("none", "cuda"):
+                check_method(cli, tmp, method, fitting)
+    print(f"PASS all {2 * len(METHODS)} native CUDA CLI E+F endpoints")
     return 0
 
 

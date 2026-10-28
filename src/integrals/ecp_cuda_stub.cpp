@@ -24,7 +24,7 @@ generativeqc_status ecp_integrals_cuda(int, const core::System&, unsigned, unsig
   return unavailable(detail, "ECP integral evaluation");
 }
 generativeqc_status add_ecp_cuda(int, const core::System&, void*, double*, const double*, double*,
-                                 std::string& detail) {
+                                 std::string& detail, double) {
   return unavailable(detail, "ECP operator application");
 }
 }  // namespace generativeqc::integrals

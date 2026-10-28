@@ -633,8 +633,10 @@ def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
     np.testing.assert_allclose(changed.forces, fresh.forces, atol=3e-7, rtol=0)
 
 
-def test_df_noncanonical_d4_composite_remains_energy_only() -> None:
-    """Adding a D4 force provider must not widen unrelated DF compositions."""
+def test_df_r2scan_d4_uses_prepared_force_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An admitted electronic graph composes its native D4 derivative once."""
     calc = Calculator(
         method="r2scan-d4-rks",
         basis="sto-3g",
@@ -645,8 +647,25 @@ def test_df_noncanonical_d4_composite_remains_energy_only() -> None:
     )
     assert not calc._density_fitted_composite_force_eligible()
     assert "forces" not in calc.capabilities.supported_properties
-    with pytest.raises(ValueError, match="does not support properties: forces"):
-        calc.singlepoint(H2, properties=("energy", "forces"))
+    with calc.prepare_batch([H2]) as batch:
+        assert batch._native_dft_force_eligible()
+
+        def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+            pytest.fail("admitted R2SCAN-D4 force escaped to Python")
+
+        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden)
+        result = batch.execute(properties=("energy", "forces"), strict=True).items[0]
+    direction = np.array([[0.0, 0.0, 0.2], [0.1, 0.0, -0.1]])
+    projection = float(np.sum(result.forces * direction))
+    for step in (3e-4, 1e-4):
+        energies = []
+        for sign in (1, -1):
+            moved = [
+                (a, np.asarray(r) + sign * step * d)
+                for (a, r), d in zip(H2, direction, strict=True)
+            ]
+            energies.append(calc.singlepoint(moved, properties=("energy",)).energy)
+        assert abs(-(energies[0] - energies[1]) / (2 * step) - projection) < 2e-6
 
 
 @pytest.mark.skipif(

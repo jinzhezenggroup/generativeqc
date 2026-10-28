@@ -240,16 +240,22 @@ def test_cpu_stationary_force_profiles_are_generated_admission_not_method_names(
             "semilocal_exchange": "3/4",
             "semilocal_correlation": "1",
         },
+        {
+            "spins": [1, 2],
+            "exact_exchange": "1/2",
+            "semilocal_exchange": "1/2",
+            "semilocal_correlation": "1",
+        },
     ]
     assert profiles["B3lyp"] == [
         {
-            "spins": [1],
+            "spins": [1, 2],
             "exact_exchange": "1/5",
             "semilocal_exchange": "1",
             "semilocal_correlation": "1",
         }
     ]
-    assert not profiles["Lda"]
+    assert profiles["Lda"][0]["spins"] == [1, 2]
     for family, exchange in (("R2scan", "0"), ("Wb97mv", "3/20")):
         assert profiles[family] == [
             {

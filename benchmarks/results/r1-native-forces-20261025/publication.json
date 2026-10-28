@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Cross-version endpoint E/F parity passes; native numerical oracles are separate committed gates. The complete paired timing comparison also meets the 1.05 non-regression threshold; no universal performance promotion is claimed. Full original per-sample evidence and reproduction code are hash-pinned in the recorded Git ancestor; only the compact qualification records remain in the current checkout.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6544,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "d103ed46ae513b761d77f84129b837e35e3b2174cd1ef3fe448fdb37ff7112ef"
+    },
+    {
+      "bytes": 4198,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "73660c49e2c5912566c8945cca021a2f85973ee263e9aeafa66a8c70d517fab2"
+    },
+    {
+      "bytes": 6665,
+      "path": "ecp-resource-followup.json",
+      "role": "summary",
+      "sha256": "9d21d1127822d199fca0b90097ebb38885c9e8d9bd7a4e3bac16dee816df5f3e"
+    },
+    {
+      "path": "historical-recovery.json",
+      "role": "summary",
+      "bytes": 2439,
+      "sha256": "b04f43914e6a3984d5274a883a12445c43f6e1d7a9a291a01a7ae03e71dd28b9"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=01:30:00",
+      "bash",
+      "reproduction/reproduce.sh",
+      "BASELINE_CHECKOUT",
+      "CANDIDATE_CHECKOUT",
+      "OUTPUT_DIRECTORY"
+    ],
+    "prerequisite": "Restore and verify the original campaign from historical-recovery.json into a separate directory; run this unchanged command from that restored evidence directory, not the compact current checkout."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "685478ca1111407573a5cbfa813d63ae0a5713ce"
+  },
+  "historical_git_revision": "796f66f4fd935ca88abd885321738ea48e9f8db2",
+  "historical_evidence_path": "benchmarks/results/r1-native-forces-20261025"
+}

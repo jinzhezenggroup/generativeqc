@@ -1242,11 +1242,6 @@ class PreparedBatch:
             names = ", ".join(sorted(repr(name) for name in unknown))
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
-        if unsupported:
-            raise ValueError(
-                f"method {self._calculator._method_name!r} does not support properties: "
-                + ", ".join(sorted(unsupported))
-            )
         compute_forces = "forces" in requested
         public_dft_forces = (
             compute_forces
@@ -1286,6 +1281,16 @@ class PreparedBatch:
             # request that could force an unqualified neighbor into native work.
             native_dft_forces = (False,) * count
             mixed_native_forces = False
+        # Method-level metadata can be conservative (for example, an ECP
+        # combination). Only the immutable prepared owner may add force support;
+        # a missing/old native query must never enable an unqualified fallback.
+        if unsupported and not (
+            unsupported == {"forces"} and public_dft_forces and all(native_dft_forces)
+        ):
+            raise ValueError(
+                f"method {self._calculator._method_name!r} does not support properties: "
+                + ", ".join(sorted(unsupported))
+            )
         compatibility_forces = tuple(
             public_dft_forces and not native for native in native_dft_forces
         )

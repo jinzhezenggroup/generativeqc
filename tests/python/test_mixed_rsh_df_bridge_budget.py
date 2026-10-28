@@ -446,6 +446,12 @@ class Harness {
   std::unique_ptr<scf::PreparedFockPlan> range_correction_, range_derivative_correction_;
   std::unique_ptr<dft::MockCuda> cuda_ = std::make_unique<dft::MockCuda>();
   generativeqc_backend backend_ = GENERATIVEQC_BACKEND_CUDA;
+  // Mirror the real prepared-owner NumericCap/DF admission guard. This
+  // extracted-source fixture must fail before touching the lazy LR producer.
+  [[nodiscard]] bool has_energy_only_df_capacity_promise() const noexcept {
+    return capacity_ && backend_ == GENERATIVEQC_BACKEND_CUDA &&
+           fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+  }
   struct Options {
     generativeqc_density_fitting_mode density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
     generativeqc_precision_mode precision_mode = GENERATIVEQC_PRECISION_FP64;
@@ -520,6 +526,36 @@ int main() {
         token, out, 5000, work, detail, &dw, &dw);
     require(result == GENERATIVEQC_STATUS_SUCCESS && out.size() == 15 && constructed == 0,
             "full RI-K did not differentiate its retained fitted owner");
+  }
+  {
+    Harness owner;
+    auto ledger = std::make_shared<runtime::DeviceResourceLedger>();
+    // The zero-byte reservation is a real promise, not fabricated pointer
+    // metadata. A promised CUDA DF owner must reject derivative work.
+    runtime::DeviceCapacityReservation promise(ledger, 0);
+    owner.capacity_ = &promise;
+    require(owner.has_energy_only_df_capacity_promise(),
+            "fixture did not carry the prepared CUDA DF energy-only promise");
+    owner.backend_ = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+    require(!owner.has_energy_only_df_capacity_promise(),
+            "CPU DF owner was incorrectly classified as CUDA energy-only");
+    owner.backend_ = GENERATIVEQC_BACKEND_CUDA;
+    owner.fock_.model.spec.coulomb.approximation = scf::FockApproximation::Exact;
+    require(!owner.has_energy_only_df_capacity_promise(),
+            "Direct owner was incorrectly classified as DF energy-only");
+    owner.fock_.model.spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+    constructed = 0;
+    trace.clear();
+    out.assign(3, 99);
+    work.fill(99);
+    auto result = owner.mixed_rsh_df_integral_gradient(
+        token, out, 5000, work, detail, &dw, &dw);
+    require(result == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && out.empty() &&
+                std::all_of(work.begin(), work.end(), [](auto value) { return value == 0; }) &&
+                detail.find("energy-only") != std::string::npos,
+            "promised CUDA DF gradients were not refused before derivative work");
+    require(constructed == 0 && trace.empty(),
+            "promised CUDA DF gradients allocated or executed a derivative owner");
   }
   for (auto fitting_mode : {GENERATIVEQC_DENSITY_FITTING_CUDA,
                            GENERATIVEQC_DENSITY_FITTING_AUTO}) {

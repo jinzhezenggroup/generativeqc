@@ -104,30 +104,9 @@ def test_invalid_batch_properties_reject_before_execution(
             batch.execute(properties=properties)
 
 
-@pytest.mark.parametrize("method", ["lda-rks", "lda-uks"])
-def test_unqualified_dft_basis_rejects_forces_before_execution(
-    method: typing.Any, monkeypatch: typing.Any
-) -> None:
-    preparation = (
-        {"charges": [-1], "multiplicities": [2]} if method.endswith("uks") else {}
-    )
-    # LDA retains its existing constructor-level refusal for this basis name.
-    # PBE now defers angular-domain admission to the actual prepared system.
-    calculator = Calculator(method=method, basis="def2-tzvp")
-    assert calculator.capabilities.supported_properties == frozenset({"energy"})
-    with calculator.prepare_batch(SYSTEMS[:1], **preparation) as batch:
-
-        def forbidden(*args: typing.Any) -> None:
-            pytest.fail("unsupported force request reached native execution")
-
-        monkeypatch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
-        with pytest.raises(ValueError, match="does not support properties: forces"):
-            batch.execute(properties=("energy", "forces"))
-
-
-@pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks"])
+@pytest.mark.parametrize("method", ["lda-rks", "lda-uks", "pbe-rks", "pbe-uks"])
 @pytest.mark.parametrize("atomic_number, expected", [(1, True), (8, False)])
-def test_native_pbe_force_admission_uses_actual_basis_shells(
+def test_native_semilocal_force_admission_uses_actual_basis_shells(
     method: str, atomic_number: int, expected: bool
 ) -> None:
     calculator = Calculator(
@@ -247,12 +226,12 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
 @pytest.mark.parametrize(
     "method, expected",
     [
-        ("lda-rks", False),
+        ("lda-rks", True),
         ("r2scan-rks", True),
         ("wb97m-v-rks", True),
-        ("pbe-d4-rks", False),
-        ("lda-uks", False),
-        ("b3lyp-uks", False),
+        ("pbe-d4-rks", True),
+        ("lda-uks", True),
+        ("b3lyp-uks", True),
         ("r2scan-uks", True),
         ("wb97m-v-uks", True),
     ],

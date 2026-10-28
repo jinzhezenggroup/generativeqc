@@ -112,6 +112,13 @@ def host_lifetime_probe(
             "static cudaError_t enqueue_generated_full_range_energy_derivatives(",
         ),
     ]
+    # Both the resident and host publication routes share the canonical LR
+    # worker; execute that real launcher so failures still test stream lifetime.
+    bodies.append(
+        _extract_function(
+            source, "static cudaError_t enqueue_generated_long_range_force("
+        )
+    )
     for route in ("full_range", "rsh"):
         symbol = f"cudaError_t execute_generated_{route}_energy_derivatives("
         bodies.append(_extract_function(source, symbol))
