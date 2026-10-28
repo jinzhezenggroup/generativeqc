@@ -10,6 +10,7 @@ positive allow-list, CUDA support, or second derivatives.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import math
 import re
@@ -95,9 +96,12 @@ def _endpoint(
     coordinates: Any = None,
 ) -> dict[str, Any]:
     from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc.automatic_artifacts import _loaded_artifact
     from generativeqc_compiler.dft import NativeAO
 
     properties = ("energy", "forces") if forces else ("energy",)
+    if forces and not batch._native_dft_force_eligible(0):
+        raise RuntimeError("force qualification requires the prepared native owner")
     item = batch.execute(
         strict=True, properties=properties, coordinates=coordinates
     ).items[0]
@@ -116,6 +120,17 @@ def _endpoint(
             ):
                 raise RuntimeError("force snapshot execution identity mismatch")
             return {
+                # Authenticate the module actually loaded by this prepared
+                # owner; a requested library path alone is not execution proof.
+                "native_library": _loaded_artifact(
+                    ctypes.cast(
+                        batch._library.generativeqc_batch_execute, ctypes.c_void_p
+                    ).value
+                ),
+                "converged": bool(item.converged),
+                "executed_backend": item.executed_backend,
+                "scf": item.ks_diagnostic.to_payload(),
+                "precision": item.precision,
                 "energy": float(item.energy),
                 "reference_energy": _reference_energy(name, atoms, spin, state.grid),
                 "forces": None if item.forces is None else item.forces.tolist(),
