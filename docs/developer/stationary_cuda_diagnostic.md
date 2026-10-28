@@ -44,7 +44,9 @@ across processes, before derivative emission or Becke primal/AD reconstruction.
 The integral owner keys exact ordered requests, component domain and shard ABI;
 the wrapper owner keys the method/point-program provenance, stationary plan,
 partition iterations and primitive shard layout. Both include logical generator
-dependency hashes, strict FP64 policy and target witnesses. Sources are bounded
+dependency hashes and strict FP64 policy. These emitters do not read the CUDA
+target: the same recipe can supply SM80 and SM120 compilation. Target witnesses
+remain in object/link identities, alongside compiler and flag identities. Sources are bounded
 UTF-8 data with checked byte counts and SHA256 hashes, published as a complete
 atomic directory. Missing entries regenerate; corrupt or partial entries fail
 closed. Concurrent publishers verify that their source bytes agree.
@@ -67,6 +69,15 @@ These records describe owner construction; a retained owner's later executions
 do not repeat that construction. Complete endpoint timers still include source
 preparation. See the
 [source-reuse decision](../../.agents/notes/implemented/performance/2026-10-07-stationary-semantic-source-cache.md).
+
+The AOT generators use these same recipes when explicitly given a shared source
+cache. Their split s/p primitives, complete s/p/d shard inventory and scientific
+wrappers can be replayed across build directories; native binding metadata is
+still generated and authenticated separately. Wrapper identity includes primitive
+declaration/shard ABI, reduction ownership and inline versus staged point mode.
+See the [build configuration](build.md#compiler-cache-generated-shards-and-compile-units)
+for `GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE`. This does not merge method kernels
+or expand public force admission.
 
 ## Execution and ownership
 
