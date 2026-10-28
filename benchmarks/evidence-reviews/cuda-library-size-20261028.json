@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cuda-library-size-20261028",
+  "owner": "Native CUDA build and DF qualification",
+  "reason": "Retains source overlay, actual compiler/cache/link provenance, binary and decoded executable-image identities, all 300 complete endpoint observations and independent references, portability/runtime tests and negative diagnostics. Initial whitespace-compaction diagnostics are retained; after mainline #2842 recovered headroom, the final change leaves historical records untouched. No aggregate or review budget is raised.",
+  "review_document": "benchmarks/results/cuda-library-size-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-library-size-20261028/receipts.json.xz",
+      "family": "cuda-library-size-20261028",
+      "classification": "required-compact-accepted-evidence",
+      "role": "host-archive-and-df-instantiation-size-with-complete-endpoint-qualification",
+      "bytes": 154664,
+      "sha256": "5793ea124387ce77b57f45cd00ece714b175407dd9dfafcf29cef8c3d5a9bb9d"
+    }
+  ]
+}
