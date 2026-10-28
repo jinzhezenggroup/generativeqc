@@ -4,14 +4,5 @@
   "owner": "automatic native CUDA force/AOT qualification (#1118, #2227)",
   "reason": "One exact reference-source patch reconstructs the independently qualified native finite-difference producer from the measured final code commit; the small baseline delta applies after it, sharing common source changes. This permits reproduction without unavailable local binaries or hashes alone. Full-precision endpoint samples and compiler/resource evidence are retained separately; raw build logs and binaries remain ignored.",
   "review_document": "benchmarks/results/automatic-native-cuda-20261027/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/automatic-native-cuda-20261027/reference-native-source.patch",
-      "family": "automatic-native-cuda-20261027",
-      "classification": "required-compact-accepted-evidence",
-      "role": "shared-source-reconstruction-for-measured-native-builds",
-      "bytes": 224274,
-      "sha256": "6a33dbf90ec0922c499c29068204ac54ae66042a5c50130001aebc57102a7d07"
-    }
-  ]
+  "files": []
 }

@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 7718,
+      "bytes": 8114,
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "0fd4174e8d74429cb440d3f4f7a7c1b6956dc74d2bc1d1c8761e2e0ae8f0020d"
+      "sha256": "346c4b3a1d9f6f9023f82861d58788e268cd466bf098dfd44bc04225274dacf1"
     },
     {
       "bytes": 301,
@@ -67,10 +67,10 @@
       "sha256": "f7319e640de20dced6ccc520210ce0b19d263ea7ec4060c00aa52ade194bddf3"
     },
     {
-      "bytes": 10505,
-      "path": "rejected-warp-experiment.patch",
+      "bytes": 3040,
+      "path": "rejected-warp-experiment.patch.xz",
       "role": "source-patch",
-      "sha256": "bcb3bea2f078a9a6e147dbe43f5ea5ee0e60447135bfc3c582a33a133c842023"
+      "sha256": "98b6b0cb839b14cfc5e4c1b01975af4e6dfc20b8a394880f5d2406d6e9f87f69"
     },
     {
       "bytes": 4845,

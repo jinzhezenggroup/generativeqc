@@ -127,3 +127,11 @@ earlier coupled warp-page/operator-specialization negative result, with
 48/96-atom PBE0 warm endpoints regress by 10.31%/2.36%; the 96-atom generic
 force interval regresses by 14.48%. Do not transplant that rejected code into
 production or mistake that workload for a post-qualified-P0-A residual.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.

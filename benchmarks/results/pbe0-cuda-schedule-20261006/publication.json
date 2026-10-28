@@ -36,10 +36,10 @@
       "sha256": "f5324c0bba193b2a7b104480d8bffaa3f69fec345c6369932e69301c9397064d"
     },
     {
-      "path": "integration-source.patch",
+      "path": "integration-source.patch.xz",
       "role": "source-patch",
-      "bytes": 12774,
-      "sha256": "befd07e4564426b5195beb7407c4e31e45364b9a8c1f8c08f9f18f7d81d494df"
+      "bytes": 4272,
+      "sha256": "f5013cbb220ebeebe77aa3ddccb6d3c249c88e735c2c3b37ed87456320d19a03"
     },
     {
       "path": "manifest.json",
@@ -54,16 +54,22 @@
       "sha256": "86a7f3cc6461e4d90b76c1804c188be663b594bf1f6dabf728806541d54d2020"
     },
     {
-      "path": "source.patch",
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "bytes": 32486,
-      "sha256": "ed60f1df376fe235b4bfb473788d0c59c8f24a851099097a5b20b8dea1b485e8"
+      "bytes": 8592,
+      "sha256": "7ccca7cf28dd3411d36172a5b3afa01d15b5abe8b033067e873cd9b705979d53"
     },
     {
       "path": "verify.py",
       "role": "reproduction",
       "bytes": 10587,
       "sha256": "a202a3627378224a4cf50c9f0b42744e26ca64e1a180fe09ac92966b5f4937a0"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 9407,
+      "sha256": "4a4329a9405d1907b7e58ad6e0a7f071198b8d583de8fe29b985dd1c1ac26750"
     }
   ],
   "decision": {
