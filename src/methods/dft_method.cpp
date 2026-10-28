@@ -3653,6 +3653,21 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "named dispersion requires strict FP64");
     execution_plan.dispersion = *dispersion;
+    if (dispersion->kind != 3) {
+      std::vector<std::uint32_t> atom_counts;
+      atom_counts.reserve(systems.size());
+      for (const auto& system : systems) {
+        if (system.atoms.size() > dft::dispersion::kD3MaximumAtomsPerSystem)
+          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                            "D3 system exceeds the production per-system atom bound");
+        atom_counts.push_back(static_cast<std::uint32_t>(system.atoms.size()));
+      }
+      const auto correction_capacity =
+          dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts);
+      if (dispersion_bytes < correction_capacity.maximum_bytes)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "KS D3 fleet exceeds its equal-share correction budget");
+    }
     // KS retains a correction owner per system. Equal shares conservatively
     // bound their aggregate storage, including replicated immutable tables.
     execution_plan.dispersion_maximum_bytes = dispersion_bytes / systems.size();

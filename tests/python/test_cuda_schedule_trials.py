@@ -441,9 +441,7 @@ def test_actual_ingredient_point_trial_executes_only_pbe_override(
         encoding="utf-8",
     )
     (tmp_path / "point_dispatch.hpp").write_text(
-        '#include "point_program.hpp"\n'
-        + module.emit_native_xc_point_dispatch()
-        + module.emit_native_xc_point_batch_dispatch(),
+        '#include "point_program.hpp"\n' + module.emit_native_xc_point_dispatch(),
         encoding="utf-8",
     )
     checks = []
@@ -475,14 +473,15 @@ void check(unsigned functional, unsigned physical_threads, unsigned batch_thread
     policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
     policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", family);
     for (std::size_t spins : {1U, 2U}) {
-      auto launch = resolve_point_launcher(functional, false);
+      const auto binding = resolve_point_binding(functional, false);
+      auto launch = binding.launch;
       launch(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, nullptr);
       require(observed_threads == physical_threads, "trial changed wrong physical geometry");
-      auto batch = resolve_point_batch_launcher(functional, launch);
+      auto batch = binding.launch_batch;
       batch(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, 1);
       require(observed_threads == batch_threads, "trial changed batch geometry");
       if (functional < 2) {
-        auto response = resolve_point_launcher(functional, true);
+        auto response = resolve_point_binding(functional, true).launch;
         response(nullptr, features, weights, 1, spins, coefficients, totals, &error, functional, 1, 1, features);
         require(observed_threads == 128, "trial changed response geometry");
       }

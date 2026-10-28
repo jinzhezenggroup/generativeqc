@@ -3161,6 +3161,54 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_batch_prepare_named_ks_with_device_resources_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "e241a9387eaa633be9d7bceb0612ee5c4aff4eb6b07fd73f8498cc0f0afc2dde",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_calculation_prepare_named_ks_with_device_resources_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "0171aec132766d966087a7776e185fc72811bf34d948610d0989e4eba7a327cc",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_ks_d3_resource_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "ec0af5fe68a6df32f1e090084c1becb88841998c066f8594b32f4e262f8d51f4",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_correlation_convergence_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

@@ -236,6 +236,17 @@ generativeqc_status generativeqc_batch_prepare_with_device_resources(
                        generativeqc::api::device_resource_owner(resources), batch, nullptr);
 }
 
+generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_device_resources* resources,
+    generativeqc_batch** batch) {
+  if (batch) *batch = nullptr;
+  if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return prepare_batch(context, systems, system_count, descriptor, flags,
+                       generativeqc::api::device_resource_owner(resources), batch, name);
+}
+
 generativeqc_status generativeqc_batch_get_device_resources(
     const generativeqc_batch* batch, generativeqc_device_resources** resources) {
   if (!batch || !resources || *resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

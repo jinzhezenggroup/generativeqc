@@ -151,6 +151,14 @@ int main(int argc, char** argv) {
                       GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                   !calculation && !runtime::active_device_resource_ledger,
               "device mismatch reached a factory or leaked a binding");
+      generativeqc_named_ks_descriptor named{};
+      named.struct_size = sizeof(named);
+      named.abi_version = GENERATIVEQC_ABI_VERSION;
+      require(generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+                  &context, &system, &descriptor, &named, resources, &calculation) ==
+                      GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                  !calculation && !runtime::active_device_resource_ledger && created == 0,
+              "named preparation bypassed resource admission or leaked a binding");
       generativeqc_device_resources_destroy(resources);
       require(ledger_witness.expired(), "refused resource metadata was retained");
     } else {

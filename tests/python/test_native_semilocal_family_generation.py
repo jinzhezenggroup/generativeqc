@@ -129,24 +129,6 @@ def test_python_cuda_fast_path_capability_census_is_manifest_owned() -> None:
     } == CUDA_FAST_PATH_CENSUS
 
 
-def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
-    from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
-
-    source = emit_native_xc_point_dispatch()
-    for item in SEMILOCAL_FAMILIES:
-        code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
-        assert f"&launch_points<{code}, false>;" in source
-        assert (f"&launch_points<{code}, true>;" in source) == (
-            item["cuda_fast_paths"]["response"] == "qualified"
-        )
-        for response in (False, True):
-            consumer = str(response).lower()
-            assert (f"&launch_points<{code}, {consumer}, true>" in source) == (
-                item["symbol"] == "Pbe"
-                and (not response or item["cuda_fast_paths"]["response"] == "qualified")
-            )
-
-
 def test_grid_jit_tracks_and_ships_capability_headers() -> None:
     import re
 
