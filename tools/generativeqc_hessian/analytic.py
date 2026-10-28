@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+from generativeqc.response_operator import RHFResponseOperator
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.resources import ResourceBudget
 from generativeqc_compiler.integral.blocks import TensorLayout, WeightTile
@@ -39,11 +40,10 @@ from generativeqc_compiler.integral.shell_spec import cartesian_components
 from generativeqc_compiler.integral.weight_pullback import normalized_radial_primitives
 
 from tools.generativeqc_response.backends import NativeJKBackend
-from tools.generativeqc_response.operators import RHFResponseOperator
 
 from .first_order import checked_direction
 from .native import NativeRHFState
-from .perturbation import solve_rhf_nuclear_perturbation
+from .perturbation import solve_stationary_nuclear_perturbation
 
 __all__ = [
     "accumulate_provider_hvp_cuda",
@@ -989,7 +989,7 @@ def cphf_relaxation(s: NativeRHFState) -> np.ndarray:
 
     The first-order frozen Fock and overlap matrices are analytic. For every
     nuclear perturbation we build the mandatory metric-density Fock response,
-    call build_rhf_nuclear_rhs, and solve A x = -b with #179 GMRES.
+    call build_stationary_nuclear_rhs, and solve A x = -b with #179 GMRES.
 
     x is the nonredundant symmetric-gauge response. The actual occupied
     MO-coefficient derivative is U_ai = x_ia.T - S_ai/2 and
@@ -1012,7 +1012,9 @@ def cphf_relaxation(s: NativeRHFState) -> np.ndarray:
     e1s = np.zeros((nat, 3, nocc, nocc))
     for ia in range(nat):
         for x in range(3):
-            response = solve_rhf_nuclear_perturbation(op, h1ao[ia, x], s1ao_all[ia, x])
+            response = solve_stationary_nuclear_perturbation(
+                op, h1ao[ia, x], s1ao_all[ia, x]
+            )
             mo1s[ia, x] = response.coefficient_derivative
             e1s[ia, x] = response.occupied_energy_derivative
 

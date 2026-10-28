@@ -6,20 +6,8 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
-from generativeqc_compiler.integral import production, production_cost
+from generativeqc_compiler.integral import production_cost
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
-
-
-def test_production_preserves_cost_policy_compatibility_reexports() -> None:
-    """Legacy production imports resolve to the canonical leaf policy objects."""
-
-    assert production.production_compile_cost is production_cost.production_compile_cost
-    assert production.stable_aot_shard_slot is production_cost.stable_aot_shard_slot
-    assert (
-        production._partition_production_selections
-        is production_cost._partition_production_selections
-    )
-    assert production.shell_class_index is production_cost.shell_class_index
 
 
 def test_production_cost_policy_has_leaf_dependencies() -> None:

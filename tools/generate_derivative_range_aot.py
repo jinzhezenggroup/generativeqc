@@ -14,10 +14,10 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 from generativeqc_compiler.integral.derivative_aot_registry import (
     AOT_ANGULAR_DOMAIN,
     component_groups,
+    program_source,
     radial_inventory_from_payload,
 )
 from generativeqc_compiler.integral.range_separation import CoulombKernelFamily
-from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
 
 def _write_if_changed(path: Path, content: str) -> None:

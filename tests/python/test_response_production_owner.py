@@ -12,39 +12,11 @@ import generativeqc.response_problem as production_problem
 import generativeqc.response_solver as production_solver
 import generativeqc.response_xc as production_xc
 import generativeqc.rks_response as production_rks
-import pytest
 
 import tools.generativeqc_response as response_api
-from tools.generativeqc_response import krylov as solver_shim
 from tools.generativeqc_response import native_ks
-from tools.generativeqc_response import operators as operator_shim
-from tools.generativeqc_response import problem as problem_shim
-from tools.generativeqc_response import xc as xc_shim
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def test_response_problem_shim_reuses_installed_objects() -> None:
-    for name in (
-        "ResponseCompatibilityError",
-        "ResponseProblem",
-        "ResponseSolveError",
-        "ResponseUnsupported",
-        "RotationLayout",
-    ):
-        assert getattr(problem_shim, name) is getattr(production_problem, name)
-
-
-def test_response_operator_shim_reuses_installed_objects() -> None:
-    for name in (
-        "CPKSResponseOperator",
-        "DenseMatrixResponseOperator",
-        "RHFResponseOperator",
-        "cpks_operator_identity",
-        "rhf_operator_identity",
-        "validate_rotation_layout",
-    ):
-        assert getattr(operator_shim, name) is getattr(production_operator, name)
 
 
 def test_top_level_tools_response_api_reuses_installed_closed_shell_objects() -> None:
@@ -57,16 +29,7 @@ def test_top_level_tools_response_api_reuses_installed_closed_shell_objects() ->
     )
 
 
-def test_response_xc_shim_reuses_installed_objects() -> None:
-    assert (
-        xc_shim.FixedDensityXCDerivativeKernel
-        is production_xc.FixedDensityXCDerivativeKernel
-    )
-    assert xc_shim.density_feature_response is production_xc.density_feature_response
-
-
 def test_response_solver_and_rks_adapter_use_installed_owners() -> None:
-    assert solver_shim is production_solver
     assert native_ks.NativeRKSResponse is production_rks.NativeRKSResponse
     assert response_api.NativeRKSResponse is production_rks.NativeRKSResponse
     assert response_api.GMRESOptions is production_solver.GMRESOptions
@@ -152,52 +115,6 @@ except problem.ResponseUnsupported:
 else:
     raise AssertionError("restricted response layout accepted two spin blocks")
 """
-
-
-@pytest.mark.parametrize("first_import", ["production", "shim"])
-def test_response_shims_preserve_public_objects_in_both_import_orders(
-    first_import: str,
-) -> None:
-    _run_isolated(
-        """
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root / "python"), str(root)]
-contracts = (
-    ("response_problem", "problem", (
-        "ResponseCompatibilityError", "ResponseProblem", "ResponseSolveError",
-        "ResponseUnsupported", "RotationLayout",
-    )),
-    ("response_operator", "operators", (
-        "CPKSResponseOperator", "DenseMatrixResponseOperator", "RHFResponseOperator",
-        "cpks_operator_identity", "rhf_operator_identity", "validate_rotation_layout",
-    )),
-    ("response_xc", "xc", (
-        "FixedDensityXCDerivativeKernel", "density_feature_response",
-    )),
-)
-for production_name, shim_name, _ in contracts:
-    importlib.import_module(
-        "generativeqc." + production_name if sys.argv[2] == "production"
-        else "tools.generativeqc_response." + shim_name
-    )
-for production_name, shim_name, names in contracts:
-    production_name = "generativeqc." + production_name
-    shim_name = "tools.generativeqc_response." + shim_name
-    production = importlib.import_module(production_name)
-    shim = importlib.import_module(shim_name)
-    assert set(names) <= set(shim.__all__)
-    for name in names:
-        assert getattr(shim, name) is getattr(production, name), name
-problem = importlib.import_module("tools.generativeqc_response.problem")
-operators = importlib.import_module("tools.generativeqc_response.operators")
-"""
-        + _RESPONSE_ALGEBRA,
-        first_import,
-    )
 
 
 def test_production_response_imports_and_algebra_execute_without_tools() -> None:

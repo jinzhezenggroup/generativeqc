@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-hvp = importlib.import_module("tools.generativeqc_hessian.rks_molecular")
+hvp = importlib.import_module("generativeqc.rks_hessian")
 
 
 def test_xc_binding_reuses_response_and_native_sources(

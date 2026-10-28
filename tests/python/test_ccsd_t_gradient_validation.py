@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.triples import triples_energy
+from generativeqc_compiler.cc.triples_response import full_triples_vjp
 
 from tools.generate_cc_triples_references import GROUND_TRUTH, _triples_feeds
-from tools.generativeqc_cc.triples import triples_energy
-from tools.generativeqc_cc.triples_response import full_triples_vjp
 from tools.validate_ccsd_t_gradient import (
     FD_STEPS,
     analytic_oracle,

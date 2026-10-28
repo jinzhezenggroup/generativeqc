@@ -18,13 +18,17 @@ from types import MappingProxyType
 from typing import Protocol
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError, ResponseProblem
+from generativeqc.response_solver import (
+    GMRESOptions,
+    _single_workspace_bytes,
+    _vector_norm,
+    solve,
+)
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.method import ImplicitVJPPlan
 from generativeqc_compiler.method.implicit import PREFIX
 from generativeqc_compiler.tensor import execute
-
-from .krylov import GMRESOptions, _single_workspace_bytes, _vector_norm, solve
-from .problem import ResponseCompatibilityError, ResponseProblem
 
 
 def _checked_bytes(value: typing.Any, name: typing.Any) -> typing.Any:

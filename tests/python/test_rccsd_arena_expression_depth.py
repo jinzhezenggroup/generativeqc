@@ -6,9 +6,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.cc.lambda_equations import build_lambda_programs
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
-
-from tools.generativeqc_cc.lambda_equations import build_lambda_programs
 
 ROOT = Path(__file__).resolve().parents[2]
 
