@@ -310,7 +310,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned spins{}, history{};
   bool incremental_diis_gram{};
   bool ordered_diis_gram{};
-  bool diis_work_enabled{}, diis_work_published{};
+  bool diis_work_enabled{}, diis_work_published{}, diis_work_ready{};
   std::unique_ptr<scf::DiisWorkReadback> diis_work_readback;
   std::array<std::size_t, 2> occupations{};
   std::vector<double> host_xc_density, host_xc_alpha, host_xc_beta, host_xc_potential;
@@ -2294,6 +2294,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void begin(const std::vector<double>* input, bool reuse_warm, CudaKsSeedOrigin seed_origin) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
+    // Invalidate the old census before any preparation or seed validation can
+    // fail. Device storage belongs to this attempt only after its reset below.
+    diis_work_published = diis_work_ready = false;
+    if (diis_work_readback) *diis_work_readback = {};
     output.dft_diagnostic.coulomb_exchange_work = {};
     final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_fitted_projection_ready = false;
@@ -2437,8 +2441,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
     host_incremental_max_abs_delta_density = 0.0;
     is_active = false;
     started = true;
-    diis_work_published = false;
-    if (diis_work_readback) *diis_work_readback = {};
     is_failed = false;
     stabilize_occupations = false;
     final_closure = false;
@@ -2539,6 +2541,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (diis_work) check(cudaMemsetAsync(diis_work, 0, sizeof(*diis_work), stream));
       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+      diis_work_ready = diis_work != nullptr;
       if (incremental_direct_jk)
         check(cudaMemsetAsync(incremental_max_abs_delta_density, 0, sizeof(double), stream));
       cuda_ks_detail::reset_control(stream, spins, static_cast<int>(occupations[0]),
@@ -4170,7 +4173,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * Owner-retained destinations survive a partial copy failure; failed copies
    * drain and propagate without publishing a stale receipt. */
   void publish_diis_receipt() {
-    if (!diis_work_readback || diis_work_published) return;
+    if (!diis_work_readback || diis_work_published || !diis_work_ready) return;
     current_device();
     auto& receipt = *diis_work_readback;
     try {
