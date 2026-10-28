@@ -15,6 +15,7 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .bulk_runtime import build_bulk_runtime_program
+from .constant_parameters import lift_point_constants
 from .density_work import DENSITY_WORK_DOMAIN, DENSITY_WORK_DOMAIN_VERSION
 from .equal_spin import equal_spin_roots
 from .libxc_work import (
@@ -108,6 +109,7 @@ def emit_automatic_point(
     spin: Literal["polarized", "unpolarized"] = "polarized",
     parameter_names: tuple[str, ...] = (),
     precompute_parameters: bool = False,
+    parameterize_constants: bool = False,
 ) -> AutomaticPointSource:
     """Lower one ordinary semilocal Graph into the native physical-spin ABI.
 
@@ -133,7 +135,12 @@ def emit_automatic_point(
     Parameters are held constant during feature-coordinate differentiation.
     With precompute_parameters, coefficient/literal products are prepared after
     AD. The returned parameters describe the complete ordered launch-data ABI.
+    Alternatively, parameterize_constants lifts arithmetic literals only after
+    ordinary specialization and AD, preserving the literal mathematical identity.
+    The package planner must match both spin bodies and bind the returned rows.
     """
+    if parameterize_constants and (parameter_names or precompute_parameters):
+        raise ValueError("literal and symbolic point parameterization are exclusive")
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
     if equal_spin and backend != "cuda":
@@ -184,6 +191,8 @@ def emit_automatic_point(
     parameters = program.parameters
     if precompute_parameters:
         roots, parameters = prepare_parameter_products(program.graph, roots, parameters)
+    if parameterize_constants:
+        roots, parameters = lift_point_constants(program.graph, roots)
     variables.update(
         {name: f"parameters[{index}]" for index, (name, _) in enumerate(parameters)}
     )
@@ -233,7 +242,7 @@ def emit_automatic_point(
     lines = [
         f"{qualifier}{value_type} {function_name}(",
         "    const double rho[2], const double (&gradient)[2][3], const double tau[2]"
-        + (", const double* parameters" if parameter_names else "")
+        + (", const double* parameters" if parameter_names or parameters else "")
         + ") {",
         f"  if (!{finite}(rho[0]) || !{finite}(rho[1]) ||",
         "      rho[0] < 0.0 || rho[1] < 0.0)",

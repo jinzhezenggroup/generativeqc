@@ -91,3 +91,9 @@ Requalify on other architectures/toolchains, after changing point lowering or
 coefficient preparation, or before admitting another parameter family. Preserve
 the bounded literal fallback. Do not extrapolate KTBM kernel or package-size
 ratios to unrelated mathematics, all functional families or an entire release.
+
+## Catalog discovery follow-up
+
+The [structural discovery decision](../architecture/2026-10-28-xc-structural-parameter-discovery.md)
+extends candidate discovery to other formulas while retaining this qualified
+KTBM default. Its negative small-batch evidence prevents blanket promotion.

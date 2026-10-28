@@ -116,9 +116,18 @@ def emit_point_traversal(*, parameter_type: str = "I") -> str:
     return _POINT_TRAVERSAL.replace("I functional", f"{parameter_type} functional")
 
 
-def emit_automatic_point_kernel(*, parameter_type: str = "I") -> str:
-    """Emit an entry with a functional code or private by-value parameter row."""
-    return _AUTOMATIC_KERNEL.replace("I functional", f"{parameter_type} functional")
+def emit_automatic_point_kernel(
+    *, parameter_type: str = "I", name: str = "automatic_evaluate_points"
+) -> str:
+    """Emit a named entry with a functional code or private parameter row.
+
+    Distinct parameter-storage ABIs may name separate entries while sharing the
+    same physical traversal. Emitting a template does not instantiate a kernel;
+    the package owner selects exactly the entries needed by its launchers.
+    """
+    return _AUTOMATIC_KERNEL.replace(
+        "I functional", f"{parameter_type} functional"
+    ).replace("automatic_evaluate_points", name)
 
 
 def emit_equal_spin_point_selector() -> str:
