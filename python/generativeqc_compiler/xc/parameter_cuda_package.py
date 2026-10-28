@@ -215,15 +215,38 @@ struct {label} {{
 }};
 """
         )
+        if label == "Restricted":
+            # Pair only the batched adapter: eliminating redundant input work
+            # helps its tile-address/parameter-load schedule, while applying
+            # the same rewrite to ordinary launches can regress their latency.
+            # Both adapters call the same mathematical body; replacing the
+            # existing batched instantiation adds no point kernel variants.
+            adapters += f"""
+struct RestrictedBatched {{
+  __device__ static DevicePointValue physical_point(const ParameterRow& row, const double rho[2],
+      const double (&gradient)[2][3], const double tau[2], double, double) {{
+    // The host selector proves RKS, hence identical physical spin channels.
+    // Expose that identity to native CSE across the parameterized point call;
+    // the common traversal still owns runtime output and tile addressing.
+    const double paired_rho[2]{{rho[0], rho[0]}};
+    const double paired_gradient[2][3]{{
+        {{gradient[0][0], gradient[0][1], gradient[0][2]}},
+        {{gradient[0][0], gradient[0][1], gradient[0][2]}}}};
+    const double paired_tau[2]{{tau[0], tau[0]}};
+    return {function}(paired_rho, paired_gradient, paired_tau{arguments});
+  }}
+}};
+"""
     launches = ""
     for batched in (False, True):
         name = "launch_batch" if batched else "launch"
+        restricted_evaluator = "RestrictedBatched" if batched else "Restricted"
         launches += f"""
 void {name}(cudaStream_t stream, const double* features, const double* weights,
     std::size_t count, std::size_t spins, double* coefficients, double* totals,
     int* error, std::size_t row, bool restricted, std::size_t tile_points) {{
   if (restricted)
-    automatic_evaluate_points<{provider.feature_terms}, {str(batched).lower()}, Restricted>
+    automatic_evaluate_points<{provider.feature_terms}, {str(batched).lower()}, {restricted_evaluator}>
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
             features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
   else

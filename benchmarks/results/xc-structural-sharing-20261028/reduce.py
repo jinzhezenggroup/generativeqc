@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import lzma
 import statistics
@@ -36,13 +35,14 @@ def point_summary(payload: dict) -> dict:
 
 
 def main() -> None:
-    with lzma.open(Path(__file__).with_name("receipts.json.xz"), "rt") as stream:
-        data = json.load(stream)
+    # Both stages share provenance storage; retain their separate populations.
+    archive = (
+        Path(__file__).parent.parent / "xc-shared-point-abi-20261028/receipts.json.xz"
+    )
+    with lzma.open(archive, "rt") as stream:
+        data = json.load(stream)["structural_discovery"]
     for arm in ("literal", "smart"):
-        sources = data["generated"][arm]
-        hashes = {
-            hashlib.sha256(source.encode()).hexdigest() for source in sources.values()
-        }
+        hashes = set(data["generated"][arm].values())
         for row in data["builds"][arm]["objects"]:
             assert row["source_sha256"] in hashes
     pilot = point_summary(data["point_pilot"])

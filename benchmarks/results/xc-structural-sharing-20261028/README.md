@@ -16,8 +16,8 @@ The selected 73-registration package compares complete literal specialization
 with all 12 shared groups. NVCC 12.9.1 targets SM120 on Slurm node2 with a PRO6000
 allocation. Builds use verified sccache 0.16.0 and retain its statistics; caches
 are never cleared. Build times are cache-aware observations, not a controlled
-cache-miss compiler-speed claim. Exact generated sources, commands, object and
-binary hashes accompany the measurements.
+cache-miss compiler-speed claim. Exact producer reconstruction, generated-source
+identities, commands, object and binary hashes accompany the measurements.
 
 The selected package's 33 objects shrink from **41,532,592 to 7,997,872 bytes**
 (**80.74%**); its point kernels shrink from **292 to 48**. These are package
@@ -63,19 +63,28 @@ The publication changes only formatting of the measured package planner; a
 one-off identical-AST check records that distinction. Both publication registries
 were regenerated together, compiled and linked again. Three final RKS smoke
 cohorts (APBE, BR78 and KTBM) pass all five cold/warm/moved calls. Separate
-publication source bytes, generated files and binary hashes are retained.
+publication source bytes, generated-file identities and binary hashes are retained.
 The default-policy comparison uses the prior package planner with the same
 canonical producer inputs; it does not reuse stale descriptor identities.
 
-`receipts.json.xz` contains the complete populations, independent-oracle receipts,
-initial failures, reconstruction sources, generated packages, compiler/cache
-provenance and experiment drivers. Binaries, objects and raw disassembly remain
-ignored local artifacts. The reducer checks artifact source hashes, paired
-numerical/work gates and reports every timing case, including failed gates:
+The `structural_discovery` record in the
+[consolidated receipt](../xc-shared-point-abi-20261028/receipts.json.xz) contains
+the complete populations, independent-oracle receipts, initial failures, exact
+producer sources, generated-source identities, compiler/cache provenance and
+experiment drivers. Every numerical record is unchanged by consolidation with
+the subsequent repair campaign. Generated products, binaries, objects and raw
+disassembly remain ignored local artifacts. The reducer checks recorded
+source/object bindings and paired numerical/work gates, and reports every timing
+case, including failed gates:
 
 ```bash
 python benchmarks/results/xc-structural-sharing-20261028/reduce.py
 ```
+
+The [source audit](../xc-shared-point-abi-20261028/reproduce_sources.py) can
+rebuild both CPU/CUDA source packages using `--snapshot structural` or
+`--snapshot publication`. It uses a published ancestor plus retained producer
+overlays and does not depend on the unmerged discovery PR head.
 
 See the [decision note](../../../.agents/notes/implemented/architecture/2026-10-28-xc-structural-parameter-discovery.md)
 and [current guide](../../../docs/developer/xc_native_cuda.md). This evidence

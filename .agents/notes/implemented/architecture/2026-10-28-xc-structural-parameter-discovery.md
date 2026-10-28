@@ -92,3 +92,6 @@ approval for automatic promotion.
 - [Original prepared-coefficient promotion](../performance/2026-10-28-xc-prepared-parameters.md)
 - [Original sharing ownership](2026-10-27-xc-parameter-worker-sharing.md)
 - [Current CUDA XC guide](../../../../docs/developer/xc_native_cuda.md)
+- [Subsequent RKS batch regression repair](../performance/2026-10-28-xc-shared-point-abi.md)
+  preserves the negative measurements above and qualifies a narrower physical
+  input-binding change without widening the default discovery policy.

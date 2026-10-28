@@ -160,7 +160,12 @@ Scalar mathematical coefficients and their fixed products are prepared after
 differentiation using the existing Graph algebra, before equal-spin projection.
 An immutable host table supplies one row by value in CUDA launch parameter space;
 fixed offsets avoid dynamic device-table addressing, and concurrent launches
-never mutate shared coefficient state. Density thresholds,
+never mutate shared coefficient state. The restricted batched adapter explicitly
+pairs physical inputs after the host proves RKS, exposing the same input equality
+to CUDA optimization as to the mathematical Graph. It reuses the restricted
+mathematical body and replaces its existing batched kernel instantiation.
+Ordinary/general adapters, polarized partial derivatives and runtime tile/output
+layouts retain their existing contracts. Density thresholds,
 work-domain guards, physical derivative conventions and spin layouts remain
 part of the compiled contract. Both general and equal-spin parameterized bodies,
 ordered parameter names and complete point layouts must agree before sharing.
@@ -194,7 +199,9 @@ python tools/generate_libxc_semilocal_cuda_registry.py \
 The report includes coefficient ABI sizes, exact contract identities, selection
 status, retained specializations and point-kernel counts. See the
 [discovery decision](../../.agents/notes/implemented/architecture/2026-10-28-xc-structural-parameter-discovery.md)
-for measured reasons to keep discovery separate from default promotion.
+for measured reasons to keep discovery separate from default promotion, and the
+[local regression fix](../../.agents/notes/implemented/performance/2026-10-28-xc-shared-point-abi.md)
+for the subsequent paired-input qualification and discarded storage changes.
 
 Each registration retains its canonical coefficient-bound mathematical identity
 for CPU/CUDA admission. Its source identity authenticates the shared worker's
