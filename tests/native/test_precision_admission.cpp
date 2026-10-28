@@ -1,11 +1,11 @@
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 
 #include "generativeqc/precision_admission.h"
+#include "native_test_require.hpp"
 
 int main() {
   generativeqc_precision_admission_context_v1 context{};
@@ -58,29 +58,30 @@ int main() {
     return generativeqc_precision_admission_query_v1(&context, &provenance, &detail, events.data(),
                                                      operators.data(), &decision);
   };
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && decision.strict_warm && !decision.budget_fock);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && decision.strict_warm &&
+               !decision.budget_fock);
   // A fresh audit on another density, owner, or execution cannot certify this
   // returned state, even when all aggregate counters remain positive.
   for (auto member : {&generativeqc_precision_work_event::owner_id,
                       &generativeqc_precision_work_event::solve_epoch,
                       &generativeqc_precision_work_event::state_generation}) {
     events[1].*member += 1;
-    assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
+    require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
     events[1].*member -= 1;
   }
   context.range_exchange = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
   context.range_exchange = 0;
   context.nonlocal_correlation = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
   context.nonlocal_correlation = 0;
   provenance.mixed_stage_fock_builds = std::numeric_limits<std::uint64_t>::max();
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
   provenance.mixed_stage_fock_builds = 0;
   context.gradient_present = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.strict_warm);
   context.gradient_qualified = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && decision.strict_warm);
   context.gradient_present = context.gradient_qualified = 0;
 
   // Pure-J mixed proposals may retain strict J; range/exact exchange needs its
@@ -89,9 +90,10 @@ int main() {
   operators[1].arithmetic_mode = GENERATIVEQC_PRECISION_ARITHMETIC_MIXED;
   provenance.strict_stage_fock_builds = 2;
   provenance.strict_refinement_applied = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && decision.budget_fock && !decision.strict_warm);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && decision.budget_fock &&
+               !decision.strict_warm);
   context.range_exchange = 1;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.budget_fock);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.budget_fock);
   context.range_exchange = 0;
 
   context.ks_model = 0;
@@ -104,30 +106,30 @@ int main() {
   context.force_max_abs = 1e-4;
   for (unsigned i = 0; i != 3; ++i)
     context.requested_controls[i] = context.standard_controls[i] = 1e-10;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && decision.standard_fallback);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && decision.standard_fallback);
   context.census_presence = 0;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
   context.census_presence = 2;
   context.force_rms = std::nextafter(3e-5, 0.0);
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
   context.force_rms = 3e-5;
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && decision.standard_fallback);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && decision.standard_fallback);
   context.requested_controls[0] = std::nextafter(context.standard_controls[0], 1.0);
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS && !decision.standard_fallback);
 
   // All schema and input failures are transactional, including late array
   // descriptor validation after otherwise admissible metadata.
   const auto before = decision;
   context.reserved = 1;
-  assert(query() == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
-  assert(std::memcmp(&before, &decision, sizeof(decision)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(std::memcmp(&before, &decision, sizeof(decision)) == 0);
   context.reserved = 0;
   context.force_rms = std::numeric_limits<double>::quiet_NaN();
-  assert(query() == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
-  assert(std::memcmp(&before, &decision, sizeof(decision)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(std::memcmp(&before, &decision, sizeof(decision)) == 0);
   context.force_rms = 0;
   operators.back().abi_version += 1;
-  assert(query() == GENERATIVEQC_STATUS_ABI_MISMATCH);
-  assert(std::memcmp(&before, &decision, sizeof(decision)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_ABI_MISMATCH);
+  require_test(std::memcmp(&before, &decision, sizeof(decision)) == 0);
   return 0;
 }
