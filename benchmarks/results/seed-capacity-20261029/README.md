@@ -2,7 +2,7 @@
 
 PR #2865 queries the prepared native owner before any warm-seed export.
 Final production source is `115cc3c72`; baseline is `e8de3e4d9` (#2864).
-This intermediate evidence commit retains the complete CPU audited endpoint
+This intermediate evidence commit retains the complete CUDA audited endpoint
 population. Full control receipts and reproduction instructions follow.
 
 Each backend has 1,792 complete scalar/batch calls in eight ABBA/BAAB groups.
@@ -12,5 +12,7 @@ count gates pass. Slurm 14843 passes 19 GPU tests with compatibility poisoned.
 Slurm 14842 failed test collection because the uploaded benchmark helper was
 missing; its installed SDK passed, and the failed receipt remains retained.
 
-`cpu-samples.json.xz` retains the exact original CPU sample JSON. No scientific model, tolerance, seed policy or gate was changed.
+`cuda-samples.json.xz` retains the exact original CUDA sample JSON.
+`history.json` binds the original CPU data to its Git commit/path/SHA-256.
+Recover it with `git show COMMIT:PATH`; no data or acceptance gate changes. No scientific model, tolerance, seed policy or gate was changed.
 This scoped #2227 R2/R4/R6 migration excludes R3 and does not close the parent.

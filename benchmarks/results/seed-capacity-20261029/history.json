@@ -1,0 +1,9 @@
+{
+  "cpu-samples.json.xz": {
+    "git_commit": "d1387a772118e1c927f84c605447320a6aeb601c",
+    "git_path": "benchmarks/results/seed-capacity-20261029/cpu-samples.json.xz",
+    "sha256": "a9ab67cebd7ef0a8dc083958f6f03fb3a19634ac96c2b1c5228ca410ab3dc79a",
+    "bytes": 32740,
+    "scope": "Final production 115cc3c72, CPU 1792-call independently audited matrix."
+  }
+}
