@@ -56,9 +56,10 @@ class NativeContractTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for header, source in zip(
-            HEADERS, (C, CPP, "namespace generativeqc {}"), strict=True
-        ):
+        for header in HEADERS:
+            source = {HEADERS[0]: C, HEADERS[1]: CPP}.get(
+                header, "" if header.endswith(".h") else "namespace generativeqc {}"
+            )
             path = self.root / header
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
@@ -81,7 +82,7 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 132)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 133)
         self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
         self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 57)

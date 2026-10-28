@@ -930,6 +930,51 @@
           "path": "python/generativeqc/progressive_controller.py",
           "symbol": "_finalize_hf_verification_python",
           "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_budget_fock_work_admitted",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_compatibility_budget_fock_work_admitted",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_budget_fock_strict_warm_admitted",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_compatibility_budget_fock_strict_warm_admitted",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_standard_fallback_admitted",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "_compatibility_standard_fallback_admitted",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/_precision_native.py",
+          "symbol": "admission",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/precision_policy.py",
+          "symbol": "PrecisionCalculator._validate_endpoint",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/_precision_batch.py",
+          "symbol": "PreparedPrecisionBatch",
+          "classification": "scientific-runtime"
         }
       ],
       "native_scientific_sources": [
@@ -942,7 +987,8 @@
         "src/scf/occupied_projection.cpp",
         "src/scf/hf_physical_audit.hpp",
         "src/scf/progressive_verification.hpp",
-        "src/scf/system_projection.hpp"
+        "src/scf/system_projection.hpp",
+        "src/runtime/precision_admission.hpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
@@ -950,11 +996,13 @@
         "src/api/c_api_scf_effort.cpp",
         "src/api/c_api_projection.cpp",
         "src/api/c_api_hf_physical_audit.cpp",
-        "src/api/c_api_hf_verification.cpp"
+        "src/api/c_api_hf_verification.cpp",
+        "src/api/c_api_precision_admission.cpp"
       ],
       "remaining_python_runtime": [
         "The bounded two-stage HF execution schedule uses the selected native callback controller: stage order, source-success projection, target-success/convergence density export, reverse-order cleanup and post-cleanup audit scheduling. For all-electron CPU RHF/UHF Direct/DF, the physical fixed-density audit uses one native scope for preparation, Fock/overlap, shared residual reduction and cleanup. The selected native final-verification policy owns scalar target/physical/precision/accuracy/work-budget disposition. Python retains typed planning, resource preflight, audit transport/presentation, typed identity/observable validation and diagnostic presentation, with explicit old-protocol/out-of-range-integer compatibility; unsupported audit domains and missing protocols retain explicit compatibility, never a retry after admitted native refusal; general coarse-to-fine and force-aware physical execution remain Python-owned. Missing-symbol scheduling is explicit compatibility, never a retry after native refusal. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance and custom types remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence.",
-        "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority."
+        "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority.",
+        "The public native application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. Python transports typed model traits and completed diagnostics; missing additive support retains explicit compatibility and selected failures never retry it. Solver-default selection, complete-gradient qualification, candidate/audit/fallback execution, observable comparison and bounded independent seed lifetimes remain Python production owners; this query does not claim a native precision endpoint or new numerical qualification."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
@@ -969,7 +1017,11 @@
         "tests/native/test_hf_verification.cpp",
         "tests/python/test_native_hf_verification.py",
         "tests/python/test_native_system_projection.py",
-        "tests/native/test_system_projection_sdk.cpp"
+        "tests/native/test_system_projection_sdk.cpp",
+        "tests/native/test_precision_admission.cpp",
+        "tests/python/test_native_precision_admission.py",
+        "tests/python/test_precision_policy_native.py",
+        "tests/python/test_precision_batch_cuda.py"
       ],
       "trackers": [
         "#933"

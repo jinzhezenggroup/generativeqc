@@ -214,6 +214,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_semilocal](#native-cpp-generativeqc-kscomposition-add-semilocal)
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
+- [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5626,3 +5627,33 @@ Native capabilities still govern execution, including rejection of unsupported D
 
 **Units.** Grid radii/tolerances use Bohr, exchange range uses inverse Bohr, and energies use
 Hartree when the returned calculation is subsequently executed.
+
+(native-c-generativeqc-precision-admission-query-v1)=
+## generativeqc_precision_admission_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_precision_admission_query_v1 ( const generativeqc_precision_admission_context_v1 * context , const generativeqc_precision_provenance * provenance , const generativeqc_precision_work_detail * detail , const generativeqc_precision_work_event * events , const generativeqc_precision_operator_record * operators , generativeqc_precision_admission_v1 * output ) ;
+```
+
+**Behavior.** Evaluate shared budget-Fock, strict warm and Standard fallback policy.
+
+**Inputs.** Nonnull versioned context, provenance, detail and output; event/operator arrays
+contain exactly the counts in detail. Missing mixed-build metadata uses UINT64_MAX;
+unavailable effective bits use zero. Supplied evidence and model traits must describe
+the same completed result. No model or numerical qualification is inferred here.
+
+**Outputs.** Transactionally writes policy version 1 and three boolean decisions.
+
+**Errors.** INVALID_ARGUMENT for invalid flags, nonfinite/negative controls or inconsistent
+array/count pairs; ABI_MISMATCH for invalid descriptors; NOT_IMPLEMENTED for an unknown
+detail version. Output is unchanged on failure.
+
+**Lifetime.** All input/output storage is borrowed only during the call; no pointer is retained.
+
+**Execution.** Synchronous allocation-free host query; no context, GPU, compiler or solve is
+needed. Explicit observable targets still require their independent endpoint audit.
+
+**Units.** Budgets use Eh and Eh/bohr; solver controls retain their existing native units;
+counts denote actual work, never inferred iterations or timings.

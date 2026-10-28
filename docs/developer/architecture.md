@@ -579,3 +579,16 @@ matrix arena stores adjacent alpha/beta states. Coulomb kernels consume
 The two spin commutators are concatenated into one DIIS metric per physical
 system, so convergence and failure isolation remain molecular rather than
 being reported as unrelated spin jobs.
+
+
+Application precision evidence admission is shared through
+`generativeqc_precision_admission_query_v1` in
+`<generativeqc/precision_admission.h>`. It consumes the existing public precision
+provenance, operator records and returned-state events. Budget-Fock qualification,
+strict warm reuse and Standard fallback use the same native predicates in the
+Python facade and SDK. Missing evidence remains unknown; explicitly unavailable
+fitted-HF counters retain their established exception. The query performs no
+numerical work and cannot qualify a method or replace an explicit observable
+audit. Python still owns solver-default/model-gradient qualification and the
+candidate/auditor execution and seed lifetimes. Missing additive symbols retain
+compatibility; a selected native query failure propagates.
