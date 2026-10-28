@@ -161,6 +161,9 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
     with bounded.prepare_batch(
         systems, charges=charges, multiplicities=multiplicities
     ) as batch:
+        assert batch._native_dft_force_eligible(), (
+            "ECP and fragment must both be native"
+        )
         with no_cpu_derivatives():
             started = perf_counter()
             cold = batch.execute(strict=True)
@@ -202,6 +205,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         ledger = batch.resource_diagnostics["observation"]["device_ledger"]
         assert ledger["rejected_allocations"] == 0
         assert 0 < ledger["peak_bytes"] <= ledger["limit_bytes"]
+        assert ledger["admission"]["combined_peak_bytes"] <= plan.peak_bytes["device"]
         record_property("native_scf_ledger", ledger)
         work = assert_ecp_force_work(batch)
         for item in work:
@@ -237,6 +241,11 @@ def test_public_ecp_force_failure_is_transactional_and_closes_snapshot(
 
     with calc.prepare_batch([atoms, fragment]) as batch:
         with monkeypatch.context() as patch:
+            # Select the retained old-library consumer so the injected Python
+            # admission failure is exercised even with native ECP force support.
+            patch.setattr(
+                batch._library, "generativeqc_ks_batch_supported_properties_v1", None
+            )
             patch.setattr(
                 _stationary_cuda, "complete_rks_cuda_gradient_diagnostic", rejected
             )

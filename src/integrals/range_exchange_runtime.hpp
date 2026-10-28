@@ -22,14 +22,17 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
                            std::size_t count, bool independent_slots, double* output,
                            std::uint64_t* visits) {
   using namespace generativeqc::scf::cuda_execution;
-  if (!packed || !indices || !weights || !output || !visits || !natom ||
-      natom > std::numeric_limits<std::size_t>::max() / 3 || !nao || !nprimitive || !count ||
-      count > 4096 || (independent_slots && count != 1))
+  // Only a bounded quartet page is fixed. Molecular indices and publication
+  // storage scale with the actual input, using checked packed-buffer offsets.
+  constexpr auto elements = std::numeric_limits<std::size_t>::max() / sizeof(double);
+  if (!packed || !indices || !weights || !output || !visits || !natom || !nao || !nprimitive ||
+      !count || count > 4096 || (independent_slots && count != 1) || natom > elements / 3 ||
+      nprimitive > (elements - 3 * natom) / 2 || nao > (elements - 3 * natom - 2 * nprimitive) / 16)
     return 1;
   const double* primitives = packed + 3 * natom;
   const double* aos = primitives + 2 * nprimitive;
-  // Retain a private per-atom accumulator: no partial publication on failure.
-  std::vector<double> candidate(independent_slots ? 12U : 3U * natom, 0.0);
+  const auto values = independent_slots ? 12 : 3 * natom;
+  std::vector<double> candidate(values);
   std::uint64_t records = 0;
   std::uint64_t evaluations = 0;
   for (std::size_t quartet = 0; quartet < count; ++quartet) {
@@ -42,7 +45,7 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
       if (index < 0 || static_cast<std::size_t>(index) >= nao) return 1;
       rows[slot] = aos + 16 * index;
       const auto* row = rows[slot];
-      // Check finite/integral metadata before converting a floating atom index.
+      // Validate packed metadata before comparisons and integer conversions.
       for (unsigned field = 0; field < 4; ++field)
         if (!std::isfinite(row[field]) || std::floor(row[field]) != row[field]) return 1;
       if (row[0] < 0 || row[0] >= natom || row[1] < 0 || row[2] < 1 ||
@@ -70,7 +73,7 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
         masks[seed] |= 1U << slot;
       }
     }
-    const std::size_t final_target = independent_slots ? 3U : owners[3];
+    const std::size_t final_target = independent_slots ? 3 : owners[3];
     for (unsigned first = 0; first < rows[0][3]; ++first)
       for (unsigned second = 0; second < rows[1][3]; ++second)
         for (unsigned third = 0; third < rows[2][3]; ++third)
@@ -91,26 +94,30 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
               if (angular_total(angular[slot]) > 3 || !std::isfinite(term[3])) return 1;
               component_weight *= term[3];
             }
-            for (unsigned first_primitive = 0; first_primitive < rows[0][2]; ++first_primitive)
-              for (unsigned second_primitive = 0; second_primitive < rows[1][2]; ++second_primitive)
-                for (unsigned third_primitive = 0; third_primitive < rows[2][2]; ++third_primitive)
-                  for (unsigned fourth_primitive = 0; fourth_primitive < rows[3][2];
+            for (std::size_t first_primitive = 0; first_primitive < rows[0][2]; ++first_primitive)
+              for (std::size_t second_primitive = 0; second_primitive < rows[1][2];
+                   ++second_primitive)
+                for (std::size_t third_primitive = 0; third_primitive < rows[2][2];
+                     ++third_primitive)
+                  for (std::size_t fourth_primitive = 0; fourth_primitive < rows[3][2];
                        ++fourth_primitive) {
-                    const unsigned local[4]{first_primitive, second_primitive, third_primitive,
-                                            fourth_primitive};
+                    const std::size_t local[4]{first_primitive, second_primitive, third_primitive,
+                                               fourth_primitive};
                     double exponents[4], weight = component_weight;
                     for (unsigned slot = 0; slot < 4; ++slot) {
                       const auto* primitive =
-                          primitives + 2 * (static_cast<unsigned>(rows[slot][1]) + local[slot]);
+                          primitives + 2 * (static_cast<std::size_t>(rows[slot][1]) + local[slot]);
                       exponents[slot] = primitive[0];
                       if (!std::isfinite(exponents[slot]) || exponents[slot] <= 0 ||
                           !std::isfinite(primitive[1]))
                         return 1;
                       weight *= primitive[1];
                     }
+                    if (records == std::numeric_limits<std::uint64_t>::max()) return 1;
                     ++records;
                     if (!std::isfinite(weight)) return 2;
                     for (unsigned seed = 0; seed < seeds; ++seed) {
+                      if (evaluations == std::numeric_limits<std::uint64_t>::max()) return 1;
                       ++evaluations;
                       const auto result =
                           Program::evaluate(exponents, centers, angular, masks[seed]);
@@ -127,7 +134,6 @@ int range_exchange_records(const double* packed, std::size_t natom, std::size_t 
                   }
           }
   }
-  const auto values = independent_slots ? 12 : 3 * natom;
   for (std::size_t index = 0; index < values; ++index)
     if (!std::isfinite(candidate[index])) return 2;
   std::copy_n(candidate.data(), values, output);

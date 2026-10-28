@@ -45,6 +45,16 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
                          minimum, 64, 16, &bounded_owner, error.data(), error.size()) == 0,
           error.data());
   binding.destroy(bounded_owner);
+  // The molecular arena is dynamic. Cross all historical atom/AO/primitive
+  // ceilings while still enforcing the exact byte floor and releasing storage.
+  const auto expanded_bytes =
+      binding.numeric_bytes(129, 2050, 16385, 64, 1, binding.spin_blocks, 1, false);
+  bounded_owner = nullptr;
+  require(binding.create(0, property.major, property.minor, 129, 2050, 16385, 64, 1,
+                         binding.spin_blocks, 1, expanded_bytes, 1, 1, &bounded_owner, error.data(),
+                         error.size()) == 0,
+          error.data());
+  binding.destroy(bounded_owner);
   // An out-of-range visible ordinal is a validated argument failure, not a
   // driver call. Preserve this distinction without allocating an owner.
   int visible_devices{};

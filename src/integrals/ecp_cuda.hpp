@@ -13,5 +13,5 @@ generativeqc_status ecp_integrals_cuda(int device, const core::System& system, u
 // Pointers and stream are borrowed; no host integral or density staging.
 generativeqc_status add_ecp_cuda(int device, const core::System& system, void* stream,
                                  double* hcore, const double* density, double* forces,
-                                 std::string& detail);
+                                 std::string& detail, double derivative_scale = 1.0);
 }  // namespace generativeqc::integrals

@@ -43,25 +43,12 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     )
     assert "separate_sources, block_domain, force_topology, spd_schedule);" in consumer
     assert "launch_bounded_shell_rsh_derivatives(" in source
-    rsh_begin = source.index("cudaError_t execute_generated_rsh_energy_derivatives(")
-    rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
-    rsh_body = source[rsh_begin:rsh_end]
-    assert rsh_body.count("launch_bounded_shell_rsh_derivatives(") == 1
-    assert rsh_body.count("launch_bounded_shell_range_exchange_derivative(") == 1
-    assert "if (omega == 0.3)" in rsh_body
-    assert "for (unsigned source" not in rsh_body
+    # Executable host-lifetime and radial-dispatch probes cover the shared LR
+    # launcher, fused fallback, omega/domain forwarding and source publication.
+    # Factoring a launcher must not require a duplicate lexical call site here.
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
     assert "DirectScreeningPurpose::Force" in consumer
-    normalized_rsh = " ".join(rsh_body.split())
-    assert (
-        "DirectCoulombRange::Long, omega, 0.0, 1.0, p.bounded_block_domain);"
-        in normalized_rsh
-    )
-    assert (
-        "DirectCoulombRange::Long, omega, 1.0, p.bounded_block_domain);"
-        in normalized_rsh
-    )
     range_begin = consumer.index("void launch_bounded_shell_range_exchange_derivative(")
     range_end = consumer.index(
         "void launch_bounded_shell_rsh_derivatives(", range_begin

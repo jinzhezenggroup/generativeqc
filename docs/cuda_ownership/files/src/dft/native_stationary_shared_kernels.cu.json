@@ -5,6 +5,12 @@
   "reason": "Shared native CUDA derivative transport and complete source-reduction launch owners. Keeps stream, bounds and final nonfinite-status handling in the verified C++ context; mathematical source weights and admission are validated by compiler ProgramIR, not method names.",
   "regions": [
     {
+      "start": "__global__ void recompose_range(",
+      "stop": "__global__ void reduce_sources(",
+      "role": "scientific",
+      "reason": "Applies the shared host/device full-range plus LR correction decomposition to authenticated device source slots, preserving gradient sign and FP64 finite checks."
+    },
+    {
       "start": "__global__ void reduce_sources(",
       "stop": "cudaError_t launch_native_stationary_source_transport(",
       "role": "scientific",

@@ -10,5 +10,6 @@ STATIONARY_AOT_BUILD_PROFILES = (
     ("pbe0", 1, "PBE0", False, None),
     ("b3lyp", 3, "B3LYP", False, None),
     ("m06_2x", 131522, "M06-2X", False, None),
+    ("mn15", 131340, "MN15", False, None),
     ("wb97mv", 4, "WB97M-V", False, "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
 )

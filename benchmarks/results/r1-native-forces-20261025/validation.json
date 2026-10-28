@@ -1,0 +1,196 @@
+{
+  "attachments": [
+    {
+      "path": "historical-recovery.json",
+      "sha256": "b04f43914e6a3984d5274a883a12445c43f6e1d7a9a291a01a7ae03e71dd28b9"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "energy": {
+      "atol": 2e-08,
+      "max_absolute_error": 9.094947017729282e-13,
+      "max_scaled_error": 4.547473508864641e-05,
+      "passed": true,
+      "rms_error": 4.1551943178377e-14,
+      "rtol": 0,
+      "shape": [
+        77568
+      ]
+    },
+    "forces": {
+      "atol": 3e-07,
+      "max_absolute_error": 8.404107342633914e-12,
+      "max_scaled_error": 2.8013691142113048e-05,
+      "passed": true,
+      "rms_error": 2.1726448795250393e-13,
+      "rtol": 0,
+      "shape": [
+        1265328
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Reused compiler caches; build time is not measured as a cold compilation claim.",
+    "seconds": null
+  },
+  "device": "NVIDIA GeForce RTX 5090, GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d, 580.95.05, 32607 MiB",
+  "hardware": {
+    "assigned_visibility": "0",
+    "diagnostic_job_id": "14329",
+    "reason": null,
+    "slurm_job_id": "14328",
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "Composite native endpoint spans multiple existing generated programs; immutable source revision, authenticated source census and binary identify them. This publication makes no new universal schedule-promotion claim.",
+    "ir": "Composite native endpoint spans multiple existing generated programs; immutable source revision, authenticated source census and binary identify them. This publication makes no new universal schedule-promotion claim.",
+    "schedule": "Composite native endpoint spans multiple existing generated programs; immutable source revision, authenticated source census and binary identify them. This publication makes no new universal schedule-promotion claim."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": null,
+    "source": "68b1a921dde5334d2a7aba3e93191dd94afc11ecd47061e9db98a42393410473"
+  },
+  "inputs_hash": "88db55038bcf69b1927cd20142f0f0493f4d2ca70f00c4d8beb0079aaebf0ee8",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Individual provider trace counters retained; whole-process RSS and simultaneous complete-endpoint device peak were not measured."
+  },
+  "performance": {
+    "maximum_median_ratio": 1.0063663194511998,
+    "non_regression_status": "pass",
+    "reason": "The separate 1.05 non-regression check passes in both orders. Full performance-promotion accounting (independent per-sample residual recomputation, concurrent peak memory and clean compilation cost) was not attempted.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "685478ca1111407573a5cbfa813d63ae0a5713ce",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "device": "cuda",
+    "inputs": {
+      "approximations": [
+        "Direct",
+        "DF; exact LR for WB97M-V"
+      ],
+      "basis": "spherical STO-3G; 36/48-atom PBE DF def2-SVP",
+      "density_tolerance": 1e-10,
+      "energy_tolerance": 1e-12,
+      "grid": "product 12/4/8; same nonlocal grid for WB97M-V",
+      "larger_geometry": "water i shifted by (7*(i%4),7*(i//4),0)",
+      "methods": [
+        "lda",
+        "pbe",
+        "pbe0",
+        "b3lyp",
+        "r2scan",
+        "wb97m-v",
+        "m06-2x",
+        "mn15"
+      ],
+      "moved": "oxygen 0 z += 0.02",
+      "precision": "fp64",
+      "screening_tolerance": 1e-13,
+      "spins": [
+        0,
+        1
+      ],
+      "units": "Bohr",
+      "water": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            -1.43233673,
+            1.10715266
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.43233673,
+            1.10715266
+          ]
+        ]
+      ]
+    },
+    "non_regression": {
+      "equal_iterations_fock_builds_warm_start": true,
+      "max_energy_difference": 2e-08,
+      "max_force_difference": 3e-07,
+      "max_ratio": 1.05
+    },
+    "numerical_scope": "All-to-all cross-version public E/F parity at matched geometries; independent PySCF/FD qualification is additionally exercised by committed tests, not inferred from this baseline comparison.",
+    "order": [
+      "ABBA",
+      "BAAB"
+    ],
+    "phases": [
+      "cold",
+      "warm",
+      "moved"
+    ],
+    "samples_per_block": 11,
+    "trace_during_timing": false,
+    "warmups_per_block": 3
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Every sample retains total iterations, Fock builds and warm-start flags in samples.json.gz; no full per-iteration residual trace or independent residual recomputation is claimed.",
+  "stages": {
+    "compilation": {
+      "reason": null,
+      "scope": "Frozen 685478ca1 versus #2782 df2ded411 paired public E/F endpoints",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": null,
+      "scope": "Frozen 685478ca1 versus #2782 df2ded411 paired public E/F endpoints",
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "scope": "Frozen 685478ca1 versus #2782 df2ded411 paired public E/F endpoints",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "No general schedule/precision promotion or universal convergence claim.",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": null,
+      "scope": "Frozen 685478ca1 versus #2782 df2ded411 paired public E/F endpoints",
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "scope": "Frozen 685478ca1 versus #2782 df2ded411 paired public E/F endpoints",
+      "status": "pass"
+    }
+  },
+  "subject": "R1 complete native force endpoint parity and non-regression",
+  "tier": "endpoint",
+  "timings": [],
+  "toolchain": {
+    "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+    "packages": {
+      "numpy": "2.3.5",
+      "pyscf": "2.14.0",
+      "pytest": "9.0.1"
+    },
+    "python": "3.13.9",
+    "sccache": "sccache 0.16.0"
+  }
+}

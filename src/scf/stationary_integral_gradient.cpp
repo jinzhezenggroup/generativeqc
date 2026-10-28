@@ -21,7 +21,7 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
                                                std::size_t grid_points,
                                                std::size_t tile_points) noexcept {
   try {
-    if (!tile_points || grid_points > 1000000) return false;
+    if (!tile_points) return false;
     std::size_t primitive_sum = 0;
     for (const auto& shell : system.shells) {
       if (shell.angular_momentum > 2) return false;
@@ -42,7 +42,12 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
                                          static_cast<std::size_t>(grid_points % tile_points != 0));
     const auto visits =
         runtime::size_mul(pairs, runtime::size_add(runtime::size_mul(2, grid_points), tiles));
-    return records <= 2000000 && visits <= 100000000;
+    // Source work is streamed; a historical qualification size is not a
+    // mathematical capability limit. Check representability, then let owned
+    // workspace and the caller's resource ledger admit the actual buffers.
+    (void)records;
+    (void)visits;
+    return true;
   } catch (...) {
     return false;
   }
@@ -69,9 +74,6 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   const auto& system = target.system();
   if (!cpu_stationary_direct_force_work_admitted(system, hybrid, 0, 1))
     throw std::invalid_argument("stationary Direct integral work exceeds its qualified envelope");
-  if (!system.ecp_terms.empty() || std::any_of(system.atoms.begin(), system.atoms.end(),
-                                               [](const auto& atom) { return atom.ecp_core != 0; }))
-    throw std::invalid_argument("stationary Direct integral sources require all-electron topology");
   const auto nbf = target.one_electron().nbf;
   const auto matrix = runtime::size_mul(nbf, nbf);
   const auto ncoord = runtime::size_mul(system.atoms.size(), 3);
@@ -242,10 +244,11 @@ std::vector<double> cpu_stationary_range_correction(const PreparedFockPlan& targ
   std::vector<double> weights, result(nc), partial(nc);
   indices.reserve(4 * tile);
   weights.reserve(tile);
-  // The generated range derivative holds another O(natom) transactional vector.
-  const auto bytes =
-      runtime::size_add(runtime::vector_capacities(basis.packed, indices, weights, result, partial),
-                        runtime::size_mul(nc, sizeof(double)));
+  // The generic range consumer owns one transactional molecular candidate
+  // until the page succeeds; include it in this caller's live byte envelope.
+  const auto bytes = runtime::add_capacity(
+      runtime::vector_capacities(basis.packed, indices, weights, result, partial),
+      runtime::size_mul(nc, sizeof(double)));
   if (bytes > maximum_bytes) throw std::bad_alloc();
   runtime::sample_cpu_capacity(bytes);
   auto submit = [&] {

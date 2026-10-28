@@ -840,9 +840,17 @@ void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
       std::array<double, 6> forces{};
       result.forces = forces.data();
       result.force_count = forces.size();
-      require(generativeqc_calculation_execute(calculation, &result) ==
-                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "mixed-DF CPU RSH accepted unsupported analytic forces");
+      const auto force_status = generativeqc_calculation_execute(calculation, &result);
+      require(force_status ==
+                  (wb97mv ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+              "mixed-DF CPU range force disagrees with the complete graph capability");
+      if (wb97mv) {
+        require(std::abs(result.energy - cold) < 1e-10,
+                "mixed-DF WB97M-V force changed the energy");
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          require(std::isfinite(forces[axis]) && std::abs(forces[axis] + forces[3 + axis]) < 1e-7,
+                  "mixed-DF WB97M-V force violates translation invariance");
+      }
       method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
       generativeqc_calculation* rejected = nullptr;
       require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
@@ -940,12 +948,25 @@ int main() {
     std::array<double, 6> forces{};
     result.forces = forces.data();
     result.force_count = static_cast<uint32_t>(forces.size());
+    generativeqc_property_flags lda_properties{};
+    require(generativeqc_calculation_get_supported_properties_v1(calculation, &lda_properties) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "LDA RKS prepared capability query failed");
+    const bool lda_force = lda_properties & GENERATIVEQC_PROPERTY_FORCES;
+    forces.fill(1234.0);
     require(generativeqc_calculation_execute(calculation, &result) ==
-                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "LDA RKS force request was not rejected");
-    const char* detail = generativeqc_context_get_last_detail(fixture.context);
-    require(detail != nullptr && std::string(detail).find("issue #163") != std::string::npos,
-            "LDA RKS force rejection omitted its capability boundary");
+                (lda_force ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+            "LDA RKS force execution disagrees with the prepared capability");
+    if (lda_force) {
+      require(result.converged && std::abs(result.energy - kDefaultH2LdaEnergy) < 2e-12,
+              "LDA RKS force execution changed the stationary energy");
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        require(std::isfinite(forces[axis]) && std::abs(forces[axis] + forces[3 + axis]) < 2e-5,
+                "LDA RKS forces violate translation invariance");
+    } else {
+      require(std::all_of(forces.begin(), forces.end(), [](double x) { return x == 1234.0; }),
+              "unavailable LDA derivatives published partial forces");
+    }
     generativeqc_calculation_destroy(calculation);
 
     method = lda_method();
@@ -1062,12 +1083,20 @@ int main() {
             "PBE-D4 public named method did not add the production D4 correction");
     result.forces = forces.data();
     result.force_count = static_cast<uint32_t>(forces.size());
-    require(generativeqc_calculation_execute(calculation, &result) ==
-                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "PBE-D4 silently widened the public force capability");
-    detail = generativeqc_context_get_last_detail(fixture.context);
-    require(detail != nullptr && std::string(detail).find("issue #163") != std::string::npos,
-            "PBE-D4 force rejection omitted the PBE stationary-gradient boundary");
+    generativeqc_property_flags corrected_properties{};
+    require(generativeqc_calculation_get_supported_properties_v1(
+                calculation, &corrected_properties) == GENERATIVEQC_STATUS_SUCCESS,
+            "PBE-D4 force capability query failed");
+    const bool corrected_force = corrected_properties & GENERATIVEQC_PROPERTY_FORCES;
+    require(
+        generativeqc_calculation_execute(calculation, &result) ==
+            (corrected_force ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+        "PBE-D4 force execution disagrees with prepared capability");
+    if (corrected_force)
+      require(
+          std::abs(result.energy - (pbe_energy + d4_energy)) < 2e-12 &&
+              std::all_of(forces.begin(), forces.end(), [](double x) { return std::isfinite(x); }),
+          "PBE-D4 force execution changed its energy or published nonfinite forces");
     generativeqc_calculation_destroy(calculation);
 
     method = lda_method();
@@ -1131,9 +1160,11 @@ int main() {
             "LDA RKS density-fitted energy failed");
     result.forces = forces.data();
     result.force_count = static_cast<uint32_t>(forces.size());
-    require(generativeqc_calculation_execute(calculation, &result) ==
-                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "DFT density fitting exposed an incomplete force consumer");
+    require(
+        generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+            result.converged &&
+            std::all_of(forces.begin(), forces.end(), [](double x) { return std::isfinite(x); }),
+        "LDA DF did not publish a complete native force");
     generativeqc_calculation_destroy(calculation);
 
     method = lda_method();
@@ -1175,7 +1206,7 @@ int main() {
                                            &calculation) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               calculation == nullptr,
           "LDA RKS accepted an odd-electron or non-singlet system");
-      detail = generativeqc_context_get_last_detail(invalid_spin.context);
+      const char* detail = generativeqc_context_get_last_detail(invalid_spin.context);
       require(detail != nullptr && std::string(detail).find("multiplicity 1") != std::string::npos,
               "LDA RKS spin rejection omitted its closed-shell boundary");
     }
@@ -1216,9 +1247,7 @@ int main() {
                   GENERATIVEQC_STATUS_SUCCESS,
               "UKS prepared force capability query failed");
       const bool eligible = available & GENERATIVEQC_PROPERTY_FORCES;
-      require(!eligible || spin_method == GENERATIVEQC_METHOD_PBE_UKS ||
-                  spin_method == GENERATIVEQC_METHOD_R2SCAN_UKS,
-              "UKS widened the native force owner beyond canonical PBE/r2SCAN");
+
       forces.fill(1234.0);
       result.forces = forces.data();
       result.force_count = static_cast<uint32_t>(forces.size());
@@ -1345,11 +1374,16 @@ int main() {
             "KS batch physical diagnostic is missing or inconsistent");
     item.forces = forces.data();
     item.force_count = forces.size();
-    require(generativeqc_batch_execute(batch, nullptr, 0, &item, 1) ==
-                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                generativeqc_batch_get_scf_diagnostic(batch, 0, nullptr) ==
-                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "KS batch force rejection retained stale diagnostics");
+    generativeqc_property_flags batch_properties{};
+    require(generativeqc_ks_batch_supported_properties_v1(batch, 0, &batch_properties) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "LDA batch force capability query failed");
+    const bool batch_force = batch_properties & GENERATIVEQC_PROPERTY_FORCES;
+    const auto expected_force_status =
+        batch_force ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    require(generativeqc_batch_execute(batch, nullptr, 0, &item, 1) == expected_force_status &&
+                generativeqc_batch_get_scf_diagnostic(batch, 0, nullptr) == expected_force_status,
+            "LDA batch force execution/diagnostics disagree with its prepared capability");
     generativeqc_batch_destroy(batch);
 
 #if GENERATIVEQC_HAS_CUDA
@@ -1481,7 +1515,11 @@ int main() {
                     precision.requested_mode == GENERATIVEQC_PRECISION_AUTO &&
                     precision.effective_bits == 32U && precision.strict_refinement_applied == 1 &&
                     precision.refinement_iterations >= 1U,
-                "CUDA KS AUTO provenance omitted actual FP32 work or FP64 refinement");
+                ("CUDA KS AUTO provenance omitted actual FP32 work or FP64 refinement: method=" +
+                 std::to_string(ks) + " bits=" + std::to_string(precision.effective_bits) +
+                 " strict=" + std::to_string(precision.strict_refinement_applied) +
+                 " iterations=" + std::to_string(precision.refinement_iterations))
+                    .c_str());
         require(saved_chunk
                     ? setenv("GENERATIVEQC_CUDA_KS_CHUNK", saved_chunk_value.c_str(), 1) == 0
                     : unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
@@ -1541,9 +1579,15 @@ int main() {
         }
         cuda_result.forces = forces.data();
         cuda_result.force_count = static_cast<uint32_t>(forces.size());
+        generativeqc_property_flags cuda_properties{};
+        require(generativeqc_calculation_get_supported_properties_v1(
+                    cuda_calculation, &cuda_properties) == GENERATIVEQC_STATUS_SUCCESS,
+                "CUDA force capability query failed");
         require(generativeqc_calculation_execute(cuda_calculation, &cuda_result) ==
-                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                "public CUDA KS force request was not rejected");
+                    ((cuda_properties & GENERATIVEQC_PROPERTY_FORCES)
+                         ? GENERATIVEQC_STATUS_SUCCESS
+                         : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+                "public CUDA KS force request disagrees with its prepared capability");
         generativeqc_calculation_destroy(cpu_calculation);
         generativeqc_calculation_destroy(cuda_calculation);
         generativeqc_system_destroy(cuda_system);
