@@ -75,14 +75,32 @@ def _budget_fock_controls(
         "generativeqc_application_fock_precision_version_v2",
         None,
     )
-    ks_options = getattr(calculator, "_ks_options", None)
-    model = getattr(ks_options, "_method_ir", None)
     fitted = bool(getattr(calculator, "_density_fitting_mode", None))
     available = (
         fitted_scf_budget_admitted(calculator, budget)
         if fitted
         else capability is not None and capability() == 2
     )
+    from ._precision_native import budget_controls
+
+    selected = budget_controls(calculator, budget, requested, available=available)
+    if selected is not None:
+        return selected
+    return _compatibility_budget_fock_controls(
+        calculator, budget, requested, available=available
+    )
+
+
+def _compatibility_budget_fock_controls(
+    calculator: Calculator,
+    budget: TargetErrorBudget,
+    requested: dict,
+    *,
+    available: bool,
+) -> dict[str, float]:
+    """Retain the incumbent selection only for libraries without native policy."""
+    ks_options = getattr(calculator, "_ks_options", None)
+    model = getattr(ks_options, "_method_ir", None)
     if (
         not available
         or model is None

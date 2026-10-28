@@ -218,6 +218,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
+- [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5739,3 +5740,33 @@ needed. Explicit observable targets still require their independent endpoint aud
 
 **Units.** Budgets use Eh and Eh/bohr; solver controls retain their existing native units;
 counts denote actual work, never inferred iterations or timings.
+
+(native-c-generativeqc-precision-controls-query-v1)=
+## generativeqc_precision_controls_query_v1
+
+Source: [precision_admission.h](../../include/generativeqc/precision_admission.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_precision_controls_query_v1 ( const generativeqc_precision_controls_context_v1 * context , generativeqc_precision_controls_v1 * output ) ;
+```
+
+**Behavior.** Select the shared budget-Fock SCF convergence controls.
+
+**Inputs.** Versioned model/capability facts, positive energy and force allowances,
+optional nonnegative RMS allowance, and explicitly selected positive overrides.
+The supplied qualification belongs to the same selected native library/model.
+
+**Outputs.** Transactionally writes policy version 1, selection and three controls.
+Unsupported traits or tighter budgets select no override, preserving strict SCF.
+
+**Errors.** INVALID_ARGUMENT for null inputs, invalid flags/mask, nonzero reserved,
+nonfinite/invalid allowances or overrides; ABI_MISMATCH for descriptor headers.
+Output is unchanged on failure. Missing qualification is a successful nonselection.
+
+**Lifetime.** Storage is borrowed only for this call; no pointer is retained.
+
+**Execution.** Allocation-free synchronous host policy; no device, compiler or solve.
+This neither admits an arithmetic provider nor supplies an observable-error proof.
+
+**Units.** Energy allowance is Eh; force allowances are Eh/bohr; controls use existing
+native SCF units. Explicit tighter caller controls remain unchanged.

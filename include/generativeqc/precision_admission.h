@@ -59,6 +59,46 @@ GENERATIVEQC_API generativeqc_status generativeqc_precision_admission_query_v1(
     const generativeqc_precision_operator_record* operators,
     generativeqc_precision_admission_v1* output);
 
+/** Inputs for the incumbent budget-Fock SCF control policy. Boolean fields are
+ * 0/1. modules_available is evidence from the selected Direct capability or the
+ * fitted model's qualification owner; this query does not establish it. An
+ * override_mask bit selects energy, density or screening in that order. Unset
+ * controls are zero. Zero force_rms means no RMS target was requested. */
+typedef struct generativeqc_precision_controls_context_v1 {
+  uint32_t struct_size, abi_version;
+  uint32_t modules_available, ks_model, restricted_spin, self_consistent, device_fused;
+  uint32_t override_mask, reserved;
+  double energy_abs, force_max_abs, force_rms, requested_controls[3];
+} generativeqc_precision_controls_context_v1;
+
+/** selected=0 preserves the caller's ordinary strict controls; all returned
+ * controls are then zero. selected=1 supplies bounded energy/density/screening
+ * tolerances, each no looser than its explicitly supplied caller override. */
+typedef struct generativeqc_precision_controls_v1 {
+  uint32_t struct_size, abi_version, policy_version, selected;
+  double controls[3];
+} generativeqc_precision_controls_v1;
+
+/** @native-contract generativeqc_precision_controls_query_v1
+ * @behavior Select the shared budget-Fock SCF convergence controls.
+ * @inputs Versioned model/capability facts, positive energy and force allowances,
+ * optional nonnegative RMS allowance, and explicitly selected positive overrides.
+ * The supplied qualification belongs to the same selected native library/model.
+ * @outputs Transactionally writes policy version 1, selection and three controls.
+ * Unsupported traits or tighter budgets select no override, preserving strict SCF.
+ * @errors INVALID_ARGUMENT for null inputs, invalid flags/mask, nonzero reserved,
+ * nonfinite/invalid allowances or overrides; ABI_MISMATCH for descriptor headers.
+ * Output is unchanged on failure. Missing qualification is a successful nonselection.
+ * @lifetime Storage is borrowed only for this call; no pointer is retained.
+ * @execution Allocation-free synchronous host policy; no device, compiler or solve.
+ * This neither admits an arithmetic provider nor supplies an observable-error proof.
+ * @units Energy allowance is Eh; force allowances are Eh/bohr; controls use existing
+ * native SCF units. Explicit tighter caller controls remain unchanged.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_precision_controls_query_v1(const generativeqc_precision_controls_context_v1* context,
+                                         generativeqc_precision_controls_v1* output);
+
 #ifdef __cplusplus
 }
 #endif

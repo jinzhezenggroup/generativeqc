@@ -8,9 +8,95 @@ observable audits and solver/seed lifetimes keep their separate owners.
 from __future__ import annotations
 
 import ctypes as ct
+import math
 from typing import Any
 
 from . import _native
+
+
+class _ControlsContext(ct.Structure):
+    """Model-owner facts and caller ceilings; no arrays or calculation lifetime."""
+
+    _fields_ = (
+        [
+            (name, ct.c_uint32)
+            for name in (
+                "struct_size",
+                "abi_version",
+                "modules_available",
+                "ks_model",
+                "restricted_spin",
+                "self_consistent",
+                "device_fused",
+                "override_mask",
+                "reserved",
+            )
+        ]
+        + [(name, ct.c_double) for name in ("energy_abs", "force_max_abs", "force_rms")]
+        + [("requested_controls", ct.c_double * 3)]
+    )
+
+
+class _Controls(ct.Structure):
+    _fields_ = [
+        (name, ct.c_uint32)
+        for name in ("struct_size", "abi_version", "policy_version", "selected")
+    ] + [("controls", ct.c_double * 3)]
+
+
+def budget_controls(
+    calculator: Any, budget: Any, requested: dict, *, available: bool
+) -> dict[str, float] | None:
+    """Query shared budget controls; only absent protocol permits compatibility.
+
+    The existing Direct/fitted qualification owner supplies availability. Native
+    policy owns the budget thresholds and caller-ceiling selection; this adapter
+    does not infer that a model/provider has independent numerical evidence.
+    """
+    library = getattr(calculator, "_library", None)
+    query = getattr(library, "generativeqc_precision_controls_query_v1", None)
+    if query is None:
+        return None
+    options = getattr(calculator, "_ks_options", None)
+    model = getattr(options, "_method_ir", None)
+    plan = getattr(options, "execution_plan", None)
+    context = _ControlsContext(ct.sizeof(_ControlsContext), _native.ABI_VERSION)
+    context.modules_available = bool(available)
+    context.ks_model = model is not None
+    context.restricted_spin = getattr(model, "spin", None) == "unpolarized"
+    context.self_consistent = bool(getattr(plan, "self_consistent", False))
+    context.device_fused = getattr(options, "xc_schedule", None) == "device_fused"
+    context.energy_abs, context.force_max_abs = budget.energy_abs, budget.force_max_abs
+    context.force_rms = 0.0 if budget.force_rms is None else budget.force_rms
+    names = ("energy_tolerance", "density_tolerance", "screening_tolerance")
+    for index, name in enumerate(names):
+        if requested.get(name) is not None:
+            context.override_mask |= 1 << index
+            context.requested_controls[index] = float(requested[name])
+    output = _Controls(ct.sizeof(_Controls), _native.ABI_VERSION)
+    query.argtypes = [ct.POINTER(_ControlsContext), ct.POINTER(_Controls)]
+    query.restype = ct.c_int
+    _native.check(library, query(ct.byref(context), ct.byref(output)))
+    if (
+        output.struct_size != ct.sizeof(_Controls)
+        or output.abi_version != _native.ABI_VERSION
+        or output.policy_version != 1
+        or output.selected not in (0, 1)
+    ):
+        raise RuntimeError("native precision controls returned an invalid receipt")
+    for index, value in enumerate(output.controls):
+        if (
+            not math.isfinite(value)
+            or (value <= 0 if output.selected else value != 0)
+            or (
+                context.override_mask & (1 << index)
+                and value > context.requested_controls[index]
+            )
+        ):
+            raise RuntimeError("native precision controls returned invalid bounds")
+    return dict(zip(names, output.controls, strict=True)) if output.selected else {}
+
+
 from ._precision_work import _ARITHMETIC_MODES, _DTYPES, _EVENT_KINDS, _OPERATOR_NAMES
 
 

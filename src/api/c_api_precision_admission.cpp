@@ -4,6 +4,29 @@
 #include "api/error.hpp"
 #include "runtime/precision_admission.hpp"
 
+extern "C" generativeqc_status generativeqc_precision_controls_query_v1(
+    const generativeqc_precision_controls_context_v1* context,
+    generativeqc_precision_controls_v1* output) {
+  if (!context || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(context) || !generativeqc::api::valid_descriptor(output))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (context->reserved || context->override_mask > 7) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  for (const auto flag : {context->modules_available, context->ks_model, context->restricted_spin,
+                          context->self_consistent, context->device_fused})
+    if (flag > 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!std::isfinite(context->energy_abs) || context->energy_abs <= 0 ||
+      !std::isfinite(context->force_max_abs) || context->force_max_abs <= 0 ||
+      !std::isfinite(context->force_rms) || context->force_rms < 0)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  for (unsigned i = 0; i != 3; ++i) {
+    const auto value = context->requested_controls[i];
+    if (!std::isfinite(value) || ((context->override_mask & (1u << i)) ? value <= 0 : value != 0))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  *output = generativeqc::runtime::precision_controls(*context);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 extern "C" generativeqc_status generativeqc_precision_admission_query_v1(
     const generativeqc_precision_admission_context_v1* context,
     const generativeqc_precision_provenance* provenance,
