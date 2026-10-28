@@ -27,6 +27,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
 - [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
@@ -634,6 +635,40 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-hf-plan-query-v1)=
+## generativeqc_hf_plan_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_plan_query_v1 ( const generativeqc_hf_plan_descriptor_v1 * descriptor , generativeqc_hf_plan_result_v1 * output ) ;
+```
+
+**Behavior.** Admit the numerical controls of a fixed source/target HF plan.
+Source convergence cannot be stricter than target convergence. Source and
+total iteration limits and optional summed cost must hold; equality passes.
+A cost-limited plan requires both estimates. This does not admit a model,
+certify observable accuracy, or replace final physical/work verification.
+
+**Inputs.** Complete current-ABI headers, positive exact iteration counts/limits,
+positive finite energy/density tolerances, declared optional-cost flags and
+positive finite present costs. Reserved input must be zero.
+
+**Outputs.** Atomically publishes all numerical planning failures. SUCCESS means
+a valid query, not admission: the caller must inspect the failures mask.
+
+**Errors.** Null pointers, malformed controls or unknown flags return
+INVALID_ARGUMENT; incompatible headers return ABI_MISMATCH. Errors leave
+output unchanged, including when input/output storage overlaps.
+
+**Lifetime.** Borrows input for this call only; retains no state or pointers.
+
+**Execution.** Synchronous constant-storage host metadata; no allocation, solver,
+device access, Python/compiler import, callback or implicit fallback.
+
+**Units.** Energy tolerance is Hartree; density tolerance follows the HF solver.
+Costs use one caller-defined common unit; iterations are exact counts.
 
 (native-c-generativeqc-hf-verify-final-v1)=
 ## generativeqc_hf_verify_final_v1

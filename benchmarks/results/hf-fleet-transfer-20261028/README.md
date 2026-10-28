@@ -86,6 +86,18 @@ The native capacity is a conservative simultaneously-live **matrix numeric**
 bound, including staged proposals and final physical validation. It excludes
 prepared arenas, caller buffers, topology metadata and opaque provider memory.
 
+## Plan-admission integration
+
+Integration with master `78e0c8afab504bbdf7ecd73ede2e4179195eaf49` retains
+both #2841 plan admission and this fleet transaction. The public inventory now
+contains 133 C functions, and the progressive endpoint test forbids both Python
+planning and Python projection compatibility on admitted native execution.
+The integrated CPU Release build passed 127/127 CTests, 233 focused Python tests
+plus 25 subtests, and the installed public-header SDK under
+`env -i PATH=/nonexistent`. This is a fresh integration correctness check;
+the complete endpoint timings above remain measurements against `d51bebb78`,
+not new timings for the later master. No GPU qualification is claimed here.
+
 ## Reproduction
 
 Build the baseline and candidate independently with the settings in provenance,

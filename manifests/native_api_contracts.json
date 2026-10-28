@@ -3112,6 +3112,22 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_hf_plan_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "7cd703472c74fb0eea43045e378d68690807732cacc72e6951b2f4726b1fce24",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }
