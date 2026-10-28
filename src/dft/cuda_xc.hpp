@@ -260,7 +260,9 @@ class CudaXcPlan {
   const CudaXcLayout& layout() const noexcept { return layout_; }
   /** Immutable automatic AOT identity, or null for the legacy curated provider.
    * This is diagnostic/execution provenance, not public capability admission. */
-  const CudaXcPointProgram* point_program() const noexcept { return point_program_; }
+  const CudaXcPointProgram* point_program() const noexcept {
+    return point_binding_.automatic_program;
+  }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
   /** Prepare bounded PBE correlation, optional AO and tiled-product lowering.
    * Application admission or experimental ablations select the components;
@@ -400,8 +402,7 @@ class CudaXcPlan {
                                        const double* total_gradient, const double* vrho,
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
-  const CudaXcPointProgram* point_program_{};
-  CudaXcPointLauncher point_launcher_{};
+  CudaXcPointBinding point_binding_{};
   bool mixed_pbe_points_{};
   bool mixed_pbe_ao_{};
   bool mixed_matrix_contractions_{};
@@ -472,7 +473,7 @@ void select_ao_chunk(const CudaXcLayout& layout, cudaStream_t stream, const doub
                      std::size_t* indices, std::size_t capacity, std::size_t initial_offset,
                      std::size_t* host_offsets);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
-CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
+CudaXcPointBinding resolve_point_binding(std::uint32_t functional, bool response);
 CudaXcPointLauncher mixed_pbe_point_launcher();
 CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher();
 /** Pure launch-shape admission for shared FP32 products, independent of XC. */
@@ -482,8 +483,6 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& ao_offsets,
                                               std::size_t requested_tiles,
                                               std::size_t device_budget, bool compact, bool ragged);
-CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional,
-                                                      CudaXcPointLauncher point_launcher);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO

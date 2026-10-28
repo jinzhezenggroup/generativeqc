@@ -7,7 +7,6 @@ from pathlib import Path
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_source,
-    emit_native_xc_point_batch_dispatch,
     emit_native_xc_point_dispatch,
 )
 
@@ -29,7 +28,6 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
-    batch_dispatch = emit_native_xc_point_batch_dispatch()
     source = tmp_path / "dispatch.cpp"
     source.write_text(
         "#include <cstdint>\n#include <cstdlib>\n#include <stdexcept>\n#include <limits>\n"
@@ -41,9 +39,13 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "using CudaXcPointLauncher = void (*)();\n"
         "using CudaXcPointBatchLauncher = void (*)();\n"
         "namespace generativeqc::dft::generated {\n"
-        "struct AutomaticPointStub { CudaXcPointLauncher launch{}; };\n"
-        "const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }\n"
+        "void automatic_launch() {}\nvoid automatic_batch() {}\n"
+        "struct AutomaticPointStub { CudaXcPointLauncher launch{}; CudaXcPointBatchLauncher launch_batch{}; };\n"
+        "const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t code) {\n"
+        "  static const AutomaticPointStub program{automatic_launch, automatic_batch};\n"
+        "  return code == 0x10042U ? &program : nullptr;\n}\n"
         "}\n"
+        "struct CudaXcPointBinding { CudaXcPointLauncher launch; CudaXcPointBatchLauncher launch_batch; const generated::AutomaticPointStub* automatic_program; };\n"
         "struct CudaXcPointCapabilities {\n"
         "  bool local_ao_selection{}, mixed_density_contraction{};\n"
         "};\n"
@@ -57,9 +59,15 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "template <unsigned Terms, unsigned Threads, bool S = false> void launch_point_batches() {\n"
         "  selected_specialized = S;\n}\n"
         + emit_native_xc_point_dispatch()
-        + batch_dispatch
         + r"""
 int main() {
+  const auto automatic = resolve_point_binding(0x10042U, false);
+  if (automatic.launch != generated::automatic_launch || automatic.launch_batch ||
+      automatic.automatic_program != generated::automatic_cuda_point_entry(0x10042U)) return 19;
+  try {
+    resolve_point_binding(0x10042U, true);
+    return 20;
+  } catch (const std::invalid_argument&) {}
   mixed_pbe_point_launcher()();
   if(selected_functional != 17) return 13;
   mixed_pbe_point_batch_launcher()();
@@ -70,7 +78,9 @@ int main() {
     for (unsigned r = 0; r < 2; ++r) {
       const bool admitted = r ? f < 2 : f < 5;
       try {
-        auto launch = resolve_point_launcher(f, r);
+        const auto binding = resolve_point_binding(f, r);
+        auto launch = binding.launch;
+        if (bool(binding.launch_batch) != !bool(r) || binding.automatic_program) return 17;
         if (!admitted || !launch) return 1;
         const auto capability = resolve_point_capabilities(f, r);
         if (capability.local_ao_selection != !bool(r)) return 10;
@@ -88,19 +98,17 @@ int main() {
     }
   }
   if (count != 7) return 5;
-  auto pbe_generic = &launch_points<semilocal_family_code(SemilocalFamily::Pbe), false>;
-  auto pbe_specialized = &launch_points<semilocal_family_code(SemilocalFamily::Pbe), false, true>;
-  if (resolve_point_batch_launcher(1, pbe_generic) != &launch_point_batches<4, 32>) return 14;
-  if (resolve_point_batch_launcher(1, pbe_specialized) !=
-      &launch_point_batches<4, 32, true>) return 15;
-  try {
-    resolve_point_batch_launcher(1, &launch_points<semilocal_family_code(SemilocalFamily::Pbe), true>);
-    return 16;
-  } catch (const std::invalid_argument&) {}
+  const auto pbe = resolve_point_binding(1, false);
+  const bool specialized = pbe.launch == &launch_points<1, false, true>;
+  if (pbe.launch_batch != (specialized ? &launch_point_batches<4, 32, true>
+                                      : &launch_point_batches<4, 32>)) return 14;
+  if (resolve_point_binding(1, true).launch_batch) return 16;
   const std::uint32_t generated_codes[]{generated::kM062XFunctionalCode,
                                         generated::kMN15FunctionalCode};
   for (const auto code : generated_codes) {
-    auto launch = resolve_point_launcher(code, false);
+    const auto binding = resolve_point_binding(code, false);
+    auto launch = binding.launch;
+    if (binding.launch_batch != &launch_point_batches<5, 128>) return 18;
     if (launch != &launch_split_hybrid_points<5>) return 7;
     const auto capability = resolve_point_capabilities(code, false);
     if (capability.local_ao_selection != (code == generated::kM062XFunctionalCode) ||
@@ -108,12 +116,12 @@ int main() {
     launch();
     if (selected_functional != 5 || selected_response) return 8;
     try {
-      resolve_point_launcher(code, true);
+      resolve_point_binding(code, true);
       return 9;
     } catch (const std::invalid_argument&) {}
   }
   try {
-    resolve_point_launcher(std::numeric_limits<std::uint32_t>::max(), false);
+    resolve_point_binding(std::numeric_limits<std::uint32_t>::max(), false);
     return 6;
   } catch (const std::invalid_argument&) {}
 }
