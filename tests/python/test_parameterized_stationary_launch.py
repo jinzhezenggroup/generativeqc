@@ -16,7 +16,14 @@ from test_libxc_automatic_point_native import _inputs, _oracle
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
-NAMES = ("MGGA_X_KTBM_0", "MGGA_X_KTBM_1")
+NAMES = (
+    "MGGA_X_KTBM_0",
+    "MGGA_X_KTBM_1",
+    "GGA_X_APBE",
+    "GGA_X_PBE_SOL",
+    "LDA_C_BR78",
+    "LDA_C_WIGNER",
+)
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +63,7 @@ double finite(double x, int* error, int code) {
 """)
     profiles = tuple(
         f"libxc_{automatic_functional_code(name)}_{spin}"
-        for name, spin in zip(NAMES, ("rks", "uks"), strict=True)
+        for name, spin in zip(NAMES, ("rks", "uks") * 3, strict=True)
     )
     workers, providers = parameterized_cuda_package(NAMES, force_profiles=profiles)
     assert all(provider.stationary_launcher for provider in providers.values())
@@ -129,7 +136,9 @@ extern "C" int evaluate(unsigned entry, std::size_t spins, std::size_t count,
     return library
 
 
-@pytest.mark.parametrize("index,spins", ((0, 1), (1, 2)))
+@pytest.mark.parametrize(
+    "index,spins", tuple((i, 1 + i % 2) for i in range(len(NAMES)))
+)
 @pytest.mark.parametrize("selection", ("0", "1"))
 def test_stationary_parameter_rows_match_independent_libxc(
     stationary_library: ctypes.CDLL,

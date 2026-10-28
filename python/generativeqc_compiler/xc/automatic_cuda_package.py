@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
@@ -55,10 +55,17 @@ class CudaPointExecutable:
     identity: str
     source: str
     stationary: bool
+    kind: Literal["literal", "parameters"] = "literal"
 
     @property
     def namespace(self) -> str:
-        return f"generativeqc::dft::cuda_xc_detail::executable_{self.identity}"
+        prefix = "parameter_family" if self.kind == "parameters" else "executable"
+        return f"generativeqc::dft::cuda_xc_detail::{prefix}_{self.identity}"
+
+    @property
+    def energy_kernel_count(self) -> int:
+        """Count ordinary/batched energy entries, excluding staged force entries."""
+        return 4 if self.kind == "parameters" else 2
 
 
 def _executable(
@@ -267,6 +274,7 @@ def automatic_cuda_package(
     force_profiles: tuple[str, ...] | None = None,
     *,
     share_parameters: bool = True,
+    parameter_policy: Literal["qualified", "discover"] = "discover",
 ) -> tuple[dict[str, CudaPointExecutable], dict[str, str]]:
     """Return unique device workers and separate immutable registrations.
 
@@ -281,7 +289,7 @@ def automatic_cuda_package(
     parameter_providers = {}
     if share_parameters:
         parameter_workers, parameter_providers = parameterized_cuda_package(
-            names, force_profiles=force_profiles
+            names, force_profiles=force_profiles, policy=parameter_policy
         )
         workers.update(
             (
@@ -294,6 +302,7 @@ def automatic_cuda_package(
                         and provider.stationary_launcher
                         for provider in parameter_providers.values()
                     ),
+                    kind="parameters",
                 ),
             )
             for identity, source in parameter_workers.items()

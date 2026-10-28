@@ -32,23 +32,23 @@ for name in names:
                     full_vector=name.startswith("MGGA_X_KTBM"),
                     replay=True,
                 )
-            row = dict(
-                name=name,
-                spins=spins,
-                status="passed",
-                seconds=time.perf_counter() - start,
-            )
-        except Exception as exc:
+            row = {
+                "name": name,
+                "spins": spins,
+                "status": "passed",
+                "seconds": time.perf_counter() - start,
+            }
+        except Exception as exc:  # noqa: BLE001 -- retain every failed case, then fail the run
             import traceback
 
             traceback.print_exc()
-            row = dict(
-                name=name,
-                spins=spins,
-                status="failed",
-                seconds=time.perf_counter() - start,
-                error=repr(exc),
-            )
+            row = {
+                "name": name,
+                "spins": spins,
+                "status": "failed",
+                "seconds": time.perf_counter() - start,
+                "error": repr(exc),
+            }
         results.append(row)
         print(json.dumps(row), flush=True)
         (out / "summary.json").write_text(json.dumps(results, indent=2) + "\n")

@@ -14,9 +14,12 @@ sys.path.insert(0, "tests/native")
 from test_cli_cuda_named import calculate as _calculate
 
 
-def calculate(*args, **kwargs):
+def calculate(
+    cli: Path, xyz: Path, method: str, backend: str, forces: bool = False
+) -> dict:
+    """Keep native command diagnostics visible when a qualification fails."""
     try:
-        return _calculate(*args, **kwargs)
+        return _calculate(cli, xyz, method, backend, forces)
     except subprocess.CalledProcessError as e:
         print(e.stdout, e.stderr, flush=True)
         raise
@@ -53,21 +56,21 @@ with tempfile.TemporaryDirectory() as t:
             assert error < 2e-5, (method, error)
             cpu_error = abs(force[1, 2] + (cpu_es[1] - cpu_es[0]) / (2 * step))
             assert cpu_error < 2e-5, (method, cpu_error)
-            errors.append(dict(gpu=error, cpu=cpu_error))
+            errors.append({"gpu": error, "cpu": cpu_error})
         rows.append(
-            dict(
-                method=method,
-                energy_error=energy_error,
-                finite_difference_errors=errors,
-                result=gpu,
-            )
+            {
+                "method": method,
+                "energy_error": energy_error,
+                "finite_difference_errors": errors,
+                "result": gpu,
+            }
         )
         print(
             json.dumps({k: v for k, v in rows[-1].items() if k != "result"}), flush=True
         )
-out = dict(
-    slurm_job_id=os.environ["SLURM_JOB_ID"],
-    cli_sha256=hashlib.sha256(cli.read_bytes()).hexdigest(),
-    rows=rows,
-)
+out = {
+    "slurm_job_id": os.environ["SLURM_JOB_ID"],
+    "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(),
+    "rows": rows,
+}
 Path(".artifacts/composite-cli.json").write_text(json.dumps(out, indent=2) + "\n")

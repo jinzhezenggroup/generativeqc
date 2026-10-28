@@ -108,13 +108,17 @@ The unused 4a archive remains immutable; no old sm90 binary acceptance is reused
 
 ## Raw recovery
 
-The self-contained capsule restores **343 files / 45,634,766 bytes**: selected
-original vectors, requests, exits, logs/failures, compiler/link output, scoped
-stats and source/reference/mode identities. Logical parts group manifest rows
-by source subsystem/Python package. Shared config keys/SHA values reference
-retained data here. Original ordering, floats, signed zeros, UTF-8, LF and CRLF
-are byte-checked. The Windows inventory's original CRLF is preserved; actual
-committed source is LF. No arbitrary byte chunks or rounded vectors are used.
+The current self-contained capsule restores **339 files / 32,411,772 bytes**:
+all original numerical vectors, requests, exits, logs/failures, compiler/link
+output, scoped stats and consumed source/reference/mode identities. Every
+retained raw file is byte-identical to the original capsule. Full source and
+environment file censuses, including two identical environment rechecks, use
+the verified [published snapshot](source-snapshot.manifest.json); they are
+historical provenance rather than inputs to numerical replay. Their counts,
+original byte lengths and hashes remain in the compact manifest and above.
+Configuration source-hash references are expanded so replay needs no history.
+Original ordering, floats, signed zeros, UTF-8, LF and CRLF are byte-checked.
+No arbitrary byte chunks or rounded vectors are used.
 Installed/opaque cache binary bodies remain immutable in the owned root with
 full identities/census; complete consumed geometry and basis records are here.
 
@@ -129,4 +133,22 @@ PYTHONPATH=python:. python benchmarks/results/runtime-cache-state-20261023/repro
 ```
 
 This refuses existing output, restores raw files and emits fresh quantitative
-gates, timing/work tables and the validation envelope. No GPU/network is needed.
+gates, timing/work tables and the validation envelope. Before/after storage
+replays give byte-identical qualification, timing, work and validation outputs.
+No GPU/network or historical Git objects are needed for this numerical replay.
+
+The original full capsule (**343 files / 45,634,766 raw bytes**), including the
+Windows inventory's original CRLF, is recoverable from published ancestor
+`cbeca43a0d29503dca4fd727b5d49275a4c42639`. Every one of its 249 stored members
+was restored and SHA-256/length checked before retiring the census parts:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/runtime-cache-state-20261023/source-snapshot.manifest.json \
+  --output .artifacts/runtime-cache-state-history
+```
+
+The helper never fetches implicitly. Run `reproduce.py --bundle` against the
+restored `benchmarks/results/runtime-cache-state-20261023` directory when auditing
+the full historical capsule. The retained Linux/Windows recovery receipts and
+the original raw-file index describe that full historical population.
