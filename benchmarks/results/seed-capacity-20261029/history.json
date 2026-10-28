@@ -5,5 +5,12 @@
     "sha256": "a9ab67cebd7ef0a8dc083958f6f03fb3a19634ac96c2b1c5228ca410ab3dc79a",
     "bytes": 32740,
     "scope": "Final production 115cc3c72, CPU 1792-call independently audited matrix."
+  },
+  "cuda-samples.json.xz": {
+    "git_commit": "647b6daa04963ff946a0ac2703b8e12c088ad502",
+    "git_path": "benchmarks/results/seed-capacity-20261029/cuda-samples.json.xz",
+    "sha256": "f3fbdb9757f107e108c13030ed38bed4340ee689dfa6375707f95f88bb86767c",
+    "bytes": 78640,
+    "scope": "Final source 115cc3c72, Slurm 14843, 1792-call audited CUDA matrix."
   }
 }
