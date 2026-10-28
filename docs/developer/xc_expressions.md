@@ -31,6 +31,13 @@ Furness definitions, including eta=0.001, dp2=0.361 and the exact rSCAN switchin
 polynomials; SCAN, rSCAN and r²SCAN are not aliases. No runtime Libxc call or
 Python autograd appears in production expression execution.
 
+The Maple importer preserves decimal and scientific-notation literals as exact
+rational coefficients during constant algebra. It does not first round them
+through Python binary64; target rounding occurs when coefficients are emitted.
+Importer semantics participate in the generated catalog identity. The offline
+`python tools/import_libxc_bulk.py` command can regenerate an absent or stale
+catalog; public functional resolution still requires a compatible catalog.
+
 Polarized SCAN-family correlation forms the spin fractions directly as
 `2*rho_a/(rho_a+rho_b)` and `2*rho_b/(rho_a+rho_b)` before Graph differentiation.
 These are the same mathematical coordinates as `1+zeta` and `1-zeta`, but retain

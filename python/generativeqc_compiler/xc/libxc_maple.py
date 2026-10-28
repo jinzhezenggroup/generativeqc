@@ -36,7 +36,7 @@ class MapleImportError(ValueError):
     """The pinned Maple source uses syntax outside the qualified importer."""
 
 
-IMPORTER_SEMANTICS = "libxc-maple-graph/v11"
+IMPORTER_SEMANTICS = "libxc-maple-graph/v12"
 # Whitespace-normalized helper definitions from pinned Libxc 7.0.0 attenuation.mpl.
 _ERF_SMOOTHING_HELPERS = (
     "attenuation_erf0",
@@ -707,6 +707,13 @@ def _translate_eval_diff(expression: str) -> str:
 
 @cache
 def _parse_expression(expression: str) -> ast.Expression:
+    """Parse syntax without rounding Maple decimal coefficients through Python.
+
+    This private tree is interpreted into Graph, never compiled as Python.
+    Numeric leaves retain their source rational until Graph emission selects
+    the target precision; even an overflowing/underflowing individual literal
+    can participate in a representable constant ratio or difference.
+    """
     translated = _translate_eval_diff(_expand_bounded_add(expression)).replace(
         "^", "**"
     )
@@ -725,6 +732,15 @@ def _parse_expression(expression: str) -> ast.Expression:
             raise MapleImportError(
                 "only positional calls to named Maple functions are supported"
             )
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            literal = ast.get_source_segment(translated, node)
+            if literal is None or not re.fullmatch(
+                r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", literal
+            ):
+                raise MapleImportError("unsupported Maple numeric literal")
+            node.value = Fraction(literal)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, bool):
+            raise MapleImportError("unsupported Maple boolean literal")
     return tree
 
 
@@ -946,7 +962,7 @@ class _Evaluator:
     def _literal_one(node: ast.AST) -> bool:
         return (
             isinstance(node, ast.Constant)
-            and isinstance(node.value, int | float)
+            and isinstance(node.value, Fraction)
             and node.value == 1
         )
 
@@ -961,8 +977,8 @@ class _Evaluator:
         return None
 
     def _eval(self, node: ast.AST, environment: Mapping[str, object]) -> object:
-        if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
-            return Fraction(str(node.value))
+        if isinstance(node, ast.Constant) and isinstance(node.value, Fraction):
+            return node.value
         if isinstance(node, ast.List):
             return tuple(self._eval(item, environment) for item in node.elts)
         if isinstance(node, ast.Subscript):
