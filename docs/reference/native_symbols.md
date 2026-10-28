@@ -218,6 +218,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
+- [generativeqc_scf_defaults_query_v1](#native-c-generativeqc-scf-defaults-query-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5739,3 +5740,32 @@ needed. Explicit observable targets still require their independent endpoint aud
 
 **Units.** Budgets use Eh and Eh/bohr; solver controls retain their existing native units;
 counts denote actual work, never inferred iterations or timings.
+
+(native-c-generativeqc-scf-defaults-query-v1)=
+## generativeqc_scf_defaults_query_v1
+
+Source: [scf_defaults.h](../../include/generativeqc/scf_defaults.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_defaults_query_v1 ( const generativeqc_scf_defaults_context_v1 * context , const generativeqc_ks_options * ks_options , const char * model_identity , size_t model_identity_size , generativeqc_scf_defaults_v1 * output ) ;
+```
+
+**Behavior.** Query shared versioned default SCF convergence controls.
+
+**Inputs.** Nonnull versioned context and output; optional KS descriptor and complete
+lowercase 64-byte MethodIR identity. A missing identity cannot qualify KS defaults.
+KS grid fields, dense element radii and XC schedule are inspected; other descriptor
+fields are outside this metadata query. A null KS descriptor denotes a non-KS model.
+
+**Outputs.** Transactionally writes policy version 1, three tolerances, and whether the
+qualified CUDA default policy applied. CPU/ECP/other models retain strict defaults.
+
+**Errors.** INVALID_ARGUMENT for invalid backend/flags, malformed identity or grid data;
+ABI_MISMATCH for invalid descriptor headers. Output is unchanged on failure.
+
+**Lifetime.** All pointers are borrowed for this call only; no pointer is retained.
+
+**Execution.** Synchronous allocation-free host metadata query; no provider, GPU,
+quadrature, compiler or scientific solve. Unknown model identities keep strict defaults.
+
+**Units.** Energy tolerance is Eh; density and screening retain their native SCF units.

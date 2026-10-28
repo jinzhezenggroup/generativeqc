@@ -597,6 +597,16 @@ strict warm reuse and Standard fallback use the same native predicates in the
 Python facade and SDK. Missing evidence remains unknown; explicitly unavailable
 fitted-HF counters retain their established exception. The query performs no
 numerical work and cannot qualify a method or replace an explicit observable
-audit. Python still owns solver-default/model-gradient qualification and the
+audit. Python still owns model-gradient qualification and the
 candidate/auditor execution and seed lifetimes. Missing additive symbols retain
 compatibility; a selected native query failure propagates.
+
+Default SCF convergence controls are queried through
+`generativeqc_scf_defaults_query_v1` in `<generativeqc/scf_defaults.h>`. The native
+method layer uses the generated complete-model catalog and the existing default-grid
+owner for its scoped CUDA policy. Python transports the already selected model,
+backend, ECP and grid metadata; it does not repeat model qualification. Explicit
+caller controls and native physical final-state checks are unchanged. Missing
+additive support retains the explicit older-library policy; a selected native
+failure cannot retry Python selection. This query does not move the precision
+candidate/auditor execution or their independent seed lifetimes.
