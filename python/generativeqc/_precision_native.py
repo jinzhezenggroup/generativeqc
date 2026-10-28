@@ -44,6 +44,11 @@ class _Controls(ct.Structure):
     ] + [("controls", ct.c_double * 3)]
 
 
+_CONTROLS_QUERY = ct.CFUNCTYPE(
+    ct.c_int, ct.POINTER(_ControlsContext), ct.POINTER(_Controls)
+)
+
+
 def budget_controls(
     calculator: Any, budget: Any, requested: dict, *, available: bool
 ) -> dict[str, float] | None:
@@ -54,7 +59,18 @@ def budget_controls(
     does not infer that a model/provider has independent numerical evidence.
     """
     library = getattr(calculator, "_library", None)
-    query = getattr(library, "generativeqc_precision_controls_query_v1", None)
+    name = "generativeqc_precision_controls_query_v1"
+    if isinstance(library, ct.CDLL) and name not in library.__dict__:
+        # Construction may load a fresh CDLL for each facade. Do not install a
+        # function attribute that would form a CDLL/function ownership cycle.
+        # No cache retains this temporary binding; explicit bindings stay
+        # authoritative for selected-library adapters and failure injection.
+        try:
+            query = _CONTROLS_QUERY((name, library))
+        except AttributeError:
+            return None
+    else:
+        query = getattr(library, name, None)
     if query is None:
         return None
     options = getattr(calculator, "_ks_options", None)

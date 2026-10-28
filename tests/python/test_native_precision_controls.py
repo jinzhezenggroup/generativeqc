@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ctypes as ct
+import gc
 import math
 import subprocess
+import weakref
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -173,3 +175,18 @@ def test_missing_protocol_retains_compatibility() -> None:
     assert policy._budget_fock_controls(
         calculator, TargetErrorBudget(1e-5, 1e-4), {}
     ) == dict(zip(NAMES, (1e-6, 1e-4, 1e-10), strict=True))
+
+
+def test_transient_binding_does_not_retain_retired_library(
+    library: Any,
+) -> None:
+    """Transient ctypes call cycles must not retain a retired selected library."""
+    selected = ct.CDLL(library._name)
+    selected.generativeqc_status_message = lambda status: b"policy refused"
+    selected.generativeqc_application_fock_precision_version_v2 = lambda: 2
+    retained = weakref.ref(selected)
+    calculator = model(selected)
+    assert policy._budget_fock_controls(calculator, TargetErrorBudget(1e-5, 1e-4), {})
+    del calculator, selected
+    gc.collect()
+    assert retained() is None
