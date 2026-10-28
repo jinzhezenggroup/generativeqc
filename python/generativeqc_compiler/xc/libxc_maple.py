@@ -705,6 +705,33 @@ def _translate_eval_diff(expression: str) -> str:
     return f"_maple_diff2({function}, {index}, {value0}, {value1})"
 
 
+class _ExactNumber(ast.Constant):
+    """Keep source precision alongside the standard syntax-tooling AST value."""
+
+    def __init__(self, node: ast.Constant, literal: str) -> None:
+        super().__init__(value=node.value, kind=node.kind)
+        self.exact_value = Fraction(literal)
+
+
+class _DecimalLiterals(ast.NodeTransformer):
+    """Annotate numeric leaves from source spans before Graph interpretation."""
+
+    def __init__(self, source: str) -> None:
+        self.source = source
+
+    def visit_Constant(self, node: ast.Constant) -> ast.Constant:
+        if type(node.value) in (int, float):
+            literal = ast.get_source_segment(self.source, node)
+            if literal is None or not re.fullmatch(
+                r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", literal
+            ):
+                raise MapleImportError("unsupported Maple numeric literal")
+            return ast.copy_location(_ExactNumber(node, literal), node)
+        if isinstance(node.value, bool):
+            raise MapleImportError("unsupported Maple boolean literal")
+        return node
+
+
 @cache
 def _parse_expression(expression: str) -> ast.Expression:
     """Parse syntax without rounding Maple decimal coefficients through Python.
@@ -732,16 +759,7 @@ def _parse_expression(expression: str) -> ast.Expression:
             raise MapleImportError(
                 "only positional calls to named Maple functions are supported"
             )
-        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
-            literal = ast.get_source_segment(translated, node)
-            if literal is None or not re.fullmatch(
-                r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", literal
-            ):
-                raise MapleImportError("unsupported Maple numeric literal")
-            node.value = Fraction(literal)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, bool):
-            raise MapleImportError("unsupported Maple boolean literal")
-    return tree
+    return typing.cast("ast.Expression", _DecimalLiterals(translated).visit(tree))
 
 
 class _Evaluator:
@@ -960,11 +978,7 @@ class _Evaluator:
 
     @staticmethod
     def _literal_one(node: ast.AST) -> bool:
-        return (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, Fraction)
-            and node.value == 1
-        )
+        return isinstance(node, _ExactNumber) and node.exact_value == 1
 
     @classmethod
     def _one_plus_operand(cls, node: ast.AST) -> ast.AST | None:
@@ -977,8 +991,8 @@ class _Evaluator:
         return None
 
     def _eval(self, node: ast.AST, environment: Mapping[str, object]) -> object:
-        if isinstance(node, ast.Constant) and isinstance(node.value, Fraction):
-            return node.value
+        if isinstance(node, _ExactNumber):
+            return node.exact_value
         if isinstance(node, ast.List):
             return tuple(self._eval(item, environment) for item in node.elts)
         if isinstance(node, ast.Subscript):

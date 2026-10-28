@@ -127,7 +127,7 @@
       "canonical_inputs": {
         "python/generativeqc_compiler/integral/expr.py": "3c5efc4ffcd4492573e4ac1b8cca7b043e31e34dcc654bfe0a64d37c07a3047a",
         "python/generativeqc_compiler/xc/libxc_bulk.py": "5a0655df9ba576dda55950cba56c4f401e20154eb4ea062bb434800d3015bbe9",
-        "python/generativeqc_compiler/xc/libxc_maple.py": "6af1e894b88a4d32b77664d673bbacb5a14a37f0e2a213356f2393e4a1b3e34e",
+        "python/generativeqc_compiler/xc/libxc_maple.py": "908008c9921ef40e60148d91e103941c5d88ca6c28c8c010b853f22bd03e2f9d",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b"
       },
       "generator": "tools/import_libxc_bulk.py",
