@@ -1,7 +1,7 @@
 # Named KS correction resource qualification
 
 Baseline: `c413cde9f` (master including #2835). The candidate production sources
-are reconstructed by applying `source.patch` to that revision. `identities.json`
+are reconstructed by decompressing and applying `source.patch.xz` to that revision. `identities.json`
 records the patch, source files, binaries and retained receipts. This is a scoped
 #2227 R2/R5/R6 cutover, not completion of all non-R3 work or broader force admission.
 
@@ -29,8 +29,15 @@ CPU observables match exactly. CUDA maximum E difference is 2.8422e-14 Eh;
 maximum force difference is 9.7700e-15 Eh/bohr. These are mechanical parity
 results, supplemented by independent numerical references below.
 
-`cpu-samples.json.xz` and `cuda-samples.json.xz` retain every sample and binary
-identity. Slurm job IDs and unchanged assigned CUDA visibility are inside the
+The original `cpu-samples.json.xz` and `cuda-samples.json.xz` remain recoverable
+from Git commit `bcf1124fc`, at their paths in this directory; `identities.json`
+records exact recovery paths and checksums. For example, use `git show
+bcf1124fc:benchmarks/results/ks-d3-resources-20261028/cpu-samples.json.xz` to
+restore the complete historical CPU record. The fresh integrated sample JSONs
+are retained as exact UTF-8 strings in `endpoint-samples.json.xz`, under
+`integrated/cpu-samples.json.xz` and `integrated/cuda-samples.json.xz` member keys.
+This preserves every observation in existing Git history while respecting the
+repository's aggregate evidence budget; no external archive is published. Slurm job IDs and unchanged assigned CUDA visibility are inside the
 receipts. GPU execution uses n1 RTX 5090; no GPU work ran on n3.
 
 ## Scientific, ABI and lifetime checks
@@ -61,7 +68,7 @@ receipts. GPU execution uses n1 RTX 5090; no GPU work ran on n3.
 
 ## GPU work and memory
 
-`profile-summary.json` and the retained Nsight CSV summaries describe an untimed
+`profile-summary.json` and the retained losslessly compressed Nsight CSV summaries describe an untimed
 complete matrix (56 calls), profiled separately from timing. Raw `.nsys-rep` and
 SQLite traces remain in ignored `.artifacts/non-r3/` and the n1 qualification
 workspace. Actual kernel, transfer and allocation counts are not inferred from
@@ -95,3 +102,29 @@ Their logs are retained separately; successful runs used complete source inputs.
 Initial fixture/import and SDK type-name mistakes were corrected, with subsequent
 full passing runs. No scientific tolerance, work gate or unsupported domain was
 relaxed to obtain acceptance.
+
+## Integrated master qualification
+
+The separate `integrated/` receipts qualify source commit `996962596`, integrating
+master `aa6e05ea6`. They do not replace or relabel the original campaign above.
+Both independent baseline products remain `c413cde9f`; the complete comparison
+therefore includes the master integration as well as this scoped change.
+
+The integrated CPU build passes 127 CTests, 146 focused Python tests and
+25 subtests (8 unavailable CUDA cases skipped), and the installed SDK contract.
+A fresh 1,792-call CPU campaign passes at maximum median ratio 1.02109358 with
+exact observables. The integrated CUDA build passes 98 scheduled GPU tests,
+the installed SDK with Python/compiler absent, and the CMake D3 failure probe
+under compute-sanitizer with zero errors and zero leaked bytes (Slurm 14828).
+Its 1,792-call complete endpoint campaign passes at maximum ratio 1.00602649,
+maximum E difference 2.8422e-14 Eh and force difference 8.7185e-15 Eh/bohr.
+Semantic work remains matched. The same independent PySCF/simple-dftd3 tests
+are included in that fresh GPU suite.
+
+The fresh integrated candidate profile retains 30,832 kernels, 4,232 explicit
+dynamic allocations, 27,048,950-byte explicit peak and zero final live bytes;
+transfer counts/bytes remain identical to the earlier scoped candidate profile.
+Its static allocation bytes and opaque memory remain separately identified.
+The selected verified sccache launcher was used throughout the builds; one
+server-shutdown warning caused its documented local compiler fallback. Shared
+cache snapshots and that warning are retained, without claiming exclusive hits.

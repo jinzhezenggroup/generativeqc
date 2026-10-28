@@ -56,10 +56,6 @@
     }
   },
   "receipts": {
-    "baseline-profile-stats_cuda_gpu_mem_time_sum.csv": {
-      "sha256": "86c74f1cfaafbc33dfaff2c9a3250ea1206fb85edd44437919779445d73279cb",
-      "bytes": 369
-    },
     "qualify.py": {
       "sha256": "6bf48344a0f52f2967213fa47f00aa3c1f33cc18df480bb71492f97302e70c6c",
       "bytes": 6265
@@ -68,17 +64,9 @@
       "sha256": "96abcf3492634cc69ed428b0caa4bc6f3194f0b90c969e977a6a1ae68f3415c3",
       "bytes": 6603
     },
-    "baseline-profile-stats_cuda_api_sum.csv": {
-      "sha256": "cea4b7929efe66a9f7a535467979dc035f4227fabf09a24ea5e2784a0c6b6c8d",
-      "bytes": 1901
-    },
     "README.md": {
-      "sha256": "6a549f94060dc8cdd6114fbdc3643a752c179f8afc554dfcd47438e3bd4ba3d1",
-      "bytes": 6016
-    },
-    "candidate-profile-stats_cuda_gpu_mem_size_sum.csv": {
-      "sha256": "54305b6bb54e081cc0c88a7400643ada588b6391b07aaef29c919404dec6c634",
-      "bytes": 344
+      "sha256": "535a20beb23ca7087f9b8bc10bbf2fbecb3475829f8c40fc6a15dba35ff182b6",
+      "bytes": 8299
     },
     "endpoint_worker.py": {
       "sha256": "991384095349b8bcbfd490687f05e4fdbf7408385ad4360d2986c50273171702",
@@ -88,41 +76,66 @@
       "sha256": "8d8d2c140e897e66397a8785a5a260b34f47ac6007310fa131b5e97281940906",
       "bytes": 6272
     },
-    "cpu-samples.json.xz": {
-      "sha256": "17dc8473515e9a3642e0c11a6b6fee2b77be9c26072e015bd60fe8b2ef1daae1",
-      "bytes": 31604
-    },
-    "candidate-profile-stats_cuda_gpu_kern_sum.csv": {
-      "sha256": "fff1b78b0e15dc8874e6116d756b1ddc17eb815e3b1d03f3de163d98c7d0521c",
-      "bytes": 26557
-    },
     "profile-summary.json": {
       "sha256": "5021f574c0463387885cf4d0d711bc9057888f51e788c40b270f8bc83c7b13b8",
       "bytes": 1267
     },
-    "candidate-profile-stats_cuda_api_sum.csv": {
-      "sha256": "009c25b8d4cf7a60b0e7347c378cef12838d9ad3144ac6d77487ebd77c4535bc",
-      "bytes": 1922
+    "baseline-profile-stats_cuda_gpu_mem_time_sum.csv.xz": {
+      "sha256": "81c9e2bd2b6af41a65425a6de691e5758a35bb9edbfa48b95c27fac9a9806b4e",
+      "bytes": 288,
+      "uncompressed_sha256": "86c74f1cfaafbc33dfaff2c9a3250ea1206fb85edd44437919779445d73279cb"
     },
-    "baseline-profile-stats_cuda_gpu_kern_sum.csv": {
-      "sha256": "962bf0ecb4def8e91298337e30408f0bf926d913e074c9305adf0a19dfa8cc89",
-      "bytes": 26548
+    "baseline-profile-stats_cuda_api_sum.csv.xz": {
+      "sha256": "ef18377d38cfd0f00970a61bcf7629cd0450deea0b01c4c9a788d9c504162743",
+      "bytes": 1060,
+      "uncompressed_sha256": "cea4b7929efe66a9f7a535467979dc035f4227fabf09a24ea5e2784a0c6b6c8d"
+    },
+    "candidate-profile-stats_cuda_gpu_mem_size_sum.csv.xz": {
+      "sha256": "94ab95043c72c504a0cf38bf574157d463aadac588f4fb9b4e636853749c61bb",
+      "bytes": 236,
+      "uncompressed_sha256": "54305b6bb54e081cc0c88a7400643ada588b6391b07aaef29c919404dec6c634"
+    },
+    "candidate-profile-stats_cuda_gpu_kern_sum.csv.xz": {
+      "sha256": "b740aa864836587ab64725d23c16395b55e8f45a62e95a8e08d86d01467a8b63",
+      "bytes": 5084,
+      "uncompressed_sha256": "fff1b78b0e15dc8874e6116d756b1ddc17eb815e3b1d03f3de163d98c7d0521c"
+    },
+    "candidate-profile-stats_cuda_api_sum.csv.xz": {
+      "sha256": "6c17bada1330c9288e6741de7fd068f9b26038d73f2b270ecc6eab58e496d87f",
+      "bytes": 1068,
+      "uncompressed_sha256": "009c25b8d4cf7a60b0e7347c378cef12838d9ad3144ac6d77487ebd77c4535bc"
+    },
+    "baseline-profile-stats_cuda_gpu_kern_sum.csv.xz": {
+      "sha256": "c85542d0df44bd6080d1a8e555a7f77bf074934ac9677f01f6feb27219c8869c",
+      "bytes": 5104,
+      "uncompressed_sha256": "962bf0ecb4def8e91298337e30408f0bf926d913e074c9305adf0a19dfa8cc89"
+    },
+    "source.patch.xz": {
+      "sha256": "2eb3c0e4dce8b8e7f0f894d86522e9433264734249ca49933c4b3eaa17581b80",
+      "bytes": 8876,
+      "uncompressed_sha256": "40bb14790a8e722cf2f58019bc11b6e3882fb3cac5127cfa73291ce00f342ec6"
+    },
+    "baseline-profile-stats_cuda_gpu_mem_size_sum.csv.xz": {
+      "sha256": "fd339cf556819a9a93f9f090051adba6b6195aa59150f0aaa8a4fb1c8752b365",
+      "bytes": 236,
+      "uncompressed_sha256": "cfaa99e73a0611760032f755449be6889bd2b17078d6152c82a74316482c4511"
+    },
+    "candidate-profile-stats_cuda_gpu_mem_time_sum.csv.xz": {
+      "sha256": "e6054636387fe2eaabc028e14ae674d17451de62a75e95f9dd409c7897cc0225",
+      "bytes": 296,
+      "uncompressed_sha256": "c508be91fa82bc6b450f0106bf3165f310cbda96dcb314d09037eb39a8203528"
+    },
+    "cpu-samples.json.xz": {
+      "git_commit": "bcf1124fcdadbb161bf3a355a9dd37b4fccc553b",
+      "git_path": "benchmarks/results/ks-d3-resources-20261028/cpu-samples.json.xz",
+      "sha256": "17dc8473515e9a3642e0c11a6b6fee2b77be9c26072e015bd60fe8b2ef1daae1",
+      "uncompressed_sha256": "9f334af5157f23e06d321743e6681cc043e98122bd5c66e99bfe425d6d5fd326"
     },
     "cuda-samples.json.xz": {
+      "git_commit": "bcf1124fcdadbb161bf3a355a9dd37b4fccc553b",
+      "git_path": "benchmarks/results/ks-d3-resources-20261028/cuda-samples.json.xz",
       "sha256": "ef071c9b82d0737ce8467b3ecf47febf2f73c7f1f81bcb8224180947aef01833",
-      "bytes": 45536
-    },
-    "source.patch": {
-      "sha256": "40bb14790a8e722cf2f58019bc11b6e3882fb3cac5127cfa73291ce00f342ec6",
-      "bytes": 36707
-    },
-    "baseline-profile-stats_cuda_gpu_mem_size_sum.csv": {
-      "sha256": "cfaa99e73a0611760032f755449be6889bd2b17078d6152c82a74316482c4511",
-      "bytes": 344
-    },
-    "candidate-profile-stats_cuda_gpu_mem_time_sum.csv": {
-      "sha256": "c508be91fa82bc6b450f0106bf3165f310cbda96dcb314d09037eb39a8203528",
-      "bytes": 370
+      "uncompressed_sha256": "7e88d4efad15f1307ff2235c631b0726f6a9f93767b0db314aa5145662551a32"
     }
   }
 }
