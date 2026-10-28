@@ -123,9 +123,14 @@ def test_budgeted_snapshot_restore_retains_resource_diagnostics(backend: str) ->
         lease.restore(target, updates=False)
         observation = target.resource_diagnostics["warm_restore"]
         assert target.resource_diagnostics["phase"] == "warm_restore"
-        assert observation["samples"] >= 1
+        # CPU restore does not run an SCF iteration, so its iteration-boundary
+        # sampler may honestly report unavailable. CUDA retains its device ledger.
+        assert observation["complete_plan_peak"] is False
+        assert observation["status"] in ("observed", "unavailable")
         if backend == "cuda":
             assert observation["scope_owner"] == "native-prepared-owner"
+            assert observation["status"] == "observed"
+            assert observation["device_ledger"] is not None
         result = target.execute(properties=("energy",), strict=True)
         assert all(item.converged for item in result.items)
     calculator.clear_cache()
