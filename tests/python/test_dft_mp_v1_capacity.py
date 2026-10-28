@@ -946,7 +946,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "a993197b05eb747473f3352ce61ef42565b2f2d402983cc521bda05f2cb5ee16"
+            "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
         ),
         "profiles": [
             "lda_rks",
@@ -2269,6 +2269,15 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
         (
             "target_link_libraries(${target} PRIVATE generativeqc_native_stationary)",
             "target_link_libraries(${target} PRIVATE missing_native_stationary)",
+        ),
+        ("--list-sources --profiles", "--profiles"),
+        (
+            "--fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}",
+            "--fused-profiles auto",
+        ),
+        (
+            "                       generativeqc_libxc_semilocal_cuda_codegen)",
+            "                       missing_point_codegen)",
         ),
     ],
 )

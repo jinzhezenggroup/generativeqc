@@ -1380,6 +1380,18 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.cpp")
   set(_generativeqc_libxc_cuda_registry_args)
+  if(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA)
+    if(GENERATIVEQC_STATIONARY_AOT_PROFILES STREQUAL "auto")
+      list(APPEND _generativeqc_libxc_cuda_registry_args --stationary-all)
+    else()
+      foreach(_point_force_profile IN LISTS GENERATIVEQC_STATIONARY_AOT_PROFILES)
+        if(_point_force_profile MATCHES "^libxc_")
+          list(APPEND _generativeqc_libxc_cuda_registry_args
+               --stationary-profile "${_point_force_profile}")
+        endif()
+      endforeach()
+    endif()
+  endif()
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
     if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS)
@@ -1423,6 +1435,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       ${_generativeqc_libxc_cuda_science_inputs}
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_program.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_value.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_runtime.cuh"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/xc_point_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_cuda.py"

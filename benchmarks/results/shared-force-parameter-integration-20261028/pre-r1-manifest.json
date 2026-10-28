@@ -1,0 +1,124 @@
+{
+  "acceptance": {
+    "density_atol": 2e-07,
+    "energy_atol": 3e-09,
+    "fixed_density_energy_atol": 3e-10,
+    "fock_atol": 3e-09,
+    "force_fd_atol": 3e-05,
+    "translation_atol": 2e-08
+  },
+  "build_input_verification": {
+    "input_count": 3184,
+    "input_inventory_sha256": "d3401db6e1b43a3880714c97b038d5f27b00cc54eaa4e67b6aaa3b0588b5d1ce",
+    "mismatches": [],
+    "source_commit": "84c30caafaa2e8393cbb5cb7a6406300f63a16f2"
+  },
+  "files": {
+    "pre-r1/GGA_X_APBE-1-False-True-False-h4.json.xz": {
+      "original_bytes": 43925,
+      "original_sha256": "d89a0f28fe1ebea0ab1c31674247e6a215132cb958bf7bb45ff41019dbf692d4",
+      "stored_bytes": 4132,
+      "stored_sha256": "7f2c1a9254bc575b164b026023992e26092f1cd77f22bd02b9a45d7fa4830b88"
+    },
+    "pre-r1/GGA_X_APBE-2-False-True-False-h4.json.xz": {
+      "original_bytes": 48037,
+      "original_sha256": "005ba495ce3dcb046890392f1b3fdab6d12b5a84e923d51c3df0cbe7b35db28d",
+      "stored_bytes": 4600,
+      "stored_sha256": "f5915292b12fea64e1e62bcea31c83201f7b9e371322fd8e4a8433a5fae700db"
+    },
+    "pre-r1/LDA_C_VWN_1-1-False-True-False-h4.json.xz": {
+      "original_bytes": 46463,
+      "original_sha256": "8fb109254ee9eb7c49b79787e53fcab364601984803705d39d4e10d645f215da",
+      "stored_bytes": 4400,
+      "stored_sha256": "855114d37c5caf302f6e11064eea04630ca525b7ace9e35db9667afbe6867bcf"
+    },
+    "pre-r1/LDA_C_VWN_1-2-False-True-False-h4.json.xz": {
+      "original_bytes": 49597,
+      "original_sha256": "1a6886a70b099ee04776b8f7b6462ad08ff26e5bbe4d2289d7189f9c1ac409a1",
+      "stored_bytes": 4756,
+      "stored_sha256": "f8f5f293af51acbfa04d2eccc622f9b0aa1ec6c45584794bfdada0e87beb9999"
+    },
+    "pre-r1/LDA_C_VWN_4-1-False-True-False-h4.json.xz": {
+      "original_bytes": 46461,
+      "original_sha256": "5ef915fe02170bb08c86d29c21a2c72f40d32ae49b89012499519a5c137a0d8b",
+      "stored_bytes": 4388,
+      "stored_sha256": "9be97aa6720a9f6f209495a66e6fcc72385cfe80a84bdf8ebe0bf2d6bca95abc"
+    },
+    "pre-r1/LDA_C_VWN_4-2-False-True-False-h4.json.xz": {
+      "original_bytes": 49839,
+      "original_sha256": "e6e3fbdf6f1de89f605730dea1b7d102f5a360bcf99616e19cac656119a1cbeb",
+      "stored_bytes": 4748,
+      "stored_sha256": "64d9aa8dfa944759a65949d26db5c764d1a08247c0d4534819d3a485797f16d6"
+    },
+    "pre-r1/MGGA_X_KTBM_0-1-True-True-False-h4.json.xz": {
+      "original_bytes": 45207,
+      "original_sha256": "f3dde73438d8c0f3b93b0488925c9050fa655e997d7c0917bd6d356da88b8216",
+      "stored_bytes": 4420,
+      "stored_sha256": "0cc30655db3e7fdb3c9bff2a634f69e779784db0b70e5653541d6d1101997d35"
+    },
+    "pre-r1/MGGA_X_KTBM_0-2-True-True-False-h4.json.xz": {
+      "original_bytes": 52065,
+      "original_sha256": "99641efbfd7640527a799b93c5df3258d3dc2121b989f1c09df7303bc247644b",
+      "stored_bytes": 5084,
+      "stored_sha256": "93a82a9fee8d59f2826b88c1a22a5a7b74b4de5793d8a275200e2131dca57714"
+    },
+    "pre-r1/MGGA_X_KTBM_1-1-True-True-False-h4.json.xz": {
+      "original_bytes": 45286,
+      "original_sha256": "cd601762412ca205b7e948a855e13fafbdd512b775c81e98d29f32fa933dcb76",
+      "stored_bytes": 4436,
+      "stored_sha256": "d88a807216c072042dcd58a64a80439962ee3e58e1013b94b376082d786941c4"
+    },
+    "pre-r1/MGGA_X_KTBM_1-2-True-True-False-h4.json.xz": {
+      "original_bytes": 51265,
+      "original_sha256": "749d830a5e159c0a01e693e80c859df76390633226567526cb74f3557516add8",
+      "stored_bytes": 5000,
+      "stored_sha256": "3dd873deb7967228fe876d275f4873e91e2d3742b83016138b336bf8582fe7a9"
+    },
+    "pre-r1/MGGA_X_LTA-1-False-True-False-h4.json.xz": {
+      "original_bytes": 56819,
+      "original_sha256": "198101478aa63d2a8c32f197703754e6756585e56784a86a4093b6ab7356b0f3",
+      "stored_bytes": 5260,
+      "stored_sha256": "0c6027c537f0d94b428a1ef4f5e3e688e96a99105cd843020387b919e77aafcf"
+    },
+    "pre-r1/MGGA_X_LTA-2-False-True-False-h4.json.xz": {
+      "original_bytes": 63429,
+      "original_sha256": "97e844271ce8402888a3de7390c1427d2507ba3ac63340a678e11046816af9ce",
+      "stored_bytes": 5964,
+      "stored_sha256": "337073949273f188ead0f0d58d43c8899c26c7880077e84d675a4f3141238690"
+    },
+    "pre-r1/composite-cli.json.xz": {
+      "original_bytes": 4108,
+      "original_sha256": "1baa4bae722967cc00d3bb1944f9285237b5b2c7f2ccd0940d53865f949521c9",
+      "stored_bytes": 1128,
+      "stored_sha256": "48a77a6094e540f1562680b56cf48d63ad3a6bc54639ce57c239661ad65e7fda"
+    },
+    "pre-r1/summary.json.xz": {
+      "original_bytes": 1326,
+      "original_sha256": "91ba8e270ffff4a898b7f7c12858ba0f415db4fcf006cbec04424645e727fd7e",
+      "stored_bytes": 340,
+      "stored_sha256": "6e9eb4b44dcc99ea6356de0625597a99037832036e41dac1af9c43f94f03a1e5"
+    }
+  },
+  "performance_promotion": false,
+  "schema": "generativeqc.shared-force-parameter-integration.v1",
+  "setup_observations": [
+    {
+      "result": "PBE base route rejects MethodIR-only grid controls; switched to existing named PBE-D3 test compositions.",
+      "scope": "test harness"
+    },
+    {
+      "result": "CPU force AOT was intentionally disabled; CPU energy finite differences supply the CLI force reference.",
+      "scope": "test build"
+    },
+    {
+      "result": "Added CUDA imported usage requirements for internal-header tests and an explicit array type for NVCC parsing.",
+      "scope": "test build"
+    }
+  ],
+  "slurm_jobs": {
+    "build": 3683,
+    "force_matrix": 3684
+  },
+  "source_commit": "84c30caafaa2e8393cbb5cb7a6406300f63a16f2",
+  "source_scope": "pre-R1 integration; not latest master qualification"
+}

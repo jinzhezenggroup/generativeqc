@@ -294,7 +294,7 @@ void launch_batch(cudaStream_t, const double*, const double*, std::size_t,
 def test_package_descriptor_selects_explicit_execution_identity(
     share_parameters: bool,
 ) -> None:
-    """Explicit rollback retains specialization; sharing binds its worker identity."""
+    """Energy and force packaging bind the selected executable and canonical science."""
     from generativeqc_compiler.xc.automatic_cuda import emit_automatic_cuda_provider
     from generativeqc_compiler.xc.parameter_cuda_package import (
         parameterized_cuda_package,
@@ -304,10 +304,16 @@ def test_package_descriptor_selects_explicit_execution_identity(
 
     names = ("MGGA_X_KTBM_0", "MGGA_X_KTBM_1")
     entries = select_entries(list(names))
-    _, shared = parameterized_cuda_package(names)
+    _, shared = parameterized_cuda_package(names, force_profiles=None)
     for index, name in enumerate(names):
         literal = emit_automatic_cuda_provider(name)
         provider = shared[name] if share_parameters else literal
         source = emit_shard(index, entries, share_parameters=share_parameters)
-        assert provider.source_identity in source
+        if share_parameters:
+            assert provider.source_identity in source
+            assert provider.executable_identity in source
+        else:
+            # Literal alias sharing has a package identity, distinct from the
+            # standalone emitter. It must not advertise a parameter worker.
+            assert "parameter_family_" not in source
         assert literal.expression_identity in source

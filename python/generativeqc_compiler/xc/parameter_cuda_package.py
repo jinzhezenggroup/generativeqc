@@ -20,6 +20,7 @@ from generativeqc_compiler.dft.xc_point_cuda import (
     emit_device_point_value,
     emit_equal_spin_point_selector,
     emit_point_traversal,
+    emit_stationary_point_kernel,
 )
 from generativeqc_compiler.integral.scalar_c import format_constant
 
@@ -191,6 +192,8 @@ def _worker(
     providers: list[AutomaticCudaPointProvider],
     parameters: tuple[str, ...],
     values: list[list[float]],
+    *,
+    stationary: bool = False,
 ) -> str:
     """Emit one paired/general producer family with uniform immutable parameters."""
     provider = providers[0]
@@ -263,11 +266,33 @@ void {name}(cudaStream_t stream, const double* features, const double* weights,
             features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
 }}
 """
+    stationary_source = ""
+    if stationary:
+        # Forces retain the incumbent U1 differential for LDA RKS and the
+        # complete polarized differential otherwise. The energy-only paired
+        # shortcut must not discard physical spin derivatives in a force tile.
+        stationary_source = (
+            emit_stationary_point_kernel(parameter_type="const ParameterRow")
+            + f"""
+void launch_stationary(cudaStream_t stream, const double* features, std::size_t count,
+    std::size_t spins, DevicePointValue* output, int* error,
+    const int* producer_error, std::size_t row) {{
+  if ({"spins == 1" if provider.feature_terms == 1 else "false"})
+    stationary_evaluate_points<{provider.feature_terms}, Restricted>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, count, output, error, producer_error, parameter_rows[row]);
+  else
+    stationary_evaluate_points<{provider.feature_terms}, General>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, count, output, error, producer_error, parameter_rows[row]);
+}}
+"""
+        )
     return f"""{_PRELUDE}{_PRIVATE_BEGIN}
 namespace {namespace} {{
 using generativeqc_tensor::I;
 using generativeqc_tensor::finite;
-{emit_device_point_value()}
+{emit_device_point_value(shared=stationary)}
 // The host authenticates one immutable row and CUDA copies it into launch
 // parameter space. Fixed offsets avoid per-thread device-table address loads;
 // concurrent launches never mutate shared device state.
@@ -280,13 +305,18 @@ constexpr ParameterRow parameter_rows[{len(values)}] = {{
 {emit_automatic_point_kernel(parameter_type="const ParameterRow")}
 {emit_automatic_point_kernel(parameter_type="const __grid_constant__ ParameterRow", name="automatic_evaluate_ordinary_points")}
 {launches}
+{stationary_source}
 }}
 {_PRIVATE_END}
 """
 
 
 def _registration(
-    provider: AutomaticCudaPointProvider, namespace: str, row: int
+    provider: AutomaticCudaPointProvider,
+    namespace: str,
+    row: int,
+    *,
+    force_spins: tuple[int, ...] = (),
 ) -> str:
     """Validate public identities before forwarding to a private family worker."""
     declarations = "\n".join(
@@ -295,6 +325,23 @@ def _registration(
         for name in ("launch", "launch_batch")
     )
     code = automatic_functional_code(provider.point.name)
+    stationary = ""
+    if force_spins:
+        declarations += """
+void launch_stationary(cudaStream_t, const double*, std::size_t, std::size_t,
+                      DevicePointValue*, int*, const int*, std::size_t);
+"""
+        spin_gate = " || ".join(f"spins == {spin}" for spin in force_spins)
+        stationary = f"""
+void launch_stationary(cudaStream_t stream, const double* features, std::size_t count,
+    std::size_t spins, DevicePointValue* output, int* error, const int* producer_error) {{
+  validate_launch(count, spins, {code}U, 1.0, 1.0);
+  if (!({spin_gate}) || !features || !output || !error || !count || count > SIZE_MAX / 10)
+    throw std::invalid_argument("unpackaged or invalid stationary point layout");
+  {namespace}::launch_stationary(stream, features, count, spins, output, error,
+                                  producer_error, {row});
+}}
+"""
     selector = (
         "spins == 1" if provider.feature_terms == 1 else "use_equal_spin_points(spins)"
     )
@@ -330,6 +377,7 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
   {namespace}::launch_batch(stream, features, weights, count, spins, coefficients, totals,
                             error, {row}, {selector}, tile_points);
 }}
+{stationary}
 }}
 {_PRIVATE_END}
 """
@@ -409,6 +457,7 @@ def parameterized_cuda_package(
     names: tuple[str, ...],
     *,
     policy: Literal["qualified", "discover"] = "discover",
+    force_profiles: tuple[str, ...] | None = (),
 ) -> tuple[dict[str, str], dict[str, AutomaticCudaPointProvider]]:
     """Share exact compatible workers by default, with a legacy policy rollback.
 
@@ -430,6 +479,16 @@ def parameterized_cuda_package(
             [value for _, value in provider.point.parameters]
             for provider in group.providers
         ]
+        force_spins = {
+            name: tuple(
+                spin
+                for spin, label in ((1, "rks"), (2, "uks"))
+                if force_profiles is None
+                or f"libxc_{automatic_functional_code(name)}_{label}" in force_profiles
+            )
+            for name in group.names
+        }
+        stationary = any(force_spins.values())
         # Table rows and their values are immutable module data and must bind
         # the worker symbol too; another package cannot interpose a different row.
         template = _worker(
@@ -437,6 +496,7 @@ def parameterized_cuda_package(
             list(group.providers),
             parameters,
             values,
+            stationary=stationary,
         )
         identity = canonical_hash(
             {
@@ -447,7 +507,7 @@ def parameterized_cuda_package(
         )
         namespace = f"generativeqc::dft::cuda_xc_detail::parameter_family_{identity}"
         workers[identity] = _worker(
-            namespace, list(group.providers), parameters, values
+            namespace, list(group.providers), parameters, values, stationary=stationary
         )
         for row, name in enumerate(group.names):
             # CPU/CUDA admission compares the canonical registered mathematics,
@@ -456,6 +516,11 @@ def parameterized_cuda_package(
             # identity and the authenticated immutable parameter row instead.
             original = providers[name]
             providers[name] = replace(
-                original, source=_registration(original, namespace, row)
+                original,
+                source=_registration(
+                    original, namespace, row, force_spins=force_spins[name]
+                ),
+                stationary_launcher=bool(force_spins[name]),
+                executable_identity=identity,
             )
     return workers, providers
