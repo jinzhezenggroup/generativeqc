@@ -238,11 +238,19 @@ def test_automatic_cuda_energy_does_not_reserve_unavailable_force_arenas(
             host_bytes=plan.peak_bytes["host"], device_bytes=plan.peak_bytes["device"]
         ),
     ).require_feasible()
-    with pytest.raises(NotImplementedError, match="forces are not qualified"):
-        resources_ks.ks_resource_request(
-            [H2, molecule],
-            method="libxc:GGA_C_AM05",
-            backend="cuda",
-            library=library,
-            include_forces=True,
-        )
+    unsupported = resources_ks.ks_resource_request(
+        [H2, molecule],
+        method="libxc:GGA_C_AM05",
+        backend="cuda",
+        library=library,
+        include_forces=True,
+    )
+    assert unsupported.identity.observables == ("energy", "forces")
+    assert unsupported.candidates == ()
+    assert (
+        "require a packaged native stationary profile" in unsupported.unsupported_reason
+    )
+    unsupported_plan = plan_resources([unsupported], ResourceBudget())
+    assert unsupported_plan.status == "unsupported"
+    with pytest.raises(NotImplementedError, match="packaged native stationary profile"):
+        unsupported_plan.require_feasible()

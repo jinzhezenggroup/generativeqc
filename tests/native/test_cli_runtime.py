@@ -1492,7 +1492,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(listing.returncode, 0, listing.stderr)
         table = {entry["name"]: entry for entry in json.loads(listing.stdout)}
         self.assertEqual(table["libxc:gga_x_apbe"]["aliases"], ["libxc-rks:gga_x_apbe"])
-        self.assertFalse(table["libxc-uks:gga_x_apbe"]["cuda"])
+        self.assertTrue(table["libxc-uks:gga_x_apbe"]["cuda"])
         # Exercise both numerical domains through the installed-style process
         # with no interpreter/toolchain on PATH. GGA alone cannot catch a stale
         # generic domain on a density-only LDA catalog entry.
@@ -1521,16 +1521,9 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(len(energies), 3)
             self.assertAlmostEqual(energies[0], energies[1], places=12)
             self.assertAlmostEqual(energies[0], energies[2], places=8)
-        rejected = self.cli(
-            "run",
-            str(SOURCE / "tests/data/h2_bohr.xyz"),
-            "--method",
-            "libxc:GGA_X_APBE",
-            "--backend",
-            "cuda",
-        )
-        self.assertEqual(rejected.returncode, 2)
-        self.assertIn("CPU backend", rejected.stderr)
+        # CUDA is now catalog-representable. Linked-provider and real-device
+        # admission are checked by the scheduled installed-CUDA qualification,
+        # not this Python-free host test (which must never initialize a GPU).
 
     def test_profile_validate_and_zip_export_preserve_python_identity(self) -> None:
         directory = self.bundle()

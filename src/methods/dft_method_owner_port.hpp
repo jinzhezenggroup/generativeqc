@@ -27,6 +27,12 @@ class KsSingleOwnerPort {
 class KsBatchOwnerPort {
  public:
   virtual ~KsBatchOwnerPort() = default;
+
+  virtual generativeqc_status automatic_artifact_diagnostic(std::size_t,
+                                                            KsAutomaticArtifactDiagnostic&,
+                                                            std::string&) const {
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   virtual generativeqc_status final_state_token(std::size_t index,
                                                 dft::CudaKsFinalStateToken& token,
                                                 std::string& detail) const = 0;

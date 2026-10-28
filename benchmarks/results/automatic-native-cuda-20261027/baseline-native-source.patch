@@ -1,0 +1,905 @@
+--- a/cmake/GenerativeQCCuda.cmake
++++ b/cmake/GenerativeQCCuda.cmake
+@@ -333,10 +333,6 @@
+     target_sources(${target} PRIVATE src/scf/aot_shell_registry_stub.cpp)
+   endif()
+   generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)
+-  # Automatic forces execute only through the shared native owner. Do not
+-  # multiply that package by legacy Python s/p and unadmitted s/p/d DSOs.
+-  set(_generativeqc_legacy_stationary_names ${_generativeqc_stationary_names})
+-  list(FILTER _generativeqc_legacy_stationary_names EXCLUDE REGEX "^libxc_")
+   # Native C++/CLI force bindings and Python-only stationary DSOs are
+   # independent products. The monolithic CLI needs only the former.
+   if(_generativeqc_stationary_names AND
+@@ -422,7 +418,7 @@
+     generativeqc_set_cuda_compile_pool(
+         generativeqc_stationary_sp_primitives "${_generativeqc_aot_compile_pool}")
+ 
+-    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_legacy_stationary_names)
++    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
+     # Component-expanded s/p/d derivatives are shared compiler output: generate
+     # the bounded primitive inventory once, then device-link it into each
+     # method/spin wrapper. The 23 x 16 layout is part of the versioned v3
+@@ -554,11 +550,11 @@
+       target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
+     endif()  # GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
+ 
+-    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_legacy_stationary_names)
++    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
+     # Generated source weights are exact-plan-bound after #665/#689. Package
+     # semilocal and admitted global-hybrid plans through one profile catalog;
+     # runtime selection still verifies the exact StationaryGradientPlan identity.
+-    foreach(_generativeqc_stationary_name IN LISTS _generativeqc_legacy_stationary_names)
++    foreach(_generativeqc_stationary_name IN LISTS _generativeqc_stationary_names)
+       set(_generativeqc_stationary_source
+           "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/generativeqc_stationary_${_generativeqc_stationary_name}.cu")
+       set(_generativeqc_stationary_manifest
+--- a/cmake/GenerativeQCStationaryProfiles.cmake
++++ b/cmake/GenerativeQCStationaryProfiles.cmake
+@@ -13,19 +13,11 @@
+   endif()
+   set(_generativeqc_stationary_discovery_inputs
+       "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/generativeqc_stationary_profile_inputs.txt")
+-  set(_generativeqc_stationary_discovery_catalog
+-      "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/generativeqc_stationary_profiles.cmake")
+-  set(_automatic_arguments)
+-  foreach(functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
+-    list(APPEND _automatic_arguments --functional "${functional}")
+-  endforeach()
+   execute_process(
+     COMMAND "${Python3_EXECUTABLE}"
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+             --list-available-aot-profiles
+             --cmake-dependencies "${_generativeqc_stationary_discovery_inputs}"
+-            --cmake-catalog "${_generativeqc_stationary_discovery_catalog}"
+-            ${_automatic_arguments}
+     OUTPUT_VARIABLE _generativeqc_stationary_profile_catalog
+     OUTPUT_STRIP_TRAILING_WHITESPACE
+     COMMAND_ERROR_IS_FATAL ANY)
+@@ -35,12 +27,29 @@
+        _generativeqc_stationary_configure_dependencies)
+   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                ${_generativeqc_stationary_configure_dependencies})
+-  include("${_generativeqc_stationary_discovery_catalog}")
+-  if(NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+-    set(_generativeqc_automatic_force_catalog)
++  set(_generativeqc_automatic_force_catalog)
++  if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
++    set(_automatic_arguments)
++    foreach(functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
++      list(APPEND _automatic_arguments --functional "${functional}")
++    endforeach()
++    execute_process(
++      COMMAND "${Python3_EXECUTABLE}"
++              "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
++              --list-automatic-aot-profiles ${_automatic_arguments}
++      OUTPUT_VARIABLE _generativeqc_automatic_force_catalog
++      OUTPUT_STRIP_TRAILING_WHITESPACE
++      COMMAND_ERROR_IS_FATAL ANY)
+   endif()
+   if(GENERATIVEQC_STATIONARY_AOT_PROFILES STREQUAL "auto")
+-    set(selected ${_generativeqc_stationary_default_catalog} ${_generativeqc_automatic_force_catalog})
++    execute_process(
++      COMMAND "${Python3_EXECUTABLE}"
++              "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
++              --list-aot-profiles
++      OUTPUT_VARIABLE selected
++      OUTPUT_STRIP_TRAILING_WHITESPACE
++      COMMAND_ERROR_IS_FATAL ANY)
++    list(APPEND selected ${_generativeqc_automatic_force_catalog})
+   else()
+     set(selected ${GENERATIVEQC_STATIONARY_AOT_PROFILES})
+   endif()
+--- a/python/generativeqc/automatic_artifacts.py
++++ /dev/null
+@@ -1,175 +0,0 @@
+-"""Explicit artifact/work receipts from the executed native automatic KS owner.
+-
+-This diagnostic reads a current converged token and process-lifetime compiled
+-descriptors. It never resolves compiler IR, generates source or executes science.
+-Binary identity comes from the module containing each actual native descriptor,
+-not from a caller-provided library filename or an emitted-source hash alone.
+-"""
+-
+-from __future__ import annotations
+-
+-import ctypes
+-import hashlib
+-import os
+-from pathlib import Path
+-from typing import Any
+-
+-from . import _native
+-
+-
+-def _loaded_artifact(address: int | None) -> dict[str, Any] | None:
+-    """Resolve a live descriptor to its loaded POSIX module and exact file bytes."""
+-    if not address:
+-        return None
+-
+-    class DlInfo(ctypes.Structure):
+-        _fields_ = [
+-            ("filename", ctypes.c_char_p),
+-            ("base", ctypes.c_void_p),
+-            ("symbol", ctypes.c_char_p),
+-            ("symbol_address", ctypes.c_void_p),
+-        ]
+-
+-    query = getattr(ctypes.CDLL(None), "dladdr", None)
+-    if query is None:
+-        raise NotImplementedError("loaded native artifact identity requires dladdr")
+-    query.argtypes = [ctypes.c_void_p, ctypes.POINTER(DlInfo)]
+-    query.restype = ctypes.c_int
+-    info = DlInfo()
+-    if not query(address, ctypes.byref(info)) or not info.filename:
+-        raise RuntimeError("native descriptor has no authenticated loaded module")
+-    path = Path(info.filename.decode()).resolve(strict=True)
+-    before = path.stat()
+-    # dladdr names the module selected by the loader. Linux mappings also bind
+-    # its inode: an atomic package replacement must not relabel the old loaded
+-    # descriptor with the new library's hash. As with normal shared-library
+-    # deployment, the mapped inode itself must remain immutable while loaded.
+-    maps = Path("/proc/self/maps")
+-    if maps.exists():
+-        for line in maps.read_text().splitlines():
+-            fields = line.split(maxsplit=5)
+-            start, end = (int(value, 16) for value in fields[0].split("-"))
+-            if start <= address < end:
+-                major, minor = (int(value, 16) for value in fields[3].split(":"))
+-                if (int(fields[4]), os.makedev(major, minor)) != (
+-                    before.st_ino,
+-                    before.st_dev,
+-                ):
+-                    raise RuntimeError("loaded native artifact file was replaced")
+-                break
+-        else:
+-            raise RuntimeError("native descriptor has no live process mapping")
+-    with path.open("rb") as source:
+-        digest = hashlib.file_digest(source, "sha256").hexdigest()
+-    after = path.stat()
+-    if (before.st_ino, before.st_size, before.st_mtime_ns) != (
+-        after.st_ino,
+-        after.st_size,
+-        after.st_mtime_ns,
+-    ):
+-        raise RuntimeError("native artifact changed while its receipt was read")
+-    return {"path": str(path), "sha256": digest, "bytes": before.st_size}
+-
+-
+-def read_automatic_artifact_diagnostic(batch: Any, index: int = 0) -> dict[str, Any]:
+-    """Read actual AOT identities and cumulative force work for a live KS item.
+-
+-    A later energy replay retains its compiled artifacts but reports no force
+-    at the new token. A failed/nonconverged solve cannot borrow an old receipt.
+-    Register/local/shared-memory measurements are separate binary-qualified
+-    offline data; these runtime workspace/work fields do not invent them.
+-    """
+-    batch._ensure_open()
+-    library = batch._library
+-    query = getattr(library, "generativeqc_ks_batch_automatic_artifact_v1", None)
+-    if query is None:
+-        raise NotImplementedError(
+-            "native automatic artifact diagnostics are unavailable"
+-        )
+-    if type(index) is not int or not 0 <= index <= 0xFFFFFFFF:
+-        raise ValueError("automatic artifact item index must fit uint32")
+-    identities = (ctypes.c_char_p * 7)()
+-    owners = (ctypes.c_void_p * 2)()
+-    work = (ctypes.c_uint64 * 40)()
+-    query.argtypes = [
+-        ctypes.c_void_p,
+-        ctypes.c_uint32,
+-        ctypes.POINTER(ctypes.c_char_p),
+-        ctypes.c_size_t,
+-        ctypes.POINTER(ctypes.c_void_p),
+-        ctypes.c_size_t,
+-        ctypes.POINTER(ctypes.c_uint64),
+-        ctypes.c_size_t,
+-    ]
+-    query.restype = ctypes.c_int
+-    _native.check(
+-        library,
+-        query(
+-            batch._batch,
+-            index,
+-            identities,
+-            len(identities),
+-            owners,
+-            len(owners),
+-            work,
+-            len(work),
+-        ),
+-    )
+-    names = (
+-        "identifier",
+-        "point_expression_identity",
+-        "point_source_identity",
+-        "force_profile",
+-        "force_plan_identity",
+-        "force_source_identity",
+-        "fallback_reason",
+-    )
+-    result = dict(
+-        zip(
+-            names,
+-            (value.decode() if value else "" for value in identities),
+-            strict=True,
+-        )
+-    )
+-    point_artifact = _loaded_artifact(owners[0])
+-    force_artifact = _loaded_artifact(owners[1])
+-    result.update(
+-        schema="generativeqc.native-automatic-artifact.v1",
+-        point_artifact=point_artifact,
+-        force_artifact=force_artifact,
+-        force_completed=bool(work[0]),
+-        domain_version=int(work[1]),
+-        spin_blocks=int(work[2]),
+-        source_count=int(work[3]),
+-        work_scope="cumulative retained force owner at the current final token",
+-        capacity=dict(
+-            zip(
+-                (
+-                    "device_upper_bytes",
+-                    "minimum_device_bytes",
+-                    "grid_numeric_bytes",
+-                    "stationary_numeric_bytes",
+-                    "grid_provider_allowance_bytes",
+-                    "grid_provider_retained_bytes",
+-                ),
+-                work[4:10],
+-                strict=True,
+-            )
+-        ),
+-        stationary_work_v1=list(work[10:34]),
+-        grid_work=dict(
+-            zip(
+-                (
+-                    "evaluation_points",
+-                    "evaluation_tiles",
+-                    "ao_jet_values",
+-                    "projection_fma_pairs",
+-                    "identical_spin_copy_bytes",
+-                    "feature_passes",
+-                ),
+-                work[34:],
+-                strict=True,
+-            )
+-        ),
+-    )
+-    return result
+--- a/python/generativeqc_compiler/method/stationary_native_cuda.py
++++ b/python/generativeqc_compiler/method/stationary_native_cuda.py
+@@ -12,7 +12,6 @@
+ from fractions import Fraction
+ 
+ from generativeqc_compiler.common.paths import asset_path
+-from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+ from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
+ from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
+ from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+@@ -35,7 +34,6 @@
+     _qualified_aot_profile,
+     emit_stationary_profile_aot_wrapper_cuda,
+     qualified_sp_requests,
+-    stationary_aot_profile_contract_identity,
+     stationary_runtime_sources,
+ )
+ 
+@@ -186,20 +184,6 @@
+         for suffix in ("", "_fp32")
+     )
+     prefix = f"generativeqc_native_{profile}_"
+-    source_identity = canonical_hash(
+-        {
+-            "schema": "generativeqc.native-stationary-source.v1",
+-            "contract": stationary_aot_profile_contract_identity(profile),
+-            "wrapper": wrapper,
+-            "transport": transport,
+-            "binding_header": file_hash(
+-                asset_path("src/dft/cuda_stationary_binding.hpp")
+-            ),
+-            "shared_kernels": file_hash(
+-                asset_path("src/dft/native_stationary_shared_kernels.cu")
+-            ),
+-        }
+-    )
+     aliases = "\n".join(
+         f"#define {name} {prefix}{name}" for name in sorted(identifiers)
+     )
+@@ -248,8 +232,7 @@
+       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
+        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
+        {exchange}}},
+-      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology,
+-      {json.dumps(source_identity)}
++      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology
+   }};
+   return binding;
+ }}
+--- a/src/api/c_api_ks_snapshot.cpp
++++ b/src/api/c_api_ks_snapshot.cpp
+@@ -155,31 +155,6 @@
+ }  // namespace
+ 
+ extern "C" {
+-
+-/** Explicit diagnostic read; no CUDA launch, source emission, or file lookup.
+- * Descriptors have static lifetime. Caller-owned arrays publish transactionally
+- * only after the prepared owner authenticates its current converged token. */
+-generativeqc_status generativeqc_ks_batch_automatic_artifact_v1(
+-    const generativeqc_batch* batch, std::uint32_t index, const char** identities,
+-    std::size_t identity_count, const void** owners, std::size_t owner_count, std::uint64_t* work,
+-    std::size_t work_count) {
+-  if (!batch || index >= batch->plan->size() || !identities || identity_count != 7 || !owners ||
+-      owner_count != 2 || !work || work_count != 40)
+-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+-  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+-  try {
+-    generativeqc::methods::detail::KsAutomaticArtifactDiagnostic diagnostic;
+-    const auto status = generativeqc::methods::detail::dft_automatic_artifact_diagnostic(
+-        *batch->plan, index, diagnostic, batch->context->last_detail);
+-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+-    std::copy(diagnostic.identities.begin(), diagnostic.identities.end(), identities);
+-    std::copy(diagnostic.artifact_owners.begin(), diagnostic.artifact_owners.end(), owners);
+-    std::copy(diagnostic.work.begin(), diagnostic.work.end(), work);
+-    return GENERATIVEQC_STATUS_SUCCESS;
+-  } catch (...) {
+-    return generativeqc::api::map_exception(&batch->context->last_detail);
+-  }
+-}
+ 
+ /** Authenticate the same additional capacity against the prepared item. This
+  * query needs no SCF/final token and publishes only after complete admission. */
+--- a/src/api/c_api_resources.cpp
++++ b/src/api/c_api_resources.cpp
+@@ -427,10 +427,11 @@
+         static_cast<std::uint32_t>(functional));
+     const auto direct = generativeqc::scf::cuda_direct_coulomb_device_bytes(
+         1, nao, atoms, shells, primitives,
+-        automatic ? generativeqc::dft::automatic_stationary_derivative_order(
+-                        static_cast<std::uint32_t>(functional), automatic->domain_version,
+-                        static_cast<std::uint32_t>(spins))
+-                  : 1U);
++        automatic
++            ? generativeqc::dft::automatic_stationary_derivative_order(
++                  static_cast<std::uint32_t>(functional), automatic->domain_version,
++                  static_cast<std::uint32_t>(spins))
++            : 1U);
+     output[0] = state;
+     output[1] = xc_and_grid;
+     output[2] = direct;
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -3847,7 +3847,7 @@
+     // Prove the force consumer's complete physical/canonical state before
+     // publishing convergence or a warm seed. Rejection resumes the intact
+     // DIIS proposal and invalidates only the borrowed orbital scratch.
+-    if (converged && (standard_convergence_active() || automatic_program)) {
++    if (converged && standard_convergence_active()) {
+       early_final_probe_ran = true;
+       converged = probe_current_final_state();
+     } else if (!converged && early_final_probe_eligible && has_energy_history &&
+@@ -3986,14 +3986,6 @@
+       final_closure = true;
+       output.converged = true;
+       is_active = false;
+-    } else if (automatic_program && converged) {
+-      // The shared canonical proof above audited this exact physical F[D]
+-      // against the original density tolerance, without changing D. Applying
+-      // another unextrapolated update can amplify roundoff at an unstable
+-      // fixed point and reject an already valid warm state. A rejected proof
+-      // instead continues the intact DIIS solve within its original budget.
+-      output.converged = true;
+-      is_active = false;
+     } else if (strict_final_closure && converged && !final_closure) {
+       // A DIIS proposal can satisfy the SCF gate before a fresh F[D] proposal
+       // does. Preserve any established UKS occupation stabilization through
+@@ -4190,7 +4182,7 @@
+     prepare_final_frame();
+     scf::solver::FinalStateLimits limits;
+     limits.density_tolerance = options.density_tolerance;
+-    if (standard_convergence_active() || automatic_program)
++    if (standard_convergence_active())
+       limits.stationarity_tolerance = physical_stationarity_tolerance();
+     limits.energy_tolerance = options.energy_tolerance;
+     limits.maximum_corrections = 0;
+--- a/src/dft/cuda_stationary_binding.hpp
++++ b/src/dft/cuda_stationary_binding.hpp
+@@ -56,9 +56,6 @@
+   decltype(geometry) geometry_fp32{};
+   /** Optional immutable atom-prefix/radius topology; no per-point owner upload. */
+   int (*grid_topology)(void*, const std::size_t*, const double*, std::size_t, char*, std::size_t){};
+-  /** Build-time compiler/header closure; the runtime receipt additionally
+-   * binds this actual descriptor's loaded native module, never just source. */
+-  const char* source_identity{};
+ };
+ 
+ /** Return only statically linked profiles, or nullptr for an unavailable one. */
+@@ -71,8 +68,8 @@
+  * This selects retained integral storage only; shape and endpoint admission
+  * still belong to the prepared calculation. Omitted artifacts retain order 0. */
+ inline unsigned automatic_stationary_derivative_order(std::uint32_t functional,
+-                                                      std::uint32_t domain,
+-                                                      std::uint32_t spins) noexcept {
++                                                       std::uint32_t domain,
++                                                       std::uint32_t spins) noexcept {
+   return cuda_stationary_binding(CudaStationaryModel{functional, domain, spins, 3, 1.0, 1.0, 0.0})
+              ? 1U
+              : 0U;
+--- a/src/methods/dft_method.cpp
++++ b/src/methods/dft_method.cpp
+@@ -46,7 +46,6 @@
+ 
+ #if GENERATIVEQC_HAS_CUDA
+ #include "dft/cuda_ks.hpp"
+-#include "generated_libxc_semilocal_cuda_registry.hpp"
+ #include "scf/cuda/rhf_policy.hpp"
+ #include "scf/cuda_direct_jk.hpp"
+ #include "scf/cuda_fock_execution.hpp"
+@@ -1893,10 +1892,9 @@
+         status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
+                                                   qualified_spatial_force_default(), nullptr);
+       }
+-      if (status == GENERATIVEQC_STATUS_SUCCESS) {
++      if (status == GENERATIVEQC_STATUS_SUCCESS)
+         resources = stationary_controller_->resources();
+-        last_native_force_token_ = expected;
+-      } else
++      else
+         stationary_controller_.reset();
+       return status;
+     } catch (const std::bad_alloc&) {
+@@ -1916,58 +1914,6 @@
+     }
+ #else
+     detail = "native CUDA stationary gradient requires a CUDA build";
+-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+-#endif
+-  }
+-
+-  generativeqc_status automatic_artifact_diagnostic(KsAutomaticArtifactDiagnostic& output,
+-                                                    std::string& detail) const {
+-#if GENERATIVEQC_HAS_CUDA
+-    if (!cuda_ || !execution_plan_.automatic_program) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+-    dft::CudaKsFinalStateToken token;
+-    const auto status = cuda_->final_state_token(token, detail);
+-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+-    const auto* point =
+-        dft::generated::automatic_cuda_point_entry(ks_xc_functional_code(execution_plan_));
+-    if (!point) return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+-    const auto* binding = admitted_cuda_stationary_binding();
+-    const bool completed = binding && stationary_controller_ && last_native_force_token_ &&
+-                           *last_native_force_token_ == token;
+-    KsAutomaticArtifactDiagnostic value;
+-    value.identities = {point->identifier,
+-                        point->expression_identity,
+-                        point->source_identity,
+-                        binding ? binding->profile : "",
+-                        binding ? binding->plan_identity : "",
+-                        binding ? binding->source_identity : "",
+-                        completed ? "none"
+-                        : binding ? "force-not-executed-at-current-token"
+-                                  : "force-artifact-or-context-unavailable"};
+-    value.artifact_owners = {point, binding};
+-    value.work[0] = completed;
+-    value.work[1] = point->domain_version;
+-    value.work[2] = execution_plan_.spin_channels;
+-    value.work[3] = binding ? binding->source_count : 0;
+-    if (completed) {
+-      const auto& resources = stationary_controller_->resources();
+-      const std::array<std::uint64_t, 6> capacity{resources.device_upper_bytes,
+-                                                  resources.minimum_device_bytes,
+-                                                  resources.grid_numeric_bytes,
+-                                                  resources.stationary_numeric_bytes,
+-                                                  resources.grid_provider_allowance_bytes,
+-                                                  resources.grid_provider_retained_bytes};
+-      std::copy(capacity.begin(), capacity.end(), value.work.begin() + 4);
+-      std::copy(resources.stationary_work.begin(), resources.stationary_work.end(),
+-                value.work.begin() + 10);
+-      const auto& grid = resources.grid_work;
+-      const std::array<std::uint64_t, 6> grid_work{
+-          grid.evaluation_points,    grid.evaluation_tiles,          grid.ao_jet_values,
+-          grid.projection_fma_pairs, grid.identical_spin_copy_bytes, grid.feature_passes};
+-      std::copy(grid_work.begin(), grid_work.end(), value.work.begin() + 34);
+-    }
+-    output = value;
+-    return GENERATIVEQC_STATUS_SUCCESS;
+-#else
+     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+ #endif
+   }
+@@ -2396,7 +2342,6 @@
+ #if GENERATIVEQC_HAS_CUDA
+   std::unique_ptr<dft::CudaKsPlan> cuda_;
+   std::unique_ptr<dft::CudaStationaryController> stationary_controller_;
+-  std::optional<dft::CudaKsFinalStateToken> last_native_force_token_;
+ #endif
+ };
+ 
+@@ -2761,16 +2706,6 @@
+     }
+ #endif
+     return std::nullopt;
+-  }
+-
+-  generativeqc_status automatic_artifact_diagnostic(std::size_t index,
+-                                                    KsAutomaticArtifactDiagnostic& output,
+-                                                    std::string& detail) const override {
+-    if (index >= items_.size() || !items_[index].plan) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+-    // Geometry/driver failures can precede begin() revoking the solver token.
+-    // Retained last-good state is not evidence for this failed item.
+-    if (items_[index].failure) std::rethrow_exception(items_[index].failure);
+-    return items_[index].plan->automatic_artifact_diagnostic(output, detail);
+   }
+ 
+   generativeqc_status final_state_token(std::size_t index, dft::CudaKsFinalStateToken& token,
+--- a/src/methods/dft_method.hpp
++++ b/src/methods/dft_method.hpp
+@@ -20,18 +20,6 @@
+ /** Model-level capability upper bound without a molecule or CUDA operation.
+  * Actual shape, resources and final-state admission remain per prepared item. */
+ bool dft_cuda_stationary_model_available(const generativeqc_method_descriptor& descriptor);
+-
+-/** A current automatic CUDA execution receipt. Text and addresses refer to
+- * process-lifetime linked descriptors; work belongs to the retained native
+- * controller and is published only for a force at the current final token. */
+-struct KsAutomaticArtifactDiagnostic {
+-  std::array<const char*, 7> identities{};
+-  std::array<const void*, 2> artifact_owners{};
+-  std::array<std::uint64_t, 40> work{};
+-};
+-generativeqc_status dft_automatic_artifact_diagnostic(const PreparedBatch& batch, std::size_t index,
+-                                                      KsAutomaticArtifactDiagnostic& output,
+-                                                      std::string& detail);
+ 
+ /** Context-qualified additional CUDA force capacity without any CUDA operation.
+  * Shapes are atoms, AOs, primitives, grid points, maximum shell l, ECP terms
+--- a/src/methods/dft_method_derivative_adapter.cpp
++++ b/src/methods/dft_method_derivative_adapter.cpp
+@@ -131,15 +131,6 @@
+   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+ }
+ 
+-generativeqc_status dft_automatic_artifact_diagnostic(const PreparedBatch& batch, std::size_t index,
+-                                                      KsAutomaticArtifactDiagnostic& output,
+-                                                      std::string& detail) {
+-  const auto* ks = dynamic_cast<const KsBatchOwnerPort*>(&batch);
+-  if (ks) return ks->automatic_artifact_diagnostic(index, output, detail);
+-  detail = "automatic artifact receipt requires a prepared KS batch";
+-  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+-}
+-
+ generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
+                                                  dft::CudaStationaryCapacity& capacity,
+                                                  std::string& detail) {
+--- a/src/methods/dft_method_owner_port.hpp
++++ b/src/methods/dft_method_owner_port.hpp
+@@ -27,12 +27,6 @@
+ class KsBatchOwnerPort {
+  public:
+   virtual ~KsBatchOwnerPort() = default;
+-
+-  virtual generativeqc_status automatic_artifact_diagnostic(std::size_t,
+-                                                            KsAutomaticArtifactDiagnostic&,
+-                                                            std::string&) const {
+-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+-  }
+   virtual generativeqc_status final_state_token(std::size_t index,
+                                                 dft::CudaKsFinalStateToken& token,
+                                                 std::string& detail) const = 0;
+--- a/tools/audit_native_automatic_aot.py
++++ /dev/null
+@@ -1,212 +0,0 @@
+-"""Join executed automatic-force receipts to native source/object/cubin evidence.
+-
+-This offline audit never initializes CUDA or compiles. Source/object records
+-supplement the actual loaded-library digest in each receipt; they cannot replace
+-that execution binding or independently promote a scientific endpoint.
+-"""
+-
+-from __future__ import annotations
+-
+-import argparse
+-import json
+-import re
+-import subprocess
+-import sys
+-from pathlib import Path
+-from typing import Any
+-
+-ROOT = Path(__file__).resolve().parents[1]
+-sys.path.insert(0, str(ROOT / "python"))
+-sys.path.insert(0, str(ROOT))
+-
+-from generativeqc_compiler.common.provenance import atomic_json, file_hash
+-
+-from tools.validate_direct_jk_aot_resources import cuobjdump_resources
+-
+-
+-def artifact(path: Path) -> dict[str, Any]:
+-    """Identify the exact frozen file inspected by this offline qualification."""
+-    return {
+-        "path": str(path.resolve()),
+-        "sha256": file_hash(path),
+-        "bytes": path.stat().st_size,
+-    }
+-
+-
+-def audit_receipt(
+-    receipt: dict[str, Any], library: dict[str, Any], resources: dict[str, Any]
+-) -> dict[str, Any]:
+-    """Require real execution, exact binary identity and complete cubin counters."""
+-    if not receipt["force_completed"] or receipt["fallback_reason"] != "none":
+-        raise ValueError("receipt does not certify a completed native force")
+-    for kind in ("point_artifact", "force_artifact"):
+-        if (
+-            receipt[kind]["sha256"] != library["sha256"]
+-            or receipt[kind]["bytes"] != library["bytes"]
+-        ):
+-            raise ValueError("executed artifact differs from the inspected binary")
+-    profile = receipt["force_profile"]
+-    if not re.fullmatch(r"libxc_[0-9]+_(rks|uks)", profile):
+-        raise ValueError("receipt is not an automatic native force profile")
+-    point = "automatic_" + receipt["identifier"].lower() + "_point_provider"
+-    scopes = {
+-        "point": {name: row for name, row in resources.items() if point in name},
+-        "force": {
+-            name: row
+-            for name, row in resources.items()
+-            if "generativeqc_native_" + profile + "_" in name
+-        },
+-    }
+-    for scope, rows in scopes.items():
+-        if not rows:
+-            raise ValueError(f"executed {scope} has no compiled cubin resources")
+-        for row in rows.values():
+-            if (
+-                set(row) != {"REG", "STACK", "LOCAL", "SHARED"}
+-                or not 0 < row["REG"] <= 255
+-                or any(row[field] < 0 for field in row)
+-            ):
+-                raise ValueError("incomplete or invalid cubin resource counters")
+-    return {"profile": profile, "scopes": scopes, "runtime": receipt}
+-
+-
+-def main() -> None:
+-    parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--library", type=Path, required=True)
+-    parser.add_argument("--build-tree", type=Path, required=True)
+-    parser.add_argument("--cuobjdump", type=Path, required=True)
+-    parser.add_argument("--receipt", type=Path, action="append", required=True)
+-    parser.add_argument("--output", type=Path, required=True)
+-    # Resource policy belongs to the consumer/target qualification, not parser
+-    # defaults. Stack includes call frames, and does not claim zero spills.
+-    parser.add_argument("--max-stack", type=int, required=True)
+-    parser.add_argument("--max-local", type=int, required=True)
+-    parser.add_argument("--max-shared", type=int, required=True)
+-    args = parser.parse_args()
+-    if min(args.max_stack, args.max_local, args.max_shared) < 0:
+-        parser.error("resource limits must be nonnegative")
+-    library = artifact(args.library)
+-    tool = subprocess.run(
+-        [str(args.cuobjdump), "--version"],
+-        capture_output=True,
+-        text=True,
+-        check=True,
+-        timeout=30,
+-    )
+-    dump = subprocess.run(
+-        [str(args.cuobjdump), "--dump-resource-usage", str(args.library)],
+-        capture_output=True,
+-        text=True,
+-        check=True,
+-        timeout=300,
+-    )
+-    # A linked DSO embeds unrelated fatbins with repeated internal tensor
+-    # helpers. Audit the uniquely owned automatic point/force symbols here;
+-    # duplicates within those scopes still fail in the common parser.
+-    automatic_blocks = [
+-        match[0]
+-        for match in re.finditer(r"[ \t]*Function (\w+):\n[^\n]+", dump.stdout)
+-        if "automatic_" in match[1] or "generativeqc_native_libxc_" in match[1]
+-    ]
+-    resources = cuobjdump_resources("\n".join(automatic_blocks))
+-    profiles = {}
+-    executions = []
+-    for path in args.receipt:
+-        payload = json.loads(path.read_text())
+-        for row in payload["rows"]:
+-            receipt = row["artifact"]
+-            joined = audit_receipt(receipt, library, resources)
+-            profile = joined["profile"]
+-            if profile not in profiles:
+-                source = (
+-                    args.build_tree
+-                    / "generated/stationary_force"
+-                    / f"native_{profile}.cu"
+-                )
+-                objects = list(args.build_tree.rglob(f"native_{profile}.cu.o"))
+-                if len(objects) != 1:
+-                    raise ValueError(f"expected one compiled object for {profile}")
+-                identity = receipt["force_source_identity"].encode()
+-                if (
+-                    len(identity) != 64
+-                    or identity not in source.read_bytes()
+-                    or identity not in objects[0].read_bytes()
+-                ):
+-                    raise ValueError(
+-                        "executed source identity is missing from source/object"
+-                    )
+-                point_identity = receipt["point_source_identity"].encode()
+-                point_sources = [
+-                    path
+-                    for path in (
+-                        args.build_tree / "generated/libxc_semilocal_cuda"
+-                    ).glob("*.cu")
+-                    if point_identity in path.read_bytes()
+-                ]
+-                if len(point_identity) != 64 or len(point_sources) != 1:
+-                    raise ValueError("executed point has no unique generated source")
+-                point_objects = list(
+-                    args.build_tree.rglob(point_sources[0].name + ".o")
+-                )
+-                if (
+-                    len(point_objects) != 1
+-                    or point_identity not in point_objects[0].read_bytes()
+-                ):
+-                    raise ValueError(
+-                        "executed point identity is missing from its compiled object"
+-                    )
+-                for scope in joined["scopes"].values():
+-                    for name, limits in scope.items():
+-                        for field, maximum in (
+-                            ("STACK", args.max_stack),
+-                            ("LOCAL", args.max_local),
+-                            ("SHARED", args.max_shared),
+-                        ):
+-                            if limits[field] > maximum:
+-                                raise ValueError(
+-                                    f"{profile}: {name} exceeds {field}={maximum}"
+-                                )
+-                profiles[profile] = {
+-                    "source": artifact(source),
+-                    "object": artifact(objects[0]),
+-                    "source_identity": receipt["force_source_identity"],
+-                    "point_source": artifact(point_sources[0]),
+-                    "point_object": artifact(point_objects[0]),
+-                    "point_source_identity": receipt["point_source_identity"],
+-                    "scopes": joined["scopes"],
+-                }
+-            executions.append(
+-                {
+-                    "receipt": str(path),
+-                    "phase": row["phase"],
+-                    "profile": profile,
+-                    "workspace": receipt["capacity"],
+-                    "fallback_reason": receipt["fallback_reason"],
+-                    "dynamic_becke_shared_bytes": receipt["stationary_work_v1"][22],
+-                }
+-            )
+-    if artifact(args.library) != library:
+-        raise ValueError("inspected library changed during audit")
+-    atomic_json(
+-        args.output,
+-        {
+-            "schema": "generativeqc.native-automatic-aot-audit.v1",
+-            "library": library,
+-            "tool": tool.stdout.strip(),
+-            "limits": {
+-                "registers": 255,
+-                "stack": args.max_stack,
+-                "local": args.max_local,
+-                "static_shared": args.max_shared,
+-            },
+-            "profiles": profiles,
+-            "executions": executions,
+-        },
+-    )
+-    print(
+-        f"Validated {len(profiles)} executed profiles and {len(executions)} endpoint receipts"
+-    )
+-
+-
+-if __name__ == "__main__":
+-    main()
+--- a/tools/audit_stationary_aot_package.py
++++ b/tools/audit_stationary_aot_package.py
+@@ -107,7 +107,7 @@
+     manifest_bytes = 0
+     selected = QUALIFIED_STATIONARY_AOT_PROFILE_NAMES if profiles is None else profiles
+     selected_profiles = tuple(
+-        _qualified_aot_profile(name) for name in dict.fromkeys(selected)
++        _qualified_aot_profile(name) for name in sorted(set(selected))
+     )
+     inventory = tuple(
+         (profile.functional, profile.spin, _profile_stem(profile) + suffix, domain)
+--- a/tools/check_native_cli_stationary.py
++++ b/tools/check_native_cli_stationary.py
+@@ -147,9 +147,8 @@
+         text=True,
+     ).stdout
+     verify_contract(cache, registry, symbols)
+-    count = len(re.findall(r"&native_stationary_profile_([a-z0-9_]+)\(\)", registry))
+     print(
+-        f"Verified {count} compiler-selected CUDA graphs "
++        f"Verified {len(compiler_native_profiles())} compiler-selected CUDA graphs "
+         f"statically linked in {args.cli}; real-GPU E+F still requires device tests"
+     )
+     return 0
+--- a/tools/generate_cli_method_catalog.py
++++ b/tools/generate_cli_method_catalog.py
+@@ -226,12 +226,8 @@
+                 exchange=(),
+                 fock_coefficients=(),
+                 cpu=True,
+-                # The same native program represents both backends. Actual
+-                # CUDA preparation still requires a linked static provider and
+-                # applies its precision/shape/spin admission; catalog selection
+-                # must not fall back to Python lowering when a package omits it.
+-                cuda=True,
+-                reason="",
++                cuda=False,
++                reason="automatic Libxc semilocal programs require the CPU backend",
+             )
+     return tuple(result[name] for name in sorted(result))
+ 
+--- a/tools/generate_native_stationary_cuda.py
++++ b/tools/generate_native_stationary_cuda.py
+@@ -29,11 +29,6 @@
+     parser.add_argument("--output", type=Path)
+     parser.add_argument("--output-dir", type=Path)
+     parser.add_argument(
+-        "--cmake-catalog",
+-        type=Path,
+-        help="write default/automatic selections during available-profile discovery",
+-    )
+-    parser.add_argument(
+         "--cmake-dependencies",
+         type=Path,
+         help="write configure-time compiler inputs alongside profile discovery",
+@@ -57,34 +52,24 @@
+         "--registry", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
+     )
+     args = parser.parse_args()
+-    if args.cmake_catalog is not None and not args.list_available_aot_profiles:
+-        parser.error("--cmake-catalog requires --list-available-aot-profiles")
+-    if args.functional and not (args.list_automatic_aot_profiles or args.cmake_catalog):
++    if args.functional and not args.list_automatic_aot_profiles:
+         parser.error("--functional applies only to automatic profile discovery")
+-    if args.list_automatic_aot_profiles or args.cmake_catalog:
++    if args.list_automatic_aot_profiles:
+         selected = (
+             {name.upper() for name in args.functional} if args.functional else None
+         )
+         entries = automatic_registry_entries()
+         if selected is not None and selected - {entry.name for entry in entries}:
+             parser.error("unknown automatic semilocal functional selection")
+-        automatic = ";".join(
+-            f"libxc_{entry.code}_{spin}"
+-            for entry in entries
+-            if selected is None or entry.name in selected
+-            for spin in ("rks", "uks")
++        print(
++            ";".join(
++                f"libxc_{entry.code}_{spin}"
++                for entry in entries
++                if selected is None or entry.name in selected
++                for spin in ("rks", "uks")
++            )
+         )
+-        if args.list_automatic_aot_profiles:
+-            print(automatic)
+-            return
+-        # These compiler-owned identifiers contain only [a-z0-9_]. Publish
+-        # both selections in one host-only discovery process, without lowering
+-        # any automatic stationary graph or repeating compiler imports.
+-        write_if_changed(
+-            args.cmake_catalog,
+-            f'set(_generativeqc_stationary_default_catalog "{";".join(QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)}")\n'
+-            f'set(_generativeqc_automatic_force_catalog "{automatic}")\n',
+-        )
++        return
+     if args.list_profiles or args.list_aot_profiles or args.list_available_aot_profiles:
+         if (
+             args.output is not None

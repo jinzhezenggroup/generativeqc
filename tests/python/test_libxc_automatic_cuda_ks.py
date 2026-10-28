@@ -158,7 +158,14 @@ def _physical_state(snapshot: NativeKsSnapshot) -> dict[str, np.ndarray]:
 
 
 def _reference(
-    name: str, spins: int, atoms: list[Any], state: dict[str, np.ndarray]
+    name: str,
+    spins: int,
+    atoms: list[Any],
+    state: dict[str, np.ndarray],
+    *,
+    basis: Any = BASIS,
+    charge: int | None = None,
+    multiplicity: int | None = None,
 ) -> tuple[float, float, np.ndarray, np.ndarray, float]:
     """Independent pinned SCF and fixed-density full-Fock directional oracle."""
     import pyscf
@@ -168,11 +175,11 @@ def _reference(
     assert dft.libxc.__version__ == "7.0.0"
     molecule = gto.M(
         atom=atoms,
-        basis=BASIS,
+        basis=basis,
         unit="Bohr",
         cart=True,
-        charge=spins - 1,
-        spin=spins - 1,
+        charge=spins - 1 if charge is None else charge,
+        spin=spins - 1 if multiplicity is None else multiplicity - 1,
         verbose=0,
     )
     method = dft.RKS(molecule) if spins == 1 else dft.UKS(molecule)
@@ -257,12 +264,13 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
         "density_tolerance": 1e-10,
         "screening_tolerance": 1e-12,
     }
-    capacity = (
-        Calculator(**options)
-        .estimate_resources([ATOMS], charges=[spins - 1], multiplicities=[spins])
-        .require_feasible()
+    probe = Calculator(**options)
+    capacity = probe.estimate_resources(
+        [ATOMS], charges=[spins - 1], multiplicities=[spins]
+    ).require_feasible()
+    assert capacity.requests[0].identity.observables == tuple(
+        sorted(probe.capabilities.supported_properties)
     )
-    assert capacity.requests[0].identity.observables == ("energy",)
     calculator = Calculator(
         **options,
         resource_budget=ResourceBudget(

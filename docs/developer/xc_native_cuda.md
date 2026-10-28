@@ -92,7 +92,14 @@ prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
 ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
 execution with J only. Missing static providers fail with a build-option
 diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
-Analytic automatic CUDA forces and other unqualified products remain rejected.
+With `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON` and a matching linked force
+profile, explicit analytic forces use the same native prepared owner. The force
+envelope is strict FP64, device-fused, all-electron s/p orbitals, direct J only
+and three Becke partition iterations. Preparation and resource planning query
+the same exact model/domain/spin binding. Missing force artifacts and unsupported
+shapes fail explicitly; automatic methods keep energy-only default outputs.
+Hessian/HVP, Laplacian/current ingredients, nonlocal and exact-exchange additions
+do not follow from this semilocal force contract.
 Automatic CUDA UKS additionally requires nonzero occupations in both spin
 channels. Empty-spin requests fail at preparation with an explicit physical-birth
 derivative diagnostic; native construction and detached final-state validation
@@ -118,6 +125,15 @@ Selection controls installed artifact content, not scientific admission,
 public capability promotion, executable alias reuse or a complete persistent
 binary-cache dependency closure.
 
+`GENERATIVEQC_STATIONARY_AOT_PROFILES=auto` follows the selected automatic energy
+package for native RKS/UKS force profiles. An explicit profile list bounds the
+force package further; an empty list omits forces. Automatic profile names are
+`libxc_<native-code>_rks` and `libxc_<native-code>_uks`. They require the matching
+energy provider. Automatic forces do not add legacy Python s/p or s/p/d DSOs;
+the native package shares its integral primitives and source reduction kernels.
+Generation and compiler-cache use are build-time operations. Ordinary installed
+execution never generates code or runs a compiler, Libxc, Maple or PySCF.
+
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
 coefficient ABI. The static `CudaXcPointProgram` descriptor binds library-owned
@@ -132,11 +148,15 @@ rather than admitting curated device chunks, graph replay or incremental J.
 CPU/CUDA resolve the same MethodIR and bind the same canonical expression and
 work-domain identity. The code-scoped KS resource inventory v2 obtains the
 actual static ingredient/feature widths, including tau; it never substitutes a
-same-family LDA/PBE shape or claims automatic force storage/capability.
-Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
-with four additional history slots accounted by both native and public resource
-owners. Detached snapshots retain the shared physical/canonical validation
-gates rather than treating an SCF convergence flag as sufficient authorization.
+same-family LDA/PBE shape. When a force binding is linked, the planner includes
+its derivative sources and retained consumer with cached and minimum workspace
+alternatives. The prepared item still owns final shape admission.
+Automatic RKS and UKS audit the current physical F[D] and its unextrapolated
+canonical density before publishing convergence. The requested density and
+energy gates remain intact. A rejected proof continues DIIS within the original
+iteration budget; it does not perturb an accepted state through a potentially
+unstable fixed-point correction. Detached snapshots and force weights retain
+their separate token-bound physical/canonical validation.
 
 The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
 structurally registered automatic provider (`0` restores the old path).
@@ -234,6 +254,29 @@ checks physical density/Fock and energy directions, and records
 complete endpoint timings and J-only semantic work. Optional
 `GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR` retains source/binary-bound receipts.
 These are qualification data, not an installed bundle or a positive user list.
+
+For automatic analytic forces, set `GENERATIVEQC_AUTOMATIC_CUDA_FORCE_TEST=1`
+inside a finite Slurm allocation and run
+`tests/python/test_libxc_native_cuda_forces.py`. Its full-vector, moved/replay,
+p-orbital and resource/lifecycle cases compare with reconverged native energies
+and independent pinned PySCF/Libxc energies on the exported moving grids.
+Open-shell tau cases additionally measure populated near-iso-orbital and
+low-density grid points. Failed SCF never authorizes force output.
+
+The explicit `generativeqc.automatic_artifacts.read_automatic_artifact_diagnostic`
+query binds the current successful native token to its actual static point and
+force descriptors. It reports source/plan identities, loaded-module SHA-256,
+workspace and retained-owner work. The `minimum-workspace` reason identifies
+the actually selected bounded geometry schedule; `none` identifies cached
+geometry execution. Work fields are retained-controller counters, not a
+whole-endpoint accounting of every failed SCF attempt. A later energy solve clears completed-force
+work; failures cannot borrow a prior force receipt. The mapped library inode
+must remain immutable while loaded; atomic replacement is detected on Linux.
+The optional diagnostic hashes library files and is outside ordinary endpoint
+execution. It does not infer register pressure from workspace sizes.
+`tools/audit_native_automatic_aot.py` joins these receipts with matching generated
+sources, objects and `cuobjdump` register/stack/local/shared counters under explicit
+resource limits. This offline evidence supplements numerical endpoint gates.
 
 ### Curated execution
 

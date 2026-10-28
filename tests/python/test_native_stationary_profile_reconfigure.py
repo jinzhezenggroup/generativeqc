@@ -127,6 +127,8 @@ def test_build_refreshes_compiler_profile_inventory(
             "\nQUALIFIED_STATIONARY_AOT_PROFILES += (\n"
             '    StationaryAotProfile("probe", 1, "PBE", "unpolarized"),\n'
             ')\nQUALIFIED_STATIONARY_AOT_PROFILE_NAMES += ("probe_rks",)\n'
+            "AVAILABLE_STATIONARY_AOT_PROFILE_NAMES = (\n"
+            "    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES)\n"
         )
     rebuilt = run("--build", str(build))
     assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
@@ -145,6 +147,8 @@ def test_build_refreshes_compiler_profile_inventory(
             ")\nQUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(\n"
             "    n for n in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES\n"
             '    if n not in ("pbe_rks", "pbe_uks")\n)\n'
+            "AVAILABLE_STATIONARY_AOT_PROFILE_NAMES = (\n"
+            "    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES)\n"
         )
     rebuilt = run("--build", str(build))
     if selection and selection != "auto":

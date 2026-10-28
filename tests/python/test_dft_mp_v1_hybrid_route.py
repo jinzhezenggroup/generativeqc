@@ -88,6 +88,8 @@ def _promoted(
     device: str = "cuda",
     automatic_name: str | None = None,
     composite: str | None = None,
+    automatic_package: bool = False,
+    discovery_calls: list[dict] | None = None,
 ) -> bool:
     _, assignments, promotion = _nodes()
     options = SimpleNamespace(
@@ -113,6 +115,12 @@ def _promoted(
     )
     owner = SimpleNamespace(
         _device_name=device,
+        _library=SimpleNamespace(),
+        _max_iterations=100,
+        _diis_history=8,
+        _energy_tolerance=1e-10,
+        _density_tolerance=1e-8,
+        _screening_tolerance=1e-12,
         _precision_mode=precision,
         _ks_options=options,
         _capabilities=SimpleNamespace(family="density_functional"),
@@ -172,6 +180,8 @@ def _promoted(
         owner._ks_options = None
     elif blocked == "reference-xc":
         options.xc_schedule = "reference"
+    elif blocked == "host-unfused":
+        options.xc_schedule = "host_unfused"
     elif blocked == "wrong-family":
         owner._capabilities.family = "hartree_fock"
     elif blocked == "unregistered-method":
@@ -189,6 +199,61 @@ def _promoted(
             else (),
             nonlocal_correlation=object() if blocked == "nonlocal" else None,
             post_scf=(),
+        )
+    # Execute the actual initializer and guarded discovery dependency before
+    # evaluating predicates. An absent package is this source-only fixture's
+    # explicit default; the guard itself must still enforce backend/precision.
+    source = (ROOT / "python/generativeqc/calculator.py").read_text(encoding="utf-8")
+    constructor = next(
+        node
+        for owner in ast.parse(source).body
+        if isinstance(owner, ast.ClassDef) and owner.name == "Calculator"
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    initializer = next(
+        node
+        for node in constructor.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "automatic_cuda_force"
+            for target in node.targets
+        )
+    )
+    guard = constructor.body[constructor.body.index(initializer) + 1]
+    assert isinstance(guard, ast.If)
+    discovery = next(
+        node
+        for node in guard.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "automatic_cuda_force"
+            for target in node.targets
+        )
+    )
+
+    def discover(library: object, model: object, **controls: object) -> bool:
+        assert library is owner._library and model is owner._ks_options
+        if discovery_calls is not None:
+            discovery_calls.append(controls)
+        return automatic_package
+
+    scope["native_cuda_stationary_model_available"] = discover
+    scope["automatic_cuda_force"] = eval(  # noqa: S307
+        compile(
+            ast.Expression(initializer.value), "<automatic force initializer>", "eval"
+        ),
+        {"__builtins__": {}, **scope},
+    )
+    if eval(  # noqa: S307
+        compile(ast.Expression(guard.test), "<automatic force guard>", "eval"),
+        {"__builtins__": {}, **scope},
+    ):
+        scope["automatic_cuda_force"] = eval(  # noqa: S307
+            compile(
+                ast.Expression(discovery.value), "<automatic force discovery>", "eval"
+            ),
+            {"__builtins__": {}, **scope},
         )
     predicates = (
         [
@@ -393,7 +458,7 @@ def test_expanded_cpu_branch_uses_its_shared_qualified_context(
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("name", ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"))
-def test_automatic_semilocal_promotion_remains_cpu_fp64_only(
+def test_automatic_semilocal_without_linked_package_remains_cpu_fp64_only(
     device: str, precision: int, spin: str, name: str
 ) -> None:
     assert _promoted(
@@ -438,3 +503,46 @@ def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
         backend="cuda",
         xc_schedule="device_fused",
     )
+
+
+@pytest.mark.parametrize("available", [False, True])
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_automatic_cuda_force_depends_on_native_package(
+    available: bool, spin: str
+) -> None:
+    calls = []
+    assert (
+        _promoted(
+            precision=_native.PRECISION_FP64,
+            device="cuda",
+            spin=spin,
+            automatic_name="LDA_C_CHACHIYO",
+            include_semilocal=True,
+            automatic_package=available,
+            discovery_calls=calls,
+        )
+        is available
+    )
+    assert len(calls) == 1
+    assert calls[0]["precision"] == "fp64"
+    assert calls[0]["max_iterations"] == 100
+
+
+@pytest.mark.parametrize("case", ["cpu", "auto", "df", "host-unfused", "ecp"])
+def test_automatic_force_discovery_preserves_native_guard(case: str) -> None:
+    calls = []
+    _promoted(
+        precision=_native.PRECISION_AUTO if case == "auto" else _native.PRECISION_FP64,
+        device="cpu" if case == "cpu" else "cuda",
+        automatic_name="LDA_C_CHACHIYO",
+        include_semilocal=True,
+        density_fitting=case == "df",
+        blocked="host-unfused"
+        if case == "host-unfused"
+        else "unqualified-ecp"
+        if case == "ecp"
+        else None,
+        automatic_package=True,
+        discovery_calls=calls,
+    )
+    assert calls == []
