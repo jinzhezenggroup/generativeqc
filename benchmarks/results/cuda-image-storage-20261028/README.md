@@ -131,10 +131,12 @@ build/cache/test/failure/pilot records. Source recipes now live in that original
 receipt rather than being duplicated in the current checkout. No failed timing
 sample or original byte is removed from history.
 
-Replay requires the original Git history. CI already uses `fetch-depth: 0` for
-its Python test checkout. Shallow/exported checkouts without the recorded object
-fail closed; explicitly fetch/retain the manifest's revision before offline
-replay. To materialize the exact 209,852 original bytes separately:
+Replay requires the pinned original Git object. It belongs to the original PR
+history and is not an ancestor of the squash-merged mainline, so even
+`fetch-depth: 0` does not supply it. The core-b CI job explicitly fetches the
+manifest's immutable revision and authenticates its bytes before running the
+offline replay tests. Other checkouts must likewise explicitly fetch/retain
+that revision; missing history continues to fail closed. To materialize the exact 209,852 original bytes separately:
 
 ```bash
 python tools/restore_retained_evidence.py \

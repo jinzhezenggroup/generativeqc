@@ -1279,6 +1279,19 @@ jobs:
           fi
           printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
           printf 'README-only CI scope: %s\n' "$scope"
+      - name: Prepare pinned CUDA storage evidence history
+        if: matrix.shard == 'core-b' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A squash merge does not retain the original PR commit in main history.
+          # Prepare the declared immutable input before the offline replay tests.
+          revision="$(python3 -c 'import json, pathlib, re; m=json.loads(pathlib.Path("benchmarks/results/cuda-image-storage-20261028/original-receipt.snapshot.json").read_text()); r=m["source_revision"]; assert re.fullmatch("[0-9a-f]{40}", r); print(r)')"
+          timeout 75s git fetch --no-tags origin "$revision"
+          python3 tools/restore_retained_evidence.py --all \
+            --manifest benchmarks/results/cuda-image-storage-20261028/original-receipt.snapshot.json \
+            --output "$RUNNER_TEMP/cuda-storage-original"
       - name: Install uv and Python 3.11
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1

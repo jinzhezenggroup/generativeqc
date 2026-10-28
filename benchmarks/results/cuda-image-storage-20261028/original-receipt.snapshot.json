@@ -3,7 +3,7 @@
   "source_revision": "d7b451eced0e2840a8ab47c02e223732c88e5e4a",
   "file_count": 1,
   "total_bytes": 209852,
-  "retention": "Existing ancestor Git objects only; retain source history. No external copy, release or tag.",
+  "retention": "Pinned original PR Git object, not a squash-mainline ancestor; explicitly fetch the recorded immutable revision before offline replay. No external copy, release or tag.",
   "files": [
     {
       "path": "benchmarks/results/cuda-image-storage-20261028/receipts.json.xz",
