@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import lzma
 import statistics
 from collections import defaultdict
 from pathlib import Path
+
+
+def restore_events(data: dict) -> None:
+    """Restore exact archived event samples and verify the pre-compaction values."""
+    encoding = data.pop("event_encoding")
+    assert encoding["schema"] == "sorted-duration-offsets-v1"
+    values = encoding["values_milliseconds"]
+    for path, expected in encoding["population_sha256"].items():
+        population = data
+        for component in path.split("/"):
+            population = population[component]
+        for row in population["records"]:
+            base = row.pop("milliseconds_base")
+            row["milliseconds"] = [
+                values[base + offset] for offset in row.pop("milliseconds_offsets")
+            ]
+        canonical = json.dumps(
+            population, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+        assert hashlib.sha256(canonical).hexdigest() == expected, path
 
 
 def point_summary(payload: dict) -> dict:
@@ -41,6 +62,7 @@ def main() -> None:
     )
     with lzma.open(archive, "rt") as stream:
         data = json.load(stream)["structural_discovery"]
+    restore_events(data)
     for arm in ("literal", "smart"):
         hashes = set(data["generated"][arm].values())
         for row in data["builds"][arm]["objects"]:

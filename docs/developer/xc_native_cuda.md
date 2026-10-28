@@ -170,11 +170,15 @@ public backend admission, or resource/performance qualification. See
 
 `GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS` defaults to `ON` when CUDA and
 automatic XC AOT are enabled. The default
-`GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=qualified` selects the measured
-prepared-coefficient KTBM workers when multiple compatible registrations are
-packaged. Set the sharing option to `OFF` to retain
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover` shares workers across
+structurally compatible registrations in the selected catalog. Set the policy to
+`qualified` to restore the prepared-coefficient KTBM selection, or the sharing
+option to `OFF` to retain
 literal specialization; the standalone generator provides `--no-share-parameters`
-for the same fallback. Automatic XC AOT itself remains opt-in.
+for the same fallback. Automatic XC AOT itself remains opt-in. Existing CMake
+caches preserve their saved policy; set
+`-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover` to adopt the new default
+in a build directory that previously cached `qualified`.
 
 Scalar mathematical coefficients and their fixed products are prepared after
 differentiation using the existing Graph algebra, before equal-spin projection.
@@ -184,8 +188,11 @@ never mutate shared coefficient state. The restricted batched adapter explicitly
 pairs physical inputs after the host proves RKS, exposing the same input equality
 to CUDA optimization as to the mathematical Graph. It reuses the restricted
 mathematical body and replaces its existing batched kernel instantiation.
-Ordinary/general adapters, polarized partial derivatives and runtime tile/output
-layouts retain their existing contracts. Density thresholds,
+The ordinary general entry marks its immutable parameter row
+`__grid_constant__`; restricted and batched entries retain their distinct storage
+ABIs. This replaces an instantiation and preserves four kernels per group.
+Polarized partial derivatives and runtime tile/output layouts retain their
+existing contracts. Density thresholds,
 work-domain guards, physical derivative conventions and spin layouts remain
 part of the compiled contract. Both general and equal-spin parameterized bodies,
 ordered parameter names and complete point layouts must agree before sharing.
@@ -193,7 +200,7 @@ Other families and singleton selections retain their specialized point emitters
 under the qualified policy.
 This controls executable reuse, not functional admission or supported products.
 
-The explicit `discover` policy analyzes the entire selected structural catalog.
+The default `discover` policy analyzes the entire selected structural catalog.
 After ordinary literal specialization and differentiation, it lifts arithmetic
 constants and compares both complete spin bodies and execution ABIs, without a
 source-entry or functional-name restriction. Predicate dependencies, fixed powers,
@@ -203,12 +210,13 @@ share one launch slot. LDA retains separate unpolarized RKS and polarized UKS
 contracts, even when the equal-spin optimization is disabled. Groups exceeding
 the portable launch-data budget and unmatched/singleton bodies remain specialized.
 
-Discovery is a qualification tool: structural compatibility alone does not
-establish point or complete-endpoint performance. Enable it in CMake with
-`-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=discover`, or use
-`--parameter-policy discover` with the standalone generator. The default policy
-continues to select previously qualified workers. A report can show both
-discovered candidates and the workers actually selected:
+Structural compatibility does not establish universal point or complete-endpoint
+performance. Default discovery is qualified on NVCC 12.9.1 / SM120; retain the
+explicit `qualified` and literal fallbacks when qualifying other toolchains or
+devices. This policy does not enable the automatic AOT master switch or change
+functional, derivative or public method admission. The standalone generator uses
+the same default and accepts `--parameter-policy qualified` for rollback. A report
+shows both compatible candidates and the workers actually selected:
 
 ```bash
 python tools/generate_libxc_semilocal_cuda_registry.py \
@@ -218,10 +226,10 @@ python tools/generate_libxc_semilocal_cuda_registry.py \
 
 The report includes coefficient ABI sizes, exact contract identities, selection
 status, retained specializations and point-kernel counts. See the
-[discovery decision](../../.agents/notes/implemented/architecture/2026-10-28-xc-structural-parameter-discovery.md)
-for measured reasons to keep discovery separate from default promotion, and the
-[local regression fix](../../.agents/notes/implemented/performance/2026-10-28-xc-shared-point-abi.md)
-for the subsequent paired-input qualification and discarded storage changes.
+[structural default decision](../../.agents/notes/implemented/performance/2026-10-28-xc-structural-default.md)
+for qualification, rejected alternatives and the earlier discovery and paired-input
+experiments. Report `default_qualified` denotes eligibility under this build
+policy; it does not certify another GPU or expand public functional admission.
 
 Each registration retains its canonical coefficient-bound mathematical identity
 for CPU/CUDA admission. Its source identity authenticates the shared worker's

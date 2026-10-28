@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import lzma
 import statistics
@@ -11,6 +12,26 @@ from pathlib import Path
 from defusedxml import ElementTree as ET
 
 TARGETS = {"GGA_XC_TH_FCO", "GGA_XC_TH_FCFO", "GGA_X_BKL1", "GGA_X_BKL2"}
+
+
+def restore_events(data: dict) -> None:
+    """Restore exact archived event samples and verify the pre-compaction values."""
+    encoding = data.pop("event_encoding")
+    assert encoding["schema"] == "sorted-duration-offsets-v1"
+    values = encoding["values_milliseconds"]
+    for path, expected in encoding["population_sha256"].items():
+        population = data
+        for component in path.split("/"):
+            population = population[component]
+        for row in population["records"]:
+            base = row.pop("milliseconds_base")
+            row["milliseconds"] = [
+                values[base + offset] for offset in row.pop("milliseconds_offsets")
+            ]
+        canonical = json.dumps(
+            population, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+        assert hashlib.sha256(canonical).hexdigest() == expected, path
 
 
 def points(payload: dict) -> dict:
@@ -50,6 +71,7 @@ def main() -> None:
     """Verify source/binary bindings, scientific gates and semantic work ledgers."""
     with lzma.open(Path(__file__).with_name("receipts.json.xz"), "rt") as stream:
         data = json.load(stream)["paired_batch"]
+    restore_events(data)
     # Generated code and disassembly are transient products. Source reproduction
     # is an opt-in audit; the normal reducer needs no compiler or Git history.
     sizes = {}

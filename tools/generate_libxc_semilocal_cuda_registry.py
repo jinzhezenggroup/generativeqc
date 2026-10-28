@@ -103,7 +103,7 @@ def emit_shard(
     entries: tuple[AutomaticRegistryEntry, ...],
     *,
     share_parameters: bool = True,
-    parameter_policy: Literal["qualified", "discover"] = "qualified",
+    parameter_policy: Literal["qualified", "discover"] = "discover",
 ) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
@@ -161,13 +161,13 @@ def main() -> None:
         "--share-parameters",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="share qualified workers by default; --no-share-parameters retains literal specialization",
+        help="share compatible workers by default; --no-share-parameters retains literal specialization",
     )
     parser.add_argument(
         "--parameter-policy",
         choices=("qualified", "discover"),
-        default="qualified",
-        help="discover also emits compatible catalog-wide candidates for explicit qualification",
+        default=None,
+        help="discover compatible catalog-wide workers by default; qualified retains legacy prepared-product groups",
     )
     parser.add_argument(
         "--sharing-report",
@@ -186,8 +186,9 @@ def main() -> None:
         parser.error("--share-parameters cannot be combined with --disabled")
     if args.disabled and args.sharing_report:
         parser.error("--sharing-report cannot be combined with --disabled")
-    if args.disabled and args.parameter_policy != "qualified":
+    if args.disabled and args.parameter_policy not in (None, "qualified"):
         parser.error("--parameter-policy discover cannot be combined with --disabled")
+    parameter_policy = args.parameter_policy or "discover"
     try:
         entries = () if args.disabled else select_entries(args.functional)
     except ValueError as error:
@@ -209,7 +210,7 @@ def main() -> None:
                 index,
                 entries,
                 share_parameters=args.share_parameters is not False,
-                parameter_policy=args.parameter_policy,
+                parameter_policy=parameter_policy,
             ),
         )
     if args.sharing_report:
@@ -217,7 +218,7 @@ def main() -> None:
         candidates = parameter_worker_groups(names)
         groups = (
             parameter_worker_groups(
-                names, include_candidates=args.parameter_policy == "discover"
+                names, include_candidates=parameter_policy == "discover"
             )
             if args.share_parameters is not False
             else ()
@@ -225,7 +226,7 @@ def main() -> None:
         shared = {name for group in groups for name in group.names}
         report = {
             "schema": "generativeqc.xc-parameter-sharing-plan.v1",
-            "policy": args.parameter_policy
+            "policy": parameter_policy
             if args.share_parameters is not False
             else "specialized",
             "registrations": len(names),
@@ -237,7 +238,9 @@ def main() -> None:
                     "contract_identity": canonical_hash(group.contract),
                     "parameter_bytes": 8 * len(group.providers[0].point.parameters),
                     "selected": set(group.names) <= shared,
-                    "default_qualified": group.strategy == "prepared-products",
+                    # Eligibility under the default execution policy does not
+                    # qualify a new public functional or a different GPU model.
+                    "default_qualified": True,
                 }
                 for group in candidates
             ],

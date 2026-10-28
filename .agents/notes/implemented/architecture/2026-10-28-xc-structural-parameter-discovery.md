@@ -95,3 +95,10 @@ approval for automatic promotion.
 - [Subsequent RKS batch regression repair](../performance/2026-10-28-xc-shared-point-abi.md)
   preserves the negative measurements above and qualifies a narrower physical
   input-binding change without widening the default discovery policy.
+
+## Subsequent qualification
+
+The [ordinary-General storage and default promotion](../performance/2026-10-28-xc-structural-default.md)
+addresses the remaining ordinary UKS regression and supersedes this snapshot's
+opt-in decision. The paired-batch fix and the negative results recorded here
+remain part of its evidence; the later storage change applies to a different ABI.

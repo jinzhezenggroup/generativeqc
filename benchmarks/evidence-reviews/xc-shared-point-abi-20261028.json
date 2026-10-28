@@ -2,7 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "xc-shared-point-abi-20261028",
   "owner": "Automatic XC compiler and CUDA qualification",
-  "reason": "Consolidated structural-discovery and paired-batch campaigns preserve every full-precision numerical/timing population, failure, dirty producer, compiler command/cache statistic and binary identity. Generated products and raw disassembly remain transient; retained generation recipes, source hashes and static operation/resource summaries bind the measurements. The source reconstruction uses a published ancestor plus exact overlays, not an unmerged PR head.",
+  "reason": "Consolidated structural-discovery and paired-batch campaigns preserve every full-precision numerical/timing population, failure, dirty producer, compiler command/cache statistic and binary identity. Generated products and raw disassembly remain transient; retained generation recipes, source hashes and static operation/resource summaries bind the measurements. The source reconstruction uses a published ancestor plus exact overlays, not an unmerged PR head. Exact event values are now losslessly interned; both previous complete reducer outputs and all decoded receipt fields remain identical.",
   "review_document": "benchmarks/results/xc-shared-point-abi-20261028/README.md",
   "files": [
     {
@@ -10,8 +10,8 @@
       "family": "xc-shared-point-abi-20261028",
       "classification": "required-compact-accepted-evidence",
       "role": "paired-point-and-complete-endpoint-qualification-with-negative-controls",
-      "bytes": 676080,
-      "sha256": "a8d13f817ed2e6e0e6ff2bfcd573183665b4637036b729d49ccc1d44d1a45b9e"
+      "bytes": 569584,
+      "sha256": "16ac276a05ca1ea9b4dfb7f6abbead9c9940b57ef8499e1ec81fb52638294f25"
     }
   ]
 }

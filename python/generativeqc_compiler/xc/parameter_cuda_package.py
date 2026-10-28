@@ -241,6 +241,14 @@ struct RestrictedBatched {{
     for batched in (False, True):
         name = "launch_batch" if batched else "launch"
         restricted_evaluator = "RestrictedBatched" if batched else "Restricted"
+        # Grid-constant storage is qualified only for the ordinary general ABI.
+        # Applying it to batched or paired kernels can worsen their scheduling;
+        # this replaces one instantiation and retains four kernels per group.
+        general_kernel = (
+            "automatic_evaluate_points"
+            if batched
+            else "automatic_evaluate_ordinary_points"
+        )
         launches += f"""
 void {name}(cudaStream_t stream, const double* features, const double* weights,
     std::size_t count, std::size_t spins, double* coefficients, double* totals,
@@ -250,7 +258,7 @@ void {name}(cudaStream_t stream, const double* features, const double* weights,
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
             features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
   else
-    automatic_evaluate_points<{provider.feature_terms}, {str(batched).lower()}, General>
+    {general_kernel}<{provider.feature_terms}, {str(batched).lower()}, General>
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
             features, weights, count, spins, coefficients, totals, error, parameter_rows[row], 1.0, 1.0, tile_points);
 }}
@@ -270,6 +278,7 @@ constexpr ParameterRow parameter_rows[{len(values)}] = {{
 {adapters}
 {emit_point_traversal(parameter_type="const ParameterRow&")}
 {emit_automatic_point_kernel(parameter_type="const ParameterRow")}
+{emit_automatic_point_kernel(parameter_type="const __grid_constant__ ParameterRow", name="automatic_evaluate_ordinary_points")}
 {launches}
 }}
 {_PRIVATE_END}
@@ -334,8 +343,8 @@ def parameter_worker_groups(
     Single-registration groups use the existing specialization. A group includes
     both polarized and equal-spin contracts and exact ordered parameter names;
     source-entry membership alone cannot make different executions share code.
-    General structural candidates require an explicit discovery policy until
-    point and complete-endpoint qualification supports default selection.
+    Structural discovery is the default execution policy. The legacy qualified
+    policy can restrict selection to the established prepared-product workers.
     """
     return _parameter_worker_plan(tuple(sorted(set(names))), include_candidates)[1]
 
@@ -399,13 +408,13 @@ def _parameter_worker_plan(
 def parameterized_cuda_package(
     names: tuple[str, ...],
     *,
-    policy: Literal["qualified", "discover"] = "qualified",
+    policy: Literal["qualified", "discover"] = "discover",
 ) -> tuple[dict[str, str], dict[str, AutomaticCudaPointProvider]]:
-    """Emit qualified workers, or explicitly requested structural candidates.
+    """Share exact compatible workers by default, with a legacy policy rollback.
 
-    Discovery proves compatible mathematics/ABIs, not a speedup. Its separate
-    opt-in preserves the measured default when an unqualified group introduces
-    register or instruction-scheduling regressions on a particular GPU.
+    Discovery proves compatible mathematics/ABIs, not universal performance or
+    public method admission. Incompatible, oversized and single-entry contracts
+    keep literal specialization; ``qualified`` retains prepared-product groups.
     """
     if policy not in ("qualified", "discover"):
         raise ValueError("XC parameter sharing policy must be qualified or discover")

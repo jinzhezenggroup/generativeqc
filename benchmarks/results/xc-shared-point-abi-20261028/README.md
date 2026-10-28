@@ -134,3 +134,16 @@ python benchmarks/results/xc-shared-point-abi-20261028/reproduce_sources.py \
 
 No other architecture, full catalog default, or complete-library size reduction
 is qualified by this evidence.
+
+## Subsequent qualification
+
+The [structural default qualification](../xc-structural-default-20261028/README.md)
+addresses the remaining ordinary UKS regression and supersedes this snapshot's
+opt-in decision. The paired-batch fix and the negative results recorded here
+remain part of its evidence; the later storage change applies to a different ABI.
+
+The subsequent campaign losslessly interns this receipt's exact timing values in
+a sorted table with integer offsets. Both historical reducers restore and
+authenticate every original population before analysis; their complete outputs
+remain byte-identical to the pre-compaction reports. No observation, failure,
+source reconstruction input or numerical gate was removed.

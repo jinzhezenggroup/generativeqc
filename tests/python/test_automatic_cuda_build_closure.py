@@ -378,19 +378,26 @@ def test_parameter_sharing_defaults_to_cuda_aot_and_remains_optional(
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if aot else 'OFF'})\n"
         + source[start:end]
         + 'file(WRITE "${CMAKE_BINARY_DIR}/sharing.txt" "${GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS}")\n'
+        + 'file(WRITE "${CMAKE_BINARY_DIR}/policy.txt" "${GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY}")\n'
     )
     command = [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")]
     subprocess.run(command, check=True, capture_output=True, timeout=30)
     assert (tmp_path / "build/sharing.txt").read_text() == (
         "ON" if cuda and aot else "OFF"
     )
+    assert (tmp_path / "build/policy.txt").read_text() == "discover"
     subprocess.run(
-        [*command, "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=OFF"],
+        [
+            *command,
+            "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=OFF",
+            "-DGENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY=qualified",
+        ],
         check=True,
         capture_output=True,
         timeout=30,
     )
     assert (tmp_path / "build/sharing.txt").read_text() == "OFF"
+    assert (tmp_path / "build/policy.txt").read_text() == "qualified"
     result = subprocess.run(
         [*command, "-DGENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS=ON"],
         check=False,

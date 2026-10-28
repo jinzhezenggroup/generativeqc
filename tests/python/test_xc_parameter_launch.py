@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 NAMES = (
+    "GGA_X_APBE",
+    "GGA_X_PBE_SOL",
+    "GGA_X_XPBE",
     "GGA_XC_TH_FCFO",
     "GGA_XC_TH_FCO",
     "GGA_X_BKL1",

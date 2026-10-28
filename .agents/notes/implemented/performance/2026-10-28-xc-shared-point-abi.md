@@ -111,3 +111,10 @@ Future compiler/toolchain changes should recheck per-case timings and complete
 endpoint work, including ordinary and UKS controls. Do not widen the default
 discovery policy, insert functional-name exceptions, or add redundant point
 kernel variants merely because these local regressions have been repaired.
+
+## Subsequent qualification
+
+The [ordinary-General storage and default promotion](2026-10-28-xc-structural-default.md)
+addresses the remaining ordinary UKS regression and supersedes this snapshot's
+opt-in decision. The paired-batch fix and the negative results recorded here
+remain part of its evidence; the later storage change applies to a different ABI.

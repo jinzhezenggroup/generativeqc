@@ -79,14 +79,17 @@ def test_discovery_preserves_specialization_and_scientific_identity() -> None:
             name in shared
         )
     assert not parameter_worker_groups((names[0],))
-    assert not parameterized_cuda_package(names)[0]
+    assert parameterized_cuda_package(names) == parameterized_cuda_package(
+        names, policy="discover"
+    )
+    assert not parameterized_cuda_package(names, policy="qualified")[0]
     with pytest.raises(ValueError, match="sharing policy"):
         parameterized_cuda_package(names, policy="unknown")
 
 
-@pytest.mark.parametrize("policy", ("qualified", "discover"))
+@pytest.mark.parametrize("policy", (None, "qualified", "discover"))
 def test_generator_reports_candidate_and_selected_workers(
-    tmp_path: Path, policy: str
+    tmp_path: Path, policy: str | None
 ) -> None:
     root = Path(__file__).resolve().parents[2]
     report = tmp_path / "sharing.json"
@@ -97,21 +100,21 @@ def test_generator_reports_candidate_and_selected_workers(
         str(tmp_path / "generated"),
         "--sharing-report",
         str(report),
-        "--parameter-policy",
-        policy,
     ]
+    if policy is not None:
+        command.extend(("--parameter-policy", policy))
     for name in FAMILIES[0]:
         command.extend(("--functional", name))
     subprocess.run(command, check=True, capture_output=True, timeout=60)
     data = json.loads(report.read_text())
     assert data["registrations"] == len(FAMILIES[0])
     assert data["shared_registrations"] == (
-        len(FAMILIES[0]) if policy == "discover" else 0
+        len(FAMILIES[0]) if policy != "qualified" else 0
     )
     (candidate,) = data["candidate_groups"]
     assert set(candidate["names"]) == set(FAMILIES[0])
-    assert candidate["selected"] is (policy == "discover")
-    assert candidate["default_qualified"] is False
+    assert candidate["selected"] is (policy != "qualified")
+    assert candidate["default_qualified"] is True
 
 
 @pytest.fixture(scope="module", params=FAMILIES, ids=lambda names: names[0])

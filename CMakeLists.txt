@@ -39,10 +39,10 @@ if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
   set(_generativeqc_parameter_sharing_default ON)
 endif()
 option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS
-       "Share audited CUDA workers with prepared immutable coefficients"
+       "Share compatible CUDA workers with immutable coefficients"
        ${_generativeqc_parameter_sharing_default})
-set(GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY "qualified" CACHE STRING
-    "XC parameter sharing policy: qualified defaults or discover structural candidates")
+set(GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY "discover" CACHE STRING
+    "XC parameter sharing policy: discover compatible workers or retain legacy qualified groups")
 set_property(CACHE GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY PROPERTY STRINGS qualified discover)
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_PARAMETER_POLICY MATCHES "^(qualified|discover)$")
   message(FATAL_ERROR "Automatic CUDA XC parameter policy must be qualified or discover")

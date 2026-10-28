@@ -294,7 +294,7 @@ void launch_batch(cudaStream_t, const double*, const double*, std::size_t,
 def test_package_descriptor_selects_explicit_execution_identity(
     share_parameters: bool,
 ) -> None:
-    """The default retains specialization; opting in advertises the shared worker."""
+    """Explicit rollback retains specialization; sharing binds its worker identity."""
     from generativeqc_compiler.xc.automatic_cuda import emit_automatic_cuda_provider
     from generativeqc_compiler.xc.parameter_cuda_package import (
         parameterized_cuda_package,
