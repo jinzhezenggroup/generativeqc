@@ -704,31 +704,6 @@ void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_c
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
-Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry,
-                                             bool mask_zero_weight_rows) {
-  if (!point_count || !tile_points)
-    throw std::invalid_argument("resident VV10 CUDA layout requires nonzero point/tile counts");
-  constexpr std::size_t partner_threads = 128;
-  const auto partner_blocks = 1 + (point_count - 1) / partner_threads;
-  const auto arrays = std::size_t{4} + (features ? 3u : 0u);
-  auto slots =
-      runtime::size_mul(arrays, point_count, "resident VV10 CUDA workspace extent overflow");
-  slots = runtime::size_add(slots, point_count,
-                            "resident VV10 CUDA active-partner index extent overflow");
-  slots = runtime::size_add(slots, partner_blocks,
-                            "resident VV10 CUDA active-partner block extent overflow");
-  slots = runtime::size_add(slots, std::size_t{1},
-                            "resident VV10 CUDA active-partner count extent overflow");
-  static_assert(sizeof(double) == sizeof(std::uint64_t));
-  return {point_count,
-          std::min(tile_points, point_count),
-          runtime::size_mul(slots, sizeof(double), "resident VV10 CUDA workspace byte overflow"),
-          features,
-          geometry,
-          mask_zero_weight_rows};
-}
-
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters parameters,
                               int device_id, cudaStream_t stream, const double* points_xyz,
                               const double* weights, const double* density,

@@ -50,13 +50,24 @@ def automatic_registry_entries() -> tuple[AutomaticRegistryEntry, ...]:
     Structural representability does not grant endpoint, domain or derivative
     admission. These retain their separate evidence-backed capability gates.
     """
+    # Capture the catalog and source identity once for this enumeration only.
+    # A later call must observe changed catalog/compiler inputs, not a global memo.
+    capabilities = {item.name: item for item in available_capabilities()}
     result = []
     codes = set()
     for name in sorted(AUTO_BULK_COMPONENTS):
-        capability = functional_capability(name)
+        capability = capabilities.get(name)
+        if capability is None:
+            # Preserve the individual lookup's fail-closed diagnostic for a stale
+            # selection whose registration is now missing or no longer imported.
+            capability = functional_capability(name)
         if set(capability.required_ingredients) - _SUPPORTED_INGREDIENTS:
             continue
-        code = automatic_functional_code(name)
+        if not 0 < capability.libxc_id < 0x10000:
+            raise UnsupportedXC(
+                f"automatic Libxc ID is outside the encoded range: {name}"
+            )
+        code = AUTOMATIC_FUNCTIONAL_CODE_BASE | capability.libxc_id
         if code in codes:
             raise ValueError(f"duplicate automatic Libxc functional code: {code:#x}")
         codes.add(code)

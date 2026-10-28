@@ -12,10 +12,6 @@ using I = std::int64_t;
 
 namespace generativeqc::runtime {
 struct GraphMetrics {};
-struct CudaDeviceScope {
-  template <class Check>
-  CudaDeviceScope(int, Check) {}
-};
 }  // namespace generativeqc::runtime
 
 namespace generativeqc_tensor {

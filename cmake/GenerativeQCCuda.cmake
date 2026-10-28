@@ -34,6 +34,45 @@ function(generativeqc_set_cuda_compile_pool target pool)
   endif()
 endfunction()
 
+function(generativeqc_cuda_profile_arguments output)
+  # Share target/profile resolution between shell bundles and derivative
+  # registries. Compile suffixes control NVCC images, not scientific identity.
+  set(architectures)
+  foreach(value IN LISTS _generativeqc_cuda_compile_architectures)
+    string(REGEX REPLACE "-(real|virtual)$" "" architecture "${value}")
+    if(NOT architecture MATCHES "^[0-9]+$")
+      message(FATAL_ERROR "GenerativeQC AOT requires numeric CUDA architectures, got ${value}")
+    endif()
+    list(APPEND architectures "${architecture}")
+  endforeach()
+  list(REMOVE_DUPLICATES architectures)
+  list(SORT architectures COMPARE NATURAL)
+  set(arguments)
+  foreach(architecture IN LISTS architectures)
+    list(APPEND arguments --target-architecture "sm_${architecture}")
+  endforeach()
+  if(NOT GENERATIVEQC_AOT_PROFILE STREQUAL "auto")
+    list(APPEND arguments --profile "${GENERATIVEQC_AOT_PROFILE}")
+  endif()
+  foreach(profile IN LISTS GENERATIVEQC_AOT_PROFILES)
+    if(profile MATCHES "^sm_([0-9]+)$")
+      if(NOT CMAKE_MATCH_1 IN_LIST architectures)
+        message(FATAL_ERROR "AOT profile ${profile} has no matching CUDA compile target")
+      endif()
+      list(APPEND arguments --profile-map "${profile}=${profile}")
+    elseif(NOT profile STREQUAL "")
+      list(LENGTH architectures target_count)
+      if(NOT target_count EQUAL 1)
+        message(FATAL_ERROR
+          "Named/portable GENERATIVEQC_AOT_PROFILES require one CUDA target; use GENERATIVEQC_AOT_PROFILE to apply one profile to all targets")
+      endif()
+      list(GET architectures 0 architecture)
+      list(APPEND arguments --profile-map "sm_${architecture}=${profile}")
+    endif()
+  endforeach()
+  set(${output} "${arguments}" PARENT_SCOPE)
+endfunction()
+
 macro(generativeqc_configure_cuda_backend target)
   if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
     generativeqc_add_hessian_aot(generativeqc_hessian_aot "${GENERATIVEQC_HESSIAN_AOT_INVENTORY}")
@@ -171,9 +210,6 @@ macro(generativeqc_configure_cuda_backend target)
     if(NOT Python3_Interpreter_FOUND)
       find_package(Python3 COMPONENTS Interpreter REQUIRED)
     endif()
-    set(GENERATIVEQC_AOT_SHELL_MANIFEST
-        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
-        CACHE FILEPATH "Accepted generated shell classes for production CUDA")
     set(GENERATIVEQC_AOT_GENERATED_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}/generated/production_shell_kernels")
 
@@ -201,7 +237,7 @@ macro(generativeqc_configure_cuda_backend target)
     set(GENERATIVEQC_AOT_TARGET_ARCHITECTURES
         ${_generativeqc_aot_compile_architecture})
 
-    set(GENERATIVEQC_AOT_GENERATOR_ARGUMENTS)
+    generativeqc_cuda_profile_arguments(GENERATIVEQC_AOT_GENERATOR_ARGUMENTS)
     set(_generativeqc_aot_unit_arguments
         --unit-mode "${GENERATIVEQC_AOT_UNIT_MODE}")
     if(GENERATIVEQC_AOT_UNIT_MODE STREQUAL "class")
@@ -210,8 +246,6 @@ macro(generativeqc_configure_cuda_backend target)
     set(GENERATIVEQC_AOT_GENERATED_PROFILE_SOURCES)
     foreach(architecture IN LISTS GENERATIVEQC_AOT_TARGET_ARCHITECTURES)
       set(profile_architecture "sm_${architecture}")
-      list(APPEND GENERATIVEQC_AOT_GENERATOR_ARGUMENTS
-           --target-architecture "${profile_architecture}")
       if(GENERATIVEQC_AOT_UNIT_MODE STREQUAL "class")
         foreach(shell_class IN LISTS GENERATIVEQC_AOT_CLASS_NAMES)
           list(APPEND GENERATIVEQC_AOT_GENERATED_PROFILE_SOURCES
@@ -224,31 +258,6 @@ macro(generativeqc_configure_cuda_backend target)
         endforeach()
       endif()
     endforeach()
-    if(NOT GENERATIVEQC_AOT_PROFILE STREQUAL "auto")
-      list(APPEND GENERATIVEQC_AOT_GENERATOR_ARGUMENTS
-           --profile "${GENERATIVEQC_AOT_PROFILE}")
-    endif()
-    foreach(profile IN LISTS GENERATIVEQC_AOT_PROFILES)
-      if(profile MATCHES "^sm_([0-9]+)$")
-        set(profile_architecture "${CMAKE_MATCH_1}")
-        if(NOT profile_architecture IN_LIST GENERATIVEQC_AOT_TARGET_ARCHITECTURES)
-          message(FATAL_ERROR
-                  "AOT profile ${profile} has no matching CUDA compile target")
-        endif()
-        list(APPEND GENERATIVEQC_AOT_GENERATOR_ARGUMENTS
-             --profile-map "${profile}=${profile}")
-      elseif(NOT profile STREQUAL "")
-        list(LENGTH GENERATIVEQC_AOT_TARGET_ARCHITECTURES target_count)
-        if(NOT target_count EQUAL 1)
-          message(FATAL_ERROR
-                  "Named/portable GENERATIVEQC_AOT_PROFILES require one CUDA target; use GENERATIVEQC_AOT_PROFILE to apply one profile to all targets")
-        endif()
-        list(GET GENERATIVEQC_AOT_TARGET_ARCHITECTURES 0 profile_architecture)
-        list(APPEND GENERATIVEQC_AOT_GENERATOR_ARGUMENTS
-             --profile-map "sm_${profile_architecture}=${profile}")
-      endif()
-    endforeach()
-
     set(GENERATIVEQC_AOT_GENERATED_REGISTRY_SOURCE
         "${GENERATIVEQC_AOT_GENERATED_DIRECTORY}/generativeqc_generated_shell_registry.cu")
     set(GENERATIVEQC_AOT_GENERATED_HEADER

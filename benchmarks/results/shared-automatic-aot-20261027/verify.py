@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import statistics
 import tempfile
 from pathlib import Path
@@ -225,6 +227,13 @@ def process_cold(scope, compiler):
 
 def main():
     """Authenticate the retained bundle before checking scientific acceptance."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--retained-only",
+        action="store_true",
+        help="replay authenticated historical receipts without qualifying this compiler",
+    )
+    args = parser.parse_args()
     assert __debug__, "run without Python -O"
     manifest = load_json(ROOT / "manifest.json")
     assert manifest["files"], "bind the completed publication before verification"
@@ -372,14 +381,37 @@ def main():
 
     for name, entries in capabilities.items():
         assert set(entries) == {"compiled-cuda"}
-        assert entries["compiled-cuda"]["qualification"]["numerical_promotion"] is False
-        capability = functional_capability(name, evidence=entries)
-        assert (
-            "compiled-cuda" in capability.qualified_stages
-            and "forces" not in capability.qualified_stages
-        )
+        envelope = entries["compiled-cuda"]
+        assert envelope["schema"] == "generativeqc.libxc-bulk-stage-evidence.v1"
+        assert envelope["stage"] == "compiled-cuda" and envelope["status"] == "pass"
+        assert re.fullmatch(r"[0-9a-f]{64}", envelope["subject_identity"])
+        qualification = envelope["qualification"]
+        assert qualification["numerical_promotion"] is False
+        for key in ("library", "installed_library"):
+            assert qualification[key] == compiler["candidate-full"][key]
+        for key in ("compilation", "endpoint_performance"):
+            for member in qualification[key]:
+                path = Path(member["path"])
+                assert path.parent.as_posix() == "benchmarks/results/" + ROOT.name
+                assert manifest["files"][path.name] == {
+                    "bytes": member["bytes"],
+                    "sha256": member["sha256"],
+                }
+        if not args.retained_only:
+            # Deliberately keep the live compiler identity gate fail-closed.
+            # Historical replay never changes an envelope's subject identity.
+            capability = functional_capability(name, evidence=entries)
+            assert (
+                "compiled-cuda" in capability.qualified_stages
+                and "forces" not in capability.qualified_stages
+            )
     print(
-        "shared automatic AOT numerical, artifact, resource and performance evidence passed"
+        "retained historical numerical, artifact, resource and performance checks passed; "
+        + (
+            "current compiler admission NOT CHECKED"
+            if args.retained_only
+            else "compiler-bound compiled-cuda admission passed"
+        )
     )
 
 

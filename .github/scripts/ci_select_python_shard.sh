@@ -252,6 +252,14 @@ measured_core_runtime_paths=(
   tests/python/test_cpu_hf_high_l.py
   tests/python/test_cuda_xc_point_contract.py
   tests/python/test_uccsd_solver.py
+  # PR #2827 run 40476660986: core-b timed out at 98%, while this
+  # complete convergence suite used ~528 worker-seconds (two ~261s
+  # independent CPU oracles). Runtime-heavy finished in 848s; preserve
+  # every case and its core enumeration slot on the loadfile lane.
+  tests/python/test_correlation_convergence.py
+  # Move the complete DF mixed-precision module off core-a without changing
+  # the original modulo slot or dropping a single numerical certificate.
+  tests/python/test_df_cc_mixed_precision.py
   # Run 38890127895 left all four ECP Hessian cases in a late serial tail
   # (~453 worker-seconds); runtime-heavy finished in 659 s. Keep every case
   # and the original core slot while moving this complete file to loadfile.
@@ -262,6 +270,10 @@ measured_core_runtime_paths=(
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  # Run 40450776430 exhausted core-a twice; this intact corrected-Lambda
+  # module used 269-351 s per worker while uccsd-forces finished in 559 s.
+  # Preserve its ordinary core slot and all cases on existing worksteal workers.
+  tests/python/test_uccsd_t_lambda.py
   "${measured_core_runtime_paths[@]}"
   # Run 39351749228 reached minute 28 before the final tight VV10 case.
   # Preserve the core modulo slot, but transfer the complete endpoint file
@@ -300,6 +312,11 @@ rebalance_paths=(
   tests/python/test_rccsd_codegen_no_numpy.py
   tests/python/test_dft_mp_v1_capacity.py
   tests/python/test_df_lambda_frontier.py
+  # PR #2827 run 40476660986: the stationary phase-budget matrix
+  # consumed ~768 worker-seconds across core-b workers (1627 results).
+  # Compiler-heavy finished in 853s; transfer the complete host
+  # compile/admission module to its loadfile lane without deselection.
+  tests/python/test_native_stationary_phased_budget.py
   # Measured full Libxc force lifecycles took ~108 s each in run
   # 38113859405. Count this file in core parity before transferring
   # it, so no unrelated file changes owners as the long tail moves.
@@ -352,23 +369,14 @@ nightly_hessian_paths=(
 # originally totaled about 0.7k observed worker-seconds per group. Later
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
-# Dedicated UCCSD force tests no longer occupy the broad core queues;
-# corrected Lambda stays an independent prioritized core-a owner.
-core_fresh_frontier_a=(
-  tests/python/test_uccsd_t_lambda.py
-)
+# Dedicated UCCSD force and corrected-Lambda tests use the existing force lane.
 core_hotspots_a=(
   # Runs 40123113539 / 40124170599 exhausted core-c while core-a
   # completed in 20m49s in the latter. Keep the intact ~305-worker-second
   # Lambda reuse module on core-a without removing its ordinary slot.
   tests/python/test_df_lambda_core_reuse.py
-  # Run 39378471974 timed out core-c with no recorded failures while core-a
-  # finished in 17m45s. Transfer the complete corrected-Lambda family
-  # (965 observed worker-seconds), preserving its priority and ordinary slots.
-  "${core_fresh_frontier_a[@]}"
-  # Run 38867209562 delayed cold RKS water by 352 s behind corrected Lambda.
-  # Keep all three fresh Hessian/Lambda families on distinct stable owners,
-  # without removing their original slots from the ordinary modulo split.
+  # Historical pins retain ordinary modulo slots. Dedicated complete-file
+  # transfers above take precedence over these earlier core owners.
   tests/python/test_wb97mv_hessian.py
   tests/python/test_mixed_rsh_df_forces.py
   # Keep complete high-angular HF parallel with its original core slot;
@@ -386,8 +394,8 @@ core_hotspots_b=(
   # Run 40127914199 completed core-c tests at 1798.9s. Moving these
   # intact ~477-worker-second modules to core-a then exhausted its cold
   # corrected-Lambda lane in run 40135163162; core-b finished in 14m37s.
-  # Keep their ordinary slots and all existing fresh-priority owners.
-  tests/python/test_correlation_convergence.py
+  # Convergence now has a loadfile owner; keep the remaining stable
+  # core-b pins and all existing fresh-priority owners.
   tests/python/test_cpu_semilocal_force_contract.py
   tests/python/test_wb97mv_uks_hessian.py
   # The added restricted-CUDA test shifted this complete response file
@@ -436,16 +444,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${core_hotspots_c[@]}"; do
       pinned_core_owner["${path}"]=2
     done
-    # Keep the remaining function-scoped UKS HVP and corrected Lambda early.
+    # Keep the remaining function-scoped UKS HVP early.
     # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
       tests/python/test_wb97mv_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a)
-        target_bucket=0
-        fresh_frontier_paths+=("${core_fresh_frontier_a[@]}")
-        ;;
+      core-a) target_bucket=0 ;;
       core-b) target_bucket=1 ;;
       core-c)
         target_bucket=2
@@ -504,13 +509,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # The intact RKS Hessian suite shares this existing lighter lane. Put it
     # first so its long water HVP starts before the complete force matrices;
     # worksteal keeps their independent function-scoped cases parallel.
+    # Corrected Lambda retains its fresh priority without sharing function fixtures.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
       tests/python/test_wb97mv_hessian.py \
       tests/python/test_uccsd_gradient.py \
-      tests/python/test_uccsd_t_gradient.py; do
+      tests/python/test_uccsd_t_gradient.py \
+      tests/python/test_uccsd_t_lambda.py; do
       # Select tracked files even when missing on disk, to fail closed; avoid
       # inventing future files on pre-merge branches or synthetic inventories.
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
@@ -660,12 +667,14 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
-    # Complete native and full-Fock files retain every numerical/fault case.
+    # Complete native/full-Fock and stationary phase-budget modules retain
+    # every numerical/compile/fault case on one loadfile worker per file.
     # Select tracked missing paths too, so incomplete checkouts fail closed.
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
       tests/python/test_uccsd_native.py \
-      tests/python/test_uccsd_triples_fock_response.py; do
+      tests/python/test_uccsd_triples_fock_response.py \
+      tests/python/test_native_stationary_phased_budget.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi

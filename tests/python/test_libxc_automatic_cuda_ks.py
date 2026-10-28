@@ -12,7 +12,7 @@ import json
 import os
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -27,6 +27,10 @@ from generativeqc_compiler.xc.automatic_semilocal import AUTOMATIC_SCF_DOMAIN
 from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.libxc_work import automatic_work_policy
 from test_libxc_automatic_point_native import NAMES
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.xc.automatic_cuda import AutomaticCudaPointProvider
+
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_AUTOMATIC_CUDA_KS_TEST") != "1",
@@ -230,13 +234,17 @@ def _reference(
 @pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize("input_form", ("selector", "method-ir"))
 def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
-    name: str, spins: int, input_form: str
+    name: str,
+    spins: int,
+    input_form: str,
+    *,
+    provider: AutomaticCudaPointProvider | None = None,
 ) -> None:
     """Cold, ordinary warm recomputation and changed geometry retain J-only work."""
     assert os.environ.get("SLURM_JOB_ID"), "real CUDA qualification requires Slurm"
     assert os.environ.get("CUDA_VISIBLE_DEVICES"), "preserve scheduler GPU visibility"
     configured_at = perf_counter()
-    options = {
+    options: dict[str, Any] = {
         "method": (
             f"libxc-{'rks' if spins == 1 else 'uks'}:{name}"
             if input_form == "selector"
@@ -386,7 +394,9 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
             ).matrix_d2h_bytes
         previous.close()
     if directory := os.environ.get("GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR"):
-        provider = emit_automatic_cuda_provider(name)
+        # A shared package has a distinct executable identity while retaining
+        # canonical CPU science. Its caller supplies the actual package row.
+        provider = provider or emit_automatic_cuda_provider(name)
         payload = {
             "schema": "generativeqc.automatic-cuda-ks-qualification.v1",
             "name": name,

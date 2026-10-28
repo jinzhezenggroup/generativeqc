@@ -13,6 +13,12 @@ function(generativeqc_native_test target source)
   endif()
   if(NOT VNT_NO_SRC_INCLUDE)
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(NOT VNT_NO_GENERATIVEQC AND TARGET CUDA::cudart)
+      # Internal device views expose CUDA types when the library enables CUDA.
+      # Keep their toolkit usage requirements local to internal-header tests;
+      # installed SDK consumers do not acquire a CUDA header dependency.
+      target_link_libraries(${target} PRIVATE CUDA::cudart)
+    endif()
   endif()
   add_test(NAME ${target} COMMAND ${target})
   if(VNT_SKIP_77)
@@ -243,6 +249,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_occupied_projection_tests tests/native/test_occupied_projection.cpp)
     generativeqc_native_test(generativeqc_basis_projection_sdk_tests tests/native/test_basis_projection_sdk.cpp NO_SRC_INCLUDE)
+    generativeqc_native_test(generativeqc_system_projection_sdk_tests tests/native/test_system_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
@@ -389,6 +396,12 @@ macro(generativeqc_add_native_tests)
   target_sources(generativeqc_d4_eeq_tests PRIVATE
     src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
+  if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_native_test(generativeqc_gcp_cuda_tests tests/native/test_gcp_r2scan3c.cpp SKIP_77)
+    target_compile_definitions(generativeqc_gcp_cuda_tests PRIVATE GENERATIVEQC_GCP_CUDA_TEST=1)
+    target_include_directories(generativeqc_gcp_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(generativeqc_gcp_cuda_tests generativeqc_method_parameters_codegen)
+  endif()
   foreach(_generativeqc_parameter_test IN ITEMS
           generativeqc_d4_reference_tests generativeqc_d4_eeq_tests generativeqc_gcp_r2scan3c_tests)
     add_dependencies(${_generativeqc_parameter_test} generativeqc_method_parameters_codegen)
@@ -596,6 +609,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_hf_df_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
+  generativeqc_native_test(generativeqc_range_exchange_runtime_tests
+                       tests/native/test_range_exchange_runtime.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_dft_restricted_point_tests

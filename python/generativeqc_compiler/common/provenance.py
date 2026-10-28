@@ -34,13 +34,22 @@ def file_hash(path: Path) -> str:
 
 def find_nvcc() -> Path | None:
     """Find a requested toolkit without guessing a different compiler version."""
+    # An explicit but unavailable compiler/root must not silently select a
+    # different toolkit from PATH. Root aliases support non-system installs.
     candidates = [os.environ.get("GENERATIVEQC_NVCC"), os.environ.get("CUDACXX")]
-    if cuda := os.environ.get("CUDA_PATH"):
-        candidates.append(str(Path(cuda) / "bin/nvcc"))
-    candidates.append(shutil.which("nvcc"))
+    candidates.extend(
+        str(Path(root).expanduser() / "bin/nvcc") if root else None
+        for root in (
+            os.environ.get("CUDAToolkit_ROOT"),
+            os.environ.get("CUDA_PATH"),
+            os.environ.get("CUDA_HOME"),
+        )
+    )
+    candidates.append("nvcc")
     for candidate in candidates:
-        if candidate and (resolved := shutil.which(candidate)):
-            return Path(resolved).resolve()
+        if candidate:
+            resolved = shutil.which(str(Path(candidate).expanduser()))
+            return Path(resolved).resolve() if resolved else None
     return None
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -18,9 +19,14 @@ def staging_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
 ) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    body = source[
-        source.index("Vv10CudaDeviceLayout vv10_cuda_device_layout(") :
-    ].rsplit("}  // namespace generativeqc::dft::nlc", 1)[0]
+    capacity = (ROOT / "src/dft/nonlocal_correlation/vv10_capacity.hpp").read_text()
+    body = "\n".join(
+        [cpp_function_definition(capacity, "vv10_cuda_device_layout")]
+        + [
+            cpp_function_definition(source, name)
+            for name in ("enqueue_vv10_cuda_device", "execute_vv10_cuda")
+        ]
+    )
     body = re.sub(r"<<<.*?>>>", "", body, flags=re.DOTALL)
     folder = tmp_path_factory.mktemp("nonlocal-host-staging")
     cpp, binary = folder / "probe.cpp", folder / "probe"
@@ -47,9 +53,7 @@ def test_queued_downloads_outlive_host_staging(
 
 def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    body = source.split("void enqueue_vv10_molecular_domain_cuda(", 1)[1].split(
-        "Vv10CudaDeviceLayout vv10_cuda_device_layout(", 1
-    )[0]
+    body = cpp_function_definition(source, "enqueue_vv10_molecular_domain_cuda")
     forbidden = (
         "OwnedCudaStream",
         "OwnedCudaBuffer",
@@ -60,16 +64,7 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
     )
     assert all(token not in body for token in forbidden)
     assert "cudaMemsetAsync" in body
-    kernel = (
-        source.split("__global__ void molecular_domain_kernel(", 1)[1].split(
-            "__global__ void reduce_energy_ordered_kernel(", 1
-        )[0]
-        if "__global__ void reduce_energy_ordered_kernel("
-        in source.split("__global__ void molecular_domain_kernel(", 1)[1]
-        else source.split("__global__ void molecular_domain_kernel(", 1)[1].split(
-            "}  // namespace", 1
-        )[0]
-    )
+    kernel = cpp_function_definition(source, "molecular_domain_kernel")
     assert "rho < threshold" in kernel
     assert (
         "effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight)"
@@ -82,9 +77,7 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
 
 def test_ordered_energy_reduction_prefetch_keeps_left_to_right_fp64() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    kernel = source.split("__global__ void reduce_energy_ordered_kernel(", 1)[1].split(
-        "__global__ void molecular_domain_kernel(", 1
-    )[0]
+    kernel = cpp_function_definition(source, "reduce_energy_ordered_kernel")
     assert "kOrderedEnergyLoadThreads = 128U" in source
     assert "__shared__ double staged[kOrderedEnergyLoadThreads]" in kernel
     assert "staged[threadIdx.x] = energy_terms[index]" in kernel
@@ -98,9 +91,7 @@ def test_ordered_energy_reduction_prefetch_keeps_left_to_right_fp64() -> None:
 
 def test_resident_enqueue_has_no_hidden_allocation_transfer_or_fence() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
-    body = source.split("void enqueue_vv10_cuda_device(", 1)[1].split(
-        "void execute_vv10_cuda(", 1
-    )[0]
+    body = cpp_function_definition(source, "enqueue_vv10_cuda_device")
     forbidden = (
         "OwnedCudaStream",
         "OwnedCudaBuffer",
@@ -170,8 +161,6 @@ struct Vv10CudaDeviceLayout {
  std::size_t point_count{},tile_points{},workspace_bytes{};
  bool features{},geometry{},mask_zero_weight_rows{};
 };
-Vv10CudaDeviceLayout vv10_cuda_device_layout(
- std::size_t,std::size_t,bool,bool,bool mask_zero_weight_rows=false);
 unsigned launch_blocks(std::size_t,unsigned) {return 1;}
 template<Vv10Variant, bool, class... T> void local_scales_kernel(T&&...) {}
 template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}

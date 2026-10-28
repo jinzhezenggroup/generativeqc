@@ -106,13 +106,14 @@ def emit_device_point_value(*, shared: bool = False) -> str:
     return _POINT_VALUE
 
 
-def emit_stationary_point_kernel() -> str:
+def emit_stationary_point_kernel(*, parameter_type: str | None = None) -> str:
     """Publish the same point differential for a staged resident force tile.
 
     Geometry already owns paired physical spin features, including the RKS
-    half-density embedding. No host repack or second density policy is needed.
+    half-density embedding. Parameter workers pass the same immutable row used
+    by energy evaluation; the traversal and physical derivative layout agree.
     """
-    return r"""
+    source = r"""
 template <I feature_terms, class PointEvaluator>
 __global__ void stationary_evaluate_points(const double* features, std::size_t count,
     DevicePointValue* output, int* error, const int* producer_error) {
@@ -136,21 +137,29 @@ __global__ void stationary_evaluate_points(const double* features, std::size_t c
   if (!value.valid) atomicCAS(error, 0, 3);
 }
 """
+    if parameter_type is not None:
+        source = source.replace(
+            "const int* producer_error)",
+            f"const int* producer_error, {parameter_type} parameters)",
+        ).replace("physical_point(0,", "physical_point(parameters,")
+    return source
 
 
-def emit_point_traversal() -> str:
+def emit_point_traversal(*, parameter_type: str = "I") -> str:
     """Emit the one shared single/batched tile traversal for static providers.
 
     Native preparation validates spin/count/tile dimensions. A response provider
     supplies ``response_point``; an ordinary provider supplies ``physical_point``.
     Discarded response branches impose no response/fxc capability on the latter.
+    A private worker may carry a typed immutable parameter row instead of the
+    ordinary functional code; the physical traversal and output ABI are shared.
     """
-    return _POINT_TRAVERSAL
+    return _POINT_TRAVERSAL.replace("I functional", f"{parameter_type} functional")
 
 
-def emit_automatic_point_kernel() -> str:
-    """Emit an ordinary-provider entry without adding a curated kernel variant."""
-    return _AUTOMATIC_KERNEL
+def emit_automatic_point_kernel(*, parameter_type: str = "I") -> str:
+    """Emit an entry with a functional code or private by-value parameter row."""
+    return _AUTOMATIC_KERNEL.replace("I functional", f"{parameter_type} functional")
 
 
 def emit_equal_spin_point_selector() -> str:

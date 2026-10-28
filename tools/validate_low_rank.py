@@ -31,6 +31,7 @@ from generativeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
+from generativeqc_compiler.common.provenance import find_nvcc
 from generativeqc_compiler.common.resources import ResourceBudget
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_posthf.coulomb_columns import CoulombColumns
@@ -50,6 +51,23 @@ CASES = ("h2", "water", "lih")
 MODES = ("exact", "fixed_rank", "adaptive_rank", "density_fitted")
 
 
+def reproduction_command(args: argparse.Namespace) -> list[str]:
+    """Retain the backend's selected compiler and target in the replay argv."""
+    argv = [
+        "python",
+        "tools/validate_low_rank.py",
+        "--backend",
+        args.backend,
+        "--samples",
+        str(args.samples),
+        "--output",
+        f".artifacts/low-rank-{args.backend}-reproduction",
+    ]
+    if args.backend == "cuda":
+        argv.extend(["--cuda-target", args.cuda_target, "--nvcc", str(args.nvcc)])
+    return argv
+
+
 def run(args: typing.Any) -> typing.Any:
     """Measure clean source and keep all raw whole-solve samples in one bundle."""
     if args.backend == "cuda" and not os.environ.get("SLURM_JOB_ID"):
@@ -64,7 +82,9 @@ def run(args: typing.Any) -> typing.Any:
     artifact = None
     compilation_start = time.perf_counter()
     if args.backend == "cuda":
-        compiler = CudaCompilerAdapter(args.nvcc, cuda_target_info("sm_120"))
+        if args.nvcc is None or not args.cuda_target:
+            raise ValueError("CUDA validation requires NVCC and --cuda-target")
+        compiler = CudaCompilerAdapter(args.nvcc, cuda_target_info(args.cuda_target))
         artifact = compile_cholesky_cuda(compiler, args.output / "cache")
     compilation_seconds = time.perf_counter() - compilation_start
     errors, rows = {}, []
@@ -393,18 +413,7 @@ def run(args: typing.Any) -> typing.Any:
             args.output,
             {
                 "source": summary["source"],
-                "reproduction": {
-                    "command": [
-                        "python",
-                        "tools/validate_low_rank.py",
-                        "--backend",
-                        args.backend,
-                        "--samples",
-                        str(args.samples),
-                        "--output",
-                        f".artifacts/low-rank-{args.backend}-reproduction",
-                    ]
-                },
+                "reproduction": {"command": reproduction_command(args)},
                 "files": [
                     {"path": p, "role": r}
                     for p, r in [
@@ -425,13 +434,17 @@ def run(args: typing.Any) -> typing.Any:
     return 0 if passed else 1
 
 
-if __name__ == "__main__":
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the validation and generated reproduction commands identically."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("cpu", "cuda"), default="cpu")
-    parser.add_argument(
-        "--nvcc", type=Path, default=Path("/group/software/cuda-12.9.1/bin/nvcc")
-    )
+    parser.add_argument("--nvcc", type=Path, default=find_nvcc())
+    parser.add_argument("--cuda-target", help="explicit CUDA architecture (e.g. sm_90)")
     parser.add_argument("--samples", type=int, default=3)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--publish", type=Path)
-    raise SystemExit(run(parser.parse_args()))
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(run(parse_args()))

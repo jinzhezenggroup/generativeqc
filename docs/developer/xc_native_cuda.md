@@ -113,9 +113,9 @@ semicolon-separated list of exact structural registration names, for example
 `"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
 must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
-remains off by default. Selected entries retain their original codes,
-scientific contracts and ordinary/batched providers. Packaged source identities
-record their actual entry-point sets. Omitted entries
+remains off by default. Selected entries retain their original codes and
+canonical mathematical identities. Packaged source identities record their
+actual entry-point sets, shared workers and immutable parameter bindings. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
 or reordered requests do not change structural shard order. Regeneration
@@ -203,6 +203,46 @@ bounded traversal. The descriptor's exact source identity covers both bodies
 and the selector. This does not add response support, installed variants,
 public backend admission, or resource/performance qualification. See
 [equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
+
+`GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS` defaults to `ON` when CUDA and
+automatic XC AOT are enabled. A package containing multiple KTBM registrations
+shares their parameterized CUDA workers. Set the option to `OFF` to retain
+literal specialization; the standalone generator provides `--no-share-parameters`
+for the same fallback. Automatic XC AOT itself remains opt-in.
+
+Scalar mathematical coefficients and their fixed products are prepared after
+differentiation using the existing Graph algebra, before equal-spin projection.
+An immutable host table supplies one row by value in CUDA launch parameter space;
+fixed offsets avoid dynamic device-table addressing, and concurrent launches
+never mutate shared coefficient state. Density thresholds,
+work-domain guards, physical derivative conventions and spin layouts remain
+part of the compiled contract. Both general and equal-spin parameterized bodies,
+ordered parameter names and complete point layouts must agree before sharing.
+Other families and singleton selections retain their specialized point emitters.
+This controls executable reuse, not functional admission or supported products.
+
+Each registration retains its canonical coefficient-bound mathematical identity
+for CPU/CUDA admission. Its source identity authenticates the shared worker's
+complete source and immutable parameter table, plus its own selected row and
+host validation wrapper. One CUDA shard owns the worker; other shards call its
+private host launchers, so no cross-translation-unit device linking is needed.
+The GPU sees one uniform parameter row per launch and has no per-point
+functional switch. Host registration wrappers include only descriptor headers,
+without emitting unrelated tensor conversion kernels.
+
+When a parameterized registration also belongs to the selected force package,
+the same immutable coefficient row supplies its staged physical point producer.
+The descriptor advertises that callback only for packaged force spins; ordinary
+energy-only registrations retain a null stationary callback. LDA RKS keeps its
+total-density differential, while GGA/MGGA force tiles retain both polarized
+physical derivatives even when energy evaluation uses the equal-spin shortcut.
+The source identity binds the callback availability and shared executable key
+separately from the registration's canonical mathematical identity.
+
+The [default-promotion decision](../../.agents/notes/implemented/performance/2026-10-28-xc-prepared-parameters.md)
+links the numerical, complete-SCF and point-kernel evidence on NVCC 12.9.1 / SM120.
+It does not establish performance on every architecture. Explicit specialization
+remains available for qualification on other toolchains and devices.
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
@@ -650,8 +690,10 @@ defaults to at most 64 GiB and one quarter of local available disk space.
 Full-range sources retain Direct by default because qualified local-NVMe replay
 is slower than their recurrence; a positive `GENERATIVEQC_KS_DISK_MAX_BYTES`
 enables controlled full-range experiments. Explicit `0` disables that tier; the matching
-`DISK_BUCKET_MASK` controls restrict selected buckets. The directory is `/tmp`,
-or `GENERATIVEQC_ERI_TMPDIR` when set. RAM filesystems and common network
+`DISK_BUCKET_MASK` controls restrict selected buckets. The directory follows
+the platform temporary-directory setting (including `TMPDIR`), overridden by
+`GENERATIVEQC_ERI_TMPDIR` when set. An unavailable directory or an empty explicit
+override disables optional spilling. RAM filesystems and common network
 filesystems are refused. Complete GPU residency creates no temporary file.
 
 The file is physically preallocated and immediately unlinked, so its owning

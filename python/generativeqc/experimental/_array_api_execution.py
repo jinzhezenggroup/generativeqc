@@ -37,7 +37,7 @@ class _Executor:
             "max_work": 100_000_000,
             "max_nodes": 4096,
             "compile_timeout": 300.0,
-            "cuda_arch": "sm_120",
+            "cuda_arch": None,
             "device": 0,
             **options,
         }
@@ -88,8 +88,21 @@ class _Executor:
 
         from generativeqc.profiles import find_nvcc
 
-        # Plan from static IR before discovering a compiler or allocating a GPU.
-        target = cuda_target_info(self.options["cuda_arch"])
+        architecture = self.options["cuda_arch"]
+        if architecture is None:
+            from generativeqc_compiler.tensor.optimize import prepare_for_backend
+
+            from generativeqc._cuda_device import device_architecture
+
+            # Reject architecture-independent unsupported IR before touching a
+            # driver. Keep the original program for the authoritative plan below
+            # so discovery does not change optimization or precision semantics.
+            prepare_for_backend(program, "cuda")
+            architecture = device_architecture(self.options["device"])
+        # An explicit target keeps planning independent of a device. Automatic
+        # selection queries only device identity, without creating a context or
+        # allocating buffers; preparation still checks the executing device.
+        target = cuda_target_info(architecture)
         plan = plan_cuda(program, target, max_bytes=self.options["max_bytes"])
         if len(plan.program.live_nodes) > self.options["max_nodes"]:
             raise ValueError("CUDA program exceeds node budget")
@@ -103,6 +116,12 @@ class _Executor:
         compiler = CudaCompilerAdapter(
             nvcc, target, compile_timeout=self.options["compile_timeout"]
         )
+        # Tensor-only execution does not load the chemistry library, whose
+        # loader normally preloads optional CUDA providers. Apply the same
+        # configured-prefix discovery before dlopen of this independent JIT DSO.
+        from generativeqc._cuda_runtime import preload_cuda_runtime_libraries
+
+        preload_cuda_runtime_libraries()
         return PreparedCuda(
             plan, compile_cuda(plan, compiler, cache), device=self.options["device"]
         )

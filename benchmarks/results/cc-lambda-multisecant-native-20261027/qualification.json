@@ -1,0 +1,125 @@
+{
+  "schema": "generativeqc.multisecant-native-qualification.v1",
+  "base_revision": "cd9ad801b09225d923ae5e2995c70274f76a50cf",
+  "records": [
+    {
+      "path": "pilot.json.xz",
+      "variant": "strict",
+      "driver": "strict-experiment.py.xz",
+      "library_sha256": "7d90642c350b2961929e135439a08857a70204fa63c34ad6d0ac107ecc7bfd6a",
+      "slurm_job_id": "1352",
+      "samples": 2
+    },
+    {
+      "path": "cohort.json.xz",
+      "variant": "strict",
+      "driver": "strict-experiment.py.xz",
+      "library_sha256": "7d90642c350b2961929e135439a08857a70204fa63c34ad6d0ac107ecc7bfd6a",
+      "slurm_job_id": "1353",
+      "samples": 12
+    },
+    {
+      "path": "warmup-cohort.json.xz",
+      "variant": "warmup",
+      "driver": "experiment.py.xz",
+      "library_sha256": "fb62e37336d02537c6cacbc7480d7908ae96c444d7be4d8b1d7091a703d72db8",
+      "slurm_job_id": "1354",
+      "samples": 12
+    },
+    {
+      "path": "large-pilot.json.xz",
+      "variant": "warmup",
+      "driver": "experiment.py.xz",
+      "library_sha256": "fb62e37336d02537c6cacbc7480d7908ae96c444d7be4d8b1d7091a703d72db8",
+      "slurm_job_id": "1355",
+      "samples": 3
+    }
+  ],
+  "completed_observations": 29,
+  "current_standard_controls": {
+    "requested_policy": "standard",
+    "preconvergence": "auto",
+    "selected": "relaxed",
+    "arithmetic_request": "df_ccsd_fp32_preconvergence",
+    "reason": "budget_scaled_convergence",
+    "budget": {
+      "energy_abs": 1e-05,
+      "force_max_abs": 0.0001,
+      "force_rms": 3e-05
+    },
+    "component_budget": {
+      "energy_abs": 2.3827302298009145e-06,
+      "force_max_abs": 2.3827302298009146e-05,
+      "force_rms": 7.148190689402743e-06
+    },
+    "coefficient_l1": 4.196866214617815,
+    "scale": 0.23827302298009143,
+    "limits": {
+      "energy_tolerance": 2.3827302298009143e-09,
+      "density_tolerance": 1e-11,
+      "ccsd_energy_tolerance": 1e-08,
+      "ccsd_residual_tolerance": 1e-07,
+      "lambda_residual_tolerance": 2.3827302298009143e-08,
+      "response_absolute_tolerance": 2.3827302298009143e-09,
+      "orbital_residual_tolerance": 2.3827302298009143e-08,
+      "stationarity_tolerance": 2.3827302298009143e-07
+    },
+    "preconvergence_fallback": null,
+    "preconvergence_selection": "mixed",
+    "arithmetic": "mixed",
+    "lambda_arithmetic_request": "df_lambda_fp32_preconvergence",
+    "lambda_arithmetic": "mixed"
+  },
+  "scientific_gates": {
+    "component_and_composite_energy_parity": 1e-08,
+    "component_and_composite_full_force_parity": 1e-08,
+    "independent_c2_energy": 1e-08,
+    "independent_c2_directional_force": 3e-06,
+    "lambda_residual_gates": "Unchanged native solve and independent physical residual limits in each endpoint convergence receipt."
+  },
+  "independent_reference": {
+    "path": "benchmarks/results/cbs-standard-preconvergence-20261025/reference.json.xz",
+    "sha256": "266e9d8870f0d99a297be4e4fc89b01675e63731bef0168916dc799ff55e86a3",
+    "scope": "Numerical oracle reuse after exact scientific input identity checks; no historical timings reused."
+  },
+  "native_gpu_tested": true,
+  "cbs_energy_force_tested": true,
+  "production_default_enabled": false,
+  "performance_promotion": false,
+  "limitations": [
+    "Synchronous Python/NumPy diagnostic callback; not a production ownership API.",
+    "Two repetitions in reversed order for C2/C4; one observation per arm for C6.",
+    "C7, tight-budget native refusals and measured peak VRAM are not qualified.",
+    "Storage estimates are numeric estimates, not measured RSS or VRAM peaks."
+  ],
+  "callback_host_tests": {
+    "passed": 4,
+    "coverage": [
+      "detached history and native callback transpose",
+      "budget refusal and callback error translation"
+    ],
+    "tests_per_variant": 2,
+    "variants": [
+      "strict",
+      "warmup"
+    ]
+  },
+  "member_sha256": {
+    "build-receipts.json.xz": "bf159ae3eb7e32d90023843ff5c4a5d80a426b648838be09ff1a8c10c772e068",
+    "build.sh": "a91db9a9c71c09df5436dabb5989a5504cfebf4b2da2d92e6e17d5ab2119e27c",
+    "cohort.json.xz": "ee55b380e1bccd431747403b861a5cfe61c38954974270a7b58de8309c03f0b7",
+    "compiled-provenance.json": "1a7938f9f59fe7dad3263a073aa254a953c508b3401658aa044c6a8cd1f3c471",
+    "experiment.py.xz": "f3047f0e2796c10bc709bd2b3c4ec6108320035aa5f7529b4325bdc09fc5d057",
+    "large-pilot.json.xz": "744454486db4d77b5629cec479143708277ec4d38984779579786023d0d7e667",
+    "pilot.json.xz": "f0df6ce17162049efc817242e149211ce02bcb36a9a64362bd56391e55e59c4a",
+    "run-n4.sh": "4b7142737b3da61997b5f6c5d4d156e7ba7674b10ed0ef747085c294427cc162",
+    "run-warmup-n4.sh": "1b2b40ebf1a4b5c2d3aca4e9cd4ede4f9d48f4012944bbae45119d94ada7ceeb",
+    "source-identities.json": "20b07b8c043acd7e46368e5c14f2459e9236bb5598d3d49210d91e7d79dfc698",
+    "strict-candidate.patch.xz": "600bd78d834cffa635d10cf28a9d469981e49e25ba73a5f0f93e33f77799b4ee",
+    "strict-experiment.py.xz": "4e7fb3f4f71ae90367ce95873e5594ec8fa039697804cebf7ec37c7d80ea447a",
+    "test_probe.py.xz": "03ab3eece4d6178fa9c1dcc9e50045d99f42a4cbf206f758bad352c9a0a2f580",
+    "test_probe_warmup.py.xz": "53ecd59b3686d8f1394d601039f43430a1354342662855f60870e6c571f1f241",
+    "warmup-addition.patch.xz": "f88688261da290fca520d487efd7ea0d54a1a1f878d19c2db1b751f8746df1ed",
+    "warmup-cohort.json.xz": "54214a4ac9495e1e9eba540435fa1e44dcaf63a233a989e45511648d5e0229fb"
+  }
+}

@@ -91,7 +91,11 @@ def audit_receipt(
         "point": {
             name: row
             for name, row in resources.items()
-            if any("executable_" + key in name for key in executable_keys)
+            if any(
+                prefix + key in name
+                for key in executable_keys
+                for prefix in ("executable_", "parameter_family_")
+            )
             or (not executable_keys and point in name)
         },
         "force": {
@@ -160,6 +164,7 @@ def main() -> None:
             for marker in (
                 "automatic_",
                 "executable_",
+                "parameter_family_",
                 "generativeqc_native_libxc_",
                 "generativeqc_native_shared_",
             )
@@ -273,17 +278,21 @@ def main() -> None:
                         ),
                     )
                 ):
-                    marker = (
-                        "namespace generativeqc::dft::cuda_xc_detail::executable_"
-                        + key
-                        + " {\nusing generativeqc_tensor::I;"
-                    ).encode()
+                    markers = tuple(
+                        (
+                            "namespace generativeqc::dft::cuda_xc_detail::"
+                            + prefix
+                            + key
+                            + " {\nusing generativeqc_tensor::I;"
+                        ).encode()
+                        for prefix in ("executable_", "parameter_family_")
+                    )
                     worker_sources = [
                         path
                         for path in (
                             args.build_tree / "generated/libxc_semilocal_cuda"
                         ).glob("*.cu")
-                        if marker in path.read_bytes()
+                        if any(marker in path.read_bytes() for marker in markers)
                     ]
                     worker_objects = (
                         list(args.build_tree.rglob(worker_sources[0].name + ".o"))

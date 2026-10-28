@@ -22,8 +22,13 @@ from generativeqc_compiler.dft.xc_point_cuda import (
     emit_stationary_point_kernel,
 )
 
-from .automatic_cuda import AutomaticCudaPointProvider, emit_automatic_cuda_provider
+from .automatic_cuda import (
+    AutomaticCudaPointProvider,
+    emit_automatic_cuda_descriptor,
+    emit_automatic_cuda_provider,
+)
 from .automatic_semilocal import automatic_functional_code
+from .parameter_cuda_package import parameterized_cuda_package
 
 if TYPE_CHECKING:
     from .automatic_point import AutomaticPointSource
@@ -258,16 +263,52 @@ const CudaXcPointProgram program{{
 
 @lru_cache(maxsize=8)
 def automatic_cuda_package(
-    names: tuple[str, ...], force_profiles: tuple[str, ...] | None = None
+    names: tuple[str, ...],
+    force_profiles: tuple[str, ...] | None = None,
+    *,
+    share_parameters: bool = True,
 ) -> tuple[dict[str, CudaPointExecutable], dict[str, str]]:
     """Return unique device workers and separate immutable registrations.
 
     None includes both force spins; an empty tuple packages energy only.
     Explicit profiles prune force launches without changing energy derivatives.
+    Qualified parameter workers keep their energy path and publish the same
+    immutable coefficient row to staged forces. Remaining exact literal workers
+    still share only when their complete emitted mathematics and ABI agree.
     """
     workers: dict[str, CudaPointExecutable] = {}
     registrations = {}
+    parameter_providers = {}
+    if share_parameters:
+        parameter_workers, parameter_providers = parameterized_cuda_package(
+            names, force_profiles=force_profiles
+        )
+        workers.update(
+            (
+                identity,
+                CudaPointExecutable(
+                    identity,
+                    source,
+                    any(
+                        provider.executable_identity == identity
+                        and provider.stationary_launcher
+                        for provider in parameter_providers.values()
+                    ),
+                ),
+            )
+            for identity, source in parameter_workers.items()
+        )
     for name in sorted(set(names)):
+        parameter_provider = parameter_providers.get(name)
+        if (
+            parameter_provider is not None
+            and parameter_provider.executable_identity is not None
+        ):
+            registrations[name] = (
+                parameter_provider.source
+                + emit_automatic_cuda_descriptor(parameter_provider)
+            )
+            continue
         provider = emit_automatic_cuda_provider(name)
         code = automatic_functional_code(name)
         spins = tuple(

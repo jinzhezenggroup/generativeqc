@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 1914,
+      "bytes": 2310,
       "path": "README.md",
       "role": "summary",
-      "sha256": "e213b367979224ec3c7062223aa9f9c2796ef62f085f211d1b87116d2969f0ce"
+      "sha256": "67c1130919cedf0d0e1742608c3b1e9167e58c7aa0dc498bddfb4cb4d21a46a2"
     },
     {
       "bytes": 4472,
@@ -61,10 +61,10 @@
       "sha256": "a378874e64826f2bcc21f60f83f7aefbb4ac00166c2e9f05f93daa613fed89c7"
     },
     {
-      "bytes": 37921,
-      "path": "source.patch",
+      "bytes": 8932,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "c265a340de1f20039fb59da59d9da6fd548d064bd459e12a58774a76f27a06d8"
+      "sha256": "2f08755c318ad84c2037b065ead46a44e2307f5cafb9a8818a753c0c237dd8a7"
     },
     {
       "bytes": 3251,

@@ -84,6 +84,7 @@ function(generativeqc_add_dft_sources target)
       src/dft/cuda_quadrature.cu
       src/dft/dispersion/d3_cuda.cu
       src/dft/dispersion/d4_cuda.cu
+      src/dft/dispersion/gcp_cuda.cu
       src/dft/dispersion/d4_runtime_cuda.cu
       src/dft/nonlocal_correlation/vv10_runtime_cuda.cu)
     # Preserve Becke tail behavior; reassociation/FMA changes cancellation at

@@ -65,7 +65,13 @@ def test_qualification_runner_passes_explicit_cooperative_selection(
     toolkit = tmp_path / "cuda"
     (toolkit / "bin").mkdir(parents=True)
     (toolkit / "bin/nvcc").touch()
+    (toolkit / "bin/nvcc").chmod(0o755)
+    monkeypatch.delenv("GENERATIVEQC_NVCC", raising=False)
+    monkeypatch.delenv("CUDACXX", raising=False)
+    monkeypatch.delenv("CUDAToolkit_ROOT", raising=False)
+    monkeypatch.delenv("CUDA_PATH", raising=False)
     monkeypatch.setenv("CUDA_HOME", str(toolkit))
+    monkeypatch.setenv("CCACHE_DIR", str(tmp_path / "existing-cache"))
     # An inherited test flag cannot secretly opt in when the CLI option is absent.
     monkeypatch.setenv("GENERATIVEQC_TEST_COOPERATIVE_BECKE", "1")
     monkeypatch.setattr(
@@ -87,6 +93,8 @@ def test_qualification_runner_passes_explicit_cooperative_selection(
         assert runner.main() == 0
         command, kwargs = calls[-1]
         assert kwargs["env"]["GENERATIVEQC_TEST_COOPERATIVE_BECKE"] == expected
+        assert kwargs["env"]["CCACHE_DIR"] == str(tmp_path / "existing-cache")
+        assert kwargs["env"]["CUDACXX"] == str(toolkit / "bin/nvcc")
         assert command[-2:] == ["-k", "complete_r2scan"]
         if expected == "1":
             assert kwargs["env"]["GENERATIVEQC_STATIONARY_FULL_FD"] == "1"

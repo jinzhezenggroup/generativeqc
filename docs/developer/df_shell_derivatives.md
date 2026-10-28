@@ -62,6 +62,13 @@ after the corresponding shell launches have been submitted successfully.
 | `packed` | 32 lanes per shell | Up to 4, bounded by shared storage |
 | `compact` | 4, 8, 16 or 32 lanes according to component count | Up to 128 threads, bounded by shared storage |
 
+The compiler resolves these policy choices separately for each angular class.
+Choices with identical complete cooperative ownership and storage share one
+CUDA execution specialization. All three selectors remain available, with the
+same launch dimensions and reductions. Moment/Rys algebra, strict/mixed
+arithmetic, screening and panel/packet execution retain their own contracts;
+an alias never crosses angular classes or changes production selection.
+
 `GENERATIVEQC_DF_PRIMITIVE_BUCKETS=on` splits each angular list by exact primitive
 count and launches homogeneous `(la, lb, lc, nprim_a, nprim_b, nprim_c)` products.
 `packet` batches up to 24 signature ranges into each angular-class launch;

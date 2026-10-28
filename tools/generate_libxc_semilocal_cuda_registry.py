@@ -93,13 +93,16 @@ def emit_shard(
     entries: tuple[AutomaticRegistryEntry, ...],
     *,
     force_profiles: tuple[str, ...] | None = None,
+    share_parameters: bool = True,
 ) -> str:
     """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
     workers, registrations = automatic_cuda_package(
-        tuple(entry.name for entry in entries), force_profiles
+        tuple(entry.name for entry in entries),
+        force_profiles,
+        share_parameters=share_parameters,
     )
     definitions = "\n".join(
         [worker.source for worker in tuple(workers.values())[index::SHARD_COUNT]]
@@ -131,6 +134,12 @@ def main() -> None:
     parser.add_argument("--stationary-all", action="store_true")
     parser.add_argument("--stationary-profile", action="append", default=[])
     parser.add_argument(
+        "--share-parameters",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="share audited parameter-family workers by default; --no-share-parameters retains literal specialization",
+    )
+    parser.add_argument(
         "--functional",
         action="append",
         help="package only requested structural registrations (repeatable)",
@@ -138,6 +147,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.disabled and args.functional:
         parser.error("--functional cannot be combined with --disabled")
+    if args.disabled and args.share_parameters:
+        parser.error("--share-parameters cannot be combined with --disabled")
     try:
         entries = () if args.disabled else select_entries(args.functional)
     except ValueError as error:
@@ -161,6 +172,7 @@ def main() -> None:
                 force_profiles=None
                 if args.stationary_all
                 else tuple(args.stationary_profile),
+                share_parameters=args.share_parameters is not False,
             ),
         )
 

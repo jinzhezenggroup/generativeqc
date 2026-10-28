@@ -476,6 +476,32 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             + "".join(f"{json.dumps(alias)}," for alias in item["aliases"])
             + ")"
         )
+        profile_rows = [
+            "            ("
+            + repr(tuple(profile["spins"]))
+            + ", "
+            + ", ".join(
+                json.dumps(profile[field])
+                for field in (
+                    "exact_exchange",
+                    "semilocal_exchange",
+                    "semilocal_correlation",
+                )
+            )
+            + "),"
+            for profile in item.get("cpu_stationary_force_profiles", ())
+        ]
+        profile_text = (
+            ['        "cpu_stationary_force_profiles": (', *profile_rows, "        ),"]
+            if profile_rows
+            else ['        "cpu_stationary_force_profiles": (),']
+        )
+        if len(profile_rows) == 1:
+            profile_text = [
+                '        "cpu_stationary_force_profiles": ('
+                + profile_rows[0].strip()
+                + "),"
+            ]
         fields = [
             f'        "symbol": {json.dumps(item["symbol"])},',
             f'        "code": {item["code"]},',
@@ -500,6 +526,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            *profile_text,
             f'        "legacy_cpu_point_response_slot": {item.get("legacy_cpu_point_response_slot")!r},',
             f'        "aliases": {alias_text},',
             '        "cuda_fast_paths": {',
@@ -557,6 +584,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    cpu_stationary_force_profiles: tuple[tuple[tuple[int, ...], str, str, str], ...]\n"
         "    legacy_cpu_point_response_slot: int | None\n"
         "    aliases: tuple[str, ...]\n"
         "    cuda_fast_paths: dict[str, str]\n"

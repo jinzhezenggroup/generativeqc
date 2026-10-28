@@ -42,6 +42,7 @@ def validate_schedule(
     directory: Path,
     *,
     timeout: typing.Any = 600,
+    device_id: int = 0,
     production_source: Path | None = None,
     production_object: Path | None = None,
 ) -> dict:
@@ -73,7 +74,12 @@ def validate_schedule(
         directory / n for n in ("kernel.cu", "kernel.o", "driver.cu", "numerical")
     ]
     driver_source = emit_numerical_driver(
-        name, target.architecture, plan=plan, source=source, consumer=consumer
+        name,
+        target.architecture,
+        plan=plan,
+        source=source,
+        consumer=consumer,
+        device_id=device_id,
     )
     compiler = CudaCompilerAdapter(nvcc, target, compile_timeout=timeout)
     compiled = None

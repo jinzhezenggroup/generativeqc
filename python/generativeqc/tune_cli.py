@@ -35,6 +35,12 @@ def parser() -> argparse.ArgumentParser:
         "--representation", choices=("cartesian", "spherical"), default="cartesian"
     )
     root.add_argument("--batch", type=int, default=1)
+    root.add_argument(
+        "--device-id",
+        type=int,
+        default=0,
+        help="CUDA-visible GPU ordinal used by every tuning and validation stage",
+    )
     root.add_argument("--coverage", type=float)
     root.add_argument("--max-classes", type=int)
     root.add_argument("--max-candidates", type=int)
@@ -57,7 +63,6 @@ def parser() -> argparse.ArgumentParser:
     )
     root.add_argument("--nvcc", type=Path)
     root.add_argument("--export", type=Path, help="export an accepted evidence bundle")
-    root.set_defaults(device_id=0)
     return root
 
 
@@ -65,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     """Run the original evidence-gated tuner, without importing runtime CLI code."""
     arguments = parser()
     args = arguments.parse_args(argv)
+    if not 0 <= args.device_id <= 2**31 - 1:
+        arguments.error("--device-id must be a nonnegative int32 CUDA-visible ordinal")
     args.coverage = (
         args.coverage if args.coverage is not None else (1.0 if args.full else 0.97)
     )

@@ -34,6 +34,18 @@ if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
 endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+set(_generativeqc_parameter_sharing_default OFF)
+if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+  set(_generativeqc_parameter_sharing_default ON)
+endif()
+option(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS
+       "Share audited CUDA workers with prepared immutable coefficients"
+       ${_generativeqc_parameter_sharing_default})
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND
+   (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
+  message(FATAL_ERROR
+    "GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS requires CUDA and automatic CUDA AOT")
+endif()
 set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "" CACHE STRING
     "Semicolon-separated automatic CUDA AOT registrations; empty selects the opt-in full catalog")
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
@@ -101,6 +113,9 @@ set(GENERATIVEQC_CUDA_PROVIDER "nvidia" CACHE STRING
 set_property(CACHE GENERATIVEQC_CUDA_PROVIDER PROPERTY STRINGS nvidia cumetal)
 set(GENERATIVEQC_AOT_PROFILE "auto" CACHE STRING
     "AOT profile for every target: strict auto, explicit portable, sm_XX, or a named profile")
+set(GENERATIVEQC_AOT_SHELL_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+    CACHE FILEPATH "Accepted generated shell classes for production CUDA")
 set(GENERATIVEQC_AOT_PROFILES "" CACHE STRING
     "Optional explicit list of AOT profiles, independent of architecture order")
 set(GENERATIVEQC_AOT_SHARDS "8" CACHE STRING
@@ -307,6 +322,10 @@ if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
    NOT GENERATIVEQC_ENABLE_CUDA)
   message(FATAL_ERROR
     "The selected automatic CUDA AOT package cannot use the CPU-only compiler fallback")
+endif()
+if(GENERATIVEQC_SHARE_AUTOMATIC_XC_CUDA_PARAMETERS AND NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR
+    "Automatic CUDA parameter sharing cannot use the CPU-only compiler fallback")
 endif()
 
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.

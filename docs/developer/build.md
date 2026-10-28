@@ -30,7 +30,9 @@ GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
 ```
 
 For a CUDA build, set `CUDACXX` to the desired NVCC and select the target
-architecture, for example `GENERATIVEQC_CUDA_ARCHITECTURES=120`.
+architecture, for example `GENERATIVEQC_CUDA_ARCHITECTURES=89` for Ada. Targets
+without a measured shell profile also need
+`CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable"`.
 
 The source-tree Python interface finds `build/libgenerativeqc.so`
 automatically. An installed wheel loads its bundled library first;
@@ -72,15 +74,22 @@ cmake --build build -j10
 
 ## CUDA build profiles
 
-Two CMake presets make the build-time tradeoff explicit. `cuda-dev-fast`
-targets one real device image and uses compile-oriented NVCC settings, while
-`cuda-release-sm120` retains production optimization settings and the full AOT
-manifest. Both leave process-level CUDA compile parallelism to the build tool.
+The generic `cuda-dev-fast` and `cuda-release` presets require a caller-selected
+numeric CUDA target and use portable kernels. The development preset uses
+compile-oriented NVCC settings. The release preset retains production
+optimization settings. Both leave process-level CUDA compile parallelism to
+the build tool. For example, build for an Ada GPU with:
 
 ```bash
-cmake --preset cuda-dev-fast
+cmake --preset cuda-dev-fast -DCMAKE_CUDA_ARCHITECTURES=89-real
 cmake --build --preset cuda-dev-fast
 ```
+
+Use `cuda-release` with the same target option for performance measurements.
+`cuda-release-sm120` and `cuda-release-cli-sm120` are explicitly specialized
+Blackwell builds with the measured `sm_120` shell profile. To use that profile
+with `cuda-dev-fast`, pass `-DCMAKE_CUDA_ARCHITECTURES=120-real
+-DGENERATIVEQC_AOT_PROFILE=sm_120`.
 
 By default, `GENERATIVEQC_CUDA_COMPILE_JOBS` is empty, so native CUDA and
 generated AOT compilation follow the build tool's normal parallelism (for
@@ -111,8 +120,8 @@ cache workflow unless the cache has been explicitly configured for PCH support.
 
 ## CUDA architecture and AOT profiles
 
-CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, and
-`90`. Only `sm_120` currently has a measured generated-shell profile. The
+CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, `90`, and
+`100`. Only `sm_120` currently has a measured generated-shell profile. The
 `auto` mode is fail-closed: a target without a tuned or explicitly compatible
 profile is a configuration error rather than an implicit generic fallback.
 
@@ -130,6 +139,11 @@ cmake -S . -B build -G Ninja \
 Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
 entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` only when the validated
 generic CUDA path is an intentional build choice.
+
+Derivative shell registries follow the same target/profile mapping, including
+custom manifests. Portable targets and builds with shell AOT disabled retain
+the bounded native derivative route. They do not inherit `sm_120` package
+metadata or schedules.
 
 ## Compiler cache, generated shards, and compile units
 

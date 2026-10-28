@@ -24,10 +24,12 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from generativeqc_compiler.integral.expr import Expr
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from generativeqc_compiler.integral.expr import Expr, Graph
+    from generativeqc_compiler.integral.expr import Graph
 
 
 class MapleImportError(ValueError):
@@ -210,10 +212,16 @@ class MapleModule:
         graph: Graph,
         name: str,
         *arguments: Expr | float | Fraction,
+        symbolic_bindings: Mapping[str, Expr] | None = None,
     ) -> Expr:
-        """Lower one parsed Maple function call into the canonical scalar Graph."""
+        """Lower one parsed Maple function call into the canonical scalar Graph.
 
-        evaluator = _Evaluator(self, graph)
+        Explicit symbolic bindings lift scalar mathematical parameters into the
+        caller's Graph for shared parameterized executables. Worker thresholds
+        and preprocessing remain fixed. Ordinary imports retain literal bindings.
+        """
+
+        evaluator = _Evaluator(self, graph, symbolic_bindings=symbolic_bindings)
         return evaluator.call(name, arguments)
 
 
@@ -723,7 +731,13 @@ def _parse_expression(expression: str) -> ast.Expression:
 class _Evaluator:
     """Lower parsed expressions directly into the canonical scalar DAG."""
 
-    def __init__(self, module: MapleModule, graph: Graph) -> None:
+    def __init__(
+        self,
+        module: MapleModule,
+        graph: Graph,
+        *,
+        symbolic_bindings: Mapping[str, Expr] | None = None,
+    ) -> None:
         self.module = module
         self.graph = graph
         self.assignments = dict(module.assignments)
@@ -737,6 +751,17 @@ class _Evaluator:
             raise MapleImportError("invalid normalized Maple binding")
 
         self.bindings = {name: decode_binding(value) for name, value in module.bindings}
+        for name, value in (symbolic_bindings or {}).items():
+            if (
+                not name.startswith("params_a_")
+                or not isinstance(self.bindings.get(name), Fraction)
+                or not isinstance(value, Expr)
+                or value.graph is not graph
+            ):
+                raise MapleImportError(
+                    "symbolic binding requires a scalar mathematical parameter in the same Graph"
+                )
+            self.bindings[name] = value
         self._assignment_cache: dict[str, object] = {}
         self._assignment_stack: set[str] = set()
         self._derivative_cache: dict[

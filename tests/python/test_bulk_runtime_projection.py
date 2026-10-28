@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Expr, Graph
 from generativeqc_compiler.xc import bulk_runtime, libxc_bulk
 from generativeqc_compiler.xc.spec import UnsupportedXC
 
@@ -71,9 +72,22 @@ def test_flags_cannot_silently_zero_a_reachable_input(
         ("rho", "sigma", "tau") if live_feature == "lapl" else ("rho", "sigma")
     )
     slot = 5 if live_feature == "lapl" else 7
+
+    def source_call(
+        graph: Graph,
+        name: str,
+        *arguments: Expr,
+        symbolic_bindings: dict[str, Expr],
+    ) -> Expr:
+        assert name == "f"
+        assert not symbolic_bindings
+        assert all(argument.graph is graph for argument in arguments)
+        return arguments[slot]
+
     module = SimpleNamespace(
         transitive_sha256="synthetic-source",
-        call=lambda graph, name, *arguments: arguments[slot],
+        bindings=(),
+        call=source_call,
     )
     monkeypatch.setattr(libxc_bulk, "import_record", lambda *a, **k: module)
     monkeypatch.setattr(

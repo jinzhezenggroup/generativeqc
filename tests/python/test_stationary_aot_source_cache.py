@@ -16,6 +16,19 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def test_composite_source_cache_preserves_external_derivative_selection(
+    tmp_path: Path,
+) -> None:
+    """Cached range/VV10 wrappers must preserve the requested source layout."""
+    emit = lowering.emit_stationary_profile_aot_wrapper_cuda
+    semilocal = emit("wb97mv_rks", include_external=False, source_cache=tmp_path)
+    complete = emit("wb97mv_rks", include_external=True, source_cache=tmp_path)
+    assert complete != semilocal
+    assert complete == emit("wb97mv_rks", include_external=True)
+    assert semilocal == emit("wb97mv_rks", include_external=False)
+    assert complete == emit("wb97mv_rks", include_external=True, source_cache=tmp_path)
+
+
 @pytest.mark.parametrize("kind", ["sp", "spd", "native"])
 def test_aot_wrapper_source_hit_preserves_bytes_and_skips_lowering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str

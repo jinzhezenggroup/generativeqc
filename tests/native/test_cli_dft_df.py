@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,160 @@ DIRECT_AOT_ENABLED = bool(int(sys.argv.pop(1)))
 
 
 class NativeDftDfCliTests(unittest.TestCase):
+    SMALL_GRID = (
+        "--grid-radial-points",
+        "8",
+        "--grid-polar-points",
+        "4",
+        "--grid-azimuth-points",
+        "8",
+    )
+
+    def test_complete_wb97mv_energy_against_independent_pyscf(self) -> None:
+        # PySCF 2.14 / Libxc 7; independently reconstructed 8x4x8 product rules,
+        # original Becke without radius adjustment, identical XC/VV10 grids,
+        # no density pruning, STO-3G H2 at +/-0.7 Bohr. This checks graph
+        # completeness, not convergence of the deliberately small quadrature.
+        for method, charge, energy in (
+            ("wb97m-v-rks", 0, -1.150312466420175),
+            ("wb97m-v-uks", 1, -0.528250800668613),
+        ):
+            with self.subTest(method=method):
+                result = self.call_named(
+                    method,
+                    *self.SMALL_GRID,
+                    "--charge",
+                    str(charge),
+                    "--multiplicity",
+                    str(charge + 1),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertAlmostEqual(
+                    json.loads(result.stdout)["energy_hartree"], energy, delta=2e-8
+                )
+        rejected = self.call_named(
+            "wb97m-v-rks", *self.SMALL_GRID, "--nonlocal-memory-bytes", "0"
+        )
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(rejected.stdout, "")
+
+    def test_complete_dispersion_forces_match_total_energy_differences(self) -> None:
+        if not DIRECT_AOT_ENABLED:
+            self.skipTest("native direct force derivatives are not linked")
+        flags = (
+            *self.SMALL_GRID,
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+        )
+        for method in (
+            "pbe-d3(bj)-rks",
+            "pbe-d3(bj)-atm-rks",
+            "pbe0-d3(0)-uks",
+            "pbe0-d4(bj-eeq-atm)-rks",
+            "b3lyp-d4(bj-eeq-atm)-rks",
+        ):
+            controls = flags + (
+                ("--charge", "1", "--multiplicity", "2")
+                if method.endswith("-uks")
+                else ()
+            )
+            with (
+                self.subTest(method=method),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                result = self.call_named(method, *controls, "--forces")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data = json.loads(result.stdout)
+                force = data["forces_hartree_per_bohr"][1][2]
+                for step in (3e-4, 1e-4):
+                    energies = []
+                    for sign in (-1, 1):
+                        path = Path(directory) / "moved.xyz"
+                        path.write_text(
+                            f"2\nH2\nH 0 0 -0.7\nH 0 0 {0.7 + sign * step:.14f}\n"
+                        )
+                        moved = self.call_xyz(path, method, *controls)
+                        self.assertEqual(moved.returncode, 0, moved.stderr)
+                        energies.append(json.loads(moved.stdout)["energy_hartree"])
+                    self.assertAlmostEqual(
+                        force, -(energies[1] - energies[0]) / (2 * step), delta=2e-5
+                    )
+                refused = self.call_named(
+                    method, *controls, "--dispersion-memory-bytes", "1"
+                )
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertEqual(refused.stdout, "")
+
+    def test_bound_r2scan3c_native_basis_and_complete_energy(self) -> None:
+        # Independent PySCF/Libxc + dftd4 4.3 + audited gCP reference;
+        # exact spherical def2-mTZVPP H2, product grid 8 x 4 x 8.
+        for spin, energy in (
+            ("rks", -1.1741390564619811),
+            ("uks", -0.5709191317293616),
+        ):
+            flags = ("--charge", "1", "--multiplicity", "2") if spin == "uks" else ()
+            command = [
+                str(CLI),
+                "run",
+                str(MOLECULE),
+                "--method",
+                f"r2scan-3c-{spin}",
+                "--backend",
+                "cpu",
+                "--units",
+                "bohr",
+                *self.SMALL_GRID,
+                "--energy-tolerance",
+                "1e-12",
+                "--density-tolerance",
+                "1e-10",
+                *flags,
+                "--json",
+            ]
+
+            def invoke(
+                extra: tuple[str, ...], command: list[str] = command
+            ) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [*command, *extra],
+                    text=True,
+                    capture_output=True,
+                    env={
+                        **os.environ,
+                        "PATH": "/no-python-runtime",
+                        "GENERATIVEQC_PROFILE": "off",
+                    },
+                    timeout=60,
+                    check=False,
+                )
+
+            for basis in ((), ("--basis", "def2-mTZVPP")):
+                result = invoke(basis)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data = json.loads(result.stdout)
+                self.assertAlmostEqual(data["energy_hartree"], energy, delta=2e-8)
+                self.assertEqual(data["basis"], "def2-mTZVPP")
+                self.assertEqual(data["representation"], "spherical")
+                self.assertEqual(
+                    data["basis_identity"],
+                    "af55e4a3e21efd9d813231d5c5b043429ebc6ca3878d2cb08802b97920719996",
+                )
+            force_result = invoke(("--forces",))
+            self.assertEqual(force_result.returncode, 0, force_result.stderr)
+            force_data = json.loads(force_result.stdout)
+            self.assertAlmostEqual(force_data["energy_hartree"], energy, delta=2e-8)
+            self.assertEqual(len(force_data["forces_hartree_per_bohr"]), 2)
+            for rejected in (
+                ("--basis", "sto-3g"),
+                ("--representation", "cartesian"),
+                ("--dispersion-memory-bytes", "1"),
+            ):
+                result = invoke(rejected)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+
     def call_named(self, method: str, *flags: str) -> subprocess.CompletedProcess[str]:
         return self.call_xyz(MOLECULE, method, *flags)
 
@@ -39,6 +194,12 @@ class NativeDftDfCliTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            env={
+                **os.environ,
+                "PATH": "/no-python-runtime",
+                "GENERATIVEQC_PROFILE": "off",
+            },
+            timeout=60,
         )
 
     def call(self, *flags: str) -> subprocess.CompletedProcess[str]:
@@ -60,10 +221,13 @@ class NativeDftDfCliTests(unittest.TestCase):
                 self.assertFalse(data[name]["reason"])
         self.assertFalse(data["m06-2x-rks"]["cpu"])
         self.assertTrue(data["m06-2x-rks"]["cuda"])
-        self.assertFalse(data["wb97m-v-rks"]["cpu"])
-        self.assertFalse(data["wb97m-v-rks"]["cuda"])
-        self.assertIn("nonlocal", data["wb97m-v-rks"]["reason"])
-        self.assertIn("correction", data["r2scan-3c-rks"]["reason"])
+        self.assertTrue(data["wb97m-v-rks"]["cpu"])
+        self.assertTrue(data["wb97m-v-rks"]["cuda"])
+        for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
+            self.assertTrue(data[name]["cpu"])
+        self.assertTrue(data["r2scan-3c-rks"]["cpu"])
+        self.assertTrue(data["r2scan-3c-rks"]["cuda"])
+        self.assertFalse(data["r2scan-3c-rks"]["reason"])
 
     def test_generated_pbe0_and_b3lyp_energy(self) -> None:
         pbe0 = self.call_named("PBE0-RKS", "--backend", "cpu")
@@ -120,8 +284,6 @@ class NativeDftDfCliTests(unittest.TestCase):
             ("pbe-rks", ("--grid-radial-points", "64"), "require a generated"),
             ("b3lyp-rks", ("--grid-polar-points", "0"), "must be positive"),
             ("m06-2x-rks", (), "no qualified native lowerer"),
-            ("wb97m-v-rks", (), "nonlocal"),
-            ("r2scan-3c-rks", (), "correction"),
             ("r2scan0-rks", (), "no qualified native semilocal"),
             ("invented-ks-rks", (), "unknown native or compiler"),
         ):
