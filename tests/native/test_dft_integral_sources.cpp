@@ -426,8 +426,15 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   // Unqualified methods retain the pre-existing
   // fail-closed whole-batch force behavior, without writing caller storage.
   method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
-  method.method = unrestricted ? GENERATIVEQC_METHOD_LDA_UKS : GENERATIVEQC_METHOD_LDA_RKS;
-  method.ks_options = nullptr;
+  method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
+  auto unqualified = *Environment::pbe0_options(unrestricted);
+  const std::array<generativeqc_ks_semilocal_component, 2> components{
+      {{"GGA_C_PBE", 1.0}, {"GGA_X_PBE", 0.63}}};
+  const generativeqc_ks_exchange_term exchange{GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.37, 0.0,
+                                               unrestricted ? -0.37 : -0.185};
+  unqualified.semilocal_components = components.data();
+  unqualified.exchange_terms = &exchange;
+  method.ks_options = &unqualified;
   batch = nullptr;
   require(generativeqc_batch_prepare(baseline.context, systems, 2, &method, 0, &batch) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
@@ -437,7 +444,7 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   require(generativeqc_ks_batch_supported_properties_v1(batch, 0, &prepared_properties) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               !(prepared_properties & GENERATIVEQC_PROPERTY_FORCES),
-          "LDA prepared item incorrectly claimed a force owner");
+          "unqualified scaled PBE graph incorrectly claimed a force owner");
   reset_outputs();
   first.fill(1111.);
   second.fill(2222.);

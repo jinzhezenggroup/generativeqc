@@ -961,6 +961,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
             "b3lyp_uks",
             "m06_2x_rks",
             "m06_2x_uks",
+            "mn15_rks",
+            "mn15_uks",
             "wb97mv_rks",
             "wb97mv_uks",
         ],
@@ -1750,10 +1752,10 @@ def test_native_finish_span_fails_closed_on_contract_drift(
     "old,new",
     [
         (
-            "(5 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
-            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "size_add(size_add(5, size_mul(18, geometry_lanes))",
+            "size_add(size_add(4, size_mul(18, geometry_lanes))",
         ),
-        ("n > 2048", "n > 2049"),
+        ("ntask > 4096", "ntask > 4097"),
     ],
 )
 def test_memory_bounds_fail_closed_when_native_allocation_moves(

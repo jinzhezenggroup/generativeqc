@@ -61,7 +61,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": True,
-        "cpu_stationary_force_profiles": (),
+        "cpu_stationary_force_profiles": (((1, 2), "0", "1", "1"),),
         "legacy_cpu_point_response_slot": 0,
         "aliases": ("LDA_XC_PW",),
         "cuda_fast_paths": {
@@ -100,6 +100,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cpu_stationary_force_profiles": (
             ((1, 2), "0", "1", "1"),
             ((1, 2), "1/4", "3/4", "1"),
+            ((1, 2), "1/2", "1/2", "1"),
         ),
         "legacy_cpu_point_response_slot": 1,
         "aliases": (),
@@ -172,7 +173,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": False,
-        "cpu_stationary_force_profiles": (((1,), "1/5", "1", "1"),),
+        "cpu_stationary_force_profiles": (((1, 2), "1/5", "1", "1"),),
         "legacy_cpu_point_response_slot": None,
         "aliases": (),
         "cuda_fast_paths": {

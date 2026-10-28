@@ -7,6 +7,7 @@
 #include <type_traits>
 
 #include "generativeqc/generativeqc.hpp"
+#include "integrals/ecp_cuda.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -97,7 +98,7 @@ HostView pack(const core::System& system, unsigned schedule) {
 /** Resource-tracked allocations remain owned until all queued work completes. */
 struct Arena {
   cudaStream_t stream{};
-  bool completed{};
+  bool completed{}, borrowed_stream{};
   std::vector<void*> allocations;
   std::size_t budget;
   OneElectronGradientResources stats;
@@ -106,7 +107,7 @@ struct Arena {
   ~Arena() {
     if (stream && !completed) (void)cudaStreamSynchronize(stream);
     for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
-    if (stream) (void)cudaStreamDestroy(stream);
+    if (stream && !borrowed_stream) (void)cudaStreamDestroy(stream);
   }
   void* allocate(std::size_t bytes) {
     if (bytes == 0) return nullptr;
@@ -272,7 +273,8 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
     OneElectronGradientResources* resources, const double* resident_density,
-    const double* resident_weighted_density) {
+    const double* resident_weighted_density, const CudaDerivativeSourceConsumer& consume,
+    void* borrowed_stream) {
   if (resources) *resources = {};
   const std::size_t n = molecule::ao_count(system), atoms = system.atoms.size();
   if (device_id < 0 || schedule > 3 || !maximum_bytes || !n || !atoms ||
@@ -321,7 +323,12 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     DeviceGuard device_guard;
     check(cudaSetDevice(device_id));
     Arena arena(maximum_bytes);
-    check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
+    if (borrowed_stream) {
+      arena.stream = reinterpret_cast<cudaStream_t>(borrowed_stream);
+      arena.borrowed_stream = true;
+    } else {
+      check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
+    }
     runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair", arena.stream,
                                               {1, n, 0, false, false});
     runtime::cuda_trace::TraceRegion preparation("one_electron_pair_allocation_and_uploads",
@@ -368,17 +375,32 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     check(launch_generated_one_electron_gradient(view, first, second, host.pair_first.size(),
                                                  pulay_weights, nullptr, schedule, 1.0,
                                                  pulay_output, arena.stream));
+    // Residual ECP is part of Hcore, with the same convergence-checked provider
+    // as SCF. Its public sink uses force sign; -1 requests a positive gradient.
+    const auto ecp_status =
+        integrals::add_ecp_cuda(device_id, system, reinterpret_cast<void*>(arena.stream), nullptr,
+                                d_device, hcore_output, detail, -1.0);
+    if (ecp_status != GENERATIVEQC_STATUS_SUCCESS) return ecp_status;
     derivatives.finish();
 
     runtime::cuda_trace::TraceRegion output_transfer("one_electron_pair_output_and_drain",
                                                      arena.stream);
     arena.stats.host_numeric_bytes +=
         (hcore_result.capacity() + pulay_result.capacity()) * sizeof(double);
-    check(cudaMemcpyAsync(hcore_result.data(), hcore_output, 3 * atoms * sizeof(double),
-                          cudaMemcpyDeviceToHost, arena.stream));
-    check(cudaMemcpyAsync(pulay_result.data(), pulay_output, 3 * atoms * sizeof(double),
-                          cudaMemcpyDeviceToHost, arena.stream));
-    arena.stats.device_to_host_bytes = 6 * atoms * sizeof(double);
+    if (consume) {
+      if (!borrowed_stream)
+        throw std::invalid_argument("device source sink requires an owning stream");
+      consume({CudaDerivativeSourceKind::OneElectron, CudaDerivativeConvention::EnergyGradient,
+               device_id, borrowed_stream, hcore_output, 3 * atoms, 1});
+      consume({CudaDerivativeSourceKind::OverlapPulay, CudaDerivativeConvention::EnergyGradient,
+               device_id, borrowed_stream, pulay_output, 3 * atoms, 1});
+    } else {
+      check(cudaMemcpyAsync(hcore_result.data(), hcore_output, 3 * atoms * sizeof(double),
+                            cudaMemcpyDeviceToHost, arena.stream));
+      check(cudaMemcpyAsync(pulay_result.data(), pulay_output, 3 * atoms * sizeof(double),
+                            cudaMemcpyDeviceToHost, arena.stream));
+      arena.stats.device_to_host_bytes = 6 * atoms * sizeof(double);
+    }
     check(cudaStreamSynchronize(arena.stream));
     arena.completed = true;
     arena.stats.stream_synchronizations = 1;
@@ -393,8 +415,10 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
       detail = "nonfinite paired generated one-electron gradient";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    hcore_gradient.swap(hcore_result);
-    pulay_gradient.swap(pulay_result);
+    if (!consume) {
+      hcore_gradient.swap(hcore_result);
+      pulay_gradient.swap(pulay_result);
+    }
     if (resources) *resources = arena.stats;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& failure) {

@@ -1334,6 +1334,18 @@ using StationaryXcKernel = PbeStationaryXcDerivative (*)(const AoBasis&, const M
                                                          const std::vector<std::vector<double>>&,
                                                          std::size_t, double, double);
 
+/** Adapt the SCF LDA program to the common geometry pullback. Its gradient
+ * and kinetic cotangents vanish; the moving-grid/partition response does not. */
+SemilocalPointValue stationary_lda_point(const double rho[2], const double (&)[2][3],
+                                         const double[2]) {
+  const auto point = evaluate_generated_lda_point(rho);
+  if (!point.valid) throw std::runtime_error("nonfinite stationary LDA response");
+  SemilocalPointValue result{};
+  result.energy = point.energy;
+  std::copy(std::begin(point.rho), std::end(point.rho), result.rho);
+  return result;
+}
+
 PbeStationaryXcDerivative bound_b3lyp_stationary_xc(const AoBasis& basis, const MolecularGrid& grid,
                                                     const std::vector<std::vector<double>>& density,
                                                     std::size_t tile_points, double exchange_scale,
@@ -1357,6 +1369,8 @@ PbeStationaryXcDerivative bound_meta_stationary_xc(const AoBasis& basis, const M
 // Implementation names are registered once, not used for runtime admission.
 constexpr auto kStationaryXcKernels = [] {
   std::array<StationaryXcKernel, kSemilocalFamilyMetadata.size()> kernels{};
+  kernels[semilocal_family_code(SemilocalFamily::Lda)] =
+      bound_meta_stationary_xc<stationary_lda_point>;
   kernels[semilocal_family_code(SemilocalFamily::Pbe)] = stationary_pbe_xc_derivative;
   kernels[semilocal_family_code(SemilocalFamily::B3lyp)] = bound_b3lyp_stationary_xc;
   kernels[semilocal_family_code(SemilocalFamily::R2scan)] =
@@ -1376,6 +1390,17 @@ PbeStationaryXcDerivative stationary_curated_xc_derivative(
     throw std::invalid_argument("no qualified native stationary XC geometry implementation");
   return kStationaryXcKernels[code](basis, grid, density, tile_points, exchange_scale,
                                     correlation_scale);
+}
+
+PbeStationaryXcDerivative stationary_program_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    const SemilocalPointProgram& program) {
+  validate_semilocal_point_program(program);
+  // The program is the immutable compiled SCF point evaluator. Reusing it
+  // preserves its vacuum/domain policy and all rho/gradient/tau derivatives.
+  return stationary_gga_xc_derivative(basis, grid, density, tile_points, false, 1.0, 1.0,
+                                      program.evaluate);
 }
 
 }  // namespace generativeqc::dft

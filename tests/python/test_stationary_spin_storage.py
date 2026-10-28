@@ -1,9 +1,9 @@
 """Native storage admission must match the spin-specialized generated weights."""
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.method import resolve_method
@@ -14,22 +14,23 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("spin,blocks", [("unpolarized", 1), ("polarized", 2)])
 def test_storage_rejects_a_different_spin_specialization(
-    tmp_path: Path, spin: str, blocks: int
+    tmp_path: Path, spin: str, blocks: int, required_native_cxx: "NativeCxx"
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("native admission requires a host C++ compiler")
     # Compile the actual production allocation function, not a Python replica.
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     function = re.search(r"size_t allocation\([^)]*\) \{.*?\n\}", header, re.DOTALL)
     assert function is not None
     source = f"""#include <cstddef>
 #include <stdexcept>
+#include "{ROOT / "src/runtime/bounded_workspace.hpp"}"
 using std::size_t;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=8<<20;
 constexpr unsigned stationary_spin_blocks={blocks};
@@ -45,10 +46,8 @@ int main() {{
     path = tmp_path / "admission.cpp"
     executable = tmp_path / "admission"
     path.write_text(source)
-    subprocess.run(
-        [compiler, "-std=c++17", str(path), "-o", str(executable)],
-        check=True,
-        timeout=30,
+    required_native_cxx.build_executable(
+        [path], executable, compile_args=["-std=c++17"]
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

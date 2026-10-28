@@ -17,20 +17,16 @@ from generativeqc_compiler.method.stationary_gradient import (
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
 @pytest.mark.parametrize("name", ["MN15"])
-def test_unrepresented_hybrids_have_no_exact_package_coverage(
-    name: str, spin: str
-) -> None:
+def test_mn15_has_exact_package_coverage(name: str, spin: str) -> None:
     from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
     plan = StationaryGradientPlan(
         resolve_method(name, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
     )
-    assert (
-        stationary_cuda.stationary_aot_profile_for_plan(
-            SPLIT_HYBRIDS[name]["functional_code"], spin, plan
-        )
-        is None
+    profile = stationary_cuda.stationary_aot_profile_for_plan(
+        SPLIT_HYBRIDS[name]["functional_code"], spin, plan
     )
+    assert profile is not None and profile.plan.identity == plan.identity
 
 
 def test_altered_semilocal_composition_does_not_alias_a_packaged_plan() -> None:
@@ -61,7 +57,16 @@ def test_altered_semilocal_composition_does_not_alias_a_packaged_plan() -> None:
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks", "m06_2x_rks", "m06_2x_uks"],
+    [
+        "pbe0_rks",
+        "pbe0_uks",
+        "b3lyp_rks",
+        "b3lyp_uks",
+        "m06_2x_rks",
+        "m06_2x_uks",
+        "mn15_rks",
+        "mn15_uks",
+    ],
 )
 @pytest.mark.parametrize("component", [False, True])
 @pytest.mark.parametrize(

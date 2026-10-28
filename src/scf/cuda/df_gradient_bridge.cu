@@ -947,7 +947,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
     const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
     const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell,
-    const CudaDfRawChargeView* raw_charge) {
+    const CudaDfRawChargeView* raw_charge, const CudaDfResidentForceRequest* resident_force) {
   const double range_omega = cuda_density_fitting_integral_source_range_omega(source);
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
@@ -989,6 +989,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (resident_force &&
+      (!source || !device_metric || resident_force->device_id != device ||
+       resident_force->stream != stream_handle || resident_force->matrix_elements != n * n ||
+       !resident_force->consume || terms.size() > 2 || !resident_force->densities[0] ||
+       (terms.size() == 2 && !resident_force->densities[1]))) {
+    detail = "native DF response has an incompatible resident density/output lease";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (raw_charge &&
@@ -1131,11 +1139,13 @@ generativeqc_status execute_cuda_df_hf_gradient(
     }
   }
   for (const auto& term : terms) {
-    if (term.density.size() != n * n || !std::isfinite(term.coulomb_coefficient) ||
+    if ((!resident_force && term.density.size() != n * n) ||
+        (resident_force && !term.density.empty()) || !std::isfinite(term.coulomb_coefficient) ||
         !std::isfinite(term.exchange_coefficient)) {
       detail = "invalid HF density response term";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+    if (resident_force) continue;  // Exact final D was accepted on device by the KS owner.
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t j = 0; j < n; ++j)
         if (!std::isfinite(term.density[i * n + j]) ||
@@ -1567,7 +1577,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
               : (single_fitted_tensor ? panel_capacity - a : panel_capacity / 2);
       auto tile = std::min({a, capacity, maximum_auxiliary_tile ? maximum_auxiliary_tile : a});
       const double* densities = nullptr;
-      if (borrowed_density) {
+      if (resident_force && terms.size() == 1) {
+        densities = resident_force->densities[0];
+        arena.stats.borrowed_device_bytes += n * n * sizeof(double);
+      } else if (borrowed_density) {
         densities = borrowed_density->density;
         const auto bytes = n * n * sizeof(double);
         arena.stats.borrowed_device_bytes += bytes;
@@ -1578,11 +1591,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
             static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));
         densities = owned_densities;
         for (std::size_t t = 0; t < terms.size(); ++t) {
-          check(cudaMemcpyAsync(owned_densities + t * n * n, terms[t].density.data(),
-                                n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
-          arena.stats.host_to_device_bytes += n * n * sizeof(double);
-          arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
-          ++arena.stats.uploads;
+          if (resident_force) {
+            check(cudaMemcpyAsync(owned_densities + t * n * n, resident_force->densities[t],
+                                  n * n * sizeof(double), cudaMemcpyDeviceToDevice, arena.stream));
+            arena.stats.borrowed_device_bytes += n * n * sizeof(double);
+          } else {
+            check(cudaMemcpyAsync(owned_densities + t * n * n, terms[t].density.data(),
+                                  n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
+            arena.stats.host_to_device_bytes += n * n * sizeof(double);
+            arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
+            ++arena.stats.uploads;
+          }
         }
       }
       const auto workspace_size = [&](std::size_t block) {
@@ -2401,9 +2420,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
                             arena.stream));
       arena.stats.device_to_host_bytes += sizeof(observed_shell_screen_work);
     }
-    check(cudaMemcpyAsync(result.data(), output, result.size() * sizeof(double),
-                          cudaMemcpyDeviceToHost, arena.stream));
-    arena.stats.device_to_host_bytes += result.size() * sizeof(double);
+    if (resident_force) {
+      resident_force->consume({resident_force->kind, CudaDerivativeConvention::EnergyGradient,
+                               device, stream_handle, output, 3 * atoms, 1});
+    } else {
+      check(cudaMemcpyAsync(result.data(), output, result.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost, arena.stream));
+      arena.stats.device_to_host_bytes += result.size() * sizeof(double);
+    }
     check(cudaStreamSynchronize(arena.stream));
     ++arena.stats.stream_synchronizations;
     arena.completed = true;
@@ -2451,7 +2475,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       std::copy(observed_precision_work.begin(), observed_precision_work.end(),
                 arena.stats.precision_work.begin());
     }
-    gradient.swap(result);
+    if (!resident_force) gradient.swap(result);
     if (resources) *resources = arena.stats;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& error) {

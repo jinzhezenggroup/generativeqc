@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "dft/dispersion/gcp_cuda.hpp"
@@ -88,8 +89,12 @@ struct GcpCudaPlan::Impl {
 };
 
 std::size_t GcpCudaPlan::numeric_bytes(std::size_t atoms) {
-  // Match D4's bounded molecular envelope; pair work is at most 4096^2 visits.
-  if (!atoms || atoms > 4096) throw std::invalid_argument("CUDA gCP requires 1..4096 atoms");
+  // Coordinate indices are signed ints; all molecular storage is dynamic.
+  if (!atoms || atoms > std::numeric_limits<int>::max() / 3 ||
+      atoms > (std::numeric_limits<std::size_t>::max() - sizeof(gcp_data::kElements) -
+               sizeof(gcp_data::kVdwAngstrom)) /
+                  (2 * sizeof(int) + 7 * sizeof(double)))
+    throw std::invalid_argument("CUDA gCP shape exceeds its index or byte capacity");
   return atoms * (2 * sizeof(int) + 7 * sizeof(double)) + sizeof(gcp_data::kElements) +
          sizeof(gcp_data::kVdwAngstrom);
 }

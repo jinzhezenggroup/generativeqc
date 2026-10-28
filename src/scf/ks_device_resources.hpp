@@ -66,10 +66,11 @@ inline std::uint64_t cuda_ks_one_electron_capacity(std::uint64_t cartesian_aos, 
               paired_gradient ? product(atoms, 3 * sizeof(double)) : 0});
 }
 
-/** State, effective XC, Coulomb, setup, quadrature setup and provider allowance.
- * The value-only one-electron exporter retires its temporary storage before J
- * preparation. Quadrature preparation instead overlaps the new Coulomb owner.
- * ECP scratch is an alternative setup phase, not another persistent owner.
+/** State, effective XC, Coulomb, construction/force peaks, quadrature and provider.
+ * Ordinary one-electron setup retires before Fock construction. ECP force
+ * scratch instead overlaps the retained SCF and stationary arenas, so it needs
+ * a separate complete-derivative peak. Late deferred setup is tracked by
+ * CudaKsDeviceFleetResources in addition to the initial setup bound.
  */
 inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
     const CudaKsDeviceResourceItem& shape) {
@@ -82,8 +83,15 @@ inline std::array<std::uint64_t, 6> cuda_ks_device_item_resources(
     static_cast<void>(sum({value}));
   const auto one_electron = cuda_ks_one_electron_capacity(shape.cartesian_aos, shape.atoms,
                                                           shape.shells, shape.primitives);
-  const auto setup = std::max({one_electron, shape.ecp_workspace, shape.fock_setup,
-                               sum({shape.coulomb, shape.quadrature_setup})});
+  auto setup = std::max({one_electron, shape.ecp_workspace, shape.fock_setup,
+                         sum({shape.coulomb, shape.quadrature_setup})});
+  if (shape.ecp_workspace && (shape.stationary_minimum || shape.stationary_cached)) {
+    // The native ECP derivative runs with all retained SCF arenas still live.
+    // One-electron metadata and paired force outputs coexist with ECP scratch.
+    const auto retained = sum({shape.state, shape.device_fused_xc ? shape.xc : 0, shape.coulomb});
+    const auto force_scratch = sum({one_electron, product(48, shape.atoms), shape.ecp_workspace});
+    setup = std::max(setup, sum({retained, force_scratch}));
+  }
   return {shape.state,
           shape.device_fused_xc ? shape.xc : 0,
           shape.coulomb,

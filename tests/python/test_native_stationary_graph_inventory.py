@@ -189,10 +189,16 @@ int main() {
     const auto capacity = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2);
     if (capacity.stationary_minimum_bytes != 1000 + 10 * spin ||
         capacity.stationary_cached_bytes != 2000 + 10 * spin) return 2;
-    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) ||
-        bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) != (spin == 1)) return 3;
-    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96)) return 14;
-    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) return 15;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) != expected ||
+        native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12) != expected) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96) != expected) return 14;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48) != expected) return 15;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 3, 96, 12)) return 26;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 3, 96, 12) != expected) return 27;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::Exact;
     const auto mixed = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2, true);
     const auto extra = 4 * (8 * 2 * 2 + 2 * 2) + dft::CudaGridStorage::provider_allowance;
     if (mixed.minimum_device_bytes != capacity.minimum_device_bytes ||
@@ -257,8 +263,8 @@ int main() {
   };
   const auto* expected = &dft::native_stationary_profile_m06_2x_rks();
   if (select(24, 3, 2) != expected || select(96, 12, 2) != expected) return 18;
-  if (select(23, 3, 1) || select(97, 12, 1) || select(24, 1, 1) ||
-      select(96, 33, 1) || select(96, 12, 3)) return 19;
+  if (select(23, 3, 1) != expected || select(97, 12, 1) != expected || select(24, 1, 1) != expected ||
+      select(96, 33, 1) != expected || select(96, 12, 3)) return 19;
   split.spin_channels = 2;
   provider.spec.spin = scf::FockSpin::Unrestricted;
   provider.spec.exchange.coefficient = -0.54;
