@@ -96,6 +96,8 @@ option(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK
        "Share native direct numerical code through a bounded NVIDIA device link" ON)
 option(GENERATIVEQC_PRUNE_CUDA_ARCHIVES
        "Prune resolved CUDA link inputs from private host-link archive copies" ON)
+option(GENERATIVEQC_COMPRESS_CUDA_FATBINS
+       "Compress NVIDIA device images (smaller files, additional first-load work)" OFF)
 option(GENERATIVEQC_CUDA_FAST_COMPILE
        "Use compiler-oriented CUDA options (never for release measurements)" OFF)
 option(GENERATIVEQC_ENABLE_CXX_PCH
@@ -261,6 +263,8 @@ if(GENERATIVEQC_ENABLE_CUDA)
         "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCCudaCompression.cmake")
+    generativeqc_configure_cuda_compression()
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
     # numeric profile identity is derived below for manifest and cache paths.
     set(_generativeqc_cuda_compile_architectures ${CMAKE_CUDA_ARCHITECTURES})

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cuda-image-storage-20261028",
+  "owner": "Native CUDA packaging and stationary AOT",
+  "reason": "Retains source overlays, build/cache commands, compact decoded-instruction attestations, every endpoint observation and independent reference, packaging/scientific validation and rejected trials. Energy/force storage is bit-preserving; full successful compiler warning streams and decoded inventories retain identities and replay recipes as ignored qualification artifacts. No historical record or aggregate budget changes.",
+  "review_document": "benchmarks/results/cuda-image-storage-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-image-storage-20261028/receipts.json.xz",
+      "family": "cuda-image-storage-20261028",
+      "classification": "required-compact-accepted-evidence",
+      "role": "stationary-host-image-storage-with-cold-warm-endpoint-gates",
+      "bytes": 209852,
+      "sha256": "fb0461c533f630f9d151d798f4998fb2dc1095975cc2b4e085abb4691b7b43f8"
+    }
+  ]
+}
