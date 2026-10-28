@@ -28,3 +28,10 @@ Recover each with `git show COMMIT:PATH` and verify its checksum.
 which passed before the shared binding extraction. It is not final `e8de3e4d9`
 qualification. Its 48 tests and 1,792 calls passed with maximum ratio
 1.0096753249835795 and identical scientific work.
+
+Final production source `e8de3e4d9` passed the 48-test CUDA suite in job 14841.
+`final-samples.json.xz` retains both complete 1,792-call matrices: CPU maximum
+ratio 1.0251511613143593; CUDA 1.0130533877965417, with identical semantic work
+and all numerical gates passed. `final-controls.json.xz` contains the original
+qualification scripts, test/control receipts, independent oracles and profiler
+CSVs. Final publication metadata and the review-ready status follow separately.
