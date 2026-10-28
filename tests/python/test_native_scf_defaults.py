@@ -100,6 +100,7 @@ def test_altered_model_or_grid_cannot_reuse_qualified_defaults(
     library: Any, change: str
 ) -> None:
     calculator = metadata(library, "pbe-rks")
+    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
     options = calculator._ks_options
     grid = options.grid
     if change == "level":
@@ -146,3 +147,15 @@ def test_absent_protocol_retains_the_explicit_compatibility_boundary() -> None:
     calculator = SimpleNamespace(_library=SimpleNamespace())
     assert transport.default_controls(calculator) is None
     assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-8
+
+
+def test_cached_metadata_is_detached_and_tracks_selected_query(library: Any) -> None:
+    calculator = metadata(library, "pbe-rks")
+    controls = policy.default_scf_controls(calculator)
+    controls["density_tolerance"] = 17.0
+    assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
+    calculator._library = SimpleNamespace(
+        generativeqc_scf_defaults_query_v1=lambda *args: 0
+    )
+    with pytest.raises(RuntimeError, match="invalid receipt"):
+        policy.default_scf_controls(calculator)

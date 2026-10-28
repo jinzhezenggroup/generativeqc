@@ -95,6 +95,17 @@ def test_default_complete_endpoint_against_tight_same_model(
         reference.max_cycle = 150
         reference.direct_scf = False
         reference.kernel()
+        reference_solver = "diis"
+        if not reference.converged:
+            # Symmetric M06-2X geometries can stall ordinary DIIS at these
+            # deliberately tight oracle controls. Continue only the independent
+            # reference with PySCF's CPU second-order solver, preserving the
+            # model, stock grid and both thresholds. GPU Newton can stall too;
+            # this is oracle work only, and no native seed enters the reference.
+            density = reference.make_rdm1()
+            reference = reference.to_cpu().newton()
+            reference.kernel(dm0=cp.asnumpy(density))
+            reference_solver = "gpu-diis+cpu-newton"
         assert reference.converged
         gradient = reference.nuc_grad_method()
         if method != "hf":
@@ -131,6 +142,7 @@ def test_default_complete_endpoint_against_tight_same_model(
                             "forces": result.forces.tolist(),
                             "reference_energy": energy,
                             "reference_forces": forces.tolist(),
+                            "reference_solver": reference_solver,
                             "errors": checks,
                         }
                     )
