@@ -46,6 +46,12 @@ are preserved. Generated source bodies and raw disassembly stay in ignored run
 storage; their hashes, recipes and operation/resource summaries remain tracked.
 An opt-in source audit reconstructs CPU/CUDA products from a published ancestor
 and exact overlays, independently of the current producer or unpublished PR head.
+After the force/AOT PR advanced the target branch, its additional evidence made
+the integration tree exceed the same budget. The existing runtime-cache campaign's
+whole source/environment file censuses now use verified published Git recovery;
+all its numerical inputs and measurements remain offline, and both replays yield
+identical numerical/timing/work outputs. This follows the existing retention
+policy rather than changing its budget or discarding XC qualification samples.
 
 - Restricting registers or changing occupancy was not supported by the equal
   register counts. Changing to 64-thread blocks did not remove the regressions.
