@@ -752,7 +752,7 @@
         {
           "path": "python/generativeqc/resources_d3.py",
           "symbol": "d3_resource_request",
-          "classification": "scientific-runtime"
+          "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/resources_native.py",
@@ -763,6 +763,11 @@
           "path": "python/generativeqc/resources_planning.py",
           "symbol": "plan_resources",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/resources_d3.py",
+          "symbol": "_portable_d3_inventory",
+          "classification": "compatibility"
         }
       ],
       "native_scientific_sources": [
@@ -798,7 +803,8 @@
         "CPU HF and CPU/CUDA KS host per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit CPU transient floor or CUDA retained consumer allowances to the native fleet peak check without transferring consumer eligibility/admission policy; the ordinary native CLI excludes Python snapshot/force consumers. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. D3(BJ) retained plan/execution, table and workspace capacities query the same native layout used by D3Plan::prepare, including a shape-only CUDA selector. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python retains consumer allowance/eligibility policy and method/provider inventory construction.",
         "CUDA KS device per-item setup, retained arena/provider sums, serialized rebuild excess and minimum/cached stationary declared-device peaks use discovered native fleet composition, shared with native CLI ordinary-energy dry runs. Python obtains the existing native allocator leaves, marshals topology/consumer inventories and publishes resource metadata; missing-symbol libraries retain explicit legacy per-item composition. Native refusal or inconsistent publication never retries Python sizing. This does not transfer consumer admission or establish complete physical/provider/lease/RSS authority.",
         "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query.",
-        "With the additive prepared-resource ABI, Calculation and PreparedBatch pass the selected inventory once and native owners retain admission across construction, execution, independent ports and destruction. Python reads snapshots without owning those binding scopes; absent-symbol libraries alone retain the explicit older observation adapter. Numeric-cap strict-FP64 all-electron s/p PBE/PBE0 KS has native mandatory fleet promises and unpromised optional XC admission; unsupported controls and capacity misses retain bounded incumbent admission. Selected external inventories keep dense/single-tile behavior. This does not transfer all Python inventory selection, admit public CUDA DF KS forces, or establish complete opaque provider/RSS accounting."
+        "With the additive prepared-resource ABI, Calculation and PreparedBatch pass the selected inventory once and native owners retain admission across construction, execution, independent ports and destruction. Python reads snapshots without owning those binding scopes; absent-symbol libraries alone retain the explicit older observation adapter. Numeric-cap strict-FP64 all-electron s/p PBE/PBE0 KS has native mandatory fleet promises and unpromised optional XC admission; unsupported controls and capacity misses retain bounded incumbent admission. Selected external inventories keep dense/single-tile behavior. This does not transfer all Python inventory selection, admit public CUDA DF KS forces, or establish complete opaque provider/RSS accounting.",
+        "Admitted complete named KS/D3 programs query the native per-item correction inventory and equal-share local cap. Electronic and correction requests feed one retained device ledger; D3 CUDA buffers use its actual allocation/rollback/destruction accounting. Missing inventory symbols and unadmitted CUDA stationary-capacity contexts retain the explicit standalone correction owner. This does not provide D4/gCP global planning, general DF-KS inventories, complete vendor memory, or resource authority for every method."
       ],
       "tests": [
         "tests/python/test_resources.py",
@@ -823,7 +829,9 @@
         "tests/python/test_device_ledger_requested_bytes.py",
         "tests/native/test_device_resources.cpp",
         "tests/native/test_ks_capacity_cuda.cpp",
-        "tests/python/test_native_prepared_resources.py"
+        "tests/python/test_native_prepared_resources.py",
+        "tests/python/test_named_ks_resources.py",
+        "tests/native/test_d3_cuda_replay_failure.cu"
       ],
       "trackers": [
         "#933",
@@ -1325,11 +1333,13 @@
         "src/api/c_api_nonlocal.cpp"
       ],
       "remaining_python_runtime": [
-        "Correction kernels have native owners; composition, nonlocal source schedules and complete derivative publication must still be audited per method/property. No blanket second-order qualification."
+        "Correction kernels have native owners; composition, nonlocal source schedules and complete derivative publication must still be audited per method/property. No blanket second-order qualification.",
+        "Exact native named FP64 D3 programs also own global-resource-plan execution where the existing electronic planner admits the context. The frontend copies completed correction receipts; selected preparation failures never retry external correction execution. Unqualified force contexts and older libraries retain compatibility. General nonlocal/second-order schedules remain separately tracked."
       ],
       "tests": [
         "tests/python/test_nonlocal_resident_force_owner.py",
-        "tests/python/test_nonlocal_python_compatibility.py"
+        "tests/python/test_nonlocal_python_compatibility.py",
+        "tests/python/test_named_ks_resources.py"
       ],
       "trackers": [
         "#926",

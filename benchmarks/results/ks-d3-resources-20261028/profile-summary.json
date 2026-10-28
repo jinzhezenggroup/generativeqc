@@ -1,0 +1,49 @@
+{
+  "scope": "Untimed complete 56-call matrix; dynamic explicit CUDA allocations only. Static/opaque/driver/pool memory excluded from dynamic peaks.",
+  "slurm_job_id": "14826",
+  "profiler": "Nsight Systems 2025.1.3",
+  "baseline": {
+    "explicit_device_peak_bytes": 26757490,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 4024,
+    "static_device_bytes": 1078077,
+    "kernel_launch_count": 30784,
+    "graph_api_calls": 0,
+    "copies": {
+      "Device-to-Device": {
+        "count": 1480,
+        "bytes": 11359200
+      },
+      "Device-to-Host": {
+        "count": 1232,
+        "bytes": 2053872
+      },
+      "Host-to-Device": {
+        "count": 2736,
+        "bytes": 5180520
+      }
+    }
+  },
+  "candidate": {
+    "explicit_device_peak_bytes": 27048950,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 4232,
+    "static_device_bytes": 1078077,
+    "kernel_launch_count": 30832,
+    "graph_api_calls": 0,
+    "copies": {
+      "Device-to-Device": {
+        "count": 1480,
+        "bytes": 11359200
+      },
+      "Device-to-Host": {
+        "count": 1352,
+        "bytes": 2053872
+      },
+      "Host-to-Device": {
+        "count": 2976,
+        "bytes": 9843976
+      }
+    }
+  }
+}

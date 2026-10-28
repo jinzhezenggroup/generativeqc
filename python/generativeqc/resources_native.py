@@ -133,6 +133,7 @@ class NativeDeviceLedger:
         *,
         owner: typing.Any = "hf",
         prepared_kind: str | None = None,
+        component_owners: tuple[str, ...] = (),
     ) -> None:
         plan.require_feasible()
         self.owner = owner
@@ -141,6 +142,18 @@ class NativeDeviceLedger:
             raise ValueError("native device ledger requires a CUDA request")
         selected = dict(plan.selections)[owner]
         candidate = next(c for c in request.candidates if c.name == selected)
+        # A complete native program owns its corrections in the same lifetime
+        # scope. Their selected capacities must be charged to this ledger too;
+        # global planning still retains separate, inspectable request identities.
+        estimates = candidate.estimates
+        if len({owner, *component_owners}) != 1 + len(component_owners):
+            raise ValueError("native resource component owners must be distinct")
+        for component in component_owners:
+            request = next(r for r in plan.requests if r.name == component)
+            selected = dict(plan.selections)[component]
+            estimates += next(
+                c for c in request.candidates if c.name == selected
+            ).estimates
         self.library = library
         self.handle = None
         self._capacity_admission = None
@@ -149,7 +162,7 @@ class NativeDeviceLedger:
         )
         if self.prepared_call is not None:
             self._destroy = library.generativeqc_device_resources_destroy
-            self._create_public_inventory(candidate.estimates)
+            self._create_public_inventory(estimates)
             return
         create = getattr(
             library, "generativeqc_resource_ledger_create_from_buffers_v1", None
@@ -189,11 +202,11 @@ class NativeDeviceLedger:
             ]
             self._read_v3.restype = ctypes.c_int
         if create is not None:
-            self._create_from_inventory(create, candidate.estimates)
+            self._create_from_inventory(create, estimates)
         else:
             devices = {
                 estimate.space
-                for estimate in candidate.estimates
+                for estimate in estimates
                 if estimate.space.startswith("device:")
             }
             if len(devices) != 1:
@@ -207,7 +220,7 @@ class NativeDeviceLedger:
                 )
             admitted = tuple(
                 estimate
-                for estimate in candidate.estimates
+                for estimate in estimates
                 if estimate.accounting != "runtime_allowance"
             )
             self.limit = _account(admitted)[0].get(f"device:{self.device}", 0)
