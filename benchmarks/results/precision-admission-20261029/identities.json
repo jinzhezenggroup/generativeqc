@@ -89,11 +89,17 @@
     },
     "receipts.json.xz": {
       "sha256": "65d565f1b687753e1f7da6ec9fb5c6dc3ff84e242a5395f5ecc7a68434b07b18",
-      "bytes": 38404
+      "bytes": 38404,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/receipts.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
     },
     "cpu-samples.json.xz": {
       "sha256": "47f6a9d7b21c2131d4af8d55849294744666d026de4870a065a66205416dad38",
-      "bytes": 32684
+      "bytes": 32684,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/cpu-samples.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
     },
     "profile-summary.json": {
       "sha256": "4cb5beea4b31f1db8ac9e794819a405b5b224b3a3f2e1258839d41f4ac30590d",
@@ -101,7 +107,10 @@
     },
     "cuda-samples.json.xz": {
       "sha256": "20448855318669b2a5e7072fbfef0fd8e7d73dfa532c2d700a0ac7342b42728e",
-      "bytes": 67300
+      "bytes": 67300,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/cuda-samples.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
     },
     "native_policy_guard.py": {
       "sha256": "04f8dbe7f304f1a0d14a2fe62ca7e5217857bb18ff551b40b22a45222e040002",

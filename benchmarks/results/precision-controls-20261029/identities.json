@@ -1,0 +1,41 @@
+{
+  "candidate_production_commit": "15d8894c90a5f00c7ab03ef3034c4bed796dd43f",
+  "baseline_production_commit": "7adf42ceaab0fb32bb69232676fbfbba326d441e",
+  "cpu": {
+    "metadata": {
+      "A": {
+        "source": "/tmp/qc-2227-precision-policy-fix-20261029",
+        "library": "/tmp/qc-2227-non-r3-20261028/.artifacts/scf-defaults-baseline/libgenerativeqc-cpu.so.0",
+        "library_sha256": "ac6eca02cef833cb3f2a834418d30c9e81cfde533362ecae4d57654af63c8a15",
+        "backend": "cpu",
+        "constructor_included": true,
+        "native_budget_controls": false,
+        "cpu_affinity": [
+          0
+        ],
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      },
+      "B": {
+        "source": "/tmp/qc-2227-precision-budget-controls-20261029",
+        "library": "/tmp/qc-2227-precision-controls-cpu-install/lib/libgenerativeqc.so.0",
+        "library_sha256": "3c00a47692bf5a4cd5cbee5e8f0a9b4f30e6889f1da27afc3eb23e4500e44c78",
+        "backend": "cpu",
+        "constructor_included": true,
+        "native_budget_controls": true,
+        "cpu_affinity": [
+          0
+        ],
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      }
+    },
+    "groups": 8,
+    "endpoint_count": 1792,
+    "max_energy_difference": 0.0,
+    "max_force_difference": 0.0,
+    "maximum_ratio": 1.0051806418477298,
+    "all_within_1_05": true
+  },
+  "scope": "CPU qualification; GPU Slurm 14846 still running. Constructor cost is included in scalar and complete fleet timing."
+}
