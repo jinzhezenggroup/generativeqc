@@ -19,3 +19,12 @@ The failed GPU M06-2X methane oracle was reproduced on the frozen baseline. GPU
 Newton also failed; CPU PySCF Newton at the same model, stock grid and unchanged
 tight thresholds succeeded. This is independent test-oracle recovery only.
 Production CUDA execution remains mandatory and has no such CPU fallback.
+
+`history.json` provides exact Git commit/path/SHA-256 recovery for earlier
+payloads removed from the current tree to meet the unchanged aggregate budget.
+Recover each with `git show COMMIT:PATH` and verify its checksum.
+
+`intermediate-gpu-receipts.json.xz` retains job 14840 on source `4ac102f67`,
+which passed before the shared binding extraction. It is not final `e8de3e4d9`
+qualification. Its 48 tests and 1,792 calls passed with maximum ratio
+1.0096753249835795 and identical scientific work.

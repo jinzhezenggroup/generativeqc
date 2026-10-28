@@ -1,0 +1,9 @@
+{
+  "prequalification-receipts.json.xz": {
+    "git_commit": "fe234d89ee56594636721e9ce6efefe52ba3559d",
+    "git_path": "benchmarks/results/scf-defaults-20261029/prequalification-receipts.json.xz",
+    "sha256": "90cef0814dc3a7118bf6bb40d14dd9115c54d1d9c9623e86c34e9bb30431e861",
+    "bytes": 118024,
+    "scope": "Unsuccessful initial/affinity/per-Calculator CPU matrices and independent GPU reference diagnostics; never acceptance."
+  }
+}
