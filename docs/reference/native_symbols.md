@@ -219,6 +219,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_scf_defaults_query_v1](#native-c-generativeqc-scf-defaults-query-v1)
+- [generativeqc_batch_query_warm_seed_capacity_v1](#native-c-generativeqc-batch-query-warm-seed-capacity-v1)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5769,3 +5770,31 @@ ABI_MISMATCH for invalid descriptor headers. Output is unchanged on failure.
 quadrature, compiler or scientific solve. Unknown model identities keep strict defaults.
 
 **Units.** Energy tolerance is Eh; density and screening retain their native SCF units.
+
+(native-c-generativeqc-batch-query-warm-seed-capacity-v1)=
+## generativeqc_batch_query_warm_seed_capacity_v1
+
+Source: [warm_seed.h](../../include/generativeqc/warm_seed.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_query_warm_seed_capacity_v1 ( const generativeqc_batch * batch , generativeqc_warm_seed_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query the prepared owner's numeric warm-seed staging envelope.
+
+**Inputs.** A live batch and initialized versioned output descriptor.
+
+**Outputs.** Transactionally writes all-slot density/coordinate/total bytes and the
+largest density buffer. Includes cold/missing slots and both spins where needed.
+
+**Errors.** INVALID_ARGUMENT for null inputs; ABI_MISMATCH for descriptor headers;
+NOT_IMPLEMENTED for owners without warm seeds; OUT_OF_MEMORY for byte overflow.
+Failures leave output unchanged. Other owner errors propagate without fallback.
+
+**Lifetime.** The batch/context must remain alive. No pointer or seed is retained.
+
+**Execution.** Synchronous locked topology query. It does not inspect/materialize a
+seed, transfer device data, execute science or allocate density buffers. Serialize
+with execution/destruction as for other operations on the same batch/context.
+
+**Units.** All sizes are bytes of binary64 densities and Bohr coordinates.

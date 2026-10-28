@@ -36,6 +36,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_correlation_convergence.cpp
     src/api/c_api_precision_admission.cpp
     src/api/c_api_scf_defaults.cpp
+    src/api/c_api_warm_seed.cpp
     src/api/c_api_response_recycle.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp

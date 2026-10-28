@@ -3192,6 +3192,22 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_batch_query_warm_seed_capacity_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "0a3c73b18df8dd25c8d177d2fc55433c3c47644890afcccbd3a1dac824a5b486",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

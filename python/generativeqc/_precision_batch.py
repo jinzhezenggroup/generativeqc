@@ -24,6 +24,14 @@ from .precision_policy import (
 
 
 def _seed_capacity(batch: Any) -> tuple[int, int]:
+    """Ask the prepared owner for bounds before any seed materialization."""
+    from ._warm_seed_native import seed_capacity
+
+    capacity = seed_capacity(batch)
+    return _compatibility_seed_capacity(batch) if capacity is None else capacity
+
+
+def _compatibility_seed_capacity(batch: Any) -> tuple[int, int]:
     """Bound export before the native size query materializes resident densities.
 
     The old query ABI can itself perform D2H allocation. Use prepared topology

@@ -610,3 +610,13 @@ caller controls and native physical final-state checks are unchanged. Missing
 additive support retains the explicit older-library policy; a selected native
 failure cannot retry Python selection. This query does not move the precision
 candidate/auditor execution or their independent seed lifetimes.
+
+Prepared precision audits query numeric seed staging bounds through
+`generativeqc_batch_query_warm_seed_capacity_v1` in `<generativeqc/warm_seed.h>`.
+The existing prepared warm-state owner supplies density dimensions, including
+spin and AO representation; ordered atom counts supply coordinate capacity.
+The query includes every slot without materializing resident densities, so
+budget refusal can precede any seed export. Python retains staging buffers,
+validation reservations and independent candidate/auditor seed lifetimes. These
+numeric bounds exclude descriptor/allocator overhead, validation scratch and
+opaque provider memory. Only absent additive support uses topology compatibility.
