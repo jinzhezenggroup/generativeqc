@@ -237,6 +237,17 @@ def _restore_states(batch: typing.Any, states: typing.Any) -> int:
             batch._batch, states, batch.system_count
         )
 
+    return _restore_seed_call(batch, restore)
+
+
+def _restore_seed_call(
+    batch: typing.Any, restore: typing.Any, *, native_managed: bool = False
+) -> int:
+    """Preserve resource observation/errors for descriptor and native snapshots.
+
+    A native snapshot restore binds a retained prepared ledger itself; legacy
+    descriptor restoration continues to use the external observation scope.
+    """
     if batch.resource_plan is None:
         return restore()
     from .resources_native import check_resource_status, observe_method_call
@@ -249,6 +260,7 @@ def _restore_states(batch: typing.Any, states: typing.Any) -> int:
         owner="ks" if batch._calculator._ks_options is not None else "hf",
         phase="warm_restore",
         previous=batch.resource_diagnostics,
+        native_managed=native_managed,
     )
     if status == _native.STATUS_OUT_OF_MEMORY:
         check_resource_status(batch._library, status, batch.resource_diagnostics)

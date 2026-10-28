@@ -618,7 +618,16 @@ Prepared precision audits query numeric seed staging bounds through
 The existing prepared warm-state owner supplies density dimensions, including
 spin and AO representation; ordered atom counts supply coordinate capacity.
 The query includes every slot without materializing resident densities, so
-budget refusal can precede any seed export. Python retains staging buffers,
-validation reservations and independent candidate/auditor seed lifetimes. These
-numeric bounds exclude descriptor/allocator overhead, validation scratch and
-opaque provider memory. Only absent additive support uses topology compatibility.
+budget refusal can precede any seed export. Native snapshots then own immutable
+host density/coordinate arrays independently of the supplying batch and context.
+`generativeqc_batch_capture_warm_seeds_v1` checks the all-slot envelope before
+materialization; `generativeqc_batch_restore_warm_seeds_v1` reuses the target's
+physical overlap/occupation validator without running SCF or changing updates.
+Borrowed diagnostic views expire with the snapshot; Python exposes only detached
+diagnostic copies. Missing capture support alone retains descriptor compatibility.
+
+Python retains same-model eligibility, validation reservations, metadata and
+separate candidate/auditor history selection. A snapshot is not a cross-model
+projection or admission token, and no auditor seed enters candidate history.
+Numeric bounds exclude descriptor/allocator overhead, validation scratch and
+opaque provider memory. Only absent capacity support uses topology compatibility.
