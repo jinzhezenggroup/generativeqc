@@ -1713,6 +1713,63 @@ GENERATIVEQC_API generativeqc_status
 generativeqc_scf_effort_verify_v1(const generativeqc_scf_effort_final_descriptor_v1* descriptor,
                                   generativeqc_scf_effort_verification_v1* output);
 
+/** Optional cost metadata for numerical two-stage HF plan admission. */
+enum {
+  GENERATIVEQC_HF_PLAN_SOURCE_COST_PRESENT = 1u << 0,
+  GENERATIVEQC_HF_PLAN_TARGET_COST_PRESENT = 1u << 1,
+  GENERATIVEQC_HF_PLAN_COST_LIMIT_PRESENT = 1u << 2
+};
+
+/** Independent numerical planning failures; zero admits the numerical controls.
+ * Graph/model identity, strict final arithmetic and actual execution verification
+ * remain separate mandatory contracts. */
+enum {
+  GENERATIVEQC_HF_PLAN_STRICTER_SOURCE = 1u << 0,
+  GENERATIVEQC_HF_PLAN_SOURCE_ITERATIONS = 1u << 1,
+  GENERATIVEQC_HF_PLAN_TOTAL_ITERATIONS = 1u << 2,
+  GENERATIVEQC_HF_PLAN_MISSING_COST = 1u << 3,
+  GENERATIVEQC_HF_PLAN_TOTAL_COST = 1u << 4
+};
+
+/** Exact requested iteration counts and positive finite convergence controls.
+ * Present costs and cost limit must be positive finite binary64 values. Absent
+ * cost fields are ignored; reserved must be zero. */
+typedef struct generativeqc_hf_plan_descriptor_v1 {
+  uint32_t struct_size, abi_version, flags, reserved;
+  uint64_t source_iterations, target_iterations, source_iteration_limit, total_iteration_limit;
+  double source_energy_tolerance, source_density_tolerance;
+  double target_energy_tolerance, target_density_tolerance;
+  double source_cost, target_cost, cost_limit;
+} generativeqc_hf_plan_descriptor_v1;
+
+/** Detached numerical failure mask; reserved is published as zero. */
+typedef struct generativeqc_hf_plan_result_v1 {
+  uint32_t struct_size, abi_version, failures, reserved;
+} generativeqc_hf_plan_result_v1;
+
+/** @native-contract generativeqc_hf_plan_query_v1
+ * @behavior Admit the numerical controls of a fixed source/target HF plan.
+ * Source convergence cannot be stricter than target convergence. Source and
+ * total iteration limits and optional summed cost must hold; equality passes.
+ * A cost-limited plan requires both estimates. This does not admit a model,
+ * certify observable accuracy, or replace final physical/work verification.
+ * @inputs Complete current-ABI headers, positive exact iteration counts/limits,
+ * positive finite energy/density tolerances, declared optional-cost flags and
+ * positive finite present costs. Reserved input must be zero.
+ * @outputs Atomically publishes all numerical planning failures. SUCCESS means
+ * a valid query, not admission: the caller must inspect the failures mask.
+ * @errors Null pointers, malformed controls or unknown flags return
+ * INVALID_ARGUMENT; incompatible headers return ABI_MISMATCH. Errors leave
+ * output unchanged, including when input/output storage overlaps.
+ * @lifetime Borrows input for this call only; retains no state or pointers.
+ * @execution Synchronous constant-storage host metadata; no allocation, solver,
+ * device access, Python/compiler import, callback or implicit fallback.
+ * @units Energy tolerance is Hartree; density tolerance follows the HF solver.
+ * Costs use one caller-defined common unit; iterations are exact counts.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_plan_query_v1(
+    const generativeqc_hf_plan_descriptor_v1* descriptor, generativeqc_hf_plan_result_v1* output);
+
 /** Observed facts for progressive-HF final verification. Identity comparison,
  * object validation and finite force-array shape checking belong to the typed
  * caller; flags are observations, never permission to skip a numerical gate. */
