@@ -768,6 +768,11 @@
           "path": "python/generativeqc/resources_d3.py",
           "symbol": "_portable_d3_inventory",
           "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/resources_d4.py",
+          "symbol": "d4_resource_request",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -786,7 +791,9 @@
         "src/molecule/basis.hpp",
         "src/molecule/basis.cpp",
         "src/runtime/prepared_device_resources.hpp",
-        "src/api/c_api_device_resources.cpp"
+        "src/api/c_api_device_resources.cpp",
+        "src/dft/dispersion/d4_runtime.cpp",
+        "src/dft/dispersion/d4_runtime_cuda.cu"
       ],
       "native_callers": [
         "src/api/c_api_resources.cpp",
@@ -804,7 +811,7 @@
         "CUDA KS device per-item setup, retained arena/provider sums, serialized rebuild excess and minimum/cached stationary declared-device peaks use discovered native fleet composition, shared with native CLI ordinary-energy dry runs. Python obtains the existing native allocator leaves, marshals topology/consumer inventories and publishes resource metadata; missing-symbol libraries retain explicit legacy per-item composition. Native refusal or inconsistent publication never retries Python sizing. This does not transfer consumer admission or establish complete physical/provider/lease/RSS authority.",
         "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query.",
         "With the additive prepared-resource ABI, Calculation and PreparedBatch pass the selected inventory once and native owners retain admission across construction, execution, independent ports and destruction. Python reads snapshots without owning those binding scopes; absent-symbol libraries alone retain the explicit older observation adapter. Numeric-cap strict-FP64 all-electron s/p PBE/PBE0 KS has native mandatory fleet promises and unpromised optional XC admission; unsupported controls and capacity misses retain bounded incumbent admission. Selected external inventories keep dense/single-tile behavior. This does not transfer all Python inventory selection, admit public CUDA DF KS forces, or establish complete opaque provider/RSS accounting.",
-        "Admitted complete named KS/D3 programs query the native per-item correction inventory and equal-share local cap. Electronic and correction requests feed one retained device ledger; D3 CUDA buffers use its actual allocation/rollback/destruction accounting. Missing inventory symbols and unadmitted CUDA stationary-capacity contexts retain the explicit standalone correction owner. This does not provide D4/gCP global planning, general DF-KS inventories, complete vendor memory, or resource authority for every method."
+        "Admitted complete named KS/D3 and individual D4 programs query native per-item correction inventory and equal-share caps. Electronic/correction inventories share one retained device ledger; D3/D4 CUDA allocations use actual admission and destruction accounting. CPU reserves a native-sized standalone correction-gradient compatibility owner. Missing D4 inventory refuses global planning while retaining ordinary execution; D3 retains its earlier standalone compatibility. Composite gCP, excluded electronic domains, opaque vendor memory and universal resource authority remain unresolved."
       ],
       "tests": [
         "tests/python/test_resources.py",
@@ -831,7 +838,8 @@
         "tests/native/test_ks_capacity_cuda.cpp",
         "tests/python/test_native_prepared_resources.py",
         "tests/python/test_named_ks_resources.py",
-        "tests/native/test_d3_cuda_replay_failure.cu"
+        "tests/native/test_d3_cuda_replay_failure.cu",
+        "tests/python/test_named_d4_resources.py"
       ],
       "trackers": [
         "#933",
@@ -1334,12 +1342,14 @@
       ],
       "remaining_python_runtime": [
         "Correction kernels have native owners; composition, nonlocal source schedules and complete derivative publication must still be audited per method/property. No blanket second-order qualification.",
-        "Exact native named FP64 D3 programs also own global-resource-plan execution where the existing electronic planner admits the context. The frontend copies completed correction receipts; selected preparation failures never retry external correction execution. Unqualified force contexts and older libraries retain compatibility. General nonlocal/second-order schedules remain separately tracked."
+        "Exact native named FP64 D3 programs also own global-resource-plan execution where the existing electronic planner admits the context. The frontend copies completed correction receipts; selected preparation failures never retry external correction execution. Unqualified force contexts and older libraries retain compatibility. General nonlocal/second-order schedules remain separately tracked.",
+        "Named strict-FP64 individual D4 programs share global native resource ownership when the existing KS electronic/stationary planner admits the context. Python presents native capacities and results; gCP composite capacity is not admitted by this correction-only query."
       ],
       "tests": [
         "tests/python/test_nonlocal_resident_force_owner.py",
         "tests/python/test_nonlocal_python_compatibility.py",
-        "tests/python/test_named_ks_resources.py"
+        "tests/python/test_named_ks_resources.py",
+        "tests/python/test_named_d4_resources.py"
       ],
       "trackers": [
         "#926",

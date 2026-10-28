@@ -224,9 +224,9 @@ class Calculator:
         and compose r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
-        the retained external-correction owner. Production two-body D3(BJ)
-        also contributes its retained host/device capacity to the global
-        ResourceBudget; composite D4/gCP planning remains fail-closed.
+        the retained correction owner. Admitted complete native D3/D4 programs
+        contribute their retained host/device capacity to the global ResourceBudget;
+        composite gCP planning remains fail-closed.
         """
         if target_accuracy is not None and not isinstance(
             target_accuracy, TargetAccuracy
@@ -715,12 +715,17 @@ class Calculator:
                 for node in self._dispersion_method_ir.primitives
                 if isinstance(node, DispersionCorrectionPrimitive)
             )
-            if len(correction_nodes) != 1 or not isinstance(
-                correction_nodes[0].specification, D3Spec
+            if (
+                len(correction_nodes) != 1
+                or not isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
+                or any(
+                    isinstance(node, GeometricCounterpoisePrimitive)
+                    for node in self._dispersion_method_ir.primitives
+                )
             ):
                 raise NotImplementedError(
-                    "global resource_budget currently supports composed D3(BJ) only; "
-                    "composite D4/gCP planning remains unavailable"
+                    "global resource_budget supports individual D3/D4 corrections; "
+                    "composite gCP planning remains unavailable"
                 )
         if self._method == _native.METHOD_GFN2_XTB:
             # Backend-specific admission is owned by native calculation preparation.
@@ -2438,35 +2443,57 @@ class Calculator:
     def _dispersion_resource_request(
         self, systems: typing.Any, electronic_request: typing.Any
     ) -> typing.Any:
-        """Return the bounded D3 owner request for global planning, when present."""
+        """Present the native correction inventory for an admitted global plan."""
         if self._dispersion_method_ir is None:
             return None
 
-        from generativeqc_compiler.method import D3Spec, DispersionCorrectionPrimitive
+        from generativeqc_compiler.method import (
+            D3Spec,
+            D4Spec,
+            DispersionCorrectionPrimitive,
+            GeometricCounterpoisePrimitive,
+        )
 
         corrections = tuple(
             node
             for node in self._dispersion_method_ir.primitives
             if isinstance(node, DispersionCorrectionPrimitive)
         )
-        if len(corrections) != 1 or not isinstance(
-            corrections[0].specification, D3Spec
+        if (
+            len(corrections) != 1
+            or not isinstance(corrections[0].specification, (D3Spec, D4Spec))
+            or any(
+                isinstance(node, GeometricCounterpoisePrimitive)
+                for node in self._dispersion_method_ir.primitives
+            )
         ):
             raise NotImplementedError(
-                "global ResourcePlan currently supports composed D3(BJ) only"
+                "global ResourcePlan supports individual D3/D4 corrections; composite gCP is unavailable"
             )
 
         from ._named_ks import select_resource_program
-        from .resources_d3 import d3_resource_request
 
-        return d3_resource_request(
+        native_ks = select_resource_program(self, electronic_request) is not None
+        if isinstance(corrections[0].specification, D4Spec):
+            if not native_ks:
+                raise NotImplementedError(
+                    "global D4 ResourcePlan requires native KS correction capacity and qualified electronic ownership"
+                )
+            from .resources_d4 import d4_resource_request
+
+            request = d4_resource_request
+        else:
+            from .resources_d3 import d3_resource_request
+
+            request = d3_resource_request
+        return request(
             tuple(tuple(atom.atomic_number for atom in system) for system in systems),
             method=self._dispersion_method_ir,
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
             library=self._library,
-            _native_ks=select_resource_program(self, electronic_request) is not None,
+            _native_ks=native_ks,
         )
 
     def _effective_ks_selection(

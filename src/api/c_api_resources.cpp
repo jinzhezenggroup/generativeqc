@@ -9,6 +9,7 @@
 #include "api/error.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
+#include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
@@ -55,6 +56,59 @@ generativeqc_status generativeqc_ks_d3_resource_query_v1(
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(nullptr);
+  }
+}
+
+generativeqc_status generativeqc_ks_d4_resource_query_v1(
+    generativeqc_backend backend, const std::uint32_t* atom_counts, std::uint32_t system_count,
+    generativeqc_d4_runtime_diagnostic* output) {
+  if (!atom_counts || !system_count || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    const auto r = generativeqc::dft::dispersion::ks_d4_resource_usage(
+        backend, std::span(atom_counts, system_count));
+    generativeqc_d4_runtime_diagnostic candidate{};
+    candidate.struct_size = output->struct_size;
+    candidate.abi_version = output->abi_version;
+    candidate.backend = backend;
+    candidate.plan_host_bytes = r.plan_host_bytes;
+    candidate.execution_host_bytes = r.execution_host_bytes;
+    candidate.device_bytes = r.device_bytes;
+    candidate.table_bytes = r.table_bytes;
+    candidate.workspace_bytes = r.workspace_bytes;
+    candidate.maximum_bytes = r.maximum_bytes;
+    candidate.total_atoms = r.total_atoms;
+    candidate.system_count = r.system_count;
+    candidate.maximum_atoms = r.maximum_atoms;
+    candidate.worker_blocks = r.worker_blocks;
+    candidate.workspace_slots = r.workspace_slots;
+    *output = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+}
+
+/** Private allocation-free standalone D4 schedule query, shared with prepare.
+ * Six capacities followed by worker slots. Invalid/below-budget requests leave
+ * every output unchanged; this is correction capacity, not method admission.
+ */
+int generativeqc_resource_d4_layout_v1(int backend, std::uint64_t systems, std::uint64_t atoms,
+                                       std::uint64_t maximum_atoms, std::uint64_t maximum_bytes,
+                                       std::uint64_t* values, std::size_t count) {
+  if (!values || count != 7 || (backend != 0 && backend != 1)) return -1;
+  try {
+    const auto r = generativeqc::dft::dispersion::d4_resource_usage(
+        static_cast<generativeqc_backend>(backend), systems, atoms, maximum_atoms, maximum_bytes);
+    const std::array<std::uint64_t, 7> result{
+        r.plan_host_bytes, r.execution_host_bytes,
+        r.device_bytes,    r.table_bytes,
+        r.workspace_bytes, r.plan_host_bytes + r.execution_host_bytes + r.device_bytes,
+        r.workspace_slots};
+    std::copy(result.begin(), result.end(), values);
+    return 0;
+  } catch (const std::exception&) {
+    return -1;
   }
 }
 

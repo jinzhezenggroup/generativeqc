@@ -425,6 +425,18 @@ separately discovered native composition owner. The prepared native D3 owner
 continues to enforce its local retained-byte cap. These numeric capacities are
 not process RSS receipts or new CUDA scientific qualification.
 
+Named D4(BJ)-EEQ global planning requires the native
+`generativeqc_ks_d4_resource_query_v1` protocol and an admitted complete KS program.
+It sums the actual per-system correction owners, including replicated tables,
+and uses the largest individual retained capacity times the fleet size for the
+existing equal-share dispersion cap. The standalone D4 worker schedule and this
+query share one native sizing authority. CPU plans also reserve the native-sized
+standalone correction-gradient owner for an electronic force compatibility path;
+CUDA plans require the existing native stationary-capacity context. Selected
+native failures propagate. Missing inventory support leaves ordinary D4 available
+but rejects global D4 plans. Composite D4/gCP and electronic domains already
+excluded by KS planning remain unsupported.
+
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |
 | CPU direct RHF/UHF | All fleet topology, warm densities and outputs | Largest serialized item: forward-mode Jet/recurrence arrays, Cartesian/public integral coexistence, SCF/DIIS/eigensolver matrices and forces |

@@ -355,8 +355,9 @@ class PreparedBatch:
                     self.resource_plan,
                     owner=request.name,
                     prepared_kind="batch",
-                    component_owners=("d3",)
+                    component_owners=(dispersion_request.name,)
                     if resource_native_name is not None
+                    and dispersion_request is not None
                     else (),
                 )
                 self._resource_prepare = self._resource_ledger.prepared_call
@@ -615,7 +616,7 @@ class PreparedBatch:
                 expected = {key: int(planned[key]) for key in actual}
                 if actual != expected:
                     raise RuntimeError(
-                        "prepared D3 resource inventory differs from the global ResourcePlan"
+                        "prepared dispersion resource inventory differs from the global ResourcePlan"
                     )
         except Exception:
             # Construction owns native handles before resource-status conversion,

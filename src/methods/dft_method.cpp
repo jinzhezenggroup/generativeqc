@@ -3653,20 +3653,26 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "named dispersion requires strict FP64");
     execution_plan.dispersion = *dispersion;
-    if (dispersion->kind != 3) {
+    if (dispersion->composite_profile == 0) {
       std::vector<std::uint32_t> atom_counts;
       atom_counts.reserve(systems.size());
+      const auto bound = dispersion->kind == 3 ? dft::dispersion::kD4MaximumAtoms
+                                               : dft::dispersion::kD3MaximumAtomsPerSystem;
       for (const auto& system : systems) {
-        if (system.atoms.size() > dft::dispersion::kD3MaximumAtomsPerSystem)
+        if (system.atoms.size() > bound)
           throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                            "D3 system exceeds the production per-system atom bound");
+                            "dispersion system exceeds the production per-system atom bound");
         atom_counts.push_back(static_cast<std::uint32_t>(system.atoms.size()));
       }
-      const auto correction_capacity =
-          dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts);
-      if (dispersion_bytes < correction_capacity.maximum_bytes)
+      const auto correction_cap =
+          dispersion->kind == 3
+              ? dft::dispersion::ks_d4_resource_usage(context.requested_backend, atom_counts)
+                    .maximum_bytes
+              : dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts)
+                    .maximum_bytes;
+      if (dispersion_bytes < correction_cap)
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
-                          "KS D3 fleet exceeds its equal-share correction budget");
+                          "KS dispersion fleet exceeds its equal-share correction budget");
     }
     // KS retains a correction owner per system. Equal shares conservatively
     // bound their aggregate storage, including replicated immutable tables.
