@@ -169,6 +169,8 @@ def test_autotune_keeps_benchmark_executor_distinct_from_compile_pool(
     arguments = argument_parser().parse_args(
         [
             "--architecture=sm_90",
+            "--nvcc",
+            str(tmp_path / "bin/nvcc"),
             "--shell-class=psps",
             "--gres=gpu:explicit:1",
             "--compile-jobs=2",

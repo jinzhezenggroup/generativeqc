@@ -5,11 +5,14 @@ from fractions import Fraction
 import pytest
 from generativeqc import _generated_methods
 from generativeqc.ks import (
+    KsOptions,
+    cpu_stationary_all_electron_force_eligible,
     ks_coefficients,
     ks_range_exchange_parameters,
     native_dft_carrier,
     public_dft_selectors,
     resolve_ks_method,
+    resolve_ks_options,
 )
 from generativeqc_compiler.method import (
     ExactExchangePrimitive,
@@ -274,3 +277,32 @@ def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -
         _native_semilocal_code(
             replace(graph, primitives=(*graph.primitives[:-1], wrong))
         )
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        "pbe-d4-rks",
+        "pbe-d4-uks",
+        "pbe-rks",
+        "pbe-uks",
+        "b3lyp-rks",
+        "b3lyp-uks",
+        "r2scan-rks",
+        "r2scan-uks",
+    ],
+)
+def test_cpu_force_candidate_projects_dispersion_only_for_coefficients(
+    selector: str,
+) -> None:
+    method = resolve_ks_options(selector, KsOptions()).method_ir
+    before = method.semantic_payload()
+    assert cpu_stationary_all_electron_force_eligible(method)
+    assert method.semantic_payload() == before
+
+
+def test_cpu_force_candidate_preserves_invalid_composition_refusal() -> None:
+    method = resolve_method("PBE")
+    assert not cpu_stationary_all_electron_force_eligible(
+        method, dispersion_method_ir=method
+    )

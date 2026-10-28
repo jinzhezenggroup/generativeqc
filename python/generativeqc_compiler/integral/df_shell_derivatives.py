@@ -78,6 +78,23 @@ def shell_schedule(angular: typing.Any, variant: typing.Any) -> typing.Any:
     return ShellSchedule(cooperative, groups * group_bytes + 1024)
 
 
+def shell_execution_variant(angular: typing.Any, variant: int) -> int:
+    """Select one executable for identical schedules of the same shell class.
+
+    Public warp/packed/compact choices remain distinct policy labels. Their
+    resolved cooperative ownership and storage sometimes coincide, so emitting
+    another CUDA specialization adds compilation and device code without changing
+    execution. Compare the complete schedule, not just its block dimensions;
+    precision, Rys/moment algebra and screening remain separate template axes.
+    """
+    schedule = shell_schedule(angular, variant)
+    return next(
+        candidate
+        for candidate in range(variant + 1)
+        if shell_schedule(angular, candidate) == schedule
+    )
+
+
 def axis_cache_layout(angular: typing.Any) -> typing.Any:
     """Pack moment polynomials with only the first orbital center raised.
 
@@ -331,6 +348,7 @@ struct Moments {
             parameters = ",".join(map(str, (*angular, variant)))
             lines += [
                 f"template<> struct Schedule<{parameters}> {{",
+                f"  static constexpr unsigned execution_variant={shell_execution_variant(angular, variant)};",
                 f"  static constexpr unsigned lanes={schedule.component_lanes};",
                 f"  static constexpr unsigned groups={schedule.triples_per_block};",
                 f"  static constexpr unsigned shared_bytes={schedule.shared_bytes};",

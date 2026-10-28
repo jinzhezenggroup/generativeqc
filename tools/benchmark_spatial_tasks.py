@@ -31,11 +31,18 @@ def main() -> None:
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--backend", choices=("cpu", "cuda"), required=True)
+    parser.add_argument("--nvcc", type=Path, help="override configured CUDA compiler")
+    parser.add_argument("--cuda-target", help="explicit CUDA architecture (e.g. sm_90)")
+    parser.add_argument("--device-id", type=int, default=0, help="CUDA-visible ordinal")
     parser.add_argument("--dense-only", action="store_true")
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--atoms", type=int, nargs="+", default=[4, 16])
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if not 0 <= args.device_id <= 2**31 - 1:
+        parser.error("--device-id must be a nonnegative int32 ordinal")
+    if args.backend == "cuda" and not args.cuda_target:
+        parser.error("CUDA benchmarking requires --cuda-target")
     if args.samples < 1 or any(n not in (4, 16) for n in args.atoms):
         raise ValueError("positive sample count and supported atom counts required")
     if args.output.exists():
@@ -51,7 +58,7 @@ def main() -> None:
     from generativeqc import Primitive, Shell
     from generativeqc.autotune import source_identity
     from generativeqc_compiler.common.evidence import block_error, canonical_hash
-    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.common.provenance import file_hash, find_nvcc
     from generativeqc_compiler.dft import ExplicitGrid, NativeAO
     from generativeqc_compiler.dft.features import density_features
     from generativeqc_compiler.dft.plan import plan_tiles
@@ -70,11 +77,13 @@ def main() -> None:
         from generativeqc_compiler.common.cuda_target import cuda_target_info
         from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
 
+        nvcc = args.nvcc or find_nvcc()
+        if nvcc is None:
+            parser.error(
+                "CUDA benchmarking requires --nvcc or a configured CUDA toolkit"
+            )
         artifact = compile_cuda(
-            CudaCompilerAdapter(
-                Path("/group/software/cuda-12.9.1/bin/nvcc"), cuda_target_info("sm_120")
-            ),
-            args.cache,
+            CudaCompilerAdapter(nvcc, cuda_target_info(args.cuda_target)), args.cache
         )
     if not args.dense_only:
         from generativeqc_compiler.common.resources import ResourceBudget
@@ -88,6 +97,7 @@ def main() -> None:
         "source_identity": identity,
         "library_sha256": file_hash(args.library),
         "backend": args.backend,
+        "device_id": args.device_id if args.backend == "cuda" else None,
         "python": sys.version,
         "numpy": np.__version__,
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
@@ -218,6 +228,7 @@ def main() -> None:
                                     backend=args.backend,
                                     tile_points=tile_points,
                                     artifact=artifact,
+                                    device_id=args.device_id,
                                     resource_budget=ResourceBudget(
                                         host_bytes=host_budget,
                                         device_bytes=device_budget,
@@ -250,6 +261,7 @@ def main() -> None:
                                     cuda = CudaGrid(
                                         basis,
                                         artifact,
+                                        device_id=args.device_id,
                                         order=1,
                                         tile_points=tile_points,
                                         budget_bytes=host_budget + device_budget,

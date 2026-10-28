@@ -183,6 +183,12 @@ extern "C" int resident_run(void* pointer, int profile, Metrics* result, char* e
     if (!lock.owns_lock()) {{
         generativeqc_tensor::error_text(error, size, "resident plan is busy"); return 1;
     }}
+    // The prepared owner may belong to a different visible device than its
+    // caller. Keep selection active through the catch's stream drain as well.
+    generativeqc::runtime::CudaDeviceScope device_guard(ctx.device, std::nothrow);
+    if (device_guard.status() != cudaSuccess) {{
+        error_text(error, size, cudaGetErrorString(device_guard.status())); return 1;
+    }}
     try {{
         ctx.check_device();
         if (!ctx.static_ready)

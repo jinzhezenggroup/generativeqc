@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.provenance import canonical_hash
@@ -118,10 +118,9 @@ def emit_cuda_derivative_shell_aot_header(
     """Emit target-gated exact-shell SR/LR dispatch plus full package metadata."""
 
     packages = cuda_derivative_shell_packages(profile, radials)
-    if not packages:
-        raise ValueError(
-            "CUDA derivative shell AOT requires a non-portable force profile"
-        )
+    # Portable targets intentionally have no accepted exact-shell packages.
+    # Emit a valid empty registry/false selector so the native bounded radial
+    # implementation remains available without borrowing another GPU's profile.
     target_arch = profile.target.architecture
     target_code = (
         profile.target.compute_capability_major * 100
@@ -194,6 +193,7 @@ def emit_cuda_derivative_shell_aot_header(
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_force_quartet.cuh"
@@ -212,11 +212,11 @@ struct DerivativeShellAotMetadata {{
 
 inline constexpr const char* kDerivativeShellAotTarget = "{target_arch}";
 inline constexpr const char* kDerivativeShellAotInventoryIdentity = "{inventory_id}";
-inline constexpr DerivativeShellAotMetadata kDerivativeShellAotInventory[] = {{
+inline constexpr std::array<DerivativeShellAotMetadata, {len(packages)}> kDerivativeShellAotInventory = {{{{
 {chr(10).join(rows)}
-}};
+}}}};
 inline constexpr std::size_t kDerivativeShellAotInventoryCount =
-    sizeof(kDerivativeShellAotInventory) / sizeof(kDerivativeShellAotInventory[0]);
+    kDerivativeShellAotInventory.size();
 
 template <bool Unrestricted>
 __device__ inline __noinline__ bool contract_packaged_derivative_shell_aot(
@@ -248,6 +248,44 @@ __device__ inline __noinline__ bool contract_packaged_derivative_shell_aot(
 
 }}  // namespace generativeqc::scf::cuda_execution
 """
+
+
+def emit_cuda_derivative_shell_aot_bundle(
+    profiles: tuple[ResolvedProductionProfile, ...],
+    radials: tuple[CoulombKernel, ...],
+) -> str:
+    """Select the matching accepted registry in each NVCC fatbinary pass.
+
+    Host metadata uses the first sorted target. Unknown device targets return
+    false and retain the bounded native route; they never inherit a measured
+    profile. Sorting/deduplication makes architecture-list order immaterial.
+    """
+    by_target = {profile.target.architecture: profile for profile in profiles}
+    if not by_target or len(by_target) != len(profiles):
+        raise ValueError("derivative AOT requires unique, nonempty CUDA targets")
+    ordered = sorted(profiles, key=lambda profile: profile.target.compute_capability)
+    if len(ordered) == 1:
+        return emit_cuda_derivative_shell_aot_header(ordered[0], radials)
+    sources = ["#pragma once\n"]
+    for index, profile in enumerate(ordered):
+        major, minor = profile.target.compute_capability
+        condition = f"__CUDA_ARCH__ == {major * 100 + minor * 10}"
+        sources.append(
+            f"#if !defined(__CUDA_ARCH__) || {condition}\n"
+            if index == 0
+            else f"#elif {condition}\n"
+        )
+        sources.append(emit_cuda_derivative_shell_aot_header(profile, radials))
+    sources.extend(
+        (
+            "#else\n",
+            emit_cuda_derivative_shell_aot_header(
+                replace(ordered[0], selections=()), radials
+            ),
+            "#endif\n",
+        )
+    )
+    return "\n".join(sources)
 
 
 def package_inventory_payload(

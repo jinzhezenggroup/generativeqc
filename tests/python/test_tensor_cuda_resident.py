@@ -62,11 +62,13 @@ def doubled_pair_program() -> typing.Any:
 
 
 @pytest.mark.parametrize("embedded", [True, False])
+@pytest.mark.parametrize("device", [0, 2])
 def test_resident_artifact_keeps_the_ordinary_abi(
     tmp_path: Path,
     required_native_cxx: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
     embedded: bool,
+    device: int,
 ) -> None:
     """Resolve and execute both generated ABIs using the same owner and spans."""
     plan = plan_cuda(_transfer_program("two"), TARGET, max_bytes=1 << 26)
@@ -101,7 +103,9 @@ def test_resident_artifact_keeps_the_ordinary_abi(
     error = ctypes.create_string_buffer(256)
     metrics = _Metrics()
     owner = ctypes.c_void_p()
-    assert lib.tensor_create(0, ctypes.byref(owner), error, len(error)) == 0
+    assert lib.tensor_create(device, ctypes.byref(owner), error, len(error)) == 0
+    assert lib.host_selected_device() == 0
+    lib.host_clear_work_devices()
     try:
         inputs = [
             (ctypes.c_int64 * plan.steps[i].node.spec.size)(
@@ -177,6 +181,8 @@ def test_resident_artifact_keeps_the_ordinary_abi(
             if step in plan.inputs:
                 assert list(array) == list(inputs[plan.inputs.index(step)])
         assert lib.host_pending_work() == 0
+        assert lib.host_selected_device() == 0
+        assert lib.host_work_on_device(device)
     finally:
         lib.tensor_destroy(owner)
     assert lib.tensor_probe(0, error, len(error)) == 0
@@ -233,6 +239,8 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
     result = ctypes.byref(metrics)
     capacity = plan.allocation_bytes
     owner = lib.host_owner(capacity, capacity - ALIGNMENT)
+    lib.host_owner_device(owner, 2)
+    lib.host_clear_work_devices()
     try:
         _assert_resident_busy(
             lib,
@@ -280,6 +288,7 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert lib.host_pending_work() == 0
             finally:
                 lib.host_failure(0)
+            assert lib.host_selected_device() == 0
         for pointer, metrics in ((None, result), (owner, None)):
             error.value = b""
             assert lib.resident_run(pointer, 0, metrics, error, len(error)) != 0
@@ -290,12 +299,34 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         assert lib.resident_run(owner, 0, result, error, len(error)) != 0
         assert b"not initialized" in error.value
         assert lib.host_synchronizations() > before
+        assert lib.host_work_on_device(2), "error drains must use the owner's device"
+        assert lib.host_selected_device() == 0
     finally:
         lib.host_destroy(owner)
 
 
 def test_resident_source_declares_the_resident_abi(resident_host: typing.Any) -> None:
     _assert_resident_abi(*resident_host)
+
+
+def test_resident_selection_failure_does_not_touch_owner(
+    resident_host: typing.Any,
+) -> None:
+    """Selection failure admits no transfers, launches or stream cleanup."""
+    plan, lib = resident_host
+    owner = lib.host_owner(plan.allocation_bytes, plan.allocation_bytes - ALIGNMENT)
+    lib.host_owner_device(owner, 2)
+    error, metrics = ctypes.create_string_buffer(256), _Metrics()
+    before = lib.host_synchronizations(), lib.host_work_sequence()
+    lib.host_fail_device(2)
+    try:
+        assert lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error)) != 0
+        assert b"selection" in error.value
+        assert (lib.host_synchronizations(), lib.host_work_sequence()) == before
+        assert lib.host_selected_device() == 0
+    finally:
+        lib.host_fail_device(-1)
+        lib.host_destroy(owner)
 
 
 def _assert_resident_busy(
@@ -339,6 +370,8 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
     capacity = plan.allocation_bytes
     error_offset = capacity - ALIGNMENT
     owner = lib.host_owner(capacity, error_offset)
+    lib.host_owner_device(owner, 2)
+    lib.host_clear_work_devices()
     error = ctypes.create_string_buffer(256)
     arena = lib.host_arena(owner)
     try:
@@ -496,8 +529,62 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                     assert host.raw == bytes([0xCC] * (size + 1)) + b"\0"
                 finally:
                     lib.host_failure(0)
+                assert lib.host_selected_device() == 0
+        assert lib.host_work_on_device(2)
     finally:
         lib.host_destroy(owner)
+
+
+def test_resident_copy_selects_owner_and_rejects_cross_device(
+    tmp_path: Path, native_cxx: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same-device copies restore the caller; cross-device copies admit no work."""
+    plan = plan_cuda(_transfer_program("two"), TARGET)
+    lib = build_resident_host(
+        plan,
+        tmp_path,
+        native_cxx,
+        monkeypatch,
+        extension=r"""
+extern "C" int test_copy(void* src, void* dst, size_t bytes, char* error, size_t size) {
+    using namespace generativeqc_resident;
+    return copy(src, resident_inputs, 2, 0, dst, resident_inputs, 2, 0, bytes, error, size);
+}
+""",
+    )
+    lib.test_copy.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    src = lib.host_owner(plan.allocation_bytes, plan.allocation_bytes - ALIGNMENT)
+    dst = lib.host_owner(plan.allocation_bytes, plan.allocation_bytes - ALIGNMENT)
+    size = plan.steps[plan.inputs[0]].node.spec.size * 8
+    payload = ctypes.create_string_buffer(bytes(i % 256 for i in range(size)))
+    error = ctypes.create_string_buffer(256)
+    try:
+        for owner in (src, dst):
+            lib.host_owner_device(owner, 2)
+        lib.host_clear_work_devices()
+        assert lib.resident_upload(src, 0, payload, size, error, len(error)) == 0
+        assert lib.test_copy(src, dst, size, error, len(error)) == 0, error.value
+        offset = plan.steps[plan.inputs[0]].offset
+        assert (
+            ctypes.string_at(lib.host_arena(dst) + offset, size) == payload.raw[:size]
+        )
+        assert lib.host_work_on_device(2) and lib.host_selected_device() == 0
+        for bad_device in (0, 1):
+            lib.host_owner_device(src, bad_device)
+            before = lib.host_work_sequence(), lib.host_synchronizations()
+            assert lib.test_copy(src, dst, size, error, len(error)) != 0
+            assert b"device mismatch" in error.value
+            assert (lib.host_work_sequence(), lib.host_synchronizations()) == before
+            assert lib.host_selected_device() == 0
+    finally:
+        lib.host_destroy(src)
+        lib.host_destroy(dst)
 
 
 def test_resident_spans_match_the_pinned_plan_offsets() -> None:

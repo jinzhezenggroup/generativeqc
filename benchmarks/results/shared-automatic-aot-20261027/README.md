@@ -181,15 +181,21 @@ package uses CMake and the verified compiler cache. Seven opt-in immutable
 toolchain closure tests were not executed here and are not represented as
 passed.
 
-Run the optional offline verifier from the repository root:
+Replay the retained measurements from the repository root after compiler changes:
 
 ```sh
-PYTHONPATH=python:. python benchmarks/results/shared-automatic-aot-20261027/verify.py
+PYTHONPATH=python:. python benchmarks/results/shared-automatic-aot-20261027/verify.py --retained-only
 ```
 
 It checks retained hashes, numerical/FD vectors, aliases, resources, work,
 capacity, artifact bindings and every timing gate. This is historical evidence
-verification, not a required CI fingerprint of production source. `drivers/`
+verification and grants no qualification to the current compiler. Without
+`--retained-only`, the verifier also requires the executing compiler to match
+the original capability subjects; use the historical compiler at `c3ddb8861`
+for that full check. An integrated compiler deliberately fails that identity
+gate until separately qualified. Original capability envelopes and measurement
+identities remain unchanged. This optional verifier is not a required CI
+fingerprint of production source. `drivers/`
 retains formatted copies of the finite build/GPU/benchmark recipes. Adapt checkout/toolchain paths
 on another host, preserve Slurm-assigned visibility, and use only available
 nodes n1/n2/n4/n5. No release, binary upload or runtime compiler is required.

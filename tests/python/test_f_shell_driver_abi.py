@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tools.generativeqc_validation.f_shell import generated_symbols, source_audit
 from tools.generativeqc_validation.f_shell_cuda import emit_numerical_driver
 
@@ -28,7 +30,13 @@ struct cudaFuncAttributes {
   std::size_t localSizeBytes = 0, sharedSizeBytes = 0;
 };
 inline const char* cudaGetErrorString(int) { return "host stub failure"; }
+constexpr int expected_device = @DEVICE_ID@;
+inline int selected_device = -1;
+inline int cudaSetDevice(int value) {
+  selected_device = value; return value == expected_device ? 0 : 1;
+}
 template<class T> int cudaMalloc(T** pointer, std::size_t bytes) {
+  if (selected_device != expected_device) return 1;
   *pointer = static_cast<T*>(std::malloc(bytes)); return *pointer ? 0 : 1;
 }
 inline int cudaFree(void* pointer) { std::free(pointer); return 0; }
@@ -38,7 +46,9 @@ inline int cudaMemcpy(void* dst, const void* src, std::size_t bytes, int) {
 inline int cudaMemset(void* dst, int value, std::size_t bytes) {
   std::memset(dst, value, bytes); return 0;
 }
-inline int cudaGetDevice(int* value) { *value = 0; return 0; }
+inline int cudaGetDevice(int* value) {
+  *value = selected_device; return selected_device == expected_device ? 0 : 1;
+}
 inline int cudaGetDeviceProperties(cudaDeviceProp*, int) { return 0; }
 inline int cudaDriverGetVersion(int* value) { *value = 12090; return 0; }
 inline int cudaRuntimeGetVersion(int* value) { *value = 12090; return 0; }
@@ -83,21 +93,27 @@ int cudaLaunchKernel(const void* function, dim3 grid, dim3 block, void** args,
 """
 
 
+@pytest.mark.parametrize("device_id", [0, 2])
 def test_numerical_driver_matches_generated_signatures_and_launch_values(
-    tmp_path: Path, native_cxx: Any
+    tmp_path: Path, native_cxx: Any, device_id: int
 ) -> None:
-    """Check all eight real wrapper signatures and direct/persistent argv slots."""
+    """Select the visible device before all eight real wrapper ABI checks."""
     _, source = source_audit("fsss")
     definitions = []
     for symbol in generated_symbols("fsss"):
         signature = re.search(r"void " + symbol + r"\([^{}]*\)\s*\{", source)
         assert signature is not None
         definitions.append('extern "C" ' + signature[0] + "}\n")
-    (tmp_path / "cuda_runtime.h").write_text(CUDA_STUB)
-    driver = tmp_path / "driver.cpp"
-    driver.write_text(
-        emit_numerical_driver("fsss") + "\n" + "\n".join(definitions) + LAUNCH_INTERCEPT
+    (tmp_path / "cuda_runtime.h").write_text(
+        CUDA_STUB.replace("@DEVICE_ID@", str(device_id))
     )
+    driver_source = (
+        emit_numerical_driver("fsss")
+        if device_id == 0
+        else emit_numerical_driver("fsss", device_id=device_id)
+    )
+    driver = tmp_path / "driver.cpp"
+    driver.write_text(driver_source + "\n" + "\n".join(definitions) + LAUNCH_INTERCEPT)
     executable = tmp_path / "driver"
     native_cxx.build_executable(
         [driver],

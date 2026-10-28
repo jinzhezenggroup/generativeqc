@@ -1,6 +1,5 @@
 #include <climits>
 #include <cstdint>
-#include <vector>
 
 #include "api/error.hpp"
 #include "dft/dispersion/gcp_r2scan3c.hpp"
@@ -42,15 +41,9 @@ generativeqc_status generativeqc_r2scan3c_gcp_evaluate(const int32_t* atomic_num
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   try {
-    std::vector<double> scratch;
-    double* target = gradient;
-    if (!target) {
-      scratch.resize(coordinate_count);
-      target = scratch.data();
-    }
     return public_status(generativeqc::dft::dispersion::evaluate_r2scan3c_gcp(
         static_cast<int>(atom_count), atomic_numbers, coordinates,
-        generativeqc::dft::dispersion::r2scan3c_gcp_parameters(), energy, target));
+        generativeqc::dft::dispersion::r2scan3c_gcp_parameters(), energy, gradient));
   } catch (...) {
     return generativeqc::api::map_exception();
   }

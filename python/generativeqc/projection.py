@@ -60,7 +60,8 @@ class ProjectionDiagnostics:
 class OccupiedProjection:
     """Detached immutable proposal with its actual metric execution owner.
 
-    ``execution_owner`` is ``native_cpu`` only after installed native execution;
+    ``execution_owner`` is ``native_cpu`` for explicit matrix transport or
+    ``native_cpu_system`` for native metric preparation and all-spin transport;
     ``python_compatibility`` identifies explicit old/custom-policy science.
     """
 

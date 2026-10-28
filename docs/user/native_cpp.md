@@ -12,6 +12,56 @@ requirement of the installed C/C++ runtime.
 and `wb97m-v` are compiler-owned scientific compositions; they are not
 native ABI IDs. Do not guess an ABI number for them.
 
+## Complete named KS programs
+
+Use `generativeqc::prepare_named_ks` for compiler catalog names. With an existing
+`Context` and `System`, a complete corrected calculation is:
+
+```cpp
+auto controls = generativeqc::default_method_descriptor("pbe-rks");
+auto calculation = generativeqc::prepare_named_ks(
+    context, system, controls, "pbe0-d3(bj)-rks");
+auto result = calculation.execute(GENERATIVEQC_PROPERTY_ENERGY);
+```
+
+The `pbe-rks`/`pbe-uks` descriptor supplies a stable spin transport carrier and
+solver controls. The named program supplies every scientific component. Query
+`Calculation::supported_properties()` before requesting forces. The helper also
+accepts grid controls, nonlocal/dispersion byte budgets and an optional exact
+MethodIR identity. It copies inputs during preparation.
+
+C clients use `generativeqc_calculation_prepare_named_ks_v1` or
+`generativeqc_batch_prepare_named_ks_v1` with a `generativeqc_named_ks_descriptor`.
+The ordinary execution/destruction APIs operate on the returned handles.
+Unknown graphs, identity/carrier mismatches and insufficient resources fail
+without creating a live owner. Scientific fields in `descriptor.ks_options`
+are supplied by the named graph; grid, scheduling, nonlocal capacity and supported
+size-tagged execution extensions remain caller controls. A null `ks_options`
+selects level-3 quadrature and a 256 MiB nonlocal budget. The explicit dispersion
+budget bounds all retained correction owners; batches conservatively divide it
+equally among systems. No Python interpreter, reference engine or runtime compiler
+participates in this endpoint.
+
+For a method with a defining basis, use the named system constructor first:
+
+```cpp
+generativeqc_named_ks_descriptor named{
+    sizeof(named), GENERATIVEQC_ABI_VERSION, "r2scan-3c-rks", nullptr, 256ull << 20};
+generativeqc::System system(context, atoms, named);
+generativeqc::Calculation calculation(context, system, controls, named);
+```
+
+Its C equivalent is `generativeqc_system_create_named_ks_v1`. The system descriptor
+supplies atoms, charge and multiplicity with empty shell/primitive arrays; the
+method owns representation and basis data. Named calculation/batch preparation
+also verifies the actual normalized orbital basis, including systems created
+through other APIs. A matching name/checksum alone cannot bypass this check.
+Currently r²SCAN-3c supplies the pinned H–Ar spherical def2-mTZVPP template and
+complete CPU/CUDA energy (r²SCAN + special-profile D4 + gCP). The correction budget
+reserves gCP storage before admitting D4. Native force admission follows the
+prepared electronic context; CUDA evaluates gCP on device. See the
+[r²SCAN-3c capability contract](r2scan3c.md) for the bounded supported domains.
+
 ## Explicit PBE0 energy in C++
 
 ```cpp
@@ -89,8 +139,8 @@ support depend on their qualified native provider and execution context.
 
 The public native `Calculation::supported_properties()` reports
 **context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS/UKS and B3LYP RKS**
-execution domain. B3LYP UKS remains unqualified. The
+strict-FP64 **CPU Direct or density-fitted PBE/PBE0/r²SCAN RKS/UKS and B3LYP RKS**
+execution domain. Canonical WB97M-V also admits bounded Direct RKS/UKS forces. B3LYP UKS remains unqualified. The
 method-global registry remains energy-only: exact source coefficients,
 spin, backend, fitting provider, basis/ECP and correction terms determine
 admission for the prepared calculation. Request
@@ -101,14 +151,19 @@ The same native, token-verified stationary-force consumer is used by
 `generativeqc_batch_execute` when **every member** of the prepared batch
 qualifies and a force output buffer is supplied. Mixed/unsupported native
 DFT force contexts fail before execution; a malformed or nonconverged item
-does not publish partial forces for that item. CUDA,
-range-separated, ECP, nonlocal and correction-bearing contexts remain
-unqualified for native DFT forces, even when Python has a separately
-supported DFT-force path.
+does not publish partial forces for that item. ECP and range/nonlocal graphs
+without a complete qualified derivative provider remain unavailable. For the
+bounded WB97M-V range/VV10 and linked CUDA stationary contexts, see the
+[CLI force contract](native_cli.md#context-qualified-native-dft-analytic-forces).
+Complete named D3/D4 programs combine the correction gradient with the qualified
+electronic force in the native owner. The legacy `pbe-d4-rks` ABI selector retains
+its previous compatibility contract.
 
 The Direct owner requires the packaged CPU first-derivative inventory
 (`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON`, the default), all-electron
-s/p/d shells, exact full-range J and the canonical PBE/PBE0/B3LYP exchange composition.
+s/p/d shells and a qualified generated semilocal/exchange composition.
+WB97M-V adds the packaged long-range derivative and native VV10 response
+within its separately documented bounds.
 It contracts compiler-generated stationary AD weights with shell-local
 derivatives, sharing each primitive evaluation between J and K. It does not
 materialize a molecular coordinate-by-AO-rank-four derivative tensor, compile

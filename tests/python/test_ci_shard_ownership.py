@@ -56,6 +56,69 @@ def _selection(
     return values[0], values[1:boundary], values[boundary + 1 :]
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_df_cc_mixed_precision_transfer_snapshot(event: str, tmp_path: Path) -> None:
+    """Source both actual Bash variants across all CI events and shards."""
+    module = "tests/python/test_df_cc_mixed_precision.py"
+    selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
+    content = selector.read_text(encoding="utf-8")
+    addition = f"  {module}\n"
+    assert content.count(addition) == 1
+    old_selector = tmp_path / "original-selector.sh"
+    old_selector.write_text(content.replace(addition, "", 1), encoding="utf-8")
+    shutil.copyfile(
+        selector.with_name("ci_prioritize_posthf_files.sh"),
+        old_selector.with_name("ci_prioritize_posthf_files.sh"),
+    )
+
+    def run(path: Path, shard: str) -> tuple[str, list[str], list[str], list[str]]:
+        script = f"source {shlex.quote(str(path))}\n"
+        script += (
+            'printf "%s\\0" "$dist_mode" "${test_targets[@]}" '
+            '--coverage-- "${coverage_args[@]}" --extra-- "${extra_args[@]}"\n'
+        )
+        result = subprocess.run(
+            ["bash", "-eu", "-c", script],
+            cwd=ROOT,
+            env={
+                **os.environ,
+                "GITHUB_EVENT_NAME": event,
+                "GENERATIVEQC_CI_SHARD": shard,
+            },
+            capture_output=True,
+            check=True,
+        )
+        fields = result.stdout.decode().split("\0")[:-1]
+        ci = fields.index("--coverage--")
+        ei = fields.index("--extra--")
+        return fields[0], fields[1:ci], fields[ci + 1 : ei], fields[ei + 1 :]
+
+    old = {shard: run(old_selector, shard) for shard in SHARDS}
+    new = {shard: run(selector, shard) for shard in SHARDS}
+    expected = Counter(
+        str(file.relative_to(ROOT))
+        for file in (ROOT / "tests/python").rglob("test_*.py")
+    )
+    old_counts = Counter(path for _, paths, _, _ in old.values() for path in paths)
+    new_counts = Counter(path for _, paths, _, _ in new.values() for path in paths)
+    assert old_counts == new_counts == expected
+    assert old_counts[module] == 1
+    original_owners = [shard for shard in SHARDS if module in old[shard][1]]
+    assert len(original_owners) == 1 and original_owners[0].startswith("core-")
+    assert [shard for shard in SHARDS if module in new[shard][1]] == ["runtime-heavy"]
+    for shard in SHARDS:
+        assert old[shard][0] == new[shard][0]  # distribution
+        assert old[shard][2] == new[shard][2]  # coverage
+        assert old[shard][3] == new[shard][3]  # extras/deselections
+        assert Counter(old[shard][1]) - Counter([module]) == (
+            Counter(new[shard][1]) - Counter([module])
+        )
+        if shard not in {*original_owners, "runtime-heavy"}:
+            assert old[shard][1] == new[shard][1]
+
+
 def test_core_shard_selection_ignores_host_locale(tmp_path: Path) -> None:
     """Exercise non-C collation even on CI hosts lacking installed locales."""
     system_sort = shutil.which("sort")
@@ -200,6 +263,7 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_rccsd_codegen_no_numpy.py",
         "test_dft_mp_v1_capacity.py",
         "test_df_lambda_frontier.py",
+        "test_native_stationary_phased_budget.py",
     ):
         assert f"tests/python/{filename}" in targets
 
@@ -223,8 +287,11 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
 @pytest.mark.parametrize(
     ("module", "owner"),
     (
+        ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
+        ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -274,6 +341,8 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
     (
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
+        ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -396,6 +465,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         # Landed dedicated transfers supersede historical core pins.
         "ecp-forces": ("test_mixed_rsh_df_forces.py",),
         "compiler-heavy": (
+            "test_native_stationary_phased_budget.py",
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
             "test_cc_native_tensor_cpu.py",
@@ -406,22 +476,23 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_wb97mv_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
+            "test_uccsd_t_lambda.py",
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
+            "test_correlation_convergence.py",
             "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
+            "test_df_cc_mixed_precision.py",
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
         "core-a": (
             "test_cc_triples_tiles.py",
-            "test_uccsd_t_lambda.py",
             "test_df_lambda_core_reuse.py",
         ),
         "core-b": (
-            "test_correlation_convergence.py",
             "test_cpu_semilocal_force_contract.py",
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -477,12 +548,14 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
+        "tests/python/test_df_cc_mixed_precision.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
-        "tests/python/test_correlation_convergence.py": "core-b",
+        "tests/python/test_correlation_convergence.py": "runtime-heavy",
+        "tests/python/test_native_stationary_phased_budget.py": "compiler-heavy",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
@@ -499,6 +572,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_correlation_convergence_next.py",
+            "test_native_stationary_phased_budget_next.py",
             "test_cpu_semilocal_force_contract_next.py",
             "test_df_lambda_core_reuse_next.py",
             "test_df_lambda_mixed_precision_next.py",
@@ -551,6 +625,49 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
 
 
 @pytest.mark.parametrize(
+    "mutation", ("missing", "duplicate", "wrong_owner", "priority", "deselect")
+)
+def test_convergence_owner_contract_rejects_changed_targets_or_arguments(
+    mutation: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = _selection
+    path = "tests/python/test_correlation_convergence.py"
+    priority = f"--ci-fresh-priority={path}"
+
+    def altered(
+        event: str,
+        shard: str,
+        *,
+        root: Path = ROOT,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[str, list[str], list[str]]:
+        distribution, targets, arguments = original(
+            event, shard, root=root, environment=environment
+        )
+        targets = list(targets)
+        arguments = list(arguments)
+        if shard == "runtime-heavy":
+            if mutation in {"missing", "wrong_owner"}:
+                targets.remove(path)
+            elif mutation == "duplicate":
+                targets.append(path)
+            elif mutation == "priority":
+                arguments.append(priority)
+            elif mutation == "deselect":
+                arguments.extend(("--deselect", path))
+        if shard == "uccsd-forces" and mutation == "wrong_owner":
+            targets.append(path)
+            arguments.append(priority)
+        return distribution, targets, arguments
+
+    monkeypatch.setitem(globals(), "_selection", altered)
+    with pytest.raises(AssertionError):
+        test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
+            "pull_request", "tracked", (), tmp_path
+        )
+
+
+@pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
@@ -561,6 +678,7 @@ def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
         "tests/python/test_wb97mv_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
+        "tests/python/test_uccsd_t_lambda.py",
     ]
     assert distribution == "worksteal"
     assert targets == expected
@@ -652,11 +770,12 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_uccsd_t_lambda.py": "core-a",
+        "tests/python/test_uccsd_t_lambda.py": "uccsd-forces",
     }
     owners = {
         **parallel,
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
+        "tests/python/test_correlation_convergence.py": "runtime-heavy",
         "tests/python/test_uccsd_gradient.py": "uccsd-forces",
         "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
@@ -716,7 +835,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         priority = {
             "tests/python/test_uccsd_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
-            "tests/python/test_uccsd_t_lambda.py": "core-a",
+            "tests/python/test_uccsd_t_lambda.py": "uccsd-forces",
         }
         for shard, (_, _, arguments) in selections.items():
             selected_priority = [
@@ -797,7 +916,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
     frontiers = {
         "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
-        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-a"),
+        "lambda": ("tests/python/test_uccsd_t_lambda.py", "uccsd-forces"),
         "order5": ("tests/python/test_direct_order5_sources.py", "core-c"),
     }
     owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
@@ -1436,8 +1555,9 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
         "test_wb97mv_hessian.py",
         "test_uccsd_gradient.py",
         "test_uccsd_t_gradient.py",
+        "test_uccsd_t_lambda.py",
     )
-    counts = (10, 24, 24)
+    counts = (10, 24, 24, 17)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     directory = tmp_path / "tests/python"
     directory.mkdir(parents=True)
@@ -1451,9 +1571,15 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     )
     for name, count in zip(names, counts, strict=True):
         (directory / name).write_text(
-            "import pytest\n"
+            "import json, os\nfrom pathlib import Path\nimport pytest\n"
+            "@pytest.fixture\n"
+            "def fresh(request):\n"
+            "    with Path('fresh-setups.jsonl').open('a') as output:\n"
+            "        output.write(json.dumps([request.node.nodeid, "
+            "os.environ['PYTEST_XDIST_WORKER']]) + '\\n')\n"
+            "    return object()\n"
             f"@pytest.mark.parametrize('value', range({count}))\n"
-            "def test_case(value):\n    assert value >= 0\n",
+            "def test_case(value, fresh):\n    assert value >= 0\n",
             encoding="utf-8",
         )
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
@@ -1507,3 +1633,10 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
         for value in range(count)
     )
     assert Counter(node for entries in records for node in entries) == expected
+    setups = [
+        json.loads(line)
+        for line in (tmp_path / "fresh-setups.jsonl").read_text().splitlines()
+    ]
+    # Every selected case owns one fresh setup; no duplicate or shared fixture
+    # is introduced by adding a complete module to the existing priority lane.
+    assert Counter(node for node, _ in setups) == expected

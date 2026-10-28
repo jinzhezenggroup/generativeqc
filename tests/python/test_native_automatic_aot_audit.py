@@ -81,8 +81,10 @@ def test_audit_fails_closed_on_stale_or_missing_evidence(damage: str) -> None:
     "damage",
     (None, "callback", "point-key", "consumer-key", "tile", "launches", "points"),
 )
+@pytest.mark.parametrize("worker_prefix", ("executable_", "parameter_family_"))
 def test_shared_audit_requires_actual_executables_and_accounted_point_work(
     damage: str | None,
+    worker_prefix: str,
 ) -> None:
     receipt, binary, resources = inputs()
     receipt.update(
@@ -97,7 +99,7 @@ def test_shared_audit_requires_actual_executables_and_accounted_point_work(
     )
     point, force = resources.values()
     resources = {
-        "executable_" + "b" * 64 + "_point_kernel": point,
+        worker_prefix + "b" * 64 + "_point_kernel": point,
         "generativeqc_native_shared_" + "d" * 24 + "_geometry_kernel": force,
     }
     if damage == "callback":

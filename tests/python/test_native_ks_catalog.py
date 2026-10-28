@@ -1,6 +1,7 @@
 """Shared native catalog programs, immutable identities and explicit routes."""
 
 import ctypes
+import os
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -16,6 +17,128 @@ from generativeqc_compiler.method import (
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
 
 from tools.generate_cli_method_catalog import rows
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PBE-D3(BJ)",
+        "PBE-D3(0)",
+        "PBE-D3(BJ)-ATM",
+        "PBE0-D4(BJ-EEQ-ATM)",
+        "B3LYP-D4(BJ-EEQ-ATM)",
+    ],
+)
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_complete_native_composition_owns_correction_and_result_lifetime(
+    library: Any,
+    name: str,
+    device: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import numpy as np
+    from generativeqc import dispersion
+
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a Slurm-allocated CUDA device")
+        assert os.environ.get("SLURM_JOB_ID"), (
+            "CUDA qualification must run through srun"
+        )
+    graph = resolve_method(name)
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    calculator = Calculator(
+        method=graph, device=device, ks_options=KsOptions(grid=GridSpec(8, 4, 8))
+    )
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("complete native program delegated correction execution to Python")
+
+    monkeypatch.setattr(dispersion, "D3CorrectionBatch", forbidden)
+    monkeypatch.setattr(dispersion, "D4CorrectionBatch", forbidden)
+    with calculator.prepare_batch([atoms], warm_start=False) as batch:
+        full = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        assert full.dispersion is not None and full.dispersion.gradient is not None
+        assert batch.dispersion_diagnostic.method_ir_identity == graph.identity
+        energy = batch.execute(strict=True, properties=("energy",)).items[0]
+        assert energy.energy == pytest.approx(full.energy, abs=1e-12)
+        assert energy.dispersion is not None and energy.dispersion.gradient is None
+        assert energy.forces is None
+        bad = batch.execute([np.full((2, 3), np.nan)], properties=("energy",)).items[0]
+        assert not bad.succeeded and bad.dispersion is None
+        # A failed replay must also revoke the separately queried receipt.
+        query = library.generativeqc_ks_batch_dispersion_result_v1
+        out = _native.D4BatchItemResultDescriptor(
+            ctypes.sizeof(_native.D4BatchItemResultDescriptor), _native.ABI_VERSION
+        )
+        assert (
+            query(batch._batch, 0, ctypes.byref(out)) == _native.STATUS_NOT_IMPLEMENTED
+        )
+        recovered = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        np.testing.assert_allclose(recovered.forces, full.forces, atol=1e-11, rtol=0)
+
+
+def test_complete_native_budget_refusal_never_retries_external_owner(
+    library: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import dispersion
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("a native capacity refusal retried external correction execution")
+
+    monkeypatch.setattr(dispersion, "D3CorrectionBatch", forbidden)
+    calculator = Calculator(
+        method=resolve_method("PBE-D3(BJ)"),
+        ks_options=KsOptions(grid=GridSpec(8, 4, 8)),
+        dispersion_memory_budget_bytes=1,
+    )
+    with pytest.raises(RuntimeError):
+        calculator.singlepoint(
+            [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))], properties=("energy",)
+        )
+
+
+@pytest.mark.parametrize(
+    "name,electronic",
+    [("PBE-D3(BJ)-ATM", "pbe-rks"), ("PBE0-D4(BJ-EEQ-ATM)", "pbe0-rks")],
+)
+def test_complete_native_triatomic_keeps_nonzero_atm(
+    library: Any, name: str, electronic: str
+) -> None:
+    """Check parameter transport/composition where the three-body term is nonzero.
+
+    Standalone correction providers have separate independent reference gates;
+    here their full gradient must enter the native molecular endpoint once.
+    """
+    import numpy as np
+    from generativeqc import evaluate_d3_correction, evaluate_d4_correction
+
+    numbers = [8, 1, 1]
+    positions = np.array([(0.0, 0.0, 0.0), (1.8, 0.0, 0.0), (-0.45, 1.75, 0.0)])
+    atoms = list(zip(numbers, positions, strict=True))
+    options = KsOptions(grid=GridSpec(12, 6, 12))
+    plain = Calculator(method=electronic, ks_options=options).singlepoint(
+        atoms, properties=("energy", "forces")
+    )
+    evaluate = evaluate_d4_correction if "D4" in name else evaluate_d3_correction
+    correction = evaluate(name, numbers, positions)
+    if "D4" in name:
+        assert abs(correction.atm_energy) > 1e-12
+    else:
+        pair = evaluate_d3_correction("PBE-D3(BJ)", numbers, positions)
+        assert abs(correction.energy - pair.energy) > 1e-12
+    with Calculator(method=resolve_method(name), ks_options=options).prepare_batch(
+        [atoms]
+    ) as batch:
+        complete = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        assert complete.dispersion.energy == pytest.approx(correction.energy, abs=2e-13)
+        assert complete.energy == pytest.approx(
+            plain.energy + correction.energy, abs=2e-11
+        )
+        np.testing.assert_allclose(
+            complete.forces, plain.forces - correction.gradient, atol=3e-10, rtol=0
+        )
 
 
 @pytest.fixture(scope="module")
@@ -92,8 +215,11 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
                 )
                 == 0
             ), row.name
-            assert selected.value == int(eligible), (row.name, backend)
-            if not eligible:
+            # The prefix-only API must not publish a truncated electronic
+            # program for a corrected method. Named preparation owns those.
+            electronic_only = eligible and not row.dispersion[0]
+            assert selected.value == int(electronic_only), (row.name, backend)
+            if not electronic_only:
                 assert bytes(output) == before
                 continue
             spin = "unpolarized" if row.spin == 1 else "polarized"
@@ -109,7 +235,7 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
             reference = compile_ks_execution_plan(method)
             expected_exchange = tuple(
                 (
-                    1,
+                    {"full-range": 1, "short-range": 2, "long-range": 3}[term.operator],
                     float(term.coefficient),
                     float(term.omega),
                     float(term.fock_coefficient),
@@ -119,17 +245,14 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
             assert program(output) == (
                 row.domain.encode(),
                 row.spin,
-                0,
+                float(reference.semilocal.functional.range_omega),
                 tuple(
                     (name, float(coefficient))
                     for name, coefficient in reference.semilocal.functional.components
                 ),
                 expected_exchange,
-                0,
-                0,
-                0,
-                0,
-                0,
+                int(reference.nonlocal_correlation is not None),
+                *row.nonlocal_correlation,
                 0,
             ), (row.name, backend)
             qualified += 1
@@ -138,7 +261,17 @@ def test_entire_catalog_against_independent_compiler_programs(library: Any) -> N
 
 @pytest.mark.parametrize(
     "name",
-    ["lda-rks", "pbe-rks", "pbe-uks", "pbe0-rks", "pbe0-uks", "b3lyp-rks", "b3lyp-uks"],
+    [
+        "lda-rks",
+        "pbe-rks",
+        "pbe-uks",
+        "pbe0-rks",
+        "pbe0-uks",
+        "b3lyp-rks",
+        "b3lyp-uks",
+        "wb97m-v-rks",
+        "wb97m-v-uks",
+    ],
 )
 def test_named_runtime_skips_python_scientific_lowering(
     library: Any, name: str, monkeypatch: pytest.MonkeyPatch

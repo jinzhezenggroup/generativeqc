@@ -33,6 +33,12 @@ inline int transfer(void* pointer, const Span* spans, size_t count, size_t slot,
     error_text(error, size, "resident plan is busy");
     return 1;
   }
+  // Host transfers and their failure cleanup must use the plan's device.
+  generativeqc::runtime::CudaDeviceScope device_guard(ctx.device, std::nothrow);
+  if (device_guard.status() != cudaSuccess) {
+    error_text(error, size, cudaGetErrorString(device_guard.status()));
+    return 1;
+  }
   try {
     ctx.check_device();
     const auto span = checked(spans, count, slot, bytes);
@@ -68,13 +74,23 @@ inline int copy(void* source, const Span* source_spans, size_t source_count, siz
     first.lock();
   else
     std::lock(first, second);
+  // This ABI is an intra-device copy. Refuse cross-device owners before any
+  // stream access, rather than accidentally draining a stream on the wrong GPU.
+  if (src.device != dst.device) {
+    error_text(error, size, "resident device mismatch");
+    return 1;
+  }
+  generativeqc::runtime::CudaDeviceScope device_guard(dst.device, std::nothrow);
+  if (device_guard.status() != cudaSuccess) {
+    error_text(error, size, cudaGetErrorString(device_guard.status()));
+    return 1;
+  }
   try {
     // While both locks are held no other resident operation can run on either
     // owner; ordinary tensor_run calls only lock their own owner, so a
     // cross-plan copy is conservative but always safe.
     src.check_device();
     dst.check_device();
-    if (src.device != dst.device) throw std::invalid_argument("resident device mismatch");
     const auto from = checked(source_spans, source_count, source_slot, bytes);
     const auto to = checked(target_spans, target_count, target_slot, bytes);
     if (from.offset > src.metrics.owned_device_bytes ||

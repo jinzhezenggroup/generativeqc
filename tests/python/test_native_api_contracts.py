@@ -81,10 +81,10 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 125)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 130)
         self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 54)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 57)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
@@ -245,6 +245,32 @@ class NativeContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ContractError, "signature/field drift"):
             validate(self.root)
+
+    def test_named_ks_constructor_has_distinct_identity(self) -> None:
+        source = """namespace generativeqc {
+        class Calculation { public:
+          Calculation(Context& context, const System& system,
+                      const generativeqc_method_descriptor& method) {}
+          Calculation(Context& context, const System& system,
+                      const generativeqc_method_descriptor& method,
+                      const generativeqc_named_ks_descriptor& name) {}
+        };
+        }"""
+        operations = [d for d in scan_cpp(source) if d.kind == "cpp-operation"]
+        self.assertEqual(
+            [d.name for d in operations],
+            [
+                "generativeqc::Calculation::Calculation",
+                "generativeqc::Calculation::Calculation-named-ks",
+            ],
+        )
+        self.assertNotEqual(operations[0].anchor, operations[1].anchor)
+        (self.root / HEADERS[1]).write_text(
+            source.replace("generativeqc_named_ks_descriptor", "UnreviewedDescriptor"),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ContractError, "duplicate native declaration"):
+            discover(self.root)
 
     def test_unknown_c_declaration_fails_closed(self) -> None:
         for source in (

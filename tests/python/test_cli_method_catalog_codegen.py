@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,6 +15,25 @@ from generate_cli_method_catalog import render, rows
 
 
 class NativeMethodirProjectionTests(unittest.TestCase):
+    def test_generator_needs_no_installed_runtime_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "catalog.hpp"
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    str(ROOT / "tools" / "generate_cli_method_catalog.py"),
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(output.read_text(encoding="utf-8"), render(rows()))
+
     def test_automatic_bulk_selectors_preserve_the_public_resolver(self) -> None:
         from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
         from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
@@ -78,10 +99,19 @@ class NativeMethodirProjectionTests(unittest.TestCase):
                 self.assertEqual(row.identity, "")
                 self.assertIn("automatic bulk components cannot mix", row.reason)
 
-        self.assertFalse(table["wb97m-v-rks"].cpu)
-        self.assertIn("nonlocal", table["wb97m-v-rks"].reason)
-        self.assertFalse(table["r2scan-3c-rks"].cuda)
-        self.assertIn("correction", table["r2scan-3c-rks"].reason)
+        nonlocal_row = table["wb97m-v-rks"]
+        self.assertTrue(nonlocal_row.cpu)
+        self.assertTrue(nonlocal_row.cuda)
+        self.assertEqual(nonlocal_row.range_omega, 0.3)
+        self.assertEqual(nonlocal_row.exchange, ((2, 0.15, 0.3), (3, 1.0, 0.3)))
+        self.assertEqual(nonlocal_row.nonlocal_correlation, (1, 6.0, 0.01, 1.0))
+        for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
+            self.assertTrue(table[name].cpu)
+            self.assertNotEqual(table[name].dispersion[0], 0)
+        self.assertTrue(table["r2scan-3c-rks"].cuda)
+        self.assertTrue(table["r2scan-3c-rks"].cpu)
+        self.assertTrue(table["r2scan-3c-rks"].bound_basis)
+        self.assertEqual("", table["r2scan-3c-rks"].reason)
 
     def test_render_is_deterministic_and_complete(self) -> None:
         catalog = rows()

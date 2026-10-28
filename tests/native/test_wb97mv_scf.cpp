@@ -700,13 +700,30 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
   require(methods::detail::read_dft_final_state(*plan, token, false, rejected, detail) !=
               GENERATIVEQC_STATUS_SUCCESS,
           "WB97M-V replay did not revoke the previous token");
-  bool force_rejected = false;
-  try {
-    (void)plan->execute(true);
-  } catch (const methods::MethodError& error) {
-    force_rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const bool force_eligible = plan->supported_properties() & GENERATIVEQC_PROPERTY_FORCES;
+  if (force_eligible) {
+    const auto force_result = plan->execute(true);
+    require(force_result.convergence.converged && std::abs(force_result.energy - oracle) < 2e-10 &&
+                force_result.forces.size() == 3 * system.atoms.size() &&
+                std::all_of(force_result.forces.begin(), force_result.forces.end(),
+                            [](double value) { return std::isfinite(value); }),
+            "native WB97M-V force execution changed its oracle or published incomplete forces");
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+      double translation = 0.0;
+      for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
+        translation += force_result.forces[3 * atom + axis];
+      require(std::abs(translation) < 1e-10,
+              "native WB97M-V forces violate translation invariance");
+    }
+  } else {
+    bool force_rejected = false;
+    try {
+      (void)plan->execute(true);
+    } catch (const methods::MethodError& error) {
+      force_rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    require(force_rejected, "unqualified WB97M-V context accepted analytic forces");
   }
-  require(force_rejected, "energy-only WB97M-V implementation accepted analytic forces");
   std::cout << name << " E=" << std::setprecision(16) << result.energy
             << " residual=" << *result.physical_residual_rms << '\n';
 

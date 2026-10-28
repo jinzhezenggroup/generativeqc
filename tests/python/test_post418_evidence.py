@@ -1,13 +1,14 @@
 """The archived scientific audit must fail closed and recompute derived claims."""
 
 import importlib.util
-import json
 import subprocess
 import sys
 import typing
 from pathlib import Path
 
 import pytest
+
+from tools.generativeqc_validation.record import load_json
 
 EVIDENCE = Path(__file__).resolve().parents[2] / "benchmarks/results/issue206-post418"
 SCRIPT = EVIDENCE / "reproduction/analyze.py"
@@ -21,8 +22,8 @@ def audit_module() -> typing.Any:
 
 
 def test_archived_audit_reproduces_all_observations() -> None:
-    assert audit_module().analyze(EVIDENCE / "raw") == json.loads(
-        (EVIDENCE / "summary.json").read_text()
+    assert audit_module().analyze(EVIDENCE / "raw") == load_json(
+        EVIDENCE / "summary.json.xz"
     )
 
 

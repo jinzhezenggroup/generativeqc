@@ -36,6 +36,10 @@ class AutomaticCudaPointProvider:
     feature_terms: int
     source: str
     restricted: AutomaticPointSource
+    # A parameter registration can be energy-only. An execution key binds its
+    # shared worker independently of the unchanged canonical science identity.
+    stationary_launcher: bool = True
+    executable_identity: str | None = None
 
     def __post_init__(self) -> None:
         """Reject stale or relabeled workers before constructing a descriptor."""
@@ -93,12 +97,14 @@ class AutomaticCudaPointProvider:
         """Bind exact traversal, mathematical source and feature layout bytes."""
         return canonical_hash(
             {
-                "schema": "generativeqc.automatic-cuda-point-provider.v2",
+                "schema": "generativeqc.automatic-cuda-point-provider.v3",
                 "point": self.point.source_identity,
                 "restricted": self.restricted.source_identity,
                 "provider": self.provider_name,
                 "feature_terms": self.feature_terms,
                 "source": self.source,
+                "stationary_launcher": self.stationary_launcher,
+                "executable_identity": self.executable_identity,
             }
         )
 
@@ -174,14 +180,24 @@ struct {provider_name} {{
 """
 
 
-def _emit_launchers(
-    code: int, feature_terms: int, provider_name: str, *, density_only: bool
+def emit_automatic_launch_validation(code: int, feature_terms: int) -> str:
+    """Keep registration/shape validation common to specialized and shared workers."""
+    return f"""
+void validate_launch(std::size_t count, std::size_t spins, std::uint32_t functional,
+                     double exchange_scale, double correlation_scale) {{
+  if (functional != 0x{code:x}U || (spins != 1 && spins != 2) ||
+      count > std::size_t{{std::numeric_limits<I>::max()}} /
+                  std::max(std::size_t{{3}}, spins * {feature_terms}) ||
+      exchange_scale != 1.0 || correlation_scale != 1.0)
+    throw std::invalid_argument("incompatible automatic CUDA XC point binding");
+}}
+"""
+
+
+def _emit_stationary_launcher(
+    feature_terms: int, provider_name: str, *, density_only: bool
 ) -> str:
-    """CSE selection may not switch density-only RKS back to P2 worker floors."""
-    selector = "spins == 1" if density_only else "use_equal_spin_points(spins)"
-    validate_selector = (
-        "  (void)use_equal_spin_points(spins);\n" if density_only else ""
-    )
+    """Preserve the full physical-spin differential of literal force providers."""
     return f"""
 void launch_stationary(cudaStream_t stream, const double* features, std::size_t count,
                       std::size_t spins, DevicePointValue* output, int* error,
@@ -200,14 +216,23 @@ void launch_stationary(cudaStream_t stream, const double* features, std::size_t 
         <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
             features, count, output, error, producer_error);
 }}
-void validate_launch(std::size_t count, std::size_t spins, std::uint32_t functional,
-                     double exchange_scale, double correlation_scale) {{
-  if (functional != 0x{code:x}U || (spins != 1 && spins != 2) ||
-      count > std::size_t{{std::numeric_limits<I>::max()}} /
-                  std::max(std::size_t{{3}}, spins * {feature_terms}) ||
-      exchange_scale != 1.0 || correlation_scale != 1.0)
-    throw std::invalid_argument("incompatible automatic CUDA XC point binding");
-}}
+"""
+
+
+def _emit_launchers(
+    code: int, feature_terms: int, provider_name: str, *, density_only: bool
+) -> str:
+    """CSE selection may not switch density-only RKS back to P2 worker floors."""
+    selector = "spins == 1" if density_only else "use_equal_spin_points(spins)"
+    validate_selector = (
+        "  (void)use_equal_spin_points(spins);\n" if density_only else ""
+    )
+    return (
+        emit_automatic_launch_validation(code, feature_terms)
+        + _emit_stationary_launcher(
+            feature_terms, provider_name, density_only=density_only
+        )
+        + f"""
 void launch(cudaStream_t stream, const double* features, const double* weights,
             std::size_t count, std::size_t spins, double* coefficients,
             double* totals, int* error, std::uint32_t functional,
@@ -248,6 +273,7 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
           functional, exchange_scale, correlation_scale, tile_points);
 }}
 """
+    )
 
 
 def emit_automatic_cuda_descriptor(provider: AutomaticCudaPointProvider) -> str:
@@ -259,12 +285,19 @@ def emit_automatic_cuda_descriptor(provider: AutomaticCudaPointProvider) -> str:
         if provider.restricted.spin == "unpolarized"
         else "nullptr"
     )
+    executable = (
+        f'"{provider.executable_identity}"'
+        if provider.executable_identity is not None
+        else "nullptr"
+    )
     return f"""
 namespace {provider.namespace} {{
 const CudaXcPointProgram program{{
     "{point.name}", "{provider.expression_identity}", "{provider.source_identity}",
     0x{code:x}U, {point.ingredient_mask}U, {point.domain_version}U,
     {provider.feature_terms}, &launch, &launch_batch, {{}},
-    "{point.expression_identity}", {restricted_identity}, &launch_stationary}};
+    "{point.expression_identity}", {restricted_identity},
+    {"&launch_stationary" if provider.stationary_launcher else "nullptr"},
+    {executable}, {executable}}};
 }}
 """
