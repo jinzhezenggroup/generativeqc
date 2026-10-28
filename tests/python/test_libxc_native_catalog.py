@@ -26,9 +26,98 @@ def bundle() -> dict:
     return catalog.load_json(ROOT / manifest["campaign"]["path"])
 
 
+def replay_recorded_source(bundle: dict) -> dict:
+    """Unit replay of recorded receipts, not a current-source admission claim.
+
+    Only the filesystem provenance boundary is stubbed. Numerical receipts,
+    compiled objects, Graph/domain contracts and execution scope still undergo
+    their ordinary validation. The live-source test below uses no such stubs.
+    """
+    recorded_inputs = dict.fromkeys(range(bundle["source_input_count"]), "recorded")
+    actual_hash = catalog.canonical_hash
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(catalog, "source_inventory", lambda root: recorded_inputs)
+        patch.setattr(
+            catalog,
+            "canonical_hash",
+            lambda value: (
+                bundle["source_identity"]
+                if value is recorded_inputs
+                else actual_hash(value)
+            ),
+        )
+        patch.setattr(
+            catalog,
+            "_source_identity",
+            lambda root, inventory: bundle["native_build_verification"][
+                "measured_input_identity"
+            ],
+        )
+        return catalog.ingest(bundle, ROOT)
+
+
 @pytest.fixture(scope="module")
 def report(bundle: dict) -> dict:
-    return catalog.ingest(bundle, ROOT)
+    return replay_recorded_source(bundle)
+
+
+def test_live_receipts_allow_truthful_source_demotion(bundle: dict) -> None:
+    live = catalog.ingest(bundle, ROOT)
+    assert len(live["observed_endpoints"]) == 44
+    if live["stale"]:
+        assert not live["endpoints"]
+        assert live["summary"]["qualified_counts"]["forces"] == 0
+        assert live["summary"]["blocked_counts"]["forces"] == 11
+    else:
+        assert live["summary"]["qualified_counts"]["forces"] == 11
+
+
+def test_boundary_coordinates_replay_recorded_inputs(bundle: dict) -> None:
+    from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+
+    from tools.generativeqc_validation.libxc_native_domain import (
+        packed_cases,
+        same_fixture_inputs,
+    )
+
+    for name, data in bundle["functionals"].items():
+        domain = data["production-domain"]
+        profile = functional_capability(name).production_domain_profile
+        for row in domain["records"]:
+            ids, inputs = packed_cases(profile, row["spin"])
+            assert row["case_ids"] == ids
+            assert same_fixture_inputs(row["inputs"], inputs)
+            if "tau/isoorbital" in ids:
+                iso = inputs[ids.index("tau/isoorbital"), -2:]
+                near = inputs[ids.index("tau/near-isoorbital"), -2:]
+                assert (near > iso).all()
+
+
+@pytest.mark.parametrize(
+    "corruption", ["three-ulps", "zero", "sign", "shape", "nan", "boundary"]
+)
+def test_fixture_rounding_allowance_does_not_relax_domain(corruption: str) -> None:
+    import numpy as np
+
+    from tools.generativeqc_validation.libxc_native_domain import same_fixture_inputs
+
+    expected = np.array([[0.0, -0.2, 0.013005319148936172]])
+    changed = expected.copy()
+    changed[0, 2] = np.nextafter(changed[0, 2], np.inf)
+    assert same_fixture_inputs(changed, expected)
+    if corruption == "three-ulps":
+        changed[0, 2] = np.nextafter(np.nextafter(changed[0, 2], np.inf), np.inf)
+    elif corruption == "zero":
+        changed[0, 0] = np.nextafter(0.0, 1.0)
+    elif corruption == "sign":
+        changed[0, 1] *= -1
+    elif corruption == "shape":
+        changed = changed.flatten()
+    elif corruption == "nan":
+        changed[0, 1] = np.nan
+    else:
+        changed[0, 2] = expected[0, 2] * (1 + 1e-12)
+    assert not same_fixture_inputs(changed, expected)
 
 
 def test_real_receipts_reach_multifamily_dag_without_whitelisting(report: dict) -> None:
@@ -148,7 +237,14 @@ def test_cpu_real_full_vector_receipt_is_revalidated(
 
 @pytest.mark.parametrize(
     "field",
-    ["profile", "point_source_identity", "mathematics", "case_ids", "reference"],
+    [
+        "profile",
+        "point_source_identity",
+        "mathematics",
+        "case_ids",
+        "inputs",
+        "reference",
+    ],
 )
 def test_native_domain_rejects_stale_contract_or_numerical_evidence(
     bundle: dict, field: str
@@ -163,6 +259,8 @@ def test_native_domain_rejects_stale_contract_or_numerical_evidence(
         row[field]["domain_version"] += 1
     elif field == "case_ids":
         row[field].pop()
+    elif field == "inputs":
+        row[field][0][0] += 1e-6
     else:
         row[field][0][0] += 1
     domain["identity"] = canonical_hash(
@@ -224,7 +322,7 @@ def test_missing_domain_demotes_both_backends_and_exact_ack_is_required(
 ) -> None:
     changed = deepcopy(bundle)
     del changed["functionals"][NAME]["production-domain"]
-    after = catalog.ingest(changed, ROOT)
+    after = replay_recorded_source(changed)
     assert not any(r["name"] == NAME for r in after["endpoints"])
     before_summary, after_summary = report["summary"], after["summary"]
     with pytest.raises(ValueError, match="unacknowledged"):
@@ -246,7 +344,7 @@ def test_missing_domain_demotes_both_backends_and_exact_ack_is_required(
 
 
 def test_changed_native_inputs_never_relabel_historical_results(
-    bundle: dict, monkeypatch: pytest.MonkeyPatch
+    bundle: dict, report: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     live = catalog.source_inventory(ROOT)
     live["include/generativeqc/generativeqc.h"] = "0" * 64
@@ -255,6 +353,13 @@ def test_changed_native_inputs_never_relabel_historical_results(
     assert after["stale"] and not after["endpoints"]
     assert after["summary"]["qualified_counts"]["forces"] == 0
     assert after["summary"]["blocked_counts"]["forces"] == 11
+    assert after["measured_source_identity"] == bundle["source_identity"]
+    assert after["source_identity"] != bundle["source_identity"]
+    before, current = report["summary"], after["summary"]
+    with pytest.raises(ValueError, match="unacknowledged"):
+        require_acknowledged_capability_regressions(before, current)
+    tokens = [item.token for item in capability_regressions(before, current)]
+    require_acknowledged_capability_regressions(before, current, acknowledged=tokens)
 
 
 @pytest.mark.parametrize("field", ["pyscf", "libxc", "gpu", "slurm_job_id"])

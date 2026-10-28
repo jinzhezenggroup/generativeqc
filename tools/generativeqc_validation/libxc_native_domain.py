@@ -46,6 +46,30 @@ def packed_cases(profile: Any, spin: str) -> tuple[list[str], np.ndarray]:
     return [case.case_id for case in cases], np.asarray(rows)
 
 
+def same_fixture_inputs(recorded: Any, expected: np.ndarray) -> bool:
+    """Allow at most two adjacent float64 values for fixture reconstruction.
+
+    Python 3.12 changed builtin floating sum, moving polarized isoorbital tau
+    by one ULP relative to 3.11. This is not a numerical-output tolerance:
+    zero/sign/shape stay exact, and near-isoorbital cases remain distinct.
+    """
+    actual = np.asarray(recorded)
+    if actual.dtype.kind not in "fiu":
+        return False
+    actual = actual.astype(np.float64, copy=False)
+    if actual.shape != expected.shape or not np.isfinite(actual).all():
+        return False
+    if not np.isfinite(expected).all():
+        return False
+    if not np.array_equal(actual == 0, expected == 0):
+        return False
+    if not np.array_equal(np.signbit(actual), np.signbit(expected)):
+        return False
+    lower = np.nextafter(np.nextafter(expected, -np.inf), -np.inf)
+    upper = np.nextafter(np.nextafter(expected, np.inf), np.inf)
+    return bool(((actual >= lower) & (actual <= upper)).all())
+
+
 def _point(name: str, family: str, spin: str) -> Any:
     # LDA RKS has an explicit U1 density worker. GGA/tau-MGGA RKS uses
     # the installed P2 differential on equal physical spin coordinates.
@@ -189,7 +213,7 @@ def native_domain_stage(name: str, result: dict[str, Any]) -> dict[str, Any]:
                 "native production-domain worker/domain/derivative ABI changed"
             )
         ids, inputs = packed_cases(profile, spin)
-        if row["case_ids"] != ids or row["inputs"] != inputs.tolist():
+        if row["case_ids"] != ids or not same_fixture_inputs(row["inputs"], inputs):
             raise ValueError("native production-domain fixture coverage mismatch")
         observed, reference = np.asarray(row["observed"]), np.asarray(row["reference"])
         expected_shape = (len(ids), 11 if spin == "polarized" else 6)
