@@ -39,9 +39,8 @@ cotangents and their response JVPs. rVV10 remains unsupported at this planning
 boundary. A compiled source rule does not qualify a molecular endpoint.
 
 Molecular execution is a separate method-neutral layer. Its canonical installed
-owner is `generativeqc.second_order`;
-`generativeqc.second_order` is a compatibility re-export of
-that module and contains no second implementation.
+owner is `generativeqc.second_order`; repository Hessian tools import this owner
+directly rather than retaining a second implementation.
 `StationarySecondOrderExecutor` accepts only a plan identity and complete
 ordered source inventory, one perturbation provider, one opaque stationary
 response driver and exactly one contributor per declared source. It performs one
