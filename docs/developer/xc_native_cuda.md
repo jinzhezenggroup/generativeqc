@@ -113,17 +113,16 @@ semicolon-separated list of exact structural registration names, for example
 `"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
 must be enabled; a selected package cannot use the CPU-only compiler fallback.
 An empty list preserves the full-catalog opt-in behavior, while the AOT option
-remains off by default. Selected entries retain their original codes, canonical
-mathematical identities and ordinary/batched ABI. Literal providers keep their
-source identities across selections; parameter sharing binds the
-selected shared worker and parameter table as described below. Omitted entries
+remains off by default. Selected entries retain their original codes and
+canonical mathematical identities. Packaged source identities record their
+actual entry-point sets, shared workers and immutable parameter bindings. Omitted entries
 have no executable dispatch case and return a null static descriptor.
 Unknown/unrepresentable names fail before generation writes outputs; duplicate
 or reordered requests do not change structural shard order. Regeneration
 rewrites all shards, removing omitted dispatch cases from shrinking packages.
 Selection controls installed artifact content, not scientific admission,
-public capability promotion, executable alias reuse or a complete persistent
-binary-cache dependency closure.
+public capability promotion or a complete persistent binary-cache dependency
+closure.
 
 `GENERATIVEQC_STATIONARY_AOT_PROFILES=auto` follows the selected automatic energy
 package for native RKS/UKS force profiles. An explicit profile list bounds the
@@ -131,8 +130,45 @@ force package further; an empty list omits forces. Automatic profile names are
 `libxc_<native-code>_rks` and `libxc_<native-code>_uks`. They require the matching
 energy provider. Automatic forces do not add legacy Python s/p or s/p/d DSOs;
 the native package shares its integral primitives and source reduction kernels.
+Automatic profiles default to staged point evaluation followed by a shared
+force consumer. Consumers are compiled per ingredient/spin/derivative ABI,
+strict precision, partition and geometry schedule, rather than per registration.
+`xc/automatic_cuda_package.py` deduplicates point workers only when the exact
+emitted mathematics, work domain, outputs and execution ABI agree. Registration
+codes, canonical expression identities and capability evidence remain separate.
+For example, the unpolarized VWN 1–4 bodies share an executable; their polarized
+bodies do not. Similar formulas with different work floors do not share.
+
+The shared `DevicePointValue` tile is charged inside the existing stationary
+arena. Its producer consumes the grid's physical `[2,5,points]` feature layout
+and writes energy, density derivatives, Cartesian gradient derivatives and the
+existing half-vtau coefficients. It reads only the declared ingredients. The
+producer and geometry consumer use the same borrowed stream and retained owner;
+no host repacking, transfer or CPU evaluation is inserted. Sticky producer
+errors prevent consuming stale point values. The minimum-workspace schedule
+also charges the point tile and remains an explicit bounded alternative.
+Geometry still forms the Becke cotangent from the point energy and raw weight.
+A resident XC tile alone cannot authorize skipping partition response: bounded
+geometry contracts it inline, while phased geometry publishes its seed to the
+existing partition kernels.
+
+`GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES` is an explicit semicolon-separated
+subset of the selected automatic force profiles. Those entries retain static
+fused point/geometry code. Package qualification compares complete cold, warm
+and moved SCF+E+F endpoints against the per-functional AOT incumbent; the default
+selection must remain within 5% median regression. Select a fused specialization
+when measured staged cost breaches that gate, retaining its compile/size cost.
 Generation and compiler-cache use are build-time operations. Ordinary installed
 execution never generates code or runs a compiler, Libxc, Maple or PySCF.
+
+Executable source identities are not persistent binary-cache keys. CMake tracks
+generator/scientific inputs and compiler depfiles, and the verified compiler
+cache owns command/toolchain/header invalidation. Final installed receipts bind
+actual loaded library bytes. The explicit offline
+[CUDA closure collector](libxc_cuda_aot_closure.md) retains its narrower admitted
+whole-program domain; unsupported native package targets/device-link recipes
+cannot be published through that object store as reusable closures. Incomplete
+closure assertions remain fail closed.
 
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
@@ -190,7 +226,7 @@ to CUDA optimization as to the mathematical Graph. It reuses the restricted
 mathematical body and replaces its existing batched kernel instantiation.
 The ordinary general entry marks its immutable parameter row
 `__grid_constant__`; restricted and batched entries retain their distinct storage
-ABIs. This replaces an instantiation and preserves four kernels per group.
+ABIs. This replaces an instantiation and preserves four energy kernels per group.
 Polarized partial derivatives and runtime tile/output layouts retain their
 existing contracts. Density thresholds,
 work-domain guards, physical derivative conventions and spin layouts remain
@@ -225,7 +261,8 @@ python tools/generate_libxc_semilocal_cuda_registry.py \
 ```
 
 The report includes coefficient ABI sizes, exact contract identities, selection
-status, retained specializations and point-kernel counts. See the
+status, retained specializations and energy point-kernel counts, including exact
+literal alias reuse. Staged force entries are excluded from that count. See the
 [structural default decision](../../.agents/notes/implemented/performance/2026-10-28-xc-structural-default.md)
 for qualification, rejected alternatives and the earlier discovery and paired-input
 experiments. Report `default_qualified` denotes eligibility under this build
@@ -239,6 +276,15 @@ private host launchers, so no cross-translation-unit device linking is needed.
 The GPU sees one uniform parameter row per launch and has no per-point
 functional switch. Host registration wrappers include only descriptor headers,
 without emitting unrelated tensor conversion kernels.
+
+When a parameterized registration also belongs to the selected force package,
+the same immutable coefficient row supplies its staged physical point producer.
+The descriptor advertises that callback only for packaged force spins; ordinary
+energy-only registrations retain a null stationary callback. LDA RKS keeps its
+total-density differential, while GGA/MGGA force tiles retain both polarized
+physical derivatives even when energy evaluation uses the equal-spin shortcut.
+The source identity binds the callback availability and shared executable key
+separately from the registration's canonical mathematical identity.
 
 The [default-promotion decision](../../.agents/notes/implemented/performance/2026-10-28-xc-prepared-parameters.md)
 links the numerical, complete-SCF and point-kernel evidence on NVCC 12.9.1 / SM120.
@@ -285,6 +331,19 @@ execution. It does not infer register pressure from workspace sizes.
 `tools/audit_native_automatic_aot.py` joins these receipts with matching generated
 sources, objects and `cuobjdump` register/stack/local/shared counters under explicit
 resource limits. This offline evidence supplements numerical endpoint gates.
+Diagnostic v2 additionally records the shared consumer and both point executable
+identities, the actual callback modules, and point tile bytes/launches/points.
+The original v1 extents remain available to older readers. ELF base mappings
+authenticate both read-only and BSS registration storage, as well as callbacks.
+
+`tools/census_native_automatic_aot.py` measures the active compile inventory,
+linked and installed device images, kernel counts and cubin/ptxas resources.
+Supply cold/cache-hit measurements and complete endpoint evidence separately;
+archive bytes do not describe installed library size. Its capability output uses
+the existing Lane-F `compiled-cuda` envelope and cannot grant molecular forces
+or unsupported derivative, spin, angular, exchange or precision capabilities.
+The [shared AOT qualification](../../benchmarks/results/shared-automatic-aot-20261027/README.md)
+contains the bounded/full package comparison and an explicit offline verifier.
 
 ### Curated execution
 

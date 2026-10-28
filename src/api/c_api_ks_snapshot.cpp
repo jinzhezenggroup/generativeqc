@@ -172,6 +172,31 @@ generativeqc_status generativeqc_ks_batch_automatic_artifact_v1(
     const auto status = generativeqc::methods::detail::dft_automatic_artifact_diagnostic(
         *batch->plan, index, diagnostic, batch->context->last_detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy_n(diagnostic.identities.begin(), identity_count, identities);
+    std::copy_n(diagnostic.artifact_owners.begin(), owner_count, owners);
+    std::copy_n(diagnostic.work.begin(), work_count, work);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+/** Add shared-consumer and executable point identities without changing v1's
+ * extents. Callback addresses authenticate the modules actually executing the
+ * staged pipeline, independently of registration descriptor storage. */
+generativeqc_status generativeqc_ks_batch_automatic_artifact_v2(
+    const generativeqc_batch* batch, std::uint32_t index, const char** identities,
+    std::size_t identity_count, const void** owners, std::size_t owner_count, std::uint64_t* work,
+    std::size_t work_count) {
+  if (!batch || index >= batch->plan->size() || !identities || identity_count != 11 || !owners ||
+      owner_count != 4 || !work || work_count != 43)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    generativeqc::methods::detail::KsAutomaticArtifactDiagnostic diagnostic;
+    const auto status = generativeqc::methods::detail::dft_automatic_artifact_diagnostic(
+        *batch->plan, index, diagnostic, batch->context->last_detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::copy(diagnostic.identities.begin(), diagnostic.identities.end(), identities);
     std::copy(diagnostic.artifact_owners.begin(), diagnostic.artifact_owners.end(), owners);
     std::copy(diagnostic.work.begin(), diagnostic.work.end(), work);

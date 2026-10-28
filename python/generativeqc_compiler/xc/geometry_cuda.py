@@ -523,6 +523,7 @@ def emit_geometry_cuda(
     pbe: typing.Any = None,
     iterations: typing.Any = 3,
     semilocal: FunctionalSpec | None = None,
+    staged_point: bool = False,
 ) -> typing.Any:
     """Lower AO bilinear AD; the caller supplies one exact semilocal selector."""
     code = _functional_code(functional, pbe)
@@ -577,13 +578,21 @@ def emit_geometry_cuda(
             emit_grid_partials(
                 iterations, device=True, scalar_type="float", suffix="_fp32"
             ),
-            f"constexpr unsigned stationary_functional = {code};",
+            f"constexpr unsigned stationary_functional = {0 if staged_point else code};",
             f"constexpr unsigned stationary_jets = {len(domain)};",
             f"constexpr unsigned stationary_ao_jets = {len(lookup)};",
             f"constexpr unsigned stationary_coefficients = {coefficient_count};",
-            _emit_stationary_point(code, semilocal=semilocal),
-            _emit_restricted_point_capability(code, semilocal),
-            _emit_mixed_point(code, semilocal),
+            (
+                _emit_staged_point_contract()
+                if staged_point
+                else "\n".join(
+                    (
+                        _emit_stationary_point(code, semilocal=semilocal),
+                        _emit_restricted_point_capability(code, semilocal),
+                        _emit_mixed_point(code, semilocal),
+                    )
+                )
+            ),
             f"__device__ __constant__ unsigned stationary_shift[{len(domain)}][3] = {{{','.join(shifts)}}};",
             "__device__ void ao_pullback(const double* c, const double* w, double* out) {",
             *emitter.lines,
@@ -602,6 +611,38 @@ def emit_geometry_cuda(
             "",
         ]
     )
+
+
+def _emit_staged_point_contract() -> str:
+    """Declare transport only; shared consumers contain no XC point equations.
+
+    The native owner requires a linked producer before any geometry enqueue.
+    Invalid stubs make accidentally selected inline/FP32 paths fail closed;
+    compile-time staged dispatch removes their device calls entirely.
+    """
+    return r"""
+#include "dft/cuda_xc_point_value.hpp"
+using StationaryPointValue = ::generativeqc::dft::DevicePointValue;
+constexpr bool stationary_restricted_point_capable = false;
+constexpr bool stationary_pbe0_restricted_point_capable = false;
+constexpr bool stationary_fp32_point_capable = false;
+inline bool stationary_restricted_point_selected(bool) { return false; }
+__device__ inline StationaryPointValue stationary_evaluate_point(
+    const double[2], const double[2][3], const double[2]) {
+  StationaryPointValue value;
+  value.valid = false;
+  return value;
+}
+__device__ inline StationaryPointValue stationary_evaluate_restricted_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  return stationary_evaluate_point(rho, gradient, tau);
+}
+__device__ inline StationaryPointValue stationary_evaluate_point_fp32(
+    const double rho[2], const double gradient[2][3], const double tau[2], bool* used = nullptr) {
+  if (used) *used = false;
+  return stationary_evaluate_point(rho, gradient, tau);
+}
+"""
 
 
 def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:

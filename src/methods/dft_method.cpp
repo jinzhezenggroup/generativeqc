@@ -2179,8 +2179,16 @@ class KsPreparedState final : public KsSingleOwnerPort {
                         binding ? binding->source_identity : "",
                         completed ? "none"
                         : binding ? "force-not-executed-at-current-token"
-                                  : "force-artifact-or-context-unavailable"};
-    value.artifact_owners = {point, binding};
+                                  : "force-artifact-or-context-unavailable",
+                        binding ? binding->consumer_identity : "",
+                        binding ? binding->consumer_profile : "",
+                        point->polarized_executable_identity,
+                        point->restricted_executable_identity};
+    value.artifact_owners = {point, binding,
+                             completed && binding->point_program
+                                 ? reinterpret_cast<const void*>(point->launch_stationary)
+                                 : reinterpret_cast<const void*>(point->launch),
+                             binding ? reinterpret_cast<const void*>(binding->geometry) : nullptr};
     value.work[0] = completed;
     value.work[1] = point->domain_version;
     value.work[2] = execution_plan_.spin_channels;
@@ -2202,6 +2210,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
           grid.evaluation_points,    grid.evaluation_tiles,          grid.ao_jet_values,
           grid.projection_fma_pairs, grid.identical_spin_copy_bytes, grid.feature_passes};
       std::copy(grid_work.begin(), grid_work.end(), value.work.begin() + 34);
+      std::copy(resources.point_work.begin(), resources.point_work.end(), value.work.begin() + 40);
     }
     output = value;
     return GENERATIVEQC_STATUS_SUCCESS;

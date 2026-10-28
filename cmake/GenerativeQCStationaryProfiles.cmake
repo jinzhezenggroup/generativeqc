@@ -4,6 +4,8 @@ include_guard(GLOBAL)
 # A named profile remains a performance specialization, not method admission.
 # "auto" follows the curated inventory and selected automatic energy package;
 # explicit profiles bound force contents further; "" disables the artifacts.
+set(GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES "" CACHE STRING
+    "Explicit packaged force profiles retaining fused CUDA specializations")
 set(GENERATIVEQC_STATIONARY_AOT_PROFILES "auto" CACHE STRING
     "Stationary CUDA AOT specializations: auto, an explicit semicolon list, or empty")
 

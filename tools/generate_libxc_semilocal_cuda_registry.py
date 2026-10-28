@@ -17,17 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.xc.automatic_cuda import (
-    emit_automatic_cuda_descriptor,
-    emit_automatic_cuda_provider,
-)
+from generativeqc_compiler.xc.automatic_cuda_package import automatic_cuda_package
 from generativeqc_compiler.xc.automatic_semilocal import (
     AutomaticRegistryEntry,
     automatic_registry_entries,
 )
 from generativeqc_compiler.xc.parameter_cuda_package import (
     parameter_worker_groups,
-    parameterized_cuda_package,
 )
 
 from tools.generate_libxc_semilocal_cpu_registry import write_if_changed
@@ -102,6 +98,7 @@ def emit_shard(
     index: int,
     entries: tuple[AutomaticRegistryEntry, ...],
     *,
+    force_profiles: tuple[str, ...] | None = None,
     share_parameters: bool = True,
     parameter_policy: Literal["qualified", "discover"] = "discover",
 ) -> str:
@@ -109,34 +106,19 @@ def emit_shard(
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
-    if share_parameters:
-        workers, registrations = parameterized_cuda_package(
-            tuple(entry.name for entry in entries), policy=parameter_policy
-        )
-        providers = [registrations[entry.name] for entry in selected]
-    else:
-        # Explicit specialization remains available for qualification and for
-        # toolchains/devices outside the measured shared-worker population.
-        workers = {}
-        providers = [emit_automatic_cuda_provider(entry.name) for entry in selected]
-    # Registration placement stays stable. Each private family worker has one
-    # CUDA owner; other shards reference its host launcher through declarations.
-    shared = "\n".join(
-        source
-        for identity, source in workers.items()
-        if int(identity[:16], 16) % SHARD_COUNT == index
+    workers, registrations = automatic_cuda_package(
+        tuple(entry.name for entry in entries),
+        force_profiles,
+        share_parameters=share_parameters,
+        parameter_policy=parameter_policy,
     )
-    definitions = (
-        shared
-        + "\n"
-        + "\n".join(
-            provider.source + emit_automatic_cuda_descriptor(provider)
-            for provider in providers
-        )
+    definitions = "\n".join(
+        [worker.source for worker in tuple(workers.values())[index::SHARD_COUNT]]
+        + [registrations[entry.name] for entry in selected]
     )
     cases = "\n".join(
-        f"    case 0x{entry.code:x}U: return &{provider.namespace}::program;"
-        for entry, provider in zip(selected, providers, strict=True)
+        f"    case 0x{entry.code:x}U: return &cuda_xc_detail::automatic_{entry.name.lower()}_point_provider::program;"
+        for entry in selected
     )
     return f"""// Generated automatic Libxc CUDA point programs; do not edit.
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -157,6 +139,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--disabled", action="store_true")
+    parser.add_argument("--stationary-all", action="store_true")
+    parser.add_argument("--stationary-profile", action="append", default=[])
     parser.add_argument(
         "--share-parameters",
         action=argparse.BooleanOptionalAction,
@@ -209,6 +193,9 @@ def main() -> None:
             emit_shard(
                 index,
                 entries,
+                force_profiles=None
+                if args.stationary_all
+                else tuple(args.stationary_profile),
                 share_parameters=args.share_parameters is not False,
                 parameter_policy=parameter_policy,
             ),
@@ -224,6 +211,12 @@ def main() -> None:
             else ()
         )
         shared = {name for group in groups for name in group.names}
+        workers, _ = automatic_cuda_package(
+            names,
+            None if args.stationary_all else tuple(args.stationary_profile),
+            share_parameters=args.share_parameters is not False,
+            parameter_policy=parameter_policy,
+        )
         report = {
             "schema": "generativeqc.xc-parameter-sharing-plan.v1",
             "policy": parameter_policy
@@ -245,7 +238,11 @@ def main() -> None:
                 for group in candidates
             ],
             "specialized_registrations": sorted(set(names) - shared),
-            "point_kernels": 4 * (len(names) - len(shared) + len(groups)),
+            # Exact literal aliases can share too. Count the actual package
+            # owners instead of assuming four energy kernels per registration.
+            "point_kernels": sum(
+                worker.energy_kernel_count for worker in workers.values()
+            ),
             "qualification": "structural compatibility; no performance or public admission claim",
         }
         write_if_changed(args.sharing_report, json.dumps(report, indent=2) + "\n")

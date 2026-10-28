@@ -15,8 +15,11 @@ from generativeqc_compiler.method.stationary_cuda import (
 )
 from generativeqc_compiler.method.stationary_native_cuda import (
     NATIVE_STATIONARY_CUDA_PROFILES,
+    emit_native_stationary_profile_cpp,
     emit_native_stationary_profile_cuda,
     emit_native_stationary_registry_cpp,
+    native_stationary_package_sources,
+    native_stationary_shared_group,
 )
 from generativeqc_compiler.xc.automatic_semilocal import automatic_registry_entries
 
@@ -41,6 +44,7 @@ def main() -> None:
     parser.add_argument(
         "--profiles", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
+    parser.add_argument("--fused-profiles", nargs="*", default=[])
     parser.add_argument(
         "--functional",
         action="append",
@@ -53,6 +57,7 @@ def main() -> None:
     selection.add_argument("--list-available-aot-profiles", action="store_true")
     selection.add_argument("--list-automatic-aot-profiles", action="store_true")
     selection.add_argument("--all-profiles", action="store_true")
+    selection.add_argument("--list-sources", action="store_true")
     selection.add_argument(
         "--registry", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
@@ -119,8 +124,10 @@ def main() -> None:
         return
     if args.cmake_dependencies is not None:
         parser.error("--cmake-dependencies applies only to profile discovery")
-    if args.all_profiles:
-        if args.output is not None or args.output_dir is None:
+    if args.all_profiles or args.list_sources:
+        if not args.list_sources and (
+            args.output is not None or args.output_dir is None
+        ):
             parser.error("--all-profiles requires --output-dir and forbids --output")
         profiles = (
             tuple(args.profiles)
@@ -129,10 +136,30 @@ def main() -> None:
         )
         if not profiles or len(profiles) != len(set(profiles)):
             parser.error("--all-profiles requires unique qualified native graphs")
-        for profile in profiles:
+        try:
+            sources = native_stationary_package_sources(
+                profiles, fused_profiles=tuple(args.fused_profiles)
+            )
+        except ValueError as error:
+            parser.error(str(error))
+        if args.list_sources:
+            print(";".join(sources))
+            return
+        for filename, profile in sources.items():
             write_if_changed(
-                args.output_dir / f"native_{profile}.cu",
-                emit_native_stationary_profile_cuda(profile),
+                args.output_dir / filename,
+                "\n".join(
+                    emit_native_stationary_profile_cpp(member)
+                    for member in sorted(profiles)
+                    if member.startswith("libxc_")
+                    and member not in args.fused_profiles
+                    and native_stationary_shared_group(member)
+                    == native_stationary_shared_group(profile)
+                )
+                if filename.endswith(".cpp")
+                else emit_native_stationary_profile_cuda(
+                    profile, staged_point=filename.startswith("native_shared_")
+                ),
             )
         return
     if args.output_dir is not None or args.profiles is not None:

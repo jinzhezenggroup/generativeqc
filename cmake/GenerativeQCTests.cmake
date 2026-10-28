@@ -13,6 +13,12 @@ function(generativeqc_native_test target source)
   endif()
   if(NOT VNT_NO_SRC_INCLUDE)
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(NOT VNT_NO_GENERATIVEQC AND TARGET CUDA::cudart)
+      # Internal device views expose CUDA types when the library enables CUDA.
+      # Keep their toolkit usage requirements local to internal-header tests;
+      # installed SDK consumers do not acquire a CUDA header dependency.
+      target_link_libraries(${target} PRIVATE CUDA::cudart)
+    endif()
   endif()
   add_test(NAME ${target} COMMAND ${target})
   if(VNT_SKIP_77)
@@ -548,6 +554,14 @@ macro(generativeqc_add_native_tests)
       src/integrals/generated_df_cpu.cpp
       src/integrals/ecp.cpp)
     add_dependencies(generativeqc_cosx_cuda_tests generativeqc_ecp_codegen generativeqc_libxc_semilocal_cuda_codegen)
+    if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+      # This standalone test compiles s_integrals.cpp instead of linking the
+      # production library, so its enabled dispatch needs the same CPU shards.
+      target_sources(generativeqc_cosx_cuda_tests PRIVATE
+        ${GENERATIVEQC_STATIONARY_CPU_AOT_SOURCES})
+      add_dependencies(generativeqc_cosx_cuda_tests
+        generativeqc_stationary_cpu_derivatives_codegen)
+    endif()
     target_include_directories(generativeqc_cosx_cuda_tests PRIVATE
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
