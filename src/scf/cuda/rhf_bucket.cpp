@@ -82,7 +82,8 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
                    false, false, false, false, true, layout, incremental_diis_gram))
     return false;
   arena_bytes = layout.bytes;
-  plan_object_bytes = sizeof(CudaRhfBucketPlan);
+  plan_object_bytes =
+      sizeof(CudaRhfBucketPlan) + (diis_work_requested() ? sizeof(DiisWorkReadback) : 0);
   return true;
 }
 
@@ -257,7 +258,8 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   }
 
   arena_bytes = std::max(energy_layout.bytes, force_layout.bytes);
-  plan_object_bytes = sizeof(CudaRhfBucketPlan);
+  plan_object_bytes =
+      sizeof(CudaRhfBucketPlan) + (diis_work_requested() ? sizeof(DiisWorkReadback) : 0);
   return true;
 }
 
@@ -306,7 +308,7 @@ std::size_t hf_cuda_retained_host_numeric_bytes(const CudaRhfBucketPlan& plan) n
           plan.resident_previous_energy, plan.frozen_warm_positions, plan.frozen_warm_density,
           plan.frozen_previous_energy, plan.bounded_direct_shell_pair_order,
           plan.bounded_stream_shell_pair_order, plan.bounded_stream_pair_class_offsets,
-          plan.mixed_precision_system_census));
+          plan.mixed_precision_system_census, plan.diis_work_readback));
   if (plan.last_ppps_queue_profile)
     bytes = runtime::add_capacity(
         bytes, runtime::vector_bytes(plan.last_ppps_queue_profile->ket_count_histogram));
@@ -498,6 +500,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
        (*plan)->reuse_converged_fock != reuse_converged_fock ||
        (*plan)->incremental_diis_gram != incremental_diis_gram ||
        (*plan)->ordered_diis_gram != ordered_diis_gram ||
+       (*plan)->diis_work_enabled != diis_work_requested() ||
        (*plan)->one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        (*plan)->mixed_precision_fock != mixed_precision_fock ||
        (*plan)->mixed_precision_fock_threshold != mixed_precision_fock_threshold)) {

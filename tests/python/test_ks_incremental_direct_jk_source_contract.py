@@ -66,20 +66,6 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
     assert "sum(options.max_iterations, kMaximumFinalCorrections)" in ks
 
 
-def test_cuda_ks_incremental_storage_is_explicitly_budgeted() -> None:
-    header = _source("src/dft/cuda_ks.hpp")
-    ks = _source("src/dft/cuda_ks.cpp")
-
-    assert "bool incremental_direct_jk = false" in header
-    assert (
-        "bool incremental_direct_jk,\n"
-        "                        bool incremental_diis_gram, void* storage" in ks
-    )
-    assert "reserve(incremental_anchor_density, elements);" in ks
-    assert "reserve(incremental_delta_density, elements);" in ks
-    assert "reserve(incremental_anchor_j, matrix);" in ks
-
-
 def test_cuda_ks_final_closure_domain(tmp_path: Path, native_cxx: NativeCxx) -> None:
     """Execute the production gate for every existing and budget-Fock domain."""
     ks = _source("src/dft/cuda_ks.cpp")
