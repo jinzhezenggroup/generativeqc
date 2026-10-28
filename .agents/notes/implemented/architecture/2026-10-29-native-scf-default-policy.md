@@ -47,6 +47,12 @@ work to very short endpoints. Replacing any input invalidates the answer, and
 callers receive detached controls. No geometry, density or device lifetime enters
 this metadata cache. Complete endpoint qualification remains required.
 
+The transport also shares at most eight immutable query bindings by native
+library handle. Each entry retains its library, so a live cache key cannot refer
+to an unloaded/reused handle. Direct CFUNCTYPE binding avoids adding a CDLL ↔
+function reference cycle for every short-lived audit Calculator. Explicitly
+supplied bindings still take precedence; missing symbols alone select compatibility.
+
 ## Validation
 
 Public/native contracts and actual linked Python queries cover every incumbent
