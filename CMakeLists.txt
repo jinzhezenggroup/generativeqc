@@ -94,6 +94,8 @@ option(GENERATIVEQC_CUDA_SEPARABLE_COMPILATION
        "Enable CUDA relocatable device code and the device-link stage" OFF)
 option(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK
        "Share native direct numerical code through a bounded NVIDIA device link" ON)
+option(GENERATIVEQC_PRUNE_CUDA_ARCHIVES
+       "Prune resolved CUDA link inputs from private host-link archive copies" ON)
 option(GENERATIVEQC_CUDA_FAST_COMPILE
        "Use compiler-oriented CUDA options (never for release measurements)" OFF)
 option(GENERATIVEQC_ENABLE_CXX_PCH
@@ -108,6 +110,8 @@ set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING
     "Optional native CUDA compiler job limit; empty follows the build tool parallelism")
 set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING
     "Optional independent generated-AOT CUDA job limit; empty follows native CUDA scheduling")
+set(GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE "" CACHE PATH
+    "Optional shared target-independent stationary source cache across AOT build directories")
 set(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "1" CACHE STRING
     "NVCC split-compile threads for generated AOT kernels; 1 preserves production code generation")
 set(GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS "1" CACHE STRING

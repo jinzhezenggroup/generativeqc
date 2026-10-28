@@ -27,6 +27,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -79,6 +80,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
+- [generativeqc_calculation_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)
+- [generativeqc_batch_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-batch-prepare-named-ks-with-device-resources-v1)
 - [generativeqc_calculation_prepare_with_device_resources](#native-c-generativeqc-calculation-prepare-with-device-resources)
 - [generativeqc_calculation_get_device_resources](#native-c-generativeqc-calculation-get-device-resources)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
@@ -633,6 +637,38 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-correlation-convergence-query-v1)=
+## generativeqc_correlation_convergence_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_correlation_convergence_query_v1 ( const generativeqc_correlation_budget_v1 * descriptor , generativeqc_correlation_limits_v1 * output ) ;
+```
+
+**Behavior.** Query the existing correlated solver's budget-scaled stopping
+policy. All-zero allowances select strict controls. A scale below the supported
+bracket also selects strict controls; this is not observable qualification.
+
+**Inputs.** Current-ABI descriptor headers and nonnegative finite allowances;
+energy and maximum force must both be positive unless all allowances are zero.
+Zero RMS denotes no RMS constraint, not a zero-error request.
+
+**Outputs.** Atomically publishes the scale and eight solver ceilings. Explicit
+tighter caller settings and independent scientific admission still apply.
+
+**Errors.** Null pointers or malformed allowances return INVALID_ARGUMENT;
+incompatible headers return ABI_MISMATCH. Errors leave output unchanged.
+
+**Lifetime.** Borrows input for this call only; retains no pointers or state.
+
+**Execution.** Synchronous host metadata through the same policy used by native
+correlated solvers. No solver, device, Python/compiler, allocation on success,
+callback or implicit retry. Input and output storage may overlap.
+
+**Units.** Energy allowances/tolerances are Hartree; force allowances are
+Hartree/Bohr. Density, amplitude and response gates retain their solver units.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1
@@ -2102,6 +2138,85 @@ identity checks and execution-control-only ks_options.
 **Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
+
+(native-c-generativeqc-ks-d3-resource-query-v1)=
+## generativeqc_ks_d3_resource_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1 ( generativeqc_backend backend , const uint32_t * atom_counts , uint32_t system_count , generativeqc_d3_runtime_diagnostic * output ) ;
+```
+
+**Behavior.** Query the capacities of KS's retained per-system D3 correction owners.
+
+**Inputs.** A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+output are required. Every item must satisfy the production D3 atom bound.
+
+**Outputs.** Publishes summed host/device/table/workspace capacities. maximum_bytes is the
+minimum aggregate dispersion cap under the named batch's equal-per-item budget rule;
+it can exceed the sum of retained bytes for ragged inputs. Output is unchanged on failure.
+
+**Lifetime.** Borrows inputs only for this call; no owner or pointer is retained.
+
+**Errors.** Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+
+**Execution.** Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+
+**Units.** Atom counts are dimensionless and all capacities are bytes.
+
+(native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)=
+## generativeqc_calculation_prepare_named_ks_with_device_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resources_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , const generativeqc_device_resources * resources , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Prepare the complete named KS program with retained native device admission.
+
+**Inputs.** Named preparation inputs plus a live resources handle on the context's CUDA device.
+Its selected inventory must include both electronic and correction capacities.
+
+**Outputs.** Clears calculation on entry and publishes an owned calculation on success.
+
+**Lifetime.** Copies inputs and shares resource ownership; the context must outlive the owner.
+Closing the caller's resource handle cannot detach admission from execution or destruction.
+
+**Errors.** Same named-program validation and device-admission statuses as ordinary preparation.
+Missing name/resources returns INVALID_ARGUMENT, with no unbudgeted retry.
+
+**Execution.** Synchronous; the shared prepared owner binds admission around setup and replay.
+
+**Units.** Coordinates in Bohr, energies in Hartree, capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-with-device-resources-v1)=
+## generativeqc_batch_prepare_named_ks_with_device_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_device_resources * resources , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare a complete input-ordered named KS batch with retained device admission.
+
+**Inputs.** Named batch preparation inputs plus a live resources handle on the context's CUDA
+device. The inventory includes electronic buffers and per-system correction owners.
+
+**Outputs.** Clears batch on entry and publishes one owning batch on success.
+
+**Lifetime.** Shares resource ownership across replay and geometry rebuild; the context must
+outlive the batch. The caller may close its resources handle after successful preparation.
+
+**Errors.** Same named-program and device-admission validation as scalar preparation; missing
+name/resources returns INVALID_ARGUMENT. Failure never retries without admission.
+
+**Execution.** Synchronous preparation; ordinary native batch replay and item failure isolation.
+
+**Units.** Coordinates in Bohr, energies in Hartree, capacities in bytes.
 
 (native-c-generativeqc-calculation-prepare-with-device-resources)=
 ## generativeqc_calculation_prepare_with_device_resources

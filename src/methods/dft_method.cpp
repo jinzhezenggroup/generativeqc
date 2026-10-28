@@ -362,10 +362,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
-  // Automatic graphs inherit the common s/p FP64 envelope only. Neither an
+  // Automatic graphs retain all-electron Direct s/p FP64 admission. Neither an
   // artifact nor a curated method's precision/large-angular receipt widens it.
   if (execution_plan.automatic_program &&
-      (maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      (!all_electron || options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+       maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
        options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused))
     return {};
   const bool application =
@@ -3652,6 +3653,21 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "named dispersion requires strict FP64");
     execution_plan.dispersion = *dispersion;
+    if (dispersion->kind != 3) {
+      std::vector<std::uint32_t> atom_counts;
+      atom_counts.reserve(systems.size());
+      for (const auto& system : systems) {
+        if (system.atoms.size() > dft::dispersion::kD3MaximumAtomsPerSystem)
+          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                            "D3 system exceeds the production per-system atom bound");
+        atom_counts.push_back(static_cast<std::uint32_t>(system.atoms.size()));
+      }
+      const auto correction_capacity =
+          dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts);
+      if (dispersion_bytes < correction_capacity.maximum_bytes)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "KS D3 fleet exceeds its equal-share correction budget");
+    }
     // KS retains a correction owner per system. Equal shares conservatively
     // bound their aggregate storage, including replicated immutable tables.
     execution_plan.dispersion_maximum_bytes = dispersion_bytes / systems.size();

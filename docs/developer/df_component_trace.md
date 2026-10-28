@@ -218,6 +218,34 @@ means submitted work completed; a host END means the scope returned or unwound.
 Neither status asserts numerical convergence. Dispatch statuses and device
 convergence readbacks remain separate observations.
 
+### Terminal HF/KS DIIS work
+
+Setting the journal path before resource planning and preparation also requests
+`cuda_diis_work` receipts from ordinary CUDA HF and KS owners. Enablement is frozen
+with the prepared arena and Graph; recreate a KS owner to change it. Each history
+owns a 16-byte device counter and a 24-byte retained host readback (plus arena
+alignment). Both are included in resource planning. With the journal disabled,
+there is no counter allocation, clearing, copy, or extra synchronization.
+
+Receipts identify the method, owner, solve epoch, batch item, AO/spin dimensions,
+history capacity, terminal live count/head, and selected Gram route. For ordered
+routes, `gram_dot_reductions` and `residual_vector_elements` are device-observed
+logical arithmetic work. They are not kernel counts, GPU time, or physical memory
+traffic. Serial and unordered fallback routes report `work_coverage=unavailable`
+and omit these counters; unavailable work is never reported as observed zero.
+`graph_launches_lifetime` separately reports successful submissions over the
+current Graph owner's lifetime; it is not an attempt-local Gram counter.
+
+Counters accumulate through history wrap, retirement and internal history resets
+within an attempt, including discarded reductions. Each new solve/retry clears
+them before iteration or Graph replay. Only the terminal stream boundary reads
+them back: HF uses its existing results fence, while diagnostic KS execution adds
+one terminal fence. Nonconvergence may still produce a completed receipt with
+`converged=0`; a copy/stream failure publishes no receipt. An exception before a
+terminal solve likewise has no completed observation. Separate attempt receipts
+must be retained when accounting for a retrying endpoint. These scopes measure
+DIIS work, not complete endpoint performance; existing numerical gates still apply.
+
 K records planner AO-pair/auxiliary tiles and executed AO rows/output auxiliary
 widths. Source-backed K also reports `executed_raw_auxiliary_tile` and
 `raw_tensor_passes_per_k`, the shared dense/occupied policy's full-traversal

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "dft/dispersion/d3_runtime.hpp"
+#include "runtime/resource_ledger.hpp"
 
 #if defined(GENERATIVEQC_D3_REPLAY_TEST_INTERPOSE)
 namespace fault_injection {
@@ -159,6 +160,44 @@ generativeqc_status replay(D3CudaOwner* owner, bool gradient, std::string& detai
                          detail);
 }
 
+void test_capacity_and_retained_ledger() {
+  using namespace generativeqc::runtime;
+  using generativeqc::dft::dispersion::d3_resource_usage;
+  const auto usage = d3_resource_usage(GENERATIVEQC_BACKEND_CUDA, 1, 8, 8);
+  const std::array<std::uint32_t, 2> offsets{0, 8};
+  const std::array<std::int32_t, 8> numbers{6, 6, 6, 6, 6, 6, 6, 6};
+  for (const auto limit : {usage.device_bytes - 1, usage.device_bytes}) {
+    auto ledger = std::make_shared<DeviceResourceLedger>();
+    ledger->device = 0;
+    ledger->limit = limit;
+    Owner owner;
+    {
+      DeviceResourceScope scope(ledger);
+      std::string detail;
+      generativeqc_status status;
+      owner.value = create_d3_cuda_owner(0, offsets, numbers, usage, detail, status);
+      if (limit < usage.device_bytes) {
+        require(!owner.value && status == GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                "below-capacity D3 preparation succeeded");
+        require(ledger->live == 0 && ledger->rejected > 0,
+                "failed D3 setup leaked a device charge or bypassed admission");
+      } else {
+        require(owner.value && status == GENERATIVEQC_STATUS_SUCCESS,
+                "exact-capacity D3 preparation failed");
+        require(ledger->live == usage.device_bytes && ledger->peak == usage.device_bytes,
+                "D3 planner and actual simultaneous allocations differ");
+        require(replay(owner.value, true, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                "budgeted D3 replay failed");
+      }
+    }
+    // Buffer ownership, rather than the submitting thread's scope, must keep
+    // the ledger alive until its last physical allocation is retired.
+    destroy_d3_cuda_owner(owner.value);
+    owner.value = nullptr;
+    require(ledger->live == 0, "D3 destruction outside admission scope leaked charges");
+  }
+}
+
 #if defined(GENERATIVEQC_D3_REPLAY_TEST_INTERPOSE)
 void expect_failure_drain(D3CudaOwner* owner, fault_injection::FailurePoint point, bool gradient) {
   fault_injection::reset(point);
@@ -197,6 +236,8 @@ int main() {
     std::string detail;
     require(replay(owner.value, true, detail) == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
 #endif
+
+    test_capacity_and_retained_ledger();
 
     std::cout << "D3 CUDA replay failures drain retained stream before host buffers expire\n";
     return EXIT_SUCCESS;

@@ -39,6 +39,25 @@
 
 extern "C" {
 
+generativeqc_status generativeqc_ks_d3_resource_query_v1(
+    generativeqc_backend backend, const std::uint32_t* atom_counts, std::uint32_t system_count,
+    generativeqc_d3_runtime_diagnostic* output) {
+  if (!atom_counts || !system_count || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    const auto r = generativeqc::dft::dispersion::ks_d3_resource_usage(
+        backend, std::span(atom_counts, system_count));
+    const generativeqc_d3_runtime_diagnostic candidate{
+        output->struct_size,    output->abi_version, backend,        r.plan_host_bytes,
+        r.execution_host_bytes, r.device_bytes,      r.table_bytes,  r.workspace_bytes,
+        r.maximum_bytes,        r.total_atoms,       r.system_count, r.maximum_atoms};
+    *output = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+}
+
 /** Private allocation-free compact topology query. Each row is an already
  * expanded contraction, not an element template. The scalar AO rules are the
  * same ones used by normalized systems; no coefficients, coordinates, provider

@@ -298,7 +298,7 @@ NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
 # shared automatic consumers and explicit fused-profile selection. Retain the
 # full wiring/discovery-policy digest; this is not measured GPU qualification.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
+    "52b6b6c6c30a258d75fcab72b5ab8cf2de60ba291b7cf2011788db2d454307f4"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"

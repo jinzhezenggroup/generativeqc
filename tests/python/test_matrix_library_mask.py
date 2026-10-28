@@ -406,11 +406,13 @@ def layouts(
 #include <type_traits>
 #include <vector>
 #include "scf/cuda/arena.hpp"
+#include "scf/diis_work.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/resident_final_validation.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 using namespace generativeqc::scf::cuda_execution;
 namespace scf = generativeqc::scf;
+namespace tensor = generativeqc::tensor;
 namespace cuda_ks_detail = generativeqc::dft::cuda_ks_detail;
 constexpr unsigned kCudaKsChunkCapacity = 2;
 """
@@ -424,10 +426,10 @@ constexpr unsigned kCudaKsChunkCapacity = 2;
 extern "C" void ks_layout(int n, int spins, int history, int exchange, int range, int incremental,
                            std::size_t* result) {
   KsStateStorage dry, actual;
-  const auto bytes = dry.partition(n, spins, history, exchange, range, incremental, true, nullptr);
+  const auto bytes = dry.partition(n, spins, history, exchange, range, incremental, true, false, nullptr);
   std::vector<double> storage((bytes + 7) / 8);
   const auto actual_bytes = actual.partition(n, spins, history, exchange, range, incremental,
-                                              true, storage.data());
+                                              true, false, storage.data());
   assert(bytes == actual_bytes && dry.masked_matrix_output == nullptr);
   const auto begin = reinterpret_cast<std::uintptr_t>(actual.masked_matrix_output);
   const auto end = reinterpret_cast<std::uintptr_t>(actual.cold_seed);

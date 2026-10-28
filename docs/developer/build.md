@@ -101,6 +101,15 @@ available memory.
 The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.
 
+Linux NVIDIA builds default to `GENERATIVEQC_PRUNE_CUDA_ARCHIVES=ON`.
+The private Direct and GFN2 archives first complete their own device links.
+`nvprune` then creates separate host-link copies without the resolved relocatable
+device inputs, preserving all requested executable cubins, PTX and registration
+wrappers. Original archives remain available for device linking and incremental
+builds. This changes packaging, not mathematical kernels or architecture coverage.
+Set the option to `OFF` to retain the complete archives in final binaries.
+Other backends, or toolkits without `nvprune`, retain the original archives.
+
 The distributable `cuda-release-cli-sm120` preset **always includes the
 entire structurally representable automatic CUDA XC catalog**. It explicitly
 sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves
@@ -202,6 +211,31 @@ automatically. Whole-library separable compilation remains optional through
 `-DGENERATIVEQC_CUDA_SEPARABLE_COMPILATION=ON`. The requested
 `120-real`/`120-virtual` suffix is retained for NVCC while profile directories
 continue to use the canonical `sm_120` identity.
+Requesting both suffixes retains both SASS and PTX in that target; list order
+does not select which image survives. An unsuffixed numeric architecture already
+requests both kinds.
+
+Separate stationary AOT build directories can share generated scientific sources
+by setting `-DGENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE=/absolute/cache/path` to the
+same directory. The default is empty (no persistent AOT source cache). This uses
+the [bounded semantic source cache](stationary_cuda_diagnostic.md), separately
+from sccache/ccache and from architecture-specific build objects. It covers the
+shared s/p primitives, s/p/d shards, legacy wrappers and native scientific
+wrappers. It does not cache native binding metadata or installed manifests.
+Cache hits retain generator/asset dependency checks and source integrity checks;
+corruption fails the build. CMake tracks the full recipe dependency closure even
+when a hit avoids importing a lowering module.
+
+Within one multiarch build, Stationary and DF shell sources are already generated
+once and compiled for the requested architectures. Direct-shell profiles may
+resolve different schedules per target, including a Fock companion selected
+during force lowering, so their target-dependent source generation remains
+separate. Cross-target reuse requires identical resolved lowering inputs.
+
+For an offline census of Stationary geometry contracts and DF shell mathematics,
+run `python tools/audit_aot_reuse.py --output /tmp/aot-reuse.json`. This reports
+source/math equivalences and layout differences; it does not qualify shared
+kernel dispatch or imply a runtime speedup.
 
 For compile-only CUDA experiments,
 `-DGENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS=N` enables NVCC split compilation of
