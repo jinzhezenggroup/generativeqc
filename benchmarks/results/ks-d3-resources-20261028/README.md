@@ -128,3 +128,16 @@ Its static allocation bytes and opaque memory remain separately identified.
 The selected verified sccache launcher was used throughout the builds; one
 server-shutdown warning caused its documented local compiler fallback. Shared
 cache snapshots and that warning are retained, without claiming exclusive hits.
+
+
+## Recovery after the subsequent policy campaign
+
+The complete raw records for this earlier source campaign are retained in Git
+commit `162ea8332179af8e2974562e30ae92f284bcc4f8`. Current identity manifests
+record `git_commit` and `git_path` for archived patches, compressed CSVs,
+receipts and sample bundles; `member` selects an exact JSON string in a bundle.
+For example, `git show 162ea8332:benchmarks/results/ks-d3-resources-20261028/endpoint-samples.json.xz`
+restores the complete integrated sample bundle. Original pre-integration sample
+recovery remains bound to `bcf1124fc` as described above. Summaries and reproduction
+programs stay in the current tree. This is existing-Git retention, with no new
+external archive, release asset, changed checksum or increased storage limit.
