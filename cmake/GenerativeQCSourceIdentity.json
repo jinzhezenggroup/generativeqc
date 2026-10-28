@@ -49,6 +49,7 @@
     "CMakeLists.txt",
     "cmake/GenerativeQCCuda.cmake",
     "cmake/GenerativeQCCudaArchive.cmake",
+    "cmake/GenerativeQCCudaCompression.cmake",
     "cmake/GenerativeQCStationaryProfiles.cmake",
     "cmake/GenerativeQCHessianAot.cmake",
     "cmake/GenerativeQCCutlass.cmake",

@@ -1,0 +1,15 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "d7b451eced0e2840a8ab47c02e223732c88e5e4a",
+  "file_count": 1,
+  "total_bytes": 209852,
+  "retention": "Existing ancestor Git objects only; retain source history. No external copy, release or tag.",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-image-storage-20261028/receipts.json.xz",
+      "bytes": 209852,
+      "sha256": "fb0461c533f630f9d151d798f4998fb2dc1095975cc2b4e085abb4691b7b43f8",
+      "git_blob_sha1": "cd98d83b473020fae7a670cc7479f32cde7e329a"
+    }
+  ]
+}
