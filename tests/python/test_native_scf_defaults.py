@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import ctypes
+import gc
 import math
+import shutil
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -159,3 +162,36 @@ def test_cached_metadata_is_detached_and_tracks_selected_query(library: Any) -> 
     )
     with pytest.raises(RuntimeError, match="invalid receipt"):
         policy.default_scf_controls(calculator)
+
+
+def test_shared_binding_retains_library_and_honors_explicit_replacement(
+    query_library: Any,
+) -> None:
+    first = metadata(ctypes.CDLL(query_library._name), "pbe-rks")
+    assert policy.default_scf_controls(first)["density_tolerance"] == 1e-5
+    del first
+    gc.collect()
+    second = metadata(ctypes.CDLL(query_library._name), "pbe-rks")
+    assert policy.default_scf_controls(second)["density_tolerance"] == 1e-5
+    second._library.generativeqc_scf_defaults_query_v1 = lambda *args: 0
+    with pytest.raises(RuntimeError, match="invalid receipt"):
+        policy.default_scf_controls(second)
+
+
+def test_concurrent_queries_survive_binding_retirement(
+    query_library: Any, tmp_path: Path
+) -> None:
+    calculators = []
+    # Distinct images exercise bounded binding retirement while other owners
+    # still hold valid queries; a pathname alias would share one loader handle.
+    for index in range(12):
+        path = tmp_path / f"query-{index}.so"
+        shutil.copyfile(query_library._name, path)
+        calculators.append(metadata(ctypes.CDLL(str(path)), "pbe-rks"))
+
+    def check(index: int) -> None:
+        calculator = calculators[index % len(calculators)]
+        assert policy.default_scf_controls(calculator)["density_tolerance"] == 1e-5
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(check, range(240)))

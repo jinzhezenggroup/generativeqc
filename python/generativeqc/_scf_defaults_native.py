@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ctypes as ct
 import math
+from collections import OrderedDict
 from functools import lru_cache
+from threading import RLock
 from typing import Any
 
 from . import _native
@@ -36,6 +38,48 @@ class _Controls(ct.Structure):
         ("density_tolerance", ct.c_double),
         ("screening_tolerance", ct.c_double),
     ]
+
+
+_QUERY_ARGUMENTS = (
+    ct.POINTER(_Context),
+    ct.POINTER(_native.KsOptionsDescriptor),
+    ct.c_char_p,
+    ct.c_size_t,
+    ct.POINTER(_Controls),
+)
+_QUERY_TYPE = ct.CFUNCTYPE(ct.c_int, *_QUERY_ARGUMENTS)
+_QUERIES: OrderedDict[int, tuple[Any, Any]] = OrderedDict()
+_QUERY_LOCK = RLock()
+
+
+def _query(library: Any) -> Any:
+    """Bound shared symbol binding without a new CDLL/function reference cycle.
+
+    ctypes attribute lookup normally installs a function on each fresh CDLL,
+    while the function retains that CDLL. Audit Calculator construction repeats
+    this for an otherwise immutable query. Bind without installing the attribute
+    and retain at most eight library/function pairs. Retaining each library also
+    prevents handle reuse while its cached binding is live. Explicitly supplied
+    bindings remain authoritative, including failure-injection adapters.
+    """
+    name = "generativeqc_scf_defaults_query_v1"
+    if not isinstance(library, ct.CDLL):
+        return getattr(library, name, None)
+    if name in library.__dict__:
+        return library.__dict__[name]
+    handle = library._handle
+    with _QUERY_LOCK:
+        if handle in _QUERIES:
+            _QUERIES.move_to_end(handle)
+            return _QUERIES[handle][1]
+        try:
+            query = _QUERY_TYPE((name, library))
+        except AttributeError:
+            query = None
+        _QUERIES[handle] = (library, query)
+        if len(_QUERIES) > 8:
+            _QUERIES.popitem(last=False)
+        return query
 
 
 @lru_cache(maxsize=16)
@@ -77,7 +121,7 @@ def default_controls(calculator: Any) -> dict[str, float] | None:
     This cache holds no geometry, seed or device resource.
     """
     library = getattr(calculator, "_library", None)
-    query = getattr(library, "generativeqc_scf_defaults_query_v1", None)
+    query = _query(library)
     if query is None:
         return None
     cuda = getattr(calculator, "_device_name", None) == "cuda"
@@ -109,13 +153,7 @@ def default_controls(calculator: Any) -> dict[str, float] | None:
         descriptor = _grid_options(options.grid, options.xc_schedule)
         identity = options.method_ir.identity.encode("ascii")
     output = _Controls(ct.sizeof(_Controls), _native.ABI_VERSION)
-    query.argtypes = [
-        ct.POINTER(_Context),
-        ct.POINTER(_native.KsOptionsDescriptor),
-        ct.c_char_p,
-        ct.c_size_t,
-        ct.POINTER(_Controls),
-    ]
+    query.argtypes = _QUERY_ARGUMENTS
     query.restype = ct.c_int
     _native.check(
         library,
