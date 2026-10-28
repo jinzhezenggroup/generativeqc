@@ -1200,12 +1200,12 @@
       "sha256": "d71ff3c2ff564b2c6a14dfd2e915137d4fa87097052f5118f85bfffc674b1e23"
     },
     "../automatic-native-cuda-20261027/manifest.json": {
-      "bytes": 61047,
-      "sha256": "15971d121f9261c6ba4b2913fe01506de9e1cb2cb7dd74b4653931d1f6c97427"
+      "bytes": 61052,
+      "sha256": "4af4ff1d98a179d11d346709d6dfa40f7ac206745cb3b46f381a77cf3312bd87"
     },
-    "../automatic-native-cuda-20261027/reference-native-source.patch": {
-      "bytes": 224274,
-      "sha256": "6a33dbf90ec0922c499c29068204ac54ae66042a5c50130001aebc57102a7d07"
+    "../automatic-native-cuda-20261027/reference-native-source.patch.xz": {
+      "bytes": 47332,
+      "sha256": "74da7abc354cc3a8b6bf948c9d3b9e754570cba6d4b3540e6b4e83b160d40462"
     }
   },
   "files": {

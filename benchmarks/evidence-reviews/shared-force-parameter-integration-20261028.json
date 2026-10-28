@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "shared-force-parameter-integration-20261028",
+  "owner": "Shared CUDA force and parameter package integration (#2835)",
+  "reason": "Exact remote input inventory binds all 5951 scientific, build and test blobs to measured commit 150c9d5bd. It permits independent reconstruction of the successful source-to-binary verification instead of relying on a summary hash alone. Numerical records and failed build receipts remain separate; this is storage review, not scientific promotion.",
+  "review_document": "benchmarks/results/shared-force-parameter-integration-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/shared-force-parameter-integration-20261028/final/build-inputs.json.xz",
+      "family": "shared-force-parameter-integration-20261028",
+      "classification": "required-compact-accepted-evidence",
+      "role": "measured-build-input-provenance",
+      "bytes": 166452,
+      "sha256": "a11b661f9723de5f3b8f0c5bcfc336293cc4f638252c7bf7b0b7b3ccc8248573"
+    }
+  ]
+}
