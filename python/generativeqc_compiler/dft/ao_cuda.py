@@ -1059,32 +1059,39 @@ def emit_native_xc_point_dispatch() -> str:
         "",
         "CudaXcPointLauncher mixed_pbe_point_launcher() { return &launch_mixed_pbe_points; }",
         "CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher() { return &launch_mixed_pbe_point_batches; }",
-        "CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response) {",
+        "CudaXcPointBinding resolve_point_binding(std::uint32_t functional, bool response) {",
     ]
     for functional, response, _, _ in consumers:
         consumer = "true" if response else "false"
+        record = SEMILOCAL_FAMILY_BY_CODE[functional]
         code = _curated_cpp_code(functional)
-        if SEMILOCAL_FAMILY_BY_CODE[functional]["symbol"] == "Pbe":
-            lines.append(
-                f"  if (functional == {code} && response == {consumer}) "
-                f"return pbe_point_specialization_enabled() "
-                f"? &launch_points<{code}, {consumer}, true> "
-                f": &launch_points<{code}, {consumer}>;"
+        terms = _point_feature_terms(record)
+        threads = 32 if terms == 4 else 128
+        launch = f"&launch_points<{code}, {consumer}>"
+        batch = "nullptr" if response else f"&launch_point_batches<{terms}, {threads}>"
+        lines.append(f"  if (functional == {code} && response == {consumer}) {{")
+        if record["symbol"] == "Pbe":
+            specialized_batch = (
+                "nullptr"
+                if response
+                else f"&launch_point_batches<{terms}, {threads}, true>"
             )
-            continue
-        lines.append(
-            f"  if (functional == {code} && response == {consumer}) "
-            f"return &launch_points<{code}, {consumer}>;"
-        )
+            lines.extend(
+                (
+                    "    if (pbe_point_specialization_enabled())",
+                    f"      return {{&launch_points<{code}, {consumer}, true>, {specialized_batch}, nullptr}};",
+                )
+            )
+        lines.extend((f"    return {{{launch}, {batch}, nullptr}};", "  }"))
     lines.extend(
         (
             "  if (!response && generated::split_hybrid_registered(functional))",
             "    return generated::split_hybrid_is_mgga(functional)",
-            "               ? &launch_split_hybrid_points<5>",
-            "               : &launch_split_hybrid_points<4>;",
+            "               ? CudaXcPointBinding{&launch_split_hybrid_points<5>, &launch_point_batches<5, 128>, nullptr}",
+            "               : CudaXcPointBinding{&launch_split_hybrid_points<4>, &launch_point_batches<4, 32>, nullptr};",
             "  if (!response)",
             "    if (const auto* program = generated::automatic_cuda_point_entry(functional))",
-            "      return program->launch;",
+            "      return {program->launch, nullptr, program};",
             '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
             "}",
             "",
@@ -1112,51 +1119,6 @@ def emit_native_xc_point_dispatch() -> str:
         )
     )
     return "\n".join(lines) + "\n"
-
-
-def emit_native_xc_point_batch_dispatch() -> str:
-    """Bind physical batches to the immutable prepared point policy."""
-    batch_dispatch = [
-        "CudaXcPointBatchLauncher resolve_point_batch_launcher(",
-        "    std::uint32_t functional, CudaXcPointLauncher point_launcher) {",
-    ]
-    for record in SEMILOCAL_FAMILIES:
-        if not record["cuda_ks"]:
-            continue
-        code = _curated_cpp_code(record["code"])
-        terms = _point_feature_terms(record)
-        threads = 32 if terms == 4 else 128
-        if record["symbol"] == "Pbe":
-            batch_dispatch.extend(
-                (
-                    f"  if (functional == {code}) {{",
-                    (
-                        f"    if (point_launcher == &launch_points<{code}, false, true>) "
-                        f"return &launch_point_batches<{terms}, {threads}, true>;"
-                    ),
-                    (
-                        f"    if (point_launcher == &launch_points<{code}, false>) "
-                        f"return &launch_point_batches<{terms}, {threads}>;"
-                    ),
-                    '    throw std::invalid_argument("PBE point batch launcher identity mismatch");',
-                    "  }",
-                )
-            )
-            continue
-        batch_dispatch.append(
-            f"  if (functional == {code}) return &launch_point_batches<{terms}, {threads}>;"
-        )
-    batch_dispatch.extend(
-        (
-            "  if (generated::split_hybrid_registered(functional))",
-            "    return generated::split_hybrid_is_mgga(functional)",
-            "               ? &launch_point_batches<5, 128>",
-            "               : &launch_point_batches<4, 32>;",
-            '  throw std::invalid_argument("unsupported CUDA XC point batch consumer");',
-            "}",
-        )
-    )
-    return "\n".join(batch_dispatch)
 
 
 def emit_native_xc_point_program() -> str:
@@ -1193,11 +1155,7 @@ def emit_native_xc_contraction_kernels(
         .replace("@COMPENSATED_TOTALS@", emit_compensated_xc_totals())
         .replace(
             "@POINT_DISPATCH@",
-            emit_native_xc_point_dispatch()
-            + "\n"
-            + emit_native_xc_point_batch_dispatch()
-            + "\n"
-            + emit_native_xc_point_batch_plan(),
+            emit_native_xc_point_dispatch() + "\n" + emit_native_xc_point_batch_plan(),
         )
         + emit_native_xc_matrix_schedule(
             matrix_schedule, density_source=_NATIVE_XC_CONTRACTION_KERNELS

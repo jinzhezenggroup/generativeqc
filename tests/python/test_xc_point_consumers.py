@@ -5,9 +5,9 @@ import subprocess
 from pathlib import Path
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_source,
-    emit_native_xc_point_batch_dispatch,
     emit_native_xc_point_dispatch,
 )
 
@@ -25,11 +25,27 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
     functional code remains separate layout data rather than a template key.
     Spin, AO precision and point counts are deliberately absent from the AOT key:
     they remain validated data/layout arguments rather than extra code variants.
+    Manifest-derived admission cases replace generated-source spelling checks:
+    every family's ordinary/response selector and PBE policy actually execute.
     """
+    cases = [
+        (
+            item["code"],
+            response,
+            item["cuda_ks"]
+            and (not response or item["cuda_fast_paths"]["response"] == "qualified"),
+        )
+        for item in SEMILOCAL_FAMILIES
+        for response in (False, True)
+    ]
+    expected_consumers = ",\n".join(
+        f"  {{{code}, {str(response).lower()}, {str(admitted).lower()}}}"
+        for code, response, admitted in cases
+    )
+    admitted_count = sum(admitted for _, _, admitted in cases)
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
-    batch_dispatch = emit_native_xc_point_batch_dispatch()
     source = tmp_path / "dispatch.cpp"
     source.write_text(
         "#include <cstdint>\n#include <cstdlib>\n#include <stdexcept>\n#include <limits>\n"
@@ -41,9 +57,13 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "using CudaXcPointLauncher = void (*)();\n"
         "using CudaXcPointBatchLauncher = void (*)();\n"
         "namespace generativeqc::dft::generated {\n"
-        "struct AutomaticPointStub { CudaXcPointLauncher launch{}; };\n"
-        "const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }\n"
+        "void automatic_launch() {}\nvoid automatic_batch() {}\n"
+        "struct AutomaticPointStub { CudaXcPointLauncher launch{}; CudaXcPointBatchLauncher launch_batch{}; };\n"
+        "const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t code) {\n"
+        "  static const AutomaticPointStub program{automatic_launch, automatic_batch};\n"
+        "  return code == 0x10042U ? &program : nullptr;\n}\n"
         "}\n"
+        "struct CudaXcPointBinding { CudaXcPointLauncher launch; CudaXcPointBatchLauncher launch_batch; const generated::AutomaticPointStub* automatic_program; };\n"
         "struct CudaXcPointCapabilities {\n"
         "  bool local_ao_selection{}, mixed_density_contraction{};\n"
         "};\n"
@@ -57,50 +77,59 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "template <unsigned Terms, unsigned Threads, bool S = false> void launch_point_batches() {\n"
         "  selected_specialized = S;\n}\n"
         + emit_native_xc_point_dispatch()
-        + batch_dispatch
+        + "struct ExpectedConsumer { unsigned functional; bool response, admitted; };\n"
+        + f"const ExpectedConsumer expected_consumers[]{{\n{expected_consumers}\n}};\n"
+        + f"constexpr unsigned expected_count = {admitted_count};\n"
         + r"""
 int main() {
+  const auto automatic = resolve_point_binding(0x10042U, false);
+  if (automatic.launch != generated::automatic_launch || automatic.launch_batch ||
+      automatic.automatic_program != generated::automatic_cuda_point_entry(0x10042U)) return 19;
+  try {
+    resolve_point_binding(0x10042U, true);
+    return 20;
+  } catch (const std::invalid_argument&) {}
   mixed_pbe_point_launcher()();
   if(selected_functional != 17) return 13;
   mixed_pbe_point_batch_launcher()();
   if(selected_functional != 18) return 14;
-  CudaXcPointLauncher entries[7]{};
+  CudaXcPointLauncher entries[expected_count]{};
   unsigned count = 0;
-  for (unsigned f = 0; f < 6; ++f) {
-    for (unsigned r = 0; r < 2; ++r) {
-      const bool admitted = r ? f < 2 : f < 5;
-      try {
-        auto launch = resolve_point_launcher(f, r);
-        if (!admitted || !launch) return 1;
-        const auto capability = resolve_point_capabilities(f, r);
-        if (capability.local_ao_selection != !bool(r)) return 10;
-        if (capability.mixed_density_contraction != (!r && f < 3)) return 11;
-        launch();
-        if (selected_functional != f || selected_response != bool(r)) return 2;
-        const char* setting = std::getenv("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION");
-        if (selected_specialized != (f == 1 && setting && setting[0] == '1')) return 13;
-        for (unsigned i = 0; i < count; ++i)
-          if (entries[i] == launch) return 3;
-        entries[count++] = launch;
-      } catch (const std::invalid_argument&) {
-        if (admitted) return 4;
-      }
+  for (const auto& expected : expected_consumers) {
+    const auto f = expected.functional;
+    const auto r = expected.response;
+    const bool admitted = expected.admitted;
+    try {
+      const auto binding = resolve_point_binding(f, r);
+      auto launch = binding.launch;
+      if (bool(binding.launch_batch) != !bool(r) || binding.automatic_program) return 17;
+      if (!admitted || !launch) return 1;
+      const auto capability = resolve_point_capabilities(f, r);
+      if (capability.local_ao_selection != !bool(r)) return 10;
+      if (capability.mixed_density_contraction != (!r && f < 3)) return 11;
+      launch();
+      if (selected_functional != f || selected_response != bool(r)) return 2;
+      const char* setting = std::getenv("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION");
+      if (selected_specialized != (f == 1 && setting && setting[0] == '1')) return 13;
+      for (unsigned i = 0; i < count; ++i)
+        if (entries[i] == launch) return 3;
+      entries[count++] = launch;
+    } catch (const std::invalid_argument&) {
+      if (admitted) return 4;
     }
   }
-  if (count != 7) return 5;
-  auto pbe_generic = &launch_points<semilocal_family_code(SemilocalFamily::Pbe), false>;
-  auto pbe_specialized = &launch_points<semilocal_family_code(SemilocalFamily::Pbe), false, true>;
-  if (resolve_point_batch_launcher(1, pbe_generic) != &launch_point_batches<4, 32>) return 14;
-  if (resolve_point_batch_launcher(1, pbe_specialized) !=
-      &launch_point_batches<4, 32, true>) return 15;
-  try {
-    resolve_point_batch_launcher(1, &launch_points<semilocal_family_code(SemilocalFamily::Pbe), true>);
-    return 16;
-  } catch (const std::invalid_argument&) {}
+  if (count != expected_count) return 5;
+  const auto pbe = resolve_point_binding(1, false);
+  const bool specialized = pbe.launch == &launch_points<1, false, true>;
+  if (pbe.launch_batch != (specialized ? &launch_point_batches<4, 32, true>
+                                      : &launch_point_batches<4, 32>)) return 14;
+  if (resolve_point_binding(1, true).launch_batch) return 16;
   const std::uint32_t generated_codes[]{generated::kM062XFunctionalCode,
                                         generated::kMN15FunctionalCode};
   for (const auto code : generated_codes) {
-    auto launch = resolve_point_launcher(code, false);
+    const auto binding = resolve_point_binding(code, false);
+    auto launch = binding.launch;
+    if (binding.launch_batch != &launch_point_batches<5, 128>) return 18;
     if (launch != &launch_split_hybrid_points<5>) return 7;
     const auto capability = resolve_point_capabilities(code, false);
     if (capability.local_ao_selection != (code == generated::kM062XFunctionalCode) ||
@@ -108,12 +137,12 @@ int main() {
     launch();
     if (selected_functional != 5 || selected_response) return 8;
     try {
-      resolve_point_launcher(code, true);
+      resolve_point_binding(code, true);
       return 9;
     } catch (const std::invalid_argument&) {}
   }
   try {
-    resolve_point_launcher(std::numeric_limits<std::uint32_t>::max(), false);
+    resolve_point_binding(std::numeric_limits<std::uint32_t>::max(), false);
     return 6;
   } catch (const std::invalid_argument&) {}
 }
