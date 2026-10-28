@@ -239,9 +239,9 @@ generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resour
     const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
   if (calculation) *calculation = nullptr;
   if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return generativeqc::api::prepare_candidate(
-      context, system, descriptor, calculation, {},
-      generativeqc::api::device_resource_owner(resources), name);
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {},
+                                              generativeqc::api::device_resource_owner(resources),
+                                              name);
 }
 
 generativeqc_status generativeqc_system_create_named_ks_v1(
