@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/GenerativeQCCudaArchive.cmake")
 
 function(generativeqc_group_cuda_architectures output_prefix)
   # Source/profile identity is numeric SM, but each target must preserve all
@@ -181,7 +182,8 @@ macro(generativeqc_configure_cuda_backend target)
     if(GENERATIVEQC_CUDA_FAST_COMPILE)
       target_compile_options(generativeqc_direct_native PRIVATE --Ofast-compile=max)
     endif()
-    target_link_libraries(${target} PRIVATE generativeqc_direct_native)
+    generativeqc_cuda_host_archive(generativeqc_direct_native _generativeqc_direct_host_archive)
+    target_link_libraries(${target} PRIVATE ${_generativeqc_direct_host_archive})
   else()
     target_sources(${target} PRIVATE ${GENERATIVEQC_DIRECT_NATIVE_SOURCES})
   endif()
