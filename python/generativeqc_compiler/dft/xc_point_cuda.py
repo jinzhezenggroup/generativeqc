@@ -104,19 +104,30 @@ def emit_device_point_value() -> str:
     return _POINT_VALUE
 
 
-def emit_point_traversal() -> str:
+def emit_point_traversal(*, parameter_type: str = "I") -> str:
     """Emit the one shared single/batched tile traversal for static providers.
 
     Native preparation validates spin/count/tile dimensions. A response provider
     supplies ``response_point``; an ordinary provider supplies ``physical_point``.
     Discarded response branches impose no response/fxc capability on the latter.
+    A private worker may carry a typed immutable parameter row instead of the
+    ordinary functional code; the physical traversal and output ABI are shared.
     """
-    return _POINT_TRAVERSAL
+    return _POINT_TRAVERSAL.replace("I functional", f"{parameter_type} functional")
 
 
-def emit_automatic_point_kernel() -> str:
-    """Emit an ordinary-provider entry without adding a curated kernel variant."""
-    return _AUTOMATIC_KERNEL
+def emit_automatic_point_kernel(
+    *, parameter_type: str = "I", name: str = "automatic_evaluate_points"
+) -> str:
+    """Emit a named entry with a functional code or private parameter row.
+
+    Distinct parameter-storage ABIs may name separate entries while sharing the
+    same physical traversal. Emitting a template does not instantiate a kernel;
+    the package owner selects exactly the entries needed by its launchers.
+    """
+    return _AUTOMATIC_KERNEL.replace(
+        "I functional", f"{parameter_type} functional"
+    ).replace("automatic_evaluate_points", name)
 
 
 def emit_equal_spin_point_selector() -> str:

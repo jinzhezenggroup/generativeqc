@@ -170,3 +170,11 @@ All numerical values, endpoint populations, source/input bytes and the original
 acceptance decision are unchanged. Reproduction writes fresh, uncompressed raw
 outputs into the chosen ignored directory. The later guarded default policy is
 documented separately in the superseding Agent Note, not asserted by this archive.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.

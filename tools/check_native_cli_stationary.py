@@ -14,7 +14,9 @@ from pathlib import Path
 
 
 @lru_cache(maxsize=1)
-def compiler_native_profiles() -> tuple[str, ...]:
+def compiler_native_profiles(
+    selection: str = "auto", automatic: str | None = None
+) -> tuple[str, ...]:
     """Read the actual compiler-owned graph inventory, not a handwritten list."""
     source = Path(__file__).resolve().parents[1]
     generated = subprocess.run(
@@ -31,7 +33,42 @@ def compiler_native_profiles() -> tuple[str, ...]:
     profiles = tuple(generated.split(";")) if generated else ()
     if not profiles or len(profiles) != len(set(profiles)):
         raise ValueError("invalid empty/duplicate native stationary graph inventory")
-    return profiles
+    if selection == "auto":
+        defaults = (
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(source / "tools/generate_native_stationary_cuda.py"),
+                    "--list-aot-profiles",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            .stdout.strip()
+            .split(";")
+        )
+        if automatic is not None:
+            arguments = [
+                sys.executable,
+                str(source / "tools/generate_native_stationary_cuda.py"),
+                "--list-automatic-aot-profiles",
+            ]
+            for name in filter(None, automatic.split(";")):
+                arguments.extend(("--functional", name))
+            defaults.extend(
+                subprocess.run(
+                    arguments, check=True, capture_output=True, text=True, timeout=60
+                )
+                .stdout.strip()
+                .split(";")
+            )
+        return tuple(profile for profile in profiles if profile in defaults)
+    selected = tuple(sorted(set(selection.split(";")))) if selection else ()
+    if any(profile not in profiles for profile in selected):
+        raise ValueError("unknown explicitly selected native stationary profile")
+    return selected
 
 
 def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
@@ -53,14 +90,30 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
     if len(linked_entries) != len(set(linked_entries)):
         raise ValueError("duplicate CUDA stationary graph in linked registry")
     linked = set(linked_entries)
-    expected_set = set(compiler_native_profiles())
+    selection = re.search(
+        r"^GENERATIVEQC_STATIONARY_AOT_PROFILES:STRING=(.*)$", cache, re.MULTILINE
+    )
+    automatic = None
+    if re.search(
+        r"^GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT:BOOL=ON$", cache, re.MULTILINE
+    ):
+        names = re.search(
+            r"^GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS:STRING=(.*)$",
+            cache,
+            re.MULTILINE,
+        )
+        automatic = names[1] if names else ""
+    profiles = compiler_native_profiles(
+        selection[1] if selection else "auto", automatic
+    )
+    expected_set = set(profiles)
     if linked != expected_set:
         raise ValueError(
             f"native CUDA profile registry mismatch: missing={sorted(expected_set - linked)}, "
             f"unexpected={sorted(linked - expected_set)}"
         )
 
-    for profile in compiler_native_profiles():
+    for profile in profiles:
         signature = f"generativeqc::dft::native_stationary_profile_{profile}()"
         if signature not in symbol_listing:
             raise ValueError(f"compiled CLI is missing native force symbol {signature}")
@@ -94,8 +147,9 @@ def main() -> int:
         text=True,
     ).stdout
     verify_contract(cache, registry, symbols)
+    count = len(re.findall(r"&native_stationary_profile_([a-z0-9_]+)\(\)", registry))
     print(
-        f"Verified {len(compiler_native_profiles())} compiler-selected CUDA graphs "
+        f"Verified {count} compiler-selected CUDA graphs "
         f"statically linked in {args.cli}; real-GPU E+F still requires device tests"
     )
     return 0

@@ -13,11 +13,10 @@ namespace generativeqc::scf {
 class PreparedFockPlan;
 struct ResolvedFockBuild;
 
-/** Preserve the existing public Direct s/p/d force work ceilings: two million
- * primitive records, one million grid points and one hundred million Becke
- * pair visits. The conservative primitive bound retains independent J/K pass
- * charges even though the native owner shares their recurrence. Zero grid
- * points applies only the integral-source admission gate. */
+/** Validate the packaged Direct s/p/d inventory and checked work counters.
+ * Source pages have bounded storage independently of the molecular size.
+ * Actual memory admission belongs to the owning resource ledger; historical
+ * test sizes and conservative primitive counts are not capability limits. */
 bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool hybrid,
                                                std::size_t grid_points,
                                                std::size_t tile_points) noexcept;

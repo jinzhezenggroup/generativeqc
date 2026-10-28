@@ -1,10 +1,13 @@
 #include "integrals/ecp.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 #include "generated_ecp_ao.cuh"
 #include "molecule/basis.hpp"
+#include "runtime/bounded_workspace.hpp"
+#include "runtime/resource_usage.hpp"
 
 namespace generativeqc::integrals {
 namespace {
@@ -34,11 +37,13 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
   if (radial < 16 || radial > 512 || angular < 8 || angular > 96)
     throw std::invalid_argument("ECP quadrature requires 16..512 radial and 8..96 polar points");
   const auto n = molecule::ao_count(system);
-  if (n > 256 || system.atoms.size() > 128)
-    throw std::invalid_argument("ECP baseline supports at most 256 AOs and 128 atoms");
-  const auto size = n * n;
+  const auto size = runtime::size_mul(n, n);
+  const auto ncoord = derivatives ? runtime::size_mul(3, system.atoms.size()) : 0;
+  const auto derivative_elements = runtime::size_mul(ncoord, size);
   std::vector<AO> aos;
   for (const auto& shell : system.shells) {
+    if (shell.primitives.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+      throw std::overflow_error("ECP primitive count exceeds the generated index type");
     const auto& position = system.atoms[shell.atom_index].position;
     const auto expansions =
         molecule::ao_expansions(shell.angular_momentum, system.basis_representation);
@@ -63,21 +68,20 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
       aos.push_back(ao);
     }
   }
-  EcpData out{n,
-              derivatives ? 3 * system.atoms.size() : 0,
-              std::vector<double>(size),
-              std::vector<double>(size),
-              {},
-              {}};
-  out.local_derivative.resize(out.ncoord * size);
-  out.nonlocal_derivative.resize(out.ncoord * size);
+  EcpData out{n, ncoord, std::vector<double>(size), std::vector<double>(size), {}, {}};
+  out.local_derivative.resize(derivative_elements);
+  out.nonlocal_derivative.resize(derivative_elements);
   if (system.ecp_terms.empty()) return out;
   std::vector<EcpRadialPoint> radii;
   std::vector<EcpSpherePoint> sphere;
   ecp_quadrature(radial, angular, radii, sphere);
   // A radial layer is still the lifetime boundary. Share its potentials and
   // projected AO jets across every pair, independently of radial grid length.
-  std::vector<Jet> values(n * sphere.size()), projections(n * projector_count);
+  std::vector<Jet> values(runtime::size_mul(n, sphere.size())),
+      projections(runtime::size_mul(n, projector_count));
+  runtime::sample_cpu_capacity(
+      runtime::vector_capacities(out.local, out.nonlocal, out.local_derivative,
+                                 out.nonlocal_derivative, aos, radii, sphere, values, projections));
   for (std::size_t center = 0; center < system.atoms.size(); ++center) {
     if (!system.atoms[center].ecp_core) continue;
     const auto& c = system.atoms[center].position;
@@ -128,6 +132,8 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
 EcpData checked_ecp_integrals(const core::System& system, bool derivatives) {
   const auto coarse = ecp_integrals(system, generated::ecp_coarse_radial_points,
                                     generated::ecp_coarse_polar_points, derivatives);
+  runtime::CpuRetainedCapacity retained(runtime::vector_capacities(
+      coarse.local, coarse.nonlocal, coarse.local_derivative, coarse.nonlocal_derivative));
   auto fine = ecp_integrals(system, generated::ecp_refined_radial_points,
                             generated::ecp_refined_polar_points, derivatives);
   const auto check = [](const auto& a, const auto& b, bool derivative) {

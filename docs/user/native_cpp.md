@@ -137,67 +137,73 @@ For energy-only calculations, configure
 `density_fitting_auxiliary_basis`, just as the native CLI does. CPU and CUDA
 support depend on their qualified native provider and execution context.
 
-The public native `Calculation::supported_properties()` reports
-**context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU Direct or density-fitted PBE/PBE0/r²SCAN RKS/UKS and B3LYP RKS**
-execution domain. Canonical WB97M-V also admits bounded Direct RKS/UKS forces. B3LYP UKS remains unqualified. The
-method-global registry remains energy-only: exact source coefficients,
-spin, backend, fitting provider, basis/ECP and correction terms determine
-admission for the prepared calculation. Request
-`GENERATIVEQC_PROPERTY_FORCES` only after querying actual prepared properties
-(the property constant is `GENERATIVEQC_PROPERTY_FORCES`).
+The public native `Calculation::supported_properties()` reports capabilities
+of the exact prepared context. The method-global registry does not grant a
+blanket force bit. Both RKS and UKS, including an empty beta population, use
+one token-verified stationary owner. The current named-program inventory is:
 
-The same native, token-verified stationary-force consumer is used by
-`generativeqc_batch_execute` when **every member** of the prepared batch
-qualifies and a force output buffer is supplied. Mixed/unsupported native
-DFT force contexts fail before execution; a malformed or nonconverged item
-does not publish partial forces for that item. ECP and range/nonlocal graphs
-without a complete qualified derivative provider remain unavailable. For the
-bounded WB97M-V range/VV10 and linked CUDA stationary contexts, see the
-[CLI force contract](native_cli.md#context-qualified-native-dft-analytic-forces).
-Complete named D3/D4 programs combine the correction gradient with the qualified
-electronic force in the native owner. The legacy `pbe-d4-rks` ABI selector retains
-its previous compatibility contract.
+| Electronic program | CPU Direct/DF | CUDA Direct/DF |
+| --- | --- | --- |
+| LDA, PBE, PBE0, B3LYP, r²SCAN, WB97M-V | native forces | native forces with linked profiles |
+| PBE50 | native forces | no CUDA SCF provider |
+| M06-2X, MN15 | no CPU SCF provider | native forces with linked profiles |
 
-The Direct owner requires the packaged CPU first-derivative inventory
-(`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON`, the default), all-electron
-s/p/d shells and a qualified generated semilocal/exchange composition.
-WB97M-V adds the packaged long-range derivative and native VV10 response
-within its separately documented bounds.
-It contracts compiler-generated stationary AD weights with shell-local
-derivatives, sharing each primitive evaluation between J and K. It does not
-materialize a molecular coordinate-by-AO-rank-four derivative tensor, compile
-at runtime, or substitute density fitting. Disabling that inventory removes
-the prepared native Direct force capability rather than invoking a compiler.
-The existing public Direct work ceilings remain in force: two million
-conservative primitive records (including independent J/K pass charges), one
-million grid points and one hundred million Becke pair visits. Oversized
-contexts do not advertise native forces. Source/weight storage has a separate
-finite capacity gate; its observed numeric capacities exclude recurrence
-scratch, allocator overhead and opaque libraries, not a complete RSS bound.
+Generated aliases and supported D3/D4 compositions use the same electronic
+program and native correction owners. The canonical r²SCAN-3c graph includes
+both D4 and gCP; see its [contract](r2scan3c.md). Imported CPU LDA/GGA/meta-GGA
+programs with a validated first-order point evaluator also use the native
+moving-grid force owner. Unsupported functional graphs remain unavailable.
 
-UKS uses separate occupation-weighted alpha/beta density and energy-weighted
-density blocks, including explicit zero beta matrices when that population is
-empty. The existing spin XC evaluator, grid/Becke response, final-state token
-and force assembler are shared with RKS. Compiler-generated Direct J/K weights
-combine both spins before the shared primitive traversal; neither spin triggers
-an additional recurrence pass. Density-fitted KS retains the existing orbital
-AO-jet boundary through f and auxiliary integral boundary through g, in Cartesian
-or real-spherical representation. Integral through-g support does not admit
-orbital g grids.
+Direct forces require packaged first derivatives and orbital s/p/d shells.
+CPU builds may disable that inventory with
+`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF`, which revokes the prepared
+capability. DF supports orbital grids through f and auxiliary integrals through
+g in Cartesian or real-spherical representation. Integral through-g support
+does not admit orbital g grids. Direct ECP forces reuse the checked residual
+operator derivative and ionic nuclear charges; ECP+DF energy remains unavailable.
 
-For Python `PreparedBatch.execute(properties=("energy", "forces"))`,
-the frontend now first queries each member's private native prepared-property
-record (`generativeqc_ks_batch_supported_properties_v1`). If all members
-qualify, it executes through `generativeqc_batch_execute` and copies the
-native force buffers; no Python stationary gradient is run for that request.
-Unsupported members and older native binaries retain their separately
-qualified Python stationary-force path. A failed native capability query other
-than explicit `NOT_IMPLEMENTED` is an error, not permission to fall back.
-Capability is evaluated after the existing Python model/warm-state identity
-checks and does not bypass resource budgets.
+WB97M-V differentiates its full semilocal, range and VV10 model. DF preserves
+the existing full-range fitted J/K plus independent exact LR convention;
+explicit fitted LR uses the matching retained metric derivative. No source is
+replaced with a different approximation. CUDA requires strict FP64,
+device-fused XC and three partition iterations for this composite. Separate XC
+and nonlocal grids are supported. General CUDA FP64 profiles require three
+partition iterations; application/mixed-precision routes retain their separate
+qualification rules.
 
-The CPU PBE/PBE0/B3LYP force qualification includes independent reconverged
-finite-difference and PySCF moving-grid analytic comparisons. A native
-force-capability flag is not evidence of an independently validated
-method/size/backend beyond its explicitly admitted context.
+Historical molecular-size ceilings (8 atoms, 64 AOs, 128 primitives, 8192 VV10
+points), CPU Direct primitive/grid-visit ceilings, and stationary CUDA arena
+atom/AO/primitive ceilings are removed. Dynamic storage and checked integer
+products govern capacity. Per-page task limits, geometry scratch, explicit
+source/nonlocal/device budgets, ECP quadrature convergence and actual operator
+inventory still apply. D4's retained EEQ provider has its own fixed pivot
+capacity; this electronic-force change does not enlarge that provider.
+The CPU source-publication capacity is a numeric-buffer bound, not a complete
+process RSS bound.
+
+The force owner consumes the final occupation-weighted D and energy-weighted W.
+Direct J/K share generated primitive derivatives. DF differentiates both
+three-center integrals and its metric. CUDA consumes resident density pointers
+on the owning provider streams, copies compact source vectors on device and
+performs the complete reduction before publishing the force. Independent LR
+providers retain their own stream/lifetime and synchronize at the source seam.
+
+`generativeqc_batch_execute` requires every force-requested member to qualify;
+selective execution can request forces for individual admitted members. Failed,
+nonconverged or stale-token items cannot publish partial forces. The Python
+frontend queries `generativeqc_ks_batch_supported_properties_v1` after checking
+model identity. Conservative method metadata cannot override a successful
+prepared capability query; missing native capability cannot enable an
+unqualified fallback. Resource budgets still apply.
+
+Independent PySCF energies, moving-grid analytic forces and final D/W, plus
+reconverged finite differences, qualify the numerical paths. Native tests also
+cover byte floors, failure cleanup, stale leases and ragged replay. A capability
+query is an execution contract, not a promise of quadrature accuracy or
+convergence for every molecule.
+
+
+A CUDA DF context prepared with a NumericCap capacity promise retains its
+energy path but does not advertise or execute forces: the derivative peak is
+not included in that promise. Query the actual prepared properties; ordinary
+DF force contexts without this promise retain their existing admission.

@@ -12,6 +12,9 @@ from generativeqc_compiler.common.provenance import file_hash
 from generativeqc_compiler.xc import bulk_aot, bulk_aot_closure, bulk_aot_store
 from generativeqc_compiler.xc.libxc_bulk import BULK_SEMANTICS, build_bulk_program
 from test_bulk_aot_closure import compile_controlled
+from test_bulk_aot_closure import (
+    real_gcc as real_gcc,  # noqa: PLC0414 -- exported pytest fixture
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +22,8 @@ if TYPE_CHECKING:
 
     import pytest
 
-pytest_plugins = ("test_bulk_aot_closure",)
+# Import the fixture directly: when the closure module is also collected as a
+# test module, pytest does not re-register its fixtures as a global plugin.
 
 
 def _variant(name: str, spin: str = "unpolarized") -> bulk_aot.SourceVariant:

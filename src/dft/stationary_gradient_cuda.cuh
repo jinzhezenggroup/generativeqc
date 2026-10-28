@@ -10,6 +10,7 @@
 #include "../tensor/cuda_runtime.cuh"
 #include "becke_scaled_policy.hpp"
 #include "grid_task_view.cuh"
+#include "runtime/bounded_workspace.hpp"
 #include "xc_point.hpp"
 #if defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
 #include "dft/native_stationary_shared_kernels.hpp"
@@ -114,23 +115,29 @@ PhasedBeckeInput phased_input(Owner& owner, size_t points) {
   input.zero_seed_points = owner.becke_zero_seed_points;
   return input;
 }
-// Caps make all products below representable before any allocation or pointer
-// dereference. D/W and AO metadata have no fixed-size AO array; 2048 admits
-// full 96-atom def2-TZVPD without changing allocation formulas. Compiler-planned
-// lanes bound O(lanes*natom) adjoint scratch; byte admission remains mandatory.
+// The general geometry kernel uses planned O(lanes*atoms) scratch. The
+// cooperative/retained-pair specializations have their own shape checks and
+// may fall back to it. Molecular atom/AO/primitive counts are not fixed arrays.
 size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns,
                   size_t geometry_lanes, bool cache_center_geometry = false) {
-  if (!na || na > 128 || !n || n > 2048 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
-      !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks ||
-      !geometry_lanes || geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
-      18 * geometry_lanes * na * sizeof(double) > stationary_geometry_max_scratch_bytes)
-    throw std::invalid_argument("stationary CUDA shape exceeds bounded resource caps");
-  // Three center coordinates, two planned nine-coordinate lane panels,
-  // and one three-coordinate panel per compiler-owned gradient source.
-  return 8 * (2 * nprimitive + 4 * n + 22 * ntask +
-              (5 + 18 * geometry_lanes + 3 * stationary_source_count) * na + 1 + 3 * np +
-              2 * ns * n * n) +
-         (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
+  using generativeqc::runtime::size_add;
+  using generativeqc::runtime::size_mul;
+  if (!na || !n || !nprimitive || !np || np > 4096 || !ntask || ntask > 4096 ||
+      (ns != 1 && ns != 2) || ns != stationary_spin_blocks || !geometry_lanes ||
+      geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
+      size_mul(size_mul(18, geometry_lanes), size_mul(na, sizeof(double))) >
+          stationary_geometry_max_scratch_bytes)
+    throw std::invalid_argument("stationary CUDA shape exceeds its geometry workspace");
+  const auto centers = size_mul(
+      size_add(size_add(5, size_mul(18, geometry_lanes)), size_mul(3, stationary_source_count)),
+      na);
+  const auto matrices = size_mul(size_mul(2, ns), size_mul(n, n));
+  auto elements = size_add(size_mul(2, nprimitive), size_mul(4, n));
+  elements = size_add(elements, size_mul(22, ntask));
+  elements = size_add(elements, size_add(centers, size_add(1, size_mul(3, np))));
+  elements = size_add(elements, matrices);
+  const auto cached = cache_center_geometry ? size_mul(48, size_mul(na, na - 1) / 2) : 0;
+  return size_add(size_add(size_mul(sizeof(double), elements), cached), 256);
 }
 /** Preserve allocation (2/3), device runtime (4), and numerical source (5)
  * failures. Invalid contracts remain 1. Existing nonzero-rejection callers

@@ -1,0 +1,94 @@
+{
+  "scope": "Selected local qualification receipts; hashes of ignored logs, not download URLs. Frozen source identity is in provenance.json; follow-up source identity is in ecp-resource-followup.json and patch. The latter preserves the measured test bytes before Ruff wrapped a long assertion.",
+  "checks": [
+    {
+      "local_artifact": "ctest-cpu-685478c.log",
+      "bytes": 17588,
+      "sha256": "41a160a7d69adff8543c21f5e351df4a5a9feec3a088ff197eec8683c82e7ab2",
+      "result": "PASS: 120/120; frozen implementation"
+    },
+    {
+      "local_artifact": "pytest-matrix-cpu-final.log",
+      "bytes": 997,
+      "sha256": "e23155fd85020b96375f08f42b9673865bac55a400f08790d8f601b7e3fca446",
+      "result": "PASS: 40 passed, 12 backend skips; independent named CPU E/F/D/W"
+    },
+    {
+      "local_artifact": "pytest-uks-cpu.log",
+      "bytes": 1680,
+      "sha256": "120087bbe6482862e653ebc8601c12f401377280bc3fc3153c32a7b5b997359e",
+      "result": "PASS: 40 passed, 8 skips; spin/angular coverage"
+    },
+    {
+      "local_artifact": "remote/final-campaign.log",
+      "bytes": 6362,
+      "sha256": "83434af5c3383169de2cb6b1eff810e9aed0f31930bf2aa6fa4a257388079597",
+      "result": "Slurm 14328: 70 passed, 4 skipped; range selection 6 passed; molecular memcheck 6 passed, zero errors; followed by complete paired campaign"
+    },
+    {
+      "local_artifact": "remote/gpu-resources2.log",
+      "bytes": 43257,
+      "sha256": "d605f773a699a727396f28daacaeb7f93885f0c69b06f654afac5d59cf379137",
+      "result": "Slurm 14325: 32 native CUDA CLI E/F endpoints pass; binding memcheck zero errors; CUDA API AUTO provenance fails in both parent and candidate"
+    },
+    {
+      "local_artifact": "pytest-ci-followup2.log",
+      "bytes": 1237,
+      "sha256": "488e9241a606f7455647d2498b31389fc16c956a631b046d2552b0d830283a3e",
+      "result": "PASS: 1062 host lifecycle, profile, compatibility and correction regression cases"
+    },
+    {
+      "local_artifact": "pytest-ecp-routes-final.log",
+      "bytes": 138,
+      "sha256": "e84e5fd65da6aa3d8161dc11f246f56daa515906d1886c0e1058abbbc3941cae",
+      "result": "PASS: 36 passed, 16 optional skips; ECP routes and compatibility ownership"
+    },
+    {
+      "local_artifact": "pytest-preliminary-final.log",
+      "bytes": 100,
+      "sha256": "7450b4e1ae8ccf820454503d351ce285da34ca09bdc7a5c2b1994a4c95989baf",
+      "result": "PASS: 62 preliminary-guess cases, including native force parity"
+    },
+    {
+      "local_artifact": "pytest-ecp-fleet-final.log",
+      "bytes": 180,
+      "sha256": "1da17ef727aad29391ded9a1f5aad0f7c1f18d63f8bf5f1bf12b93a68f04ea3f",
+      "result": "PASS: 130 resource and parent CI-budget cases after planner fix"
+    },
+    {
+      "local_artifact": "ctest-ecp-fleet-final.log",
+      "bytes": 17588,
+      "sha256": "4ce3979497bc9d8ca3471d408e0e489b39d67878f558c968638fc4b448128330",
+      "result": "PASS: rebuilt CPU CTest 120/120 after planner fix"
+    },
+    {
+      "local_artifact": "remote/gpu-ecp-routes-accepted.log",
+      "bytes": 1475,
+      "sha256": "bf5e83971d123f82edd933c98f11355f172565235b7533c0d0a309e01fbc69f3",
+      "result": "Slurm 14348: 6 passed; exact-budget/native ECP, replay and failure cleanup"
+    },
+    {
+      "local_artifact": "ty-ci-pinned-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "PASS: CI-pinned ty 0.0.82 with numpy/tomli"
+    }
+  ],
+  "unsuccessful_runs": [
+    {
+      "local_artifact": "remote/gpu-ecp-routes-final.log",
+      "sha256": "2699443bb048306bf4609941499197c59f7a5fb1d9e11e9aa24d1662fad8aaeb",
+      "reason": "Six failures: per-atom tuple shape and missing standalone compatibility AOT packages"
+    },
+    {
+      "local_artifact": "pytest-preliminary-before.log",
+      "sha256": "99e60b20651d6acc6a84eef47f29f2eec695c4f8a0e502772494e2ce45e6c4aa",
+      "reason": "Stale KS-force refusal expectation"
+    },
+    {
+      "local_artifact": "ty-followup-final.log",
+      "sha256": "9cf22e6e477cd535e75c78e9c61e49d609bffb20bfc5b6f583c7410abe1fee7f",
+      "reason": "Unpinned local ty 0.0.15; replaced by the passing CI-pinned 0.0.82 check"
+    }
+  ]
+}

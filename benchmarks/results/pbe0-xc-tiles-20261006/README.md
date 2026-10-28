@@ -68,3 +68,11 @@ Selected raw files and receipts are checksum-bound by `publication.json`.
 The offline consumer recomputes whole-vector gates, actual work and medians;
 edited forces, iteration counts, selected tiles or work counters are rejected.
 Full build/command/Slurm logs stay ignored locally and on n2; no Release is used.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.

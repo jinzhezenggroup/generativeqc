@@ -8,6 +8,7 @@
 #include "dft/cuda_stationary_capacity.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "xc_cpu_generated.hpp"
@@ -60,12 +61,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
           tile_points,
           std::max(grid.point_count(), nonlocal_grid ? nonlocal_grid->point_count() : 0))) {
   if (!binding_ || !quadrature_ || quadrature_.device != device || !tile_points_ || !basis.natom ||
-      basis.natom != system.atoms.size() || grid.spec().partition_iterations != 3 ||
-      !system.ecp_terms.empty() ||
-      std::any_of(system.atoms.begin(), system.atoms.end(),
-                  [](const auto& atom) { return atom.ecp_core != 0; }))
+      basis.natom != system.atoms.size() || grid.spec().partition_iterations != 3)
     throw std::invalid_argument(
         "native CUDA stationary owner has no qualified profile/grid domain");
+  system_ = system;
+  maximum_device_bytes_ = maximum_device_bytes;
   points_per_atom_ = grid.spec().version == 4 ? 0 : grid_points_per_atom(grid.spec());
   coincident_tolerance_ = grid.spec().coincident_tolerance;
   const auto capacity = cuda_stationary_capacity(*binding_, basis.natom, aos_, basis.nprimitive,
@@ -78,6 +78,7 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
   resources_.minimum_device_bytes = capacity.minimum_device_bytes;
   if (resources_.minimum_device_bytes > maximum_device_bytes) throw std::bad_alloc();
   const bool cached = capacity.cached_device_bytes <= maximum_device_bytes;
+  resources_.cached_geometry = cached;
   const auto stationary_budget =
       cached ? capacity.stationary_cached_bytes : capacity.stationary_minimum_bytes;
   resources_.device_upper_bytes =
@@ -92,7 +93,7 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
     throw std::invalid_argument("native stationary profile AO jets have no grid producer");
   for (const auto& atom : system.atoms) {
     centers_.insert(centers_.end(), atom.position.begin(), atom.position.end());
-    charges_.push_back(atom.atomic_number);
+    charges_.push_back(atom.ionic_charge());
   }
   runtime::CudaDeviceScope device_scope(device, stationary_cuda_check);
   cudaDeviceProp property{};
@@ -209,13 +210,18 @@ generativeqc_status CudaStationaryController::gradient(
     const CudaKsResidentStationaryWeightsBinding& weights, const scf::PreparedFockPlan& fock,
     const std::function<bool()>& token_current, std::vector<double>& output, std::string& detail,
     bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision,
-    const scf::ResolvedFockBuild* range, const CudaKsResidentNonlocalFeaturesBinding* nonlocal) {
+    const scf::ResolvedFockBuild* range, const CudaKsResidentNonlocalFeaturesBinding* nonlocal,
+    const scf::PreparedFockPlan* range_provider) {
   detail.clear();
   try {
+    const auto provider = scf::prepared_cuda_fock_binding(fock);
+    const bool fitted =
+        fock.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     const auto derivative = scf::prepared_cuda_direct_derivative_binding(fock);
-    if (!stationary_ || !grid_ || !density || !weights || !derivative || !token_current ||
-        !token_current() || density.device_id != device_ || weights.device_id != device_ ||
-        derivative.device_id != device_ || density.matrix_elements != aos_ * aos_ ||
+    if (!stationary_ || !grid_ || !density || !weights || !provider || (!fitted && !derivative) ||
+        !token_current || !token_current() || density.device_id != device_ ||
+        weights.device_id != device_ || provider.device_id != device_ ||
+        density.matrix_elements != aos_ * aos_ ||
         weights.matrix_elements != density.matrix_elements ||
         density.spins != binding_->spin_blocks || weights.spins != density.spins ||
         weights.owner != density.owner || weights.solve_epoch != density.solve_epoch ||
@@ -228,9 +234,10 @@ generativeqc_status CudaStationaryController::gradient(
     const auto expected_exchange =
         (density.spins == 1 ? -0.5 : -1.0) *
         (composite ? binding_->model.short_range_exchange : binding_->full_range_exchange);
-    const auto full_range = [](const scf::FockTermSpec& term) {
+    const auto full_range = [fitted](const scf::FockTermSpec& term) {
       return !term.present || (term.op == scf::FockOperator::FullRange && term.omega == 0.0 &&
-                               term.approximation == scf::FockApproximation::Exact);
+                               term.approximation == (fitted ? scf::FockApproximation::DensityFitted
+                                                             : scf::FockApproximation::Exact));
     };
     if (fock.strategy().backend != scf::FockBackend::Cuda || !spec.coulomb.present ||
         spec.coulomb.coefficient != 1.0 || !full_range(spec.coulomb) ||
@@ -377,16 +384,62 @@ generativeqc_status CudaStationaryController::gradient(
       require_stationary_call(
           binding_->consume_integrals(stationary_, &view, error.data(), error.size()), error);
     };
-    auto status = scf::consume_prepared_cuda_stationary_one_electron_pair(
-        fock.cuda_direct_source(), weights.density, weights.weighted_density,
-        weights.matrix_elements, consume, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    status = composite ? scf::consume_prepared_cuda_direct_rsh_energy_derivatives_device(
-                             fock, *range, density.alpha, density.beta, density.matrix_elements,
-                             consume, detail)
-                       : scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-                             fock, density.alpha, density.beta, density.matrix_elements, consume,
-                             detail, allow_spatial_default, precision);
+    generativeqc_status status;
+    if (fitted) {
+      std::vector<double> unused_hcore, unused_pulay;
+      // These temporary device sources borrow the persistent Fock stream and
+      // retain its existing one-electron mapping policy. Hardcoding serial AO
+      // pairs would regress the previous DF consumer's attraction-center work.
+      // The terminal consumer owns copied slots after the bridge drains.
+      status = scf::execute_cuda_stationary_one_electron_pair(
+          device_, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+          maximum_device_bytes_, unused_hcore, unused_pulay, detail, nullptr, weights.density,
+          weights.weighted_density, consume, reinterpret_cast<void*>(provider.stream));
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = fock.consume_fitted_energy_derivatives(
+          device_, reinterpret_cast<void*>(provider.stream), density.alpha, density.beta,
+          weights.density, consume, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      if (composite) {
+        if (!range_provider)
+          throw std::invalid_argument(
+              "mixed range force lacks its independent derivative provider");
+        const auto range_binding = scf::prepared_cuda_fock_binding(*range_provider);
+        if (!range_binding) throw std::invalid_argument("range provider has no resident binding");
+        // The resident D/W owner and both radial providers may use different
+        // ordinary streams. Order the read without a host matrix export.
+        runtime::OwnedCudaEvent ready(device_, cudaEventDisableTiming, stationary_cuda_check);
+        ready.record(provider.stream);
+        stationary_cuda_check(cudaStreamWaitEvent(range_binding.stream, ready.get(), 0));
+        status = range_provider->strategy().spec.exchange.approximation ==
+                         scf::FockApproximation::DensityFitted
+                     ? range_provider->consume_fitted_energy_derivatives(
+                           device_, reinterpret_cast<void*>(range_binding.stream), density.alpha,
+                           density.beta, weights.density, consume, detail, true)
+                     : scf::consume_prepared_cuda_direct_long_range_derivatives_device(
+                           *range_provider, density.alpha, density.beta, density.matrix_elements,
+                           consume, detail);
+      }
+    } else {
+      if (system_.ecp_terms.empty()) {
+        status = scf::consume_prepared_cuda_stationary_one_electron_pair(
+            fock.cuda_direct_source(), weights.density, weights.weighted_density,
+            weights.matrix_elements, consume, detail);
+      } else {
+        std::vector<double> unused_hcore, unused_pulay;
+        status = scf::execute_cuda_stationary_one_electron_pair(
+            device_, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+            maximum_device_bytes_, unused_hcore, unused_pulay, detail, nullptr, weights.density,
+            weights.weighted_density, consume, reinterpret_cast<void*>(provider.stream));
+      }
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = composite ? scf::consume_prepared_cuda_direct_rsh_energy_derivatives_device(
+                               fock, *range, density.alpha, density.beta, density.matrix_elements,
+                               consume, detail)
+                         : scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                               fock, density.alpha, density.beta, density.matrix_elements, consume,
+                               detail, allow_spatial_default, precision);
+    }
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::vector<double> candidate(centers_.size());
     require_stationary_call(

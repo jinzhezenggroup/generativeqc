@@ -172,14 +172,8 @@ struct {provider_name} {{
 """
 
 
-def _emit_launchers(
-    code: int, feature_terms: int, provider_name: str, *, density_only: bool
-) -> str:
-    """CSE selection may not switch density-only RKS back to P2 worker floors."""
-    selector = "spins == 1" if density_only else "use_equal_spin_points(spins)"
-    validate_selector = (
-        "  (void)use_equal_spin_points(spins);\n" if density_only else ""
-    )
+def emit_automatic_launch_validation(code: int, feature_terms: int) -> str:
+    """Keep registration/shape validation common to specialized and shared workers."""
     return f"""
 void validate_launch(std::size_t count, std::size_t spins, std::uint32_t functional,
                      double exchange_scale, double correlation_scale) {{
@@ -189,6 +183,20 @@ void validate_launch(std::size_t count, std::size_t spins, std::uint32_t functio
       exchange_scale != 1.0 || correlation_scale != 1.0)
     throw std::invalid_argument("incompatible automatic CUDA XC point binding");
 }}
+"""
+
+
+def _emit_launchers(
+    code: int, feature_terms: int, provider_name: str, *, density_only: bool
+) -> str:
+    """CSE selection may not switch density-only RKS back to P2 worker floors."""
+    selector = "spins == 1" if density_only else "use_equal_spin_points(spins)"
+    validate_selector = (
+        "  (void)use_equal_spin_points(spins);\n" if density_only else ""
+    )
+    return (
+        emit_automatic_launch_validation(code, feature_terms)
+        + f"""
 void launch(cudaStream_t stream, const double* features, const double* weights,
             std::size_t count, std::size_t spins, double* coefficients,
             double* totals, int* error, std::uint32_t functional,
@@ -229,6 +237,7 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
           functional, exchange_scale, correlation_scale, tile_points);
 }}
 """
+    )
 
 
 def emit_automatic_cuda_descriptor(provider: AutomaticCudaPointProvider) -> str:

@@ -469,7 +469,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
+            "d643696b8ba56b118400c0c949d50aba329fb1c9befd03e30590e9367b5ec286"
         ),
         "global_hybrid_force_predicate_sha256": current_python_owner_identity(
             "python/generativeqc/calculator.py",
@@ -946,7 +946,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
+            "a993197b05eb747473f3352ce61ef42565b2f2d402983cc521bda05f2cb5ee16"
         ),
         "profiles": [
             "lda_rks",
@@ -961,6 +961,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
             "b3lyp_uks",
             "m06_2x_rks",
             "m06_2x_uks",
+            "mn15_rks",
+            "mn15_uks",
             "wb97mv_rks",
             "wb97mv_uks",
         ],
@@ -1750,10 +1752,10 @@ def test_native_finish_span_fails_closed_on_contract_drift(
     "old,new",
     [
         (
-            "(5 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
-            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "size_add(size_add(5, size_mul(18, geometry_lanes))",
+            "size_add(size_add(4, size_mul(18, geometry_lanes))",
         ),
-        ("n > 2048", "n > 2049"),
+        ("ntask > 4096", "ntask > 4097"),
     ],
 )
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
@@ -2485,6 +2487,7 @@ def test_spherical_ao_count_fails_closed_when_shared_shell_owner_is_missing(
     [
         ("self._automatic_libxc_name is None", 0),
         ("cpu_direct_semilocal_force", 0),
+        ("automatic_cuda_force", 0),
         ("self._ks_options is not None", 0),
         ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
         ('self._device_name == "cuda"', 0),

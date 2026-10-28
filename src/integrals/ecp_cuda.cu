@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 #include "api/error.hpp"
@@ -76,14 +77,15 @@ __global__ void contract(const AO* aos, const core::EcpTerm* terms, int nt,
   }
 }
 __global__ void consume(const double* output, int size, int ncoord, double* hcore,
-                        const double* density, double* forces) {
+                        const double* density, double* forces, double derivative_scale) {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   const int stride = size * (1 + ncoord);
   if (hcore && i < size)
     hcore[i] = generated::ecp_add_operator(hcore[i], output[i], output[stride + i]);
   if (forces && i < ncoord) {
-    forces[i] += generated::ecp_force_component(output + (1 + i) * size,
-                                                output + stride + (1 + i) * size, density, size);
+    forces[i] += derivative_scale * generated::ecp_force_component(output + (1 + i) * size,
+                                                                   output + stride + (1 + i) * size,
+                                                                   density, size);
   }
 }
 struct CudaFailure {
@@ -146,15 +148,25 @@ struct Arena {
 };
 void run(const core::System& system, unsigned radial, unsigned polar, bool derivatives,
          cudaStream_t stream, EcpData* export_result, double* hcore, const double* density,
-         double* forces, bool convergence = false) {
+         double* forces, bool convergence = false, double derivative_scale = 1.0) {
   const auto n = molecule::ao_count(system);
-  if (n == 0 || n > 256 || system.atoms.size() > 128 || system.ecp_terms.empty())
-    throw std::invalid_argument("ECP CUDA requires 1..256 AOs, at most 128 atoms and ECP terms");
+  // Generated matrix/coordinate offsets are signed ints. Enforce that actual
+  // representability constraint rather than a historical molecular-size cap.
+  const auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  // The convergence kernel indexes both local/nonlocal panels, including
+  // rounded-up launch lanes, with signed int arithmetic.
+  const auto panel_limit = (limit - 127) / 2;
+  if (!n || n > panel_limit / n || system.atoms.size() > (panel_limit / (n * n) - 1) / 3 ||
+      system.ecp_terms.empty() || system.ecp_terms.size() > limit)
+    throw std::invalid_argument(
+        "ECP CUDA matrix/coordinate offsets exceed the generated index type");
   std::vector<AO> aos;
   std::vector<Primitive> primitives;
   for (const auto& shell : system.shells) {
     const auto& atom = system.atoms[shell.atom_index];
     const auto offset = primitives.size();
+    if (shell.primitives.size() > limit || offset > limit - shell.primitives.size())
+      throw std::overflow_error("ECP primitive offsets exceed the generated index type");
     for (const auto& p : shell.primitives) primitives.push_back({p.exponent, p.coefficient});
     for (const auto& expansion :
          molecule::ao_expansions(shell.angular_momentum, system.basis_representation)) {
@@ -189,8 +201,12 @@ void run(const core::System& system, unsigned radial, unsigned polar, bool deriv
     std::vector<EcpRadialPoint> radial_grid;
     std::vector<EcpSpherePoint> sphere;
     ecp_quadrature(nr, na, radial_grid, sphere);
+    if (sphere.empty() || sphere.size() > limit || n > (limit - 127) / sphere.size() ||
+        n > (limit - 127) / projector_count)
+      throw std::overflow_error("ECP angular staging exceeds the generated index type");
     const int nq = sphere.size();
     unsigned tile = std::min(nr, generated::ecp_cuda_radial_tile(n, na));
+    tile = std::min<std::size_t>(tile, (limit - 127) / (n * std::max(nq, projector_count)));
     Arena grid{stream, {}};
     auto dsphere = grid.allocate(sphere.size(), sphere.data());
     auto dradii = grid.allocate(radial_grid.size(), radial_grid.data());
@@ -247,7 +263,7 @@ void run(const core::System& system, unsigned radial, unsigned polar, bool deriv
   }
   if (hcore || forces) {
     consume<<<(std::max(size, static_cast<std::size_t>(ncoord)) + 127) / 128, 128, 0, stream>>>(
-        output, size, ncoord, hcore, density, forces);
+        output, size, ncoord, hcore, density, forces, derivative_scale);
     check(cudaPeekAtLastError());
   }
   if (export_result) {
@@ -287,15 +303,15 @@ generativeqc_status ecp_integrals_cuda(int device, const core::System& system, u
 }
 generativeqc_status add_ecp_cuda(int device, const core::System& system, void* stream,
                                  double* hcore, const double* density, double* forces,
-                                 std::string& detail) {
+                                 std::string& detail, double derivative_scale) {
   if (system.ecp_terms.empty()) return GENERATIVEQC_STATUS_SUCCESS;
   try {
     if (forces && !density) throw std::invalid_argument("ECP force requires density weights");
     DeviceGuard device_guard;
     check(cudaSetDevice(device));
     run(system, generated::ecp_coarse_radial_points, generated::ecp_coarse_polar_points,
-        forces != nullptr, static_cast<cudaStream_t>(stream), nullptr, hcore, density, forces,
-        true);
+        forces != nullptr, static_cast<cudaStream_t>(stream), nullptr, hcore, density, forces, true,
+        derivative_scale);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return map_ecp_exception(detail);

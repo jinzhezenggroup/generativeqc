@@ -109,7 +109,7 @@ def calculator(method: typing.Any, **kwargs: typing.Any) -> typing.Any:
     options = kwargs.pop("ks_options", KsOptions(grid=GRID))
     return Calculator(
         method=method,
-        device="cpu",
+        device=kwargs.pop("device", "cpu"),
         ks_options=options,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,

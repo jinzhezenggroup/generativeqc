@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/mixed_rsh_exchange.hpp",
+  "role": "scientific",
+  "subsystem": "xc",
+  "reason": "Shared host/device algebra decomposes a full-range fitted exchange gradient and independently weighted long-range correction into the existing short/long source convention. No backend-specific duplicate equations.",
+  "regions": []
+}

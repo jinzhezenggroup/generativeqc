@@ -145,3 +145,11 @@ Stored XZ SHA-256:
 The [original summary at the merged revision](https://github.com/jinzhezenggroup/generativeqc/blob/764a9a71d559245bd23966739c2504c7c865b746/benchmarks/results/pbe0-incremental-refinement-20261007/summary.json)
 is an additional immutable recovery source. The ordinary verifier uses the
 current compressed bytes and does not need a history fetch.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.

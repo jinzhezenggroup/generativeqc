@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "r1-native-forces-20261025",
+  "owner": "#2227 R1 native force completion",
+  "reason": "The original full-precision samples were reviewed and remain recoverable by Git object identity at 796f66f4fd935ca88abd885321738ea48e9f8db2; the current checkout retains compact qualification receipts, not the large sample blob.",
+  "review_document": "benchmarks/results/r1-native-forces-20261025/README.md",
+  "files": []
+}

@@ -222,9 +222,9 @@ def test_native_uks_scaled_composition_is_not_canonical_pbe0(fitting: str) -> No
     """A family label and two spin blocks do not authenticate a scaled hybrid."""
     graph = resolve_method(
         MethodSpec(
-            "PBE50-UKS-negative-control",
-            (("GGA_X_PBE", Fraction(1, 2)), ("GGA_C_PBE", Fraction(1))),
-            exact_exchange=Fraction(1, 2),
+            "PBE37-UKS-negative-control",
+            (("GGA_X_PBE", Fraction(63, 100)), ("GGA_C_PBE", Fraction(1))),
+            exact_exchange=Fraction(37, 100),
         ),
         spin="polarized",
     )
@@ -251,8 +251,8 @@ def test_native_uks_orbital_g_keeps_existing_ao_jet_boundary(method: str) -> Non
 
 @pytest.mark.parametrize("method", ["pbe-uks", "pbe0-uks"])
 @pytest.mark.parametrize("fitting", ["none", "cpu"])
-def test_native_uks_ecp_keeps_separate_force_owner(method: str, fitting: str) -> None:
-    """Removing the spin restriction does not remove the Hamiltonian restriction."""
+def test_native_uks_ecp_force_admission(method: str, fitting: str) -> None:
+    """Direct ECP shares the complete owner; unsupported DF energy stays closed."""
     from test_ecp import fixture
 
     atoms, record, reference = fixture(spin=1)
@@ -266,7 +266,7 @@ def test_native_uks_ecp_keeps_separate_force_owner(method: str, fitting: str) ->
     with calc.prepare_batch(
         [atoms], charges=[reference.charge], multiplicities=[reference.spin + 1]
     ) as batch:
-        assert not batch._native_dft_force_eligible()
+        assert batch._native_dft_force_eligible()
 
 
 def angular_basis(angular: int, representation: str) -> BasisSet:
@@ -287,8 +287,11 @@ def angular_basis(angular: int, representation: str) -> BasisSet:
 @pytest.mark.parametrize(
     "angular,fitting,auxiliary_angular", [(2, "none", 2), (3, "cpu", 3), (3, "cpu", 4)]
 )
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_native_uks_angular_source_oracle(
     method: str,
+    device: str,
+    monkeypatch: pytest.MonkeyPatch,
     xc: str,
     representation: str,
     angular: int,
@@ -296,6 +299,10 @@ def test_native_uks_angular_source_oracle(
     auxiliary_angular: int,
 ) -> None:
     """Direct d, DF orbital f and auxiliary g preserve their actual AO spaces."""
+    from test_r1_native_forces import forbid_python_force, require_backend
+
+    require_backend(device)
+    forbid_python_force(monkeypatch)
     pytest.importorskip("pyscf", reason="independent UKS angular acceptance")
     basis_set = angular_basis(angular, representation)
     auxiliary_basis = angular_basis(auxiliary_angular, representation)
@@ -303,7 +310,8 @@ def test_native_uks_angular_source_oracle(
         method,
         basis=basis_set,
         max_iterations=200,
-        density_fitting=fitting,
+        device=device,
+        density_fitting=device if fitting == "cpu" else "none",
         auxiliary_basis=auxiliary_basis if fitting == "cpu" else None,
     )
     with (

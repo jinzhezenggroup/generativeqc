@@ -229,6 +229,34 @@ generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
       matrix_elements, consumer, detail);
 }
 
+generativeqc_status consume_prepared_cuda_direct_long_range_derivatives_device(
+    const PreparedFockPlan& correction, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consume, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(correction);
+  const auto& spec = correction.strategy().spec;
+  if (!binding || !consume || !density || spec.coulomb.present || !spec.exchange.present ||
+      spec.exchange.approximation != FockApproximation::Exact ||
+      spec.exchange.op != FockOperator::LongRange || !(spec.exchange.omega > 0) ||
+      matrix_elements != binding.nbf * binding.nbf ||
+      (spec.spin == FockSpin::Unrestricted ? !beta : beta != nullptr)) {
+    detail = "invalid independent exact LR derivative lease";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return consume_cuda_direct_shell_rsh_energy_derivatives_device(
+      correction.cuda_direct_source(), spec.spin, 0, 0, spec.exchange.coefficient,
+      spec.exchange.omega, density, beta, matrix_elements,
+      [&](const CudaDerivativeSourceView& value) {
+        if (value.kind != CudaDerivativeSourceKind::RangeSeparatedJk || value.channels != 3)
+          throw std::invalid_argument("LR provider returned incompatible source rows");
+        auto lr = value;
+        lr.kind = CudaDerivativeSourceKind::RangeCorrection;
+        lr.values += 2 * lr.coordinates;
+        lr.channels = 1;
+        consume(lr);
+      },
+      detail);
+}
+
 generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
     const PreparedFockPlan& correction, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {

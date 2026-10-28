@@ -19,6 +19,8 @@ struct CudaStationaryResources {
   std::size_t grid_provider_retained_bytes{}, grid_prepare_device_delta{};
   std::size_t grid_provider_allowance_bytes{};
   std::size_t minimum_device_bytes{};
+  /** Optional center/phase geometry cache selected from the same fleet budget. */
+  bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
   AoGridWork grid_work;
 };
@@ -48,7 +50,8 @@ class CudaStationaryController {
                                bool allow_spatial_default = false,
                                scf::DirectForcePrecisionRequest* precision = nullptr,
                                const scf::ResolvedFockBuild* range = nullptr,
-                               const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr);
+                               const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr,
+                               const scf::PreparedFockPlan* range_provider = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:
@@ -60,6 +63,8 @@ class CudaStationaryController {
   std::size_t mixed_grid_budget_{}, mixed_grid_bytes_{};
   double coincident_tolerance_{};
   std::vector<double> centers_, charges_;
+  core::System system_;
+  std::size_t maximum_device_bytes_{};
   void *grid_{}, *stationary_{};
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
   std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;

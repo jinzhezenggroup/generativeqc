@@ -42,7 +42,17 @@
       "aliases": [
         "LDA_XC_PW"
       ],
-      "cpu_stationary_force_profiles": [],
+      "cpu_stationary_force_profiles": [
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "0",
+          "semilocal_exchange": "1",
+          "semilocal_correlation": "1"
+        }
+      ],
       "legacy_cpu_point_response_slot": 0
     },
     {
@@ -101,6 +111,15 @@
           ],
           "exact_exchange": "1/4",
           "semilocal_exchange": "3/4",
+          "semilocal_correlation": "1"
+        },
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "1/2",
+          "semilocal_exchange": "1/2",
           "semilocal_correlation": "1"
         }
       ],
@@ -191,7 +210,8 @@
       "cpu_stationary_force_profiles": [
         {
           "spins": [
-            1
+            1,
+            2
           ],
           "exact_exchange": "libxc",
           "semilocal_exchange": "1",

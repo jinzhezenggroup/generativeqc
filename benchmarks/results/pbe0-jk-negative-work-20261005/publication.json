@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 4112,
+      "bytes": 4508,
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "3915bfc3020a144a91281c70c3772ae3564a151feff12ccd21ec121248eebc8f"
+      "sha256": "cbbe4d76d748033620add5f90022ebe7f6c157ce6ca62ff007cef52067758b37"
     },
     {
       "bytes": 10297,
@@ -31,10 +31,10 @@
       "sha256": "f076589734ebd51f453f404f5f73b422836908a6282a802d42d4b8875c1a0a50"
     },
     {
-      "bytes": 11772,
-      "path": "candidate-source.patch",
+      "bytes": 3436,
+      "path": "candidate-source.patch.xz",
       "role": "source-patch",
-      "sha256": "e89242bc36964166a8fc94ceab2e79c42ee8323a9a2c047ad8d166df829b434c"
+      "sha256": "515459130f58c36bb6ca1a06ed4a618d173dd0b930c04bdcfc153beec3514a1a"
     },
     {
       "bytes": 15005,
@@ -109,10 +109,10 @@
       "sha256": "60c7b76e5c6cfeb63d0b583ce3bf2c3ebd8b230ad15112323fc234f238bc3ee0"
     },
     {
-      "bytes": 28369,
-      "path": "control-source.patch",
+      "bytes": 6588,
+      "path": "control-source.patch.xz",
       "role": "source-patch",
-      "sha256": "1eb438c2b27dd6e8b97e17f6b09ae70e0a4eca0edb27a6a538b288b25842315d"
+      "sha256": "5c3f55ec07f7e5006a3588d9d8a9095a6b1cc66742d02e03e2bff8eb07a0535d"
     },
     {
       "bytes": 1487,

@@ -1067,8 +1067,33 @@ class Calculator:
                 )
             )
         cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
+        automatic_cuda_force = False
+        if (
+            self._automatic_libxc_name is not None
+            and self._device_name == "cuda"
+            and self._precision_mode == _native.PRECISION_FP64
+            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and self._ks_options.xc_schedule == "device_fused"
+            and not basis_has_ecp
+        ):
+            from .resources_ks import native_cuda_stationary_model_available
+
+            automatic_cuda_force = native_cuda_stationary_model_available(
+                self._library,
+                self._ks_options,
+                precision="fp64",
+                max_iterations=self._max_iterations,
+                diis_history=self._diis_history,
+                energy_tolerance=self._energy_tolerance,
+                density_tolerance=self._density_tolerance,
+                screening_tolerance=self._screening_tolerance,
+            )
         semilocal_force = (
-            (self._automatic_libxc_name is None or cpu_direct_semilocal_force)
+            (
+                self._automatic_libxc_name is None
+                or cpu_direct_semilocal_force
+                or automatic_cuda_force
+            )
             and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
@@ -1391,6 +1416,7 @@ class Calculator:
                 and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
             )
             or qualified_direct_semilocal_context(self)
+            or self._automatic_libxc_name is not None
         ):
             return frozenset({"energy"})
         return self._capabilities.supported_properties
@@ -1404,7 +1430,11 @@ class Calculator:
         requested = frozenset(properties)
         if "energy" not in requested:
             raise ValueError("properties must include 'energy'")
-        if requested - self._capabilities.supported_properties:
+        unsupported = requested - self._capabilities.supported_properties
+        if unsupported and not (
+            unsupported == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             raise ValueError(
                 "method does not support properties: "
                 + ", ".join(sorted(requested - self._capabilities.supported_properties))
@@ -3109,7 +3139,12 @@ class Calculator:
                 f"method {self._method_name!r} does not support properties: {names}"
             )
         unsupported_properties = requested_properties - supported_properties
-        if unsupported_properties:
+        # DFT forces are admitted by the prepared context after the actual
+        # basis, operators and linked derivative providers are known.
+        if unsupported_properties and not (
+            unsupported_properties == {"forces"}
+            and self._capabilities.family == "density_functional"
+        ):
             names = ", ".join(sorted(unsupported_properties))
             raise ValueError(
                 f"method {self._method_name!r} does not support properties: {names}"
