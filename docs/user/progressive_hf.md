@@ -95,6 +95,15 @@ admission bound for this fixed-density operation; it is not a measured process
 or driver-memory peak. An unavailable inventory fails closed. Exhausting either
 part returns `budget_exhausted` without starting the verification Fock rebuild.
 Failed source work remains in the execution record and total work count.
+The shared native `generativeqc_hf_plan_query_v1` policy checks source/target
+convergence ordering, configured iteration limits and optional estimated cost
+before execution. Equality meets a budget. Calculator-built plans use the
+selected target library; standalone typed plans use the first configured
+library. Python retains graph/model/evidence validation and diagnostic text.
+Missing older-library protocols and integer metadata outside the fixed-width
+ABI use explicit compatibility. Native refusal or invalid receipts never retry
+another policy. This query does not establish final convergence or accuracy.
+
 Diagnostics separately report source/target setup and execution, projection,
 final verification and context cleanup, while `total_seconds` covers the complete
 endpoint.
