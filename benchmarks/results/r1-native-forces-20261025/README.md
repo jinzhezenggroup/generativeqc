@@ -6,8 +6,10 @@
 > inventories, ECP follow-up patch and executable reproduction drivers are
 > recoverable without loss from immutable ancestor commit
 > [`796f66f4fd935ca88abd885321738ea48e9f8db2`](https://github.com/njzjz-bot/vibeqc/tree/796f66f4fd935ca88abd885321738ea48e9f8db2/benchmarks/results/r1-native-forces-20261025).
-> The original per-file SHA-256 values remain in `validation.json` and in
-> the archived `publication.json`. Recover and verify the exact source with:
+> `historical-recovery.json` retains every archived file identity and both
+> original manifest identities. The current validation attachment and publication
+> hash-bind that local recovery receipt; the original scientific body and measured
+> revision are unchanged. Recover and verify the exact historical files with:
 >
 > ```bash
 > mkdir -p /tmp/r1-native-forces-evidence

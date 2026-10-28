@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 7354,
+      "bytes": 6544,
       "path": "validation.json",
       "role": "evidence",
-      "sha256": "d091e94304aa0dd2f5fd5221559ef33a5cdba4cf180a6246576680a624d8901f"
+      "sha256": "d103ed46ae513b761d77f84129b837e35e3b2174cd1ef3fe448fdb37ff7112ef"
     },
     {
       "bytes": 4198,
@@ -23,6 +23,12 @@
       "path": "ecp-resource-followup.json",
       "role": "summary",
       "sha256": "9d21d1127822d199fca0b90097ebb38885c9e8d9bd7a4e3bac16dee816df5f3e"
+    },
+    {
+      "path": "historical-recovery.json",
+      "role": "summary",
+      "bytes": 2439,
+      "sha256": "b04f43914e6a3984d5274a883a12445c43f6e1d7a9a291a01a7ae03e71dd28b9"
     }
   ],
   "reproduction": {
@@ -40,7 +46,8 @@
       "BASELINE_CHECKOUT",
       "CANDIDATE_CHECKOUT",
       "OUTPUT_DIRECTORY"
-    ]
+    ],
+    "prerequisite": "Restore and verify the original campaign from historical-recovery.json into a separate directory; run this unchanged command from that restored evidence directory, not the compact current checkout."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

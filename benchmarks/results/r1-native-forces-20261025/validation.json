@@ -1,32 +1,8 @@
 {
   "attachments": [
     {
-      "path": "comparison.json",
-      "sha256": "72c8f7a8184d2d94f156be80ffeb0f6b21272ea89d29b870337077fab3468bb3"
-    },
-    {
-      "path": "provenance.json",
-      "sha256": "cf927aa541d36d6a59bbd260ccaf1457231df83d417f6432f46ff6fa405b5cb2"
-    },
-    {
-      "path": "reproduction/audit_paired.py",
-      "sha256": "c50d3ca69d40d75af5aef32e6ed7de8feea1f5a58b71c0e7fbfa62cfa0fdea15"
-    },
-    {
-      "path": "reproduction/endpoint_benchmark.py",
-      "sha256": "684a697702ebea47110732d8d314bac1fed0b24836f2fbb3c044aad3e2a9913c"
-    },
-    {
-      "path": "reproduction/reproduce.sh",
-      "sha256": "4e0a8314ef43ca0d8480916bcaf74cb1a3b3aa76c2f1448ec19a35802b276df4"
-    },
-    {
-      "path": "samples.json.gz",
-      "sha256": "8e4bc68eae5c91ad57f9d1a47bac7fee467aed5793d5674a7deddb4f945dd81f"
-    },
-    {
-      "path": "trace-summary.json",
-      "sha256": "608749100b113756a8ca7c4cccac13f5fdf195c1e852293a929cb5c0be614d04"
+      "path": "historical-recovery.json",
+      "sha256": "b04f43914e6a3984d5274a883a12445c43f6e1d7a9a291a01a7ae03e71dd28b9"
     }
   ],
   "backend_selected": "cuda",
