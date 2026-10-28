@@ -1,5 +1,25 @@
 # R1 native force qualification
 
+> **Retention note (2026-10-28):** The current checkout retains the compact numerical/
+> resource qualification receipts only. The original full-precision paired
+> samples, per-case comparison table, diagnostic trace summaries, source
+> inventories, ECP follow-up patch and executable reproduction drivers are
+> recoverable without loss from immutable ancestor commit
+> [`796f66f4fd935ca88abd885321738ea48e9f8db2`](https://github.com/njzjz-bot/vibeqc/tree/796f66f4fd935ca88abd885321738ea48e9f8db2/benchmarks/results/r1-native-forces-20261025).
+> The original per-file SHA-256 values remain in `validation.json` and in
+> the archived `publication.json`. Recover and verify the exact source with:
+>
+> ```bash
+> mkdir -p /tmp/r1-native-forces-evidence
+> git archive 796f66f4fd935ca88abd885321738ea48e9f8db2 benchmarks/results/r1-native-forces-20261025 \
+>   | tar -x -C /tmp/r1-native-forces-evidence
+> cd /tmp/r1-native-forces-evidence/benchmarks/results/r1-native-forces-20261025
+> ```
+>
+> This retention-only change does not requalify measurements or modify any
+> scientific limits. Restoring a complete campaign to a separate checkout is
+> required to replay the original paired-sample audit.
+
 The frozen implementation `685478ca1111407573a5cbfa813d63ae0a5713ce`
 passes 192 paired public E/F comparisons against #2782 at
 `df2ded411074d3b04b5c236b83d760ca1aafc295`. Both ABBA and BAAB orders
@@ -21,15 +41,17 @@ endpoint; both new spin cases pass but are excluded from timing ratios.
 | PBE DF, 36 atoms | 0.4725 / 0.4737 | 0.4886 / 0.4856 | 0.4315 / 0.4218 |
 | PBE DF, 48 atoms | 0.5940 / 0.5959 | 0.4166 / 0.4164 | 0.5470 / 0.5573 |
 
-`samples.json.gz` retains all measured E/F arrays, times and work counters.
-`comparison.json` contains every comparison and gate. `provenance.json`
-records authenticated source censuses, binary identities and hardware/toolchain.
+The archived `samples.json.gz` retains measured E/F arrays, times and work
+counters; `comparison.json` records every comparison and gate; and
+`provenance.json` stores authenticated source censuses, binary identities and
+the hardware/toolchain. These original files are not duplicated in this checkout.
 Timing ran in Slurm job 14328; diagnostic replay ran afterwards in 14329,
 on node1/main/RTX 5090 with Slurm-assigned visibility. Compiler caches were
 reused. The later parent commit `5f715501` changes CI time budgets and their
 tests only; it is integrated without relabeling these measured revisions.
 
-Reproduce with clean, built checkouts at the two frozen revisions. Both need
+Restore the historical directory as shown above, then reproduce from that
+restored directory with clean, built checkouts at the two frozen revisions. Both need
 the native CUDA library and stationary AOT compatibility packages under
 `build/native-ks-catalog`. Put the matching Python/compiler dependencies and
 CUDA tools on PATH, then run from this directory:
@@ -60,7 +82,7 @@ per-atom ECP core counts were passed to a scalar shape field, and native ECP
 derivative scratch was charged with the energy-setup lifetime. The follow-up
 reduces the core counts and charges ECP/one-electron force temporaries while
 SCF and stationary arenas are live. It does not modify force equations or
-the measured all-electron endpoints. `ecp-resource-followup.patch` preserves
+the measured all-electron endpoints. the archived `ecp-resource-followup.patch` preserves
 the exact measured changes from the frozen implementation for the relevant
 sources and tests; `ecp-resource-followup.json` records source/binary hashes.
 
@@ -79,8 +101,8 @@ Earlier source-sync, extracted-harness, stale refusal expectations, ECP budget
 and WB97M-V schedule failures are not relabeled as passing runs. The final
 LR schedule shares the existing specialized omega=0.3 launcher.
 
-`trace-summary.json` retains provider counters and original diagnostic stream
-hashes; full profiler streams remain in ignored local artifacts. These counters
+The archived `trace-summary.json` retains provider counters and original
+diagnostic stream hashes; full profiler streams remain in ignored local artifacts. These counters
 are not whole-process RSS or simultaneous device peaks. The follow-up ECP
 ledger covers explicit owned buffers and provider reservations, excluding
 driver/pool and opaque library internals. No cold compilation cost or
