@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 8663,
+      "bytes": 9059,
       "path": "README.md",
       "role": "reproduction",
-      "sha256": "1af4d976a74d4f496205fa20e8c80b816aa61f269bc8a0fa2c14a2bc176486b3"
+      "sha256": "484b81422c9733d2ef42eab84d9672162d97712bb3dcc7c8d1c6ef95f9dbff83"
     },
     {
       "bytes": 578,
@@ -103,10 +103,10 @@
       "sha256": "f88bdad7167f3553f16a116a015ffd798ad8af400fcc8c61e12034d334f43d5a"
     },
     {
-      "bytes": 54079,
-      "path": "merged-source.patch",
+      "bytes": 11292,
+      "path": "merged-source.patch.xz",
       "role": "source-patch",
-      "sha256": "e5559dee5237f3281e881a812082d9d62d62e3cf3b15dc0841110537b5d12735"
+      "sha256": "3bcfd138a9a62c02f4bfa4cba480d250d06575861d73187f27de3779853d1131"
     },
     {
       "bytes": 3161,
@@ -145,10 +145,10 @@
       "sha256": "c3514a2251a09d1af4a8d25aae0414943bbfa70bc7833c8533cf647a62f9e12f"
     },
     {
-      "bytes": 82902,
-      "path": "repaired-source.patch",
+      "bytes": 17200,
+      "path": "repaired-source.patch.xz",
       "role": "source-patch",
-      "sha256": "5877fa30ff10e69f60311caeec9552d85db0a8955eec5fa3d86eaa240d0e0a1b"
+      "sha256": "7618b95d31bb3e906dff43e3d86f20dee1949311a718aaa33c41956ad6770f44"
     },
     {
       "bytes": 2234,
@@ -169,10 +169,10 @@
       "sha256": "96789d9c6c4ee76865cfd7301cb74bffec54503676f9ec9937b464e63c39c173"
     },
     {
-      "bytes": 6710,
+      "bytes": 6718,
       "path": "validation.json.gz",
       "role": "evidence",
-      "sha256": "e4170ddacc09660e7035589b98dc182d90518f80e240aa6249eecc883e79fa69"
+      "sha256": "0fa3262f54a1b81a52483c8fa845434738f12f9c76fb9cf358f7fce791d81bbe"
     },
     {
       "bytes": 9802,

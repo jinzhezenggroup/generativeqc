@@ -32,3 +32,11 @@ with `VIBEQC_RESOURCE_CUDA_TEST=1` inside Slurm. `regressions.json` retains all
 18 test names and high-l work/oracle errors. Resource and kernel summaries come
 from a separate intrusive Nsight pass and are not clean speedup measurements.
 Full traces and routine logs remain ignored local artifacts.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.

@@ -152,3 +152,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 The driver refuses an existing result directory. Future experiments must retain
 this failed campaign. Repeated cold/changed geometry, full resource/transfer
 accounting and the prior original DF/direct failures remain open requirements.
+
+Additional JSON/JSONL records now use the same lossless gzip storage. The family
+manifest preserves every original byte count and SHA-256; `analyze.py` reads
+the compressed companions without changing any scientific values or gates.

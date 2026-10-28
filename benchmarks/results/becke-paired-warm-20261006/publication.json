@@ -19,10 +19,10 @@
       "sha256": "ad5fb106ac03cbc3eb8031ed53c1d2ae1ba8b3846a90f7a00e7ab2cc5fdf9946"
     },
     {
-      "bytes": 41187,
-      "path": "source.patch",
+      "bytes": 9892,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f"
+      "sha256": "b84974f0bcb2f0205b0188f34a5632737f83442dc19d141f34357e91e3e5f07f"
     },
     {
       "bytes": 10745,
@@ -89,6 +89,12 @@
       "path": "protocols/harness-failure-6201.json.gz",
       "role": "samples",
       "sha256": "fb1283753c20b911a2afdae4c1c56e4ee5f9939ca5b6d4234d913ee2589369ef"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 396,
+      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
     }
   ],
   "reproduction": {

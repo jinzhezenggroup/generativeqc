@@ -9,21 +9,21 @@
   "records": [
     {
       "source": ".artifacts/issue206-auxiliary/practical-warm-v1/manifest.json",
-      "retained": "raw/manifest.json",
-      "encoding": "identity",
+      "retained": "raw/manifest.json.gz",
+      "encoding": "gzip",
       "original_bytes": 19594,
       "original_sha256": "88f3a6d92c1ce83788b37d847d66f433ca580ca70a53fa97e638d091c6acb9c5",
-      "stored_bytes": 19594,
-      "stored_sha256": "88f3a6d92c1ce83788b37d847d66f433ca580ca70a53fa97e638d091c6acb9c5"
+      "stored_bytes": 5531,
+      "stored_sha256": "5f7280b73b2cbf149a035d518e0b72c5077992e72e2d9e4dc7bff3e46588579c"
     },
     {
       "source": ".artifacts/issue206-auxiliary/practical-warm-v1/oh-def2-svp-spherical-uhf-b1-forces.json",
-      "retained": "raw/oh-def2-svp-spherical-uhf-b1-forces.json",
-      "encoding": "identity",
+      "retained": "raw/oh-def2-svp-spherical-uhf-b1-forces.json.gz",
+      "encoding": "gzip",
       "original_bytes": 79640,
       "original_sha256": "54ca323310d449ed54f97949ed9101336f2302e4c0cf49d1c8e22c1129590732",
-      "stored_bytes": 79640,
-      "stored_sha256": "54ca323310d449ed54f97949ed9101336f2302e4c0cf49d1c8e22c1129590732"
+      "stored_bytes": 7580,
+      "stored_sha256": "16dc51c5d4e977eb588af638d8c5b2c405647937a801bf97e574afc0aa030903"
     },
     {
       "source": ".artifacts/issue206-auxiliary/practical-warm-v1/oh-def2-svp-spherical-uhf-b1-forces.progress.jsonl",
@@ -153,12 +153,12 @@
     },
     {
       "source": ".artifacts/issue206-auxiliary/cpu-diagnosis-v1.json",
-      "retained": "diagnosis/cpu-diagnosis-v1.json",
-      "encoding": "identity",
+      "retained": "diagnosis/cpu-diagnosis-v1.json.gz",
+      "encoding": "gzip",
       "original_bytes": 41447,
       "original_sha256": "224aa4e799f42b2f89afc50a0d2d1790f7a792f129bf05a6b6a1bb703d36ccc0",
-      "stored_bytes": 41447,
-      "stored_sha256": "224aa4e799f42b2f89afc50a0d2d1790f7a792f129bf05a6b6a1bb703d36ccc0"
+      "stored_bytes": 7269,
+      "stored_sha256": "960f6949a922e3023fd1f85386444058fe35891f2b6147762cfd6ecfdf5ad090"
     },
     {
       "source": ".artifacts/issue206-auxiliary/cpu-diagnosis-v1.txt",
@@ -234,66 +234,66 @@
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto_return.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto_return.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto_return.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 77846,
       "original_sha256": "7ff3680fe9673288e96c53222e590e1f8ae3da3ec3350ce9bc2a3de83e0e30ae",
-      "stored_bytes": 77846,
-      "stored_sha256": "7ff3680fe9673288e96c53222e590e1f8ae3da3ec3350ce9bc2a3de83e0e30ae"
+      "stored_bytes": 6281,
+      "stored_sha256": "b48c48d469cd37f7e43db8f00c3589b3e5904de41e27ecb1bb171e65e73bea02"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-blas.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-blas.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-blas.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 78051,
       "original_sha256": "0fc06e91ab961aaae4a05a155dac317c3070e5b2dc82272c3e905ac2a5f8882b",
-      "stored_bytes": 78051,
-      "stored_sha256": "0fc06e91ab961aaae4a05a155dac317c3070e5b2dc82272c3e905ac2a5f8882b"
+      "stored_bytes": 5770,
+      "stored_sha256": "e67e7079f174d9dca242af4252934bfa8ae0b5a25c4a544f5ecbfabf255b644e"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-host_final.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-host_final.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-host_final.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 76723,
       "original_sha256": "7881d890ad5fd2d9ef201a34bb1f882e2700b08f293e039bdb260ed04334ba3f",
-      "stored_bytes": 76723,
-      "stored_sha256": "7881d890ad5fd2d9ef201a34bb1f882e2700b08f293e039bdb260ed04334ba3f"
+      "stored_bytes": 6094,
+      "stored_sha256": "c205cf0ec415528589946842f9bb2d6ca2e2823b6bca1b2a4336b01c13590d9b"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-occupied.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-occupied.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-occupied.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 25941,
       "original_sha256": "2f7d2e916674683dcfa281491a36bf6370f5f07fb73d257d518cc19e57e10234",
-      "stored_bytes": 25941,
-      "stored_sha256": "2f7d2e916674683dcfa281491a36bf6370f5f07fb73d257d518cc19e57e10234"
+      "stored_bytes": 2384,
+      "stored_sha256": "ca04b5d676065d22283192b061a11dbc965180868ce2f2b738169db358deef33"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 90156,
       "original_sha256": "60ccc7390207e8eac4bda02918f702ea52b987e06f8a080d4e75a8b23e46a5fc",
-      "stored_bytes": 90156,
-      "stored_sha256": "60ccc7390207e8eac4bda02918f702ea52b987e06f8a080d4e75a8b23e46a5fc"
+      "stored_bytes": 8050,
+      "stored_sha256": "4e88cd80bd57bfce6beda3440144094107f7d01b2f211c7242a2702550cdde29"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell_blas.jsonl",
-      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell_blas.jsonl",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell_blas.jsonl.gz",
+      "encoding": "gzip",
       "original_bytes": 90315,
       "original_sha256": "8fadab5c2e8de01477a687c4580fb28a2073b8882d448ca74cceee471f7573f6",
-      "stored_bytes": 90315,
-      "stored_sha256": "8fadab5c2e8de01477a687c4580fb28a2073b8882d448ca74cceee471f7573f6"
+      "stored_bytes": 7373,
+      "stored_sha256": "c35bc7ff58775d0316d181ecd87a3c18940bbd39679cb216911ea5339ce3bd17"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/report.json",
-      "retained": "diagnosis/control-diagnosis-v1/report.json",
-      "encoding": "identity",
+      "retained": "diagnosis/control-diagnosis-v1/report.json.gz",
+      "encoding": "gzip",
       "original_bytes": 17539,
       "original_sha256": "c35759ba478dd94d7ee43eddfe55ecf5334b42dc2bb53db962a07c083674d76d",
-      "stored_bytes": 17539,
-      "stored_sha256": "c35759ba478dd94d7ee43eddfe55ecf5334b42dc2bb53db962a07c083674d76d"
+      "stored_bytes": 3039,
+      "stored_sha256": "1498f71a61e3dd9954af2b6b85729b4a485012e8073211c12097f1845f7ae520"
     },
     {
       "source": ".artifacts/issue206-auxiliary/control-diagnosis-v1/water-tetramer-def2-svp-spherical-auto.jsonl",
