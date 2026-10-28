@@ -112,3 +112,8 @@ Each payload is a JSON map containing lossless UTF-8 receipt text and decoded
 SHA-256. Older #2859 raw samples remain recoverable through its own identity
 manifest and unchanged source commit. Passing final measurements do not erase
 or retrospectively validate any earlier failure.
+
+The final sample payload is now also retained in existing commit
+`d40902292`, with its exact path/hash in `history.json`. This frees room for
+the next independent qualification under the same 80 MiB aggregate limit.
+The final sample contents and reported results are unchanged.

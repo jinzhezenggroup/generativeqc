@@ -19,5 +19,12 @@
     "sha256": "14cb2eb5d2724e5d3adeaee1f1519794f228e859e7727ce8e7164700bcca7f8b",
     "bytes": 48008,
     "scope": "Final source e8de3e4d9 controls, raw independent reference results, scripts, test receipts and Nsight CSV summaries."
+  },
+  "final-samples.json.xz": {
+    "git_commit": "d4090229273c6f07a8b63bdec692630b80c5c767",
+    "git_path": "benchmarks/results/scf-defaults-20261029/final-samples.json.xz",
+    "sha256": "5e44f4feeffcd84bd69190ab8778fb39ad343bb7003964f16818a730ccb72ca3",
+    "bytes": 102504,
+    "scope": "Final e8de3e4d9 paired CPU/CUDA raw samples, unchanged."
   }
 }
