@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_source,
     emit_native_xc_point_dispatch,
@@ -24,7 +25,24 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
     functional code remains separate layout data rather than a template key.
     Spin, AO precision and point counts are deliberately absent from the AOT key:
     they remain validated data/layout arguments rather than extra code variants.
+    Manifest-derived admission cases replace generated-source spelling checks:
+    every family's ordinary/response selector and PBE policy actually execute.
     """
+    cases = [
+        (
+            item["code"],
+            response,
+            item["cuda_ks"]
+            and (not response or item["cuda_fast_paths"]["response"] == "qualified"),
+        )
+        for item in SEMILOCAL_FAMILIES
+        for response in (False, True)
+    ]
+    expected_consumers = ",\n".join(
+        f"  {{{code}, {str(response).lower()}, {str(admitted).lower()}}}"
+        for code, response, admitted in cases
+    )
+    admitted_count = sum(admitted for _, _, admitted in cases)
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
@@ -59,6 +77,9 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "template <unsigned Terms, unsigned Threads, bool S = false> void launch_point_batches() {\n"
         "  selected_specialized = S;\n}\n"
         + emit_native_xc_point_dispatch()
+        + "struct ExpectedConsumer { unsigned functional; bool response, admitted; };\n"
+        + f"const ExpectedConsumer expected_consumers[]{{\n{expected_consumers}\n}};\n"
+        + f"constexpr unsigned expected_count = {admitted_count};\n"
         + r"""
 int main() {
   const auto automatic = resolve_point_binding(0x10042U, false);
@@ -72,32 +93,32 @@ int main() {
   if(selected_functional != 17) return 13;
   mixed_pbe_point_batch_launcher()();
   if(selected_functional != 18) return 14;
-  CudaXcPointLauncher entries[7]{};
+  CudaXcPointLauncher entries[expected_count]{};
   unsigned count = 0;
-  for (unsigned f = 0; f < 6; ++f) {
-    for (unsigned r = 0; r < 2; ++r) {
-      const bool admitted = r ? f < 2 : f < 5;
-      try {
-        const auto binding = resolve_point_binding(f, r);
-        auto launch = binding.launch;
-        if (bool(binding.launch_batch) != !bool(r) || binding.automatic_program) return 17;
-        if (!admitted || !launch) return 1;
-        const auto capability = resolve_point_capabilities(f, r);
-        if (capability.local_ao_selection != !bool(r)) return 10;
-        if (capability.mixed_density_contraction != (!r && f < 3)) return 11;
-        launch();
-        if (selected_functional != f || selected_response != bool(r)) return 2;
-        const char* setting = std::getenv("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION");
-        if (selected_specialized != (f == 1 && setting && setting[0] == '1')) return 13;
-        for (unsigned i = 0; i < count; ++i)
-          if (entries[i] == launch) return 3;
-        entries[count++] = launch;
-      } catch (const std::invalid_argument&) {
-        if (admitted) return 4;
-      }
+  for (const auto& expected : expected_consumers) {
+    const auto f = expected.functional;
+    const auto r = expected.response;
+    const bool admitted = expected.admitted;
+    try {
+      const auto binding = resolve_point_binding(f, r);
+      auto launch = binding.launch;
+      if (bool(binding.launch_batch) != !bool(r) || binding.automatic_program) return 17;
+      if (!admitted || !launch) return 1;
+      const auto capability = resolve_point_capabilities(f, r);
+      if (capability.local_ao_selection != !bool(r)) return 10;
+      if (capability.mixed_density_contraction != (!r && f < 3)) return 11;
+      launch();
+      if (selected_functional != f || selected_response != bool(r)) return 2;
+      const char* setting = std::getenv("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION");
+      if (selected_specialized != (f == 1 && setting && setting[0] == '1')) return 13;
+      for (unsigned i = 0; i < count; ++i)
+        if (entries[i] == launch) return 3;
+      entries[count++] = launch;
+    } catch (const std::invalid_argument&) {
+      if (admitted) return 4;
     }
   }
-  if (count != 7) return 5;
+  if (count != expected_count) return 5;
   const auto pbe = resolve_point_binding(1, false);
   const bool specialized = pbe.launch == &launch_points<1, false, true>;
   if (pbe.launch_batch != (specialized ? &launch_point_batches<4, 32, true>
