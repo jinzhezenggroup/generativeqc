@@ -314,8 +314,10 @@ rebalance_paths=(
   tests/python/test_df_lambda_frontier.py
   # PR #2827 run 40476660986: the stationary phase-budget matrix
   # consumed ~768 worker-seconds across core-b workers (1627 results).
-  # Compiler-heavy finished in 853s; transfer the complete host
-  # compile/admission module to its loadfile lane without deselection.
+  # Its original compiler-heavy owner later timed out twice in run
+  # 40719097332. This intact matrix used ~811 worker-seconds there;
+  # runtime-heavy finished in 864 s. Keep every case and the core slot
+  # while transferring its shared fixtures to that existing loadfile lane.
   tests/python/test_native_stationary_phased_budget.py
   # Measured full Libxc force lifecycles took ~108 s each in run
   # 38113859405. Count this file in core parity before transferring
@@ -561,7 +563,10 @@ case "${GENERATIVEQC_CI_SHARD}" in
     )
     # Tracked missing files stay selected and fail closed in pytest; absent
     # future files and untracked local probes cannot enter the owner inventory.
-    for path in tests/python/test_uccsd_triples_response.py "${measured_core_runtime_paths[@]}"; do
+    for path in \
+      tests/python/test_uccsd_triples_response.py \
+      tests/python/test_native_stationary_phased_budget.py \
+      "${measured_core_runtime_paths[@]}"; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi
@@ -667,14 +672,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
-    # Complete native/full-Fock and stationary phase-budget modules retain
+    # Complete native/full-Fock modules retain
     # every numerical/compile/fault case on one loadfile worker per file.
     # Select tracked missing paths too, so incomplete checkouts fail closed.
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
       tests/python/test_uccsd_native.py \
-      tests/python/test_uccsd_triples_fock_response.py \
-      tests/python/test_native_stationary_phased_budget.py; do
+      tests/python/test_uccsd_triples_fock_response.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi
