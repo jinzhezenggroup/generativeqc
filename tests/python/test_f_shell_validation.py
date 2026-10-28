@@ -242,7 +242,8 @@ def test_numerical_driver_checks_fixture_sizes_and_uses_no_gpu_visibility_overri
     assert "invalid bounded fixture dimensions" in source
     assert "active_blocks_per_sm" in source
     assert "cudaOccupancyMaxActiveBlocksPerMultiprocessor" in source
-    assert "cudaSetDevice" not in source
+    # Selecting a visible ordinal must not rewrite the scheduler's GPU mask.
+    # The executable driver ABI test checks default and nonzero device selection.
     assert "setenv" not in source
     assert "unrestricted" in source and "persistent_args" in source
 

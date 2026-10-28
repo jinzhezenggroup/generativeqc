@@ -5,6 +5,7 @@ from dataclasses import replace
 from fractions import Fraction
 
 from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.xc_point_cuda import emit_device_point_value
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from ._generated_native_semilocal import (
@@ -12,11 +13,13 @@ from ._generated_native_semilocal import (
     SEMILOCAL_FAMILY_CODES,
 )
 from ._generated_split_hybrids import SPLIT_HYBRIDS
+from .automatic_point import emit_automatic_point
+from .automatic_semilocal import automatic_functional_name
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
 from .scalar_schedule import XcScalarConsumer, select_xc_scalar_schedule
 from .semilocal_codegen import emit_polarized_semilocal, emit_r2scan_program
-from .spec import FunctionalSpec
+from .spec import FunctionalSpec, UnsupportedXC
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
 
 _SPLIT_HYBRID_BY_CODE = {
@@ -36,11 +39,58 @@ def _functional_code(functional: typing.Any, pbe: typing.Any) -> int:
         return int(pbe)
     if pbe is not None:
         raise ValueError("specify functional or pbe, not both")
-    if type(functional) is not int or functional not in _REGISTERED_STATIONARY_CODES:
+    if type(functional) is not int:
         raise ValueError(
             "geometry lowering requires a registered semilocal functional code"
         )
+    if functional not in _REGISTERED_STATIONARY_CODES:
+        try:
+            automatic_functional_name(functional)
+        except UnsupportedXC as error:
+            raise ValueError(
+                "geometry lowering requires a registered semilocal functional code"
+            ) from error
     return functional
+
+
+def _emit_automatic_point(code: int, semilocal: FunctionalSpec | None) -> str:
+    """Adapt the SCF worker differential, preserving its spin and work domain.
+
+    Density-only RKS uses the U1 worker even when paired transport channels are
+    equal. Polarized folding would change its floor behavior. All other graphs
+    retain the same P2 physical derivatives as their CUDA energy owner; this
+    adapter never differentiates clipping or supplies a separate force formula.
+    """
+    name = automatic_functional_name(code)
+    if (
+        not isinstance(semilocal, FunctionalSpec)
+        or semilocal.components != ((name, Fraction(1)),)
+        or semilocal.exact_exchange
+        or semilocal.range_omega
+        or semilocal.long_range_exchange
+    ):
+        raise ValueError("automatic stationary point composition/code mismatch")
+    spin = (
+        "unpolarized"
+        if semilocal.spin == "unpolarized" and semilocal.ingredients == ("rho",)
+        else "polarized"
+    )
+    point = emit_automatic_point(name, backend="cuda", spin=spin)
+    return "\n".join(
+        (
+            emit_device_point_value(),
+            point.source,
+            "using StationaryPointValue = DevicePointValue;",
+            "__device__ inline StationaryPointValue stationary_evaluate_point(",
+            "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
+            "  double physical_gradient[2][3]{};",
+            "  for (unsigned spin = 0; spin < 2; ++spin)",
+            "    for (unsigned axis = 0; axis < 3; ++axis)",
+            "      physical_gradient[spin][axis] = gradient[spin][axis];",
+            f"  return {point.function_name}(rho, physical_gradient, tau);",
+            "}",
+        )
+    )
 
 
 def _emit_composed_point(
@@ -237,7 +287,9 @@ def _emit_stationary_point(
             raise ValueError("composed stationary point requires its FunctionalSpec")
         return _emit_composed_point(functional, semilocal, scalar_type=scalar_type)
     if curated is None:
-        raise ValueError("unknown stationary semilocal functional code")
+        if scalar_type != "double":
+            raise ValueError("automatic stationary point requires strict FP64")
+        return _emit_automatic_point(functional, semilocal)
     kernel = curated["stationary_kernel"]
     if kernel == "composed":
         if not isinstance(semilocal, FunctionalSpec):

@@ -14,13 +14,18 @@ def emit_numerical_driver(
     plan: typing.Any = None,
     source: str | None = None,
     consumer: str | None = None,
+    device_id: int = 0,
 ) -> str:
     """Extract the emitted task ABI and declare the eight generated launch entries.
 
     Keeping the host driver separate lets numerical-fixture changes reuse the
     expensive class object and its exact resource report. No device recurrence
     or contraction implementation is copied into this host-only translation unit.
+    ``device_id`` is the same CUDA-visible ordinal used by the tuning endpoint;
+    it never rewrites the scheduler's visibility mask.
     """
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
     if source is None:
         _, source = source_audit(name, architecture)
     plan = plan or f_shell_plan(name, architecture)
@@ -63,6 +68,7 @@ def emit_numerical_driver(
         raise ValueError("numerical driver does not cover the complete wrapper set")
     template = Path(__file__).with_name("f_shell_driver.cu.in").read_text()
     substitutions = {
+        "@DEVICE_ID@": str(device_id),
         "@TASK_TYPES@": types,
         "@KERNEL_DECLARATIONS@": "\n".join(declarations),
         "@KERNEL_TABLE@": ",\n".join(table),

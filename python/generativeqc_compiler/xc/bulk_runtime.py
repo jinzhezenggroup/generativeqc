@@ -231,6 +231,7 @@ class BulkRuntimeProgram:
     outputs: tuple[tuple[int, ...], ...]
     optimization: str
     expression_hash: str
+    parameters: tuple[tuple[str, float], ...] = ()
 
     @property
     def order(self) -> int:
@@ -251,6 +252,7 @@ class BulkRuntimeProgram:
         result = np.zeros((len(self.outputs), x.shape[1]), dtype=np.float64)
         if np.any(active):
             variables = dict(zip(self.spec.features, x[:, active], strict=True))
+            variables.update(self.parameters)
             values = evaluate_array_graph(self.graph, self.roots, variables)
             for row, value in enumerate(values):
                 result[row, active] = np.broadcast_to(value, (int(np.sum(active)),))
@@ -297,6 +299,7 @@ def build_bulk_runtime_program(
     outputs: typing.Any = None,
     optimization: str = "after",
     domain: str = libxc_bulk.BULK_SEMANTICS,
+    parameter_names: tuple[str, ...] = (),
 ) -> BulkRuntimeProgram:
     """Build one pointwise-qualified runtime candidate without promoting it.
 
@@ -313,6 +316,10 @@ def build_bulk_runtime_program(
     pinned safe densities, without differentiating clipping, and retains original
     density energy weighting. It does not change the meaning of v1/v2 or claim
     GGA/MGGA, particle-birth, molecular, or public qualification.
+
+    Explicit parameter_names retain mathematical coefficients symbolically
+    through differentiation. Evaluation binds their registered immutable values;
+    code emitters may carry those same values as shared-worker parameter data.
     """
     if domain not in _RUNTIME_DOMAINS:
         raise UnsupportedXC(f"unsupported bulk runtime domain {domain!r}")
@@ -327,7 +334,9 @@ def build_bulk_runtime_program(
     if spin not in capability.spin_layouts:
         raise UnsupportedXC(f"bulk runtime spin layout is unsupported: {spin!r}")
 
-    bulk = libxc_bulk.build_bulk_program(capability.name, spin=spin)
+    bulk = libxc_bulk.build_bulk_program(
+        capability.name, spin=spin, parameter_names=parameter_names
+    )
     density_threshold = None
     density_work_policy = None
     density_work_source_identity = None
@@ -440,4 +449,5 @@ def build_bulk_runtime_program(
         outputs=requested,
         optimization=optimization,
         expression_hash=expression_hash,
+        parameters=bulk.parameters,
     )

@@ -12,26 +12,42 @@ import re
 from fractions import Fraction
 
 from generativeqc_compiler.common.paths import asset_path
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_functional_code,
+    automatic_scf_domain,
+)
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
+    AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES,
     COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     QUALIFIED_PARTITION_ITERATIONS,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
     emit_stationary_profile_aot_wrapper_cuda,
     qualified_sp_requests,
+    stationary_aot_profile_contract_identity,
     stationary_runtime_sources,
 )
 
-NATIVE_STATIONARY_CUDA_PROFILES = tuple(
-    profile
-    for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
-    if set((plan := _qualified_aot_profile(profile).plan).external_source_names)
-    <= set(COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES)
+NATIVE_STATIONARY_CUDA_PROFILES = (
+    tuple(
+        profile
+        for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+        if set((plan := _qualified_aot_profile(profile).plan).external_source_names)
+        <= set(COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES)
+    )
+    + AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
 )
 
 
@@ -45,6 +61,29 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
     plan = compile_ks_execution_plan(_qualified_aot_profile(profile).plan.method)
     functional = plan.semilocal.functional
     actual = dict(functional.components)
+    if len(actual) == 1 and next(iter(actual)) in AUTO_BULK_COMPONENTS:
+        name, coefficient = next(iter(actual.items()))
+        if (
+            coefficient != 1
+            or plan.exchange
+            or plan.nonlocal_correlation
+            or plan.post_scf
+            or functional.range_omega
+        ):
+            raise ValueError(
+                "automatic stationary model requires one pure unit component"
+            )
+        domain = (
+            DENSITY_WORK_DOMAIN_VERSION
+            if automatic_scf_domain(name) == DENSITY_WORK_DOMAIN
+            else LIBXC_WORK_DOMAIN_VERSION
+        )
+        return (
+            automatic_functional_code(name),
+            domain,
+            Fraction(1),
+            Fraction(1),
+        )
     for record in SPLIT_HYBRIDS.values():
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]
@@ -150,6 +189,20 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         for suffix in ("", "_fp32")
     )
     prefix = f"generativeqc_native_{profile}_"
+    source_identity = canonical_hash(
+        {
+            "schema": "generativeqc.native-stationary-source.v1",
+            "contract": stationary_aot_profile_contract_identity(profile),
+            "wrapper": wrapper,
+            "transport": transport,
+            "binding_header": file_hash(
+                asset_path("src/dft/cuda_stationary_binding.hpp")
+            ),
+            "shared_kernels": file_hash(
+                asset_path("src/dft/native_stationary_shared_kernels.cu")
+            ),
+        }
+    )
     aliases = "\n".join(
         f"#define {name} {prefix}{name}" for name in sorted(identifiers)
     )
@@ -239,7 +292,8 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
        {exchange}, {range_values}}},
       stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology,
-      native_nonlocal_slot >= 0 ? native_nonlocal_geometry : nullptr
+      native_nonlocal_slot >= 0 ? native_nonlocal_geometry : nullptr,
+      {json.dumps(source_identity)}
   }};
   return binding;
 }}

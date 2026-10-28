@@ -240,6 +240,13 @@ def _run_autotune(
 ) -> dict[str, object]:
     """Generate, compile, run, rank, and optionally persist schedule winners."""
 
+    # Older programmatic callers predate the CLI selector. Preserve their
+    # visible-zero default, while rejecting malformed ordinals before compiling.
+    device_id = getattr(arguments, "device_id", 0)
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
+    if arguments.nvcc is None:
+        raise ValueError("CUDA compiler not found; configure an explicit toolkit")
     arguments.architecture = normalize_cuda_architecture(arguments.architecture)
     target = runtime_target or cuda_target_info(arguments.architecture)
     if target.architecture != arguments.architecture:
@@ -444,7 +451,11 @@ def _run_autotune(
         if runnable_trials:
             driver = directory / "autotune_driver.cu"
             driver.write_text(
-                emit_schedule_driver(runnable_trials, arguments.architecture),
+                emit_schedule_driver(
+                    runnable_trials,
+                    arguments.architecture,
+                    device_id=device_id,
+                ),
                 encoding="utf-8",
             )
             executable = directory / "shell_schedule_autotune"

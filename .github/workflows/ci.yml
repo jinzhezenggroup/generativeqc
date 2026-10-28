@@ -1236,7 +1236,9 @@ jobs:
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || 40 }}
+    # The posthf test step has a 35-minute allowance. Its six-minute
+    # setup also needs headroom, without changing other shards' job caps.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || (matrix.shard == 'posthf' && 45 || 40) }}
     env:
       CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
@@ -1458,7 +1460,10 @@ jobs:
       - name: Run Python tests with coverage
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_tests
-        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
+        # The posthf shard reached 100% exactly at the 30-minute timeout on
+        # run 40504114981. Give it five minutes for final reporting without
+        # changing other routine shards or skipping qualification.
+        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || (matrix.shard == 'posthf' && 35 || 30) }}
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build

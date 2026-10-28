@@ -55,6 +55,7 @@
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_direct_jk.hpp"
@@ -101,19 +102,24 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
                                     generativeqc_backend backend,
                                     const NativeKsExecutionPlan& plan) noexcept {
-  // Automatic CUDA KS is energy-only. Do not retain unqualified derivative
-  // sources outside its exact J-only resource inventory.
-  if (plan.automatic_program && backend == GENERATIVEQC_BACKEND_CUDA) return 0;
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda) {
     const auto exact = [](const scf::FockTermSpec& term) {
       return term.present && term.approximation == scf::FockApproximation::Exact;
     };
-    if (exact(strategy.spec.coulomb) || exact(strategy.spec.exchange)) return 1;
+    if (exact(strategy.spec.coulomb) || exact(strategy.spec.exchange)) {
+      // Match the allocation-free planner. An energy-only package must not
+      // retain derivative sources absent from its declared J-only inventory.
+      return plan.automatic_program
+                 ? dft::automatic_stationary_derivative_order(
+                       ks_xc_functional_code(plan), ks_scf_domain_version(plan), plan.spin_channels)
+                 : 1U;
+    }
   }
 #else
   (void)strategy;
   (void)backend;
+  (void)plan;
 #endif
   return 0;
 }
@@ -355,7 +361,13 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
-    std::size_t atoms) noexcept {
+    std::size_t atoms, bool qualify_through_d = false) noexcept {
+  // Automatic graphs inherit the common s/p FP64 envelope only. Neither an
+  // artifact nor a curated method's precision/large-angular receipt widens it.
+  if (execution_plan.automatic_program &&
+      (maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+       options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused))
+    return {};
   const bool application =
       dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
                                            options.screening_tolerance, false) &&
@@ -2118,9 +2130,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
             range_derivative_correction_ ? range_derivative_correction_.get()
                                          : range_correction_.get());
       }
-      if (status == GENERATIVEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         resources = stationary_controller_->resources();
-      else
+        last_native_force_token_ = expected;
+      } else
         stationary_controller_.reset();
       return status;
     } catch (const std::bad_alloc&) {
@@ -2144,7 +2157,61 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   }
 
-  const dft::CudaStationaryBinding* admitted_cuda_stationary_binding() const noexcept {
+  generativeqc_status automatic_artifact_diagnostic(KsAutomaticArtifactDiagnostic& output,
+                                                    std::string& detail) const {
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_ || !execution_plan_.automatic_program) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    dft::CudaKsFinalStateToken token;
+    const auto status = cuda_->final_state_token(token, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto* point =
+        dft::generated::automatic_cuda_point_entry(ks_xc_functional_code(execution_plan_));
+    if (!point) return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    const auto* binding = admitted_cuda_stationary_binding();
+    const bool completed = binding && stationary_controller_ && last_native_force_token_ &&
+                           *last_native_force_token_ == token;
+    KsAutomaticArtifactDiagnostic value;
+    value.identities = {point->identifier,
+                        point->expression_identity,
+                        point->source_identity,
+                        binding ? binding->profile : "",
+                        binding ? binding->plan_identity : "",
+                        binding ? binding->source_identity : "",
+                        completed ? "none"
+                        : binding ? "force-not-executed-at-current-token"
+                                  : "force-artifact-or-context-unavailable"};
+    value.artifact_owners = {point, binding};
+    value.work[0] = completed;
+    value.work[1] = point->domain_version;
+    value.work[2] = execution_plan_.spin_channels;
+    value.work[3] = binding ? binding->source_count : 0;
+    if (completed) {
+      const auto& resources = stationary_controller_->resources();
+      if (!resources.cached_geometry) value.identities[6] = "minimum-workspace";
+      const std::array<std::uint64_t, 6> capacity{resources.device_upper_bytes,
+                                                  resources.minimum_device_bytes,
+                                                  resources.grid_numeric_bytes,
+                                                  resources.stationary_numeric_bytes,
+                                                  resources.grid_provider_allowance_bytes,
+                                                  resources.grid_provider_retained_bytes};
+      std::copy(capacity.begin(), capacity.end(), value.work.begin() + 4);
+      std::copy(resources.stationary_work.begin(), resources.stationary_work.end(),
+                value.work.begin() + 10);
+      const auto& grid = resources.grid_work;
+      const std::array<std::uint64_t, 6> grid_work{
+          grid.evaluation_points,    grid.evaluation_tiles,          grid.ao_jet_values,
+          grid.projection_fma_pairs, grid.identical_spin_copy_bytes, grid.feature_passes};
+      std::copy(grid_work.begin(), grid_work.end(), value.work.begin() + 34);
+    }
+    output = value;
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
+  const dft::CudaStationaryBinding* admitted_cuda_stationary_binding(
+      bool qualify_through_d = false) const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CUDA) return {};
     const bool all_electron = system_.ecp_terms.empty() &&
                               std::none_of(system_.atoms.begin(), system_.atoms.end(),
@@ -2750,6 +2817,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<dft::CudaKsPlan> cuda_;
   std::unique_ptr<dft::CudaStationaryController> stationary_controller_;
+  std::optional<dft::CudaKsFinalStateToken> last_native_force_token_;
 #endif
 };
 
@@ -3135,6 +3203,16 @@ class KsPreparedBatch final : public PreparedBatch,
     return std::nullopt;
   }
 
+  generativeqc_status automatic_artifact_diagnostic(std::size_t index,
+                                                    KsAutomaticArtifactDiagnostic& output,
+                                                    std::string& detail) const override {
+    if (index >= items_.size() || !items_[index].plan) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // Geometry/driver failures can precede begin() revoking the solver token.
+    // Retained last-good state is not evidence for this failed item.
+    if (items_[index].failure) std::rethrow_exception(items_[index].failure);
+    return items_[index].plan->automatic_artifact_diagnostic(output, detail);
+  }
+
   generativeqc_status final_state_token(std::size_t index, dft::CudaKsFinalStateToken& token,
                                         std::string& detail) const override {
     if (index < items_.size() && items_[index].plan)
@@ -3473,6 +3551,16 @@ class KsPreparedBatch final : public PreparedBatch,
 
 Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
   return adapt_result(std::move(native), backend);
+}
+
+bool dft_cuda_stationary_model_available(const generativeqc_method_descriptor& descriptor) {
+  NativeKsExecutionPlan execution_plan;
+  auto options = dft_options(descriptor, GENERATIVEQC_BACKEND_CUDA, execution_plan);
+  const auto grid = ks_grid_options(descriptor, options, execution_plan);
+  // A model-level upper bound for clients without a molecule yet. Zero sizes
+  // deliberately cannot borrow shape-specific precision/d-shell qualification.
+  // Prepared properties and the resource query still validate the real shape.
+  return native_cuda_stationary_binding(execution_plan, options, grid, true, 1, 0, 0) != nullptr;
 }
 
 generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descriptor& descriptor,

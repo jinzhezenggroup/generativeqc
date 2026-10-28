@@ -76,15 +76,18 @@ def collect(
     *,
     refined: bool = False,
     training_only: bool = False,
+    device_id: int = 0,
 ) -> dict[str, Any]:
     """Compile with ccache and measure only within the caller's Slurm allocation.
 
-    CUDA_VISIBLE_DEVICES is inherited unchanged by every child. Native ordinal 0
-    selects the allocated visible device. Build logs/binaries stay in build/;
+    CUDA_VISIBLE_DEVICES is inherited unchanged by every child. ``device_id``
+    selects an allocated visible ordinal. Build logs/binaries stay in build/;
     the compact measurement retains source, compiler, binary and PTXAS identity.
     """
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         raise ValueError("collection requires a Slurm GPU allocation; run through srun")
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("device_id must be a nonnegative int32 ordinal")
     ccache = shutil.which("ccache")
     if ccache is None:
         raise ValueError("ccache is required for CUDA calibration builds")
@@ -133,7 +136,7 @@ def collect(
         "--format=csv",
     ]
     before = _run(query).stdout
-    probe_args = [str(binary), str(samples)]
+    probe_args = [str(binary), str(samples), "--device-id", str(device_id)]
     if refined:
         probe_args.append("--refined")
         if training_only:
@@ -392,6 +395,7 @@ def main() -> None:
     parser.add_argument("--nvcc", type=Path)
     parser.add_argument("--arch", help="explicit CUDA architecture for collection")
     parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--device-id", type=int, default=0, help="CUDA-visible ordinal")
     parser.add_argument("--suite", choices=("legacy", "refined"), default="legacy")
     parser.add_argument(
         "--training-only",
@@ -420,6 +424,7 @@ def main() -> None:
             args.output,
             refined=args.suite == "refined",
             training_only=args.training_only,
+            device_id=args.device_id,
         )
         source = args.output / "measurement.json"
     if measurement.get("schema") == "generativeqc.cuda-timing-probe.v2":

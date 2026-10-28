@@ -12,7 +12,7 @@ import json
 import os
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -27,6 +27,10 @@ from generativeqc_compiler.xc.automatic_semilocal import AUTOMATIC_SCF_DOMAIN
 from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.libxc_work import automatic_work_policy
 from test_libxc_automatic_point_native import NAMES
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.xc.automatic_cuda import AutomaticCudaPointProvider
+
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_AUTOMATIC_CUDA_KS_TEST") != "1",
@@ -154,7 +158,14 @@ def _physical_state(snapshot: NativeKsSnapshot) -> dict[str, np.ndarray]:
 
 
 def _reference(
-    name: str, spins: int, atoms: list[Any], state: dict[str, np.ndarray]
+    name: str,
+    spins: int,
+    atoms: list[Any],
+    state: dict[str, np.ndarray],
+    *,
+    basis: Any = BASIS,
+    charge: int | None = None,
+    multiplicity: int | None = None,
 ) -> tuple[float, float, np.ndarray, np.ndarray, float]:
     """Independent pinned SCF and fixed-density full-Fock directional oracle."""
     import pyscf
@@ -164,11 +175,11 @@ def _reference(
     assert dft.libxc.__version__ == "7.0.0"
     molecule = gto.M(
         atom=atoms,
-        basis=BASIS,
+        basis=basis,
         unit="Bohr",
         cart=True,
-        charge=spins - 1,
-        spin=spins - 1,
+        charge=spins - 1 if charge is None else charge,
+        spin=spins - 1 if multiplicity is None else multiplicity - 1,
         verbose=0,
     )
     method = dft.RKS(molecule) if spins == 1 else dft.UKS(molecule)
@@ -223,13 +234,17 @@ def _reference(
 @pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize("input_form", ("selector", "method-ir"))
 def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
-    name: str, spins: int, input_form: str
+    name: str,
+    spins: int,
+    input_form: str,
+    *,
+    provider: AutomaticCudaPointProvider | None = None,
 ) -> None:
     """Cold, ordinary warm recomputation and changed geometry retain J-only work."""
     assert os.environ.get("SLURM_JOB_ID"), "real CUDA qualification requires Slurm"
     assert os.environ.get("CUDA_VISIBLE_DEVICES"), "preserve scheduler GPU visibility"
     configured_at = perf_counter()
-    options = {
+    options: dict[str, Any] = {
         "method": (
             f"libxc-{'rks' if spins == 1 else 'uks'}:{name}"
             if input_form == "selector"
@@ -249,12 +264,13 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
         "density_tolerance": 1e-10,
         "screening_tolerance": 1e-12,
     }
-    capacity = (
-        Calculator(**options)
-        .estimate_resources([ATOMS], charges=[spins - 1], multiplicities=[spins])
-        .require_feasible()
+    probe = Calculator(**options)
+    capacity = probe.estimate_resources(
+        [ATOMS], charges=[spins - 1], multiplicities=[spins]
+    ).require_feasible()
+    assert capacity.requests[0].identity.observables == tuple(
+        sorted(probe.capabilities.supported_properties)
     )
-    assert capacity.requests[0].identity.observables == ("energy",)
     calculator = Calculator(
         **options,
         resource_budget=ResourceBudget(
@@ -378,7 +394,9 @@ def test_public_automatic_cuda_ks_lifecycle_matches_independent_pyscf(
             ).matrix_d2h_bytes
         previous.close()
     if directory := os.environ.get("GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR"):
-        provider = emit_automatic_cuda_provider(name)
+        # A shared package has a distinct executable identity while retaining
+        # canonical CPU science. Its caller supplies the actual package row.
+        provider = provider or emit_automatic_cuda_provider(name)
         payload = {
             "schema": "generativeqc.automatic-cuda-ks-qualification.v1",
             "name": name,

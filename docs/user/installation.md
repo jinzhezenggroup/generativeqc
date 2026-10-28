@@ -32,6 +32,11 @@ its measured shell profile. Architecture-specific prebuilt `sm120` archives
 cannot execute on older GPUs; see the [build guide](../developer/build.md)
 for multi-architecture builds.
 
+For relocated CUDA runtimes, set `CUDA_HOME`, `CUDA_PATH`, or `CUDAToolkit_ROOT`
+to the toolkit prefix, or supply library directories through `LD_LIBRARY_PATH`.
+Provider discovery also checks the active Python environment's `lib` directory
+and NVIDIA's separately installed Python packages.
+
 Verify method discovery after installation:
 
 ```bash

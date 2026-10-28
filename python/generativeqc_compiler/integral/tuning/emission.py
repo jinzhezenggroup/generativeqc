@@ -245,8 +245,13 @@ def emit_schedule_resource_translation_unit(trial: ScheduleTrial) -> str:
 def emit_schedule_driver(
     trials: Iterable[ScheduleTrial],
     architecture: str | None = None,
+    *,
+    device_id: int = 0,
 ) -> str:
-    """Emit a driver that validates its allocated GPU before benchmarking."""
+    """Select and validate the requested visible GPU before benchmarking."""
+
+    if type(device_id) is not int or not 0 <= device_id <= 2**31 - 1:
+        raise ValueError("CUDA device must be a nonnegative int32 ordinal")
 
     items = tuple(trials)
     if architecture is None:
@@ -269,7 +274,8 @@ def emit_schedule_driver(
 {declarations}
 
 int main() {{
-  const cudaError_t initialization = cudaFree(nullptr);
+  const cudaError_t selection = cudaSetDevice({device_id});
+  const cudaError_t initialization = selection == cudaSuccess ? cudaFree(nullptr) : selection;
   if (initialization != cudaSuccess) {{
     std::fprintf(stderr, "CUDA initialization failed: %s\n",
                  cudaGetErrorString(initialization));

@@ -78,6 +78,7 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
   resources_.minimum_device_bytes = capacity.minimum_device_bytes;
   if (resources_.minimum_device_bytes > maximum_device_bytes) throw std::bad_alloc();
   const bool cached = capacity.cached_device_bytes <= maximum_device_bytes;
+  resources_.cached_geometry = cached;
   const auto stationary_budget =
       cached ? capacity.stationary_cached_bytes : capacity.stationary_minimum_bytes;
   resources_.device_upper_bytes =

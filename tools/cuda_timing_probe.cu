@@ -145,13 +145,27 @@ int main(int argc, char** argv) {
   try {
     if (!std::getenv("SLURM_JOB_ID")) throw std::runtime_error("run this probe through srun");
     const int samples = argc > 1 ? std::stoi(argv[1]) : 7;
-    const bool smoke = argc > 2 && std::string(argv[2]) == "--smoke";
-    const bool refined = argc > 2 && std::string(argv[2]) == "--refined";
-    const bool training_only = argc > 3 && std::string(argv[3]) == "--training-only";
+    bool smoke = false, refined = false, training_only = false;
+    int device = 0;
+    for (int i = 2; i < argc; ++i) {
+      const std::string option(argv[i]);
+      if (option == "--smoke")
+        smoke = true;
+      else if (option == "--refined")
+        refined = true;
+      else if (option == "--training-only")
+        training_only = true;
+      else if (option == "--device-id" && i + 1 < argc)
+        device = std::stoi(argv[++i]);
+      else
+        throw std::runtime_error("unknown or incomplete probe option: " + option);
+    }
     if (samples < 3 || samples > 31) throw std::runtime_error("samples must be 3..31");
-    checked(cudaSetDevice(0));  // Slurm's visible ordinal, never a physical index override.
+    if (device < 0) throw std::runtime_error("device must be a nonnegative visible ordinal");
+    // Device ordinals stay inside the allocation's unchanged visibility mask.
+    checked(cudaSetDevice(device));
     cudaDeviceProp prop{};
-    checked(cudaGetDeviceProperties(&prop, 0));
+    checked(cudaGetDeviceProperties(&prop, device));
     int driver = 0, runtime = 0;
     checked(cudaDriverGetVersion(&driver));
     checked(cudaRuntimeGetVersion(&runtime));
@@ -255,8 +269,9 @@ int main(int argc, char** argv) {
               << (refined ? "generativeqc.cuda-timing-probe.v2"
                           : "generativeqc.cuda-timing-probe.v1")
               << "\",\"device\":\"" << prop.name << "\",\"architecture\":\"sm_" << prop.major
-              << prop.minor << "\",\"sm_count\":" << sm << ",\"l2_bytes\":" << prop.l2CacheSize
-              << ",\"driver_version\":" << driver << ",\"runtime_version\":" << runtime
+              << prop.minor << "\",\"device_id\":" << device << ",\"sm_count\":" << sm
+              << ",\"l2_bytes\":" << prop.l2CacheSize << ",\"driver_version\":" << driver
+              << ",\"runtime_version\":" << runtime
               << ",\"max_threads_per_sm\":" << prop.maxThreadsPerMultiProcessor
               << ",\"seed\":1787,\"samples\":" << samples << ",\"cases\":[\n";
     bool first_case = true;

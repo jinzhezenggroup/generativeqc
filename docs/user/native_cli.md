@@ -157,8 +157,12 @@ the C and C++ APIs.
 the compiler's structural admission and explicit blacklist at build time.
 `run --method libxc:GGA_X_APBE` (or `libxc-rks:GGA_X_APBE`) selects RKS;
 `libxc-uks:GGA_X_APBE` selects UKS. These programs execute through the existing
-native CPU KS lowerer, without importing Python at runtime. CUDA and mixed
-automatic component graphs remain unavailable rather than changing the method.
+shared native KS lowerer, without importing Python at runtime. CUDA execution
+requires a build containing the selected automatic XC provider; analytic CUDA
+forces additionally require its native stationary profile. Missing providers
+fail explicitly. See the [automatic CUDA contract](../developer/xc_native_cuda.md#experimental-automatic-aot-plumbing)
+for build selection, precision, spin and force-shape bounds. Mixed automatic
+component graphs remain unavailable rather than changing the method.
 The generated catalog retains each worker's numerical domain: density-only LDA
 uses its distinct total-density RKS and spin-resolved UKS contract, while GGA
 and tau meta-GGA retain the general Libxc work domain.
