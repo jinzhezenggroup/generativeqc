@@ -1,0 +1,128 @@
+{
+  "baseline": "c413cde9fc4d102b42a2c3e856dceb0fadcdcdd7",
+  "scope": "Measured production patch relative to baseline; qualification scripts and tests retained separately. No certification of subsequent master integrations.",
+  "sources": {
+    "cmake/GenerativeQCTests.cmake": "508d4fb6bb0048edc7d5ebf629acb37fad5b18f9cf7fe4cd8bfc1a90804f1b96",
+    "include/generativeqc/generativeqc.h": "66ccf66efbdea478320147b75697fdf3b4e80402543832f41533f1e94275fe18",
+    "python/generativeqc/_named_ks.py": "dae2ac42eb01426b9f8a16cf83623cb31ff63a40839e2dfd51be24d12869b882",
+    "python/generativeqc/batch.py": "3a54c42fd8292bd291ce80469ba4d850986bab1122a8833a73d7bbf678f2ae78",
+    "python/generativeqc/calculator.py": "415e6baf45e78c3c1e79f4faf6fa854e9e041c182fc2ed97ca6532fb9ae94be2",
+    "python/generativeqc/resources_d3.py": "0aabaaff68da30c9d91af03e60343bc5a7e440c1652fcdd4434e82c2f1e3149e",
+    "python/generativeqc/resources_native.py": "c62b835acc2ccdd78da259f1101a957e7b775d63ea0ecbeceb4a397a4c64bcf4",
+    "src/api/c_api_batch.cpp": "1d75a01328bc921a42e8f13b15dfb3c87343053a4b7f8196b8d9d98211b1bb08",
+    "src/api/c_api_calculation.cpp": "99daec9e1fe6d80e69517b079b28a34e747428d12807ca7d853ae7df64846f02",
+    "src/api/c_api_resources.cpp": "49d803b4e12dd47d5b97d6de256b3f1592c4499b61c51d58248077e8b9957d21",
+    "src/dft/dispersion/d3_cuda.cu": "471708fb89d508dd56f04b9ae6d6bfac7a1b059fd5b1917c7b6a32b8a43ebc43",
+    "src/dft/dispersion/d3_runtime.cpp": "6e41df5e08b434f32551d59c7505fae1200880b11ac0478d8be3426ed56b88c8",
+    "src/dft/dispersion/d3_runtime.hpp": "1380a3f2155c2b05de6f572f269da46b9b44aa8c370d3ef98b489411decaab0c",
+    "src/methods/dft_method.cpp": "9f3f57ac950175fc398f62da2dc870b3d1848684f8e46c37dd8614a76b508462"
+  },
+  "binaries": {
+    "cpu": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-baseline-c413cde9f",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/baseline-cpu.so",
+        "library_sha256": "76e8f9b73a1b386a3c75b6d7063d46f0e895725a88f925cea75452a7dda87c65",
+        "backend": "cpu",
+        "slurm_job_id": "14821",
+        "cuda_visible_devices": null
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-20261028",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/candidate-cpu.so",
+        "library_sha256": "9a9f2f8618eced11c08ac82461168be0a1e9ba3901484aa7982ea7aa0f418a7f",
+        "backend": "cpu",
+        "slurm_job_id": "14821",
+        "cuda_visible_devices": null
+      }
+    },
+    "cuda": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-baseline-c413cde9f",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/baseline-cuda.so",
+        "library_sha256": "bdb1dfc06ddd4611daabbde47fb527d1683d661e61b524ce65b2fea1bf774aa4",
+        "backend": "cuda",
+        "slurm_job_id": "14823",
+        "cuda_visible_devices": "0"
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-20261028",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/candidate-cuda.so",
+        "library_sha256": "338bb1f7cc858472a855ef640080f4e142c943efbfe5c4a39dc5b6b16348fdee",
+        "backend": "cuda",
+        "slurm_job_id": "14823",
+        "cuda_visible_devices": "0"
+      }
+    }
+  },
+  "receipts": {
+    "baseline-profile-stats_cuda_gpu_mem_time_sum.csv": {
+      "sha256": "86c74f1cfaafbc33dfaff2c9a3250ea1206fb85edd44437919779445d73279cb",
+      "bytes": 369
+    },
+    "qualify.py": {
+      "sha256": "6bf48344a0f52f2967213fa47f00aa3c1f33cc18df480bb71492f97302e70c6c",
+      "bytes": 6265
+    },
+    "sdk.cpp": {
+      "sha256": "96abcf3492634cc69ed428b0caa4bc6f3194f0b90c969e977a6a1ae68f3415c3",
+      "bytes": 6603
+    },
+    "baseline-profile-stats_cuda_api_sum.csv": {
+      "sha256": "cea4b7929efe66a9f7a535467979dc035f4227fabf09a24ea5e2784a0c6b6c8d",
+      "bytes": 1901
+    },
+    "README.md": {
+      "sha256": "6a549f94060dc8cdd6114fbdc3643a752c179f8afc554dfcd47438e3bd4ba3d1",
+      "bytes": 6016
+    },
+    "candidate-profile-stats_cuda_gpu_mem_size_sum.csv": {
+      "sha256": "54305b6bb54e081cc0c88a7400643ada588b6391b07aaef29c919404dec6c634",
+      "bytes": 344
+    },
+    "endpoint_worker.py": {
+      "sha256": "991384095349b8bcbfd490687f05e4fdbf7408385ad4360d2986c50273171702",
+      "bytes": 6341
+    },
+    "receipts.json.xz": {
+      "sha256": "8d8d2c140e897e66397a8785a5a260b34f47ac6007310fa131b5e97281940906",
+      "bytes": 6272
+    },
+    "cpu-samples.json.xz": {
+      "sha256": "17dc8473515e9a3642e0c11a6b6fee2b77be9c26072e015bd60fe8b2ef1daae1",
+      "bytes": 31604
+    },
+    "candidate-profile-stats_cuda_gpu_kern_sum.csv": {
+      "sha256": "fff1b78b0e15dc8874e6116d756b1ddc17eb815e3b1d03f3de163d98c7d0521c",
+      "bytes": 26557
+    },
+    "profile-summary.json": {
+      "sha256": "5021f574c0463387885cf4d0d711bc9057888f51e788c40b270f8bc83c7b13b8",
+      "bytes": 1267
+    },
+    "candidate-profile-stats_cuda_api_sum.csv": {
+      "sha256": "009c25b8d4cf7a60b0e7347c378cef12838d9ad3144ac6d77487ebd77c4535bc",
+      "bytes": 1922
+    },
+    "baseline-profile-stats_cuda_gpu_kern_sum.csv": {
+      "sha256": "962bf0ecb4def8e91298337e30408f0bf926d913e074c9305adf0a19dfa8cc89",
+      "bytes": 26548
+    },
+    "cuda-samples.json.xz": {
+      "sha256": "ef071c9b82d0737ce8467b3ecf47febf2f73c7f1f81bcb8224180947aef01833",
+      "bytes": 45536
+    },
+    "source.patch": {
+      "sha256": "40bb14790a8e722cf2f58019bc11b6e3882fb3cac5127cfa73291ce00f342ec6",
+      "bytes": 36707
+    },
+    "baseline-profile-stats_cuda_gpu_mem_size_sum.csv": {
+      "sha256": "cfaa99e73a0611760032f755449be6889bd2b17078d6152c82a74316482c4511",
+      "bytes": 344
+    },
+    "candidate-profile-stats_cuda_gpu_mem_time_sum.csv": {
+      "sha256": "c508be91fa82bc6b450f0106bf3165f310cbda96dcb314d09037eb39a8203528",
+      "bytes": 370
+    }
+  }
+}

@@ -3127,6 +3127,59 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
     generativeqc_batch_flags flags, generativeqc_batch** batch);
 
+/** @native-contract generativeqc_ks_d3_resource_query_v1
+ * @behavior Query the capacities of KS's retained per-system D3 correction owners.
+ * @inputs A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+ * output are required. Every item must satisfy the production D3 atom bound.
+ * @outputs Publishes summed host/device/table/workspace capacities. maximum_bytes is the
+ * minimum aggregate dispersion cap under the named batch's equal-per-item budget rule;
+ * it can exceed the sum of retained bytes for ragged inputs. Output is unchanged on failure.
+ * @lifetime Borrows inputs only for this call; no owner or pointer is retained.
+ * @errors Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+ * @execution Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+ * This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+ * @units Atom counts are dimensionless and all capacities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1(
+    generativeqc_backend backend, const uint32_t* atom_counts, uint32_t system_count,
+    generativeqc_d3_runtime_diagnostic* output);
+
+/** @native-contract generativeqc_calculation_prepare_named_ks_with_device_resources_v1
+ * @behavior Prepare the complete named KS program with retained native device admission.
+ * @inputs Named preparation inputs plus a live resources handle on the context's CUDA device.
+ * Its selected inventory must include both electronic and correction capacities.
+ * @outputs Clears calculation on entry and publishes an owned calculation on success.
+ * @lifetime Copies inputs and shares resource ownership; the context must outlive the owner.
+ * Closing the caller's resource handle cannot detach admission from execution or destruction.
+ * @errors Same named-program validation and device-admission statuses as ordinary preparation.
+ * Missing name/resources returns INVALID_ARGUMENT, with no unbudgeted retry.
+ * @execution Synchronous; the shared prepared owner binds admission around setup and replay.
+ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_device_resources* resources, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_batch_prepare_named_ks_with_device_resources_v1
+ * @behavior Prepare a complete input-ordered named KS batch with retained device admission.
+ * @inputs Named batch preparation inputs plus a live resources handle on the context's CUDA
+ * device. The inventory includes electronic buffers and per-system correction owners.
+ * @outputs Clears batch on entry and publishes one owning batch on success.
+ * @lifetime Shares resource ownership across replay and geometry rebuild; the context must
+ * outlive the batch. The caller may close its resources handle after successful preparation.
+ * @errors Same named-program and device-admission validation as scalar preparation; missing
+ * name/resources returns INVALID_ARGUMENT. Failure never retries without admission.
+ * @execution Synchronous preparation; ordinary native batch replay and item failure isolation.
+ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_device_resources* resources,
+    generativeqc_batch** batch);
+
 /** @native-contract generativeqc_calculation_prepare_with_device_resources
  * @behavior Prepare the same scientific calculation with native-owned device admission.
  * The native owner binds around preparation and every execution, including component returns,

@@ -1,0 +1,759 @@
+diff --git a/cmake/GenerativeQCTests.cmake b/cmake/GenerativeQCTests.cmake
+index d60441618..29211ecb1 100644
+--- a/cmake/GenerativeQCTests.cmake
++++ b/cmake/GenerativeQCTests.cmake
+@@ -436,7 +436,10 @@ macro(generativeqc_add_native_tests)
+     generativeqc_native_test(generativeqc_d3_cuda_replay_failure_tests
+                        tests/native/test_d3_cuda_replay_failure.cu
+                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
+-    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE src/dft/dispersion/d3_cuda.cu)
++    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE
++      src/dft/dispersion/d3_cuda.cu src/dft/dispersion/d3_runtime.cpp)
++    target_compile_definitions(generativeqc_d3_cuda_replay_failure_tests PRIVATE
++      GENERATIVEQC_HAS_CUDA=1)
+     add_dependencies(generativeqc_d3_cuda_replay_failure_tests generativeqc_d3_codegen)
+     target_include_directories(generativeqc_d3_cuda_replay_failure_tests PRIVATE
+       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")
+diff --git a/include/generativeqc/generativeqc.h b/include/generativeqc/generativeqc.h
+index 51dabf379..939246554 100644
+--- a/include/generativeqc/generativeqc.h
++++ b/include/generativeqc/generativeqc.h
+@@ -3127,6 +3127,59 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
+     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+     generativeqc_batch_flags flags, generativeqc_batch** batch);
+ 
++/** @native-contract generativeqc_ks_d3_resource_query_v1
++ * @behavior Query the capacities of KS's retained per-system D3 correction owners.
++ * @inputs A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
++ * output are required. Every item must satisfy the production D3 atom bound.
++ * @outputs Publishes summed host/device/table/workspace capacities. maximum_bytes is the
++ * minimum aggregate dispersion cap under the named batch's equal-per-item budget rule;
++ * it can exceed the sum of retained bytes for ragged inputs. Output is unchanged on failure.
++ * @lifetime Borrows inputs only for this call; no owner or pointer is retained.
++ * @errors Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
++ * @execution Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
++ * This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
++ * @units Atom counts are dimensionless and all capacities are bytes.
++ */
++GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1(
++    generativeqc_backend backend, const uint32_t* atom_counts, uint32_t system_count,
++    generativeqc_d3_runtime_diagnostic* output);
++
++/** @native-contract generativeqc_calculation_prepare_named_ks_with_device_resources_v1
++ * @behavior Prepare the complete named KS program with retained native device admission.
++ * @inputs Named preparation inputs plus a live resources handle on the context's CUDA device.
++ * Its selected inventory must include both electronic and correction capacities.
++ * @outputs Clears calculation on entry and publishes an owned calculation on success.
++ * @lifetime Copies inputs and shares resource ownership; the context must outlive the owner.
++ * Closing the caller's resource handle cannot detach admission from execution or destruction.
++ * @errors Same named-program validation and device-admission statuses as ordinary preparation.
++ * Missing name/resources returns INVALID_ARGUMENT, with no unbudgeted retry.
++ * @execution Synchronous; the shared prepared owner binds admission around setup and replay.
++ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
++ */
++GENERATIVEQC_API generativeqc_status
++generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
++    generativeqc_context* context, const generativeqc_system* system,
++    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
++    const generativeqc_device_resources* resources, generativeqc_calculation** calculation);
++
++/** @native-contract generativeqc_batch_prepare_named_ks_with_device_resources_v1
++ * @behavior Prepare a complete input-ordered named KS batch with retained device admission.
++ * @inputs Named batch preparation inputs plus a live resources handle on the context's CUDA
++ * device. The inventory includes electronic buffers and per-system correction owners.
++ * @outputs Clears batch on entry and publishes one owning batch on success.
++ * @lifetime Shares resource ownership across replay and geometry rebuild; the context must
++ * outlive the batch. The caller may close its resources handle after successful preparation.
++ * @errors Same named-program and device-admission validation as scalar preparation; missing
++ * name/resources returns INVALID_ARGUMENT. Failure never retries without admission.
++ * @execution Synchronous preparation; ordinary native batch replay and item failure isolation.
++ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
++ */
++GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1(
++    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
++    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
++    generativeqc_batch_flags flags, const generativeqc_device_resources* resources,
++    generativeqc_batch** batch);
++
+ /** @native-contract generativeqc_calculation_prepare_with_device_resources
+  * @behavior Prepare the same scientific calculation with native-owned device admission.
+  * The native owner binds around preparation and every execution, including component returns,
+diff --git a/python/generativeqc/_named_ks.py b/python/generativeqc/_named_ks.py
+index f7496dbe8..2786523b4 100644
+--- a/python/generativeqc/_named_ks.py
++++ b/python/generativeqc/_named_ks.py
+@@ -43,6 +43,45 @@ def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None
+     return selected.value
+ 
+ 
++def select_resource_program(calculator: Any, electronic_request: Any) -> bytes | None:
++    """Select a complete program only with matching correction capacity ownership.
++
++    Missing additive resource support retains the standalone compatibility
++    owner. After positive selection, query/preparation errors are authoritative.
++    This does not extend the global planner's electronic or correction domains.
++    CUDA additionally needs the existing native stationary-capacity receipt:
++    compatibility forces would otherwise allocate a second correction owner.
++    """
++    library = calculator._library
++    if (
++        calculator._dispersion_method_ir is None
++        or calculator._precision_mode != _native.PRECISION_FP64
++        or not hasattr(library, "generativeqc_ks_d3_resource_query_v1")
++        or (
++            calculator._device_name == "cuda"
++            and (
++                not hasattr(
++                    library,
++                    "generativeqc_batch_prepare_named_ks_with_device_resources_v1",
++                )
++                or not electronic_request.candidates
++                or any(
++                    "cuda_stationary_cache" not in dict(candidate.decisions)
++                    for candidate in electronic_request.candidates
++                )
++            )
++        )
++    ):
++        return None
++    return select_named_program(
++        library,
++        calculator._dispersion_method_ir,
++        _native.BACKEND_CUDA
++        if calculator._device_name == "cuda"
++        else _native.BACKEND_CPU_REFERENCE,
++    )
++
++
+ def create_named_system(
+     library: Any,
+     context: Any,
+@@ -108,9 +147,14 @@ def prepare_named_batch(
+     name: bytes,
+     graph: Any,
+     maximum_bytes: int,
++    resources: Any = None,
+ ) -> int:
+     """Pass controls plus a pinned full identity to the selected library."""
+-    prepare = library.generativeqc_batch_prepare_named_ks_v1
++    prepare = (
++        library.generativeqc_batch_prepare_named_ks_with_device_resources_v1
++        if resources is not None
++        else library.generativeqc_batch_prepare_named_ks_v1
++    )
+     prepare.argtypes = [
+         ct.c_void_p,
+         ct.POINTER(ct.c_void_p),
+@@ -118,8 +162,10 @@ def prepare_named_batch(
+         ct.POINTER(_native.MethodDescriptor),
+         ct.POINTER(_native.NamedKsDescriptor),
+         ct.c_uint32,
+-        ct.POINTER(ct.c_void_p),
+     ]
++    if resources is not None:
++        prepare.argtypes += [ct.c_void_p]
++    prepare.argtypes += [ct.POINTER(ct.c_void_p)]
+     prepare.restype = ct.c_int
+     named = _native.NamedKsDescriptor(
+         ct.sizeof(_native.NamedKsDescriptor),
+@@ -135,9 +181,10 @@ def prepare_named_batch(
+         if graph.spin == "unpolarized"
+         else _native.METHOD_PBE_UKS
+     )
+-    return prepare(
+-        context, systems, count, ct.byref(method), ct.byref(named), flags, output
+-    )
++    arguments = [context, systems, count, ct.byref(method), ct.byref(named), flags]
++    if resources is not None:
++        arguments.append(resources)
++    return prepare(*arguments, output)
+ 
+ 
+ class NativeKsDispersion:
+diff --git a/python/generativeqc/batch.py b/python/generativeqc/batch.py
+index ad6dc5767..7330652ca 100644
+--- a/python/generativeqc/batch.py
++++ b/python/generativeqc/batch.py
+@@ -302,7 +302,10 @@ class PreparedBatch:
+         self._resource_ledger = None
+         self._resource_prepare = None
+         dispersion_request = None
++        resource_native_name = None
+         if resource_plan is not None or calculator._resource_budget is not None:
++            from ._named_ks import select_resource_program
++
+             request = calculator._resource_request(
+                 self._systems,
+                 charges=self._charges,
+@@ -310,7 +313,10 @@ class PreparedBatch:
+                 ks_options=self._effective_ks_options,
+                 properties=self._planned_properties,
+             )
+-            dispersion_request = calculator._dispersion_resource_request(self._systems)
++            resource_native_name = select_resource_program(calculator, request)
++            dispersion_request = calculator._dispersion_resource_request(
++                self._systems, request
++            )
+             requests = (
+                 (request,)
+                 if dispersion_request is None
+@@ -349,6 +355,9 @@ class PreparedBatch:
+                     self.resource_plan,
+                     owner=request.name,
+                     prepared_kind="batch",
++                    component_owners=("d3",)
++                    if resource_native_name is not None
++                    else (),
+                 )
+                 self._resource_prepare = self._resource_ledger.prepared_call
+             if request.identity.backend == "cuda" and (
+@@ -414,7 +423,7 @@ class PreparedBatch:
+             if inactive_eigensolver_profiling:
+                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
+ 
+-            native_name = None
++            native_name = resource_native_name
+             if (
+                 calculator._dispersion_method_ir is not None
+                 and self.resource_plan is None
+@@ -445,6 +454,11 @@ class PreparedBatch:
+                         native_name,
+                         calculator._dispersion_method_ir,
+                         calculator._dispersion_memory_budget_bytes,
++                        resources=(
++                            self._resource_ledger.handle
++                            if self._resource_ledger is not None
++                            else None
++                        ),
+                     )
+                 if self._resource_prepare is not None:
+                     return self._resource_prepare(
+@@ -582,32 +596,27 @@ class PreparedBatch:
+                         device_id=calculator._device_id,
+                         maximum_bytes=calculator._dispersion_memory_budget_bytes,
+                     )
+-                    if (
+-                        self.resource_plan is not None
+-                        and dispersion_request is not None
+-                    ):
+-                        selected = dict(self.resource_plan.selections)[
+-                            dispersion_request.name
+-                        ]
+-                        candidate = next(
+-                            candidate
+-                            for candidate in dispersion_request.candidates
+-                            if candidate.name == selected
+-                        )
+-                        planned = dict(candidate.decisions)
+-                        diagnostic = self._dispersion_batch.diagnostic()
+-                        actual = {
+-                            "plan_host_bytes": diagnostic.plan_host_bytes,
+-                            "execution_host_bytes": diagnostic.execution_host_bytes,
+-                            "device_bytes": diagnostic.device_bytes,
+-                            "table_bytes": diagnostic.table_bytes,
+-                            "workspace_bytes": diagnostic.workspace_bytes,
+-                        }
+-                        expected = {key: int(planned[key]) for key in actual}
+-                        if actual != expected:
+-                            raise RuntimeError(
+-                                "prepared D3 resource inventory differs from the global ResourcePlan"
+-                            )
++            if self.resource_plan is not None and dispersion_request is not None:
++                selected = dict(self.resource_plan.selections)[dispersion_request.name]
++                candidate = next(
++                    candidate
++                    for candidate in dispersion_request.candidates
++                    if candidate.name == selected
++                )
++                planned = dict(candidate.decisions)
++                diagnostic = self.dispersion_diagnostic
++                actual = {
++                    "plan_host_bytes": diagnostic.plan_host_bytes,
++                    "execution_host_bytes": diagnostic.execution_host_bytes,
++                    "device_bytes": diagnostic.device_bytes,
++                    "table_bytes": diagnostic.table_bytes,
++                    "workspace_bytes": diagnostic.workspace_bytes,
++                }
++                expected = {key: int(planned[key]) for key in actual}
++                if actual != expected:
++                    raise RuntimeError(
++                        "prepared D3 resource inventory differs from the global ResourcePlan"
++                    )
+         except Exception:
+             # Construction owns native handles before resource-status conversion,
+             # which can raise MemoryError as well as ordinary validation errors.
+diff --git a/python/generativeqc/calculator.py b/python/generativeqc/calculator.py
+index 9763d77c9..a6d60da74 100644
+--- a/python/generativeqc/calculator.py
++++ b/python/generativeqc/calculator.py
+@@ -2429,7 +2429,9 @@ class Calculator:
+                 )
+         return request
+ 
+-    def _dispersion_resource_request(self, systems: typing.Any) -> typing.Any:
++    def _dispersion_resource_request(
++        self, systems: typing.Any, electronic_request: typing.Any
++    ) -> typing.Any:
+         """Return the bounded D3 owner request for global planning, when present."""
+         if self._dispersion_method_ir is None:
+             return None
+@@ -2448,6 +2450,7 @@ class Calculator:
+                 "global ResourcePlan currently supports composed D3(BJ) only"
+             )
+ 
++        from ._named_ks import select_resource_program
+         from .resources_d3 import d3_resource_request
+ 
+         return d3_resource_request(
+@@ -2457,6 +2460,7 @@ class Calculator:
+             device_id=self._device_id,
+             maximum_bytes=self._dispersion_memory_budget_bytes,
+             library=self._library,
++            _native_ks=select_resource_program(self, electronic_request) is not None,
+         )
+ 
+     def _effective_ks_selection(
+@@ -2565,7 +2569,7 @@ class Calculator:
+                 properties=properties,
+             )
+         ]
+-        dispersion_request = self._dispersion_resource_request(systems)
++        dispersion_request = self._dispersion_resource_request(systems, requests[0])
+         if dispersion_request is not None:
+             requests.append(dispersion_request)
+         return plan_resources(
+diff --git a/python/generativeqc/resources_d3.py b/python/generativeqc/resources_d3.py
+index d2bf0294a..6e0b4ca7d 100644
+--- a/python/generativeqc/resources_d3.py
++++ b/python/generativeqc/resources_d3.py
+@@ -160,6 +160,58 @@ def _d3_spec(graph: MethodIR) -> D3Spec:
+     return corrections[0].specification
+ 
+ 
++def _ks_d3_inventory(
++    counts: tuple[int, ...], backend: str, library: typing.Any
++) -> dict[str, int]:
++    """Read KS's actual per-item correction layout, including replicated tables.
++
++    Selection requires this ABI before planning. A rejected or malformed native
++    receipt cannot be repaired by sizing a different, standalone ragged owner.
++    """
++    from . import _native
++
++    query = library.generativeqc_ks_d3_resource_query_v1
++    query.argtypes = [
++        ctypes.c_int32,
++        ctypes.POINTER(ctypes.c_uint32),
++        ctypes.c_uint32,
++        ctypes.POINTER(_native.D3RuntimeDiagnostic),
++    ]
++    query.restype = ctypes.c_int
++    values = _native.D3RuntimeDiagnostic(
++        ctypes.sizeof(_native.D3RuntimeDiagnostic), _native.ABI_VERSION
++    )
++    _native.check(
++        library,
++        query(
++            int(backend == "cuda"),
++            (ctypes.c_uint32 * len(counts))(*counts),
++            len(counts),
++            ctypes.byref(values),
++        ),
++    )
++    inventory = {
++        key: checked_bytes(int(getattr(values, key)), "KS D3 " + key)
++        for key in _D3_RESOURCE_KEYS[:-1]
++    }
++    inventory["retained_bytes"] = checked_bytes(
++        sum(inventory[key] for key in _D3_RESOURCE_KEYS[:3]), "KS D3 retained_bytes"
++    )
++    inventory["minimum_maximum_bytes"] = checked_bytes(
++        int(values.maximum_bytes), "KS D3 minimum_maximum_bytes"
++    )
++    if (
++        values.backend != int(backend == "cuda")
++        or values.system_count != len(counts)
++        or values.total_atoms != sum(counts)
++        or values.maximum_atoms != max(counts)
++        or not 0 < inventory["retained_bytes"] <= inventory["minimum_maximum_bytes"]
++        or (backend == "cpu" and inventory["device_bytes"] != 0)
++    ):
++        raise ValueError("native KS D3 inventory returned inconsistent capacity")
++    return inventory
++
++
+ def _normalized_atomic_numbers(systems: typing.Any) -> tuple[tuple[int, ...], ...]:
+     normalized = tuple(tuple(system) for system in systems)
+     if not normalized or any(not system for system in normalized):
+@@ -182,12 +234,15 @@ def d3_resource_request(
+     first_phase: int = 0,
+     last_phase: int = 0,
+     library: typing.Any = None,
++    _native_ks: bool = False,
+ ) -> ResourceRequest:
+     """Describe the retained production D3(BJ) owner without allocating it.
+ 
+     An already-loaded ``library`` supplies native sizing when its additive
+     query exists. No library is loaded here; absent symbols retain portable
+     metadata sizing, while discovered native failures are authoritative.
++    The selected complete KS program uses its distinct per-item native query;
++    its equal-share local cap is checked independently of global live storage.
+     """
+     if not isinstance(method, MethodIR):
+         raise TypeError("D3 resource planning requires a MethodIR")
+@@ -212,13 +267,15 @@ def d3_resource_request(
+         "device_id": device_id,
+         "inventory_version": 1,
+         "inventory_owner": (
+-            "native-d3-layout-v1"
++            "native-ks-d3-layout-v1"
++            if _native_ks
++            else "native-d3-layout-v1"
+             if getattr(library, "generativeqc_resource_d3_layout_v1", None) is not None
+             else "portable-d3-layout-v1"
+         ),
+         "maximum_bytes": maximum_bytes,
+         "method_ir_identity": method.identity,
+-        "schedule": "retained-native-d3-bj",
++        "schedule": "retained-native-ks-d3" if _native_ks else "retained-native-d3-bj",
+     }
+     identity = ResourceIdentity(
+         method.identifier,
+@@ -260,19 +317,24 @@ def d3_resource_request(
+             unsupported_reason=unsupported,
+         )
+ 
+-    inventory = _d3_inventory(counts, backend, library)
++    inventory = (
++        _ks_d3_inventory(counts, backend, library)
++        if _native_ks
++        else _d3_inventory(counts, backend, library)
++    )
+     plan_host_bytes = inventory["plan_host_bytes"]
+     execution_host_bytes = inventory["execution_host_bytes"]
+     device_bytes = inventory["device_bytes"]
+     retained_total = inventory["retained_bytes"]
+-    if retained_total > maximum_bytes:
++    required_budget = inventory.get("minimum_maximum_bytes", retained_total)
++    if required_budget > maximum_bytes:
+         return ResourceRequest(
+             name,
+             identity,
+             (),
+             exclusions,
+             infeasible_reason=(
+-                f"production D3(BJ) retained owner requires {retained_total} bytes, "
++                f"production D3(BJ) retained owner requires {required_budget} bytes, "
+                 f"exceeding dispersion maximum_bytes={maximum_bytes}"
+             ),
+         )
+@@ -295,6 +357,24 @@ def d3_resource_request(
+             kind="persistent",
+         ),
+     ]
++    if _native_ks and backend == "cpu":
++        # Native CPU force admission is per prepared item and includes bounded
++        # derivative work, which this correction-only shape query cannot prove.
++        # An unadmitted electronic force may retain the established standalone
++        # correction-gradient consumer alongside the native energy owners.
++        # Reserve its complete numeric layout before either endpoint executes;
++        # its correction energy is never added a second time.
++        compatibility = _d3_inventory(counts, backend, library)
++        estimates.append(
++            ResourceEstimate(
++                "D3 CPU compatibility force owner allowance",
++                compatibility["retained_bytes"],
++                "pageable",
++                first_phase,
++                last_phase,
++                kind="persistent",
++            )
++        )
+     if backend == "cuda":
+         estimates.append(
+             ResourceEstimate(
+diff --git a/python/generativeqc/resources_native.py b/python/generativeqc/resources_native.py
+index c2a9e1096..a88c7829c 100644
+--- a/python/generativeqc/resources_native.py
++++ b/python/generativeqc/resources_native.py
+@@ -133,6 +133,7 @@ class NativeDeviceLedger:
+         *,
+         owner: typing.Any = "hf",
+         prepared_kind: str | None = None,
++        component_owners: tuple[str, ...] = (),
+     ) -> None:
+         plan.require_feasible()
+         self.owner = owner
+@@ -141,6 +142,18 @@ class NativeDeviceLedger:
+             raise ValueError("native device ledger requires a CUDA request")
+         selected = dict(plan.selections)[owner]
+         candidate = next(c for c in request.candidates if c.name == selected)
++        # A complete native program owns its corrections in the same lifetime
++        # scope. Their selected capacities must be charged to this ledger too;
++        # global planning still retains separate, inspectable request identities.
++        estimates = candidate.estimates
++        if len({owner, *component_owners}) != 1 + len(component_owners):
++            raise ValueError("native resource component owners must be distinct")
++        for component in component_owners:
++            request = next(r for r in plan.requests if r.name == component)
++            selected = dict(plan.selections)[component]
++            estimates += next(
++                c for c in request.candidates if c.name == selected
++            ).estimates
+         self.library = library
+         self.handle = None
+         self._capacity_admission = None
+@@ -149,7 +162,7 @@ class NativeDeviceLedger:
+         )
+         if self.prepared_call is not None:
+             self._destroy = library.generativeqc_device_resources_destroy
+-            self._create_public_inventory(candidate.estimates)
++            self._create_public_inventory(estimates)
+             return
+         create = getattr(
+             library, "generativeqc_resource_ledger_create_from_buffers_v1", None
+@@ -189,11 +202,11 @@ class NativeDeviceLedger:
+             ]
+             self._read_v3.restype = ctypes.c_int
+         if create is not None:
+-            self._create_from_inventory(create, candidate.estimates)
++            self._create_from_inventory(create, estimates)
+         else:
+             devices = {
+                 estimate.space
+-                for estimate in candidate.estimates
++                for estimate in estimates
+                 if estimate.space.startswith("device:")
+             }
+             if len(devices) != 1:
+@@ -207,7 +220,7 @@ class NativeDeviceLedger:
+                 )
+             admitted = tuple(
+                 estimate
+-                for estimate in candidate.estimates
++                for estimate in estimates
+                 if estimate.accounting != "runtime_allowance"
+             )
+             self.limit = _account(admitted)[0].get(f"device:{self.device}", 0)
+diff --git a/src/api/c_api_batch.cpp b/src/api/c_api_batch.cpp
+index 29c24bffd..933efea99 100644
+--- a/src/api/c_api_batch.cpp
++++ b/src/api/c_api_batch.cpp
+@@ -236,6 +236,17 @@ generativeqc_status generativeqc_batch_prepare_with_device_resources(
+                        generativeqc::api::device_resource_owner(resources), batch, nullptr);
+ }
+ 
++generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1(
++    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
++    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
++    generativeqc_batch_flags flags, const generativeqc_device_resources* resources,
++    generativeqc_batch** batch) {
++  if (batch) *batch = nullptr;
++  if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
++  return prepare_batch(context, systems, system_count, descriptor, flags,
++                       generativeqc::api::device_resource_owner(resources), batch, name);
++}
++
+ generativeqc_status generativeqc_batch_get_device_resources(
+     const generativeqc_batch* batch, generativeqc_device_resources** resources) {
+   if (!batch || !resources || *resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+diff --git a/src/api/c_api_calculation.cpp b/src/api/c_api_calculation.cpp
+index 9307e644e..21eb5c887 100644
+--- a/src/api/c_api_calculation.cpp
++++ b/src/api/c_api_calculation.cpp
+@@ -193,6 +193,17 @@ generativeqc_status generativeqc_calculation_prepare_named_ks_v1(
+   return prepare_calculation(context, system, descriptor, {}, calculation, name);
+ }
+ 
++generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
++    generativeqc_context* context, const generativeqc_system* system,
++    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
++    const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
++  if (calculation) *calculation = nullptr;
++  if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
++  return prepare_calculation(context, system, descriptor,
++                             generativeqc::api::device_resource_owner(resources), calculation,
++                             name);
++}
++
+ generativeqc_status generativeqc_system_create_named_ks_v1(
+     generativeqc_context* context, const generativeqc_system_descriptor* input,
+     const generativeqc_named_ks_descriptor* named, generativeqc_system** system) {
+diff --git a/src/api/c_api_resources.cpp b/src/api/c_api_resources.cpp
+index e71e07aa2..85e44b71e 100644
+--- a/src/api/c_api_resources.cpp
++++ b/src/api/c_api_resources.cpp
+@@ -39,6 +39,25 @@
+ 
+ extern "C" {
+ 
++generativeqc_status generativeqc_ks_d3_resource_query_v1(
++    generativeqc_backend backend, const std::uint32_t* atom_counts, std::uint32_t system_count,
++    generativeqc_d3_runtime_diagnostic* output) {
++  if (!atom_counts || !system_count || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
++  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
++  try {
++    const auto r = generativeqc::dft::dispersion::ks_d3_resource_usage(
++        backend, std::span(atom_counts, system_count));
++    const generativeqc_d3_runtime_diagnostic candidate{
++        output->struct_size,    output->abi_version, backend,        r.plan_host_bytes,
++        r.execution_host_bytes, r.device_bytes,      r.table_bytes,  r.workspace_bytes,
++        r.maximum_bytes,        r.total_atoms,       r.system_count, r.maximum_atoms};
++    *output = candidate;
++    return GENERATIVEQC_STATUS_SUCCESS;
++  } catch (...) {
++    return generativeqc::api::map_exception(nullptr);
++  }
++}
++
+ /** Private allocation-free compact topology query. Each row is an already
+  * expanded contraction, not an element template. The scalar AO rules are the
+  * same ones used by normalized systems; no coefficients, coordinates, provider
+diff --git a/src/dft/dispersion/d3_cuda.cu b/src/dft/dispersion/d3_cuda.cu
+index 206d84ab3..db69ba08b 100644
+--- a/src/dft/dispersion/d3_cuda.cu
++++ b/src/dft/dispersion/d3_cuda.cu
+@@ -6,6 +6,7 @@
+ 
+ #include "d3_data.hpp"
+ #include "dft/dispersion/d3_runtime.hpp"
++#include "runtime/resource_cuda.cuh"
+ 
+ namespace generativeqc::dft::dispersion {
+ 
+@@ -66,7 +67,7 @@ bool allocate(T*& pointer, std::size_t count, std::string& detail) {
+     pointer = nullptr;
+     return true;
+   }
+-  const auto error = cudaMalloc(reinterpret_cast<void**>(&pointer), count * sizeof(T));
++  const auto error = runtime::resource_cuda_malloc(&pointer, count * sizeof(T));
+   if (error == cudaSuccess) return true;
+   detail = std::string("D3 CUDA allocation failed: ") + cudaGetErrorString(error);
+   return false;
+@@ -332,7 +333,10 @@ D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t>
+     return nullptr;
+   }
+ 
+-  auto owner = std::make_unique<D3CudaOwner>();
++  // Setup can throw while formatting a failure or staging a table. Retire
++  // every partial allocation (and its ledger charge) on exception paths too.
++  std::unique_ptr<D3CudaOwner, decltype(&destroy_d3_cuda_owner)> owner(new D3CudaOwner(),
++                                                                       destroy_d3_cuda_owner);
+   owner->device_id = device_id;
+   owner->systems = static_cast<std::uint32_t>(offsets.size() - 1);
+   owner->atoms = atomic_numbers.size();
+@@ -393,19 +397,19 @@ void destroy_d3_cuda_owner(D3CudaOwner* owner) noexcept {
+   DeviceScope scope(owner->device_id);
+   if (scope.error() == cudaSuccess) {
+     if (owner->stream) cudaStreamSynchronize(owner->stream);
+-    cudaFree(owner->reference_c6);
+-    cudaFree(owner->reference_cn);
+-    cudaFree(owner->pairs);
+-    cudaFree(owner->elements);
+-    cudaFree(owner->workspace);
+-    cudaFree(owner->gradients);
+-    cudaFree(owner->energies);
+-    cudaFree(owner->statuses);
+-    cudaFree(owner->want_gradient);
+-    cudaFree(owner->active);
+-    cudaFree(owner->coordinates);
+-    cudaFree(owner->atomic_numbers);
+-    cudaFree(owner->offsets);
++    runtime::resource_cuda_free(owner->reference_c6);
++    runtime::resource_cuda_free(owner->reference_cn);
++    runtime::resource_cuda_free(owner->pairs);
++    runtime::resource_cuda_free(owner->elements);
++    runtime::resource_cuda_free(owner->workspace);
++    runtime::resource_cuda_free(owner->gradients);
++    runtime::resource_cuda_free(owner->energies);
++    runtime::resource_cuda_free(owner->statuses);
++    runtime::resource_cuda_free(owner->want_gradient);
++    runtime::resource_cuda_free(owner->active);
++    runtime::resource_cuda_free(owner->coordinates);
++    runtime::resource_cuda_free(owner->atomic_numbers);
++    runtime::resource_cuda_free(owner->offsets);
+     if (owner->stream) cudaStreamDestroy(owner->stream);
+   }
+   delete owner;
+diff --git a/src/dft/dispersion/d3_runtime.cpp b/src/dft/dispersion/d3_runtime.cpp
+index 912d4b055..96142cc26 100644
+--- a/src/dft/dispersion/d3_runtime.cpp
++++ b/src/dft/dispersion/d3_runtime.cpp
+@@ -49,6 +49,31 @@ D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t sy
+   return r;
+ }
+ 
++D3ResourceUsage ks_d3_resource_usage(generativeqc_backend backend,
++                                     std::span<const std::uint32_t> atom_counts) {
++  if (atom_counts.empty() || atom_counts.size() > std::numeric_limits<std::uint32_t>::max())
++    throw std::invalid_argument("invalid KS D3 fleet shape");
++  D3ResourceUsage total{};
++  total.system_count = static_cast<std::uint32_t>(atom_counts.size());
++  std::uint64_t largest_owner = 0;
++  // Validated uint32 item counts and D3's per-item atom cap bound all sums
++  // below signed int64, even though the fleet need not fit one ragged owner.
++  for (const auto atoms : atom_counts) {
++    const auto item = d3_resource_usage(backend, 1, atoms, atoms);
++    total.plan_host_bytes += item.plan_host_bytes;
++    total.execution_host_bytes += item.execution_host_bytes;
++    total.device_bytes += item.device_bytes;
++    total.table_bytes += item.table_bytes;
++    total.workspace_bytes += item.workspace_bytes;
++    total.total_atoms += atoms;
++    total.maximum_atoms = std::max(total.maximum_atoms, atoms);
++    largest_owner = std::max(largest_owner,
++                             item.plan_host_bytes + item.execution_host_bytes + item.device_bytes);
++  }
++  total.maximum_bytes = largest_owner * total.system_count;
++  return total;
++}
++
+ std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device_id,
+                                         std::vector<std::uint32_t> offsets,
+                                         std::vector<std::int32_t> atomic_numbers,
+diff --git a/src/dft/dispersion/d3_runtime.hpp b/src/dft/dispersion/d3_runtime.hpp
+index e88015b1c..328de1698 100644
+--- a/src/dft/dispersion/d3_runtime.hpp
++++ b/src/dft/dispersion/d3_runtime.hpp
+@@ -45,6 +45,15 @@ struct D3ResourceUsage {
+ D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t systems,
+                                   std::uint64_t atoms, std::uint64_t maximum_atoms);
+ 
++/** Capacity of KS's simultaneously retained one-system correction owners.
++ * This differs from a standalone ragged D3Plan: each CUDA owner has its own
++ * tables, and each CPU owner has its own execution allowance. maximum_bytes
++ * reports the minimum aggregate cap under KS's equal-per-item budget rule.
++ * Geometry rebuild destroys the old item before constructing its replacement.
++ */
++D3ResourceUsage ks_d3_resource_usage(generativeqc_backend backend,
++                                     std::span<const std::uint32_t> atom_counts);
++
+ struct D3CudaOwner;
+ 
+ class D3Plan {
+diff --git a/src/methods/dft_method.cpp b/src/methods/dft_method.cpp
+index 40ff954c0..059e31649 100644
+--- a/src/methods/dft_method.cpp
++++ b/src/methods/dft_method.cpp
+@@ -3652,6 +3652,21 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
+       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                         "named dispersion requires strict FP64");
+     execution_plan.dispersion = *dispersion;
++    if (dispersion->kind != 3) {
++      std::vector<std::uint32_t> atom_counts;
++      atom_counts.reserve(systems.size());
++      for (const auto& system : systems) {
++        if (system.atoms.size() > dft::dispersion::kD3MaximumAtomsPerSystem)
++          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
++                            "D3 system exceeds the production per-system atom bound");
++        atom_counts.push_back(static_cast<std::uint32_t>(system.atoms.size()));
++      }
++      const auto correction_capacity =
++          dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts);
++      if (dispersion_bytes < correction_capacity.maximum_bytes)
++        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
++                          "KS D3 fleet exceeds its equal-share correction budget");
++    }
+     // KS retains a correction owner per system. Equal shares conservatively
+     // bound their aggregate storage, including replicated immutable tables.
+     execution_plan.dispersion_maximum_bytes = dispersion_bytes / systems.size();

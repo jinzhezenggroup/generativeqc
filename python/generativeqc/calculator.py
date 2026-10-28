@@ -2429,7 +2429,9 @@ class Calculator:
                 )
         return request
 
-    def _dispersion_resource_request(self, systems: typing.Any) -> typing.Any:
+    def _dispersion_resource_request(
+        self, systems: typing.Any, electronic_request: typing.Any
+    ) -> typing.Any:
         """Return the bounded D3 owner request for global planning, when present."""
         if self._dispersion_method_ir is None:
             return None
@@ -2448,6 +2450,7 @@ class Calculator:
                 "global ResourcePlan currently supports composed D3(BJ) only"
             )
 
+        from ._named_ks import select_resource_program
         from .resources_d3 import d3_resource_request
 
         return d3_resource_request(
@@ -2457,6 +2460,7 @@ class Calculator:
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
             library=self._library,
+            _native_ks=select_resource_program(self, electronic_request) is not None,
         )
 
     def _effective_ks_selection(
@@ -2565,7 +2569,7 @@ class Calculator:
                 properties=properties,
             )
         ]
-        dispersion_request = self._dispersion_resource_request(systems)
+        dispersion_request = self._dispersion_resource_request(systems, requests[0])
         if dispersion_request is not None:
             requests.append(dispersion_request)
         return plan_resources(

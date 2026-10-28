@@ -43,6 +43,45 @@ def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None
     return selected.value
 
 
+def select_resource_program(calculator: Any, electronic_request: Any) -> bytes | None:
+    """Select a complete program only with matching correction capacity ownership.
+
+    Missing additive resource support retains the standalone compatibility
+    owner. After positive selection, query/preparation errors are authoritative.
+    This does not extend the global planner's electronic or correction domains.
+    CUDA additionally needs the existing native stationary-capacity receipt:
+    compatibility forces would otherwise allocate a second correction owner.
+    """
+    library = calculator._library
+    if (
+        calculator._dispersion_method_ir is None
+        or calculator._precision_mode != _native.PRECISION_FP64
+        or not hasattr(library, "generativeqc_ks_d3_resource_query_v1")
+        or (
+            calculator._device_name == "cuda"
+            and (
+                not hasattr(
+                    library,
+                    "generativeqc_batch_prepare_named_ks_with_device_resources_v1",
+                )
+                or not electronic_request.candidates
+                or any(
+                    "cuda_stationary_cache" not in dict(candidate.decisions)
+                    for candidate in electronic_request.candidates
+                )
+            )
+        )
+    ):
+        return None
+    return select_named_program(
+        library,
+        calculator._dispersion_method_ir,
+        _native.BACKEND_CUDA
+        if calculator._device_name == "cuda"
+        else _native.BACKEND_CPU_REFERENCE,
+    )
+
+
 def create_named_system(
     library: Any,
     context: Any,
@@ -108,9 +147,14 @@ def prepare_named_batch(
     name: bytes,
     graph: Any,
     maximum_bytes: int,
+    resources: Any = None,
 ) -> int:
     """Pass controls plus a pinned full identity to the selected library."""
-    prepare = library.generativeqc_batch_prepare_named_ks_v1
+    prepare = (
+        library.generativeqc_batch_prepare_named_ks_with_device_resources_v1
+        if resources is not None
+        else library.generativeqc_batch_prepare_named_ks_v1
+    )
     prepare.argtypes = [
         ct.c_void_p,
         ct.POINTER(ct.c_void_p),
@@ -118,8 +162,10 @@ def prepare_named_batch(
         ct.POINTER(_native.MethodDescriptor),
         ct.POINTER(_native.NamedKsDescriptor),
         ct.c_uint32,
-        ct.POINTER(ct.c_void_p),
     ]
+    if resources is not None:
+        prepare.argtypes += [ct.c_void_p]
+    prepare.argtypes += [ct.POINTER(ct.c_void_p)]
     prepare.restype = ct.c_int
     named = _native.NamedKsDescriptor(
         ct.sizeof(_native.NamedKsDescriptor),
@@ -135,9 +181,10 @@ def prepare_named_batch(
         if graph.spin == "unpolarized"
         else _native.METHOD_PBE_UKS
     )
-    return prepare(
-        context, systems, count, ct.byref(method), ct.byref(named), flags, output
-    )
+    arguments = [context, systems, count, ct.byref(method), ct.byref(named), flags]
+    if resources is not None:
+        arguments.append(resources)
+    return prepare(*arguments, output)
 
 
 class NativeKsDispersion:
