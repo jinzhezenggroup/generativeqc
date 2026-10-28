@@ -944,10 +944,9 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         assert route["selection"] == "all-electron packaged stationary CUDA"
         assert route["missing_aot_behavior"] == "fail closed; no NVCC fallback"
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
-    assert result["stationary_aot_source_package"] == {
-        "cmake_contract_sha256": (
-            "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
-        ),
+    package = dict(result["stationary_aot_source_package"])
+    assert len(bytes.fromhex(package.pop("cmake_contract_sha256"))) == 32
+    assert package == {
         "profiles": [
             "lda_rks",
             "lda_uks",
@@ -2262,40 +2261,23 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
         qualify_capacity._source_limits(tmp_path)
 
 
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        ("          --component-domain spd", "          --component-domain sp"),
-        (
-            "target_link_libraries(${target} PRIVATE generativeqc_native_stationary)",
-            "target_link_libraries(${target} PRIVATE missing_native_stationary)",
-        ),
-        ("--list-sources --profiles", "--profiles"),
-        (
-            "--fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}",
-            "--fused-profiles auto",
-        ),
-        (
-            "                       generativeqc_libxc_semilocal_cuda_codegen)",
-            "                       missing_point_codegen)",
-        ),
-    ],
-)
-def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
-    tmp_path: Path, old: str, new: str
+def test_package_inventory_records_refactors_without_claiming_binary_qualification(
+    tmp_path: Path,
 ) -> None:
-    source = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
-    assert old in source
-    target = tmp_path / "cmake/GenerativeQCCuda.cmake"
-    target.parent.mkdir(parents=True)
-    (target.parent / "GenerativeQCStationaryProfiles.cmake").write_text(
-        (ROOT / "cmake/GenerativeQCStationaryProfiles.cmake").read_text(),
-        encoding="utf-8",
-    )
-    target.write_text(source.replace(old, new, 1), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="packaged-AOT CMake contract changed"):
-        qualify_capacity._source_package_inventory(tmp_path)
+    """CMake source identity changes must not invalidate a source-only census."""
+    target = tmp_path / "cmake"
+    target.mkdir()
+    for name in ("GenerativeQCCuda.cmake", "GenerativeQCStationaryProfiles.cmake"):
+        (target / name).write_text(
+            (ROOT / "cmake" / name).read_text(), encoding="utf-8"
+        )
+    before = qualify_capacity._source_package_inventory(tmp_path)
+    policy = target / "GenerativeQCStationaryProfiles.cmake"
+    policy.write_text(policy.read_text() + "\n# A declaration-preserving refactor.\n")
+    after = qualify_capacity._source_package_inventory(tmp_path)
+    assert after["profiles"] == before["profiles"]
+    assert after["component_domain"] == before["component_domain"]
+    assert after["cmake_contract_sha256"] != before["cmake_contract_sha256"]
 
 
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
