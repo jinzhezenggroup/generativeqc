@@ -12,5 +12,12 @@
     "sha256": "3e69cb850d70ad59c6ca58a8c9a78f47783e3dbf3354b03eb336581686dbdb39",
     "bytes": 114780,
     "scope": "Passing superseded source 4ac102f67, Slurm 14840; not final e8 source."
+  },
+  "final-controls.json.xz": {
+    "git_commit": "82fb77ad665b962999e7e3bfdef6a5d251cf7e20",
+    "git_path": "benchmarks/results/scf-defaults-20261029/final-controls.json.xz",
+    "sha256": "14cb2eb5d2724e5d3adeaee1f1519794f228e859e7727ce8e7164700bcca7f8b",
+    "bytes": 48008,
+    "scope": "Final source e8de3e4d9 controls, raw independent reference results, scripts, test receipts and Nsight CSV summaries."
   }
 }
