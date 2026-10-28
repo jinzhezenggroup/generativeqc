@@ -216,7 +216,7 @@ def test_reducer_is_owned_by_plan_and_invalidates_hf_replay(
     ]
     replay = _block(replay_source, "if (!first_setup &&")
     stores = []
-    for field in ("incremental_diis_gram", "ordered_diis_gram"):
+    for field in ("incremental_diis_gram", "ordered_diis_gram", "diis_work_enabled"):
         start = driver.index(f"plan.{field} =")
         stores.append(driver[start : driver.index(";", start) + 1])
     unit = tmp_path / "reducer_lifetime.cpp"
@@ -229,6 +229,12 @@ def test_reducer_is_owned_by_plan_and_invalidates_hf_replay(
 #include <vector>
 #include "generativeqc/generativeqc.h"
 #include "scf/cuda/arena.hpp"
+#include "scf/diis_work.hpp"
+using generativeqc::scf::diis_work_requested;
+void diis_work_control(bool enabled) {
+ if(enabled)setenv("GENERATIVEQC_DF_PROGRESS_TRACE","unused-host-probe-path",1);
+ else unsetenv("GENERATIVEQC_DF_PROGRESS_TRACE");
+}
 using ProviderInitializationUnavailable=std::runtime_error;
 struct Plan {
  struct {int device_id_{};} resources;
@@ -237,7 +243,7 @@ struct Plan {
  bool bounded_fock_class_timing{},bounded_streaming_override{},fock_only_diagnostic{};
  unsigned primary_streaming_fock_mask{};
  bool graph_native_eigensolver_override{},reuse_converged_fock{},incremental_diis_gram{},ordered_diis_gram{};
- bool one_electron_value_mapping{},mixed_precision_fock{},bounded_direct_streaming{};
+ bool one_electron_value_mapping{},mixed_precision_fock{},bounded_direct_streaming{},diis_work_enabled{};
  bool fp32_block_screening{},incremental_direct_jk{};
  double mixed_precision_fock_threshold{};
 };
@@ -254,9 +260,10 @@ bool try_retire_rhf_cuda_bucket_plan(Plan** plan) {
  retirement_entered=true;if(!retirement_allowed)return false;*plan=nullptr;return true;
 }
 void fill_global_failure(std::vector<int>& outputs,generativeqc_status status) {outputs[0]=status;}
-void cached_probe(bool saved_incremental,bool saved_ordered,bool incremental_diis_gram,
-                  bool ordered_diis_gram,bool initialized,bool allow_retirement) {
+void cached_probe(bool saved_incremental,bool saved_ordered,bool saved_work,bool incremental_diis_gram,
+                  bool ordered_diis_gram,bool requested_work,bool initialized,bool allow_retirement) {
  Plan storage;storage.incremental_diis_gram=saved_incremental;storage.ordered_diis_gram=saved_ordered;
+ storage.diis_work_enabled=saved_work;diis_work_control(requested_work);
  storage.initialized=initialized;Plan* value=&storage;Plan** plan=&value;
  const int device_id=0,candidate=0,options=0;
  const bool unrestricted=false,shell_class_profiling=false,inactive_eigensolver_profiling=false;
@@ -268,15 +275,16 @@ void cached_probe(bool saved_incremental,bool saved_ordered,bool incremental_dii
         + retire
         + r"""
  } catch(const ProviderInitializationUnavailable&) {refused=true;}
- const bool mismatch=saved_incremental!=incremental_diis_gram || saved_ordered!=ordered_diis_gram;
+ const bool mismatch=saved_incremental!=incremental_diis_gram || saved_ordered!=ordered_diis_gram || saved_work!=requested_work;
  assert(retirement_entered==(initialized && mismatch));
  assert(refused==(initialized && mismatch && !allow_retirement));
  assert((value==nullptr)==(initialized && mismatch && allow_retirement));
  if(refused)assert(value==&storage);
 }
-std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,
- bool requested_incremental_diis_gram,bool requested_ordered_diis_gram,bool first_setup) {
+std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,bool saved_work,
+ bool requested_incremental_diis_gram,bool requested_ordered_diis_gram,bool requested_work,bool first_setup) {
  Plan plan;plan.incremental_diis_gram=saved_incremental;plan.ordered_diis_gram=saved_ordered;
+ plan.diis_work_enabled=saved_work;diis_work_control(requested_work);
  const int device_id=0,host=0,options=0;
  const bool unrestricted=false,requested_bounded_direct_streaming=false,requested_fp32_block_screening=false;
  const bool shell_class_profiling=false,inactive_eigensolver_profiling=false,bounded_fock_class_timing=false;
@@ -292,17 +300,19 @@ std::vector<int> replay_probe(bool saved_incremental,bool saved_ordered,
         + r"""
   assert(plan.incremental_diis_gram==requested_incremental_diis_gram);
   assert(plan.ordered_diis_gram==requested_ordered_diis_gram);
+  assert(plan.diis_work_enabled==requested_work);
  }
  return outputs;
 }
 int main() {
- for(bool saved_incremental:{false,true})for(bool saved_ordered:{false,true})
- for(bool incremental:{false,true})for(bool ordered:{false,true})for(bool first:{false,true}) {
-  for(bool retire:{false,true})cached_probe(saved_incremental,saved_ordered,incremental,ordered,!first,retire);
-  const auto result=replay_probe(saved_incremental,saved_ordered,incremental,ordered,first);
-  const bool reject=!first && (saved_incremental!=incremental || saved_ordered!=ordered);
+ for(bool saved_incremental:{false,true})for(bool saved_ordered:{false,true})for(bool saved_work:{false,true})
+ for(bool incremental:{false,true})for(bool ordered:{false,true})for(bool work:{false,true})for(bool first:{false,true}) {
+  for(bool retire:{false,true})cached_probe(saved_incremental,saved_ordered,saved_work,incremental,ordered,work,!first,retire);
+  const auto result=replay_probe(saved_incremental,saved_ordered,saved_work,incremental,ordered,work,first);
+  const bool reject=!first && (saved_incremental!=incremental || saved_ordered!=ordered || saved_work!=work);
   assert(result[0]==(reject?GENERATIVEQC_STATUS_INVALID_ARGUMENT:GENERATIVEQC_STATUS_SUCCESS));
  }
+ diis_work_control(false);
  const auto arena=[](const char* reducer) {
   setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",reducer,1);
   generativeqc::scf::cuda_execution::ArenaLayout layout;

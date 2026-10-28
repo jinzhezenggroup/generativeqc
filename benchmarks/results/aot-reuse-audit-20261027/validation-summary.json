@@ -1,0 +1,166 @@
+{
+  "cmake_probe": {
+    "actual_compile_command": "sccache /group/software/cuda-12.9.1/bin/nvcc -forward-unknown-to-host-compiler   \"--generate-code=arch=compute_120,code=[sm_120]\" \"--generate-code=arch=compute_120,code=[compute_120]\" -MD -MT CMakeFiles/images.dir/image.cu.o -MF CMakeFiles/images.dir/image.cu.o.d -x cu -c /home/jzzeng/.codex/worktrees/d5a5/qc-df-jk/.cache/aot-execution-reuse/cmake-images/image.cu -o CMakeFiles/images.dir/image.cu.o",
+    "original_log_sha256": "e0c7015fbdc89eab7bbd5301a6387ce6c9480159d6b27bb42cc6312e045fdb92"
+  },
+  "compiler_cache": {
+    "after": {
+      "fields": {
+        "Average cache read hit": "0.000 s",
+        "Average cache write": "0.000 s",
+        "Average compiler": "0.383 s",
+        "Base directories": "(none)",
+        "Cache errors": "0",
+        "Cache hits": "4",
+        "Cache hits (CUBIN)": "1",
+        "Cache hits (CUDA (Device code))": "1",
+        "Cache hits (CUDA)": "1",
+        "Cache hits (PTX)": "1",
+        "Cache hits rate": "100.00 %",
+        "Cache hits rate (CUBIN)": "100.00 %",
+        "Cache hits rate (CUDA (Device code))": "100.00 %",
+        "Cache hits rate (CUDA)": "100.00 %",
+        "Cache hits rate (PTX)": "100.00 %",
+        "Cache location": "Local disk: \"/home/jzzeng/.cache/sccache\"",
+        "Cache misses": "0",
+        "Cache read errors": "0",
+        "Cache size": "1 GiB",
+        "Cache timeouts": "0",
+        "Cache write errors": "0",
+        "Compilation failures": "0",
+        "Compilations": "1",
+        "Compile requests": "1",
+        "Compile requests executed": "5",
+        "Failed distributed compilations": "0",
+        "Forced recaches": "0",
+        "Max cache size": "10 GiB",
+        "Non-cacheable calls": "0",
+        "Non-cacheable compilations": "1",
+        "Non-compilation calls": "0",
+        "Unsupported compiler calls": "0",
+        "Use direct/preprocessor mode?": "yes",
+        "Version (client)": "0.16.0"
+      },
+      "original_log_sha256": "125ee509ad757dac1c34eecd1213903bf8927fcdb388cd9ea0760fdbcc4253a4"
+    },
+    "before": {
+      "fields": {
+        "Average cache read hit": "0.000 s",
+        "Average cache write": "0.000 s",
+        "Average compiler": "0.000 s",
+        "Base directories": "(none)",
+        "Cache errors": "0",
+        "Cache hits": "0",
+        "Cache hits rate": "-",
+        "Cache location": "Local disk: \"/home/jzzeng/.cache/sccache\"",
+        "Cache misses": "0",
+        "Cache read errors": "0",
+        "Cache timeouts": "0",
+        "Cache write errors": "0",
+        "Compilation failures": "0",
+        "Compilations": "0",
+        "Compile requests": "0",
+        "Compile requests executed": "0",
+        "Failed distributed compilations": "0",
+        "Forced recaches": "0",
+        "Max cache size": "10 GiB",
+        "Non-cacheable calls": "0",
+        "Non-cacheable compilations": "0",
+        "Non-compilation calls": "0",
+        "Unsupported compiler calls": "0",
+        "Use direct/preprocessor mode?": "yes",
+        "Version (client)": "0.16.0"
+      },
+      "original_log_sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    "command": [
+      "sccache",
+      "--show-stats"
+    ]
+  },
+  "schema": "generativeqc.aot-build-validation-summary.v1",
+  "scope": "host source/build regression, not GPU or endpoint qualification",
+  "test_suites": {
+    "aot-cache-tests.log": {
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/python/test_stationary_aot_source_cache.py",
+        "-q",
+        "--disable-warnings"
+      ],
+      "duration_seconds": 34.45,
+      "environment": {
+        "PYTHONPATH": "python:."
+      },
+      "original_log_sha256": "195e1fb66a6dc2fa8c8001460676989732cd19d47b5c8e58f269831729fd39f5",
+      "passed": 5,
+      "summary": "5 passed in 34.45s"
+    },
+    "native-df-tests.log": {
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/python/test_native_stationary_cuda_binding.py",
+        "tests/python/test_native_stationary_shared_kernels.py",
+        "tests/python/test_native_stationary_graph_inventory.py",
+        "tests/python/test_native_stationary_build_options.py",
+        "tests/python/test_df_shell_units.py",
+        "-q",
+        "--disable-warnings"
+      ],
+      "duration_seconds": 929.49,
+      "environment": {
+        "PYTHONPATH": "python:."
+      },
+      "original_log_sha256": "098710e0a93a5b204171cb977a974fec96b80fb71490ebb48ad413aa2789446a",
+      "passed": 951,
+      "summary": "951 passed in 929.49s (0:15:29)"
+    },
+    "pr-base-compatibility.log": {
+      "base_revision": "c3ddb8861e65a6903c39098eb75cad9f90e7f6a8",
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/python/test_dft_mp_v1_capacity.py",
+        "tests/python/test_cuda_xc_point_contract.py",
+        "-q",
+        "--disable-warnings",
+        "--maxfail=2"
+      ],
+      "duration_seconds": 295.73,
+      "environment": {
+        "PYTHONPATH": "python:."
+      },
+      "original_log_sha256": "2a75d22824687b00fdb169d56e6c2261db9b3a10e227b6874b97a21d00a3bb5f",
+      "packaged_aot_cmake_contract_sha256": "52b6b6c6c30a258d75fcab72b5ab8cf2de60ba291b7cf2011788db2d454307f4",
+      "passed": 427,
+      "summary": "427 passed in 295.73s (0:04:55)"
+    },
+    "pytest.log": {
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/python/test_stationary_aot_source_cache.py",
+        "tests/python/test_stationary_aot_build_dependencies.py",
+        "tests/python/test_stationary_semantic_cache.py",
+        "tests/python/test_stationary_aot_generation.py",
+        "tests/python/test_semantic_source_cache.py",
+        "tests/python/test_cmake_ownership.py",
+        "-q",
+        "--disable-warnings"
+      ],
+      "duration_seconds": 279.31,
+      "environment": {
+        "PYTHONPATH": "python:."
+      },
+      "original_log_sha256": "be6b893354fe57d51bab58bee89fe025bd334a25dae7b9307fe30086958afd37",
+      "passed": 130,
+      "summary": "130 passed in 279.31s (0:04:39)"
+    }
+  }
+}

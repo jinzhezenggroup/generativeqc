@@ -56,3 +56,8 @@ measured source and binary identity; neither qualifies a later installed SDK.
 ## Lossless shared storage
 
 The earlier published V4/V6 receipt JSON bytes now share `v4-v6-receipts.tar.xz` in the family root. The V4 source closure is a three-file delta against the unchanged V6 source archive, which V7 also requires. Both historical replays verify recovery of the exact original compressed archive bytes before checking their unchanged engineering outcomes. Original archive SHA256/length fields remain in each summary. This storage change does not recover private redacted remote bytes or establish SDK/scientific acceptance. Use the family-root `restore_original_archives.py --output <fresh-directory>` for offline byte recovery.
+
+The [V9 current-input receipt](v9/README.md) retains the integrated `964faab6`
+production closure, full generated text and separately bounded Root observation.
+V8 path refusal and the original V9 collector limit remain failures. This is
+model-free engineering evidence; installed SDK/science remain unqualified.
