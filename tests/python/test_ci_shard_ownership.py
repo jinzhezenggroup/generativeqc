@@ -748,8 +748,14 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         ('"${diagnostic_args[@]}"', '""'),
         ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
         ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
-        ("&& 90 || 30", "&& 90 || 31"),
-        ("&& 100 || 40", "&& 100 || 41"),
+        # Exercise full, ordinary, and posthf budgets independently. The old
+        # pre-exception fragments no longer reached the contract assertion.
+        ("&& 90 ||", "&& 91 ||"),
+        ("&& 100 ||", "&& 101 ||"),
+        ("&& 35 || 30", "&& 35 || 31"),
+        ("&& 45 || 40", "&& 45 || 41"),
+        ("&& 35 || 30", "&& 36 || 30"),
+        ("&& 45 || 40", "&& 46 || 40"),
     ],
 )
 def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
