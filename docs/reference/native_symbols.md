@@ -27,6 +27,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -635,6 +636,38 @@ no scientific reevaluation, provider/device work or fallback SCF solve.
 
 **Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
 remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-correlation-convergence-query-v1)=
+## generativeqc_correlation_convergence_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_correlation_convergence_query_v1 ( const generativeqc_correlation_budget_v1 * descriptor , generativeqc_correlation_limits_v1 * output ) ;
+```
+
+**Behavior.** Query the existing correlated solver's budget-scaled stopping
+policy. All-zero allowances select strict controls. A scale below the supported
+bracket also selects strict controls; this is not observable qualification.
+
+**Inputs.** Current-ABI descriptor headers and nonnegative finite allowances;
+energy and maximum force must both be positive unless all allowances are zero.
+Zero RMS denotes no RMS constraint, not a zero-error request.
+
+**Outputs.** Atomically publishes the scale and eight solver ceilings. Explicit
+tighter caller settings and independent scientific admission still apply.
+
+**Errors.** Null pointers or malformed allowances return INVALID_ARGUMENT;
+incompatible headers return ABI_MISMATCH. Errors leave output unchanged.
+
+**Lifetime.** Borrows input for this call only; retains no pointers or state.
+
+**Execution.** Synchronous host metadata through the same policy used by native
+correlated solvers. No solver, device, Python/compiler, allocation on success,
+callback or implicit retry. Input and output storage may overlap.
+
+**Units.** Energy allowances/tolerances are Hartree; force allowances are
+Hartree/Bohr. Density, amplitude and response gates retain their solver units.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1

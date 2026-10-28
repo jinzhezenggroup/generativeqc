@@ -94,6 +94,8 @@ option(GENERATIVEQC_CUDA_SEPARABLE_COMPILATION
        "Enable CUDA relocatable device code and the device-link stage" OFF)
 option(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK
        "Share native direct numerical code through a bounded NVIDIA device link" ON)
+option(GENERATIVEQC_PRUNE_CUDA_ARCHIVES
+       "Prune resolved CUDA link inputs from private host-link archive copies" ON)
 option(GENERATIVEQC_CUDA_FAST_COMPILE
        "Use compiler-oriented CUDA options (never for release measurements)" OFF)
 option(GENERATIVEQC_ENABLE_CXX_PCH

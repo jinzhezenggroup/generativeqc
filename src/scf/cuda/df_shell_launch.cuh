@@ -290,8 +290,13 @@ cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&&
     // or calling a losing dtype path Fast. Independent kernel probes still
     // qualify every float class; this is an endpoint cost policy, not availability.
     constexpr bool mixed_contraction_preferred = A >= 2 || B >= 2;
-    return context.mixed && mixed_contraction_preferred ? arithmetic.template operator()<true>()
-                                                        : arithmetic.template operator()<false>();
+    // Discard the ineligible launch at template instantiation time. A normal
+    // conditional still instantiates its CUDA kernel, even when host dead-code
+    // elimination later removes the call. Keep private mixed-arithmetic probes
+    // independent of this production selection policy.
+    if constexpr (mixed_contraction_preferred)
+      if (context.mixed) return arithmetic.template operator()<true>();
+    return arithmetic.template operator()<false>();
   };
   if constexpr (generated::rys_available<A, B, C>)
     if (context.rys) return dispatch_screening<A, B, C, true>(budget, variant);

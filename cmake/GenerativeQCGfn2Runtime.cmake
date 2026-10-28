@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/GenerativeQCCudaArchive.cmake")
 
 function(generativeqc_add_gfn2_runtime target)
   set(_gfn2_root "${CMAKE_CURRENT_SOURCE_DIR}/src/xtb/native")
@@ -184,8 +185,11 @@ function(generativeqc_add_gfn2_runtime target)
     # The CUDA archive resolves its own device symbols. Consume the complete
     # archive so CUDA registration/device-link objects cannot be discarded,
     # without propagating separable compilation to unrelated GenerativeQC CUDA TUs.
+    generativeqc_cuda_host_archive(generativeqc_gfn2_cuda _gfn2_host_archive)
+    set_property(TARGET generativeqc_gfn2_cuda PROPERTY
+      GENERATIVEQC_HOST_ARCHIVE "${_gfn2_host_archive}")
     target_link_libraries(${target} PRIVATE
-      "$<LINK_LIBRARY:WHOLE_ARCHIVE,generativeqc_gfn2_cuda>")
+      "$<LINK_LIBRARY:WHOLE_ARCHIVE,${_gfn2_host_archive}>")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       generativeqc_attach_cuda_driver_implib(${target})
     else()
@@ -209,8 +213,12 @@ function(generativeqc_link_cli_core target)
     # The CUDA archive calls host GFN2 helpers and lazy driver imports in the
     # static core. Rescan this pair at the final link, retaining every CUDA
     # registration/device-link object without whole-archiving the entire core.
+    get_target_property(_gfn2_host_archive generativeqc_gfn2_cuda GENERATIVEQC_HOST_ARCHIVE)
+    if(NOT _gfn2_host_archive)
+      set(_gfn2_host_archive generativeqc_gfn2_cuda)
+    endif()
     target_link_libraries(${target} PRIVATE
-      "$<LINK_GROUP:RESCAN,generativeqc,$<LINK_LIBRARY:WHOLE_ARCHIVE,generativeqc_gfn2_cuda>>")
+      "$<LINK_GROUP:RESCAN,generativeqc,$<LINK_LIBRARY:WHOLE_ARCHIVE,${_gfn2_host_archive}>>")
   else()
     target_link_libraries(${target} PRIVATE generativeqc)
   endif()

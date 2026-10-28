@@ -780,22 +780,14 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
-            from ._correlation_convergence import convergence_limits
-
-            for name, value, upper in (
-                ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                (
-                    "ccsd_residual_tolerance",
-                    ccsd_residual_tolerance,
-                    convergence_limits(_correlation_convergence_budget)[
-                        "ccsd_residual_tolerance"
-                    ],
-                ),
+            # Reject malformed values before library loading. The selected native
+            # policy supplies the actual ceilings below, before any context exists.
+            for name, value in (
+                ("ccsd_energy_tolerance", ccsd_energy_tolerance),
+                ("ccsd_residual_tolerance", ccsd_residual_tolerance),
             ):
-                if not np.isfinite(value) or not 0.0 < value <= upper:
-                    raise ValueError(
-                        f"{name} must be finite, positive, and <= {upper:g}"
-                    )
+                if not np.isfinite(value) or value <= 0:
+                    raise ValueError(f"{name} must be finite and positive")
             if (
                 not np.isfinite(ccsd_denominator_threshold)
                 or ccsd_denominator_threshold <= 0.0
@@ -872,6 +864,20 @@ class Calculator:
         ):
             raise ValueError("canonical correlated methods require precision='fp64'")
         self._library = _native.load_library(device=device, device_id=self._device_id)
+        if self._method in _COUPLED_CLUSTER_METHODS:
+            from ._correlation_convergence import convergence_limits
+
+            limits = convergence_limits(
+                _correlation_convergence_budget, library=self._library
+            )
+            for name, value in (
+                ("ccsd_energy_tolerance", ccsd_energy_tolerance),
+                ("ccsd_residual_tolerance", ccsd_residual_tolerance),
+            ):
+                if value > limits[name]:
+                    raise ValueError(
+                        f"{name} must be finite, positive, and <= {limits[name]:g}"
+                    )
         if _correlation_preconvergence is not None:
             query = getattr(
                 self._library, "generativeqc_correlation_execution_version_v1", None
