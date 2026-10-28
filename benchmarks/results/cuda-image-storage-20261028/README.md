@@ -104,7 +104,9 @@ with Sphinx warnings treated as errors.
 
 DF noinline samples grew; modern compression-size samples were smaller but
 require the newer driver format. Speed/balance samples did not improve storage.
-All negative probes and failed prerequisite/test diagnostics are retained.
+All negative probes and failed prerequisite/test diagnostics are retained in
+the original Git receipt; recover it as described below. The failed timing
+observations are replayed from that same authenticated original receipt.
 There is **no controlled whole-project compilation-time improvement claim**;
 concurrent cache activity makes the recorded build durations unsuitable for one.
 
@@ -114,9 +116,36 @@ concurrent cache activity makes the recorded build durations unsuitable for one.
 python benchmarks/results/cuda-image-storage-20261028/reduce.py
 ```
 
-`receipts.json.xz` is LZMA-compressed JSON. Source overlays, recipes, configuration,
-compiler commands, cache statistics, test summaries and failure details, every endpoint timing/work
-observation and independent reference are included. Per-process energy/force
+`summary.json` retains every campaign's call count, failed timing ratios, maximum
+ratio and paired/independent numerical errors, with the unchanged work and
+acceptance gates. Default replay reads the original full `receipts.json.xz`
+directly from existing Git objects through the repository's stock authenticated
+reader. It verifies the manifest's original commit/path, byte count, SHA256 and
+Git blob identity before decompressing. No network, generated cache, alternate
+storage or new recovery framework is used.
+
+The original receipt contains all 2,075 campaign observations and independent
+references, source overlays and recipes, protocols, artifact identities,
+instruction census, complete package-load witnesses and auxiliary
+build/cache/test/failure/pilot records. Source recipes now live in that original
+receipt rather than being duplicated in the current checkout. No failed timing
+sample or original byte is removed from history.
+
+Replay requires the original Git history. CI already uses `fetch-depth: 0` for
+its Python test checkout. Shallow/exported checkouts without the recorded object
+fail closed; explicitly fetch/retain the manifest's revision before offline
+replay. To materialize the exact 209,852 original bytes separately:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/cuda-image-storage-20261028/receipts.json.xz \
+  --manifest benchmarks/results/cuda-image-storage-20261028/original-receipt.snapshot.json
+```
+
+The output is under ignored `.artifacts/retention-restore/`. The immutable source
+revision and original identities are recorded only in the stock snapshot manifest.
+
+Per-process energy/force
 columns use a lossless little-endian IEEE-754 XOR encoding; `decode_samples()`
 restores every bit. A one-off comparison checks restoration against the original
 JSON observations. Paths are execution provenance and need adaptation elsewhere.
@@ -126,5 +155,5 @@ multiset digests/counts plus binary identities and collector recipes. Replay
 checks these collection attestations; it does not decode absent binaries. Full
 raw inventories and successful compiler warning streams remain ignored local
 artifacts, with hashes and action/diagnostic summaries retained here. No cubins
-or shared libraries are committed. This bounded receipt fits the existing
+or shared libraries are committed. The compact current summary and offline replay fit the existing
 80-MiB aggregate evidence policy without changing historical evidence or budgets.

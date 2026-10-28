@@ -8,11 +8,24 @@ The complete collection recipe and raw-inventory identity accompany the receipt.
 from __future__ import annotations
 
 import base64
-import struct
 import json
 import lzma
+import runpy
+import struct
 from pathlib import Path
 from statistics import median
+
+
+def load_receipt(manifest: Path | None = None) -> dict:
+    """Read the authenticated original Git receipt, offline; never fetch."""
+    root = Path(__file__).resolve().parents[3]
+    restore = runpy.run_path(str(root / "tools/restore_retained_evidence.py"))
+    records = restore["_records"](
+        manifest or Path(__file__).with_name("original-receipt.snapshot.json")
+    )
+    if len(records) != 1:
+        raise ValueError("expected one original CUDA storage receipt")
+    return json.loads(lzma.decompress(restore["_read"](records[0])))
 
 
 def force_error(a: dict, b: dict) -> float:
@@ -36,21 +49,35 @@ def decode_samples(samples: dict, references: dict) -> dict:
         bits = struct.unpack("<" + "Q" * (len(raw) // 8), raw)
         assert len(bits) == width * len(sample["rows"])
         for i, row in enumerate(sample["rows"]):
-            reference = struct.unpack("<" + "Q" * width, base64.b64decode(
-                references[sample["cohort"]][row["phase"]]))
-            values = [a ^ b for a, b in zip(
-                bits[i * width:(i + 1) * width], reference, strict=True)]
-            numbers = struct.unpack("<" + "d" * width,
-                                    struct.pack("<" + "Q" * width, *values))
+            reference = struct.unpack(
+                "<" + "Q" * width,
+                base64.b64decode(references[sample["cohort"]][row["phase"]]),
+            )
+            values = [
+                a ^ b
+                for a, b in zip(
+                    bits[i * width : (i + 1) * width], reference, strict=True
+                )
+            ]
+            numbers = struct.unpack(
+                "<" + "d" * width, struct.pack("<" + "Q" * width, *values)
+            )
             row["energy"] = numbers[0]
-            row["forces"] = [list(numbers[j:j + 3]) for j in range(1, width, 3)]
+            row["forces"] = [list(numbers[j : j + 3]) for j in range(1, width, 3)]
     return samples
 
 
 def endpoints(samples: dict, expected: dict, rounds: int) -> dict:
     """Keep every timing failure while enforcing all scientific/work gates."""
-    result = {"calls": 0, "failures": [], "cohorts": {}, "paired_energy": 0.0,
-              "paired_force": 0.0, "oracle_energy": 0.0, "oracle_force": 0.0}
+    result = {
+        "calls": 0,
+        "failures": [],
+        "cohorts": {},
+        "paired_energy": 0.0,
+        "paired_force": 0.0,
+        "oracle_energy": 0.0,
+        "oracle_force": 0.0,
+    }
     for kind in ("direct", "df", "dffast", "pbe", "pbedf"):
         for size in (24, 96):
             cohort = f"{kind}-{size}"
@@ -67,7 +94,12 @@ def endpoints(samples: dict, expected: dict, rounds: int) -> dict:
                     assert population["job"] and population["module_loading"] == "LAZY"
                     rows = population["rows"]
                     assert [r["phase"] for r in rows] == [
-                        "cold", "warm1", "warm2", "warm3", "moved"]
+                        "cold",
+                        "warm1",
+                        "warm2",
+                        "warm3",
+                        "moved",
+                    ]
                     observations[arm].append(rows)
                     pair.append(rows)
                     for row in rows:
@@ -83,22 +115,36 @@ def endpoints(samples: dict, expected: dict, rounds: int) -> dict:
                     for before, after in zip(pair[0], other, strict=True):
                         for field in ("iterations", "fock_builds"):
                             assert before[field] == after[field]
-                        for field in ("attempted_fp32_weighted_tasks",
-                                      "attempted_fp32_primitive_sources",
-                                      "weighted_task_retries"):
-                            a = ((before.get("precision") or {}).get("gradient") or {}).get(field)
-                            b = ((after.get("precision") or {}).get("gradient") or {}).get(field)
+                        for field in (
+                            "attempted_fp32_weighted_tasks",
+                            "attempted_fp32_primitive_sources",
+                            "weighted_task_retries",
+                        ):
+                            a = (
+                                (before.get("precision") or {}).get("gradient") or {}
+                            ).get(field)
+                            b = (
+                                (after.get("precision") or {}).get("gradient") or {}
+                            ).get(field)
                             assert a == b
                         result["paired_energy"] = max(
-                            result["paired_energy"], abs(before["energy"] - after["energy"]))
+                            result["paired_energy"],
+                            abs(before["energy"] - after["energy"]),
+                        )
                         result["paired_force"] = max(
-                            result["paired_force"], force_error(before, after))
+                            result["paired_force"], force_error(before, after)
+                        )
             phases = {}
             for phase in ("cold", "warm", "moved"):
                 times = {
-                    arm: [median(row["seconds"] for row in rows
-                                 if row["phase"].startswith(phase))
-                          for rows in population]
+                    arm: [
+                        median(
+                            row["seconds"]
+                            for row in rows
+                            if row["phase"].startswith(phase)
+                        )
+                        for rows in population
+                    ]
                     for arm, population in observations.items()
                 }
                 ratio = median(times["candidate"]) / median(times["baseline"])
@@ -106,13 +152,15 @@ def endpoints(samples: dict, expected: dict, rounds: int) -> dict:
                 if ratio > 1.02:
                     result["failures"].append([cohort, phase, ratio])
                 if "compressed" in times:
-                    phases[phase]["compression_ratio"] = (
-                        median(times["compressed"]) / median(times["candidate"]))
+                    phases[phase]["compression_ratio"] = median(
+                        times["compressed"]
+                    ) / median(times["candidate"])
             result["cohorts"][cohort] = phases
     assert result["paired_energy"] <= 1e-9
     assert result["paired_force"] <= 1e-8
     result["maximum_ratio"] = max(
-        p["ratio"] for c in result["cohorts"].values() for p in c.values())
+        p["ratio"] for c in result["cohorts"].values() for p in c.values()
+    )
     return result
 
 
@@ -130,7 +178,10 @@ def reduce(data: dict) -> dict:
             "after": sum(x["bytes"] for x in candidate.values()),
             "artifacts": len(before),
         }
-    assert census["native"]["baseline"]["instructions"] == census["native"]["compressed"]["instructions"]
+    assert (
+        census["native"]["baseline"]["instructions"]
+        == census["native"]["compressed"]["instructions"]
+    )
     for arm in ("baseline", "final", "default"):
         witness = data["records"][f"remote/package-load-{arm}.json"]
         assert witness["mode"] == "EAGER" and witness["job"]
@@ -147,28 +198,43 @@ def reduce(data: dict) -> dict:
     }
     for name, campaign in data["campaigns"].items():
         if name == "mainline-default":
-            assert campaign["hashes"]["baseline"] == data["artifacts"]["mainline-original"]["sha256"]
-            assert campaign["hashes"]["candidate"] == data["artifacts"]["mainline-default"]["sha256"]
+            assert (
+                campaign["hashes"]["baseline"]
+                == data["artifacts"]["mainline-original"]["sha256"]
+            )
+            assert (
+                campaign["hashes"]["candidate"]
+                == data["artifacts"]["mainline-default"]["sha256"]
+            )
         else:
-            assert campaign["hashes"]["baseline"] == data["artifacts"]["historical-original"]["sha256"]
+            assert (
+                campaign["hashes"]["baseline"]
+                == data["artifacts"]["historical-original"]["sha256"]
+            )
             expected = "compressed" if name == "compression" else "baseline"
-            assert campaign["hashes"]["candidate"] == census["native"][expected]["sha256"]
+            assert (
+                campaign["hashes"]["candidate"] == census["native"][expected]["sha256"]
+            )
         result["campaigns"][name] = endpoints(
-            decode_samples(campaign["samples"], campaign["numeric_references"]), campaign["hashes"], campaign["rounds"])
+            decode_samples(campaign["samples"], campaign["numeric_references"]),
+            campaign["hashes"],
+            campaign["rounds"],
+        )
     # Earlier failures are retained negative evidence, not promoted acceptance.
     assert result["campaigns"]["compression"]["failures"]
     final = result["campaigns"]["mainline-default"]
     assert final["calls"] == 1000 and not final["failures"], final["failures"]
-    before, after = (data["artifacts"][name] for name in
-                     ("mainline-original", "mainline-default"))
+    before, after = (
+        data["artifacts"][name] for name in ("mainline-original", "mainline-default")
+    )
     assert before["instructions"] == after["instructions"]
     result["sizes"]["native_mainline"] = {
-        "before": before["bytes"], "default": after["bytes"],
+        "before": before["bytes"],
+        "default": after["bytes"],
         "instruction_sections": after["instructions"]["count"],
     }
     return result
 
 
 if __name__ == "__main__":
-    with lzma.open(Path(__file__).with_name("receipts.json.xz"), "rt") as handle:
-        print(json.dumps(reduce(json.load(handle)), indent=2, sort_keys=True))
+    print(json.dumps(reduce(load_receipt()), indent=2, sort_keys=True))
