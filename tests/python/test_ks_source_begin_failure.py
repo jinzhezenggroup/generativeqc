@@ -19,6 +19,12 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     # Keep the real begin transaction and catch. Only preparation/device work
     # are doubles; neither scientific integrals nor a CUDA context is needed.
     transaction = source[begin:end]
+    entry = source.index("    if (is_pending) throw", source.index("  void begin("))
+    invalidate = source[entry : source.index("    output.dft_diagnostic", entry)]
+    publish_begin = source.index("  void publish_diis_receipt() {")
+    publish = source[
+        publish_begin : source.index("\n  /** Domain follows", publish_begin)
+    ]
     cpp = tmp_path / "begin.cpp"
     cpp.write_text(
         r"""
@@ -33,15 +39,28 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
 #include <stdexcept>
 #include <vector>
 #include "scf/coulomb_exchange_work.hpp"
+#include "scf/diis_work.hpp"
+#include <cstring>
 constexpr int GENERATIVEQC_PRECISION_FP64 = 64;
 constexpr int cudaMemcpyDeviceToDevice = 0, cudaMemcpyHostToDevice = 1;
-int cudaMemsetAsync(void*, int, std::size_t, void*) { return 0; }
-int cudaMemcpyAsync(void*, const void*, std::size_t, int, void*) { return 0; }
+constexpr int cudaMemcpyDeviceToHost = 2;
+int receipt_copies = 0;
+int cudaMemsetAsync(void* pointer, int value, std::size_t bytes, void*) {
+  if (pointer) std::memset(pointer, value, bytes);
+  return 0;
+}
+int cudaMemcpyAsync(void* to, const void* from, std::size_t bytes, int kind, void*) {
+  if (kind == cudaMemcpyDeviceToHost) ++receipt_copies;
+  if (to && from) std::memcpy(to, from, bytes);
+  return 0;
+}
 int cudaStreamSynchronize(void*) { return 0; }
 int cudaGetLastError() { return 0; }
 void check(int status) { if (status) throw std::runtime_error("device"); }
 enum class CudaKsSeedOrigin { External, NativeColdGuess };
 namespace scf {
+using generativeqc::scf::DiisWorkReadback;
+using generativeqc::scf::publish_diis_work;
 enum class FockBackend { Cuda };
 enum class FockApproximation { Exact };
 enum class FockOperator { ShortRange, LongRange };
@@ -65,6 +84,17 @@ struct Family {
 };
 const Family* semilocal_family_metadata_from_code(int) { return nullptr; }
 struct Owner {
+  bool is_pending{}, diis_work_published = true, diis_work_ready = true;
+  bool ordered_diis_gram = true, incremental_diis_gram = true;
+  std::unique_ptr<scf::DiisWorkReadback> diis_work_readback =
+      std::make_unique<scf::DiisWorkReadback>();
+  generativeqc::tensor::RingGramWork previous_work{17, 153};
+  generativeqc::tensor::RingGramWork* diis_work = &previous_work;
+  std::size_t n = 3;
+  unsigned history = 2;
+  void current_device() {}
+  struct Metrics { unsigned replays = 0; };
+  struct Executor { Metrics replay_metrics() { return {}; } } solver_region_executor;
   bool is_active = true, started = false, is_failed = true;
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
@@ -80,7 +110,7 @@ struct Owner {
     scf::ScfOptions::XcExecutionSchedule xc_execution_schedule{};
     double semilocal_exchange_scale = 1, semilocal_correlation_scale = 1;
   } options;
-  struct { struct { int requested_mode{}; } precision;
+  struct { bool converged = false; struct { int requested_mode{}; } precision;
     struct { std::uint64_t owner_id{}; std::vector<int> operators; } precision_work;
     struct {
       generativeqc::scf::CoulombExchangeWork coulomb_exchange_work =
@@ -124,7 +154,7 @@ struct Owner {
   void* control{}; void* enabled{}; void* spin_enabled{};
   double density[1]{}, warm[1]{}, cold_seed[1]{};
   std::size_t elements = 1;
-  struct { std::size_t density_h2d_bytes{}, synchronizations{}; } movement;
+  struct { std::size_t density_h2d_bytes{}, scalar_d2h_bytes{}, synchronizations{}; } movement;
   bool warm_energy_baseline{}, occupied_fitted_factor_ready{};
   struct { std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{}; } resource;
   double range_warm_energy{}, range_warm_energy_correction{};
@@ -151,7 +181,9 @@ struct Owner {
     const auto initial_synchronizations = movement.synchronizations;
     std::vector<double> prepared;
 """
+        + invalidate
         + transaction
+        + publish
         + r"""
 };
 int main(int argc, char** argv) {
@@ -164,6 +196,12 @@ int main(int argc, char** argv) {
     bool thrown = false;
     try { owner.begin(); } catch (...) { thrown = true; }
     assert(thrown);
+    // A failure before reset must not read the previous attempt's counters.
+    // Scenario 4 fails after reset and can publish its zero-work census.
+    owner.publish_diis_receipt();
+    assert(scenario == 4 ? receipt_copies > 0 : receipt_copies == 0);
+    assert(owner.diis_work_ready == (scenario == 4));
+    if (scenario == 4) assert(owner.diis_work_readback->work.dots == 0);
     assert(owner.is_failed && !owner.is_active);
     assert(!owner.output.dft_diagnostic.coulomb_exchange_work.complete);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
@@ -180,6 +218,14 @@ int main(int argc, char** argv) {
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
+    assert(owner.diis_work_ready && !owner.diis_work_published);
+    assert(owner.previous_work.dots == 0 && owner.previous_work.vector_elements == 0);
+    const auto prior_copies = receipt_copies;
+    owner.publish_diis_receipt();
+    assert(receipt_copies > prior_copies);
+    const auto completed_copies = receipt_copies;
+    owner.publish_diis_receipt();
+    assert(receipt_copies == completed_copies);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
     assert(!owner.pending_mixed_contractions);

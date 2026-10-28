@@ -102,6 +102,15 @@ available memory.
 The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.
 
+Linux NVIDIA builds default to `GENERATIVEQC_PRUNE_CUDA_ARCHIVES=ON`.
+The private Direct and GFN2 archives first complete their own device links.
+`nvprune` then creates separate host-link copies without the resolved relocatable
+device inputs, preserving all requested executable cubins, PTX and registration
+wrappers. Original archives remain available for device linking and incremental
+builds. This changes packaging, not mathematical kernels or architecture coverage.
+Set the option to `OFF` to retain the complete archives in final binaries.
+Other backends, or toolkits without `nvprune`, retain the original archives.
+
 The distributable `cuda-release-cli-sm120` preset **always includes the
 entire structurally representable automatic CUDA XC catalog**. It explicitly
 sets `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` and leaves

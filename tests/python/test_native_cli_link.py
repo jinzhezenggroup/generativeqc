@@ -71,6 +71,15 @@ def link_probe(tmp_path: Path, native_cxx: object) -> object:
     def build(mode: str) -> tuple[Path, subprocess.CompletedProcess[str]]:
         monolithic = mode != "shared"
         cuda = mode != "cpu"
+        archive = "host_archive" if mode == "host-archive" else "generativeqc_gfn2_cuda"
+        host_archive = (
+            "add_library(host_archive STATIC cuda.cpp registration.cpp)\n"
+            "set_target_properties(host_archive PROPERTIES POSITION_INDEPENDENT_CODE ON)\n"
+            "set_property(TARGET generativeqc_gfn2_cuda PROPERTY "
+            "GENERATIVEQC_HOST_ARCHIVE host_archive)\n"
+            if mode == "host-archive"
+            else ""
+        )
         # Negative controls remove the repair or the linker's retention behavior,
         # without inspecting or rewriting production implementation spelling.
         cli_link = (
@@ -99,9 +108,10 @@ def link_probe(tmp_path: Path, native_cxx: object) -> object:
                 "add_library(generativeqc_gfn2_cuda STATIC cuda.cpp registration.cpp)\n"
                 "set_target_properties(generativeqc_gfn2_cuda PROPERTIES "
                 "POSITION_INDEPENDENT_CODE ON)\n"
-                "target_compile_definitions(generativeqc PRIVATE WITH_CUDA)\n"
+                + host_archive
+                + "target_compile_definitions(generativeqc PRIVATE WITH_CUDA)\n"
                 'target_link_libraries(generativeqc PRIVATE "'
-                '$<LINK_LIBRARY:WHOLE_ARCHIVE,generativeqc_gfn2_cuda>")\n'
+                f'$<LINK_LIBRARY:WHOLE_ARCHIVE,{archive}>")\n'
                 + (
                     'include("cmake/GenerativeQCCudaImplib.cmake")\n'
                     "generativeqc_attach_cuda_driver_implib(generativeqc)\n"
@@ -144,13 +154,15 @@ def link_probe(tmp_path: Path, native_cxx: object) -> object:
     return build
 
 
-@pytest.mark.parametrize("mode", ["monolithic", "shared", "cpu"])
+@pytest.mark.parametrize("mode", ["monolithic", "host-archive", "shared", "cpu"])
 def test_native_cli_link_and_installed_execution(link_probe: object, mode: str) -> None:
     build_dir, result = link_probe(mode)
     assert result.returncode == 0, result.stdout + result.stderr
     libraries = (build_dir / "cli-link.txt").read_text()
-    assert ("LINK_GROUP:RESCAN" in libraries) == (mode == "monolithic")
-    if mode == "monolithic":
+    assert ("LINK_GROUP:RESCAN" in libraries) == (
+        mode in {"monolithic", "host-archive"}
+    )
+    if mode in {"monolithic", "host-archive"}:
         assert "--whole-archive" in result.stdout
         assert "--start-group" in result.stdout
     assert _run(str(build_dir / "generativeqc_cli")).returncode == 0
