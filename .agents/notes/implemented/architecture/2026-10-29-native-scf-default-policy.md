@@ -40,6 +40,13 @@ It owns the borrowed dense radius array and never retains molecular geometry,
 SCF state or device memory. Unknown identities stay strict rather than being
 inferred from a familiar method name or ingredient.
 
+Each Calculator retains at most one copied default answer keyed by the selected
+query and every consumed model/backend/ECP/grid fact. Precision validation asks
+the same question repeatedly; rebuilding ctypes descriptors adds host allocation
+work to very short endpoints. Replacing any input invalidates the answer, and
+callers receive detached controls. No geometry, density or device lifetime enters
+this metadata cache. Complete endpoint qualification remains required.
+
 ## Validation
 
 Public/native contracts and actual linked Python queries cover every incumbent

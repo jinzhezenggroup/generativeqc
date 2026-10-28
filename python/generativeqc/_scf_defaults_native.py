@@ -69,21 +69,40 @@ def _grid_options(grid: Any, schedule: str) -> Any:
 
 
 def default_controls(calculator: Any) -> dict[str, float] | None:
-    """Use native defaults when present; only absence permits compatibility."""
+    """Use native defaults, retaining one immutable metadata answer per owner.
+
+    Repeated precision decisions need not allocate fresh ctypes descriptors.
+    The key includes the selected query and every consumed scientific fact;
+    replacing a backend, model, grid or library invalidates the copied answer.
+    This cache holds no geometry, seed or device resource.
+    """
     library = getattr(calculator, "_library", None)
     query = getattr(library, "generativeqc_scf_defaults_query_v1", None)
     if query is None:
         return None
-    context = _Context(ct.sizeof(_Context), _native.ABI_VERSION)
     cuda = getattr(calculator, "_device_name", None) == "cuda"
-    context.backend = _native.BACKEND_CUDA if cuda else _native.BACKEND_CPU_REFERENCE
     method = getattr(calculator, "_method", -1)
-    context.method = method if type(method) is int else -1
     basis = getattr(calculator, "_basis", None)
-    context.has_ecp = isinstance(basis, BasisSet) and any(
+    has_ecp = isinstance(basis, BasisSet) and any(
         element.ecp_core_electrons for element in basis.elements
     )
     options = getattr(calculator, "_ks_options", None) if cuda else None
+    key = (
+        query,
+        cuda,
+        method,
+        has_ecp,
+        None if options is None else options.grid,
+        None if options is None else options.xc_schedule,
+        None if options is None else options.method_ir.identity,
+    )
+    cached = getattr(calculator, "_native_scf_defaults_cache", None)
+    if cached is not None and cached[0] == key:
+        return cached[1].copy()
+    context = _Context(ct.sizeof(_Context), _native.ABI_VERSION)
+    context.backend = _native.BACKEND_CUDA if cuda else _native.BACKEND_CPU_REFERENCE
+    context.method = method if type(method) is int else -1
+    context.has_ecp = has_ecp
     descriptor = None
     identity = b""
     if options is not None:
@@ -120,4 +139,5 @@ def default_controls(calculator: Any) -> dict[str, float] | None:
         or any(not math.isfinite(value) or value <= 0 for value in result.values())
     ):
         raise RuntimeError("native SCF default policy returned an invalid receipt")
+    calculator._native_scf_defaults_cache = (key, result.copy())
     return result

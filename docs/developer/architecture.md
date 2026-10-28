@@ -610,3 +610,5 @@ caller controls and native physical final-state checks are unchanged. Missing
 additive support retains the explicit older-library policy; a selected native
 failure cannot retry Python selection. This query does not move the precision
 candidate/auditor execution or their independent seed lifetimes.
+Each Calculator may retain one copied metadata answer keyed by every consumed
+input and the selected native query; returned control dictionaries are detached.
