@@ -1,0 +1,95 @@
+{
+  "source_base": "d51bebb7807c2c7a754bc96a104a121435517688",
+  "dirty_production_patch": "source.patch.xz",
+  "patch_sha256": "87bb9c05168b57d66ab12bec244d05826345b14be1c11663219fffb6a4836d6d",
+  "patch_bytes": 45281,
+  "reconstructed_paths": [
+    "cmake/GenerativeQCSources.cmake",
+    "include/generativeqc/generativeqc.h",
+    "python/generativeqc/_fleet_projection_native.py",
+    "python/generativeqc/progressive.py",
+    "src/api/c_api_fleet_projection.cpp",
+    "src/methods/batch_capabilities.hpp",
+    "src/methods/hf_method.cpp",
+    "src/scf/fleet.cpp",
+    "src/scf/fleet.hpp",
+    "src/scf/fleet_projection.cpp",
+    "src/scf/fleet_projection.hpp"
+  ],
+  "runner": "node3",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "cpu": "AMD EPYC 7K62 48-Core Processor",
+  "numpy": "2.5.1",
+  "pyscf": "2.14.0",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "cache": "sccache 0.16.0",
+  "candidate_configure": [
+    "cmake",
+    "-S",
+    "CANDIDATE",
+    "-B",
+    "CANDIDATE/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+    "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=/home/jzzeng/.local/bin/sccache",
+    "-DCMAKE_PREFIX_PATH=/home/jzzeng/miniconda3"
+  ],
+  "baseline_configure": "same settings in separate BASELINE/build",
+  "benchmark_sha256": "604d0569113da3f62e6819d5967707f0deb5ca2360ba4ebe670253b03e61f47e",
+  "qualification": {
+    "ctest": {
+      "passed": 126,
+      "failed": 0
+    },
+    "python": {
+      "passed": 304,
+      "deselected": 18,
+      "subtests_passed": 25,
+      "selection": "-k not cuda; all focused and additional regression modules in one current-base invocation"
+    },
+    "installed_sdk": "public-header RHF/UHF shared-context transfer, PATH=/nonexistent and empty inherited environment; installed current-base library",
+    "typecheck": "ty 0.0.82 passed",
+    "documentation": "Sphinx warnings-as-errors passed",
+    "hooks": "all applicable staged hooks passed on integrated source and retained evidence",
+    "endpoint": {
+      "samples": 1008,
+      "groups": 12,
+      "maximum_median_ratio": 1.0162910900941808,
+      "limit": 1.05,
+      "scientific_work_signature_mismatches": 0
+    }
+  },
+  "initial_extended_timing_attempt": {
+    "status": "incomplete",
+    "reason": "Initial extended water/def2-SVP ragged endpoint sampling exceeded the local timing allocation before its first block published; no baseline/candidate comparison or gate result was produced. Existing H2/H2+ matrix is unchanged in the replacement; added ragged performance cases use H2/He. Water/OH moved-geometry Direct/DF independent numerical qualification remains covered separately.",
+    "worker_cpu_seconds_at_stop": 832.62,
+    "stopped_unix": 1793179116.6686568,
+    "harness_sha256": "5eea2d85e35e5c8bdcffb53b45478dd90174662137506d6da63214062430034c"
+  },
+  "compiler_cache_observations": {
+    "before": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+    "after_separate_builds": "Compile requests                    160\nCompile requests executed           160\nCache hits                            1\nCache hits (C/C++)                    1\nCache misses                        159\nCache misses (C/C++)                159\nCache hits rate                    0.62 %\nCache hits rate (C/C++)            0.62 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                        159\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  4.729 s\nAverage cache read hit            0.003 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                            1 GiB\nMax cache size                       10 GiB\n",
+    "interpretation": "Observed shared-server snapshots, not isolated build-speed measurements or monotonic per-task deltas. No cache was cleared or disabled by this task."
+  },
+  "reproduction_command": [
+    "python",
+    "benchmarks/results/hf-fleet-transfer-20261028/benchmark.py",
+    "--baseline",
+    "BASELINE",
+    "--candidate",
+    "CANDIDATE",
+    "--baseline-library",
+    "BASELINE/build/libgenerativeqc.so",
+    "--candidate-library",
+    "CANDIDATE/build/libgenerativeqc.so",
+    "--output",
+    "IGNORED/samples.json"
+  ],
+  "stored_sha256": {
+    "source.patch.xz": "24d01a48fbe2adaf639b4a6b42fb3b580679fb5f6e437ec94add06b0daccecc6",
+    "benchmark.py": "604d0569113da3f62e6819d5967707f0deb5ca2360ba4ebe670253b03e61f47e",
+    "samples.json.xz": "f5c651279344173f6a8ac982c8eae0f9a333fa0409da8dcfa76227e4dc7b5faa"
+  },
+  "pre_integration": "pre-integration/provenance.json; original qualified a3ec1f8fd baseline preserved with raw samples and reconstruction"
+}

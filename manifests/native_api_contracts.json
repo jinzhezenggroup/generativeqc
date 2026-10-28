@@ -3080,6 +3080,38 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_hf_fleet_projection_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "cf7544cc731c02df29c595db75053255629dd3e3fa39a3caab516ee5f83f219e",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_hf_fleet_initialize_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "c848592cae87df8371ef6c9c1b1d60ada99c85c1a631ef4985f73fe47694bbde",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

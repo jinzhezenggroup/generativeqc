@@ -123,6 +123,7 @@ def test_native_schedule_target_energy_and_forces_against_pyscf(
     import numpy as np
 
     pyscf = pytest.importorskip("pyscf")
+    from generativeqc import progressive
     from generativeqc import progressive_controller as controller
 
     def forbidden_audit(*args: object, **kwargs: object) -> None:
@@ -138,6 +139,7 @@ def test_native_schedule_target_energy_and_forces_against_pyscf(
     monkeypatch.setattr(
         controller, "_finalize_hf_verification_python", forbidden_policy
     )
+    monkeypatch.setattr(progressive, "_initialize_from_compatibility", forbidden_policy)
     source, target = calculators(method=method, fitted=fitted)
     problem = TargetProblem.from_calculator(
         target, ATOMS, charge=charge, multiplicity=multiplicity
