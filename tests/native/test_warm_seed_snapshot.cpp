@@ -1,4 +1,3 @@
-#include <cassert>
 #include <cstring>
 #include <memory>
 #include <thread>
@@ -6,6 +5,7 @@
 #include "api/handles.hpp"
 #include "generativeqc/warm_seed.h"
 #include "methods/batch_capabilities.hpp"
+#include "native_test_require.hpp"
 #include "runtime/resource_ledger.hpp"
 
 namespace {
@@ -66,50 +66,51 @@ int main() {
     auto* sentinel = reinterpret_cast<generativeqc_warm_seed_snapshot*>(std::uintptr_t{1});
     auto* output = sentinel;
     owner->forbid_export = true;
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 295, &info, &output) ==
-           GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-    assert(output == sentinel && std::memcmp(&info, &before, sizeof(info)) == 0);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 295, &info, &output) ==
+                 GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+    require_test(output == sentinel && std::memcmp(&info, &before, sizeof(info)) == 0);
     owner->forbid_export = false;
     owner->fail_second_export = true;
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
-           GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-    assert(output == sentinel && std::memcmp(&info, &before, sizeof(info)) == 0);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
+                 GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+    require_test(output == sentinel && std::memcmp(&info, &before, sizeof(info)) == 0);
     owner->fail_second_export = false;
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) == 0);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) == 0);
     snapshot.reset(output);
-    assert(info.system_count == 2 && info.numeric_bytes == 80 && info.largest_density_bytes == 32);
+    require_test(info.system_count == 2 && info.numeric_bytes == 80 &&
+                 info.largest_density_bytes == 32);
     owner->states[0]->density[0] = 9;
     owner->clear_warm_starts();
     // A cold capture still requires the conservative all-slot envelope, while
     // its actual retained numeric receipt correctly reports zero.
     generativeqc_warm_seed_snapshot* cold{};
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &cold) == 0);
-    assert(info.numeric_bytes == 0 && info.largest_density_bytes == 0);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &cold) == 0);
+    require_test(info.numeric_bytes == 0 && info.largest_density_bytes == 0);
     generativeqc_warm_seed_snapshot_destroy(cold);
     info.abi_version += 1;
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
-           GENERATIVEQC_STATUS_ABI_MISMATCH);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
+                 GENERATIVEQC_STATUS_ABI_MISMATCH);
     info.abi_version -= 1;
     source.plan = std::make_unique<WithoutSeeds>();
-    assert(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
-           GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    require_test(generativeqc_batch_capture_warm_seeds_v1(&source, 296, &info, &output) ==
+                 GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
   }
   // Source plan and context are gone. Read-only views are independently owned.
   generativeqc_warm_seed_view_v1 view{sizeof(view), GENERATIVEQC_ABI_VERSION};
-  assert(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 0, &view) == 0);
-  assert(view.present && view.density_count == 4 && view.coordinate_count == 6);
-  assert(view.density[0] == 1 && view.coordinates[2] == -0.7 && view.energy == -1);
+  require_test(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 0, &view) == 0);
+  require_test(view.present && view.density_count == 4 && view.coordinate_count == 6);
+  require_test(view.density[0] == 1 && view.coordinates[2] == -0.7 && view.energy == -1);
   const auto before = view;
-  assert(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 2, &view) ==
-         GENERATIVEQC_STATUS_INVALID_ARGUMENT);
-  assert(std::memcmp(&view, &before, sizeof(view)) == 0);
-  assert(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 1, &view) == 0);
-  assert(!view.present && !view.density && !view.coordinates && !view.density_count);
+  require_test(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 2, &view) ==
+               GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(std::memcmp(&view, &before, sizeof(view)) == 0);
+  require_test(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 1, &view) == 0);
+  require_test(!view.present && !view.density && !view.coordinates && !view.density_count);
   auto reader = [&] {
     for (int i = 0; i != 64; ++i) {
       generativeqc_warm_seed_view_v1 local{sizeof(local), GENERATIVEQC_ABI_VERSION};
-      assert(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 0, &local) == 0);
-      assert(local.density[0] == 1);
+      require_test(generativeqc_warm_seed_snapshot_read_v1(snapshot.get(), 0, &local) == 0);
+      require_test(local.density[0] == 1);
     }
   };
   std::thread first(reader), second(reader);
@@ -126,31 +127,31 @@ int main() {
   owner->states[0]->density[0] = 7;
   target.plan = std::move(plan);
   owner->dimensions[0] = 9;
-  assert(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
-         GENERATIVEQC_STATUS_INVALID_ARGUMENT);
-  assert(owner->states[0]->density[0] == 7);
+  require_test(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
+               GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(owner->states[0]->density[0] == 7);
   owner->dimensions[0] = 4;
   owner->reject_restore = true;
-  assert(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
-         GENERATIVEQC_STATUS_INVALID_ARGUMENT);
-  assert(owner->states[0]->density[0] == 7);
+  require_test(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
+               GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(owner->states[0]->density[0] == 7);
   owner->reject_restore = false;
   target.resource_ledger = std::make_shared<runtime::DeviceResourceLedger>();
   target.resource_ledger->limit = 15;
   owner->validation_allowance = 16;
-  assert(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
-         GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-  assert(owner->states[0]->density[0] == 7 && target.resource_ledger->rejected > 0);
-  assert(target.resource_ledger->provider_reserved == 0 && !target.resource_ledger->active);
+  require_test(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) ==
+               GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+  require_test(owner->states[0]->density[0] == 7 && target.resource_ledger->rejected > 0);
+  require_test(target.resource_ledger->provider_reserved == 0 && !target.resource_ledger->active);
   target.resource_ledger->limit = 16;
   for (int replay = 0; replay != 2; ++replay) {
-    assert(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) == 0);
-    assert(owner->states[0]->density[0] == 1);
-    assert(target.resource_ledger->provider_reservation_peak == 16);
-    assert(target.resource_ledger->provider_reserved == 0 && !target.resource_ledger->active);
+    require_test(generativeqc_batch_restore_warm_seeds_v1(&target, snapshot.get()) == 0);
+    require_test(owner->states[0]->density[0] == 1);
+    require_test(target.resource_ledger->provider_reservation_peak == 16);
+    require_test(target.resource_ledger->provider_reserved == 0 && !target.resource_ledger->active);
     owner->clear_warm_starts();
   }
-  assert(generativeqc_batch_restore_warm_seeds_v1(nullptr, snapshot.get()) ==
-         GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(generativeqc_batch_restore_warm_seeds_v1(nullptr, snapshot.get()) ==
+               GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   generativeqc_warm_seed_snapshot_destroy(nullptr);
 }

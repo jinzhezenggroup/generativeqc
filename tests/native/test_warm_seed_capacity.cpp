@@ -1,4 +1,3 @@
-#include <cassert>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -7,6 +6,7 @@
 #include "api/handles.hpp"
 #include "generativeqc/warm_seed.h"
 #include "methods/batch_capabilities.hpp"
+#include "native_test_require.hpp"
 
 namespace {
 using namespace generativeqc;
@@ -45,22 +45,22 @@ int main() {
   const auto query = [&] {
     return generativeqc_batch_query_warm_seed_capacity_v1(&batch, &output);
   };
-  assert(query() == GENERATIVEQC_STATUS_SUCCESS);
-  assert(output.density_bytes == 176 && output.coordinate_bytes == 120 &&
-         output.total_bytes == 296 && output.largest_density_bytes == 144);
+  require_test(query() == GENERATIVEQC_STATUS_SUCCESS);
+  require_test(output.density_bytes == 176 && output.coordinate_bytes == 120 &&
+               output.total_bytes == 296 && output.largest_density_bytes == 144);
   const auto before = output;
   owner->dimensions[1] = std::numeric_limits<std::size_t>::max();
-  assert(query() == GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-  assert(std::memcmp(&before, &output, sizeof(output)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+  require_test(std::memcmp(&before, &output, sizeof(output)) == 0);
   // Each item fits, but the aggregate byte count must not wrap.
   owner->dimensions[0] = owner->dimensions[1] = std::numeric_limits<std::size_t>::max() / 8;
-  assert(query() == GENERATIVEQC_STATUS_OUT_OF_MEMORY);
-  assert(std::memcmp(&before, &output, sizeof(output)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+  require_test(std::memcmp(&before, &output, sizeof(output)) == 0);
   batch.plan = std::make_unique<WithoutSeeds>();
-  assert(query() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
-  assert(std::memcmp(&before, &output, sizeof(output)) == 0);
+  require_test(query() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+  require_test(std::memcmp(&before, &output, sizeof(output)) == 0);
   output.abi_version += 1;
-  assert(query() == GENERATIVEQC_STATUS_ABI_MISMATCH);
-  assert(generativeqc_batch_query_warm_seed_capacity_v1(nullptr, &output) ==
-         GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  require_test(query() == GENERATIVEQC_STATUS_ABI_MISMATCH);
+  require_test(generativeqc_batch_query_warm_seed_capacity_v1(nullptr, &output) ==
+               GENERATIVEQC_STATUS_INVALID_ARGUMENT);
 }

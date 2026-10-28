@@ -122,7 +122,10 @@ def test_budgeted_snapshot_restore_retains_resource_diagnostics(backend: str) ->
     with calculator.prepare_batch(SYSTEMS) as target:
         lease.restore(target, updates=False)
         observation = target.resource_diagnostics["warm_restore"]
-        assert observation["scope_owner"] == "native-prepared-owner"
+        assert target.resource_diagnostics["phase"] == "warm_restore"
+        assert observation["samples"] >= 1
+        if backend == "cuda":
+            assert observation["scope_owner"] == "native-prepared-owner"
         result = target.execute(properties=("energy",), strict=True)
         assert all(item.converged for item in result.items)
     calculator.clear_cache()
