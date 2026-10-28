@@ -62,3 +62,13 @@ Current execution domains remain documented in `docs/user/libxc.md`; the generat
 report is the sole count table. Revisit the conservative input inventory when a
 native owner provides a narrower, equally complete execution identity, or when
 independent response/expanded-context producers become available.
+
+The integrated current-tree evidence initially exceeded the fixed checkout
+storage budget. Keep its full acceptance values; do not relax the budget or
+move measurements into fixture directories to bypass it. The older #2835
+whole-source census is recoverable byte-for-byte from published commit
+`c413cde9fc4d102b42a2c3e856dceb0fadcdcdd7`, with the standard Git snapshot/restorer.
+Its input count, digest and recorded verification remain local, alongside every
+numerical/failed-run receipt. Ordinary historical numerical replay needs no Git
+history; an explicit restored census retains both stored and original-byte
+integrity checks. Verify recovery before retiring that redundant census.

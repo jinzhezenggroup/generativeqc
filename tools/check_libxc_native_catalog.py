@@ -45,11 +45,12 @@ def render(report: dict, previous: dict) -> str:
         f"Executed native library SHA-256: `{report['native_library']['sha256']}`.",
         "Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.",
         (
-            f"Structurally selectable registrations: {report['structurally_selectable']}; "
+            f"Structurally selectable non-curated automatic registrations: {report['structurally_selectable']}; "
             f"registrations without a retained native campaign: {len(report['unmeasured_functionals'])}."
         ),
         "",
         "This offline qualification inventory does not restrict structural public selection.",
+        "The automatic count excludes registrations already owned by curated components.",
         "Counts apply only to the exact retained native contexts; no response, Hessian,",
         "HVP, higher-l, mixed/Fast, ECP or DF scope is inferred.",
         "The `public-method` row counts the optional stronger admission receipt,",
@@ -70,6 +71,24 @@ def render(report: dict, previous: dict) -> str:
         "",
         f"Measured backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
         "All records retain exact geometry, grid, precision, binary and derivative scope.",
+        "The [manifest](../../manifests/libxc/native-qualification.json) locates the",
+        "compressed machine-readable snapshot and independent numerical receipts.",
+        "",
+        "## Qualified registrations",
+        "",
+        "| Registration | Backend | Product | Qualified spin layouts |",
+        "| --- | --- | --- | --- |",
+    ]
+    scopes: dict[tuple[str, str, str], set[str]] = {}
+    for row in report["endpoints"]:
+        scopes.setdefault((row["name"], row["backend"], row["product"]), set()).add(
+            row["spin"]
+        )
+    for (name, backend, product), spins in sorted(scopes.items()):
+        lines.append(
+            f"| `{name}` | {backend} | {product} | {', '.join(sorted(spins))} |"
+        )
+    lines += [
         "",
         "## Explicit blockers",
         "",

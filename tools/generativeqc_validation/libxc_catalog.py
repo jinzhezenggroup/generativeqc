@@ -238,7 +238,8 @@ def validate_cuda(
     require(
         context["basis"] == "sto-3g"
         and context["fixture"] == "h4"
-        and context["basis_max_l"] == 0,
+        and context["basis_max_l"] == 0
+        and context["full_vector"] is True,
         "CUDA fixture scope mismatch",
     )
     rows = record["rows"]
@@ -332,11 +333,9 @@ def validate_cuda(
         )
         forces = np.asarray(row["forces"], dtype=float)
         require(forces.shape == (4, 3), "CUDA force shape")
-        projected = (
-            forces.ravel()
-            if context["full_vector"]
-            else np.array([forces[-1] @ np.array([0.2, -0.3, 0.4])])
-        )
+        # This catalog's force claim requires every Cartesian component to
+        # pass both finite-difference oracles, including replay and movement.
+        projected = forces.ravel()
         for field in ("native_fd", "independent_fd", "analytic_directions"):
             _close(row[field], projected, 3e-5, f"CUDA {field}")
         _close(forces.sum(axis=0), np.zeros(3), 2e-8, "CUDA translation")

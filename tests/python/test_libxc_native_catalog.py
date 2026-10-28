@@ -1,0 +1,332 @@
+"""Real retained native receipts, stale-input gates and exact context isolation."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.capability_transition import (
+    capability_regressions,
+    require_acknowledged_capability_regressions,
+)
+from generativeqc_compiler.xc.libxc_bulk_capabilities import available_capabilities
+
+from tools.generativeqc_validation import libxc_catalog as catalog
+from tools.generativeqc_validation.libxc_native_domain import native_domain_stage
+
+ROOT = Path(__file__).resolve().parents[2]
+NAME = "LDA_C_VWN_4"
+
+
+@pytest.fixture(scope="module")
+def bundle() -> dict:
+    manifest = catalog.load_json(ROOT / "manifests/libxc/native-qualification.json")
+    return catalog.load_json(ROOT / manifest["campaign"]["path"])
+
+
+@pytest.fixture(scope="module")
+def report(bundle: dict) -> dict:
+    return catalog.ingest(bundle, ROOT)
+
+
+def test_real_receipts_reach_multifamily_dag_without_whitelisting(report: dict) -> None:
+    assert not report["stale"]
+    assert report["summary"]["qualified_counts"]["forces"] == 11
+    assert len(report["observed_endpoints"]) == 44
+    assert len(report["endpoints"]) == 88
+    assert {r["family"] for r in report["endpoints"]} == {"lda", "gga", "mgga"}
+    assert report["summary"]["qualified_counts"]["response"] == 0
+    assert report["summary"]["qualified_counts"]["public-method"] == 0
+    # Evidence is opt-in. Ordinary inventory queries and structural selection
+    # must not silently load this machine's native qualification campaign.
+    assert all(
+        c.qualified_stages == ("graph-imported", "pointwise-validated")
+        for c in available_capabilities()
+    )
+    from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+
+    assert resolve_bulk_ks("GGA_X_APBE", backend="cuda").method is not None
+
+
+@pytest.mark.parametrize(
+    "owner",
+    [
+        "point_artifact",
+        "force_artifact",
+        "point_executable_artifact",
+        "force_executable_artifact",
+    ],
+)
+def test_actual_loaded_callback_mismatch_is_rejected(bundle: dict, owner: str) -> None:
+    row = deepcopy(bundle["functionals"][NAME]["cuda"][0])
+    row["rows"][0]["artifact"][owner]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="object mismatch"):
+        catalog.validate_cuda(
+            NAME, row, bundle["build"]["library"], row["subject_identity"]
+        )
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "backend",
+        "spin",
+        "schedule",
+        "energy",
+        "fock",
+        "precision",
+        "lifecycle",
+        "geometry",
+        "fd",
+        "nonfinite",
+        "j-work",
+        "domain-abi",
+        "full-vector",
+    ],
+)
+def test_cuda_replays_raw_gates_instead_of_trusting_pass_labels(
+    bundle: dict, corruption: str
+) -> None:
+    record = deepcopy(bundle["functionals"][NAME]["cuda"][0])
+    row = record["rows"][0]
+    if corruption == "backend":
+        row["executed_backend"] = "cpu_reference"
+    elif corruption == "spin":
+        record["spins"] = 3 - record["spins"]
+    elif corruption == "schedule":
+        row["artifact"]["force_schedule"] = "fused"
+    elif corruption == "energy":
+        row["reference_energy"] += 1e-3
+    elif corruption == "fock":
+        row["fock_error"] = 1e-2
+    elif corruption == "precision":
+        row["semantic_work"]["effective_bits"] = 32
+    elif corruption == "lifecycle":
+        record["rows"].pop()
+    elif corruption == "geometry":
+        record["rows"][2]["coordinates"] = row["coordinates"]
+    elif corruption == "fd":
+        row["independent_fd"][0] += 1e-2
+    elif corruption == "nonfinite":
+        row["forces"][0][0] = float("nan")
+    elif corruption == "j-work":
+        row["scf"]["coulomb_exchange_work"]["complete"] = False
+    elif corruption == "full-vector":
+        record["context"]["full_vector"] = False
+    else:
+        row["artifact"]["schema"] = "generativeqc.native-automatic-artifact.v1"
+    with pytest.raises(ValueError):
+        catalog.validate_cuda(
+            NAME, record, bundle["build"]["library"], record["subject_identity"]
+        )
+
+
+@pytest.mark.parametrize("corruption", ["library", "lifecycle", "energy", "work"])
+def test_cpu_real_full_vector_receipt_is_revalidated(
+    bundle: dict, corruption: str
+) -> None:
+    record = deepcopy(bundle["functionals"][NAME]["cpu"])
+    result = record["result"]
+    if corruption == "library":
+        result["rows"][0]["native_library"]["sha256"] = "0" * 64
+    elif corruption == "lifecycle":
+        result["rows"].pop()
+    elif corruption == "energy":
+        result["rows"][0]["stencil"][0]["plus"]["reference_energy"] += 0.01
+    else:
+        result["rows"][0]["scf"]["coulomb_exchange_work"]["exchange_applications"] = 1
+    # An edited result with a self-consistent hash still has to satisfy science,
+    # compiled/loaded-object equality and complete executed work requirements.
+    result["identity"] = canonical_hash(
+        {k: v for k, v in result.items() if k != "identity"}
+    )
+    with pytest.raises(ValueError):
+        catalog.validate_cpu(NAME, record, bundle["build"]["library"])
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["profile", "point_source_identity", "mathematics", "case_ids", "reference"],
+)
+def test_native_domain_rejects_stale_contract_or_numerical_evidence(
+    bundle: dict, field: str
+) -> None:
+    domain = deepcopy(bundle["functionals"][NAME]["production-domain"])
+    row = domain["records"][0]
+    if field == "profile":
+        domain["profile"]["identity"] = "0" * 64
+    elif field == "point_source_identity":
+        row[field] = "0" * 64
+    elif field == "mathematics":
+        row[field]["domain_version"] += 1
+    elif field == "case_ids":
+        row[field].pop()
+    else:
+        row[field][0][0] += 1
+    domain["identity"] = canonical_hash(
+        {k: v for k, v in domain.items() if k != "identity"}
+    )
+    if field == "reference":
+        assert native_domain_stage(NAME, domain)["status"] == "fail"
+    else:
+        with pytest.raises(ValueError):
+            native_domain_stage(NAME, domain)
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["precision", "integrals", "ecp", "basis_max_l", "product", "grid", "coordinates"],
+)
+def test_unmeasured_execution_context_cannot_borrow_a_stage(
+    report: dict, change: str
+) -> None:
+    row = next(
+        r for r in report["endpoints"] if r["name"] == NAME and r["product"] == "forces"
+    )
+    arguments = {
+        k: row[k]
+        for k in (
+            "backend",
+            "spin",
+            "product",
+            "precision",
+            "integrals",
+            "ecp",
+            "basis",
+            "basis_max_l",
+            "grid",
+            "elements",
+            "charge",
+            "multiplicity",
+            "tile_points",
+            "partition_iterations",
+        )
+    }
+    arguments["coordinates"] = row["coordinates"][0]
+    assert catalog.resolve_context(report, NAME, **arguments)
+    arguments[change] = {
+        "precision": "fast",
+        "integrals": "df",
+        "ecp": True,
+        "basis_max_l": 2,
+        "product": "hvp",
+        "grid": [99, 8, 16],
+        "coordinates": [[0, 0, 0]],
+    }[change]
+    with pytest.raises(ValueError, match="no qualified native receipt"):
+        catalog.resolve_context(report, NAME, **arguments)
+
+
+def test_missing_domain_demotes_both_backends_and_exact_ack_is_required(
+    bundle: dict, report: dict
+) -> None:
+    changed = deepcopy(bundle)
+    del changed["functionals"][NAME]["production-domain"]
+    after = catalog.ingest(changed, ROOT)
+    assert not any(r["name"] == NAME for r in after["endpoints"])
+    before_summary, after_summary = report["summary"], after["summary"]
+    with pytest.raises(ValueError, match="unacknowledged"):
+        require_acknowledged_capability_regressions(before_summary, after_summary)
+    tokens = [r.token for r in capability_regressions(before_summary, after_summary)]
+    require_acknowledged_capability_regressions(
+        before_summary, after_summary, acknowledged=tokens
+    )
+    with pytest.raises(ValueError, match="stale or unknown"):
+        require_acknowledged_capability_regressions(
+            before_summary,
+            after_summary,
+            acknowledged=[*tokens[:-1], tokens[-1] + "stale"],
+        )
+    with pytest.raises(ValueError, match="duplicate"):
+        require_acknowledged_capability_regressions(
+            before_summary, after_summary, acknowledged=[*tokens, tokens[0]]
+        )
+
+
+def test_changed_native_inputs_never_relabel_historical_results(
+    bundle: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    live = catalog.source_inventory(ROOT)
+    live["include/generativeqc/generativeqc.h"] = "0" * 64
+    monkeypatch.setattr(catalog, "source_inventory", lambda root: live)
+    after = catalog.ingest(bundle, ROOT)
+    assert after["stale"] and not after["endpoints"]
+    assert after["summary"]["qualified_counts"]["forces"] == 0
+    assert after["summary"]["blocked_counts"]["forces"] == 11
+
+
+@pytest.mark.parametrize("field", ["pyscf", "libxc", "gpu", "slurm_job_id"])
+def test_execution_provenance_is_required(bundle: dict, field: str) -> None:
+    changed = deepcopy(bundle)
+    changed["executions"][0]["environment"][field] = ""
+    with pytest.raises(ValueError, match="oracle/environment|GPU provenance"):
+        catalog.ingest(changed, ROOT)
+
+
+def test_cuda_cannot_borrow_another_job_environment(bundle: dict) -> None:
+    changed = deepcopy(bundle)
+    changed["functionals"][NAME]["cuda"][0]["slurm_job_id"] = "unknown-job"
+    with pytest.raises(ValueError, match="matching execution environment"):
+        catalog.ingest(changed, ROOT)
+
+
+def test_embedded_native_source_must_match_build_inputs(bundle: dict) -> None:
+    changed = deepcopy(bundle)
+    changed["native_build_verification"]["source_identity"] = "0" * 64
+    with pytest.raises(ValueError, match="embedded build/source mismatch"):
+        catalog.ingest(changed, ROOT)
+
+
+@pytest.mark.parametrize("missing", ["cuda", "polarized", "forces"])
+def test_other_backend_spin_or_product_cannot_fill_missing_coverage(
+    report: dict, missing: str
+) -> None:
+    from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
+    from generativeqc_compiler.xc.endpoint_capability import resolve_endpoint_capability
+
+    evidence = deepcopy(report["evidence"][NAME])
+    if missing == "cuda":
+        del evidence["compiled-cuda"]
+        del evidence["gpu-runtime"]
+    elif missing == "polarized":
+        for stage in ("molecular-scf", "forces"):
+            qualification = evidence[stage]["qualification"]
+            qualification["coverage"] = [
+                r for r in qualification["coverage"] if r["spin"] != "polarized"
+            ]
+    else:
+        del evidence["forces"]
+    with pytest.raises(CapabilityNotQualified):
+        resolve_endpoint_capability(
+            NAME, backend="cuda", spin="polarized", product="forces", evidence=evidence
+        )
+
+
+@pytest.mark.parametrize("product", ["response", "hessian", "hvp"])
+def test_first_force_scope_never_grants_second_order(
+    report: dict, product: str
+) -> None:
+    assert not any(row["product"] == product for row in report["endpoints"])
+
+
+def test_live_checker_rejects_changed_toolchain_and_old_update_baseline(
+    bundle: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tools import check_libxc_native_catalog as checker
+
+    actual_load = checker.load_json
+    changed = deepcopy(bundle)
+    changed["build"]["toolchain"]["CMAKE_CXX_COMPILER"]["version"] += " changed"
+    manifest = actual_load(checker.MANIFEST)
+    campaign_path = ROOT / manifest["campaign"]["path"]
+    monkeypatch.setattr(
+        checker,
+        "load_json",
+        lambda path: changed if path == campaign_path else actual_load(path),
+    )
+    with pytest.raises(ValueError, match="differs from retained snapshot"):
+        checker.check(checker.MANIFEST)
+    with pytest.raises(ValueError, match="older baseline cannot hide"):
+        checker.check(checker.MANIFEST, write=True)
