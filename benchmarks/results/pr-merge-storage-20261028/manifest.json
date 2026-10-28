@@ -1,0 +1,312 @@
+{
+  "schema": "generativeqc.lossless-storage-repair.v1",
+  "source_commit": "a3ec1f8fd8116fc70cf945ab2e7dd97f1e0d42a6",
+  "members": [
+    {
+      "original_path": "benchmarks/results/becke-native-domain-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-native-domain-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 42519,
+      "original_sha256": "7a85be7b7b406d72d3679c41285153dc930c4709dccfcb94a10452b4c7cb83d7",
+      "stored_bytes": 10368,
+      "stored_sha256": "a5257ba8aa0a243f86c00c0fb53c3726769eff1fd8129b4306278526d8954ea6"
+    },
+    {
+      "original_path": "benchmarks/results/becke-native-phases-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-native-phases-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 36067,
+      "original_sha256": "3fbb1e040e77456f08202fac753b46d90edd1bf3d6695dad89e6826b100df1fe",
+      "stored_bytes": 8672,
+      "stored_sha256": "239d097672fba81d9996bb330fc0c5805eef22ccfa48bd0226e42e9c10e68401"
+    },
+    {
+      "original_path": "benchmarks/results/becke-pair-coefficients-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-pair-coefficients-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 38790,
+      "original_sha256": "41abee29e4e6f42dbe35f943febfd7c979d7736407b6758a3c5a53a7c59eb7aa",
+      "stored_bytes": 9856,
+      "stored_sha256": "b2c9ac93cc681f0980b3c557be8d3c0aa08d8795ae0e6a9bd4ca63e0d7878b4b"
+    },
+    {
+      "original_path": "benchmarks/results/becke-paired-warm-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-paired-warm-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 41187,
+      "original_sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f",
+      "stored_bytes": 9892,
+      "stored_sha256": "b84974f0bcb2f0205b0188f34a5632737f83442dc19d141f34357e91e3e5f07f"
+    },
+    {
+      "original_path": "benchmarks/results/becke-partition-indexed-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-partition-indexed-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 49531,
+      "original_sha256": "1b2a4e5b22334db509ce8dc309ca6da621425aedc63daa129956525d82aecb48",
+      "stored_bytes": 12088,
+      "stored_sha256": "a68af1cda6c14255419d95cb04b691cf849f1d080c5f0c059df66ee63e0fd0cc"
+    },
+    {
+      "original_path": "benchmarks/results/becke-physical-endpoints-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-physical-endpoints-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 41187,
+      "original_sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f",
+      "stored_bytes": 9892,
+      "stored_sha256": "b84974f0bcb2f0205b0188f34a5632737f83442dc19d141f34357e91e3e5f07f"
+    },
+    {
+      "original_path": "benchmarks/results/becke-physical-forces-20261006/source.patch",
+      "stored_path": "benchmarks/results/becke-physical-forces-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 6290,
+      "original_sha256": "8f112565f7e28e34ec5dd45796a8bd749b0ebaaabee25796d44ccaee74cb8a72",
+      "stored_bytes": 2128,
+      "stored_sha256": "0c3c23feb81d349224e6a3cd1cf6b6d5c9368e650fe3977ade986738ad77f9bd"
+    },
+    {
+      "original_path": "benchmarks/results/bounded-direct-945-20260923/source.patch",
+      "stored_path": "benchmarks/results/bounded-direct-945-20260923/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 37921,
+      "original_sha256": "c265a340de1f20039fb59da59d9da6fd548d064bd459e12a58774a76f27a06d8",
+      "stored_bytes": 8932,
+      "stored_sha256": "2f08755c318ad84c2037b065ead46a44e2307f5cafb9a8818a753c0c237dd8a7"
+    },
+    {
+      "original_path": "benchmarks/results/cc-curvature-eigensolver-20261003/source.patch",
+      "stored_path": "benchmarks/results/cc-curvature-eigensolver-20261003/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 10845,
+      "original_sha256": "06b50b4159989df1f59cdaddb6cc36ca08d53d8d49fa79e739ded4d088b1c92a",
+      "stored_bytes": 3884,
+      "stored_sha256": "be45f920a3b341934afb04b35198edf46ffe056f82a46ce5cac9ff40211d97e5"
+    },
+    {
+      "original_path": "benchmarks/results/df-hf-preconvergence-default-20261009/source.patch",
+      "stored_path": "benchmarks/results/df-hf-preconvergence-default-20261009/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 52036,
+      "original_sha256": "c3de73ba733b1d6545dfe3474bd9a3d0683aed4a6575b1dcd4d000dbf37ece4b",
+      "stored_bytes": 12516,
+      "stored_sha256": "17f892a1580fcd87fef800d25e052e536ff781b7f986e0ec58baec4538e7981d"
+    },
+    {
+      "original_path": "benchmarks/results/direct-force-resources-1892-20261005/rejected-warp-experiment.patch",
+      "stored_path": "benchmarks/results/direct-force-resources-1892-20261005/rejected-warp-experiment.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 10505,
+      "original_sha256": "bcb3bea2f078a9a6e147dbe43f5ea5ee0e60447135bfc3c582a33a133c842023",
+      "stored_bytes": 3040,
+      "stored_sha256": "98b6b0cb839b14cfc5e4c1b01975af4e6dfc20b8a394880f5d2406d6e9f87f69"
+    },
+    {
+      "original_path": "benchmarks/results/direct-phase-moved-20261023/driver.patch",
+      "stored_path": "benchmarks/results/direct-phase-moved-20261023/driver.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 86687,
+      "original_sha256": "7103a0dac6e91f2824b737832f3ab619dcfccc8ec94a6a6d315cdd594d761fc3",
+      "stored_bytes": 18636,
+      "stored_sha256": "cb52cc42c2b0e4d660982a9717921e0cc56f9bdcc279128ddd0bf56db819ea6c"
+    },
+    {
+      "original_path": "benchmarks/results/ks-df-warm-factor-20261015/measured-source.patch",
+      "stored_path": "benchmarks/results/ks-df-warm-factor-20261015/measured-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 37084,
+      "original_sha256": "441bab799cb16bae9646fdc0f51eee6c1ddee7c6b74efbc6ebc281a8502262ab",
+      "stored_bytes": 9280,
+      "stored_sha256": "f8293c1e1b7a99205012a8b48c6f69f6c4da10662bf36d3dbb9981adc0ff0d31"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-composed-baseline-20261005/composed-source.patch",
+      "stored_path": "benchmarks/results/pbe0-composed-baseline-20261005/composed-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 79633,
+      "original_sha256": "75291834ac4afd29c85c116510944308891e67aba1b0b0edf92c10f52548e4f9",
+      "stored_bytes": 19608,
+      "stored_sha256": "8e0babcce91bc488ea9698c760637496d7ebd56b1197ff07ac25183e9679058e"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-source.patch",
+      "stored_path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 12774,
+      "original_sha256": "befd07e4564426b5195beb7407c4e31e45364b9a8c1f8c08f9f18f7d81d494df",
+      "stored_bytes": 4272,
+      "stored_sha256": "f5013cbb220ebeebe77aa3ddccb6d3c249c88e735c2c3b37ed87456320d19a03"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-cuda-schedule-20261006/source.patch",
+      "stored_path": "benchmarks/results/pbe0-cuda-schedule-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 32486,
+      "original_sha256": "ed60f1df376fe235b4bfb473788d0c59c8f24a851099097a5b20b8dea1b485e8",
+      "stored_bytes": 8592,
+      "stored_sha256": "7ccca7cf28dd3411d36172a5b3afa01d15b5abe8b033067e873cd9b705979d53"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-incremental-refinement-20261007/merged-source.patch",
+      "stored_path": "benchmarks/results/pbe0-incremental-refinement-20261007/merged-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 54079,
+      "original_sha256": "e5559dee5237f3281e881a812082d9d62d62e3cf3b15dc0841110537b5d12735",
+      "stored_bytes": 11292,
+      "stored_sha256": "3bcfd138a9a62c02f4bfa4cba480d250d06575861d73187f27de3779853d1131"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-incremental-refinement-20261007/repaired-source.patch",
+      "stored_path": "benchmarks/results/pbe0-incremental-refinement-20261007/repaired-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 82902,
+      "original_sha256": "5877fa30ff10e69f60311caeec9552d85db0a8955eec5fa3d86eaa240d0e0a1b",
+      "stored_bytes": 17200,
+      "stored_sha256": "7618b95d31bb3e906dff43e3d86f20dee1949311a718aaa33c41956ad6770f44"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-jk-negative-work-20261005/candidate-source.patch",
+      "stored_path": "benchmarks/results/pbe0-jk-negative-work-20261005/candidate-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 11772,
+      "original_sha256": "e89242bc36964166a8fc94ceab2e79c42ee8323a9a2c047ad8d166df829b434c",
+      "stored_bytes": 3436,
+      "stored_sha256": "515459130f58c36bb6ca1a06ed4a618d173dd0b930c04bdcfc153beec3514a1a"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-jk-negative-work-20261005/control-source.patch",
+      "stored_path": "benchmarks/results/pbe0-jk-negative-work-20261005/control-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 28369,
+      "original_sha256": "1eb438c2b27dd6e8b97e17f6b09ae70e0a4eca0edb27a6a538b288b25842315d",
+      "stored_bytes": 6588,
+      "stored_sha256": "5c3f55ec07f7e5006a3588d9d8a9095a6b1cc66742d02e03e2bff8eb07a0535d"
+    },
+    {
+      "original_path": "benchmarks/results/pbe0-xc-tiles-20261006/source.patch",
+      "stored_path": "benchmarks/results/pbe0-xc-tiles-20261006/source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 43656,
+      "original_sha256": "b3579f45fdccc40a8b30d54237a33d791e0d2b8e33a9851a5b926aeb5a6d6a40",
+      "stored_bytes": 11540,
+      "stored_sha256": "f7e47fd08f10c54c99a9c0ba02c54b1683a08d8d29971940621809059a64fa28"
+    },
+    {
+      "original_path": "benchmarks/results/readme-defaults-20261020/measurement-driver.patch",
+      "stored_path": "benchmarks/results/readme-defaults-20261020/measurement-driver.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 21407,
+      "original_sha256": "84b422a9a2af6ffa9c52dd618af121080f003707a604f21cb761d22e8107de21",
+      "stored_bytes": 6212,
+      "stored_sha256": "bbf2109d91d207dc47bb182ed0c2d14389198b6495a004d3fdbdaa38095516cc"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/raw/manifest.json",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/raw/manifest.json.gz",
+      "encoding": "gzip",
+      "original_bytes": 19594,
+      "original_sha256": "88f3a6d92c1ce83788b37d847d66f433ca580ca70a53fa97e638d091c6acb9c5",
+      "stored_bytes": 5531,
+      "stored_sha256": "5f7280b73b2cbf149a035d518e0b72c5077992e72e2d9e4dc7bff3e46588579c"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/raw/oh-def2-svp-spherical-uhf-b1-forces.json",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/raw/oh-def2-svp-spherical-uhf-b1-forces.json.gz",
+      "encoding": "gzip",
+      "original_bytes": 79640,
+      "original_sha256": "54ca323310d449ed54f97949ed9101336f2302e4c0cf49d1c8e22c1129590732",
+      "stored_bytes": 7580,
+      "stored_sha256": "16dc51c5d4e977eb588af638d8c5b2c405647937a801bf97e574afc0aa030903"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/cpu-diagnosis-v1.json",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/cpu-diagnosis-v1.json.gz",
+      "encoding": "gzip",
+      "original_bytes": 41447,
+      "original_sha256": "224aa4e799f42b2f89afc50a0d2d1790f7a792f129bf05a6b6a1bb703d36ccc0",
+      "stored_bytes": 7269,
+      "stored_sha256": "960f6949a922e3023fd1f85386444058fe35891f2b6147762cfd6ecfdf5ad090"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto_return.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto_return.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 77846,
+      "original_sha256": "7ff3680fe9673288e96c53222e590e1f8ae3da3ec3350ce9bc2a3de83e0e30ae",
+      "stored_bytes": 6281,
+      "stored_sha256": "b48c48d469cd37f7e43db8f00c3589b3e5904de41e27ecb1bb171e65e73bea02"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-blas.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-blas.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 78051,
+      "original_sha256": "0fc06e91ab961aaae4a05a155dac317c3070e5b2dc82272c3e905ac2a5f8882b",
+      "stored_bytes": 5770,
+      "stored_sha256": "e67e7079f174d9dca242af4252934bfa8ae0b5a25c4a544f5ecbfabf255b644e"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-host_final.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-host_final.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 76723,
+      "original_sha256": "7881d890ad5fd2d9ef201a34bb1f882e2700b08f293e039bdb260ed04334ba3f",
+      "stored_bytes": 6094,
+      "stored_sha256": "c205cf0ec415528589946842f9bb2d6ca2e2823b6bca1b2a4336b01c13590d9b"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-occupied.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-occupied.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 25941,
+      "original_sha256": "2f7d2e916674683dcfa281491a36bf6370f5f07fb73d257d518cc19e57e10234",
+      "stored_bytes": 2384,
+      "stored_sha256": "ca04b5d676065d22283192b061a11dbc965180868ce2f2b738169db358deef33"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 90156,
+      "original_sha256": "60ccc7390207e8eac4bda02918f702ea52b987e06f8a080d4e75a8b23e46a5fc",
+      "stored_bytes": 8050,
+      "stored_sha256": "4e88cd80bd57bfce6beda3440144094107f7d01b2f211c7242a2702550cdde29"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell_blas.jsonl",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-shell_blas.jsonl.gz",
+      "encoding": "gzip",
+      "original_bytes": 90315,
+      "original_sha256": "8fadab5c2e8de01477a687c4580fb28a2073b8882d448ca74cceee471f7573f6",
+      "stored_bytes": 7373,
+      "stored_sha256": "c35bc7ff58775d0316d181ecd87a3c18940bbd39679cb216911ea5339ce3bd17"
+    },
+    {
+      "original_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/report.json",
+      "stored_path": "benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/report.json.gz",
+      "encoding": "gzip",
+      "original_bytes": 17539,
+      "original_sha256": "c35759ba478dd94d7ee43eddfe55ecf5334b42dc2bb53db962a07c083674d76d",
+      "stored_bytes": 3039,
+      "stored_sha256": "1498f71a61e3dd9954af2b6b85729b4a485012e8073211c12097f1845f7ae520"
+    },
+    {
+      "original_path": "benchmarks/results/automatic-native-cuda-20261027/baseline-native-source.patch",
+      "stored_path": "benchmarks/results/automatic-native-cuda-20261027/baseline-native-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 40913,
+      "original_sha256": "0b7a2d159b969b0ecd9d6a78aae48b95b5aa50be69664c827b7d8b00837e9b72",
+      "stored_bytes": 10992,
+      "stored_sha256": "de596ff43fb8880c2e80077206231a0c5213380ed860ad8bbcf9c8e1f0f1c873"
+    },
+    {
+      "original_path": "benchmarks/results/automatic-native-cuda-20261027/reference-native-source.patch",
+      "stored_path": "benchmarks/results/automatic-native-cuda-20261027/reference-native-source.patch.xz",
+      "encoding": "xz",
+      "original_bytes": 224274,
+      "original_sha256": "6a33dbf90ec0922c499c29068204ac54ae66042a5c50130001aebc57102a7d07",
+      "stored_bytes": 47332,
+      "stored_sha256": "74da7abc354cc3a8b6bf948c9d3b9e754570cba6d4b3540e6b4e83b160d40462"
+    }
+  ]
+}

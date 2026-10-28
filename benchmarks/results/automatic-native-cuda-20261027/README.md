@@ -146,3 +146,10 @@ keep finite Slurm scheduling and the actual assigned visibility. Large binaries,
 compiler streams and source archives remain in ignored run storage. These
 receipts expose endpoint and compiler evidence for #1124; they do not close all
 remaining parent #1118 or cross-method #2227 obligations.
+
+## Lossless source-patch storage
+
+Restore `reference-native-source.patch.xz` and `baseline-native-source.patch.xz`
+with `xz -dc NAME.patch.xz > NAME.patch` before applying them in the order above.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) retains the
+original byte counts and SHA-256 values. All measured subjects stay unchanged.

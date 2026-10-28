@@ -73,3 +73,11 @@ original scientific hash fields have not been rewritten.
 The rejected implementation and wrapper-only predecessor are explained in
 `.agents/notes/rejected/2026-10-05-shared-direct-jk-density-transform.md` and
 `.agents/notes/rejected/2026-10-05-unused-j-preparation-wrapper.md`.
+
+## Lossless source-patch storage
+
+The original source patches are retained as XZ files. Before applying a patch,
+restore its original filename with `xz -dc NAME.patch.xz > NAME.patch`.
+The [storage inventory](../pr-merge-storage-20261028/manifest.json) records both
+stored and original byte counts and SHA-256 values. Measurement identities,
+all samples, and acceptance decisions are unchanged.
