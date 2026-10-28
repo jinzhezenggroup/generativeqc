@@ -136,6 +136,7 @@ def reduce(data: dict) -> dict:
         assert witness["mode"] == "EAGER" and witness["job"]
         assert len(witness["rows"]) == 32
         expected = census["package"]["baseline" if arm == "baseline" else "final"]
+        assert {row["library"] for row in witness["rows"]} == expected.keys()
         for row in witness["rows"]:
             assert row["sha256"] == expected[row["library"]]["sha256"]
     result["sizes"]["native_historical"] = {

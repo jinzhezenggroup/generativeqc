@@ -38,11 +38,16 @@ standalone libraries. For the native library the historical combined saving is
 46.1%, but that is an **opt-in** result. It is not directly comparable to #2852's
 537.7 MB configuration, which excluded native stationary.
 
-The collector compares every decoded executable text section: all 80 DF objects,
-all 32 standalone libraries and all **18,666** native instruction sections match
-in the initial campaign. This checks instruction bytes and multiplicity, not just
-kernel totals. Public standalone symbols match, all 32 manifests pass the native
-cubin audit, and all 32 libraries load/register with `CUDA_MODULE_LOADING=EAGER`.
+The retained attestations match decoded executable text sections for all 80 DF
+objects and all 32 standalone libraries across their respective comparisons.
+All **18,666** native sections match between the historical pruned and compressed
+libraries. The historical original retains only its size and binary hash, so
+replay cannot establish its instruction match against the pruned library.
+The final mainline comparison below retains both
+instruction attestations. These comparisons check instruction bytes and
+multiplicity, not just kernel totals. Public standalone symbols match, all 32
+manifests pass the native cubin audit, and all 32 libraries load/register with
+`CUDA_MODULE_LOADING=EAGER`.
 
 On the final mainline source, the matched **default** comparison is
 **589,663,288 -> 566,705,208 bytes**, saving **22,958,080 bytes (3.9%)**.
