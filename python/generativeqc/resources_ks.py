@@ -313,6 +313,10 @@ def _item_host_inventory(
     # descriptors and plan objects have a conservative LP64 value allowance.
     # Include fixed element-radius tables copied into method/grid/XC snapshots.
     metadata = 8192 + 512 * (a + s + p + n + c + orbital.get("ecp_terms", 0))
+    # Optional terminal DIIS readback: two uint64 counters and count/head.
+    # The matching device record is charged by the native state layout query.
+    if backend == "cuda" and os.environ.get("GENERATIVEQC_DF_PROGRESS_TRACE"):
+        metadata += 24
     # Shared native XC potential binding, including bounded preparation scratch.
     if backend == "cuda" and model.xc_schedule != "host_unfused":
         metadata += 16 << 10

@@ -59,6 +59,7 @@
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_value_work.hpp"
 #include "scf/df_density_seed_policy.hpp"
+#include "scf/diis_work.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -170,6 +171,7 @@ struct KsStateStorage {
   std::int32_t* occupied{};
   std::uint8_t *enabled{}, *spin_enabled{};
   std::uint32_t *history_count{}, *history_head{};
+  tensor::RingGramWork* diis_work{};
   int *solver_info{}, *final_solver_info{}, *jk_error{}, *range_jk_error{}, *staged_xc_error{};
   double* staged_xc_totals{};
   std::uint8_t *final_spin_enabled{}, *final_enabled{};
@@ -179,7 +181,7 @@ struct KsStateStorage {
    * persistent and phase-local numeric buffers are explicitly charged. */
   std::size_t partition(std::size_t n, unsigned spins, unsigned history, bool exact_exchange,
                         bool range_correction, bool incremental_direct_jk,
-                        bool incremental_diis_gram, void* storage) {
+                        bool incremental_diis_gram, bool collect_diis_work, void* storage) {
     const auto matrix = product(n, n), elements = product(spins, matrix);
     std::size_t bytes = 0;
     const auto reserve = [&](auto*& pointer, std::size_t count) {
@@ -232,6 +234,10 @@ struct KsStateStorage {
       reserve(raw_gram, product(history, history));
     else
       raw_gram = nullptr;
+    if (collect_diis_work)
+      reserve(diis_work, 1);
+    else
+      diis_work = nullptr;
     reserve(weights, history + 1);
     reserve(eigenvalues, product(spins, n));
     reserve(final_coefficients, elements);
@@ -279,10 +285,11 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
-  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
-                              incremental_direct_jk,
-                              cuda_ks_incremental_diis_gram_requested(n, history), nullptr),
-             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+  return sum(
+      layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
+                       incremental_direct_jk, cuda_ks_incremental_diis_gram_requested(n, history),
+                       scf::diis_work_requested(), nullptr),
+      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
 struct CudaKsPlan::Impl : KsStateStorage {
@@ -303,6 +310,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned spins{}, history{};
   bool incremental_diis_gram{};
   bool ordered_diis_gram{};
+  bool diis_work_enabled{}, diis_work_published{};
+  std::unique_ptr<scf::DiisWorkReadback> diis_work_readback;
   std::array<std::size_t, 2> occupations{};
   std::vector<double> host_xc_density, host_xc_alpha, host_xc_beta, host_xc_potential;
   // Async H2D copies retain these controls through the existing stream drain.
@@ -1584,6 +1593,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !std::all_of(integrals.hcore.begin(), integrals.hcore.end(), finite))
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
+    diis_work_enabled = scf::diis_work_requested();
+    if (diis_work_enabled) diis_work_readback = std::make_unique<scf::DiisWorkReadback>();
     incremental_diis_gram = cuda_ks_incremental_diis_gram_requested(n, history);
     // Automatic promotion preserves the original scalar dot order. Explicit
     // enable/reducer selections retain their established diagnostic semantics.
@@ -1907,8 +1918,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         throw std::invalid_argument(
             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
     }
-    ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
-                               incremental_direct_jk, incremental_diis_gram, nullptr);
+    ks_arena_bytes =
+        partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
+                  incremental_diis_gram, diis_work_enabled, nullptr);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes =
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
@@ -1941,6 +1953,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
         sizeof(host_all_spins) + sizeof(host_one) +
+        (diis_work_enabled ? sizeof(scf::DiisWorkReadback) : 0) +
         final_validation_diagnostic.determinant.eigenframes.capacity() *
             sizeof(scf::solver::EigenFrameDiagnostic) +
         tensor::CudaMatrixProductBinding::kPreparationHostBytes +
@@ -1957,7 +1970,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       check(runtime::resource_cuda_malloc(&arena, ks_arena_bytes));
       partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                incremental_diis_gram, arena);
+                incremental_diis_gram, diis_work_enabled, arena);
       if (nonlocal_arena_bytes) {
         bool host_oom = false;
         auto status =
@@ -2424,6 +2437,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     host_incremental_max_abs_delta_density = 0.0;
     is_active = false;
     started = true;
+    diis_work_published = false;
+    if (diis_work_readback) *diis_work_readback = {};
     is_failed = false;
     stabilize_occupations = false;
     final_closure = false;
@@ -2521,6 +2536,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else if (device_chunk_region.bound()) {
         device_chunk_region.invalidate();
       }
+      if (diis_work) check(cudaMemsetAsync(diis_work, 0, sizeof(*diis_work), stream));
       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       if (incremental_direct_jk)
@@ -2704,7 +2720,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (ordered_diis_gram) {
       launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
                                      enabled, fock_history, residual_history, gram, weights,
-                                     history_count, history_head, effective, raw_gram, true);
+                                     history_count, history_head, effective, raw_gram, true,
+                                     diis_work);
     } else {
       const bool incremental_gram = incremental_diis_gram;
       if (incremental_gram)
@@ -3639,7 +3656,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (ordered_diis_gram) {
           launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
                                          enabled, fock_history, residual_history, gram, weights,
-                                         history_count, history_head, effective, raw_gram, true);
+                                         history_count, history_head, effective, raw_gram, true,
+                                         diis_work);
         } else {
           const bool incremental_gram = incremental_diis_gram;
           if (incremental_gram)
@@ -4148,6 +4166,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return is_active;
   }
 
+  /** One bounded readback per terminal attempt, including nonconvergence.
+   * Owner-retained destinations survive a partial copy failure; failed copies
+   * drain and propagate without publishing a stale receipt. */
+  void publish_diis_receipt() {
+    if (!diis_work_readback || diis_work_published) return;
+    current_device();
+    auto& receipt = *diis_work_readback;
+    try {
+      check(cudaMemcpyAsync(&receipt.work, diis_work, sizeof(receipt.work), cudaMemcpyDeviceToHost,
+                            stream));
+      check(cudaMemcpyAsync(&receipt.count, history_count, sizeof(receipt.count),
+                            cudaMemcpyDeviceToHost, stream));
+      check(cudaMemcpyAsync(&receipt.head, history_head, sizeof(receipt.head),
+                            cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.scalar_d2h_bytes += sizeof(receipt);
+    ++movement.synchronizations;
+    scf::publish_diis_work(receipt, spins == 1 ? "RKS" : "UKS", owner, solve_epoch, 0, n, spins,
+                           history, ordered_diis_gram, incremental_diis_gram, output.converged,
+                           is_failed, solver_region_executor.replay_metrics().replays);
+    diis_work_published = true;
+  }
+
   /** Domain follows the bound scientific program, not its transport family. */
   std::uint32_t point_domain_version() const {
     if (automatic_program) return automatic_program->domain_version;
@@ -4619,6 +4664,7 @@ bool CudaKsPlan::finish_iteration() { return impl_->finish(); }
 scf::ScfResult CudaKsPlan::result(bool export_density) {
   if (!impl_->started || impl_->is_active || impl_->is_pending)
     throw std::logic_error("CUDA KS result is not terminal");
+  impl_->publish_diis_receipt();
   auto result = impl_->output;
   if (impl_->xc)
     result.dft_diagnostic.cuda_ao_selection.xc_evaluations =

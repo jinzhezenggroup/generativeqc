@@ -117,6 +117,7 @@ def native_probe(
 #include "scf/cuda/resident_final_validation.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/direct_task_layout.hpp"
+#include "scf/diis_work.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/generated_shell_task.hpp"
 using namespace generativeqc;

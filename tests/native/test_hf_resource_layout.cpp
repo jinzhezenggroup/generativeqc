@@ -20,8 +20,31 @@
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
+#include "scf/diis_work.hpp"
 
 namespace {
+
+void check_optional_diis_work_capacity() {
+  using namespace generativeqc::scf;
+  constexpr auto trace = "GENERATIVEQC_DF_PROGRESS_TRACE";
+  const std::array<std::uint8_t, 2> angular{0, 0};
+  const std::array<std::size_t, 2> primitives{3, 3};
+  for (const unsigned spins : {1U, 2U}) {
+    std::size_t arena[3]{}, owner[3]{};
+    for (unsigned pass = 0; pass < 3; ++pass) {
+      if (pass == 1)
+        assert(setenv(trace, "unused-layout-only.jsonl", 1) == 0);
+      else
+        assert(unsetenv(trace) == 0);
+      assert(small_hf_cuda_resource_layout_v2(2, 2, 2, angular.data(), primitives.data(),
+                                              angular.size(), 8, spins, GENERATIVEQC_PRECISION_FP64,
+                                              1e-10, 1e-12, arena[pass], owner[pass]));
+    }
+    assert(arena[1] == arena[0] + sizeof(generativeqc::tensor::RingGramWork));
+    assert(owner[1] == owner[0] + sizeof(DiisWorkReadback));
+    assert(arena[2] == arena[0] && owner[2] == owner[0]);
+  }
+}
 
 void check_incremental_diis_capacity() {
   using generativeqc::scf::small_hf_cuda_resource_layout;
@@ -224,6 +247,7 @@ void check_df_values_pack_g_metadata_without_scf_work() {
 }  // namespace
 
 int main() {
+  check_optional_diis_work_capacity();
   check_incremental_diis_capacity();
   check_h2_cartesian_rhf();
   check_spherical_d_uhf();

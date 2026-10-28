@@ -129,6 +129,7 @@ template <class... Args> void launch_update_diis_kernel(Args...) { ++legacy_call
   const bool ordered_diis_gram = ordered, incremental_diis_gram = incremental;
   struct { void* stream_ = nullptr; } resources;
   void* stream = nullptr;
+  void* diis_work = nullptr;
   const int batch_size=2, matrix_reduction_threads=32, nbf=3, n=3, spins=1;
   const bool unrestricted=false;
   const unsigned diis_history=4, history=4;
