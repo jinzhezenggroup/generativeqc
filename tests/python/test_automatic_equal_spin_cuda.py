@@ -152,7 +152,7 @@ extern "C" void evaluate(bool restricted, const double* inputs,
 def test_actual_automatic_launchers_select_only_proven_rks(
     name: str, tmp_path: Path, native_cxx: object
 ) -> None:
-    """Run generated host launchers with a CUDA stub; keep UKS/scaling/response gates."""
+    """Execute energy/force selection with CUDA stubs and retain validation gates."""
     provider = emit_automatic_cuda_provider(name)
     launchers = provider.source.split("void validate_launch", 1)[1].split(
         "}  // namespace", 1
@@ -166,6 +166,7 @@ def test_actual_automatic_launchers_select_only_proven_rks(
         "#include <cstring>\n#include <cstdint>\n#include <limits>\n"
         "#include <stdexcept>\n#include <type_traits>\n"
         "using I = long;\nusing cudaStream_t = void*;\n"
+        "struct DevicePointValue {};\n"
         f"struct {provider.provider_name} {{}};\nstruct {provider.provider_name}_equal_spin {{}};\n"
         "bool observed_restricted = false, observed_batch = false;\nunsigned calls = 0;\n"
         f"""
@@ -176,12 +177,20 @@ void automatic_evaluate_points(Args...) {{
   observed_batch = batched;
   ++calls;
 }}
+template <I width, class Provider, class... Args>
+void stationary_evaluate_points(Args...) {{
+  static_assert(width == {provider.feature_terms});
+  observed_restricted = std::is_same_v<Provider, {provider.provider_name}_equal_spin>;
+}}
 """
         + emit_equal_spin_point_selector()
         + launchers
         + f"""
 int main() {{
   constexpr std::uint32_t code = 0x{automatic_functional_code(name):x}U;
+  double features[370]{{}};
+  DevicePointValue values[37];
+  int error = 0;
   for (const char* selection : {{"0", "1"}}) {{
     setenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", selection, 1);
     for (unsigned spins : {{1, 2}}) {{
@@ -189,6 +198,10 @@ int main() {{
       assert(!observed_batch && observed_restricted == (({str(provider.feature_terms == 1).lower()} || selection[0] == '1') && spins == 1));
       launch_batch(nullptr,nullptr,nullptr,37,spins,nullptr,nullptr,nullptr,code,1,1,16);
       assert(observed_batch && observed_restricted == (({str(provider.feature_terms == 1).lower()} || selection[0] == '1') && spins == 1));
+      // Force derivatives retain the physical spin layout independently of
+      // the energy equal-spin shortcut; only density-only RKS uses U1.
+      launch_stationary(nullptr,features,37,spins,values,&error,nullptr);
+      assert(observed_restricted == ({str(provider.feature_terms == 1).lower()} && spins == 1));
     }}
   }}
   unsetenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");

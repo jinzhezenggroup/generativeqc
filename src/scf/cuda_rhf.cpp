@@ -820,6 +820,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        plan.incremental_direct_jk != requested_incremental_direct_jk ||
        plan.incremental_diis_gram != requested_incremental_diis_gram ||
        plan.ordered_diis_gram != requested_ordered_diis_gram ||
+       plan.diis_work_enabled != diis_work_requested() ||
        plan.one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        plan.mixed_precision_fock != requested_mixed_precision_fock ||
        plan.mixed_precision_fock_threshold !=
@@ -1020,6 +1021,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.diis_history = diis_history;
     plan.incremental_diis_gram = requested_incremental_diis_gram;
     plan.ordered_diis_gram = requested_ordered_diis_gram;
+    plan.diis_work_enabled = diis_work_requested();
+    if (plan.diis_work_enabled) plan.diis_work_readback.resize(batch_size);
     plan.persistent_eri = requested_persistent_eri;
     plan.quartet_direct = requested_quartet_direct;
     plan.transformed_direct = requested_transformed_direct;
@@ -1215,6 +1218,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
             : 0;
     reference_base_bytes = reference_detail::check_capacity(
         reference_base_bytes, resources.reference_fock_correction_bytes_,
+        options.reference_memory_budget_bytes);
+    reference_base_bytes = reference_detail::check_capacity(
+        reference_base_bytes, runtime::vector_bytes(plan.diis_work_readback),
         options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
   }
@@ -1656,6 +1662,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto diis_raw_gram = plan.incremental_diis_gram
                            ? arena_pointer<double>(resources.arena_, layout.diis_raw_gram)
                            : nullptr;
+  auto diis_work = plan.diis_work_enabled
+                       ? arena_pointer<tensor::RingGramWork>(resources.arena_, layout.diis_work)
+                       : nullptr;
   auto diis_coefficients = arena_pointer<double>(resources.arena_, layout.diis_coefficients);
   auto diis_count = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_count);
   auto diis_head = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_head);
@@ -3135,6 +3144,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     fill_global_failure(outputs, cuda_status(cuda_error));
     return outputs;
   }
+  if (diis_work) {
+    // A replay/retry starts a fresh census; wraps and retirements within this
+    // solve retain their actual work instead of hiding discarded reductions.
+    std::fill(plan.diis_work_readback.begin(), plan.diis_work_readback.end(), DiisWorkReadback{});
+    cuda_error = cudaMemsetAsync(diis_work, 0, batch_size * sizeof(*diis_work), resources.stream_);
+    if (cuda_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
   launch_initialize_state_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
                                  static_cast<std::int32_t>(batch_size), cached_energy_baseline_hit,
                                  energy, active, converged, failed, iterations, previous_energy,
@@ -3542,7 +3561,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
           unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), fock, residual, active,
           fock_history, residual_history, diis_linear_system, diis_coefficients, diis_count,
-          diis_head, eigensystem, diis_raw_gram);
+          diis_head, eigensystem, diis_raw_gram, false, diis_work);
     } else {
       const bool incremental_gram = plan.incremental_diis_gram;
       if (incremental_gram) {
@@ -5689,6 +5708,33 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       return outputs;
     }
   }
+  if (diis_work) {
+    // Queue bounded owner-retained destinations immediately before the existing
+    // terminal fence. No iteration or Graph-capture path reads counters on host.
+    for (std::size_t item = 0; item < batch_size && cuda_error == cudaSuccess; ++item) {
+      auto& receipt = plan.diis_work_readback[item];
+      cuda_error = runtime::residency_memcpy_async(
+          residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+          &receipt.work, diis_work + item, sizeof(receipt.work), cudaMemcpyDeviceToHost,
+          resources.stream_);
+      if (cuda_error == cudaSuccess)
+        cuda_error = runtime::residency_memcpy_async(
+            residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+            &receipt.count, diis_count + item, sizeof(receipt.count), cudaMemcpyDeviceToHost,
+            resources.stream_);
+      if (cuda_error == cudaSuccess)
+        cuda_error = runtime::residency_memcpy_async(
+            residency_execution, SourceRole::oracle, SourceSite::hf_profile, SourcePayload::none,
+            &receipt.head, diis_head + item, sizeof(receipt.head), cudaMemcpyDeviceToHost,
+            resources.stream_);
+    }
+    if (cuda_error != cudaSuccess) {
+      // A partial asynchronous read must drain before a failed owner can retire.
+      (void)cudaStreamSynchronize(resources.stream_);
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
   cuda_error =
       runtime::residency_stream_synchronize(residency_execution, SourceRole::publication,
                                             SourceSite::hf_results_fence, resources.stream_);
@@ -5924,6 +5970,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       result.forces.assign(host_forces.begin() + atom_begin * 3,
                            host_forces.begin() + atom_end * 3);
     }
+    if (diis_work)
+      publish_diis_work(plan.diis_work_readback[system], unrestricted ? "UHF" : "RHF",
+                        reinterpret_cast<std::uintptr_t>(&plan), plan.execution_generation, system,
+                        nbf, static_cast<unsigned>(spin_count), diis_history,
+                        plan.ordered_diis_gram, plan.incremental_diis_gram, result.converged,
+                        host_failed[system] != 0, iteration_graphs.iteration_launches());
     output.status = host_failed[system] != 0
                         ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
                         : (result.converged ? GENERATIVEQC_STATUS_SUCCESS

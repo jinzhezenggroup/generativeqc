@@ -3160,6 +3160,22 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_correlation_convergence_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "435d66b3ebd4b18efc061eb692a3bb6f0e5447bbfba04790bc31eba11fb29244",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

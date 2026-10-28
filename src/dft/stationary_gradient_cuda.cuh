@@ -15,12 +15,22 @@
 #if defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
 #include "dft/native_stationary_shared_kernels.hpp"
 #endif
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+#include "dft/cuda_xc_point_program.hpp"
+#endif
 
 namespace generativeqc_stationary_cuda {
 using namespace generativeqc_tensor;
 constexpr size_t record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // This bounded tile is charged by allocation() and reused on the borrowed
+  // geometry stream. The point launcher has process-lifetime AOT ownership.
+  StationaryPointValue* staged_points{};
+  generativeqc::dft::CudaXcStationaryPointLauncher point_launcher{};
+  uint64_t staged_point_launches{}, staged_point_count{};
+#endif
   generativeqc::runtime::OwnedCudaBuffer<unsigned char> phased_storage;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
       max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
@@ -137,7 +147,12 @@ size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntas
   elements = size_add(elements, size_add(centers, size_add(1, size_mul(3, np))));
   elements = size_add(elements, matrices);
   const auto cached = cache_center_geometry ? size_mul(48, size_mul(na, na - 1) / 2) : 0;
-  return size_add(size_add(size_mul(sizeof(double), elements), cached), 256);
+  auto bytes = size_add(size_add(size_mul(sizeof(double), elements), cached), 256);
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  // The staged producer uses the same overflow-checked workspace admission.
+  bytes = size_add(bytes, size_mul(np, sizeof(StationaryPointValue)));
+#endif
+  return bytes;
 }
 /** Preserve allocation (2/3), device runtime (4), and numerical source (5)
  * failures. Invalid contracts remain 1. Existing nonzero-rejection callers
@@ -323,6 +338,18 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      double* partial, double* scratch,
                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
                      bool restricted_point = false, bool fp32_geometry = false) {
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+  if (!owner.point_launcher || !owner.staged_points || external || fp32_geometry)
+    throw std::invalid_argument("staged stationary geometry has no matching point producer");
+  cuda_check(cudaPeekAtLastError());
+  owner.point_launcher(stream, view.features, view.npoint, owner.spin_blocks, owner.staged_points,
+                       error, view.error);
+  cuda_check(cudaPeekAtLastError());
+  external = reinterpret_cast<const double*>(owner.staged_points);
+  ++owner.launches;
+  ++owner.staged_point_launches;
+  owner.staged_point_count += view.npoint;
+#endif
   if (!owners && !points_per_atom && owner.molecular_points) {
     stationary_grid_owners<<<blocks(view.npoint, 128), 128, 0, stream>>>(
         owner.atom_offsets, na, owner_offset, view.npoint, owner.point_atoms);
@@ -372,8 +399,12 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
   // routes on the original evaluator; no new resident-storage requirement.
   static_assert(alignof(StationaryPointValue) <= alignof(double));
   const bool precomputed_point =
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+      false;
+#else
       phased_active &&
       na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double));
+#endif
   if (precomputed_point) {
     // Preserve incoming launch status and stop before any consumer can observe
     // scratch from a failed producer. Peeking neither clears nor synchronizes.
@@ -406,6 +437,10 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
             center_pairs, error, phased.seeds, false, radii);
     cuda_check(cudaPeekAtLastError());
   } else if (owner.becke_threads_per_point > 1)
+    // The template flag denotes a fully prepared phased-Becke seed, not merely
+    // an external XC value. Staged points still need geometry_point_setup to
+    // form that seed and either publish it or contract inline partition motion.
+    // Selecting <true> here silently drops Becke response on nonphased tiles.
     geometry_cooperative_kernel<false, double>
         <<<geometry_lanes, owner.becke_threads_per_point,
            owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
@@ -584,6 +619,12 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->point_atoms = reinterpret_cast<int64_t*>(take(np));
     p->density = take(ns * n * n);
     p->weighted_density = take(ns * n * n);
+#if defined(GENERATIVEQC_NATIVE_STAGED_POINT)
+    static_assert(sizeof(StationaryPointValue) % sizeof(double) == 0);
+    static_assert(alignof(StationaryPointValue) <= alignof(double));
+    p->staged_points = reinterpret_cast<StationaryPointValue*>(
+        take(np * sizeof(StationaryPointValue) / sizeof(double)));
+#endif
     // The charged 256-byte control panel reserves two error words followed by
     // this aligned counter. It is not part of the mathematical scratch alias.
     p->becke_zero_seed_points = reinterpret_cast<unsigned long long*>(

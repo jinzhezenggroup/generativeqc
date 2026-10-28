@@ -1,0 +1,58 @@
+{
+  "baseline_sha": "78e0c8afab504bbdf7ecd73ede2e4179195eaf49",
+  "candidate_production_patch": "source.patch.xz",
+  "patch_sha256": "1944f89a9b4919d9cfda0b716d2b65f398710663dc6eed8dd9b1a4b07443abfc",
+  "production_hashes": {
+    "cmake/GenerativeQCSources.cmake": "e23800d6cbfe09bae05c7b1b4a04354e9caddfdda37e4cccf677f30f90fcc210",
+    "include/generativeqc/generativeqc.h": "d03f976094b02075c1c297e0e705ed2b60d6332af1a03dc98ad621122718dcb2",
+    "python/generativeqc/_correlation_convergence.py": "a0b04137848a43580f463dfa3f57495f5250118efd2dba942e4329582135a45e",
+    "python/generativeqc/calculator.py": "22e90e79a6f734110a8f06c70d30d8d8746d35bd9a58fcf938956f9c9d391251",
+    "python/generativeqc/cbs.py": "e12e04bdd900f81f90de5f875d70d30c4e0fc966e89ac1f33f795f5b2cb697fc",
+    "src/api/c_api_correlation_convergence.cpp": "9d76694fa7a1066a95d589c1107dbad006b7eafecd708a31b1ae12e75867338c"
+  },
+  "unchanged_scientific_policy": {
+    "path": "src/core/correlation_convergence.hpp",
+    "sha256": "5daa8467b2c5635b89c1517e382e79cbc94f2984f68ab5dcce6a25f847d2f836"
+  },
+  "build": {
+    "type": "Release",
+    "cuda": false,
+    "cpu_stationary_force_aot": true,
+    "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+    "cache": "sccache 0.16.0",
+    "cmake_launcher": "/home/jzzeng/.local/bin/sccache",
+    "prefix": "/home/jzzeng/miniconda3"
+  },
+  "runner": "node3",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "qualification": {
+    "ctest_passed": 127,
+    "python_passed": 206,
+    "python_subtests_passed": 25,
+    "python_skipped": 3,
+    "python_deselected": 23,
+    "skip_scope": "CUDA paths in the CPU-only build; no real GPU qualification",
+    "installed_sdk": "passed: public-header executable, env -i PATH=/nonexistent, installed library/provider search path only",
+    "typecheck": "ty 0.0.82 passed",
+    "documentation": "Sphinx -W passed",
+    "complete_cpu_endpoints": 672,
+    "scientific_and_work_signatures": "exactly equal across baseline/candidate and repeated blocks",
+    "max_median_ratio": 0.9837589687274356,
+    "performance_gate": 1.05
+  },
+  "exploratory_attempts": [
+    "A def2-SVP H2 timing smoke was stopped after about four CPU minutes without publishing a comparison block. It is incomplete and supplies no performance acceptance. The completed matrix uses pinned two-AO-per-H2 algebra fixtures; it makes no def2-SVP, physical CBS limit, water timing or GPU claim.",
+    "An early CTest run overlapped relinking the CLI probe and failed two dry-run probe cases. Only the later post-build run is reported as final qualification."
+  ],
+  "reconstruction_verified": true,
+  "compiler_command_example": "/home/jzzeng/.local/bin/sccache /usr/bin/c++ -DGENERATIVEQC_BUILDING_LIBRARY=1 -DGENERATIVEQC_CUDA_PROVIDER_CUMETAL=0 -DGENERATIVEQC_HAS_CUDA=0 -DGENERATIVEQC_HAS_OPENBLAS=0 -DGENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS=0 -DGENERATIVEQC_OPENBLAS_HAS_LAPACKE=0 -DGENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS=0 -DGENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED=0 -DGENERATIVEQC_OPENBLAS_SCIPY_PREFIX=0 -Dgenerativeqc_EXPORTS -I/tmp/qc-2227-correlated-policy-20261028/src/xtb/native -I/tmp/qc-2227-correlated-policy-20261028/src/xtb/native/src -I/tmp/qc-2227-correlated-policy-20261028/build/generated -I/tmp/qc-2227-correlated-policy-20261028/include -I/tmp/qc-2227-correlated-policy-20261028/src -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -MD -MT CMakeFiles/generativeqc.dir/src/api/c_api_correlation_convergence.cpp.o -MF CMakeFiles/generativeqc.dir/src/api/c_api_correlation_convergence.cpp.o.d -o CMakeFiles/generativeqc.dir/src/api/c_api_correlation_convergence.cpp.o -c /tmp/qc-2227-correlated-policy-20261028/src/api/c_api_correlation_convergence.cpp",
+  "cache_observation_after_build": "Compile requests                   1136\nCompile requests executed          1136\nCache hits                            1\nCache hits (C/C++)                    1\nCache misses                       1135\nCache misses (C/C++)               1135\nCache hits rate                    0.09 %\nCache hits rate (C/C++)            0.09 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                       1135\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  2.884 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                            2 GiB\nMax cache size                       10 GiB\n",
+  "benchmark_sha256": "30d342bbc8efc7ab5c7a482324a0a992ecc337026be1966b94e80191acc69eb5",
+  "samples_sha256": "c6017aad1aac7b00a072c26ff4c6873f2cfa7598568a3e23a79b3641cbf67e25",
+  "cache_observation_before_build": "Compile requests                    281\nCompile requests executed           281\nCache hits                            0\nCache misses                        281\nCache misses (C/C++)                281\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                        281\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  2.830 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                            2 GiB\nMax cache size                       10 GiB\n",
+  "reference_inputs": {
+    "tests/reference_data/cbs/water-algebra-high.json": "556caf7573d706d89fd8070e7ee5c523d07b5b681574b36cd127be67705f5ce3",
+    "tests/reference_data/cbs/water-algebra-low.json": "5c93637d7cdd318cd881c7ad77b5aa313829e2a9696eebbe71c7fa7fc1c917a5",
+    "tests/reference_data/cbs/water-algebra.json": "54385bd42bd59ab336c5eb1210a2d0832924a8e3cbb66396734f8393be1dd874"
+  }
+}

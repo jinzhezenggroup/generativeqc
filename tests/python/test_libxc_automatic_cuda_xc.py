@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import numpy as np
 import pytest
 from generativeqc_compiler.common.provenance import file_hash
 from generativeqc_compiler.xc.automatic_cuda import emit_automatic_cuda_provider
+from generativeqc_compiler.xc.automatic_cuda_package import automatic_cuda_package
 from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
 from test_libxc_automatic_point_native import NAMES, _inputs, _oracle
 
@@ -111,6 +113,54 @@ def _unpack_tiles(
             .T
         )
     return result
+
+
+@pytest.mark.parametrize("name", ("LDA_C_VWN_4", "GGA_X_APBE", "MGGA_X_LTA"))
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("failure", (0, 1, 2, 3))
+def test_staged_force_point_layout_and_sticky_errors(
+    native_xc_driver: Path, name: str, spins: int, failure: int
+) -> None:
+    """Use independent point derivatives and genuinely uninitialized unused channels."""
+    inputs = _inputs(name, spins - 1)
+    if failure == 3:
+        inputs = inputs.copy()
+        inputs[0, 0] = -0.1
+    physical = np.stack(
+        [inputs[:, [0, 2, 3, 4, 8]], inputs[:, [1, 5, 6, 7, 9]]], axis=1
+    )
+    packed = physical.transpose(1, 2, 0).reshape(-1)
+    submitted = str(len(inputs)) + " " + " ".join(str(value) for value in packed)
+    completed = subprocess.run(
+        [
+            str(native_xc_driver),
+            "--automatic-stationary-json",
+            str(automatic_functional_code(name)),
+            str(spins),
+            str(failure if failure < 3 else 0),
+        ],
+        input=submitted,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    record = json.loads(completed.stdout)
+    if failure:
+        assert record["error"] != 0
+        return
+    assert record["error"] == 0
+    actual = np.asarray(record["values"]).reshape(-1, 11)
+    if spins == 1 and name.startswith("LDA_"):
+        unpolarized = _oracle(name, inputs, 0)
+        expected = np.zeros_like(actual)
+        expected[:, 0] = unpolarized[:, 0]
+        expected[:, 1:3] = unpolarized[:, 1, None]
+    else:
+        # GGA/tau RKS forces deliberately retain the physical P2 differential.
+        expected = _oracle(name, inputs, 1)
+    np.testing.assert_allclose(actual, expected, rtol=4e-11, atol=4e-11)
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -231,7 +281,26 @@ def test_automatic_cuda_fixed_density_energy_fock_and_replay(
     record = json.loads(completed.stdout)
     provider = emit_automatic_cuda_provider(name)
     assert record["expression_identity"] == provider.expression_identity
-    assert record["source_identity"] == provider.source_identity
+    # The package owns the compiled wrapper identity; the standalone provider
+    # still owns canonical science. Force entry pruning is an explicit package
+    # choice, so authenticate the actual descriptor against its four possible
+    # requested spin masks rather than assuming both force entries are present.
+    code = automatic_functional_code(name)
+    packaged_sources = set()
+    for mask in range(4):
+        profiles = tuple(
+            f"libxc_{code}_{spin}"
+            for bit, spin in enumerate(("rks", "uks"))
+            if mask & (1 << bit)
+        )
+        _, registrations = automatic_cuda_package((name,), profiles)
+        identity = re.search(
+            r'const CudaXcPointProgram program\{\s*"[^"]+", "[^"]+", "([0-9a-f]{64})"',
+            registrations[name],
+        )
+        assert identity is not None
+        packaged_sources.add(identity[1])
+    assert record["source_identity"] in packaged_sources
     assert record["point_count"] % record["tile_points"] != 0
     actual_potential = np.asarray(record["potential"])
     expected_energy, expected_potential = _independent_xc(name, record, displacement)
@@ -267,7 +336,7 @@ def test_automatic_cuda_fixed_density_energy_fock_and_replay(
                 "slurm_job_id": os.environ["SLURM_JOB_ID"],
                 "binary_sha256": file_hash(native_xc_driver),
                 "expression_identity": provider.expression_identity,
-                "source_identity": provider.source_identity,
+                "source_identity": record["source_identity"],
                 "device_bytes": record["device_bytes"],
                 "evaluations": record["evaluations"],
                 "potential_calls": record["potential_calls"],

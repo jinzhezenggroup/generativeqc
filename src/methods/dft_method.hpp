@@ -25,9 +25,9 @@ bool dft_cuda_stationary_model_available(const generativeqc_method_descriptor& d
  * process-lifetime linked descriptors; work belongs to the retained native
  * controller and is published only for a force at the current final token. */
 struct KsAutomaticArtifactDiagnostic {
-  std::array<const char*, 7> identities{};
-  std::array<const void*, 2> artifact_owners{};
-  std::array<std::uint64_t, 40> work{};
+  std::array<const char*, 11> identities{};
+  std::array<const void*, 4> artifact_owners{};
+  std::array<std::uint64_t, 43> work{};
 };
 generativeqc_status dft_automatic_artifact_diagnostic(const PreparedBatch& batch, std::size_t index,
                                                       KsAutomaticArtifactDiagnostic& output,

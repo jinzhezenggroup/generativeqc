@@ -362,10 +362,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
-  // Automatic graphs inherit the common s/p FP64 envelope only. Neither an
+  // Automatic graphs retain all-electron Direct s/p FP64 admission. Neither an
   // artifact nor a curated method's precision/large-angular receipt widens it.
   if (execution_plan.automatic_program &&
-      (maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      (!all_electron || options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+       maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
        options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused))
     return {};
   const bool application =
@@ -2179,8 +2180,16 @@ class KsPreparedState final : public KsSingleOwnerPort {
                         binding ? binding->source_identity : "",
                         completed ? "none"
                         : binding ? "force-not-executed-at-current-token"
-                                  : "force-artifact-or-context-unavailable"};
-    value.artifact_owners = {point, binding};
+                                  : "force-artifact-or-context-unavailable",
+                        binding ? binding->consumer_identity : "",
+                        binding ? binding->consumer_profile : "",
+                        point->polarized_executable_identity,
+                        point->restricted_executable_identity};
+    value.artifact_owners = {point, binding,
+                             completed && binding->point_program
+                                 ? reinterpret_cast<const void*>(point->launch_stationary)
+                                 : reinterpret_cast<const void*>(point->launch),
+                             binding ? reinterpret_cast<const void*>(binding->geometry) : nullptr};
     value.work[0] = completed;
     value.work[1] = point->domain_version;
     value.work[2] = execution_plan_.spin_channels;
@@ -2202,6 +2211,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
           grid.evaluation_points,    grid.evaluation_tiles,          grid.ao_jet_values,
           grid.projection_fma_pairs, grid.identical_spin_copy_bytes, grid.feature_passes};
       std::copy(grid_work.begin(), grid_work.end(), value.work.begin() + 34);
+      std::copy(resources.point_work.begin(), resources.point_work.end(), value.work.begin() + 40);
     }
     output = value;
     return GENERATIVEQC_STATUS_SUCCESS;

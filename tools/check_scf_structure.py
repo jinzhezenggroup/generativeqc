@@ -38,6 +38,10 @@ ALLOWED = {
 # Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
+    # Optional DIIS counters share CUDA-free size/enablement/readback metadata.
+    # This header has no solver, provider or mutable device-owner dependency.
+    "scf/cuda/arena.cpp": ("scf/diis_work.hpp",),
+    "scf/cuda/rhf_bucket_internal.hpp": ("scf/diis_work.hpp",),
     # Share scalar convergence limits without importing host solver ownership.
     "scf/cuda/scf_convergence_policy.cuh": ("scf/convergence_limits.hpp",),
     "scf/cuda/direct_md_j.hpp": ("scf/cuda/md_j_engine_contract.hpp",),

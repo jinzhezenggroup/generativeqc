@@ -9,8 +9,12 @@ from generativeqc_compiler.xc.automatic_cuda import (
     emit_automatic_cuda_descriptor,
     emit_automatic_cuda_provider,
 )
+from generativeqc_compiler.xc.automatic_cuda_package import automatic_cuda_package
 from generativeqc_compiler.xc.automatic_point import emit_automatic_point
-from generativeqc_compiler.xc.automatic_semilocal import automatic_registry_entries
+from generativeqc_compiler.xc.automatic_semilocal import (
+    AutomaticRegistryEntry,
+    automatic_registry_entries,
+)
 
 from tools import generate_libxc_semilocal_cpu_registry as cpu_registry
 from tools import generate_libxc_semilocal_cuda_registry as cuda_registry
@@ -63,15 +67,57 @@ def test_cpu_and_cuda_share_structural_registry_without_a_positive_whitelist() -
     assert cuda_registry.SHARD_COUNT == 32
 
 
+def _assert_shared_package_closure(
+    entries: tuple[AutomaticRegistryEntry, ...],
+) -> tuple[str, ...]:
+    """Every complete worker and scientific registration has one shard owner."""
+    workers, registrations = automatic_cuda_package(
+        tuple(entry.name for entry in entries)
+    )
+    shards = tuple(
+        cuda_registry.emit_shard(index, entries)
+        for index in range(cuda_registry.SHARD_COUNT)
+    )
+    assert set(registrations) == {entry.name for entry in entries}
+    assert tuple(workers) == tuple(sorted(workers))
+    for ordinal, worker in enumerate(workers.values()):
+        assert tuple(source.count(worker.source) for source in shards) == tuple(
+            int(index == ordinal % cuda_registry.SHARD_COUNT)
+            for index in range(cuda_registry.SHARD_COUNT)
+        )
+    for ordinal, entry in enumerate(entries):
+        owner = ordinal % cuda_registry.SHARD_COUNT
+        registration = registrations[entry.name]
+        provider = emit_automatic_cuda_provider(entry.name)
+        assert provider.expression_identity in registration
+        assert provider.point.expression_identity in registration
+        if provider.feature_terms == 1:
+            assert provider.restricted.expression_identity in registration
+        assert tuple(source.count(registration) for source in shards) == tuple(
+            int(index == owner) for index in range(cuda_registry.SHARD_COUNT)
+        )
+        dispatch = f"case 0x{entry.code:x}U:"
+        assert tuple(source.count(dispatch) for source in shards) == tuple(
+            int(index == owner) for index in range(cuda_registry.SHARD_COUNT)
+        )
+    assert sum(source.count("    case ") for source in shards) == len(entries)
+    for source in shards:
+        unowned = source
+        for worker in workers.values():
+            unowned = unowned.replace(worker.source, "")
+        for registration in registrations.values():
+            unowned = unowned.replace(registration, "")
+        assert "automatic_evaluate_points" not in unowned
+    return shards
+
+
 def test_aot_descriptor_binds_shared_science_and_exact_launcher_source() -> None:
     entry = next(
         item for item in automatic_registry_entries() if item.name == "GGA_X_APBE"
     )
     provider = emit_automatic_cuda_provider(entry.name)
     descriptor = emit_automatic_cuda_descriptor(provider)
-    shard = cuda_registry.emit_shard(0, (entry,))
-    assert provider.source in shard
-    assert descriptor in shard
+    shard = _assert_shared_package_closure((entry,))[0]
     assert provider.source_identity in descriptor
     assert provider.expression_identity in descriptor
     assert f"0x{entry.code:x}U" in descriptor
@@ -104,15 +150,12 @@ def test_explicit_package_preserves_registration_order_and_identity() -> None:
     assert cuda_registry.select_entries(names) == expected
     assert cuda_registry.select_entries(list(reversed(names))) == expected
     assert len(expected) == 3
+    shards = _assert_shared_package_closure(expected)
     for index, entry in enumerate(expected):
-        provider = emit_automatic_cuda_provider(entry.name)
-        shard = cuda_registry.emit_shard(index, expected)
-        assert provider.source in shard
-        assert emit_automatic_cuda_descriptor(provider) in shard
+        shard = shards[index]
         for absent in expected:
             if absent != entry:
                 assert f"case 0x{absent.code:x}U:" not in shard
-    assert "automatic_evaluate_points" not in cuda_registry.emit_shard(3, expected)
 
 
 @pytest.mark.parametrize("names", ([], ["UNKNOWN"], ["GGA_X_APBE", "MGGA_X_BR89"]))

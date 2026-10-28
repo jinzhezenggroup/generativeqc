@@ -181,8 +181,8 @@ void weighted_cases() {
     malformed.batch_scale.modes[0] = 99;
     rejected = false;
     try {
-      generativeqc::tensor::PreparedContractionSites<1> invalid(std::array{malformed}, stream.value,
-                                                                96ULL << 20);
+      generativeqc::tensor::PreparedContractionSites<1> invalid(
+          std::array<decltype(malformed), 1>{malformed}, stream.value, 96ULL << 20);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
