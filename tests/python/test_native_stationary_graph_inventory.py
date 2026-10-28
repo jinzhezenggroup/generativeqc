@@ -199,6 +199,20 @@ int main() {
     if (native_cuda_stationary_binding(plan, options, grid, true, 3, 96, 12) != expected) return 27;
     options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
     provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::Exact;
+    // The same matching binding cannot widen an automatic program's domain.
+    // Keep the curated ECP/DF positive controls above while exercising both spins.
+    plan.automatic_program = true;
+    options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    if (select() != expected) return 30;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12)) return 31;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    if (select()) return 32;
+    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+    provider.spec.coulomb.approximation = provider.spec.exchange.approximation = scf::FockApproximation::Exact;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) return 33;
+    if (select() != expected) return 34;
+    plan.automatic_program = false;
     const auto mixed = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2, true);
     const auto extra = 4 * (8 * 2 * 2 + 2 * 2) + dft::CudaGridStorage::provider_allowance;
     if (mixed.minimum_device_bytes != capacity.minimum_device_bytes ||

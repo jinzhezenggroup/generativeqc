@@ -362,10 +362,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
-  // Automatic graphs inherit the common s/p FP64 envelope only. Neither an
+  // Automatic graphs retain all-electron Direct s/p FP64 admission. Neither an
   // artifact nor a curated method's precision/large-angular receipt widens it.
   if (execution_plan.automatic_program &&
-      (maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      (!all_electron || options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+       maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
        options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused))
     return {};
   const bool application =
