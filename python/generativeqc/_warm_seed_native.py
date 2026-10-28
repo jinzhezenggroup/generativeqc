@@ -6,6 +6,7 @@ import ctypes as ct
 from typing import Any
 
 from . import _native
+from ._metadata_native import bind
 
 
 class Capacity(ct.Structure):
@@ -21,14 +22,18 @@ class Capacity(ct.Structure):
     ]
 
 
+_QUERY_ARGUMENTS = (ct.c_void_p, ct.POINTER(Capacity))
+_QUERY_TYPE = ct.CFUNCTYPE(ct.c_int, *_QUERY_ARGUMENTS)
+
+
 def seed_capacity(batch: Any) -> tuple[int, int] | None:
     """Return native bounds; only a missing protocol permits compatibility."""
-    query = getattr(
-        batch._library, "generativeqc_batch_query_warm_seed_capacity_v1", None
+    query = bind(
+        batch._library, "generativeqc_batch_query_warm_seed_capacity_v1", _QUERY_TYPE
     )
     if query is None:
         return None
-    query.argtypes = [ct.c_void_p, ct.POINTER(Capacity)]
+    query.argtypes = _QUERY_ARGUMENTS
     query.restype = ct.c_int
     output = Capacity(ct.sizeof(Capacity), _native.ABI_VERSION)
     _native.check(

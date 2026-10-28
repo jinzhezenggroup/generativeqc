@@ -30,6 +30,16 @@ candidate/audit scheduling, independent history ownership, checkpoint format or
 host reservation policy. Numeric density/coordinate bytes are not complete RSS,
 allocator, validation-scratch or opaque provider-memory accounting.
 
+## Metadata binding ownership
+
+The new capacity transport and the SCF-default transport share
+`_metadata_native.bind`. Retain at most eight typed library/symbol bindings,
+keyed by handle, symbol and signature, with locked retirement and strong library
+ownership. Binding directly avoids a new CDLL/function reference cycle per
+short-lived audit owner. The prior SCF-default decision remains applicable;
+this extraction shares transport lifetime and adds no scientific policy.
+Explicit query replacement and missing-symbol compatibility remain authoritative.
+
 ## Validation
 
 Compiled fault-injected owners forbid seed materialization and scientific work,
