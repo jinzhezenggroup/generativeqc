@@ -117,6 +117,14 @@ by the sum of absolute combined coefficients. This accounts for extrapolation
 amplification without assuming cancellation. For default DZ/TZ extrapolation
 with a DZ correction that sum is approximately `4.196866`.
 
+Python CBS planning queries `generativeqc_correlation_convergence_query_v1`,
+which uses the same stopping-policy owner as the native correlated solvers.
+Standalone `Calculator` validates CC ceilings using its selected library before
+creating a context. Native-free planning and older libraries missing this
+additive query retain explicit metadata compatibility; an admitted query failure
+is an error and does not retry Python arithmetic. This does not replace the
+separate native convergence-transport capability required for actual execution.
+
 The component allowance selects a scale `s`: the minimum of one and its
 energy/max-force/RMS ratios to `1e-5`, `1e-4`, `3e-5`, respectively (omit the RMS
 ratio when unspecified). The following ceilings apply:

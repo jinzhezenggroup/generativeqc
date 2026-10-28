@@ -145,6 +145,8 @@ struct ArenaLayout {
   std::size_t residual_history{};
   std::size_t diis_linear_system{};
   std::size_t diis_raw_gram{};
+  /** Optional per-history logical work, enabled by the progress journal. */
+  std::size_t diis_work{};
   std::size_t diis_coefficients{};
   std::size_t diis_count{};
   std::size_t diis_head{};

@@ -194,6 +194,36 @@ def test_native_execution_selector_rejects_unsupported_family(
         owner.clear_cache()
 
 
+def test_calculator_policy_stays_on_selected_library(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real CC preparation uses its selected native policy without Python arithmetic."""
+    from generativeqc import _correlation_convergence as policy
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "selected correlated policy escaped to Python/default discovery"
+        )
+
+    monkeypatch.setattr(policy, "_optional_library", forbidden)
+    monkeypatch.setattr(policy, "_compatibility_scale", forbidden)
+    monkeypatch.setattr(policy, "_compatibility_limits", forbidden)
+    owner = Calculator(
+        method="ccsd(t)",
+        basis="sto-3g",
+        _correlation_convergence_budget=BUDGET,
+        ccsd_residual_tolerance=1e-6,
+    )
+    try:
+        result = owner.singlepoint(ATOMS, properties=("energy", "forces"))
+        assert result.converged and np.isfinite(result.energy)
+        assert result.forces is not None and np.all(np.isfinite(result.forces))
+    finally:
+        owner.clear_cache()
+    with pytest.raises(ValueError, match="ccsd_residual_tolerance"):
+        Calculator(method="ccsd(t)", basis="sto-3g", ccsd_residual_tolerance=1e-6)
+
+
 def test_native_budget_descriptor_and_batch_boundary() -> None:
     """The legacy ABI stays strict and a batch cannot silently lose allowances."""
     owner = Calculator(
