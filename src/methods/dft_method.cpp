@@ -447,7 +447,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
 
 /** Reserve the counted native CUDA owners before constructing any fleet item.
  * The initial domain is strict all-electron s/p PBE/PBE0 Direct/DF, without
- * preliminary guesses or independent corrections. Unsupported configurations
+ * preliminary guesses. Individual D4 owners use the same allocator-owned
+ * capacity query as preparation; D3/gCP remain outside this promise. Unsupported configurations
  * and insufficient caps retain the incumbent admission path. This is a numeric
  * and declared-provider bound, not a CUDA-context/opaque-runtime measurement.
  */
@@ -462,10 +463,8 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
       execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
       execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
-      // The legacy D4 flag does not cover compiler-named D3/D4 programs.
-      // Their retained owners are absent from this electronic-only bound;
-      // keep ordinary capped allocation until a complete bound includes them.
-      execution_plan.d4_correction || execution_plan.dispersion.kind || options.preliminary_guess ||
+      (execution_plan.dispersion.kind && execution_plan.dispersion.kind != 3) ||
+      execution_plan.dispersion.composite_profile || options.preliminary_guess ||
       options.nonlocal_grid_spec || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
       options.incremental_direct_jk || !options.resolved_fock_build ||
@@ -484,6 +483,7 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
                           term->op != scf::FockOperator::FullRange || term->omega != 0))
       return {};
   scf::CudaKsDeviceFleetResources fleet;
+  std::size_t correction_bytes = 0;
   for (const auto& system : systems) {
     if (!system.ecp_terms.empty() ||
         std::any_of(system.atoms.begin(), system.atoms.end(),
@@ -493,6 +493,14 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       return {};
     const auto n = molecule::ao_count(system), cart = molecule::cartesian_ao_count(system);
     const auto atoms = system.atoms.size(), shells = system.shells.size();
+    if (execution_plan.d4_correction || execution_plan.dispersion.kind == 3) {
+      // Each KS item retains a separate D4 owner, including its tables and
+      // force workspace. Geometry replacement destroys it before rebuilding,
+      // so the full retained sum also protects later items and force replays.
+      const auto correction = dft::dispersion::d4_resource_usage(
+          backend, 1, atoms, atoms, std::numeric_limits<std::uint64_t>::max());
+      correction_bytes = runtime::size_add(correction_bytes, correction.device_bytes);
+    }
     std::size_t primitives = 0, angular = 0;
     for (const auto& shell : system.shells) {
       primitives = runtime::size_add(primitives, shell.primitives.size());
@@ -538,7 +546,8 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
                   0, true, stationary, stationary, fock.setup_bytes,
                   scf::cuda_ks_one_electron_capacity(cart, atoms, shells, primitives, true)});
   }
-  return runtime::DeviceCapacityReservation::try_create(ledger, fleet.inventory()[8]);
+  return runtime::DeviceCapacityReservation::try_create(
+      ledger, runtime::size_add(fleet.inventory()[8], correction_bytes));
 #else
   (void)systems;
   (void)execution_plan;

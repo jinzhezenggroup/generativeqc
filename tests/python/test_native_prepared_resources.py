@@ -114,6 +114,7 @@ def prepared_ledger(
     ledger.owner = "hf"
     ledger.device = 0
     ledger.limit = 64
+    ledger._native_complete_cap = False
     ledger._capacity_admission = {"declared_device_peak": 80}
     ledger.library = SimpleNamespace(
         generativeqc_device_resources_read=read,
@@ -190,7 +191,7 @@ def inventory_plan() -> SimpleNamespace:
         last_phase=1,
         accounting="capacity_bound",
     )
-    candidate = SimpleNamespace(name="selected", estimates=(estimate,))
+    candidate = SimpleNamespace(name="selected", estimates=(estimate,), decisions=())
     return SimpleNamespace(
         require_feasible=lambda: None,
         requests=(

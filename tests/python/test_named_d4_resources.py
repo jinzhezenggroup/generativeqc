@@ -144,6 +144,15 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
     monkeypatch.setattr(dispersion, "D4CorrectionBatch", forbidden)
     with calc.prepare_batch(systems(), resource_plan=plan) as batch:
         assert batch._native_dispersion is not None
+        if device == "cuda" and hasattr(
+            library, "generativeqc_resource_ks_d4_optional_cuda_v1"
+        ):
+            # The optional candidate must actually select a native complete
+            # promise. A larger declared budget alone is not an execution test.
+            observation = batch._resource_ledger.native_observation()["device_ledger"]
+            assert observation["admission"]["mode"] == "numeric-cap"
+            assert observation["admission"]["capacity_reserved_bytes"] > 0
+            assert observation["rejected_allocations"] == 0
         diagnostic = batch.dispersion_diagnostic
         inventory = resources_d4._ks_d4_inventory((2, 3), device, library)
         for key in resources_d4._KEYS:
@@ -254,6 +263,54 @@ def test_composite_gcp_remains_outside_global_inventory() -> None:
         )
 
 
+@pytest.mark.parametrize("optional_protocol", [True, False])
+def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
+    library: Any,
+    optional_protocol: bool,
+) -> None:
+    """Exercise a larger grid and provider owner, plus the old-image fallback."""
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires a finite Slurm CUDA allocation")
+    assert os.environ.get("SLURM_JOB_ID")
+    waters = [
+        (symbol, (xyz[0] + 8 * copy, xyz[1], xyz[2]))
+        for copy in range(4)
+        for symbol, xyz in systems()[1]
+    ]
+    fleet = [systems()[0], waters]
+    calc = calculator("cuda", energy_tolerance=1e-12, density_tolerance=1e-10)
+    with calc.prepare_batch(fleet) as baseline:
+        reference = baseline.execute(properties=("energy", "forces"), strict=True)
+
+    class WithoutOptionalProtocol:
+        def __getattr__(self, name: str) -> Any:
+            if name == "generativeqc_resource_ks_d4_optional_cuda_v1":
+                raise AttributeError(name)
+            return getattr(library, name)
+
+    if not optional_protocol:
+        calc._library = WithoutOptionalProtocol()
+    plan = calc.estimate_resources(
+        fleet, budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
+    )
+    with calc.prepare_batch(fleet, resource_plan=plan) as batch:
+        for _ in range(2):
+            result = batch.execute(properties=("energy", "forces"), strict=True)
+            for actual, expected in zip(result.items, reference.items, strict=True):
+                assert actual.energy == pytest.approx(expected.energy, abs=2e-8)
+                np.testing.assert_allclose(
+                    actual.forces, expected.forces, atol=2e-7, rtol=0
+                )
+        observation = batch._resource_ledger.native_observation()["device_ledger"]
+        assert observation["rejected_allocations"] == 0
+        assert observation["admission"]["mode"] == (
+            "numeric-cap" if optional_protocol else "selected-inventory"
+        )
+        assert (
+            observation["admission"]["combined_peak_bytes"] <= plan.peak_bytes["device"]
+        )
+
+
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_global_exact_and_below_capacity_gate(library: Any, device: str) -> None:
     from generativeqc.resources_planning import plan_resources
@@ -298,6 +355,11 @@ def test_global_exact_and_below_capacity_gate(library: Any, device: str) -> None
         assert (plan.status == "feasible") == (delta == 0)
         if delta == 0:
             with calc.prepare_batch(systems(), resource_plan=plan) as batch:
+                if device == "cuda":
+                    observation = batch._resource_ledger.native_observation()[
+                        "device_ledger"
+                    ]
+                    assert observation["admission"]["mode"] == "selected-inventory"
                 assert all(
                     item.succeeded
                     for item in batch.execute(properties=("energy",)).items

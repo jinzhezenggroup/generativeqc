@@ -115,3 +115,12 @@ latest-status claims only; the original failed campaigns remain available.
 files to make room for the current complete populations. Original Git blobs and
 decoded/encoded hashes preserve every value; historical reconstruction patches
 and recovery manifests retain their original paths in the recorded Git trees.
+
+## Earlier diagnostic storage
+
+The six intermediate hashing/planning/current-CUDA evidence files named above
+are retained byte-for-byte in the existing ancestor recorded by
+`pre-optional-history.json`. Restore them with the same offline restoration
+command, passing that manifest. Their failed timing/work gates remain failed.
+This migration keeps the unchanged aggregate evidence cap while retaining the
+next complete optional-XC qualification. No historical Git ancestry is rewritten.
