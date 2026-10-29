@@ -2,7 +2,7 @@
 
 The shared native metadata runtime executes eligible NUM03 decisions and final
 observable gates. This module retains typed policy/calibration presentation and
-explicit compatibility. It does not provide a geometry optimizer or replace
+explicit custom-policy and integer-domain behavior. It does not provide a geometry optimizer or replace
 PROG04 progressive execution. A consumer supplies the current geometry/force
 signal and executes the returned, already-defined SCF convergence level.
 
@@ -569,8 +569,9 @@ class ForceAwareScfPolicy:
         outside calibration, or in strict reproducible mode. Relaxation requires
         a sustained safe streak; the returned decision carries the next state.
         Native/load errors propagate without a Python numerical retry. Missing
-        protocols, customized typed inputs and unbounded Python counters retain
-        their explicit compatibility policy.
+        library/protocol support is an error for built-in bounded inputs.
+        Customized typed inputs and unbounded Python counters retain their
+        explicit Python policy.
         """
         _identity(method, "method")
         _identity(basis_id, "basis identity")
@@ -651,7 +652,7 @@ class ForceAwareScfPolicy:
         step_index: int,
         current_force_max: typing.Any | None,
     ) -> ScfEffortDecision:
-        """Compatibility for old native protocols and customized policy/predictor types."""
+        """Execute custom typed policies or counters outside the native integer domain."""
         allowed_energy = self.intermediate_energy_error
         if self.strict_reproducible or current_force_max is None:
             reason = (
@@ -828,7 +829,6 @@ class ForceAwareScfPolicy:
         _finite = float(energy)
         if not math.isfinite(_finite):
             raise ValueError("final energy must be finite")
-        native = None
         if (
             type(self) is ForceAwareScfPolicy
             and type(level) is ScfEffortLevel
@@ -838,7 +838,7 @@ class ForceAwareScfPolicy:
         ):
             from . import _scf_effort_native
 
-            native = _scf_effort_native.verify(
+            status, reasons = _scf_effort_native.verify(
                 self,
                 observed_model_id == target_model_id,
                 level == self.strict_level,
@@ -848,10 +848,8 @@ class ForceAwareScfPolicy:
                 density,
                 force,
             )
-        status, reasons = (
-            native
-            if native is not None
-            else self._verify_final_python(
+        else:
+            status, reasons = self._verify_final_python(
                 target_model_id,
                 observed_model_id,
                 level,
@@ -860,7 +858,6 @@ class ForceAwareScfPolicy:
                 density,
                 force,
             )
-        )
         return OptimizationFinalVerification(
             status,
             tuple(reasons),
@@ -882,7 +879,7 @@ class ForceAwareScfPolicy:
         density: float,
         force: float,
     ) -> tuple[str, tuple[str, ...]]:
-        """Compatibility for old native protocols and customized policy types."""
+        """Honor custom policy/level types and nonstandard identity comparisons."""
         reasons = []
         if observed_model_id != target_model_id:
             reasons.append("final model identity does not match target")

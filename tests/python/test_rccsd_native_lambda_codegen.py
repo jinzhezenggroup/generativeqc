@@ -9,13 +9,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc_compiler.tensor import execute
-
-from tools.generativeqc_cc.lambda_equations import (
+from generativeqc_compiler.cc.lambda_equations import (
     PARAMETERS,
     build_lambda_programs,
     build_parameter_vjp,
 )
+from generativeqc_compiler.tensor import execute
+
 from tools.generativeqc_cc.oracle import dense_feeds, random_case
 
 FIELDS = (

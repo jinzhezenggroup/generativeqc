@@ -14,7 +14,9 @@ from generativeqc_compiler.integral.benchmark import (
     emit_shell_class_benchmark_cuda,
 )
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
-from generativeqc_compiler.integral.production import load_production_kernel_selections
+from generativeqc_compiler.integral.production_profile import (
+    load_production_kernel_selections,
+)
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")

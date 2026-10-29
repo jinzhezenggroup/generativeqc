@@ -127,28 +127,27 @@
       "canonical_inputs": {
         "python/generativeqc_compiler/integral/expr.py": "3c5efc4ffcd4492573e4ac1b8cca7b043e31e34dcc654bfe0a64d37c07a3047a",
         "python/generativeqc_compiler/xc/libxc_bulk.py": "5a0655df9ba576dda55950cba56c4f401e20154eb4ea062bb434800d3015bbe9",
-        "python/generativeqc_compiler/xc/libxc_maple.py": "2e436ab6a0fa6dd0c4872d4b382c8403bcdc8c543247cc92009c093d337be7ed",
-        "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b"
+        "python/generativeqc_compiler/xc/libxc_c_metadata.py": "11dc15cd67a2c0b9e9ce23cf9ac1267aa0e9230df98b9359ad0c8f8aeff03299",
+        "python/generativeqc_compiler/xc/libxc_maple.py": "908008c9921ef40e60148d91e103941c5d88ca6c28c8c010b853f22bd03e2f9d"
       },
       "generator": "tools/import_libxc_bulk.py",
-      "generator_sha256": "3400d274c390eb08a47b3666c5c2630597d91b5c42d3d6944e1ed45a7cc6373f",
+      "generator_sha256": "ce09f01dbdfd633fde5944f13cf089af584a6757110ee29c65a5e034f41cd2af",
       "input_identity_sha256": "f386c54fdf599ab325eb1ed83209e3fc90f6dfcd37a2d0ef589663e57199136f",
       "inputs": [
         "libxc-7.0.0-fulltree"
       ],
       "outputs": {
         "docs/libxc_bulk_import.md": "71a155b1a7de6f21dab5841fa11623b7280f23de8bd545cebb47e304429a1630",
-        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "be752a9369ba5f6ee222cb4fcfb6e676e78f4f86c9876fdc783a64d223b012a3"
+        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "4b466a53fc3717b27fc70dd5ae1d02706b01d3d7353e5ccf3afb3708747dd676"
       }
     },
     "libxc-method-metadata": {
       "canonical_inputs": {
-        "python/generativeqc_compiler/xc/libxc_method_metadata.py": "1c0517435e8101d83f19cfb35cc094e42a242b52adf141249013382cec4ec096",
-        "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b",
-        "tools/libxc_method_metadata.py": "c1dfd47bfd94811c1eef3dd077eb0d758f7f3ae3a059cd0c40c32126798f2716"
+        "python/generativeqc_compiler/xc/libxc_c_metadata.py": "11dc15cd67a2c0b9e9ce23cf9ac1267aa0e9230df98b9359ad0c8f8aeff03299",
+        "python/generativeqc_compiler/xc/libxc_method_metadata.py": "1c0517435e8101d83f19cfb35cc094e42a242b52adf141249013382cec4ec096"
       },
       "generator": "tools/generate_libxc_methods.py",
-      "generator_sha256": "3badb001b165e09bf9d699b1a3213b1834dcb9ef0c45e9e5195c7ff8a3035492",
+      "generator_sha256": "96cfc85191d49673f50586861f47ef897f54736e6b6e6a0b0d2a40705d59a6fa",
       "input_identity_sha256": "aa1123524c7c173d270806ce1f0eebaf7131448d99d77c633a912d6c31bbaea2",
       "inputs": [
         "libxc-7.0.0",
@@ -175,7 +174,7 @@
         "python/generativeqc_compiler/xc/wb97mv_maple.py": "24499cc623efe00533263a47a06c8408313cea8247de3a1420db4161e1cb932d"
       },
       "generator": "python/generativeqc_compiler/xc/libxc_maple.py",
-      "generator_sha256": "2e436ab6a0fa6dd0c4872d4b382c8403bcdc8c543247cc92009c093d337be7ed",
+      "generator_sha256": "908008c9921ef40e60148d91e103941c5d88ca6c28c8c010b853f22bd03e2f9d",
       "input_identity_sha256": "aa1ecae5abc04565a754de95c16772f0e73b93eed2a695103ee3a6950313887b",
       "inputs": [
         "libxc-7.0.0"
@@ -401,8 +400,8 @@
     "libxc-7.0.0": {
       "admission": {
         "importer": "python/generativeqc_compiler/xc/libxc_maple.py",
-        "importer_sha256": "2e436ab6a0fa6dd0c4872d4b382c8403bcdc8c543247cc92009c093d337be7ed",
-        "semantics": "libxc-maple-graph/v11"
+        "importer_sha256": "908008c9921ef40e60148d91e103941c5d88ca6c28c8c010b853f22bd03e2f9d",
+        "semantics": "libxc-maple-graph/v12"
       },
       "collections": {
         "core": [

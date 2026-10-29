@@ -32,6 +32,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument(
+        "--source-cache",
+        type=Path,
+        help="Reuse target-independent scientific wrappers across AOT builds",
+    )
+    parser.add_argument(
         "--cmake-catalog",
         type=Path,
         help="write default/automatic selections during available-profile discovery",
@@ -158,7 +163,9 @@ def main() -> None:
                 )
                 if filename.endswith(".cpp")
                 else emit_native_stationary_profile_cuda(
-                    profile, staged_point=filename.startswith("native_shared_")
+                    profile,
+                    staged_point=filename.startswith("native_shared_"),
+                    source_cache=args.source_cache,
                 ),
             )
         return
@@ -167,7 +174,9 @@ def main() -> None:
     if args.output is None:
         parser.error("generation requires --output")
     source = (
-        emit_native_stationary_profile_cuda(args.profile)
+        emit_native_stationary_profile_cuda(
+            args.profile, source_cache=args.source_cache
+        )
         if args.profile
         else emit_native_stationary_registry_cpp(tuple(args.registry))
     )

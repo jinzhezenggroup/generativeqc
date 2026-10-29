@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-28
 
+The missing-library/protocol allowance is superseded by
+[the current-protocol requirement](../compatibility/2026-10-29-required-hf-policy-protocols.md).
+The independent policy and arbitrary-width integer behavior remain unchanged.
+
 ## Problem
 
 The bounded HF controller already delegates execution scheduling, final scalar

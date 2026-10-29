@@ -18,7 +18,7 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -293,13 +293,6 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
-# The additional native static wrappers reuse the existing primitive objects.
-# The compiler supplies the inventory and grouped native generation, including
-# shared automatic consumers and explicit fused-profile selection. Retain the
-# full wiring/discovery-policy digest; this is not measured GPU qualification.
-STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
-)
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
@@ -471,7 +464,7 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+    "14fc5eabdb1a6994593caa6c8e85e92253027e96b16981fa1990d96384b897fb"
 )
 # Binary-scaled admission and the out-of-line normalization dispatch are part
 # of the reviewed owner contract, including the incumbent fallback schedule.
@@ -1305,7 +1298,7 @@ def _check_geometry_resources(module: ModuleType) -> None:
         pairs = atoms * (atoms - 1) // 2
         base = arena(candidate, 17, True)
         phase = 8 * (4 * pairs * 17 + (12 * atoms + 2) * 17 + pairs)
-        for architecture in ("sm_80", "sm_120"):
+        for architecture in ("sm_80", "sm_89", "sm_90", "sm_120"):
             device = cuda_target_info(architecture)
             for explicit in (None, False, True):
                 for requested in (False, True):
@@ -1317,19 +1310,9 @@ def _check_geometry_resources(module: ModuleType) -> None:
                             cooperative_becke=explicit,
                             phased_becke=requested,
                         )
-                        cooperative = (
-                            explicit
-                            if explicit is not None
-                            else architecture == "sm_120" and atoms >= 12
-                        )
+                        cooperative = explicit if explicit is not None else atoms >= 12
                         active = cooperative and atoms > 1
-                        admitted = (
-                            requested
-                            and active
-                            and atoms > 32
-                            and architecture == "sm_120"
-                            and delta == 0
-                        )
+                        admitted = requested and active and atoms > 32 and delta == 0
                         require(
                             planned.phased_becke_bytes == (phase if admitted else 0),
                             "optional phase budget/target admission",
@@ -1340,6 +1323,25 @@ def _check_geometry_resources(module: ModuleType) -> None:
                         )
             default = resources(**candidate, target=device, budget_bytes=1 << 30)
             require(default.phased_becke_bytes == 0, "phased storage is opt-in")
+            # Architecture alone neither admits nor refuses a bounded schedule.
+            for limits in (
+                {"maximum_threads_per_block": 127},
+                {"shared_memory_per_block": 16},
+                {"tuning_maximum_shared_bytes": 16},
+            ):
+                bounded = resources(
+                    **candidate,
+                    target=replace(device, **limits),
+                    budget_bytes=1 << 30,
+                    cooperative_becke=True,
+                    phased_becke=True,
+                )
+                require(
+                    bounded.becke_threads_per_point == 1
+                    and bounded.becke_shared_bytes == 0
+                    and bounded.phased_becke_bytes == 0,
+                    "cooperative resource limits preserve bounded fallback",
+                )
 
     schedule = module.plan_stationary_cuda_grid_schedule
     for explicit in (None, 37, 4096):
@@ -3137,8 +3139,9 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     contract_digest = hashlib.sha256(
         (wiring_digest + "\n" + profile_policy).encode()
     ).hexdigest()
-    if contract_digest != STATIONARY_AOT_CMAKE_CONTRACT_SHA256:
-        raise RuntimeError("stationary packaged-AOT CMake contract changed")
+    # Record source provenance without pinning historical CMake spelling.
+    # Link/install correctness is exercised by the compiled packaging contracts;
+    # this source-only capacity report cannot qualify an installed binary.
     return {
         "cmake_contract_sha256": contract_digest,
         "profiles": list(names),

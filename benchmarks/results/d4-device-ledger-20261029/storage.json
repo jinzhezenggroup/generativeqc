@@ -1,0 +1,10 @@
+{
+  "scope": "Lossless JSON compression to retain the existing 80 MiB checkout evidence budget; no measurements or acceptance decisions changed.",
+  "original_path": "benchmarks/results/issue471-cpu-autotune.json",
+  "original_revision": "4fc8782cfa3b8ddbcaad8bbda4eed002e8aea5c8",
+  "original_bytes": 82716,
+  "original_sha256": "506f281d149ab3d00eb81183f6ffb29b235e459cdb56974eb808d5222601fc9f",
+  "stored_path": "benchmarks/results/issue471-cpu-autotune.json.xz",
+  "stored_bytes": 6432,
+  "stored_sha256": "3289072692604dadf8771740fc36819f9f88864b4d9aedce005501e3146fe716"
+}

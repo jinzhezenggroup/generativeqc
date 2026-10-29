@@ -17,17 +17,21 @@ from generativeqc_compiler.integral import (
     build_fused_shell_plan,
     build_integral_ir,
 )
-from generativeqc_compiler.integral.production import (
-    KernelSelection,
-    emit_multi_registry_header,
-    emit_multi_registry_source,
+from generativeqc_compiler.integral.production_emission import (
     emit_production_shard,
     emit_profile_shard,
-    emit_registry_header,
-    emit_registry_source,
+)
+from generativeqc_compiler.integral.production_profile import (
     load_production_kernel_selections,
     resolve_production_profile,
 )
+from generativeqc_compiler.integral.production_registry import (
+    emit_multi_registry_header,
+    emit_multi_registry_source,
+    emit_registry_header,
+    emit_registry_source,
+)
+from generativeqc_compiler.integral.production_selection import KernelSelection
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 

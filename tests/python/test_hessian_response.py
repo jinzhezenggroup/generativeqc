@@ -7,12 +7,10 @@ import pytest
 from generativeqc.stationary_nuclear import solve_stationary_nuclear_perturbations
 
 from tools.generativeqc_hessian import (
-    build_rhf_nuclear_rhs,
     build_stationary_nuclear_rhs,
     metric_density_response_mo,
     solve_stationary_nuclear_perturbation,
 )
-from tools.generativeqc_hessian.perturbation import solve_rhf_nuclear_perturbation
 from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 from tools.generativeqc_response import (
     CPKSResponseOperator,
@@ -39,7 +37,7 @@ def test_nuclear_rhs_includes_metric_fock_and_overlap_energy_gap_term() -> None:
     frozen = np.array([[0.0, 0.1, 0.2], [0.3, 0.0, 0.4], [0.5, 0.6, 0.0]])
     overlap = np.array([[0.0, 0.7, 0.8], [0.9, 0.0, 0.2], [0.3, 0.4, 0.0]])
     metric = np.array([[0.0, 0.01, 0.02], [0.03, 0.0, 0.04], [0.05, 0.06, 0.0]])
-    rhs = build_rhf_nuclear_rhs(frozen, overlap, metric, energies, nocc=1)
+    rhs = build_stationary_nuclear_rhs(frozen, overlap, metric, energies, nocc=1)
     expected = np.array(
         [[0.3 + 0.03 - 0.5 * (0.2 - 0.7) * 0.7, 0.5 + 0.05 - 0.5 * (0.8 - 0.7) * 0.8]]
     )
@@ -52,9 +50,11 @@ def test_nuclear_rhs_rejects_missing_or_malformed_metric_inputs() -> None:
     with pytest.raises(ValueError, match="finite"):
         bad = values.copy()
         bad[0, 0] = np.nan
-        build_rhf_nuclear_rhs(bad, values, values, np.arange(3.0), nocc=1)
+        build_stationary_nuclear_rhs(bad, values, values, np.arange(3.0), nocc=1)
     with pytest.raises(ValueError, match="shape"):
-        build_rhf_nuclear_rhs(values, values, np.zeros((2, 2)), np.arange(3.0), nocc=1)
+        build_stationary_nuclear_rhs(
+            values, values, np.zeros((2, 2)), np.arange(3.0), nocc=1
+        )
     with pytest.raises(ValueError, match="between"):
         metric_density_response_mo(values, nocc=0)
 
@@ -195,8 +195,6 @@ def test_stationary_nuclear_response_accepts_cpks_induced_fock() -> None:
         nocc=ks.nocc,
     )
     assert np.max(np.abs(response.rhs - without_xc)) > 1e-8
-    with pytest.raises(TypeError, match="RHF nuclear response"):
-        solve_rhf_nuclear_perturbation(operator, frozen, overlap)
 
 
 @pytest.mark.parametrize("method", ("rhf", "cpks"))

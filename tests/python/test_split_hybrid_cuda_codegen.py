@@ -3,8 +3,7 @@
 import re
 
 import pytest
-
-from tools.generate_xc_split_hybrid_cuda import emit_split_hybrid_device
+from generativeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device
 
 
 @pytest.mark.parametrize(

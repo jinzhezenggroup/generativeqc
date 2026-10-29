@@ -1,0 +1,23 @@
+{
+  "schema": "pbe0.public-candidate-files.v1",
+  "witnesses_sha256": "bf49758d4911233ff1f5f57d7c253d05f333f062a2e76a242417a5275ea408de",
+  "files": {
+    "evidence.tar.xz": {
+      "bytes": 374332,
+      "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
+    },
+    "README.md": {
+      "bytes": 4867,
+      "sha256": "3b9d37cec4409a3c1657e3b602b3a7e5af6bd2d99cf55bbb1e48309d3c809304"
+    },
+    "replay.py": {
+      "bytes": 14251,
+      "sha256": "eb47861c8e0fd7edb43b1a5049355015dfe82326ab31a5a05bfd47e22c737835"
+    },
+    "summary.json": {
+      "bytes": 11868,
+      "sha256": "8118ac77619519b47862d2691fb1fa027921e203646789e50898b9a48d129453"
+    }
+  },
+  "restore_sha256": "37d3129f9944d2322c5c2a38a62b4df522f45fd92afff0bdae9d56260ede287a"
+}

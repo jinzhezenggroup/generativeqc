@@ -129,7 +129,7 @@ def safe_path(name: str) -> str:
 
 
 class Evidence:
-    def __init__(self, document: dict):
+    def __init__(self, document: dict) -> None:
         require(
             document.get("schema") == "generativeqc.h100-direct-content-objects.v1",
             "unknown evidence schema",
@@ -261,7 +261,8 @@ def load(root: Path) -> Evidence:
     return Evidence(decode_xz((root / "terminal-evidence.json.xz").read_bytes()))
 
 
-def host_history(root: Path) -> dict:
+def host_history(root: Path, *, reference_root: Path | None = None) -> dict:
+    """Audit explicitly restored HOST history; never fetch missing payloads."""
     history = decode_xz((root / "host-history.json.xz").read_bytes())
     require(
         history["schema"] == "generativeqc.h100-direct-host-history.v1",
@@ -277,7 +278,16 @@ def host_history(root: Path) -> dict:
         require(name not in seen and type(row["bytes"]) is int, "HOST member inventory")
         seen.add(name)
         if name.endswith(".xz"):
-            raw = (root / name).read_bytes()
+            path = root / name
+            # This independent scientific fixture remains in the current tree.
+            # Archived HOST files have no fallback: missing/corrupt recovery fails.
+            if (
+                not path.exists()
+                and name == "independent-oracles.json.xz"
+                and reference_root is not None
+            ):
+                path = reference_root / name
+            raw = path.read_bytes()
         else:
             raw = objects[row["sha256"]]
             referenced.add(row["sha256"])
@@ -303,6 +313,24 @@ def host_history(root: Path) -> dict:
         V2_full_suite=failed["full_suite_qualification"],
         source_transport_sha256=failed["source_transport_sha256"],
         mode_scope="initial local policy; not a remote POSIX witness",
+    )
+
+
+def recorded_host_history(root: Path) -> dict:
+    """Describe the prior audit while distinguishing it from a current replay."""
+    record = json_bytes((root / "historical-host-summary.json").read_bytes())
+    require(
+        record["schema"] == "generativeqc.h100-direct-historical-host-summary.v1"
+        and record["current_history_audit"].startswith("NOT_RUN")
+        and record["snapshot_manifest"] == "historical-host-snapshot.json"
+        and sha((root / record["snapshot_manifest"]).read_bytes())
+        == record["snapshot_manifest_sha256"],
+        "historical HOST summary/recovery binding",
+    )
+    return dict(
+        verification="NOT_RUN_HISTORICAL_AUDIT",
+        recovery_manifest=record["snapshot_manifest"],
+        recorded_original_result=record["original_audit_result"],
     )
 
 
@@ -901,9 +929,9 @@ def report(root: Path) -> dict:
         "history coverage",
     )
     return dict(
-        schema="generativeqc.h100-direct-public-replay.v1",
+        schema="generativeqc.h100-direct-public-replay.v2",
         jobs=jobs,
-        host_history=host_history(root),
+        host_history=recorded_host_history(root),
         formal_EF_returns=sum(
             x["complete_EF_returns"] for x in jobs.values() if x["formal"]
         ),
@@ -934,9 +962,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--restore", choices=JOBS)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--host-history-root",
+        type=Path,
+        help="explicit stock-restored historical HOST directory; no numerical execution",
+    )
     args = parser.parse_args()
     root = Path(__file__).parent
-    if args.restore:
+    if args.host_history_root is not None:
+        if args.restore or args.output is not None:
+            parser.error(
+                "historical HOST audit cannot be combined with runtime restoration"
+            )
+        result = host_history(args.host_history_root, reference_root=root)
+    elif args.restore:
         parser.error(
             "--output is required for restoration"
         ) if args.output is None else None

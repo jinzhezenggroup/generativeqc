@@ -126,3 +126,17 @@ mean zero work or measured zero memory. H2 cannot prove nonzero(T); synthetic
 water is not physical water CBS-limit accuracy; C2's old24 displaced energies
 and independent full vector remain UNAVAILABLE. No cross-machine speedup,
 all-core acceptance, issue closure or parent completion is claimed.
+
+## Historical HOST packet storage
+
+The superseded v2/v3/v4 HOST producer packets and two HOST test streams now use
+`historical-host-snapshot.json`. It pins the already-merged commit
+`9a0c072e279b29413085b6fa588821267478a9d9`, every original path, byte length
+and SHA256. The standard offline recovery command in that manifest restores all
+five files without fetching, executing their operational scripts or running GPU
+work. Recovery has been checked against all original compressed bytes.
+
+All255 actual runtime originals, returned full vectors, independent references,
+qualified patch, prepared plans and executable numerical replay remain in this
+checkout. The two refusals, late first-Job admission failure and14 NOT_RUN slots
+retain their original outcomes. This storage change supplies no new acceptance.

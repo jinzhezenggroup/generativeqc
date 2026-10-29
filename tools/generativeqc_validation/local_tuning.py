@@ -16,12 +16,12 @@ from tempfile import TemporaryDirectory
 import numpy as np
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.evidence import canonical_hash, file_hash
-from generativeqc_compiler.integral.autotune import schedule_payload
 from generativeqc_compiler.integral.benchmark import _CUDA_PRELUDE
-from generativeqc_compiler.integral.cuda_lowering import emit_shell_class_fused_cuda
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.lowering.dispatch import emit_shell_class_fused_cuda
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+from generativeqc_compiler.integral.tuning.policy import schedule_payload
 
 from .f_shell import ROOT, cuobjdump_resources, runtime_header_hashes
 from .f_shell_cuda import emit_numerical_driver

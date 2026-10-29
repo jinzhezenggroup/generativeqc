@@ -26,6 +26,33 @@ Neither owner supplies corrected-(T) response or public method registration.
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
 from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
+from generativeqc_compiler.cc.lambda_equations import (
+    CCSDLambdaPrograms,
+    build_lambda_programs,
+    build_parameter_vjp,
+)
+from generativeqc_compiler.cc.triples import (
+    build_triples_program,
+    triples_energy,
+    triples_energy_tensorir,
+    triples_fullsum,
+)
+from generativeqc_compiler.cc.triples_response import (
+    TRIPLES_RESPONSE_INPUTS,
+    accumulate_tile_triples_vjp,
+    build_full_triples_vjp,
+    build_tile_triples_vjp,
+    full_triples_vjp,
+    tile_triples_vjp,
+)
+from generativeqc_compiler.cc.triples_tiles import (
+    TileSpec,
+    TriplesTileEnumerator,
+    build_tile_triples_program,
+    tile_triples_energy,
+    tile_triples_energy_masked,
+    tile_triples_energy_tensorir,
+)
 
 from .api import (
     BatchItemResult,
@@ -80,11 +107,6 @@ from .df_triples import (
 )
 from .evaluate import evaluate
 from .lambda_cuda import PreparedCUDALambda
-from .lambda_equations import (
-    CCSDLambdaPrograms,
-    build_lambda_programs,
-    build_parameter_vjp,
-)
 from .lambda_response import BoundCCSDResponse, CCSDParameterWeight
 from .lambda_solver import BoundCCSDLambda, CCSDLambdaResult, LambdaOptions
 from .native_tensor_cuda import CudaCCTensorExecutor
@@ -97,12 +119,6 @@ from .state_transport import (
     StateTransportPolicy,
     StateTransportRequest,
     TransportCompatibility,
-)
-from .triples import (
-    build_triples_program,
-    triples_energy,
-    triples_energy_tensorir,
-    triples_fullsum,
 )
 from .triples_complete_gradient import (
     BoundCCSDTGradient,
@@ -122,26 +138,10 @@ from .triples_lambda_response import (
     solve_corrected_lambda,
 )
 from .triples_orbital_response import BoundCCSDTOrbitalResponse
-from .triples_response import (
-    TRIPLES_RESPONSE_INPUTS,
-    accumulate_tile_triples_vjp,
-    build_full_triples_vjp,
-    build_tile_triples_vjp,
-    full_triples_vjp,
-    tile_triples_vjp,
-)
 from .triples_response_cuda import (
     CudaTriplesResponseResult,
     CudaTriplesResponseTiles,
     solve_corrected_lambda_cuda,
-)
-from .triples_tiles import (
-    TileSpec,
-    TriplesTileEnumerator,
-    build_tile_triples_program,
-    tile_triples_energy,
-    tile_triples_energy_masked,
-    tile_triples_energy_tensorir,
 )
 from .uccsd_gradient import (
     PreparedUCCSDGradient,
