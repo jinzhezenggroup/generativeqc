@@ -201,3 +201,15 @@ exactly match the original baseline. Native/installed independent-reference
 checks, memcheck, 150 GPU tests and before/after integrity of 27,418 inputs pass.
 Completed scheduler/srun receipts retain the failed status. Every population,
 profile and exact runner is retained in `container-copy-cuda-*`.
+
+The complete `1e214273b` populations and receipt are recoverable byte-for-byte
+from `container-copy-history.json` (storage ancestor `a677a78c0`). Restoration
+was verified before migration. Default remains passing and budget remains failed;
+this retention change does not alter either acceptance result.
+
+`resolved-options-scalar-{samples,receipts}.json.xz` records the scoped follow-up
+at production `a677a78c0`, Slurm 14919. All 256 scalar-complete invocations in
+eight ABBA/BAAB groups pass at maximum ratio 1.0475317675582805, E/F errors
+<=8.89e-16 / 6.67e-16. All 112 relevant tests pass and both integrity checks and
+completed scheduler receipts succeed. This scalar-only diagnostic is not a
+replacement for complete fleet qualification.

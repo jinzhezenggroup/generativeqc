@@ -159,7 +159,7 @@ cases still exceed 1.05, with maximum 1.0586252. CUDA metadata was resolving an
 already resolved immutable KS option again during each scalar preparation.
 `resolve_ks_options` now records its exact selector as non-scientific provenance
 on the frozen result. CUDA planning may reuse that same validated value; the
-field is excluded from comparison/serialization, cannot be set in construction,
+field is excluded from comparison and `to_payload()`, cannot be set in construction,
 and resets on `dataclasses.replace`. Changed options, different selectors and
 profile-derived replacements retain full resolution. Shape, precision, native
 provider/capacity and execute-time model/provenance checks are unchanged. CPU
