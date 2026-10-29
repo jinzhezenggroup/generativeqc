@@ -152,3 +152,15 @@ suitable implementation for this canonical data-only tree. Copy dict/list/tuple
 containers directly, sharing only immutable JSON scalars; retain tuple types and
 the existing mutation, changed-plan and authoritative-capacity tests. JSON
 round-tripping was rejected because it changes tuple containers to lists.
+
+Full eight-group qualification at `1e214273b` (Slurm 14918) now passes every batch
+phase, preserving exact GPU work/storage and 150 GPU test gates. Three scalar
+cases still exceed 1.05, with maximum 1.0586252. CUDA metadata was resolving an
+already resolved immutable KS option again during each scalar preparation.
+`resolve_ks_options` now records its exact selector as non-scientific provenance
+on the frozen result. CUDA planning may reuse that same validated value; the
+field is excluded from comparison/serialization, cannot be set in construction,
+and resets on `dataclasses.replace`. Changed options, different selectors and
+profile-derived replacements retain full resolution. Shape, precision, native
+provider/capacity and execute-time model/provenance checks are unchanged. CPU
+planning keeps its previous resolution path.

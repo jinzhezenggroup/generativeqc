@@ -190,3 +190,14 @@ The diagnostic-cache and catalog-carry populations/receipts are retained in
 verified ancestor `1e214273b` through `intermediate-replay-history.json`. Their
 failed gates remain failed. Every restored byte was verified before migrating
 these four intermediate files to make room for complete eight-group results.
+
+## Complete replay/diagnostic qualification
+
+Production `1e214273b`, Slurm 14918, completes both eight-group campaigns with
+1,792 calls each. Default timing passes at 1.0130209401642423. Budget timing
+**fails** at 1.0586252112560126, confined to three scalar-complete cases; all
+batch cold, warm and moved phases pass. Both actual work/storage profiles
+exactly match the original baseline. Native/installed independent-reference
+checks, memcheck, 150 GPU tests and before/after integrity of 27,418 inputs pass.
+Completed scheduler/srun receipts retain the failed status. Every population,
+profile and exact runner is retained in `container-copy-cuda-*`.
