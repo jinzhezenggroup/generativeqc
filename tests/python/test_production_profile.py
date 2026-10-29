@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
+import pytest
 from generativeqc_compiler.integral import production_profile
 
 
@@ -36,3 +38,27 @@ def test_resolved_profile_is_owned_by_profile_module() -> None:
     assert production_profile.ResolvedProductionProfile.__module__.endswith(
         ".production_profile"
     )
+
+
+@pytest.mark.parametrize("invalid", (0, 1, "false", None))
+def test_optional_fock_variants_requires_an_explicit_boolean(
+    tmp_path: Path, invalid: object
+) -> None:
+    """Reject ambiguous build policy instead of silently omitting kernels."""
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "architectures": {
+                    "portable_cuda": {
+                        "kind": "portable",
+                        "kernels": [],
+                        "optional_fock_variants": invalid,
+                    }
+                },
+            }
+        )
+    )
+    with pytest.raises(TypeError, match="optional_fock_variants must be a boolean"):
+        production_profile.resolve_production_profile(manifest, "sm_80")
