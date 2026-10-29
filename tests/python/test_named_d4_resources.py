@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes as ct
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -348,24 +349,13 @@ def test_complete_budgeted_endpoint_against_independent_pyscf_and_d4(
     from pyscf.data.elements import ELEMENTS
 
     pyscf.lib.num_threads(1)
-    # Independent dftd4 4.2.0 asymmetric_pbe fixture, also covered by the
-    # pinned EEQ oracle manifest and native D4 production gates.
-    case = {
-        "numbers": [6, 8, 7, 1],
-        "positions": [
-            [0.0, 0.0, 0.0],
-            [2.2487740883046663, 0.24566439620135014, -0.07558904498503081],
-            [-0.8881712785741119, 2.475541223259759, 0.41573974741766945],
-            [0.5858150986339887, -1.1905274585142351, 1.6818562509169355],
-        ],
-        "energy": -0.0014151210214956252,
-        "gradient": [
-            [-5.283171663150866e-06, -8.386235155361897e-06, -2.9748087148538252e-06],
-            [-1.211398469656972e-05, -2.375381237206978e-06, 1.2806873212180398e-05],
-            [4.118585055275185e-06, 6.479960153031064e-06, -1.3029967085337256e-06],
-            [1.3278571304445404e-05, 4.2816562395378085e-06, -8.529067788792845e-06],
-        ],
-    }
+    # The electronic reference uses a stable water geometry; the standalone
+    # CNOH correction fixture remains covered by the existing D4 oracle tests.
+    case = json.loads(
+        (
+            Path(__file__).parents[1] / "data/d4/pbe_water_resource_reference.json"
+        ).read_text()
+    )
     atoms = tuple(
         Atom(z, tuple(x))
         for z, x in zip(case["numbers"], case["positions"], strict=True)
