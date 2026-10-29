@@ -278,7 +278,9 @@ def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
         for symbol, xyz in systems()[1]
     ]
     fleet = [systems()[0], waters]
-    calc = calculator("cuda", energy_tolerance=1e-12, density_tolerance=1e-10)
+    calc = calculator(
+        "cuda", basis="def2-svp", energy_tolerance=1e-12, density_tolerance=1e-10
+    )
     with calc.prepare_batch(fleet) as baseline:
         reference = baseline.execute(properties=("energy", "forces"), strict=True)
 
@@ -290,8 +292,10 @@ def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
 
     if not optional_protocol:
         calc._library = WithoutOptionalProtocol()
+    # Four d-shell waters have a declared host setup bound above 2 GiB.
+    # Keep the original endpoint campaign's smaller-fixture caps unchanged.
     plan = calc.estimate_resources(
-        fleet, budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
+        fleet, budget=ResourceBudget(host_bytes=4 << 30, device_bytes=2 << 30)
     )
     with calc.prepare_batch(fleet, resource_plan=plan) as batch:
         for _ in range(2):
@@ -306,6 +310,9 @@ def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
         assert observation["admission"]["mode"] == (
             "numeric-cap" if optional_protocol else "selected-inventory"
         )
+        assert (
+            observation["admission"]["capacity_reserved_bytes"] > 0
+        ) == optional_protocol
         assert (
             observation["admission"]["combined_peak_bytes"] <= plan.peak_bytes["device"]
         )

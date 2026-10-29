@@ -417,6 +417,11 @@
       "owner": "h100-pbe0-direct-df-20261029 / xshengrui",
       "reason": "Exact compact source-bound H100 PBE0 Direct/DF matrix: all620 public raw members, full144 E+F vectors/binary64, independent gates, semantic work, failures and negative performance. Standalone offline replay verifies every reconstructed public hash; redacted originals retain separate explicit witnesses. No cap or change-review exemption.",
       "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
+    },
+    "benchmarks/results/d4-capacity-20261029/sp-only-cuda-qualification.json.xz": {
+      "owner": "2227 D4 capacity qualification",
+      "reason": "Complete source-bound rejected s/p-only optional admission: every default and budget sample, actual GPU profiles, numerical/test receipts and replay sources. Preserves the failed 3.47645 ratio without relaxing aggregate or incoming-byte caps.",
+      "sha256": "7a78227480729550753db08c33443f3f0d6624784f98f003225cc223bb21abc3"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

@@ -124,3 +124,16 @@ are retained byte-for-byte in the existing ancestor recorded by
 command, passing that manifest. Their failed timing/work gates remain failed.
 This migration keeps the unchanged aggregate evidence cap while retaining the
 next complete optional-XC qualification. No historical Git ancestry is rewritten.
+
+## Rejected s/p-only optional-XC admission
+
+`sp-only-cuda-qualification.json.xz` retains both full 1,792-call campaigns
+and profiles for source `9d0df5629`, finite Slurm job 14903. Default timing
+passes at 1.01182439, but budget timing fails at 3.47645361: the original
+def2-SVP water member contains d shells outside that first promise domain.
+Actual kernels are 172,628 versus 216,916; the budget regression is unresolved
+at that source. Numerical/lifecycle checks and 138 Python GPU tests pass.
+The srun exit is 1 and the final input-integrity check completes; the completed
+scheduler record expired before retrieval, and accounting storage is disabled.
+The running scheduler receipt and srun failure are retained without inventing
+a completed receipt.

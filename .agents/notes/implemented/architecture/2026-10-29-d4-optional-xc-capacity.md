@@ -52,6 +52,24 @@ Full numerical and performance receipts belong in
 and binary identities. Performance promotion requires both original eight-group
 endpoint campaigns and actual work/storage profiles.
 
+The first complete run at `9d0df5629` (Slurm 14903) passes the default campaign
+at 1.01182439 but fails the budget campaign at 3.47645361. The s/p-only promise
+does not cover the original matrix's d-shell water/def2-SVP member, so whole
+fleets retain selected-inventory fallback. Preserve every sample and both
+profiles in `sp-only-cuda-qualification.json.xz`. The srun exit is 1; the completed
+scheduler record expired before retrieval and accounting storage is disabled.
+The running record and failure output remain evidence, without an invented
+completed scheduler receipt.
+
+Individual Direct D4 promises now admit the existing qualified s/p/d force
+context using the same allocator-owned bounds. Uncorrected and DF promises keep
+their original angular domain. The larger executable regression uses four
+def2-SVP waters, so a basis-name assumption cannot silently miss this domain
+again. Its initial 2 GiB host cap correctly refused the declared 3.244 GB host
+setup bound; this larger test uses 4 GiB host and 2 GiB device capacity. The
+original timing matrix keeps both of its 2 GiB caps and its unchanged 1.05 gate.
+This extension still needs the full qualification matrix.
+
 ## References
 
 - #2227 R2/R6; #2872; #2875.

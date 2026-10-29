@@ -449,7 +449,7 @@ native failures propagate. Missing inventory support leaves ordinary D4 availabl
 but rejects global D4 plans. Composite D4/gCP and electronic domains already
 excluded by KS planning remain unsupported.
 
-For bounded strict-FP64 all-electron s/p PBE/PBE0-D4 CUDA contexts, the additive
+For bounded strict-FP64 all-electron s/p/d Direct PBE/PBE0-D4 CUDA contexts, the additive
 `generativeqc_resource_ks_d4_optional_cuda_v1` query supplies an optional XC
 headroom candidate. It reserves mapped AO arenas, spatial copies and the native
 default point-panel ceiling concurrently. This is a conservative declared

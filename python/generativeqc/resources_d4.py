@@ -73,7 +73,7 @@ def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) ->
         return request
     items = json.loads(request.identity.topology)["items"]
     if any(
-        item["orbital"]["maximum_angular"] > 1 or item["orbital"].get("ecp_terms")
+        item["orbital"]["maximum_angular"] > 2 or item["orbital"].get("ecp_terms")
         for item in items
     ):
         return request

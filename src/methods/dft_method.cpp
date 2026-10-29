@@ -448,7 +448,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
 /** Reserve the counted native CUDA owners before constructing any fleet item.
  * The initial domain is strict all-electron s/p PBE/PBE0 Direct/DF, without
  * preliminary guesses. Individual D4 owners use the same allocator-owned
- * capacity query as preparation; D3/gCP remain outside this promise. Unsupported configurations
+ * capacity query as preparation, including qualified Direct d-shell contexts;
+ * D3/gCP remain outside this promise. Unsupported configurations
  * and insufficient caps retain the incumbent admission path. This is a numeric
  * and declared-provider bound, not a CUDA-context/opaque-runtime measurement.
  */
@@ -482,6 +483,11 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
     if (term->present && (term->approximation != approximation ||
                           term->op != scf::FockOperator::FullRange || term->omega != 0))
       return {};
+  const unsigned capacity_angular =
+      approximation == scf::FockApproximation::Exact &&
+              (execution_plan.d4_correction || execution_plan.dispersion.kind == 3)
+          ? 2U
+          : 1U;
   scf::CudaKsDeviceFleetResources fleet;
   std::size_t correction_bytes = 0;
   for (const auto& system : systems) {
@@ -489,7 +495,9 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
         std::any_of(system.atoms.begin(), system.atoms.end(),
                     [](const auto& atom) { return atom.ecp_core != 0; }) ||
         std::any_of(system.shells.begin(), system.shells.end(),
-                    [](const auto& shell) { return shell.angular_momentum > 1; }))
+                    [capacity_angular](const auto& shell) {
+                      return shell.angular_momentum > capacity_angular;
+                    }))
       return {};
     const auto n = molecule::ao_count(system), cart = molecule::cartesian_ao_count(system);
     const auto atoms = system.atoms.size(), shells = system.shells.size();
