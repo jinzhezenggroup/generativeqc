@@ -6,21 +6,22 @@ CUDA execution; molecular accuracy remains covered by the public native tests.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("host C++ compiler and ccache required")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
+def publication(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text(encoding="utf-8")
     start = source.index("      auto diagnostic = state.diagnostic;")
     stop = source.index("      return std::move(state.result);", start)
@@ -54,6 +55,7 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <optional>
 #include <memory>
 #include <stdexcept>
@@ -113,6 +115,13 @@ struct RawSource : integrals::ElectronInteractionSource {
 }
 namespace scf {
 struct CudaRhfBucketPlan {};
+// This publication fixture owns the legacy path. Any opt-in owner use must
+// fail rather than silently replacing its native retention implementation.
+struct PendingReferenceProviderOwner {
+  void register_cache_slot(CudaRhfBucketPlan**,CudaRhfBucketPlan** = nullptr) { std::abort(); }
+  CudaRhfBucketPlan* bucket() const { std::abort(); }
+  bool closed() const { std::abort(); }
+};
 std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
@@ -224,24 +233,17 @@ int main(int argc,char** argv) {
 """,
         encoding="utf-8",
     )
-    compiled = subprocess.run(
-        [
-            cache,
-            compiler,
+    native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
+        ),
+        compile_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stderr
     return executable
 
 

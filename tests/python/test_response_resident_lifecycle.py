@@ -138,8 +138,7 @@ def test_solver_releases_temporaries_even_when_a_profiler_retains_them(
     owner_type: typing.Any,
 ) -> None:
     import numpy as np
-
-    from tools.generativeqc_response import krylov
+    from generativeqc import response_solver as krylov
 
     owner, _ = _owner(owner_type)
     owner.dimension = 1
@@ -176,8 +175,9 @@ def test_empty_request_validates_real_owner_protocol_without_native_work(
     owner_type: typing.Any,
 ) -> None:
     import numpy as np
+    from generativeqc import response_solver as krylov
 
-    from tools.generativeqc_response import ResponseCompatibilityError, krylov
+    from tools.generativeqc_response import ResponseCompatibilityError
 
     owner, _ = _owner(owner_type)
     owner.dimension = 1

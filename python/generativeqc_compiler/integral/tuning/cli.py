@@ -165,3 +165,7 @@ def main() -> None:
         arguments.output.write_text(output, encoding="utf-8")
     if len(winners) != len(set(arguments.shell_class)):
         raise SystemExit(4)
+
+
+if __name__ == "__main__":
+    main()

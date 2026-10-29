@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "files": [
+    {
+      "path": "benchmarks/results/d4-device-ledger-20261029/cuda-samples.json.xz",
+      "bytes": 85424,
+      "sha256": "86d1b4449649a292a51103d2b0a778974703dd150dbe896e1bd159c4bb710e2a",
+      "checkout": "git-history"
+    }
+  ],
+  "source_revision": "595cbcaf83c8dad80e64afedd9c9a14a06fa08e3",
+  "moved_files": 1,
+  "moved_bytes": 85424,
+  "history_rewritten": false,
+  "retention": "Existing ancestor Git objects only; preserve Git history for byte-exact offline recovery.",
+  "file_count": 1,
+  "total_bytes": 85424
+}

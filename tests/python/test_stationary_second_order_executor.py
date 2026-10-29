@@ -14,7 +14,6 @@ from generativeqc.second_order import (
     StationaryPerturbationProvider,
     StationaryResponseDriver,
     StationarySecondOrderExecutor,
-    StationarySecondOrderResult,
 )
 from generativeqc_compiler.method import (
     StationaryHVPPlan,
@@ -79,20 +78,6 @@ assert not attempts, attempts
         timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-
-
-def test_tools_compatibility_shim_reexports_production_owner() -> None:
-    """Repository tools must not retain a second second-order implementation."""
-    from tools.generativeqc_hessian import stationary_executor as compatibility
-
-    assert compatibility.StationaryHVPContext is StationaryHVPContext
-    assert compatibility.StationaryHVPContributor is StationaryHVPContributor
-    assert (
-        compatibility.StationaryPerturbationProvider is StationaryPerturbationProvider
-    )
-    assert compatibility.StationaryResponseDriver is StationaryResponseDriver
-    assert compatibility.StationarySecondOrderExecutor is StationarySecondOrderExecutor
-    assert compatibility.StationarySecondOrderResult is StationarySecondOrderResult
 
 
 def _pbe_plan() -> StationaryHVPPlan:

@@ -12,7 +12,7 @@ import json
 import os
 import re
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import lru_cache
 from itertools import permutations
 from pathlib import Path
@@ -1293,6 +1293,7 @@ def emit_stationary_profile_component_aot_wrapper_cuda(
     profile: str,
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
 ) -> str:
     """Emit a profile wrapper linked against the shared packaged s/p/d shards."""
 
@@ -1305,6 +1306,7 @@ def emit_stationary_profile_component_aot_wrapper_cuda(
         functional=selected.functional,
         plan=selected.plan,
         iterations=iterations,
+        source_cache=source_cache,
         primitive_shards=QUALIFIED_SPD_AOT_SHARDS,
         primitive_shard_width=QUALIFIED_SPD_AOT_SHARD_WIDTH,
     )
@@ -1314,6 +1316,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
     profile: str,
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
     include_reduction: bool = True,
     include_external: bool = False,
 ) -> str:
@@ -1331,6 +1334,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
         functional=selected.functional,
         plan=selected.plan,
         iterations=iterations,
+        source_cache=source_cache,
         include_reduction=include_reduction,
         include_external=include_external,
     )
@@ -1363,6 +1367,7 @@ def emit_stationary_component_aot_wrapper_cuda(
     *,
     spin: str = "unpolarized",
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    source_cache: Path | None = None,
 ) -> str:
     """Emit the small wrapper linked against the fixed packaged s/p/d primitive shards."""
     if type(iterations) is not int or iterations != QUALIFIED_PARTITION_ITERATIONS:
@@ -1371,7 +1376,7 @@ def emit_stationary_component_aot_wrapper_cuda(
         )
     profile = _legacy_profile(functional, spin)
     return emit_stationary_profile_component_aot_wrapper_cuda(
-        _profile_stem(profile), iterations=iterations
+        _profile_stem(profile), iterations=iterations, source_cache=source_cache
     )
 
 
@@ -1778,9 +1783,25 @@ def emit_stationary_wrapper_cuda(
     primitive_shard_width: int | None = None,
     include_reduction: bool = True,
     staged_point: bool = False,
+    source_cache: Path | None = None,
     include_external: bool = False,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
+
+    if source_cache is not None:
+        return cached_stationary_wrapper_cuda(
+            cache=source_cache,
+            functional=functional,
+            pbe=pbe,
+            plan=plan,
+            iterations=iterations,
+            declare_primitive=declare_primitive,
+            primitive_shards=primitive_shards,
+            primitive_shard_width=primitive_shard_width,
+            include_reduction=include_reduction,
+            staged_point=staged_point,
+            include_external=include_external,
+        )[0]
 
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError("stationary CUDA requires StationaryGradientPlan")
@@ -1859,6 +1880,71 @@ def emit_stationary_cuda(
     )
 
 
+def cached_stationary_wrapper_cuda(
+    *,
+    cache: Path | None,
+    plan: StationaryGradientPlan,
+    functional: typing.Any = None,
+    pbe: typing.Any = None,
+    iterations: int = 3,
+    declare_primitive: bool = True,
+    primitive_shards: int | None = None,
+    primitive_shard_width: int | None = None,
+    include_reduction: bool = True,
+    staged_point: bool = False,
+    include_external: bool = False,
+) -> tuple[str, dict[str, typing.Any]]:
+    """Reuse target-independent lowering across AOT builds and runtime JIT.
+
+    Every emitter selection, exact scientific plan and dependency is part of
+    the recipe. GPU targets and toolchains belong exclusively to downstream
+    binary identities: this emitter never reads either of them. A source hit
+    cannot admit a binary for a different target or waive its integrity checks.
+    """
+    started = perf_counter()
+    if not isinstance(plan, StationaryGradientPlan):
+        raise TypeError("stationary CUDA requires StationaryGradientPlan")
+    selection: dict[str, typing.Any] = {
+        "plan": plan,
+        "functional": functional,
+        "pbe": pbe,
+        "iterations": iterations,
+        "declare_primitive": declare_primitive,
+        "primitive_shards": primitive_shards,
+        "primitive_shard_width": primitive_shard_width,
+        "include_reduction": include_reduction,
+        "staged_point": staged_point,
+        # Composite range/VV10 sources change layout and reduction semantics.
+        # A semilocal-only cache entry cannot satisfy the complete endpoint.
+        "include_external": include_external,
+    }
+    recipe = {
+        "dependencies": source_hashes(
+            "common",
+            "integral",
+            "tensor",
+            "xc",
+            "dft",
+            "method",
+            assets=STATIONARY_AOT_ASSETS,
+        ),
+        "precision": "FP64/strict/no-fmad",
+        "product": "stationary-wrapper-cuda.v2",
+        **selection,
+        "plan": plan.to_payload(),
+        "method_manifest": plan.method.to_payload(),
+    }
+    recipe_seconds = perf_counter() - started
+    sources, work = cached_sources(
+        cache,
+        recipe,
+        lambda: (emit_stationary_wrapper_cuda(**selection),),
+        expected_units=1,
+    )
+    work["recipe_seconds"] = recipe_seconds
+    return sources[0], work
+
+
 def compile_stationary_cuda(
     primitive_source: typing.Any,
     *,
@@ -1894,7 +1980,6 @@ def compile_stationary_cuda(
     if callable(primitive_source):
         primitive_source, primitive_work = primitive_source()
 
-    recipe_started = perf_counter()
     sharded = not isinstance(primitive_source, str)
     primitive_sources = (
         tuple(primitive_source) if sharded else (typing.cast("str", primitive_source),)
@@ -1905,44 +1990,16 @@ def compile_stationary_cuda(
         raise ValueError("stationary CUDA requires nonempty primitive source")
     if sharded != (primitive_shard_width is not None):
         raise ValueError("stationary CUDA shard width must match primitive sources")
-    wrapper_recipe = {
-        "dependencies": source_hashes(
-            "common",
-            "integral",
-            "tensor",
-            "xc",
-            "dft",
-            "method",
-            assets=STATIONARY_AOT_ASSETS,
-        ),
-        "target": asdict(compiler.target),
-        "precision": "FP64/strict/no-fmad",
-        "product": "stationary-wrapper-cuda.v1",
-        "plan": plan.to_payload(),
-        "method_manifest": plan.method.to_payload(),
-        "functional": functional,
-        "pbe": pbe,
-        "iterations": iterations,
-        "primitive_shards": len(primitive_sources) if sharded else None,
-        "primitive_shard_width": primitive_shard_width,
-    }
-    recipe_seconds = perf_counter() - recipe_started
-    wrapper_sources, wrapper_work = cached_sources(
-        source_cache,
-        wrapper_recipe,
-        lambda: (
-            emit_stationary_wrapper_cuda(
-                functional=functional,
-                pbe=pbe,
-                plan=plan,
-                iterations=iterations,
-                primitive_shards=len(primitive_sources) if sharded else None,
-                primitive_shard_width=primitive_shard_width,
-            ),
-        ),
-        expected_units=1,
+    wrapper_source, wrapper_work = cached_stationary_wrapper_cuda(
+        cache=source_cache,
+        functional=functional,
+        pbe=pbe,
+        plan=plan,
+        iterations=iterations,
+        primitive_shards=len(primitive_sources) if sharded else None,
+        primitive_shard_width=primitive_shard_width,
     )
-    wrapper_source = wrapper_sources[0]
+    recipe_seconds = wrapper_work["recipe_seconds"]
     binary_started = perf_counter()
     cache.mkdir(parents=True, exist_ok=True)
     wrapper_path = cache / (canonical_hash(wrapper_source) + ".stationary.cu")

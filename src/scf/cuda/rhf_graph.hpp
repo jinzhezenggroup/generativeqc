@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "runtime/residency_observer.hpp"
+#include "scf/provider_initialization_teardown.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -37,6 +38,13 @@ class RhfIterationGraphs {
 
   /** Retire captured borrowers after their stream has been drained. */
   void reset() noexcept;
+  static ProviderOwnerSchema provider_schema();
+  ProviderOwnerInventory provider_inventory() const;
+  ProviderInitializationTeardownStep close_provider_operation(const std::string&);
+  void enter_provider_retirement(
+      std::function<void()> require_current,
+      std::function<void(const std::string&, std::optional<std::uint32_t>)> failure);
+  void mark_provider_closed();
   /** A phase-local execution may initialize the bucket without a retained graph. */
   bool has_iteration() const noexcept { return iteration_graph_exec_ != nullptr; }
   /** Read-only lifetime identity for verifying replay without exposing handles. */
@@ -74,6 +82,13 @@ class RhfIterationGraphs {
   cudaGraph_t post_eigensolver_graph_{};
   cudaGraphExec_t post_eigensolver_graph_exec_{};
   std::uint64_t post_eigensolver_generation_{};
+  // Identity-only aliases for an observation emitted after both actual destroys
+  // succeed; these fields never acquire ownership of another CUDA object.
+  cudaGraph_t retiring_iteration_graph_{}, retiring_post_graph_{};
+  cudaGraphExec_t retiring_iteration_exec_{}, retiring_post_exec_{};
+  bool provider_managed_{}, provider_closed_{};
+  std::function<void()> provider_current_;
+  std::function<void(const std::string&, std::optional<std::uint32_t>)> provider_failure_;
 };
 
 }  // namespace generativeqc::scf::cuda_execution

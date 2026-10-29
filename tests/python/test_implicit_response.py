@@ -9,6 +9,7 @@ import typing
 
 import numpy as np
 import pytest
+from generativeqc.response_solver import _HostKrylovEngine
 from generativeqc_compiler.method import ImplicitSolveSpec
 from generativeqc_compiler.tensor import (
     Index,
@@ -47,7 +48,6 @@ from tools.generativeqc_response.implicit import (
     ResponseGMRES,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _HostKrylovEngine
 
 
 def _rhf_equation(
@@ -410,8 +410,9 @@ def test_response_binding_rejects_cpks_even_with_declared_resources() -> None:
     from dataclasses import replace
     from types import SimpleNamespace
 
+    from generativeqc.response_problem import ResponseProblem
+
     from tools.generativeqc_response.implicit import ResponseTransposeBinding
-    from tools.generativeqc_response.problem import ResponseProblem
 
     metadata, arrays = load_fixture("h2")
     reference = replace(

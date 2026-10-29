@@ -7,6 +7,11 @@ none of them supplies a state or derivative to the native Hessian calculation.
 
 import typing
 
+from generativeqc.stationary_nuclear import (
+    build_stationary_nuclear_rhs,
+    metric_density_response_mo,
+)
+
 from .assembly import assemble_frozen_skeleton, validate_hessian_component
 from .numerical import (
     forces_to_gradient,
@@ -15,11 +20,6 @@ from .numerical import (
     hessian_translation_error,
     numerical_hessian,
 )
-from .response import (
-    build_rhf_nuclear_rhs,
-    build_stationary_nuclear_rhs,
-    metric_density_response_mo,
-)
 from .weights import two_electron_energy, two_electron_weight, weight_energy
 
 # Loading mathematical helpers does not load the optional native library.
@@ -27,18 +27,18 @@ _LAZY = {
     "NativeRHFState": "native",
     "DirectionalRHFResponse": "directional",
     "directional_rhf_response": "directional",
-    "DirectionalRKSBatchResponse": "rks_directional",
-    "DirectionalRKSResponse": "rks_directional",
-    "RKSXCHVPComponents": "rks_directional",
-    "directional_rks_response": "rks_directional",
-    "directional_rks_responses": "rks_directional",
-    "native_rks_xc_hvp_components": "rks_directional",
-    "RKSHessianResult": "rks_molecular",
-    "RKSHVPBatchResult": "rks_molecular",
-    "RKSHVPResult": "rks_molecular",
-    "rks_hessian": "rks_molecular",
-    "rks_hvp": "rks_molecular",
-    "rks_hvp_many": "rks_molecular",
+    "DirectionalRKSBatchResponse": "generativeqc.rks_hessian_directional",
+    "DirectionalRKSResponse": "generativeqc.rks_hessian_directional",
+    "RKSXCHVPComponents": "generativeqc.rks_hessian_directional",
+    "directional_rks_response": "generativeqc.rks_hessian_directional",
+    "directional_rks_responses": "generativeqc.rks_hessian_directional",
+    "native_rks_xc_hvp_components": "generativeqc.rks_hessian_directional",
+    "RKSHessianResult": "generativeqc.rks_hessian",
+    "RKSHVPBatchResult": "generativeqc.rks_hessian",
+    "RKSHVPResult": "generativeqc.rks_hessian",
+    "rks_hessian": "generativeqc.rks_hessian",
+    "rks_hvp": "generativeqc.rks_hessian",
+    "rks_hvp_many": "generativeqc.rks_hessian",
     "RHFHVPResult": "hvp",
     "rhf_hvp": "hvp",
     "RHFHVPBlockResult": "block",
@@ -56,12 +56,12 @@ _LAZY = {
     "StationaryNuclearBatchResponse": "perturbation",
     "solve_stationary_nuclear_perturbation": "perturbation",
     "solve_stationary_nuclear_perturbations": "perturbation",
-    "StationaryHVPContext": "stationary_executor",
-    "StationaryHVPContributor": "stationary_executor",
-    "StationaryPerturbationProvider": "stationary_executor",
-    "StationaryResponseDriver": "stationary_executor",
-    "StationarySecondOrderExecutor": "stationary_executor",
-    "StationarySecondOrderResult": "stationary_executor",
+    "StationaryHVPContext": "generativeqc.second_order",
+    "StationaryHVPContributor": "generativeqc.second_order",
+    "StationaryPerturbationProvider": "generativeqc.second_order",
+    "StationaryResponseDriver": "generativeqc.second_order",
+    "StationarySecondOrderExecutor": "generativeqc.second_order",
+    "StationarySecondOrderResult": "generativeqc.second_order",
 }
 
 __all__ = [
@@ -87,7 +87,6 @@ __all__ = [
     "analytic_hessian",
     "assemble_frozen_skeleton",
     "build_reference",
-    "build_rhf_nuclear_rhs",
     "build_stationary_nuclear_rhs",
     "cphf_relaxation",
     "directional_rhf_response",
@@ -124,5 +123,11 @@ def __getattr__(name: typing.Any) -> typing.Any:
     if module is not None:
         import importlib
 
-        return getattr(importlib.import_module(f".{module}", __name__), name)
+        # Runtime owners use absolute names; tools-only implementations stay local.
+        return getattr(
+            importlib.import_module(
+                module if "." in module else f".{module}", __name__
+            ),
+            name,
+        )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

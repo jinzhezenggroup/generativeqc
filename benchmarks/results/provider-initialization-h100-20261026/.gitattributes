@@ -1,5 +1,0 @@
-# The offline verification receipt binds these publication files by byte hash.
-*.json text eol=lf
-*.py text eol=lf
-*.md text eol=lf
-*.xz -text

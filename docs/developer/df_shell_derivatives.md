@@ -29,6 +29,14 @@ The auxiliary derivative follows from translation of the two independent
 orbital centers. Exponents, normalization and external response weights remain
 fixed in this derivative.
 
+The per-class CUDA units share compiler algebra and native execution templates.
+Their host dispatch signature alone does not establish a common device ABI:
+ordered Cartesian components, raised-first-center cache layout, Boys domain,
+Rys eligibility, schedule and precision policy remain class inputs. Swapping
+orbital centers additionally requires weight-index permutation and derivative
+slot restoration. The [offline AOT census](build.md#compiler-cache-generated-shards-and-compile-units)
+reports these distinctions without changing shell admission or kernel routing.
+
 The native runtime owns compact angular-class shell lists and AO offsets. It
 projects each shell block's public weights through the existing normalized
 sparse Cartesian expansions once. One generated subgroup traverses primitive shell

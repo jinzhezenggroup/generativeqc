@@ -10,6 +10,13 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc_compiler.cc.gradient_equations import (
+    build_ao_eri_weight_block_program,
+    build_ao_weight_program,
+    build_hamiltonian_programs,
+)
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS
 from generativeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec, execute
 
 from tools.cc_gradient_fixtures import CASES, inputs, load, source_arguments
@@ -22,12 +29,6 @@ from tools.generativeqc_cc.complete_gradient import (
     complete_gradient_validation,
     gradient_capabilities,
 )
-from tools.generativeqc_cc.gradient_equations import (
-    build_ao_eri_weight_block_program,
-    build_ao_weight_program,
-    build_hamiltonian_programs,
-)
-from tools.generativeqc_cc.lambda_equations import PARAMETERS
 from tools.generativeqc_cc.oracle import dense_feeds, random_case
 from tools.generativeqc_posthf.export import export_rhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
@@ -38,7 +39,6 @@ from tools.generativeqc_posthf.sources import (
 )
 from tools.generativeqc_response.implicit import ImplicitSolveError
 from tools.generativeqc_response.oracle import _expm_small, explicit_rhf_response_matrix
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 def _source(value: typing.Any) -> typing.Any:

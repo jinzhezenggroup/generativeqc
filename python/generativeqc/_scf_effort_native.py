@@ -108,7 +108,10 @@ def _load(path: str) -> Any:
     operation = getattr(library, "generativeqc_scf_effort_decide_v1", None)
     verification = getattr(library, "generativeqc_scf_effort_verify_v1", None)
     if operation is None or verification is None:
-        return None
+        raise RuntimeError(
+            "SCF effort decisions require the current native decide/verify protocol; "
+            "rebuild or reinstall GenerativeQC"
+        )
     library.generativeqc_get_abi_version.argtypes = []
     library.generativeqc_get_abi_version.restype = ctypes.c_uint32
     if library.generativeqc_get_abi_version() != _native.ABI_VERSION:
@@ -125,12 +128,20 @@ def _load(path: str) -> Any:
     return library
 
 
-def optional_library() -> Any:
-    """Use only the first existing selected path; old/missing protocol is compatibility."""
+def require_library() -> Any:
+    """Bind the first selected image; missing support never enables Python decisions.
+
+    Built-in policies share the installed SDK's current protocol. Keep load and
+    protocol failures visible instead of silently selecting a second image or
+    changing the owner of a scientific decision.
+    """
     for candidate in _native._candidate_paths():
         if candidate.exists():
             return _load(str(candidate.resolve()))
-    return None
+    raise RuntimeError(
+        "SCF effort decisions require the current native library; "
+        "build or install GenerativeQC"
+    )
 
 
 def decide(
@@ -142,9 +153,7 @@ def decide(
         for value in (state.level_index, state.safe_streak, policy.relax_after)
     ):
         return None
-    library = optional_library()
-    if library is None:
-        return None
+    library = require_library()
     calibration = policy.estimator
     domain = (
         1
@@ -210,9 +219,7 @@ def verify(
     force: float,
 ) -> Any:
     """Publish actual final gates; native errors never turn into Python verification."""
-    library = optional_library()
-    if library is None:
-        return None
+    library = require_library()
     descriptor = FinalDescriptor(
         struct_size=ctypes.sizeof(FinalDescriptor),
         abi_version=_native.ABI_VERSION,

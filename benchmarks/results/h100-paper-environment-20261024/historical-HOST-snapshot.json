@@ -1,0 +1,41 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5cb8716e51807e3a6c6010ffeb27ad8c8e8c7aea",
+  "file_count": 5,
+  "total_bytes": 232381,
+  "purpose": "Five task-owned superseded CPU build/static SDK and wheel-integrity sidecars only. Current device originals, numeric arrays, independent references, source identities, failures and executable smoke replay remain in the checkout.",
+  "recovery": "python tools/restore_retained_evidence.py --all --manifest benchmarks/results/h100-paper-environment-20261024/historical-HOST-snapshot.json --output .artifacts/recovered-h100-HOST-sidecars",
+  "network": "No implicit fetch or operational execution. Explicitly obtain the pinned already-merged commit in shallow clones before offline restore.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/hf-sdk-provenance.json.xz",
+      "bytes": 31920,
+      "sha256": "4d8839b7eabfbc9c25c08792e80f9a79d275e1676abeafc96cdf4e040711b687",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/cbs-sdk-provenance.json.xz",
+      "bytes": 31880,
+      "sha256": "96ebb0c38f75154c494f830f88e0c3920d2e44231ca4bb85db7ec80377d9506a",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/hf-terminal-provenance.json.xz",
+      "bytes": 73312,
+      "sha256": "0cd0b54d44900794281a9d29611eebdb7343ad0480a995470d2390848309c624",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/cbs-terminal-provenance.json.xz",
+      "bytes": 73828,
+      "sha256": "0ee125039089f0a05fd60d4cb9cdb51286e749a40c35acdec498599fe4ded01b",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/base-wheel-integrity.json",
+      "bytes": 21441,
+      "sha256": "b044f14e6d0ceb47ce66763db0fb82d74e8f28548137b4f0640d6b60a9365ebf",
+      "git_mode": "100644"
+    }
+  ]
+}

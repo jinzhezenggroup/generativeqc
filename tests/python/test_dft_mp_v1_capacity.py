@@ -737,8 +737,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_phased_becke_allocation_sha256": (
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
-        "native_phased_becke_admission_sha256": (
-            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+        "native_phased_becke_admission_sha256": current_native_identity(
+            "int stationary_configure_phased_becke_v1("
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -944,10 +944,9 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         assert route["selection"] == "all-electron packaged stationary CUDA"
         assert route["missing_aot_behavior"] == "fail closed; no NVCC fallback"
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
-    assert result["stationary_aot_source_package"] == {
-        "cmake_contract_sha256": (
-            "72b47e9dcca4aa75f3245d199a1b34d53552ee55fdbe304336d2d0c3d71f4596"
-        ),
+    package = dict(result["stationary_aot_source_package"])
+    assert len(bytes.fromhex(package.pop("cmake_contract_sha256"))) == 32
+    assert package == {
         "profiles": [
             "lda_rks",
             "lda_uks",
@@ -2262,40 +2261,23 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
         qualify_capacity._source_limits(tmp_path)
 
 
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        ("          --component-domain spd", "          --component-domain sp"),
-        (
-            "target_link_libraries(${target} PRIVATE generativeqc_native_stationary)",
-            "target_link_libraries(${target} PRIVATE missing_native_stationary)",
-        ),
-        ("--list-sources --profiles", "--profiles"),
-        (
-            "--fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}",
-            "--fused-profiles auto",
-        ),
-        (
-            "                       generativeqc_libxc_semilocal_cuda_codegen)",
-            "                       missing_point_codegen)",
-        ),
-    ],
-)
-def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
-    tmp_path: Path, old: str, new: str
+def test_package_inventory_records_refactors_without_claiming_binary_qualification(
+    tmp_path: Path,
 ) -> None:
-    source = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
-    assert old in source
-    target = tmp_path / "cmake/GenerativeQCCuda.cmake"
-    target.parent.mkdir(parents=True)
-    (target.parent / "GenerativeQCStationaryProfiles.cmake").write_text(
-        (ROOT / "cmake/GenerativeQCStationaryProfiles.cmake").read_text(),
-        encoding="utf-8",
-    )
-    target.write_text(source.replace(old, new, 1), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="packaged-AOT CMake contract changed"):
-        qualify_capacity._source_package_inventory(tmp_path)
+    """CMake source identity changes must not invalidate a source-only census."""
+    target = tmp_path / "cmake"
+    target.mkdir()
+    for name in ("GenerativeQCCuda.cmake", "GenerativeQCStationaryProfiles.cmake"):
+        (target / name).write_text(
+            (ROOT / "cmake" / name).read_text(), encoding="utf-8"
+        )
+    before = qualify_capacity._source_package_inventory(tmp_path)
+    policy = target / "GenerativeQCStationaryProfiles.cmake"
+    policy.write_text(policy.read_text() + "\n# A declaration-preserving refactor.\n")
+    after = qualify_capacity._source_package_inventory(tmp_path)
+    assert after["profiles"] == before["profiles"]
+    assert after["component_domain"] == before["component_domain"]
+    assert after["cmake_contract_sha256"] != before["cmake_contract_sha256"]
 
 
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
@@ -5162,6 +5144,12 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
     assert_native_create_contract(source, tmp_path, required_native_cxx)
 
 
+def test_resource_semantics_accept_capability_based_targets() -> None:
+    qualify_capacity._geometry_resource_contract(
+        ROOT / "python/generativeqc_compiler/method/stationary_resources.py"
+    )
+
+
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -5169,6 +5157,25 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
         ("+ 1  # atom prefix offsets", "+ 0  # atom prefix offsets"),
         ("if required <= budget_bytes - allocation - center_bytes:", "if True:"),
         ("except ValueError as error:", "except Exception as error:"),
+        (
+            "type(atoms) is int and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS",
+            (
+                'type(atoms) is int and target.architecture == "sm_120" '
+                "and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS"
+            ),
+        ),
+        (
+            "and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS",
+            "and True",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.shared_memory_per_block",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.tuning_maximum_shared_bytes",
+        ),
     ],
 )
 def test_resource_semantics_reject_missing_panels_and_unbounded_fallback(

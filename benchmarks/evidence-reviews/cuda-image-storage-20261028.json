@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cuda-image-storage-20261028",
+  "owner": "cuda-image-storage-20261028",
+  "reason": "The exact original receipt is a live offline regression input, including all 2075 observations, negative timing campaigns, independent references and complete package-load witnesses. Its PR-only origin is not a protected-history retirement anchor. Five superseded HOST sidecars use separately verified published recovery to keep the aggregate storage budget unchanged.",
+  "review_document": "benchmarks/results/cuda-image-storage-20261028/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-image-storage-20261028/receipts.json.xz",
+      "family": "cuda-image-storage-20261028",
+      "classification": "test-reference-input",
+      "role": "Exact source-export and offline regression input for the original numerical, timing, work and package-witness replay; retaining these bytes is not new scientific qualification.",
+      "bytes": 209852,
+      "sha256": "fb0461c533f630f9d151d798f4998fb2dc1095975cc2b4e085abb4691b7b43f8"
+    }
+  ]
+}
