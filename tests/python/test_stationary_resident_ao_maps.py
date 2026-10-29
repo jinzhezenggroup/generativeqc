@@ -1,4 +1,4 @@
-"""Ordinary force mask admission, identity, and replay remain caller-owned."""
+"""All stationary compositions share force-map identity and lifetime rules."""
 
 import sys
 import typing
@@ -9,6 +9,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 from generativeqc import _stationary_cuda as runtime
+from generativeqc._stationary_composite_cuda import (
+    PreparedCompositeStationaryCudaGradient,
+)
 from test_stationary_large_grid_work import _geometry_loop
 
 
@@ -50,8 +53,10 @@ class _Domain:
     derivative_order: int
 
 
-@pytest.fixture
-def bindings(monkeypatch: pytest.MonkeyPatch) -> typing.Iterator[typing.Any]:
+@pytest.fixture(params=["ordinary", "composite"])
+def bindings(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> typing.Iterator[typing.Any]:
     """Test the caller without inheriting implementation details of the cache."""
 
     class Cache:
@@ -104,7 +109,11 @@ def bindings(monkeypatch: pytest.MonkeyPatch) -> typing.Iterator[typing.Any]:
         plan=SimpleNamespace(tile_points=256, order=2),
     )
     resident = SimpleNamespace(device=0, points=1000, point_count=512)
-    owner = runtime.PreparedStationaryCudaExecution()
+    owner = (
+        runtime.PreparedStationaryCudaExecution()
+        if request.param == "ordinary"
+        else PreparedCompositeStationaryCudaGradient()
+    )
     yield owner, grid, state, resident, checks
     owner.close()
 
