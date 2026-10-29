@@ -199,9 +199,10 @@ def _basis_record(
     angular = tuple(int(shell.angular_momentum) for shell in shells)
     primitives = tuple(len(shell.primitives) for shell in shells)
     record = {
-        **_basis_shape(
-            angular, primitives, mode, library=library if backend == "cpu" else None
-        ),
+        # AO counts depend on the representation and expanded contractions,
+        # not the execution device. Reuse the already selected native owner
+        # for CUDA too; this metadata query does not create a device context.
+        **_basis_shape(angular, primitives, mode, library=library),
         "shell_angular": angular,
         "shell_primitive_counts": primitives,
         "representation": mode,
