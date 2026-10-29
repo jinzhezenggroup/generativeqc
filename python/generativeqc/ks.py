@@ -1027,9 +1027,13 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
         # Preserve the independent catalog projection's declaration order and
         # identity when options have already been resolved.
         resolved = selected if options.functional is None else options.functional
-        if SemilocalXCPrimitive(resolved).semantic_payload() != (
-            SemilocalXCPrimitive(selected).semantic_payload()
-        ):
+        # A resolved option can retain the graph's exact functional object.
+        # Comparing that object with itself would serialize and hash the same
+        # upstream provenance twice. Distinct objects still need the complete
+        # semantic comparison; no identity cache survives a resolution call.
+        if resolved is not selected and SemilocalXCPrimitive(
+            resolved
+        ).semantic_payload() != (SemilocalXCPrimitive(selected).semantic_payload()):
             raise ValueError("resolved KS functional disagrees with its MethodIR")
     else:
         resolved = expected if options.functional is None else options.functional

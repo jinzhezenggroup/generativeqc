@@ -3145,13 +3145,8 @@ class Calculator:
         if not native_atoms:
             raise ValueError("at least one atom is required")
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
-        effective_ks_options = self._effective_ks_options(
-            (native_atoms,),
-            charges=(charge,),
-            multiplicities=(multiplicity,),
-        )
         resource_plan = None
-        if self._resource_budget is not None:
+        if self._resource_budget is not None and self._dispersion_method_ir is None:
             resource_plan = self.estimate_resources(
                 [native_atoms],
                 charges=[charge],
@@ -3161,6 +3156,12 @@ class Calculator:
         if self._dispersion_method_ir is not None or (
             self._capabilities.family == "density_functional"
         ):
+            # Named corrections always reserve their complete electronic and
+            # correction inventories, independent of the requested output. Let
+            # the prepared owner build and admit that plan once. Passing a plan
+            # synthesized here would repeat its shape queries and then validate
+            # it as if it came from an external caller. Output-aware plain CPU
+            # KS retains the explicitly requested-property plan above.
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
             # scientific implementation in the single-system path. Energy-only
@@ -3194,6 +3195,11 @@ class Calculator:
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
                 )
+        effective_ks_options = self._effective_ks_options(
+            (native_atoms,),
+            charges=(charge,),
+            multiplicities=(multiplicity,),
+        )
         if self._singlepoint_context is not None:
             context = self._singlepoint_context.get(self._context_descriptor())
         else:
