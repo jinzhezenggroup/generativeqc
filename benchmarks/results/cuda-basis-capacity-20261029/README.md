@@ -49,13 +49,14 @@ original Git blob and decoded/encoded checksums retained separately.
 ## Qualification-driver hardening
 
 The replay driver now rejects non-finite energies/force components and non-finite
-or non-positive timings before reduction. Existing E/F tolerances and the 1.05
+or non-positive timings before reduction. Force array shapes must match exactly,
+without NumPy broadcasting. Existing E/F tolerances and the 1.05
 per-case performance gate are unchanged. `--response-timeout` (default 900 seconds)
 bounds each startup/sample response, including a partial line; failure and normal
 shutdown terminate and reap only the harness-owned worker sessions.
 
 This is a harness correction, not a replacement GPU campaign. All retained raw
-samples, their order and measurements are unchanged. The 22 host-only driver tests
+samples, their order and measurements are unchanged. The 23 host-only driver tests
 exercise the full entry point, invalid values, exact retained-population replay,
 and real silent/partial/failed/persistent workers and inherited-pipe cleanup.
 

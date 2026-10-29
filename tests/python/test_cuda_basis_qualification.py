@@ -160,6 +160,17 @@ def test_existing_scientific_limits_are_not_relaxed(
         invoke(driver, monkeypatch, tmp_path, samples)
 
 
+def test_broadcastable_force_shape_change_is_rejected(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = population()
+    for record in samples:
+        if record["engine"] == "B":
+            record["rows"][0]["items"][0]["forces"] = [0.0, 0.0, 0.0]
+    with pytest.raises(RuntimeError, match="forces shape changed"):
+        invoke(driver, monkeypatch, tmp_path, samples)
+
+
 def test_valid_complete_entry_point(
     driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

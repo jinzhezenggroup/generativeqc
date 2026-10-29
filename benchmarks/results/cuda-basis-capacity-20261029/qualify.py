@@ -173,6 +173,8 @@ def main() -> None:
                             if actual[field] != reference[field]:
                                 raise RuntimeError("derivative publication changed")
                             continue
+                        if np.shape(actual[field]) != np.shape(reference[field]):
+                            raise RuntimeError(f"{key}: forces shape changed")
                         if not np.all(np.isfinite(actual[field])) or not np.all(
                             np.isfinite(reference[field])
                         ):
