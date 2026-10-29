@@ -24,6 +24,8 @@ def direct_k_block_candidates(
 ) -> tuple[KernelSelection, ...]:
     """Return bounded packed K alternatives with the incumbent lane storage policy."""
 
+    if not profile.optional_fock_variants:
+        return ()
     candidates = []
     for incumbent in profile.selections:
         if (

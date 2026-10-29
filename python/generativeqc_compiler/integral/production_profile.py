@@ -61,6 +61,10 @@ class ResolvedProductionProfile:
     selections: tuple[KernelSelection, ...]
     cuda_toolkit: str
     preferred_rys_task_fock_shell_classes: tuple[str, ...] | None = None
+    # Alternative experimental Fock families share the primary CUDA modules.
+    # Their code size therefore contributes to first-launch loading even when
+    # the runtime uses only the primary generated kernels.
+    optional_fock_variants: bool = True
 
     @property
     def portable(self) -> bool:
@@ -635,6 +639,9 @@ def resolve_production_profile(
     toolkit = profile_payload.get("cuda_toolkit", "")
     if not isinstance(toolkit, str):
         raise TypeError("profile cuda_toolkit must be a string")
+    optional_fock_variants = profile_payload.get("optional_fock_variants", True)
+    if not isinstance(optional_fock_variants, bool):
+        raise TypeError("profile optional_fock_variants must be a boolean")
     return ResolvedProductionProfile(
         target=target,
         profile=profile_name,
@@ -642,6 +649,7 @@ def resolve_production_profile(
         tuned=tuned,
         selections=selections,
         cuda_toolkit=toolkit,
+        optional_fock_variants=optional_fock_variants,
         preferred_rys_task_fock_shell_classes=_qualified_rys_task_classes(
             profile_payload, tuned=tuned
         ),

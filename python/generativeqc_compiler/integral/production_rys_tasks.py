@@ -27,6 +27,8 @@ def direct_rys_task_candidates(
     unavailable classes and portable builds retain their exact incumbent; no
     molecule, method or runtime density enters source selection.
     """
+    if not profile.optional_fock_variants:
+        return ()
     candidates = []
     for incumbent in profile.selections:
         if (
