@@ -7,29 +7,19 @@
       "sha256": "23c4014d2456e159b04cd9666d1af57476ef56fa2f8361bbc3b201d702e623a2"
     },
     {
-      "path": "host-history.json.xz",
-      "bytes": 123644,
-      "sha256": "562d6fa079c808bf0c2bdf8b7dcffef4ebd825731b5681aec54fa8f32a3a2830"
-    },
-    {
-      "path": "frozen-host-packet-v2.json.xz",
-      "bytes": 173416,
-      "sha256": "625b256ae227563a025240f3a14983a9163692b64b8be7a45f175a29ace4a180"
-    },
-    {
-      "path": "frozen-host-packet-v3.json.xz",
-      "bytes": 188864,
-      "sha256": "56c313ef7c43ee6da05bd6051567c07cf6b712521e859e481d94938f6dcb026b"
-    },
-    {
       "path": "independent-oracles.json.xz",
       "bytes": 56528,
       "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
     },
     {
-      "path": "root-host-v2-failed-originals.json.xz",
-      "bytes": 4988,
-      "sha256": "0cef5a78fc9db2bb2559c2c8f73ac252d3ee02256d85eb610aae914c61192bbf"
+      "path": "historical-host-snapshot.json",
+      "bytes": 2419,
+      "sha256": "e525ccbc80c13241a39d1b906e76c8b9b6048a4a46889996a2d6257ad6f2eca6"
+    },
+    {
+      "path": "historical-host-summary.json",
+      "bytes": 884,
+      "sha256": "b294f357b6e56fac54ad6aade797bc3af91aa54e28665ade33c17ef38bf18caa"
     }
   ]
 }

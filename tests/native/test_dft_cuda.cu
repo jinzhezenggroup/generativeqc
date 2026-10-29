@@ -236,6 +236,10 @@ void automatic_xc_record(std::uint32_t code, unsigned spins, double displacement
   require(program && program->launch && program->launch_batch, "missing automatic AOT entry");
   require(generated::automatic_cuda_point_entry(code) == program, "unstable AOT lifetime");
   require(!generated::automatic_cuda_point_entry(code | 0x1000000U), "truncated AOT code");
+  const auto binding = cuda_xc_detail::resolve_point_binding(code, false);
+  require(binding.launch == program->launch && binding.automatic_program == program,
+          "shared point binding lost the automatic executable or science identity");
+  require(!binding.launch_batch, "raw AOT batch entry granted production batching");
   auto molecule = system();
   molecule.atoms[1].position[2] += displacement;
   const AoBasis basis(molecule);
@@ -1358,7 +1362,7 @@ int main(int argc, char** argv) {
                                                grid.point_count(), functional, false, 17);
       require(layout.jets == 4 && layout.work_jets == 4 && layout.feature_terms == 5,
               "generated split-hybrid MGGA layout is inconsistent");
-      require(cuda_xc_detail::resolve_point_launcher(functional, false) != nullptr,
+      require(cuda_xc_detail::resolve_point_binding(functional, false).launch != nullptr,
               "generated split-hybrid CUDA point launcher is missing");
     }
     bool unknown_split_hybrid_rejected = false;

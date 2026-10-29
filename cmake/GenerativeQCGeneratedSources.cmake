@@ -246,7 +246,6 @@ macro(generativeqc_register_host_generated_sources target)
       OUTPUTS ${GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_SOURCES}
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/rsh_cpu_aot.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/derivative_aot_registry.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/weighted_eri.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/weighted_eri_native.py"
@@ -841,7 +840,7 @@ macro(generativeqc_register_host_generated_sources target)
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_native.py"
     OUTPUTS "${GENERATIVEQC_RCCSDT_CPU_HEADER}"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/triples.py"
     ARGS --output "${GENERATIVEQC_RCCSDT_CPU_HEADER}")
 
   set(GENERATIVEQC_DF_HF_RESPONSE_CONTRACT_HEADER
@@ -1348,10 +1347,10 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/manifests/cuda_split_hybrids.json"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_split_hybrid_cuda.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_split_hybrid.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_bulk_metadata.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/libxc_method_metadata.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/split_hybrid_codegen.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/split_hybrid_program.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_c_metadata.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_method_metadata.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
@@ -1533,7 +1532,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsdt_native.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/triples.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/cc/triples_cuda.hpp"
     ARGS --output "${GENERATIVEQC_RCCSDT_CUDA_SOURCE}")
 

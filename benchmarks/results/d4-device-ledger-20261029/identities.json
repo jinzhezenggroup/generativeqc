@@ -1,0 +1,539 @@
+{
+  "candidate_production_commit": "4fc8782cfa3b8ddbcaad8bbda4eed002e8aea5c8",
+  "baseline_production_commit": "228a2a68c08d8b27ffec1798e9c3addfb200153f",
+  "cuda": {
+    "metadata": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-d4-ledger-baseline-228a2a68c-20261029",
+        "library": "/home/jzzeng/codes/qc-2227-d4-ledger-baseline-228a2a68c-20261029/artifacts/libgenerativeqc.so.0",
+        "library_sha256": "72efe46682fed58ecbb9f776a7a1dcb13977344f510afdaa5383cb368419dd69",
+        "backend": "cuda",
+        "constructor_included": true,
+        "python_correction_owner": "poisoned",
+        "cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "slurm_job_id": "14847",
+        "cuda_visible_devices": "0"
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-d4-ledger-4fc8782cf-20261029",
+        "library": "/home/jzzeng/codes/qc-2227-d4-ledger-4fc8782cf-20261029/artifacts/libgenerativeqc.so.0",
+        "library_sha256": "34a087014bb9d54d3731e0f278f881c6c20c63a8970ec1cd3bcd0af59256ba03",
+        "backend": "cuda",
+        "constructor_included": true,
+        "python_correction_owner": "poisoned",
+        "cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "slurm_job_id": "14847",
+        "cuda_visible_devices": "0"
+      }
+    },
+    "groups": 8,
+    "endpoint_count": 1792,
+    "max_energy_difference": 9.947598300641403e-14,
+    "max_force_difference": 5.684341886080802e-14,
+    "maximum_ratio": 1.0042326378469892,
+    "all_within_1_05": true
+  },
+  "slurm": {
+    "job": 14847,
+    "state": "COMPLETED",
+    "exit": "0:0",
+    "node": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "visibility": "0",
+    "runtime": "00:05:33",
+    "time_limit": "01:00:00"
+  },
+  "validation": {
+    "cpu_ctests": 127,
+    "cpu_python_passed": 18,
+    "cpu_python_cuda_deselected": 3,
+    "gpu_python_passed": 21,
+    "native_cuda_checks": [
+      "production independent oracle/finite differences, resource capacity and lifecycle",
+      "4100-item ragged isolation",
+      "EEQ oracle/ragged failure isolation",
+      "independent dftd4/ATM/derivative/negative cases",
+      "cooperative schedule and ragged isolation"
+    ],
+    "compute_sanitizer": {
+      "errors": 0,
+      "leaked_bytes": 0,
+      "leaked_allocations": 0
+    },
+    "installed_sdk": "Public headers only, -O3 -DNDEBUG; CPU and CUDA independent E/gradient/charge and replay with PATH=/nonexistent; CUDA under Slurm14847"
+  },
+  "scope": "CUDA allocation/lifetime prerequisite only; no global D4 ResourcePlan admission or new scientific method/force domain; R3 excluded. CPU production arithmetic/allocation code is unchanged.",
+  "local_debug_receipts": [
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/baseline-build.log",
+      "bytes": 637382,
+      "sha256": "56ffcb897537293b05d90b2c4b74831543b7db3e9db0a5316c41e471aecfd33b"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/baseline-configure.log",
+      "bytes": 246,
+      "sha256": "5456d874df2ca3539c031a7f4648f10dbffcee5a23c4ea7f7c4fd30aeefac7ba"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/baseline-install.log",
+      "bytes": 12755,
+      "sha256": "85c5ff21f635b80c0ad08fb9210f84c84da608b3307f8a46a0ee8749713597ea"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/cache-baseline-after.txt",
+      "bytes": 1936,
+      "sha256": "68470a000d12b36fcb24b2fe66e27125165b6d5862c01320d679c393907f8ff9"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/cache-baseline-before.txt",
+      "bytes": 1038,
+      "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/cache-candidate-after.txt",
+      "bytes": 1936,
+      "sha256": "56b29411516f2c8d9392b82ab25bf7eda01598f067f5f0c2fd7c1fff6e22a64b"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/cache-candidate-before.txt",
+      "bytes": 1936,
+      "sha256": "e06bfe8a9e8a0bc59b0b94c92afe4466cf5152468d634e225b24e4075a914b07"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/cache-version.txt",
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/candidate-build.log",
+      "bytes": 9948,
+      "sha256": "0d56053c5660ced3273a371ba56bf48bb93d64c13804a5fe2a16406643834b04"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/candidate-cache-version.txt",
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/candidate-configure.log",
+      "bytes": 246,
+      "sha256": "5456d874df2ca3539c031a7f4648f10dbffcee5a23c4ea7f7c4fd30aeefac7ba"
+    },
+    {
+      "path": "/tmp/qc-2227-non-r3-20261028/.artifacts/d4-ledger/candidate-install.log",
+      "bytes": 12870,
+      "sha256": "d6ef67e95f798c8f82e69b5437420f77503e8427c643bba2db16cc8466541916"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/build.log",
+      "bytes": 115346,
+      "sha256": "3ee2f9490de7f7a23659c5ef04d3b3c73a5c6d79671978491e0e22ad12321b05"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/cache-after.txt",
+      "bytes": 1936,
+      "sha256": "103dce0169f37cff52f7cdbacd13e21a2835b739052f27b857ea77eafc7fe9b8"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/cache-before.txt",
+      "bytes": 1936,
+      "sha256": "68470a000d12b36fcb24b2fe66e27125165b6d5862c01320d679c393907f8ff9"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/cache-version.txt",
+      "bytes": 15,
+      "sha256": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/configure.log",
+      "bytes": 248,
+      "sha256": "ae8dec7e70cd5c27c0d989ab3dc0cb24015909e4d45f78528ddc76b30b8b2ff7"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/ctest.log",
+      "bytes": 18570,
+      "sha256": "5cf86cd2a7da25e77e407ce14fbb21365faa3ec31ed7b643add75367ae8fd481"
+    },
+    {
+      "path": "/tmp/qc-2227-seed-capacity-20261029/.artifacts/d4-ledger/install.log",
+      "bytes": 1600,
+      "sha256": "80e595e53dd52a1f39ecdbc813c6c9682e03323214c78ce29b7632b05546cc13"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/cpu-python.log",
+      "bytes": 113,
+      "sha256": "70580eb8b8cb5d42b5cc61dad2a5d8bb6065c4258af0fc88b699d702a11053af"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/baseline-profile.log",
+      "bytes": 215616,
+      "sha256": "241b0116038d5a2a7f1d85dbad18f2b919fda355917e2bdc754d1d3b85ad2aba"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/candidate-profile.log",
+      "bytes": 215702,
+      "sha256": "d28841ccab466d2ed55185f120117f69f542146f6e0da63627e613c022d44930"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/gpu-tests.xml",
+      "bytes": 3237,
+      "sha256": "c6c5d40efe26873ca2267eeda6a7cef6f3573b6aa3fc14b31d0d1fd33cc5c599"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/input-sha256.txt",
+      "bytes": 2463245,
+      "sha256": "0a722b029ef266df873c753bb33577c025884aa01b0ddfa903e6dac05b614b65"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/integrity-after.log",
+      "bytes": 1614961,
+      "sha256": "d0750f67e0e3ec99a8a6252b34b6b3af6ba3625148f16e6394ec5f3c0ffb0351"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/integrity-before.log",
+      "bytes": 1614961,
+      "sha256": "d0750f67e0e3ec99a8a6252b34b6b3af6ba3625148f16e6394ec5f3c0ffb0351"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/memcheck.log",
+      "bytes": 160,
+      "sha256": "d1c71956d002aab7fda807743f9c71d787ce8824d77d74d2cde17607ef103b4a"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu/slurm-job.txt",
+      "bytes": 1181,
+      "sha256": "10d395e2b29419a21ecf78c1e32db3c9ee5e0a5b64c70a8a2cd475e6d743f280"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/gpu-run.log",
+      "bytes": 9662,
+      "sha256": "59b463da168d7938a2642dac7edd1d2661c8c89a4d375f2a84865e6550a16acb"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/hooks-final.log",
+      "bytes": 2862,
+      "sha256": "b5502ae52928ac2197d2db033498033c3d28388c55fb5ca89de964cac8642308"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/hooks.log",
+      "bytes": 2921,
+      "sha256": "094b9f3a2b85dafd2cf23561ee22d6361c895d94da887bf23f48fc8d4679c57f"
+    },
+    {
+      "path": "/tmp/qc-2227-native-d4-resources-20261029/.artifacts/d4-ledger/sdk-cpu.log",
+      "bytes": 61,
+      "sha256": "56c5a1709029051a413d9449d579ba9d62323161f9188162cde9f814008ccff7"
+    }
+  ],
+  "setup_diagnostics": [
+    "The first SDK CUDA link selected older system CUDA dependencies and reported undefined cudaStreamGetDevice/cusolverDnXsyevBatched symbols; explicit CUDA 12.9.1 rpath-link resolved it before any SDK execution.",
+    "Initial hook runs formatted C++ only; final production source 4fc8782cf passed hooks before builds."
+  ],
+  "retained_files": [
+    {
+      "path": "history.json",
+      "bytes": 588,
+      "sha256": "6f549afe09059a2efd75a6b3f5b0aeeed025a4d83822edc7b76155f7f51fcb1c"
+    },
+    {
+      "path": "profile-summary.json",
+      "bytes": 1381,
+      "sha256": "5c3c3240e5b20048edb74a49a73f7bc1856d6196a254c1c875bdb556a23becf0"
+    },
+    {
+      "path": "qualification/endpoint_worker.py",
+      "bytes": 7682,
+      "sha256": "ca380895983da0674b5d6003b71bab44de777f31ee195ecd25bbe2f6df06aaee"
+    },
+    {
+      "path": "qualification/profile_summary.py",
+      "bytes": 3169,
+      "sha256": "5b867d81f0720c5dbf1e39964d523586ad89d56c9cdbc855208a0880f59cb9e5"
+    },
+    {
+      "path": "qualification/qualify.py",
+      "bytes": 6262,
+      "sha256": "0c10cf39c9383ff262b3ae42c1b7c72de3c38d54996797341e8fe12ec365e849"
+    },
+    {
+      "path": "qualification/run-gpu.sh",
+      "bytes": 3479,
+      "sha256": "775cfed0fdd78e4c2020ab7c70e88961c4a237a9093e41ba4f13fc4900d4ae2c"
+    },
+    {
+      "path": "qualification/sdk.cpp",
+      "bytes": 3925,
+      "sha256": "6b3593fa23ea13192fb63f73033da0fe6e449058ee4cde8b11783545a4c9ab56"
+    },
+    {
+      "path": "storage.json",
+      "bytes": 579,
+      "sha256": "44cfea305d7dcb2f6890ccc616e6c7686f8be0ef1fce6cb23df966cd1d8a6b91"
+    }
+  ],
+  "debug_retention": "Logs, XML, failed setup diagnostics and Nsight databases remain in ignored local artifacts; raw accepted samples are recoverable byte-for-byte from the ancestor in history.json. No external archive/Release.",
+  "sdk_reproduction": {
+    "formatting": "Retained SDK source was clang-formatted after execution; only whitespace/line wrapping changed. All Python/shell reproduction sources match executed bytes.",
+    "executed_sha256": "ca764593435caf54a65f4c081705a53e3ad8a658dcbc8e60490cbbdcb2c355e2",
+    "executed_bytes": 2941
+  }
+}

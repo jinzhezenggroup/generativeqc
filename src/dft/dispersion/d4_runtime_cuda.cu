@@ -11,10 +11,15 @@
 #include "dft/dispersion/d4_cuda.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "generated_d4_derivative.hpp"
+#include "runtime/resource_cuda.cuh"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
 namespace {
 thread_local bool fail_next_d4_after_coordinate_upload = false;
+thread_local bool fail_next_d4_after_allocations = false;
+}  // namespace
+extern "C" void d4_cuda_fail_after_allocations_for_test_v1() {
+  fail_next_d4_after_allocations = true;
 }
 extern "C" void d4_cuda_fail_after_coordinate_upload_for_test_v1() {
   fail_next_d4_after_coordinate_upload = true;
@@ -89,7 +94,9 @@ bool allocate(T*& pointer, std::size_t count, std::string& detail) {
     pointer = nullptr;
     return true;
   }
-  const auto error = cudaMalloc(reinterpret_cast<void**>(&pointer), count * sizeof(T));
+  // A prepared scope owns the actual bytes; without a scope this preserves
+  // the standalone CUDA allocation contract.
+  const auto error = runtime::resource_cuda_malloc(&pointer, count * sizeof(T));
   if (error == cudaSuccess) return true;
   detail = std::string("D4 CUDA allocation failed: ") + cudaGetErrorString(error);
   return false;
@@ -214,7 +221,11 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
     return nullptr;
   }
 
-  auto owner = std::make_unique<D4CudaOwner>();
+  // Keep every partial stream/allocation owned even if constructing an error
+  // detail throws on the host. The same deleter retires ledger charges after
+  // the submitting scope has ended.
+  std::unique_ptr<D4CudaOwner, decltype(&destroy_d4_cuda_owner)> owner(new D4CudaOwner,
+                                                                       destroy_d4_cuda_owner);
   owner->device_id = device_id;
   owner->systems = static_cast<std::uint32_t>(offsets.size() - 1);
   owner->atoms = atomic_numbers.size();
@@ -261,9 +272,12 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !allocate(owner->reference_c6, c6_count, detail) ||
       !allocate(owner->charge_elements, host_eeq_tables.element_count, detail)) {
     status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-    destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
+
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  if (std::exchange(fail_next_d4_after_allocations, false)) throw std::bad_alloc();
+#endif
 
   if (!upload(owner->stream, owner->offsets, offsets.data(), offsets.size(), detail) ||
       !upload(owner->stream, owner->atomic_numbers, atomic_numbers.data(), atoms, detail) ||
@@ -276,13 +290,11 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !upload(owner->stream, owner->reference_c6, host_d4_tables.reference_c6, c6_count, detail) ||
       !upload(owner->stream, owner->charge_elements, host_eeq_tables.charge_elements,
               host_eeq_tables.element_count, detail)) {
-    destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
   error = cudaStreamSynchronize(owner->stream);
   if (error != cudaSuccess) {
     status = cuda_failure(error, "synchronize D4 setup", detail);
-    destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
   status = GENERATIVEQC_STATUS_SUCCESS;
@@ -295,27 +307,27 @@ void destroy_d4_cuda_owner(D4CudaOwner* owner) noexcept {
   DeviceScope scope(owner->device_id);
   if (scope.error() == cudaSuccess) {
     if (owner->stream) cudaStreamSynchronize(owner->stream);
-    cudaFree(owner->charge_elements);
-    cudaFree(owner->reference_c6);
-    cudaFree(owner->references);
-    cudaFree(owner->elements);
-    cudaFree(owner->fixed_workspace);
-    cudaFree(owner->dqdr_workspace);
-    cudaFree(owner->eeq_workspace);
-    cudaFree(owner->next_system);
-    cudaFree(owner->dedq);
-    cudaFree(owner->charges);
-    cudaFree(owner->gradients);
-    cudaFree(owner->energies);
-    cudaFree(owner->fixed_statuses);
-    cudaFree(owner->statuses);
-    cudaFree(owner->fixed_active);
-    cudaFree(owner->want_gradient);
-    cudaFree(owner->active);
-    cudaFree(owner->coordinates);
-    cudaFree(owner->total_charges);
-    cudaFree(owner->atomic_numbers);
-    cudaFree(owner->offsets);
+    runtime::resource_cuda_free(owner->charge_elements);
+    runtime::resource_cuda_free(owner->reference_c6);
+    runtime::resource_cuda_free(owner->references);
+    runtime::resource_cuda_free(owner->elements);
+    runtime::resource_cuda_free(owner->fixed_workspace);
+    runtime::resource_cuda_free(owner->dqdr_workspace);
+    runtime::resource_cuda_free(owner->eeq_workspace);
+    runtime::resource_cuda_free(owner->next_system);
+    runtime::resource_cuda_free(owner->dedq);
+    runtime::resource_cuda_free(owner->charges);
+    runtime::resource_cuda_free(owner->gradients);
+    runtime::resource_cuda_free(owner->energies);
+    runtime::resource_cuda_free(owner->fixed_statuses);
+    runtime::resource_cuda_free(owner->statuses);
+    runtime::resource_cuda_free(owner->fixed_active);
+    runtime::resource_cuda_free(owner->want_gradient);
+    runtime::resource_cuda_free(owner->active);
+    runtime::resource_cuda_free(owner->coordinates);
+    runtime::resource_cuda_free(owner->total_charges);
+    runtime::resource_cuda_free(owner->atomic_numbers);
+    runtime::resource_cuda_free(owner->offsets);
     if (owner->stream) cudaStreamDestroy(owner->stream);
   }
   delete owner;

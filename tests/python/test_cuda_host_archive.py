@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,8 @@ def archive_probe(tmp_path: Path, native_cxx: Any) -> Any:
     toolkit = Path(compiler).parent
     if not (toolkit / "nvprune").is_file():
         pytest.skip("CUDA toolkit has no nvprune")
+    for name in ("cmake", "tools", "src"):
+        (tmp_path / name).symlink_to(ROOT / name, target_is_directory=True)
     (tmp_path / "callee.cu").write_text(
         "__device__ int add_one(int value) { return value + 1; }\n"
     )
@@ -58,8 +61,10 @@ def archive_probe(tmp_path: Path, native_cxx: Any) -> Any:
     )
     (tmp_path / "CMakeLists.txt").write_text(f"""
 cmake_minimum_required(VERSION 3.24)
-project(ArchiveProbe LANGUAGES CXX CUDA)
+project(ArchiveProbe LANGUAGES C CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
+include("{ROOT / "cmake/GenerativeQCCudaCompression.cmake"}")
+generativeqc_configure_cuda_compression()
 include("{ROOT / "cmake/GenerativeQCCudaArchive.cmake"}")
 add_library(original STATIC owner.cu callee.cu)
 set_target_properties(original PROPERTIES
@@ -71,9 +76,29 @@ file(GENERATE OUTPUT "${{CMAKE_BINARY_DIR}}/selected-$<CONFIG>.txt"
   CONTENT "$<TARGET_FILE:${{selected}}>")
 add_executable(probe main.cpp)
 target_link_libraries(probe PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${{selected}}>")
+generativeqc_add_cuda_shared_library(plugin plugin_owner owner.cu callee.cu)
+if(WHEEL_PROBE)
+  set(Python3_EXECUTABLE "{sys.executable}")
+  include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")
+  set_target_properties(${{plugin_owner}} plugin PROPERTIES CUDA_RUNTIME_LIBRARY None)
+  generativeqc_attach_cuda_implib(plugin)
+  target_link_libraries(${{plugin_owner}} PRIVATE generativeqc_cuda_wheel_imports)
+else()
+  target_link_libraries(${{plugin_owner}} PRIVATE CUDA::cudart)
+endif()
+file(GENERATE OUTPUT "${{CMAKE_BINARY_DIR}}/plugin-owner-$<CONFIG>.txt"
+  CONTENT "$<TARGET_FILE:${{plugin_owner}}>")
+add_executable(plugin_probe main.cpp)
+target_link_libraries(plugin_probe PRIVATE plugin)
 """)
 
-    def build(architectures: str, enabled: bool = True, multi: bool = False) -> Path:
+    def build(
+        architectures: str,
+        enabled: bool = True,
+        multi: bool = False,
+        compression: bool = True,
+        wheel: bool = False,
+    ) -> Path:
         directory = tmp_path / ("multi" if multi else "build")
         launcher = shutil.which("sccache") or native_cxx.cache
         run(launcher, "--version")
@@ -89,9 +114,12 @@ target_link_libraries(probe PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${{selected}}>
             f"-DCMAKE_CXX_COMPILER={native_cxx.compiler}",
             f"-DCMAKE_CUDA_HOST_COMPILER={native_cxx.compiler}",
             f"-DCMAKE_CXX_COMPILER_LAUNCHER={launcher}",
+            f"-DCMAKE_C_COMPILER_LAUNCHER={launcher}",
             f"-DCMAKE_CUDA_COMPILER_LAUNCHER={launcher}",
             f"-DCMAKE_CUDA_ARCHITECTURES={architectures}",
             f"-DGENERATIVEQC_PRUNE_CUDA_ARCHIVES={'ON' if enabled else 'OFF'}",
+            f"-DGENERATIVEQC_COMPRESS_CUDA_FATBINS={'ON' if compression else 'OFF'}",
+            f"-DWHEEL_PROBE={'ON' if wheel else 'OFF'}",
             "-DCMAKE_BUILD_TYPE=Release",
         )
         run(
@@ -102,12 +130,24 @@ target_link_libraries(probe PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${{selected}}>
     return build, tmp_path, toolkit
 
 
+def test_shared_archive_keeps_provider_free_final_link(archive_probe: Any) -> None:
+    """Wheel import synthesis belongs to the final ELF, not its static owner."""
+    build, _, _ = archive_probe
+    directory = build("120-real", wheel=True)
+    dynamic = run("readelf", "-d", str(directory / "libplugin.so")).stdout
+    assert "Shared library: [libcudart" not in dynamic
+    if os.environ.get("GENERATIVEQC_RUN_CUDA_TESTS") == "1":
+        assert os.environ.get("SLURM_JOB_ID"), "CUDA execution requires finite srun"
+        run(str(directory / "plugin_probe"))
+
+
 def executable_images(toolkit: Path, archive: Path, directory: Path) -> list[str]:
     """Compare decoded executable payloads, independent of archive layout/names."""
     directory.mkdir()
     for kind in ("elf", "ptx"):
         run(
             str(toolkit / "cuobjdump"),
+            "-all",
             f"--extract-{kind}",
             "all",
             str(archive),
@@ -150,14 +190,31 @@ def test_closed_archive_preserves_executable_images(
     before = executable_images(toolkit, original, root / "original-images")
     assert before
     assert executable_images(toolkit, selected, root / "host-images") == before
+    plugin = directory / ("Release/libplugin.so" if multi else "libplugin.so")
+    plugin_owner = Path((directory / "plugin-owner-Release.txt").read_text())
+    # The shared artifact retains the same device program and a linkable host
+    # export after its private archive has been pruned and wholly retained.
+    plugin_images = executable_images(toolkit, plugin, root / "plugin-images")
+    owned_images = executable_images(
+        toolkit, plugin_owner, root / "plugin-owner-images"
+    )
+    # A PTX-only host link can also retain CUDA's device-runtime images. Every
+    # program image owned by this archive must survive byte-for-byte, including
+    # multiplicity; the runtime provider is validated by actual execution below.
+    assert Counter(owned_images) <= Counter(plugin_images)
     if os.environ.get("GENERATIVEQC_RUN_CUDA_TESTS") == "1":
         assert os.environ.get("SLURM_JOB_ID"), "CUDA execution requires finite srun"
         run(str(directory / ("Release/probe" if multi else "probe")))
+        run(str(directory / ("Release/plugin_probe" if multi else "plugin_probe")))
         if "120" in architectures.split(";"):
             # Forward-compatible PTX must still support a forced driver JIT,
             # including the cross-translation-unit device call.
             run(
                 str(directory / ("Release/probe" if multi else "probe")),
+                env={**os.environ, "CUDA_FORCE_PTX_JIT": "1"},
+            )
+            run(
+                str(directory / ("Release/plugin_probe" if multi else "plugin_probe")),
                 env={**os.environ, "CUDA_FORCE_PTX_JIT": "1"},
             )
     original_bytes = original.read_bytes()
@@ -178,12 +235,57 @@ def test_closed_archive_preserves_executable_images(
 
 
 def test_archive_pruning_can_be_disabled(archive_probe: Any) -> None:
-    build, _, _ = archive_probe
+    build, root, toolkit = archive_probe
     directory = build("120-real", enabled=False)
     assert (
         Path((directory / "selected-Release.txt").read_text())
         == directory / "liboriginal.a"
     )
+    assert executable_images(
+        toolkit, directory / "libplugin.so", root / "unpruned-plugin"
+    ) == executable_images(
+        toolkit,
+        Path((directory / "plugin-owner-Release.txt").read_text()),
+        root / "unpruned-owner",
+    )
+    if os.environ.get("GENERATIVEQC_RUN_CUDA_TESTS") == "1":
+        assert os.environ.get("SLURM_JOB_ID"), "CUDA execution requires finite srun"
+        run(str(directory / "plugin_probe"))
+
+
+@pytest.mark.parametrize("architectures", ["120-real", "120-virtual", "80-real;120"])
+def test_compression_preserves_device_linked_images(
+    archive_probe: Any, architectures: str
+) -> None:
+    """Compare decoded executables after rebuilding the same RDC archive.
+
+    The OFF arm is the toolchain's original storage policy. Compression applies
+    to both translation units and the final device link, without losing PTX.
+    """
+    build, root, toolkit = archive_probe
+    directory = build(architectures, compression=False)
+    original = directory / "liboriginal.a"
+    before = executable_images(toolkit, original, root / "uncompressed-images")
+    original_size = original.stat().st_size
+    selected = Path((directory / "selected-Release.txt").read_text())
+    host_size = selected.stat().st_size
+    build(architectures, compression=True)
+    assert executable_images(toolkit, original, root / "compressed-images") == before
+    # PTX-only images may already use the same compression under the toolchain
+    # default. Real cubins exercise both ordinary compilation and device linking.
+    assert original.stat().st_size <= original_size
+    assert selected.stat().st_size <= host_size
+    if any(not value.endswith("-virtual") for value in architectures.split(";")):
+        assert original.stat().st_size < original_size
+        assert selected.stat().st_size < host_size
+    if os.environ.get("GENERATIVEQC_RUN_CUDA_TESTS") == "1":
+        assert os.environ.get("SLURM_JOB_ID"), "CUDA execution requires finite srun"
+        run(str(directory / "probe"))
+        if "120" in architectures.split(";"):
+            run(
+                str(directory / "probe"),
+                env={**os.environ, "CUDA_FORCE_PTX_JIT": "1"},
+            )
 
 
 @pytest.mark.parametrize(

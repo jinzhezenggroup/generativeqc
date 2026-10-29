@@ -681,9 +681,10 @@ def finalize_hf_verification(
 ) -> FinalVerification:
     """Derive final acceptance through the shared native metadata policy.
 
-    The first configured library supplies the policy for standalone calls. Older
-    libraries and integer metadata outside the ABI retain explicit compatibility;
-    native refusal never retries it. This does not perform a physical Fock audit.
+    The first configured library supplies the current protocol for standalone
+    calls. Missing support and native refusal are errors. Integer metadata
+    outside the ABI retains explicit Python behavior without truncation.
+    This does not perform a physical Fock audit.
     """
     return _finalize_hf_verification(
         problem,
@@ -726,7 +727,7 @@ def _finalize_hf_verification_python(
     physical_audit_error: str | None = None,
     physical_audit_budget_exhausted: bool = False,
 ) -> FinalVerification:
-    """Old-library/unrepresentable-metadata compatibility; never a native retry."""
+    """Verify unrepresentable integer metadata without truncation; never a native retry."""
     if (
         not isinstance(problem, TargetProblem)
         or target_stage.role is not StageRole.TARGET

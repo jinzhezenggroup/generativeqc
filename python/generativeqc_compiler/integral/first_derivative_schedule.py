@@ -209,7 +209,7 @@ def cached_derivative_cuda_source(
     requests: tuple[DerivativeRequest, ...],
     *,
     cache: Path,
-    target: CudaTargetInfo,
+    target: CudaTargetInfo | None = None,
     component_domain: tuple[str, ...] | None = None,
     enabled: bool = True,
 ) -> tuple[str | tuple[str, ...], dict[str, typing.Any]]:
@@ -218,6 +218,9 @@ def cached_derivative_cuda_source(
     Demand projection stays with the qualified runtime capability owner. This
     provider only caches the existing full bounded or nuclear-only recipe and
     returns sources for the unchanged source/header/toolchain binary cache.
+    Lowering is target-independent: an optional target is recorded only as
+    request provenance. AOT builds can reuse these same sources before their
+    architecture-specific compilation without constructing a compiler adapter.
     """
     started = perf_counter()
     if type(enabled) is not bool:
@@ -232,7 +235,7 @@ def cached_derivative_cuda_source(
             "stationary CUDA component domain differs from primitive demand"
         )
     recipe = {
-        "product": "first-derivative-cuda.v1",
+        "product": "first-derivative-cuda.v2",
         "dependencies": source_hashes(
             "common",
             "integral",
@@ -241,7 +244,6 @@ def cached_derivative_cuda_source(
                 "src/integrals/range_moments.hpp",
             ),
         ),
-        "target": asdict(target),
         "precision": "FP64/strict/no-fmad",
         "requests": requests,
         "component_domain": component_domain,
@@ -270,4 +272,6 @@ def cached_derivative_cuda_source(
         else 1,
     )
     work.update(requests=len(requests), recipe_seconds=recipe_seconds)
+    if target is not None:
+        work["requested_target"] = asdict(target)
     return (sources if component_domain is not None else sources[0]), work

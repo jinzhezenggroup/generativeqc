@@ -9,6 +9,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc.profiles import find_nvcc
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc_compiler.cc.triples_response import (
+    TRIPLES_RESPONSE_INPUTS,
+    accumulate_tile_triples_vjp,
+)
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.resources import ResourceBudget
@@ -23,15 +28,10 @@ from tools.generativeqc_cc.triples_lambda_response import (
     BoundCCSDTResponse,
     solve_corrected_lambda,
 )
-from tools.generativeqc_cc.triples_response import (
-    TRIPLES_RESPONSE_INPUTS,
-    accumulate_tile_triples_vjp,
-)
 from tools.generativeqc_cc.triples_response_cuda import (
     CudaTriplesResponseTiles,
     solve_corrected_lambda_cuda,
 )
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 if typing.TYPE_CHECKING:
     from typing_extensions import Self

@@ -2,6 +2,11 @@
   "benchmark_results_max_bytes": 83886080,
   "change_review_max_bytes": 2097152,
   "exceptions": {
+    "benchmarks/results/h100-provider-owner-20261027/v4-v6-receipts.tar.xz": {
+      "owner": "h100-provider-owner-20261027",
+      "reason": "Exact lossless shared representation of already published privacy-redacted V4/V6 engineering receipts. Both original compressed byte sequences are independently reconstructed; no new run or science is admitted.",
+      "sha256": "0aeef5da2c72945093e2098cda0a024cde22a89edab6693e44b510b8b5da2c99"
+    },
     "benchmarks/results/pbe0-fast-20261013/complete-gradient-test-prehybrid-guard.log.xz": {
       "owner": "pbe0-fast-20261013",
       "reason": "Original complete-gradient test receipt from the superseded small-hybrid candidate; retained as historical evidence, not integrated-head validation.",
@@ -412,6 +417,11 @@
       "owner": "shared-force-parameter-integration-20261028",
       "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
       "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
+    },
+    "benchmarks/results/h100-pbe0-direct-df-20261029/evidence.tar.xz": {
+      "owner": "h100-pbe0-direct-df-20261029 / xshengrui",
+      "reason": "Exact compact source-bound H100 PBE0 Direct/DF matrix: all620 public raw members, full144 E+F vectors/binary64, independent gates, semantic work, failures and negative performance. Standalone offline replay verifies every reconstructed public hash; redacted originals retain separate explicit witnesses. No cap or change-review exemption.",
+      "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

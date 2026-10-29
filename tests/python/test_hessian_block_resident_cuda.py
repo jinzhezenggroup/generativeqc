@@ -23,8 +23,9 @@ pytestmark = pytest.mark.skipif(
 def h2_external_hessian(h2_case: typing.Any) -> typing.Any:
     """Build the external oracle with native Hessian/response seams forbidden."""
     pytest.importorskip("pyscf")
+    from generativeqc import response_solver as krylov
+
     from tools.generativeqc_hessian import analytic, perturbation
-    from tools.generativeqc_response import krylov
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
         pytest.fail("external Hessian oracle called native Hessian/response code")

@@ -37,15 +37,6 @@ def test_bulk_ks_default_allows_supported_import_without_evidence() -> None:
     assert result.to_payload()["admission"] == "default-allow/explicit-blacklist"
 
 
-def test_public_bulk_ks_is_default_allow_compatibility_alias() -> None:
-    first = bulk_ks.resolve_bulk_ks("MGGA_X_LTA")
-    second = bulk_ks.resolve_public_bulk_ks("MGGA_X_LTA")
-
-    assert first.method.identity == second.method.identity
-    assert first.plan.identity == second.plan.identity
-    assert first.public_dft and second.public_dft
-
-
 def test_positive_evidence_is_not_a_public_admission_gate() -> None:
     result = bulk_ks.resolve_bulk_ks(
         "LDA_C_BR78",

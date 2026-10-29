@@ -23,9 +23,12 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
 from generativeqc_compiler.xc import libxc_bulk, libxc_maple
+from generativeqc_compiler.xc.libxc_c_metadata import (
+    C_BINDING_SEMANTICS,
+    extract_registrations,
+)
 
 from tools import source_registry
-from tools.libxc_bulk_metadata import C_BINDING_SEMANTICS, extract_registrations
 
 REVISION = "7.0.0"
 ARCHIVE_URL = "https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz"
@@ -392,7 +395,7 @@ def register_product(catalog: dict[str, Any]) -> None:
             path: digest(ROOT / path)
             for path in (
                 "python/generativeqc_compiler/integral/expr.py",
-                "tools/libxc_bulk_metadata.py",
+                "python/generativeqc_compiler/xc/libxc_c_metadata.py",
                 "python/generativeqc_compiler/xc/libxc_bulk.py",
                 "python/generativeqc_compiler/xc/libxc_maple.py",
             )

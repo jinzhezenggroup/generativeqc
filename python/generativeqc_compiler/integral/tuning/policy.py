@@ -9,6 +9,10 @@ from dataclasses import dataclass, replace
 from functools import cache
 from typing import TYPE_CHECKING
 
+from generativeqc_compiler.integral.production_profile import (
+    load_production_kernel_selections,
+)
+
 from ..cuda_schedule import (
     AlgebraOrdering,
     AlgebraPlacement,
@@ -17,7 +21,6 @@ from ..cuda_schedule import (
     tuning_schedule_candidates,
 )
 from ..ir import IntegralIR, KernelConsumer, build_integral_ir
-from ..production import load_production_kernel_selections
 from .analysis import StaticAlgebraModel, _integral_signature, static_algebra_model
 from .shared import _PRODUCTION_MANIFEST_PATH
 

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from generativeqc.profiles import find_nvcc
+from generativeqc.response_problem import ResponseCompatibilityError
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.resources import ResourceBudget
@@ -21,7 +22,6 @@ from tools.generativeqc_cc import (
     solve,
 )
 from tools.generativeqc_cc.solver import SolverOptions
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 class _Choice:

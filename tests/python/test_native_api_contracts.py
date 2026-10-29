@@ -56,9 +56,13 @@ class NativeContractTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        fixtures = {
+            "include/generativeqc/generativeqc.h": C,
+            "include/generativeqc/generativeqc.hpp": CPP,
+        }
         for header in HEADERS:
-            source = {HEADERS[0]: C, HEADERS[1]: CPP}.get(
-                header, "" if header.endswith(".h") else "namespace generativeqc {}"
+            source = fixtures.get(
+                header, "namespace generativeqc {}" if header.endswith(".hpp") else ""
             )
             path = self.root / header
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,7 +86,7 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 136)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 140)
         self.assertEqual(sum(d.kind == "c-callback" for d in declarations), 3)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 12)
         self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 57)
@@ -97,8 +101,16 @@ class NativeContractTests(unittest.TestCase):
         self.assertEqual(len(validate(self.root)), 3)
 
     def test_utf8_contract_round_trip_under_ascii_locale(self) -> None:
-        self.mutate(HEADERS[0], "Read an example count", "Read a λ count in Å")
-        self.mutate(HEADERS[1], "Own a copied count value.", "Own a copied λ value.")
+        self.mutate(
+            "include/generativeqc/generativeqc.h",
+            "Read an example count",
+            "Read a λ count in Å",
+        )
+        self.mutate(
+            "include/generativeqc/generativeqc.hpp",
+            "Own a copied count value.",
+            "Own a copied λ value.",
+        )
         manifest_path = self.root / MANIFEST
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["review_note"] = "Reviewed λ and Å units"
@@ -148,7 +160,9 @@ class NativeContractTests(unittest.TestCase):
 
     def test_new_undocumented_c_function_fails(self) -> None:
         self.mutate(
-            HEADERS[0], C, C + "GENERATIVEQC_API void generativeqc_new(void);\n"
+            "include/generativeqc/generativeqc.h",
+            C,
+            C + "GENERATIVEQC_API void generativeqc_new(void);\n",
         )
         with self.assertRaisesRegex(ContractError, "inventory drift.*generativeqc_new"):
             validate(self.root)
@@ -160,7 +174,7 @@ class NativeContractTests(unittest.TestCase):
         self.assertEqual(declarations[0].kind, "c-callback")
         with self.assertRaisesRegex(ContractError, "missing exact.*native-contract"):
             contract_facets(declarations[0])
-        self.mutate(HEADERS[0], C, C + callback)
+        self.mutate("include/generativeqc/generativeqc.h", C, C + callback)
         with self.assertRaisesRegex(
             ContractError, "inventory drift.*generativeqc_action"
         ):
@@ -179,7 +193,11 @@ class NativeContractTests(unittest.TestCase):
                 scan_c(declaration)
 
     def test_new_undocumented_cpp_operation_fails(self) -> None:
-        self.mutate(HEADERS[1], "int count{};", "int count{};\n  void run() {}")
+        self.mutate(
+            "include/generativeqc/generativeqc.hpp",
+            "int count{};",
+            "int count{};\n  void run() {}",
+        )
         with self.assertRaisesRegex(ContractError, "inventory drift.*Example::run"):
             validate(self.root)
 
@@ -194,7 +212,7 @@ class NativeContractTests(unittest.TestCase):
 
     def test_arbitrary_adjacent_comment_is_not_a_contract(self) -> None:
         self.mutate(
-            HEADERS[0],
+            "include/generativeqc/generativeqc.h",
             C[: C.index("GENERATIVEQC_API")],
             "/** This nearby comment explains an unrelated internal detail. */\n",
         )
@@ -202,24 +220,36 @@ class NativeContractTests(unittest.TestCase):
             validate(self.root)
 
     def test_missing_applicable_facet_fails(self) -> None:
-        self.mutate(HEADERS[0], " * @outputs Returns the example count by value.\n", "")
+        self.mutate(
+            "include/generativeqc/generativeqc.h",
+            " * @outputs Returns the example count by value.\n",
+            "",
+        )
         with self.assertRaisesRegex(ContractError, "missing facets.*outputs"):
             validate(self.root)
 
     def test_placeholder_facet_fails(self) -> None:
-        self.mutate(HEADERS[0], "Returns the example count by value.", "TODO.")
+        self.mutate(
+            "include/generativeqc/generativeqc.h",
+            "Returns the example count by value.",
+            "TODO.",
+        )
         with self.assertRaisesRegex(ContractError, "unusable outputs"):
             validate(self.root)
 
     def test_new_record_field_requires_review(self) -> None:
-        self.mutate(HEADERS[1], "int count{};", "int count{};\n  double energy{};")
+        self.mutate(
+            "include/generativeqc/generativeqc.hpp",
+            "int count{};",
+            "int count{};\n  double energy{};",
+        )
         with self.assertRaisesRegex(ContractError, "signature/field drift"):
             validate(self.root)
 
     def test_record_field_type_and_default_require_review(self) -> None:
         for change in ("double count{};", "int count{7};"):
             with self.subTest(change=change):
-                path = self.root / HEADERS[1]
+                path = self.root / "include/generativeqc/generativeqc.hpp"
                 path.write_text(CPP.replace("int count{};", change), encoding="utf-8")
                 with self.assertRaisesRegex(ContractError, "signature/field drift"):
                     validate(self.root)
@@ -242,7 +272,9 @@ class NativeContractTests(unittest.TestCase):
 
     def test_signature_change_requires_review(self) -> None:
         self.mutate(
-            HEADERS[0], "generativeqc_example(void)", "generativeqc_example(int mode)"
+            "include/generativeqc/generativeqc.h",
+            "generativeqc_example(void)",
+            "generativeqc_example(int mode)",
         )
         with self.assertRaisesRegex(ContractError, "signature/field drift"):
             validate(self.root)
@@ -266,7 +298,7 @@ class NativeContractTests(unittest.TestCase):
             ],
         )
         self.assertNotEqual(operations[0].anchor, operations[1].anchor)
-        (self.root / HEADERS[1]).write_text(
+        (self.root / "include/generativeqc/generativeqc.hpp").write_text(
             source.replace("generativeqc_named_ks_descriptor", "UnreviewedDescriptor"),
             encoding="utf-8",
         )
@@ -349,18 +381,20 @@ class NativeContractTests(unittest.TestCase):
 
     def test_private_members_and_comment_decoys_are_exempt(self) -> None:
         self.mutate(
-            HEADERS[1],
+            "include/generativeqc/generativeqc.hpp",
             "int count{};",
             "int count{};\nprivate:\n  void hidden() {}\npublic:",
         )
         self.mutate(
-            HEADERS[0], C, C + "/* GENERATIVEQC_API void generativeqc_decoy(void); */"
+            "include/generativeqc/generativeqc.h",
+            C,
+            C + "/* GENERATIVEQC_API void generativeqc_decoy(void); */",
         )
         self.assertEqual(len(validate(self.root)), 3)
 
     def test_renamed_contract_does_not_cover_another_declaration(self) -> None:
         self.mutate(
-            HEADERS[0],
+            "include/generativeqc/generativeqc.h",
             "@native-contract generativeqc_example",
             "@native-contract generativeqc_other",
         )

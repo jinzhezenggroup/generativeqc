@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 from generativeqc_compiler.dft.ao_cuda import (
-    emit_native_xc_point_batch_dispatch,
     emit_native_xc_point_dispatch,
     emit_native_xc_point_program,
 )
@@ -31,9 +30,7 @@ def test_compiled_family_equal_spin_point_contract(
         encoding="utf-8",
     )
     (tmp_path / "point_dispatch.hpp").write_text(
-        '#include "point_program.hpp"\n'
-        + emit_native_xc_point_dispatch()
-        + emit_native_xc_point_batch_dispatch(),
+        '#include "point_program.hpp"\n' + emit_native_xc_point_dispatch(),
         encoding="utf-8",
     )
     binary = tmp_path / "point-policy-contract"

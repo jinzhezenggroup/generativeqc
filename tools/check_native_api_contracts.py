@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HEADERS = (
     "include/generativeqc/generativeqc.h",
+    "include/generativeqc/provider_initialization.h",
     "include/generativeqc/generativeqc.hpp",
     "include/generativeqc/ks.hpp",
     "include/generativeqc/precision_admission.h",

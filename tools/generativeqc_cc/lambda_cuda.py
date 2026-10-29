@@ -18,6 +18,8 @@ from pathlib import Path
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.common.resources import (
@@ -36,8 +38,6 @@ from tools.generativeqc_response.implicit import (
     _immutable,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _vector_norm
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 from .lambda_solver import BoundCCSDLambda, CCSDLambdaResult, LambdaOptions
 

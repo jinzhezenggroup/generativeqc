@@ -14,9 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
 PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
-PYTHON_COMPAT_OUTPUT = (
-    ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-)
 SCHEMA = "generativeqc.native-semilocal-families.v3"
 LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/xc/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
@@ -609,25 +606,6 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
     )
 
 
-def emit_python_compat() -> str:
-    return '''"""Compatibility re-export for native semilocal execution metadata."""
-
-from generativeqc_compiler.dft._generated_native_semilocal import (
-    SCF_DOMAIN_BY_VERSION,
-    SEMILOCAL_FAMILIES,
-    SEMILOCAL_FAMILY_BY_CODE,
-    SEMILOCAL_FAMILY_CODES,
-)
-
-__all__ = [
-    "SCF_DOMAIN_BY_VERSION",
-    "SEMILOCAL_FAMILIES",
-    "SEMILOCAL_FAMILY_BY_CODE",
-    "SEMILOCAL_FAMILY_CODES",
-]
-'''
-
-
 def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
@@ -638,15 +616,12 @@ def main() -> int:
     args = parser.parse_args()
     cpp = emit_cpp()
     python = emit_python()
-    python_compat = emit_python_compat()
     if args.check:
         stale = []
         if CPP_OUTPUT.read_text(encoding="utf-8") != cpp:
             stale.append(str(CPP_OUTPUT.relative_to(ROOT)))
         if PYTHON_OUTPUT.read_text(encoding="utf-8") != python:
             stale.append(str(PYTHON_OUTPUT.relative_to(ROOT)))
-        if PYTHON_COMPAT_OUTPUT.read_text(encoding="utf-8") != python_compat:
-            stale.append(str(PYTHON_COMPAT_OUTPUT.relative_to(ROOT)))
         if stale:
             raise SystemExit(
                 "stale generated native semilocal metadata: " + ", ".join(stale)
@@ -654,7 +629,6 @@ def main() -> int:
         return 0
     _write(CPP_OUTPUT, cpp)
     _write(PYTHON_OUTPUT, python)
-    _write(PYTHON_COMPAT_OUTPUT, python_compat)
     return 0
 
 

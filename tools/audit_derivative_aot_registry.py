@@ -25,6 +25,7 @@ from generativeqc_compiler.integral.derivative_aot_registry import (
     DerivativeAotPackageKey,
     component_groups,
     make_key,
+    program_source,
     radial_inventory_from_payload,
 )
 from generativeqc_compiler.integral.derivative_cuda_shell_aot import (
@@ -39,7 +40,6 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
 )
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
 from tools import stationary_cpu_source_receipt as source_receipt
 
