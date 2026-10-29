@@ -185,12 +185,17 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
             )
 
 
-def test_equal_share_correction_budget_boundary(library: Any) -> None:
-    inventory = resources_d4._ks_d4_inventory((2, 3), "cpu", library)
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_equal_share_correction_budget_boundary(library: Any, device: str) -> None:
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a finite Slurm CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID")
+    inventory = resources_d4._ks_d4_inventory((2, 3), device, library)
     required = inventory["minimum_maximum_bytes"]
     assert required > inventory["retained_bytes"]
     for delta in (-1, 0):
-        calc = calculator(dispersion_memory_budget_bytes=required + delta)
+        calc = calculator(device, dispersion_memory_budget_bytes=required + delta)
         plan = calc.estimate_resources(systems())
         assert (plan.status == "feasible") == (delta == 0)
         if delta == 0:
@@ -249,15 +254,29 @@ def test_composite_gcp_remains_outside_global_inventory() -> None:
         )
 
 
-def test_global_exact_and_below_capacity_gate(library: Any) -> None:
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_global_exact_and_below_capacity_gate(library: Any, device: str) -> None:
     from generativeqc.resources_planning import plan_resources
 
-    calc = calculator()
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a finite Slurm CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID")
+    calc = calculator(device)
     full = calc.estimate_resources(systems())
     for delta in (-1, 0):
         plan = plan_resources(
             full.requests,
-            ResourceBudget(host_bytes=full.peak_bytes["host"] + delta),
+            ResourceBudget(
+                **{
+                    "device_bytes"
+                    if device == "cuda"
+                    else "host_bytes": full.peak_bytes[
+                        "device" if device == "cuda" else "host"
+                    ]
+                    + delta
+                }
+            ),
             library=calc._library,
         )
         assert (plan.status == "feasible") == (delta == 0)
