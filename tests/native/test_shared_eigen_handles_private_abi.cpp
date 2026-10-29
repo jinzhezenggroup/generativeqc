@@ -75,6 +75,7 @@ bool ensure_cuda_gfn2_parameters(int, std::string&) {
 std::string cuda_error_message(const char* text, cudaError_t) { return text; }
 
 struct CudaResources {
+  bool explicit_retirement_managed_{}, explicit_retirement_closed_{};
   int device_id_{3};
   cudaStream_t stream_{};
   cublasHandle_t blas_{};

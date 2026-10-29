@@ -362,10 +362,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
-  // Automatic graphs inherit the common s/p FP64 envelope only. Neither an
+  // Automatic graphs retain all-electron Direct s/p FP64 admission. Neither an
   // artifact nor a curated method's precision/large-angular receipt widens it.
   if (execution_plan.automatic_program &&
-      (maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      (!all_electron || options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+       maximum_angular > 1 || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
        options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused))
     return {};
   const bool application =
@@ -461,8 +462,11 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
       execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
       execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
-      execution_plan.d4_correction || options.preliminary_guess || options.nonlocal_grid_spec ||
-      options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      // The legacy D4 flag does not cover compiler-named D3/D4 programs.
+      // Their retained owners are absent from this electronic-only bound;
+      // keep ordinary capped allocation until a complete bound includes them.
+      execution_plan.d4_correction || execution_plan.dispersion.kind || options.preliminary_guess ||
+      options.nonlocal_grid_spec || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
       options.incremental_direct_jk || !options.resolved_fock_build ||
       std::any_of(options.application_precision_budget.begin(),

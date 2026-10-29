@@ -92,3 +92,33 @@ function(generativeqc_cuda_host_archive target output)
   add_dependencies(${target}_host ${target}_host_artifact)
   set(${output} "${target}_host" PARENT_SCOPE)
 endfunction()
+
+# Keep a shared CUDA artifact's public filename and host exports while giving
+# its device link a separate owner. nvprune accepts archives, not shared ELF
+# libraries. Whole-archive retention preserves every registration/export even
+# when no executable in this build references the plugin's public entry points.
+# Callers configure the returned owner with sources' includes/options/providers.
+function(generativeqc_add_cuda_shared_library target owner)
+  if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(device_target "${target}_device")
+    add_library(${device_target} STATIC ${ARGN})
+    set_target_properties(${device_target} PROPERTIES
+      CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS ON
+      POSITION_INDEPENDENT_CODE ON)
+    generativeqc_cuda_host_archive(${device_target} host_archive)
+    # A host-only link keeps the already resolved device image intact. This TU
+    # supplies a link language without adding a public symbol or device work.
+    set(anchor "${CMAKE_CURRENT_BINARY_DIR}/cuda-host/${target}_link.cpp")
+    file(GENERATE OUTPUT "${anchor}" CONTENT "// Host link for a device-closed CUDA artifact.\n")
+    add_library(${target} SHARED "${anchor}")
+    # AOT manifests seal the post-build ELF hash. Link with the final RPATH so
+    # cmake --install cannot rewrite an already authenticated device artifact.
+    set_target_properties(${target} PROPERTIES
+      CUDA_RESOLVE_DEVICE_SYMBOLS OFF BUILD_WITH_INSTALL_RPATH ON)
+    target_link_libraries(${target} PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${host_archive}>")
+    set(${owner} "${device_target}" PARENT_SCOPE)
+  else()
+    add_library(${target} SHARED ${ARGN})
+    set(${owner} "${target}" PARENT_SCOPE)
+  endif()
+endfunction()

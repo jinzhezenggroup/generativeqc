@@ -1,8 +1,9 @@
 """Audited semilocal XC kernels; this does not register a public DFT method."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .spec import FunctionalSpec, UnsupportedXC, functional
+if TYPE_CHECKING:
+    from .spec import FunctionalSpec, UnsupportedXC, functional
 
 __all__ = [
     "FixedDensityXC",
@@ -18,6 +19,16 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    if name in {"FunctionalSpec", "UnsupportedXC", "functional"}:
+        # The source importer must be usable before its generated catalog is
+        # current. Resolve catalog-backed public types only when requested.
+        from .spec import FunctionalSpec, UnsupportedXC, functional
+
+        return {
+            "FunctionalSpec": FunctionalSpec,
+            "UnsupportedXC": UnsupportedXC,
+            "functional": functional,
+        }[name]
     if name in {"FixedDensityXC", "XCIntegral"}:
         from .integration import FixedDensityXC, XCIntegral
 

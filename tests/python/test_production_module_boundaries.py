@@ -8,17 +8,10 @@ from graphlib import TopologicalSorter
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.integral import (
-    production,
-    production_bundle,
-    production_emission,
-    production_selection,
-)
 
 ROOT = Path(__file__).resolve().parents[2]
 INTEGRAL = ROOT / "python" / "generativeqc_compiler" / "integral"
 PRODUCTION_MODULES = {
-    "production",
     "production_bundle",
     "production_cost",
     "production_emission",
@@ -34,7 +27,7 @@ EMISSION_IMPORTS = {
     "capabilities",
     "collections.abc",
     "cuda_emitter",
-    "cuda_lowering",
+    "lowering",
     "cuda_schedule",
     "fused_schedule",
     "functools",
@@ -105,41 +98,6 @@ def _production_imports(module: str) -> set[str]:
     return _imports(module) & PRODUCTION_MODULES
 
 
-def test_compatibility_facade_preserves_callable_identity() -> None:
-    assert production.emit_production_shard is production_emission.emit_production_shard
-    assert production.emit_profile_shard is production_emission.emit_profile_shard
-    assert (
-        production.write_production_bundle is production_bundle.write_production_bundle
-    )
-    assert (
-        production.write_production_bundles
-        is production_bundle.write_production_bundles
-    )
-    assert production._selection_integral is production_selection._selection_integral
-    emission_aliases = (
-        "CAPABILITY_LOCAL_PACKED_STREAMING_FOCK",
-        "CAPABILITY_MIXED_FOCK",
-        "CAPABILITY_STREAMING_FOCK",
-        "GeneratedKernelArgument",
-        "GeneratedKernelSignature",
-        "KernelConsumer",
-        "ScheduleIR",
-        "ScheduleKind",
-        "ShellClassSpec",
-        "TYPE_CHECKING",
-        "build_fused_shell_plan",
-        "cuda_target_info",
-        "emit_ppps_resident_bra_rys3_cuda",
-        "emit_shell_class_fused_cuda",
-        "re",
-        "shell_pair_class",
-    )
-    for name in emission_aliases:
-        assert getattr(production, name) is getattr(production_emission, name)
-    for name in ("FUSED_SHELL_SPEC_BY_NAME", "normalize_cuda_architecture"):
-        assert getattr(production, name) is getattr(production_bundle, name)
-
-
 def test_production_ownership_graph_is_cycle_free() -> None:
     graph = {module: _production_imports(module) for module in PRODUCTION_MODULES}
     for module in PRODUCTION_MODULES - {"production"}:
@@ -153,18 +111,18 @@ def test_import_normalization_covers_equivalent_package_spellings() -> None:
 from . import production_bundle
 from .production_registry import emit_registry_source
 from .production_exchange_queue import exchange_streaming_worker
-from generativeqc_compiler.integral import production
+from generativeqc_compiler.integral import production_profile
 from generativeqc_compiler.integral import production_exchange_queue
 from generativeqc_compiler.integral.production_selection import KernelSelection
 import generativeqc_compiler.integral.production_cost
 """
     )
     assert imports == {
-        "production",
         "production_bundle",
         "production_cost",
         "production_exchange_queue",
         "production_registry",
+        "production_profile",
         "production_selection",
     }
 
@@ -207,26 +165,3 @@ def test_exchange_queue_is_a_registered_leaf_emitter() -> None:
     assert "production_exchange_queue" in PRODUCTION_MODULES
     assert "production_exchange_queue" in _production_imports("production_emission")
     assert not _production_imports("production_exchange_queue")
-
-
-def test_facade_is_narrow_and_contains_no_generation_implementation() -> None:
-    source = (INTEGRAL / "production.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    assert len(source.splitlines()) < 110
-    assert all(
-        isinstance(node, (ast.Assign, ast.Expr, ast.Import, ast.ImportFrom))
-        for node in tree.body
-    )
-    assert not any(
-        isinstance(
-            node,
-            (ast.AsyncFunctionDef, ast.ClassDef, ast.FunctionDef, ast.Lambda),
-        )
-        for node in ast.walk(tree)
-    )
-    assignments = [node for node in tree.body if isinstance(node, ast.Assign)]
-    assert assignments
-    for assignment in assignments:
-        assert isinstance(assignment.value, ast.Attribute)
-        assert isinstance(assignment.value.value, ast.Name)
-        assert assignment.value.value.id.startswith("_production_")

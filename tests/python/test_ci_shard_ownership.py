@@ -733,8 +733,14 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         in preparation
     )
     assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
-    assert "&& 90 || (matrix.shard == 'posthf' && 35 || 30)" in step
-    assert "&& 100 || (matrix.shard == 'posthf' && 45 || 40)" in source
+    assert (
+        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 35 || 30)"
+        in step
+    )
+    assert (
+        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 45 || 40)"
+        in source
+    )
 
 
 @pytest.mark.parametrize(
@@ -748,7 +754,7 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         ('"${diagnostic_args[@]}"', '""'),
         ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
         ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
-        # Exercise full, ordinary, and posthf budgets independently. The old
+        # Exercise full, ordinary, and extended-shard budgets independently. The old
         # pre-exception fragments no longer reached the contract assertion.
         ("&& 90 ||", "&& 91 ||"),
         ("&& 100 ||", "&& 101 ||"),

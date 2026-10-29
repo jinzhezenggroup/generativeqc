@@ -3272,6 +3272,70 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_provider_initialization_intent_version": {
+      "kind": "c-function",
+      "header": "include/generativeqc/provider_initialization.h",
+      "signature_sha256": "d1ed852f9fca423a7fd003fd2f086888ba7ed873340e3c04e97197e51394c237",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_provider_initialization_capabilities_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/provider_initialization.h",
+      "signature_sha256": "39f70b9ddcd6514b496edb527de8f3554a6066a5394595c2728382ec646f328e",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_calculation_prepare_with_provider_initialization_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/provider_initialization.h",
+      "signature_sha256": "f9412dbf14519cb3aff40aa8472b7f5e23f9aee510408f2cdb4dd5d63a7719cc",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_context_close_provider_initialization_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/provider_initialization.h",
+      "signature_sha256": "44ca14c2973e60a60e7ea5667a45b18dfc14110c3c92fcfe549f3d6049339f79",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

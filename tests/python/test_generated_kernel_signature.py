@@ -3,25 +3,30 @@
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.integral import production
-from generativeqc_compiler.integral.production import (
+from generativeqc_compiler.integral import production_profile
+from generativeqc_compiler.integral.production_emission import (
     _streaming_fock_internal_signature,
-    _streaming_fock_launch_parameter_declaration,
     _streaming_fock_launch_wrapper,
     _streaming_fock_source,
+)
+from generativeqc_compiler.integral.production_profile import (
     load_production_kernel_selections,
 )
+from generativeqc_compiler.integral.production_registry import (
+    _streaming_fock_launch_parameter_declaration,
+)
+from generativeqc_compiler.integral.production_selection import KernelSelection
 from generativeqc_compiler.integral.signature import (
     GeneratedKernelArgument,
     GeneratedKernelSignature,
 )
 
-_PRODUCTION_MANIFEST = Path(production.__file__).with_name(
+_PRODUCTION_MANIFEST = Path(production_profile.__file__).with_name(
     "production_shell_classes.json"
 )
 
 
-def _selection(name: str) -> production.KernelSelection:
+def _selection(name: str) -> KernelSelection:
     return next(
         selection
         for selection in load_production_kernel_selections(

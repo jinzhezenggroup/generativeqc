@@ -172,10 +172,13 @@ calls. Final success still needs the actual independently executed strict result
 matching model/level metadata, SCF convergence and all measured observable gates.
 `verify_final` does not reconverge a calculation or certify an empirical envelope.
 
-Missing additive native protocols, subclassed policies/predictors/levels,
-nonstandard identity comparisons and integer states outside the installed ABI
-retain explicit compatibility. Selected-library load failures and native errors
-propagate. Loaded native library paths must remain immutable; a fresh library
+Built-in policies with bounded integer state require the current native library
+and both SCF effort protocols. Missing libraries or protocols report an error;
+they do not select a Python decision implementation or try another library.
+Subclassed policies/predictors/levels, nonstandard identity comparisons and
+integer states outside the installed ABI retain their explicit Python behavior.
+Selected-library load failures and native errors propagate.
+Loaded native library paths must remain immutable; a fresh library
 path selects a separate binding, not a hot replacement of a loaded shared object.
 
 This moves NUM03 policy decisions, not the geometry optimizer, physical SCF stage

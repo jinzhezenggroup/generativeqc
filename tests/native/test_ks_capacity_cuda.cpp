@@ -17,6 +17,7 @@
 
 #include "api/handles.hpp"
 #include "methods/dft_method.hpp"
+#include "methods/named_ks_catalog.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "scf/ks_device_resources.hpp"
@@ -67,6 +68,88 @@ void empty(const Resources& r) {
   const auto d = snapshot(r, "closed");
   require(!d.numeric_live_bytes && !d.provider_reserved_bytes && !d.capacity_reserved_bytes,
           "teardown retained charges");
+}
+
+/** Named corrections own storage outside the electronic-only promise. A raw
+ * numeric cap still bounds every allocation, but cannot certify omitted future
+ * owners or grant optional XC permission on their behalf. */
+void test_named_correction_admission() {
+  generativeqc_context_descriptor descriptor{sizeof(descriptor), GENERATIVEQC_ABI_VERSION, 0,
+                                             GENERATIVEQC_BACKEND_CUDA};
+  qc::Context context(descriptor);
+  const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -.7}, {1, 0, 0, .7}}};
+  qc::System system(context, atoms, "sto-3g");
+  auto method = qc::default_method_descriptor("pbe-rks");
+  method.energy_tolerance = 1e-12;
+  method.density_tolerance = 1e-10;
+  method.max_iterations = 250;
+  for (const auto* selector : {"pbe-d3(bj)-rks", "pbe-d3(0)-rks", "pbe-d4(bj-eeq-atm)-rks",
+                               "pbe-d3(bj)-uks", "pbe-d3(0)-uks", "pbe-d4(bj-eeq-atm)-uks"}) {
+    const auto* entry = qc::methods::named_ks::find_method(selector);
+    require(entry != nullptr, "named correction fixture is not registered");
+    method.method = entry->carrier;
+    const std::string identity(entry->identity);
+    const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION, selector,
+                                                 identity.c_str(), 256ULL << 20};
+    auto r = resources(cap);
+    {
+      generativeqc_calculation* raw{};
+      check(generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+                context.get(), system.get(), &method, &named, r.get(), &raw),
+            context.get()->last_detail);
+      Calculation calculation(raw, generativeqc_calculation_destroy);
+      require(snapshot(r, std::string(selector) + "-prepared").capacity_reserved_bytes == 0,
+              "named correction borrowed an incomplete electronic-only promise");
+      const auto result = calculation->plan->execute(true);
+      require(result.convergence.converged && std::isfinite(result.energy),
+              "bounded named correction did not converge");
+      require(snapshot(r, std::string(selector) + "-executed").capacity_reserved_bytes == 0,
+              "named correction created an incomplete promise during execution");
+      generativeqc_calculation* plain{};
+      check(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
+                                                         &named, &plain),
+            context.get()->last_detail);
+      Calculation reference_owner(plain, generativeqc_calculation_destroy);
+      const auto reference = reference_owner->plan->execute(true);
+      require(std::abs(result.energy - reference.energy) < 1e-9 && result.forces.size() == 6 &&
+                  result.forces.size() == reference.forces.size(),
+              "capped correction changed energy or force publication");
+      for (std::size_t i = 0; i < result.forces.size(); ++i)
+        require(std::abs(result.forces[i] - reference.forces[i]) < 1e-8,
+                "capped correction changed forces");
+    }
+    empty(r);
+    {
+      const std::array<const generativeqc_system*, 2> systems{system.get(), system.get()};
+      generativeqc_batch* raw{};
+      check(generativeqc_batch_prepare_named_ks_with_device_resources_v1(
+                context.get(), systems.data(), systems.size(), &method, &named,
+                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, r.get(), &raw),
+            context.get()->last_detail);
+      Batch batch(raw, generativeqc_batch_destroy);
+      require(snapshot(r, std::string(selector) + "-fleet").capacity_reserved_bytes == 0,
+              "named fleet borrowed an incomplete electronic-only promise");
+      for (const qc::methods::Coordinates& moved :
+           {qc::methods::Coordinates{}, qc::methods::Coordinates{{{0, 0, -.7, .03, 0, .78}}, {}}}) {
+        const auto values = batch->plan->execute(moved, true);
+        require(values.size() == systems.size(), "named fleet omitted an item");
+        for (const auto& item : values)
+          require(item.status == GENERATIVEQC_STATUS_SUCCESS &&
+                      item.calculation.convergence.converged &&
+                      std::isfinite(item.calculation.energy),
+                  "named correction fleet failed bounded replay");
+      }
+    }
+    empty(r);
+    auto insufficient = resources(1);
+    generativeqc_calculation* rejected{};
+    require(generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+                context.get(), system.get(), &method, &named, insufficient.get(), &rejected) ==
+                    GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                !rejected,
+            "named correction bypassed a below-capacity refusal");
+    empty(insufficient);
+  }
 }
 struct Model {
   std::array<generativeqc_ks_semilocal_component, 2> terms{{{"GGA_C_PBE", 1}, {"GGA_X_PBE", .75}}};
@@ -471,6 +554,7 @@ int main() {
   try {
     int devices{};
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
+    test_named_correction_admission();
     test_shared_lifetimes();
     test_admission_boundaries();
     test_sparse_pair();

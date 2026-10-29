@@ -7,6 +7,7 @@ integrals, SCF solve, or chemical energy is evaluated.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _compile_run(tmp_path: Path, code: str, sources: tuple[Path, ...] = ()) -> str:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which(os.environ.get("CXX", "c++"))
+    cache = shutil.which(os.environ.get("CCACHE", "ccache"))
     if compiler is None or cache is None:
         pytest.skip("host C++ compiler and ccache required")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
@@ -96,6 +98,7 @@ void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept {
 }
 using generativeqc::methods::detail::CorrelatedCudaReferencePlan;
 using generativeqc::methods::detail::run_with_cuda_reference_budget;
+using generativeqc::methods::detail::run_with_cuda_reference_capacity;
 using generativeqc::methods::detail::run_with_rccsd_reference_source;
 """
 
@@ -419,6 +422,7 @@ void provider_probe(int failure, bool resident, bool fitted) {
   core::System system;
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
+  scf::ScfOptions reference_options;
   solver_options.max_bytes = 100;
   // The extracted callback borrows the fitted owner from its enclosing frame.
   // Its allowance must survive exact-source retirement and be charged once on
@@ -480,6 +484,7 @@ void solver_probe(int failure, bool resident) {
   *owner.slot() = new scf::CudaRhfBucketPlan{30,10};
   auto* cuda_reference_plan = owner.slot();
   cc::SolverOptions solver_options, correlation_options;
+  scf::ScfOptions reference_options;
   solver_options.max_bytes = 100;
   const bool cuda = true;
   const std::size_t exact_source_retained = resident ? 30 : 17;
@@ -804,7 +809,10 @@ void mp2_probe(int failure, std::size_t warm_capacity) {
   const bool reference_plan_reused = true;
   const double threshold_ = 1e-12;
   const core::CorrelationConvergence convergence_{};
-  struct { double density_fitting_relative_threshold = 1e-10; } options_;
+  struct {
+    double density_fitting_relative_threshold = 1e-10;
+    std::shared_ptr<scf::PendingReferenceProviderOwner> reference_provider_initialization_owner;
+  } options_;
   struct { int device_id = 0; } context_;
   core::System system_;
   std::optional<core::System> auxiliary_;
@@ -853,6 +861,7 @@ void cc_force_probe(int failure, bool borrowed=false) {
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   core::System system_;
   ProbeExecution execution_;
+  scf::ScfOptions reference_options_;
   ProbeState state;
   if(borrowed) {
     state.reference_interaction_source=std::make_shared<ResidentSource>(

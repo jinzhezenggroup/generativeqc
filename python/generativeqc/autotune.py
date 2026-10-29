@@ -493,7 +493,7 @@ def _native_kernel_paths(
 def run(args: typing.Any) -> dict:
     """Tune measured hotspots; publish only complete accepted endpoint replacements."""
     source = args.source_dir.resolve()
-    if not (source / "python/generativeqc_compiler/integral/autotune.py").is_file():
+    if not (source / "python/generativeqc_compiler/integral/tuning/cli.py").is_file():
         raise ValueError(
             "autotuning needs the matching GenerativeQC source checkout; pass --source-dir"
         )
@@ -518,12 +518,10 @@ def run(args: typing.Any) -> dict:
         )
 
     from generativeqc_compiler.common.cuda_target import cuda_target_info
-    from generativeqc_compiler.integral.autotune import (
-        _run_autotune,
-        argument_parser,
-        supported_schedule_trials,
-    )
     from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+    from generativeqc_compiler.integral.tuning.cli import argument_parser
+    from generativeqc_compiler.integral.tuning.driver import _run_autotune
+    from generativeqc_compiler.integral.tuning.policy import supported_schedule_trials
 
     from tools.generativeqc_validation.local_tuning import validate_schedule
 

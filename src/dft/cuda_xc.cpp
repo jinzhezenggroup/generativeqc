@@ -272,8 +272,7 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
                                    layout.functional, layout.spins == 2, layout.tile_points,
                                    layout.response, layout.ao_precision, layout.exchange_scale,
                                    layout.correlation_scale, layout.borrowed_grid)),
-      point_program_(generated::automatic_cuda_point_entry(layout_.functional)),
-      point_launcher_(cuda_xc_detail::resolve_point_launcher(layout_.functional, layout_.response)),
+      point_binding_(cuda_xc_detail::resolve_point_binding(layout_.functional, layout_.response)),
       arena_(arena),
       arena_bytes_(arena_bytes),
       stream_(stream) {
@@ -467,9 +466,9 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   check(cudaStreamIsCapturing(stream_, &capture));
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("XC point batch preparation cannot capture");
-  // Automatic AOT entries qualify only the bounded one-tile FP64 executor.
-  // Keep optional batching closed until its complete endpoint/resource gates.
-  if (generated::automatic_cuda_point_entry(layout_.functional)) return;
+  // The prepared provider carries production qualification separately from
+  // raw kernel availability. Unsupported providers retain the bounded tile.
+  if (!point_binding_.launch_batch) return;
   if (!admitted_density_[0].precision.arithmetic.is_strict_fp64()) return;
   // Optional providers keep their qualified materialization/epilogue. This
   // candidate must never silently replace a selected library execution path.
@@ -478,8 +477,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
                                                              device_budget, compact, ragged);
   if (plan.tiles == 1) return;
-  const auto launcher =
-      cuda_xc_detail::resolve_point_batch_launcher(layout_.functional, point_launcher_);
+  const auto launcher = point_binding_.launch_batch;
   double* arena = nullptr;
   bool host_oom = false;
   const auto status = generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&arena),
@@ -1047,9 +1045,10 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
       execution_layout.ao_precision = CudaXcAoPrecision::Fp32ComputeFp64Storage;
     cuda_xc_detail::enqueue(
         execution_layout,
-        mixed_point ? cuda_xc_detail::mixed_pbe_point_launcher() : point_launcher_, stream_, basis_,
-        points_, weights_, density, ao_, work_, features_, coefficients_, point_totals_, potential_,
-        totals_, error_, phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
+        mixed_point ? cuda_xc_detail::mixed_pbe_point_launcher() : point_binding_.launch, stream_,
+        basis_, points_, weights_, density, ao_, work_, features_, coefficients_, point_totals_,
+        potential_, totals_, error_,
+        phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
         local_density_launchers_, direction, delta_features_, total_density, total_gradient,
         ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get(),
         point_batch_plan_,

@@ -3,6 +3,7 @@
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.triples import triples_energy
 from test_df_ccsd_factorized import FixtureDFProvider, _method_problem
 
 from tools.generativeqc_cc.df_ccsdt_oracle import (
@@ -14,7 +15,6 @@ from tools.generativeqc_cc.df_triples import (
     solve_df_ccsdt,
 )
 from tools.generativeqc_cc.solver import SolverOptions
-from tools.generativeqc_cc.triples import triples_energy
 
 
 def _block(eri, nocc, name) -> np.ndarray:

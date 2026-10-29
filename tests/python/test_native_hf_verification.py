@@ -23,7 +23,7 @@ from test_progressive_controller import (
 
 @pytest.fixture
 def library() -> Any:
-    value = native.optional_library()
+    value = native.require_library()
     assert value is not None, "build the current native HF verification protocol"
     return value
 
@@ -141,8 +141,30 @@ def test_selected_old_library_never_discovers_another_owner(
     def forbidden() -> None:
         raise AssertionError("selected old library searched for a second owner")
 
-    monkeypatch.setattr(native, "optional_library", forbidden)
-    assert finalize(library=SimpleNamespace()).succeeded
+    monkeypatch.setattr(native, "require_library", forbidden)
+    forbid_compatibility(monkeypatch)
+    with pytest.raises(
+        RuntimeError, match="requires the current native final protocol"
+    ):
+        finalize(library=SimpleNamespace())
+
+
+@pytest.mark.parametrize("missing", ["library", "protocol"])
+def test_standalone_verification_requires_current_native_support(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    """Construct the valid plan first so only final-verifier discovery is missing."""
+    prepared = plan()
+    selected = tmp_path / "selected.so"
+    if missing == "protocol":
+        selected.touch()
+        monkeypatch.setattr(native.ctypes, "CDLL", lambda _: SimpleNamespace())
+    monkeypatch.setattr(native._native, "_candidate_paths", lambda: iter((selected,)))
+    forbid_compatibility(monkeypatch)
+    with pytest.raises(
+        RuntimeError, match="HF verification requires the current native"
+    ):
+        finalize(selected=prepared)
 
 
 def test_native_refusal_is_not_a_compatibility_signal(

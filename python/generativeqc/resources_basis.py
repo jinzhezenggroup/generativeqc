@@ -18,7 +18,7 @@ _SHAPE_KEYS = ("nbf", "cartesian_nbf", "shells", "primitives", "maximum_angular"
 def _portable_basis_shape(
     angular: Sequence[int], primitives: Sequence[int], representation: str
 ) -> dict[str, int]:
-    """Retain scalar metadata sizing for absent/older libraries and CUDA plans."""
+    """Retain scalar metadata sizing only for absent or older native libraries."""
     cartesian = sum((value + 1) * (value + 2) // 2 for value in angular)
     public = (
         cartesian

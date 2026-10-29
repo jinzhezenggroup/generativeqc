@@ -64,4 +64,17 @@ struct CudaXcPointProgram {
   }
 };
 
+/** Prepared execution binding shared by curated, composed and automatic XC.
+ * Resolve both launchers together so a later policy change cannot pair a batch
+ * consumer with different point mathematics. A null batch callback means that
+ * production batching is unqualified, even if a raw AOT batch entry exists.
+ * The optional automatic descriptor retains its own scientific provenance;
+ * curated method/domain identity continues to belong to the prepared KS model.
+ */
+struct CudaXcPointBinding {
+  CudaXcPointLauncher launch{};
+  CudaXcPointBatchLauncher launch_batch{};
+  const CudaXcPointProgram* automatic_program{};
+};
+
 }  // namespace generativeqc::dft

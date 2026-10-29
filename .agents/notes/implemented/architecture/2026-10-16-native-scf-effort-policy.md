@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-16
 
+The missing-library/protocol compatibility decision below is superseded by
+[the current-protocol requirement](../compatibility/2026-10-29-required-scf-effort-protocol.md).
+Custom policy semantics and unbounded integer handling remain explicit.
+
 ## Problem
 
 The force-aware research consumer already uses native SCF and analytic forces,

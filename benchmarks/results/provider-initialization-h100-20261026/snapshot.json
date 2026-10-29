@@ -1,0 +1,54 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "11b7bda884901e94c132433691106100e54b1f55",
+  "file_count": 7,
+  "total_bytes": 316187,
+  "purpose": "Superseded task-owned initialization-only engineering family; no molecular/solver/scientific endpoint values or independent oracles. Preserve all seven original published files exactly in already-merged Git history.",
+  "original_outcome": "PASS_ENGINEERING_INIT_SUBCONTRACT_ONLY; full SDK and scientific qualification not established",
+  "recovery": "python tools/restore_retained_evidence.py --all --manifest benchmarks/results/provider-initialization-h100-20261026/snapshot.json --output .artifacts/recovered-provider-initialization",
+  "fetch_policy": "No implicit network. A shallow clone must explicitly obtain the pinned already-merged commit before requesting offline restore.",
+  "files": [
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/.gitattributes",
+      "bytes": 143,
+      "sha256": "d560dd6b59de4a3a131c6c048f6f49b4433868fc346269b9465d964c83caacdc",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/README.md",
+      "bytes": 7824,
+      "sha256": "53b952a35720a7aa70c67c122597a62b96e4f4392da01ce18d2cedce50c54e78",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/inputs.json.xz",
+      "bytes": 228780,
+      "sha256": "d9593b5045852e9f78038dbe2761b19c625ffbf219043ee6479eb8a1de801f60",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/manifest.json",
+      "bytes": 40392,
+      "sha256": "49c441dbd232c0184bb8535f956622cf5f81d2686aa0ed65655727baded14934",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/observations.json.xz",
+      "bytes": 21468,
+      "sha256": "068f67d40dcdc80ce32baceeef3617b05dc47d6bf5e1858554722820bd2c49ec",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/offline-verification.json",
+      "bytes": 1528,
+      "sha256": "a2a31607aed08960f850777209992b4bf596af0929be64981f7568e085eda277",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/provider-initialization-h100-20261026/reader.py",
+      "bytes": 16052,
+      "sha256": "cecda4ed75edbcbdeb301e0bd51f43dc5e51eb0a593c1b02b4f09ab0eb7b26ca",
+      "git_mode": "100644"
+    }
+  ]
+}
