@@ -1,8 +1,23 @@
 #!/bin/bash
-# Run the water-96 standard-arm benchmark cases on a USTC SCC GPU node.
+# Run the water-96 benchmark cases for ONE arm on a USTC SCC GPU node.
 #
+#   # GenerativeQC Standard arm (the implementation under test)
 #   sbatch tools/scc/run.sbatch
+#
+#   # GPU4PySCF reference arm, same methods/modes/gates
+#   sbatch --export=ALL,GQC_ARM=gpu4pyscf tools/scc/run.sbatch
+#
+#   # group 1: the cheap calibration set (hf + pbe, direct + df)
+#   sbatch tools/scc/run.sbatch
+#
+#   # group 2: the paths the reference RTX 5090 cohort showed to be slow/broken
+#   sbatch --export=ALL,GQC_GROUP=defects tools/scc/run.sbatch
+#
 #   OUT=/scratch/<user>/gqc-a100 sbatch tools/scc/run.sbatch
+#
+# A standard/GPU4PySCF pair for the same group is two submissions with the same
+# GQC_GROUP and different GQC_ARM; results land in separate directories and
+# tools/scc/compare_scc.py joins them.
 #
 # V100 (瀚海20, sm_70) — the library must already be built for sm_70:
 #   sbatch --partition=<v100-partition> --gres=gpu:v100:1 \
@@ -21,12 +36,17 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=01:00:00
+#SBATCH --time=04:00:00
 
-# Why one GPU and 8 CPUs: four serial water-96 cases, one process each, with
+# Why one GPU and 8 CPUs: cases run serially, one process each, with
 # single-threaded BLAS/OMP so the timings are single-device endpoint numbers.
-# On an RTX 5090 the four cases total roughly 2 minutes; 1 hour is ample even
-# if A100 is slower.
+#
+# Why 4 hours: the baseline group is minutes, but the defects group contains
+# wb97m-v, which on an RTX 5090 took 1130 s for a single cold evaluation with 39
+# SCF iterations. Multiplied by cold + 3 warm repeats, and allowing for the A100
+# being slower per iteration, a 1-hour limit would be cut off partway through
+# the most interesting case. run.sh additionally caps each individual case via
+# GQC_TIMEOUT so one pathological method cannot eat the whole slot.
 #
 # Why 64 GB: the DF cases allocate a metric plus a contraction tile, and too
 # little memory fails with
@@ -40,6 +60,7 @@
 set -euo pipefail
 echo "job=${SLURM_JOB_ID:-local} node=$(hostname) $(date)"
 echo "gres=${SLURM_GRES:-none} cpus=${SLURM_CPUS_PER_TASK:-unset} arch=${GQC_ARCH:-80}"
+echo "arm=${GQC_ARM:-standard} group=${GQC_GROUP:-baseline}"
 echo "src=${SLURM_SUBMIT_DIR:-$(pwd)}"
 nvidia-smi --query-gpu=index,name,compute_cap,memory.total --format=csv
 echo
@@ -53,7 +74,9 @@ fi
 
 # Default output stays inside the checkout (git-ignored). Results are small, but
 # redirect OUT when the AOT build has already consumed the home quota.
-OUT="${OUT:-${ROOT}/.artifacts/scc-a100-sm${GQC_ARCH:-80}}"
+# Arm and group are both in the path so the two arms never overwrite each
+# other's pbe:df reference point, and the two groups never do either.
+OUT="${OUT:-${ROOT}/.artifacts/scc-a100-sm${GQC_ARCH:-80}/${GQC_ARM:-standard}/${GQC_GROUP:-baseline}}"
 echo "results=${OUT}"
 echo
 

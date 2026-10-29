@@ -33,7 +33,20 @@ import math
 import sys
 from pathlib import Path
 
-CASES = ["standard-hf-direct", "standard-hf-df", "standard-pbe-direct", "standard-pbe-df"]
+# 由 "<arm>-<method>-<mode>" 组成。顺序按 run.sh 的 all 组排列：
+# 前四个是标定用的 baseline 组，后面是参照设备上暴露问题的路径。
+# pbe-df 同时属于两组，作为两批提交之间的重合锚点。
+CASES = [
+    "standard-hf-df",
+    "standard-hf-direct",
+    "standard-pbe-df",
+    "standard-pbe-direct",
+    "standard-r2scan-df",
+    "standard-r2scan-3c-direct",
+    "standard-r2scan-3c-df",
+    "standard-wb97m-v-df",
+    "standard-wb97m-v-direct",
+]
 
 DEFAULT_GATES = {
     "energy_abs_per_atom_hartree": 1e-5,
@@ -52,6 +65,39 @@ def load(directory, case):
     except Exception as exc:  # noqa: BLE001 - 报告并继续，不中断整批汇总
         print(f"WARN: 读不了 {path}: {exc}", file=sys.stderr)
         return None
+
+
+def report_failures_file(directory, docs):
+    """读 run.sh 写的 failures.tsv。
+
+    这一份记录的是"进程层面"的失败（超时、崩溃），JSON 里的 status 只反映
+    库返回了什么。两者互补：run.sh 在进程死掉时会补一个 failed 桩，但超时被
+    SIGKILL 的算例可能留下半截 JSON，靠 tsv 才能确定真实原因。
+    """
+    path = Path(directory) / "failures.tsv"
+    if not path.exists():
+        return
+    bad = []
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as exc:
+        print(f"WARN: 读不了 {path}: {exc}", file=sys.stderr)
+        return
+    for line in lines[1:]:
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            bad.append((parts[0], parts[1]))
+    if not bad:
+        print("failures.tsv: 无进程级失败")
+        return
+    print(f"failures.tsv 记录 {len(bad)} 个进程级失败:")
+    for case, reason in bad:
+        print(f"  {case}: {reason}")
+    # 提醒哪些算例根本没产出可解析的 JSON——这些不会出现在汇总表里。
+    silent = [c for c, _ in bad if docs.get(c) is None]
+    if silent:
+        print(f"  其中无可用 JSON: {silent}", file=sys.stderr)
+
 
 
 def gates_of(doc, fallback):
@@ -223,6 +269,8 @@ def main(argv):
 
     docs = {case: load(cand_dir, case) for case in CASES}
     base_docs = {case: load(base_dir, case) for case in CASES} if base_dir else {}
+
+    report_failures_file(cand_dir, docs)
 
     all_gates = [gates_of(d, DEFAULT_GATES) for d in docs.values() if d]
     gates = all_gates[0] if all_gates else dict(DEFAULT_GATES)
