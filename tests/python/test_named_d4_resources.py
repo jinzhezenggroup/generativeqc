@@ -227,6 +227,9 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
     monkeypatch.setattr(dispersion, "D4CorrectionBatch", forbidden)
     with calc.prepare_batch(systems(), resource_plan=plan) as batch:
         assert batch._native_dispersion is not None
+        assert batch.basis_metadata == tuple(
+            calc.basis_metadata(atoms) for atoms in systems()
+        )
         if device == "cuda" and hasattr(
             library, "generativeqc_resource_ks_d4_optional_cuda_v1"
         ):

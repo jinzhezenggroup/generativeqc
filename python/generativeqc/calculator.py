@@ -1892,6 +1892,25 @@ class Calculator:
         self, atoms: typing.Any, *, charge: typing.Any = 0, multiplicity: typing.Any = 1
     ) -> typing.Any:
         """Resolve complete orbital/auxiliary scientific identities for this model."""
+        return self._basis_metadata_from_snapshot(
+            atoms, charge=charge, multiplicity=multiplicity
+        )
+
+    def _basis_metadata_from_snapshot(
+        self,
+        atoms: typing.Any,
+        *,
+        charge: typing.Any = 0,
+        multiplicity: typing.Any = 1,
+        model_signature: typing.Any = None,
+    ) -> typing.Any:
+        """Resolve item metadata against one synchronous prepared model snapshot.
+
+        A CUDA D4 constructor already computes the complete model signature
+        immediately before resolving its items. Carry that value through this
+        local operation; public calls and later executions still recompute it.
+        This does not retain a signature across caller-visible mutation points.
+        """
         atoms = tuple(Atom.from_value(a) for a in atoms)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
@@ -1937,7 +1956,9 @@ class Calculator:
             )
         result["model_identity"] = canonical_hash(
             {
-                "calculator": self._model_signature(),
+                "calculator": self._model_signature()
+                if model_signature is None
+                else model_signature,
                 "basis": result,
                 "charge": int(charge),
                 "multiplicity": int(multiplicity),

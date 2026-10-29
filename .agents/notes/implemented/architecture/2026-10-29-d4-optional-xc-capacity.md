@@ -164,3 +164,15 @@ and resets on `dataclasses.replace`. Changed options, different selectors and
 profile-derived replacements retain full resolution. Shape, precision, native
 provider/capacity and execute-time model/provenance checks are unchanged. CPU
 planning keeps its previous resolution path.
+
+Selector-bound option reuse at `a677a78c0` passes the eight-group scalar-only
+diagnostic (1.0475318), but full qualification still fails at 1.0544498 in Slurm
+14920. All 180 GPU tests and both exact work/storage profiles pass. Warmed host
+profiling also identifies 24 redundant model hashes while preparing per-item
+basis metadata. The complete CUDA D4 constructor already takes a full scientific
+model snapshot immediately before that metadata loop. Carry this signature
+through that one synchronous operation, while preserving public metadata
+validation order and all later execute-time mutation checks. The independent
+public metadata query must produce the same complete identity for each item.
+Do not retain this signature across caller-visible mutation points or extend
+the optimization to unrelated prepared owners without qualification.

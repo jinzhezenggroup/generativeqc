@@ -213,3 +213,11 @@ eight ABBA/BAAB groups pass at maximum ratio 1.0475317675582805, E/F errors
 <=8.89e-16 / 6.67e-16. All 112 relevant tests pass and both integrity checks and
 completed scheduler receipts succeed. This scalar-only diagnostic is not a
 replacement for complete fleet qualification.
+
+The full `a677a78c0` qualification (Slurm 14920) is retained in
+`resolved-options-cuda-*`. Both populations contain 1,792 complete calls across
+eight groups. Default passes at 1.0125901383084006; budget **fails** at
+1.0544497885332915 for PBE0 energy+forces scalar preparation. Maximum E/F
+differences are 1.28e-13 / 5.78e-14. All 180 GPU tests, native/installed SDK
+references, memcheck and before/after input integrity pass. Both actual GPU
+work/storage profiles exactly match baseline. Completed receipts preserve exit 1.

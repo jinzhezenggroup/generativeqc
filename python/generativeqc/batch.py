@@ -399,6 +399,13 @@ class PreparedBatch:
             )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
+            if self._cuda_d4_resource_replay is None
+            else calculator._basis_metadata_from_snapshot(
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                model_signature=self._model_signature,
+            )
             for atoms, charge, multiplicity in zip(
                 self._systems, self._charges, self._multiplicities, strict=True
             )
