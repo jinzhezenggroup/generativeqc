@@ -119,10 +119,10 @@ python benchmarks/results/cuda-image-storage-20261028/reduce.py
 `summary.json` retains every campaign's call count, failed timing ratios, maximum
 ratio and paired/independent numerical errors, with the unchanged work and
 acceptance gates. Default replay reads the original full `receipts.json.xz`
-directly from existing Git objects through the repository's stock authenticated
-reader. It verifies the manifest's original commit/path, byte count, SHA256 and
-Git blob identity before decompressing. No network, generated cache, alternate
-storage or new recovery framework is used.
+retained alongside the reader. It verifies the original byte count, SHA256 and
+Git blob identity before decompressing. Routine tests and source exports need
+neither Git history nor network access. An explicitly supplied snapshot manifest
+continues to invoke the stock authenticated historical reader.
 
 The original receipt contains all 2,075 campaign observations and independent
 references, source overlays and recipes, protocols, artifact identities,
@@ -131,12 +131,10 @@ build/cache/test/failure/pilot records. Source recipes now live in that original
 receipt rather than being duplicated in the current checkout. No failed timing
 sample or original byte is removed from history.
 
-Replay requires the pinned original Git object. It belongs to the original PR
-history and is not an ancestor of the squash-merged mainline, so even
-`fetch-depth: 0` does not supply it. The core-b CI job explicitly fetches the
-manifest's immutable revision and authenticates its bytes before running the
-offline replay tests. Other checkouts must likewise explicitly fetch/retain
-that revision; missing history continues to fail closed. To materialize the exact 209,852 original bytes separately:
+The manifest records the original PR revision, which is not an ancestor of the
+squash-merged mainline and is not a protected-history retirement anchor. The
+exact 209,852 bytes therefore remain in the current tree. To perform a separate
+historical recovery audit, explicitly obtain that revision before using:
 
 ```bash
 python tools/restore_retained_evidence.py \
@@ -145,7 +143,9 @@ python tools/restore_retained_evidence.py \
 ```
 
 The output is under ignored `.artifacts/retention-restore/`. The immutable source
-revision and original identities are recorded only in the stock snapshot manifest.
+revision and original identities are recorded in the stock snapshot manifest.
+Missing history still fails closed for that explicit audit. It does not prevent
+normal offline replay of the authenticated in-tree receipt.
 
 Per-process energy/force
 columns use a lossless little-endian IEEE-754 XOR encoding; `decode_samples()`
@@ -159,3 +159,8 @@ raw inventories and successful compiler warning streams remain ignored local
 artifacts, with hashes and action/diagnostic summaries retained here. No cubins
 or shared libraries are committed. The compact current summary and offline replay fit the existing
 80-MiB aggregate evidence policy without changing historical evidence or budgets.
+Five superseded HOST build/wheel sidecars in
+[`h100-paper-environment-20261024`](../h100-paper-environment-20261024/README.md#historical-host-build-and-wheel-sidecars)
+use a separately verified, already-merged Git snapshot, freeing room for this
+live regression input. Current numerical/device originals and reference readers
+remain offline in the checkout.

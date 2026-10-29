@@ -234,3 +234,19 @@ The independent oracle reader passed four additional CPU tests in both modes,
 using retained data and synthetic perturbations. Actual unmodified CLI checks
 also verified the zero-warm rejection and both Slurm guards, with exit code 2,
 no created measurement output and no scientific calls.
+
+## Historical HOST build and wheel sidecars
+
+Five superseded CPU build/static SDK and wheel-integrity sidecars now use
+`historical-HOST-snapshot.json`, pinned to already-merged
+`5cb8716e51807e3a6c6010ffeb27ad8c8e8c7aea` (#2750). The stock offline Git
+snapshot restorer reproduced all five original compressed/plain files at
+their published SHA256/length before this migration. The manifest gives
+the exact recovery command; shallow clones must explicitly obtain that
+commit first. No new build, device call or chemistry follows from restore.
+
+All current device originals, numeric arrays, independent references,
+source identities, prior failures and executable smoke/oracle readers
+remain here. Historical CPU artifact qualification is not promoted into
+installed-SDK, numerical or performance acceptance. This bounded migration
+uses existing Git history and keeps all retention limits unchanged.
