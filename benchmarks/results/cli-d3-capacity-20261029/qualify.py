@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 base = Path("/tmp/qc-2227-cli-d4-cpu-install/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
-candidate = Path("/tmp/qc-2227-cli-d3-complete-20261030/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
+candidate = Path("/tmp/qc-2227-cli-d3-integrated-install/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
 geometry = Path("tests/data/h2_bohr.xyz").resolve()
 environment = {**os.environ, "PATH": "/nonexistent", "GENERATIVEQC_PROFILE": "off"}
 for key in (
@@ -24,7 +24,13 @@ samples = []
 reference = {}
 for group in range(8):
     for role in "ABBA" if group % 2 == 0 else "BAAB":
-        for method in ("rhf", "pbe-rks", "pbe-uks", "pbe-d4(bj-eeq-atm)-rks", "pbe-d4(bj-eeq-atm)-uks"):
+        for method in (
+            "rhf",
+            "pbe-rks",
+            "pbe-uks",
+            "pbe-d4(bj-eeq-atm)-rks",
+            "pbe-d4(bj-eeq-atm)-uks",
+        ):
             for batch in (1, 4):
                 key = f"{method}/{batch}"
                 binary = base if role == "A" else candidate
@@ -93,7 +99,7 @@ report = {
     "reference": reference,
     "samples": samples,
 }
-Path(".artifacts/cli-d3/current-cli-samples.json").write_text(
+Path(".artifacts/integration-20261030/cli-samples.json").write_text(
     json.dumps(report, separators=(",", ":")) + "\n"
 )
 print(

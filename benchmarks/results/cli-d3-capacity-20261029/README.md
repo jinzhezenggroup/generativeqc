@@ -1,5 +1,21 @@
 # Native CLI D3 capacity qualification
 
+Current source `0808f5be3` includes master `3045c7e90` and the repaired D4 parent.
+Its Release CPU installation passes all 17 CLI CTests and named D3 inventory with
+Python/compiler absent from PATH. The unchanged eight-group, 6,720-call complete
+metadata matrix passes at maximum ratio **1.00941650303987**. Outputs match after
+the existing source/plan identity normalization. No scientific/GPU execution is
+claimed by this CLI timing.
+
+`current-samples.json.xz` and `current-qualification.json.xz` retain every sample,
+reference, installed product hash, executed runner and validation receipt.
+`qualify.py` is the formatted, AST-equivalent reproduction script. The preceding
+receipts and exact old runner/README remain recoverable through
+`pre-integration-history.json`; offline restoration was verified before replacing
+the current records. Historical qualifications below retain their original sources.
+
+## Previous integrated qualification
+
 Integrated source `8cdafb7fc` retains the shared D4 parent and passes all three
 CLI contract/catalog CTests plus installed named D3 inventory with Python and
 compiler absent from PATH. The original 6,720-call eight-group ABBA/BAAB matrix
