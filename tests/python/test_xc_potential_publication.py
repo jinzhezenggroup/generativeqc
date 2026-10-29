@@ -121,7 +121,10 @@ struct CudaXcPlan {
   runtime::AsyncGeneration generations_;
   struct { std::uint64_t evaluations{}, potential_calls{}, potential_summands{}; } transfers_;
   cudaStream_t stream_{7};
-  int device_{2}, point_launcher_{};
+  int device_{2};
+  // Publication consumes the prepared ordinary entry; descriptor ownership is
+  // exercised separately by the compiled provider-binding contract.
+  struct { int launch{17}; } point_binding_;
   bool evaluation_started_{};
   bool mixed_pbe_points_{}, mixed_pbe_ao_{}, mixed_matrix_contractions_{};
   CudaXcPointBatchPlan point_batch_plan_;
@@ -163,7 +166,7 @@ int main(int argc, char** argv) {
   plan.mixed_pbe_ao_ = arithmetic == 2 || arithmetic == 4;
   plan.mixed_matrix_contractions_ = arithmetic == 2 || arithmetic >= 4;
   const bool mixed = arithmetic == 3 || arithmetic == 4;
-  expected_point_launcher = mixed ? 19 : plan.point_launcher_;
+  expected_point_launcher = mixed ? 19 : plan.point_binding_.launch;
   expected_fp32_contractions = arithmetic == 4 || arithmetic == 5;
   expected_fp32_point_totals = arithmetic == 4;
   expected_ao_precision = arithmetic == 4 ? CudaXcAoPrecision::Fp32ComputeFp64Storage

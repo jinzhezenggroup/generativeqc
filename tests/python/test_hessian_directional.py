@@ -392,6 +392,6 @@ def test_one_perturbation_rejects_bad_matrices_before_jk(
         np.array([[0.0, 1.0], [0.0, 0.0]]),
     ):
         with pytest.raises(ValueError, match="matrix|symmetric"):
-            perturbation.solve_rhf_nuclear_perturbation(
+            perturbation.solve_stationary_nuclear_perturbation(
                 operator, bad, result.overlap_derivative
             )

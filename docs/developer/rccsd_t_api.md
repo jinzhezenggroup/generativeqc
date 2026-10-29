@@ -178,7 +178,7 @@ conventional closed-shell domain. The native **CPU energy** owner used by
 `Calculator("rccsd(t)")` and its `"ccsd(t)"` alias reuses the existing native
 RCCSD solve, retains the exact canonical orbital energies from that reference,
 and evaluates standard `(T)` with a C++ header
-generated from the audited `tools/generativeqc_cc/triples.py` inventory. The generator
+generated from the audited `python/generativeqc_compiler/cc/triples.py` inventory. The generator
 AST-reads only the literal scientific inventory and recomputes the same canonical
 inventory hash, so build-time code generation has no NumPy/PySCF runtime
 dependency and does not introduce a second handwritten triples table.

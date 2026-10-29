@@ -1,8 +1,9 @@
 """Typed metadata transport for native progressive-HF final verification.
 
 The running controller supplies its selected library. Standalone verification
-uses the first configured library; only missing protocols or Python integer
-domains outside the ABI use explicit compatibility. Native errors never retry.
+uses the first configured library. Bounded inputs require the current protocol;
+Python integer domains outside the ABI keep explicit compatibility. Native
+errors never retry.
 """
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def _load(path: str) -> typing.Any:
     """Keep discovery local to the first selected immutable library path."""
     library = ctypes.CDLL(path)
     if getattr(library, "generativeqc_hf_verify_final_v1", None) is None:
-        return None
+        raise RuntimeError("HF verification requires the current native final protocol")
     library.generativeqc_get_abi_version.argtypes = []
     library.generativeqc_get_abi_version.restype = ctypes.c_uint32
     if library.generativeqc_get_abi_version() != _native.ABI_VERSION:
@@ -78,12 +79,12 @@ def _load(path: str) -> typing.Any:
     return library
 
 
-def optional_library() -> typing.Any:
-    """A missing first protocol means compatibility, never another library search."""
+def require_library() -> typing.Any:
+    """Require the first configured image, without searching past a broken installation."""
     for candidate in _native._candidate_paths():
         if candidate.exists():
             return _load(str(candidate.resolve()))
-    return None
+    raise RuntimeError("HF verification requires the current native library")
 
 
 def finalize(
@@ -141,10 +142,10 @@ def finalize(
         for value in counts
     ):
         return None
-    selected_library = optional_library() if library is None else library
+    selected_library = require_library() if library is None else library
     operation = getattr(selected_library, "generativeqc_hf_verify_final_v1", None)
     if operation is None:
-        return None
+        raise RuntimeError("HF verification requires the current native final protocol")
 
     actual_provider_identity = result.basis_metadata.get("model_identity", "")
     actual_hashes = tuple(sorted(tuple(pair) for pair in actual_provider_hashes))

@@ -56,7 +56,7 @@ All **124** retained native complete endpoints, including diagnostic/cold/moved 
 
 ## Provenance and reproduction
 
-Native source base: `013675d52d3b2857fc425c96c9a3bf7a3883ce21` plus [measured-source.patch](measured-source.patch). Measured native library SHA-256: `edad6753260ad527708dac3a43d0c371bcf025ec3256b98ffbba803cea5b4c89`. The patch pins the dirty measured checkout; subsequent evidence/documentation does not change those native bytes. [receipt.json.gz](receipt.json.gz) retains every clean/diagnostic sample, aggregate work counts, all gates and raw-artifact hashes. [independent-reference.json](independent-reference.json) preserves independent energy/force arrays and complete geometry/settings identity. Raw traces remain ignored local artifacts, without external publication.
+Native source base: `013675d52d3b2857fc425c96c9a3bf7a3883ce21` plus [measured-source.patch](measured-source.patch). Measured native library SHA-256: `edad6753260ad527708dac3a43d0c371bcf025ec3256b98ffbba803cea5b4c89`. The patch pins the dirty measured checkout; subsequent evidence/documentation does not change those native bytes. [receipt.json.gz](receipt.json.gz) retains every clean/diagnostic sample, aggregate work counts, all gates and raw-artifact hashes. [independent-reference.json.xz](independent-reference.json.xz) preserves independent energy/force arrays and complete geometry/settings identity. Raw traces remain ignored local artifacts, without external publication.
 
 Slurm jobs: 11796 independent references, 11797 regression matrix, 11798 baseline reproduction / memcheck / smoke, 11799 large endpoints. CUDA 12.9.1; package versions and the loaded library's actual kernel profile are in the JSON records.
 

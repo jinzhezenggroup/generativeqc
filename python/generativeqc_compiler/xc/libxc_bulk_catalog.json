@@ -8,7 +8,7 @@
     "maple_files": 285,
     "registrations": 544
   },
-  "importer_semantics": "libxc-maple-graph/v11",
+  "importer_semantics": "libxc-maple-graph/v12",
   "parameter_binding_semantics": "libxc-c-copy-parameters/v1",
   "registrations": [
     {

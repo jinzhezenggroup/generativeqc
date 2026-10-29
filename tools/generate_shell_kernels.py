@@ -21,7 +21,7 @@ from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
 )
-from generativeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production_bundle import (
     write_production_bundle,
     write_production_bundles,
 )
@@ -124,7 +124,7 @@ def main() -> None:
     parser.add_argument(
         "--profile",
         default="auto",
-        help="strict auto, explicit portable, sm_XX, or a named manifest profile",
+        help="auto (tuned then portable), explicit portable, sm_XX, or a named manifest profile",
     )
     parser.add_argument(
         "--profile-map",

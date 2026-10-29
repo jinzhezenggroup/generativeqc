@@ -1,0 +1,67 @@
+{
+  "source_commit": "9969625965f46f93964a7f5b158ced29c52fff76",
+  "integrated_master": "aa6e05ea6",
+  "baseline": "c413cde9fc4d102b42a2c3e856dceb0fadcdcdd7",
+  "scope": "Fresh integrated-source CPU/CUDA receipts. Earlier sibling evidence remains its original c413 plus bcf production-patch campaign. The executed CUDA driver used gzip regardless of suffix; retained samples are losslessly recompressed to xz.",
+  "binaries": {
+    "cpu": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-baseline-c413cde9f",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/baseline-cpu.so",
+        "library_sha256": "76e8f9b73a1b386a3c75b6d7063d46f0e895725a88f925cea75452a7dda87c65",
+        "backend": "cpu",
+        "slurm_job_id": "14827",
+        "cuda_visible_devices": null
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-20261028",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/integrated-cpu.so",
+        "library_sha256": "4b64274f969c5ebbfd7906ff5296dbb449c62241fe80c1e9b0e2529bdb5a9e31",
+        "backend": "cpu",
+        "slurm_job_id": "14827",
+        "cuda_visible_devices": null
+      }
+    },
+    "cuda": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-baseline-c413cde9f",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/baseline-cuda.so",
+        "library_sha256": "bdb1dfc06ddd4611daabbde47fb527d1683d661e61b524ce65b2fea1bf774aa4",
+        "backend": "cuda",
+        "slurm_job_id": "14828",
+        "cuda_visible_devices": "0"
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-20261028",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/integrated/libgenerativeqc.so.0",
+        "library_sha256": "6d899cebe4ca3a5cc799fe93961bd5ac2c82b5d3b9d4620d4f90c4cc9dd316b1",
+        "backend": "cuda",
+        "slurm_job_id": "14828",
+        "cuda_visible_devices": "0"
+      }
+    }
+  },
+  "receipts": {
+    "receipts.json.xz": {
+      "sha256": "d2e465c12b079aebcf6acc8c9a2086f84a668381890e00fc58051ced6d875a1d",
+      "bytes": 12644
+    },
+    "profile-summary.json": {
+      "sha256": "be423ef86b92bec688b6fc525a41f99605b9b898be496f30b6ab94c44c055680",
+      "bytes": 652
+    },
+    "cpu-samples.json.xz": {
+      "storage": "../endpoint-samples.json.xz",
+      "member": "integrated/cpu-samples.json.xz",
+      "uncompressed_sha256": "540d32bba90ab67c7be4315455a88046c75778d9cde56024d39b2b54c002cbd7",
+      "historical_compressed_sha256": "746129ce6c8c22804af0521e09351ad7cbe1c8cef3755234c9e88aac020ef9bd"
+    },
+    "cuda-samples.json.xz": {
+      "storage": "../endpoint-samples.json.xz",
+      "member": "integrated/cuda-samples.json.xz",
+      "uncompressed_sha256": "7b145ebeca268c3b79486757d111ab7fd7a18cecfc9db2b8689d3fdd1c9b3129",
+      "historical_compressed_sha256": "dfe83880ced1896727c095f5008be4ebde8d35064c70fe7980ba128402d69f91"
+    }
+  },
+  "sample_storage_sha256": "b438bb8162524c0fb3c7b6275da4a4567017ce973fd16cf30cec8f528566fba1"
+}

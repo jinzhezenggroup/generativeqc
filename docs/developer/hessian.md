@@ -237,7 +237,7 @@ otherwise cancel against another.
 
 ## Nuclear response RHS
 
-The nuclear-RHS boundary is ``build_rhf_nuclear_rhs``. It consumes the MO forms
+The nuclear-RHS boundary is ``build_stationary_nuclear_rhs``. It consumes the MO forms
 of the frozen Fock derivative, overlap derivative, and the Fock response to
 the known metric density connection, then returns ``b[i, a]`` in the
 occupied-major/virtual-minor layout required by the response solver. The metric Fock input is
@@ -366,7 +366,7 @@ reference oracle. The chain is:
    density into the frozen-Fock perturbation. Nuclear-attraction operator-center
    motion and all basis-center motions are accumulated onto physical atoms.
    No molecular `3N * NAO^4` first-derivative tensor is retained.
-5. `build_rhf_nuclear_rhs` constructs the symmetric-gauge RHS, including the
+5. `build_stationary_nuclear_rhs` constructs the symmetric-gauge RHS, including the
    known metric-density Fock term. `RHFResponseOperator` / true-residual
    GMRES uses `NativeJKBackend`, not the dense AO response oracle.
 6. The explicit second-derivative skeleton uses generated second-integral providers.
@@ -447,7 +447,7 @@ with the corresponding physical direction, including repeated atom slots and
 the independent nuclear-attraction center. It accumulates only two `(AO, AO)`
 matrices: the frozen-density Fock derivative and overlap derivative.
 
-The same `solve_rhf_nuclear_perturbation` helper now serves this direction and
+The same `solve_stationary_nuclear_perturbation` helper now serves this direction and
 the existing complete-coordinate CPU Hessian assembly. It includes the known
 metric-density Fock response, solves the nonredundant CPHF problem once, and
 retains the occupied metric response and full occupied-energy response block.

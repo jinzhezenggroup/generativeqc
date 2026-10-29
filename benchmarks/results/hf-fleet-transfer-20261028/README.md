@@ -116,3 +116,8 @@ The harness saves completed blocks, retains every timed sample and fails on any
 scientific/work signature difference or median ratio above 1.05. XZ records are
 lossless; read with `json.loads(lzma.decompress(path.read_bytes()))`. Hashes bind
 this historical receipt and do not add permanent required-CI source fingerprints.
+
+The original pre-integration sample population remains byte-for-byte recoverable
+through `pre-integration-history.json`. Offline restoration verified its Git
+ancestor and checksum before migration to preserve the unchanged evidence limit.
+The current integrated population and all scientific acceptance results remain.

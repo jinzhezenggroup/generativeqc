@@ -10,16 +10,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc_compiler.tensor import PackedLayout, Program, execute
-
-from tools.generativeqc_cc.gradient_equations import (
+from generativeqc_compiler.cc.gradient_equations import (
     build_fock_small_weight_program,
     build_fock_weight_program,
     build_hamiltonian_eri_weight_program,
     build_hamiltonian_programs,
     build_hamiltonian_small_weight_program,
 )
-from tools.generativeqc_cc.lambda_equations import PARAMETERS
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS
+from generativeqc_compiler.tensor import PackedLayout, Program, execute
 
 
 def _literal(value: float) -> str:

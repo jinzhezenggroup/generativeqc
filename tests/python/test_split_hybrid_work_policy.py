@@ -16,16 +16,15 @@ from generativeqc_compiler.xc.scalar_schedule import (
     XcScalarConsumer,
     select_xc_scalar_schedule,
 )
-from generativeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
-
-from tools.generate_xc_split_hybrid_cuda import (
+from generativeqc_compiler.xc.split_hybrid_codegen import (
     SplitHybridWorkPolicy,
     _component_work_policy,
     _emit_work_wrapper,
     emit_split_hybrid_device,
     emit_split_hybrid_device_body,
 )
-from tools.libxc_split_hybrid import (
+from generativeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
+from generativeqc_compiler.xc.split_hybrid_program import (
     _bound_component,
     _catalog,
     _root,

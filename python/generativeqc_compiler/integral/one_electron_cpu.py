@@ -59,11 +59,6 @@ def one_electron_cpu_inventory() -> dict[str, object]:
     }
 
 
-def one_electron_st_cpu_inventory() -> dict[str, object]:
-    """Compatibility alias for the pre-V host inventory entry point."""
-    return one_electron_cpu_inventory()
-
-
 def emit_one_electron_cpu() -> str:
     """Emit the s/p/d/f S/T/V value + first-derivative production helper."""
     body = "\n".join(
@@ -94,8 +89,3 @@ def emit_one_electron_cpu() -> str:
             "",
         )
     )
-
-
-def emit_one_electron_st_cpu() -> str:
-    """Compatibility alias for the pre-V host emitter entry point."""
-    return emit_one_electron_cpu()

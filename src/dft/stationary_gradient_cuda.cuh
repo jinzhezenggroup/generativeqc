@@ -711,8 +711,10 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
     cudaDeviceProp property{};
     cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
     const size_t pairs = owner->atoms * (owner->atoms - 1) / 2;
-    if (property.major != 12 || property.minor != 0 || property.maxThreadsPerBlock < 128 ||
-        property.maxThreadsDim[0] < 128 || pairs > size_t(property.maxGridSize[1]) ||
+    // Phased partition response uses ordinary CUDA kernels. Admission depends
+    // on their launch dimensions and retained byte budget, not a GPU model.
+    if (property.maxThreadsPerBlock < 128 || property.maxThreadsDim[0] < 128 ||
+        pairs > size_t(property.maxGridSize[1]) ||
         blocks(owner->points, 128) > size_t(property.maxGridSize[0]))
       return;
     try {

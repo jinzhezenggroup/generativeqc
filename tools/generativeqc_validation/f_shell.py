@@ -20,18 +20,18 @@ from tempfile import TemporaryDirectory
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.evidence import canonical_hash, file_hash, outcome
-from generativeqc_compiler.integral.autotune import schedule_payload
 from generativeqc_compiler.integral.batch_benchmark import parse_ptxas_resources
 from generativeqc_compiler.integral.benchmark import emit_shell_class_resource_cuda
 from generativeqc_compiler.integral.capabilities import build_capability_report
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.ir_serialization import integral_to_payload
-from generativeqc_compiler.integral.production import shell_class_index
+from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.shell_spec import (
     FUSED_SHELL_SPEC_BY_NAME,
     FUSED_SHELL_SPECS,
 )
+from generativeqc_compiler.integral.tuning.policy import schedule_payload
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"

@@ -169,7 +169,7 @@ current manifest/runtime when determining today's execution policy.
 
 ## Architecture autotuning
 
-`python/generativeqc_compiler/integral/autotune.py` emits every CUDA-supported schedule variant
+`python/generativeqc_compiler/integral/tuning/cli.py` drives generation of every CUDA-supported schedule variant
 with unique symbols, compiles the translation units in parallel, links them
 into one executable, and runs all variants in one GPU allocation. A candidate
 is rejected for:
@@ -195,7 +195,7 @@ Passing compiled variants are ranked by measured kernel time. The winner can be 
 to a schema-v2, architecture-specific production manifest:
 
 ```bash
-python -m generativeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.tuning.cli \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class dpds \
@@ -209,7 +209,7 @@ repeating `--shell-class`, or by supplying a list file. The list-file form
 accepts one class per line, comma-separated names, and `#` comments:
 
 ```bash
-python -m generativeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.tuning.cli \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class-file benchmarks/issue52-hotspots.txt \
@@ -236,7 +236,7 @@ this searches the component-lane variants for three Fock classes and
 atomically promotes all three winners together:
 
 ```bash
-python -m generativeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.tuning.cli \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class dpps --shell-class ddds --shell-class dppp \

@@ -693,6 +693,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         "--grid-pruning", choices=("auto", "none", "radial-v1"), default="auto"
     )
     parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument(
+        "--allow-portable-build",
+        action="store_true",
+        help="Measure a portable CUDA build while retaining its untuned provenance",
+    )
     parser.add_argument("--reference", type=Path)
     parser.add_argument(
         "--accuracy-reference",
@@ -743,8 +748,8 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         parser.error(
             "Fast qualification cannot be combined with private seed/force experiments"
         )
-    if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        parser.error("GPU work requires a finite Slurm or LSF GPU allocation")
     if args.repeats < 1 or (args.grid is not None and min(args.grid) < 1):
         parser.error("repeats and grid dimensions must be positive")
     if args.nonlocal_grid is not None and (
@@ -897,7 +902,15 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         ),
         "scheduler": {
             name: os.environ.get(name)
-            for name in ("SLURM_JOB_ID", "SLURM_JOB_PARTITION", "SLURM_GPUS_ON_NODE")
+            for name in (
+                "SLURM_JOB_ID",
+                "SLURM_JOB_PARTITION",
+                "SLURM_GPUS_ON_NODE",
+                "LSB_JOBID",
+                "LSB_QUEUE",
+                "LSB_HOSTS",
+                "CUDA_VISIBLE_DEVICES",
+            )
         },
     }
     record["environment"]["accelerator"] = cuda_accelerator_metadata(cp)
@@ -1116,7 +1129,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             record["native_build"] = native_build_metadata(
                 calc if precision_policy is None else calc._candidate
             )
-            require_tuned_native_build(record["native_build"])
+            require_tuned_native_build(
+                record["native_build"], allow_portable=args.allow_portable_build
+            )
             record["native_capabilities"] = {
                 "supported_properties": sorted(calc.capabilities.supported_properties),
                 "maximum_basis_angular_momentum": max(

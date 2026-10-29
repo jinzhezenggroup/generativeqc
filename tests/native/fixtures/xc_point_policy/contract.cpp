@@ -171,10 +171,12 @@ Output execute(unsigned functional, unsigned spins, const std::vector<double>& i
   std::vector<double> weights(count, 1), coefficients(input.size() + 2, 12345),
       totals(3 * count + 2, 54321);
   const auto original = input;
-  auto launch = resolve_point_launcher(functional, response);
+  const auto binding = resolve_point_binding(functional, response);
+  auto launch = binding.launch;
   int error = 0;
   if (batched) {
-    auto batch = resolve_point_batch_launcher(functional, launch);
+    auto batch = binding.launch_batch;
+    require(batch != nullptr, "unqualified point batch");
     batch(nullptr, input.data(), weights.data(), count, spins, coefficients.data() + 1,
           totals.data() + 1, &error, functional, exchange, correlation, 3);
   } else {
@@ -366,11 +368,7 @@ void replay_and_response() {
             near(response.coefficients[i],
                  (high.coefficients[i] - low.coefficients[i]) / (2 * step), 1e-6, 2e-9);
         }
-        try {
-          resolve_point_batch_launcher(1, resolve_point_launcher(1, true));
-          throw std::logic_error("response batch admitted");
-        } catch (const std::invalid_argument&) {
-        }
+        require(!resolve_point_binding(1, true).launch_batch, "response batch admitted");
       }
   }
 }
@@ -461,10 +459,11 @@ void consumer_identity() {
 }
 void invalid_domains_and_policy() {
   policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", "0");
-  const auto generic = resolve_point_launcher(1, false);
+  const auto generic = resolve_point_binding(1, false);
   policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", "1");
-  const auto specialized = resolve_point_launcher(1, false);
-  require(generic != specialized, "prepared family identities collapsed");
+  const auto specialized = resolve_point_binding(1, false);
+  require(generic.launch != specialized.launch, "prepared family identities collapsed");
+  require(generic.launch_batch != specialized.launch_batch, "prepared batch identities collapsed");
   for (const char* equal : {"0", "1"})
     for (const char* selected : {"0", "1"}) {
       policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
@@ -482,7 +481,7 @@ void invalid_domains_and_policy() {
     }
   policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", "yes");
   try {
-    resolve_point_launcher(1, false);
+    resolve_point_binding(1, false);
     throw std::logic_error("invalid family policy accepted");
   } catch (const std::invalid_argument&) {
   }
@@ -496,13 +495,10 @@ void invalid_domains_and_policy() {
   require(execute(1, 2, {.2, 0, 0, 0, .3, 0, 0, 0}).error == 0, "RKS policy affected UKS");
   require(execute(1, 1, {.4, 0, 0, 0}, true, false, 1, {0, 0, 0, 0}).error == 0,
           "RKS policy affected response");
+  require(resolve_point_binding(1, false).launch_batch == generic.launch_batch,
+          "a changed policy corrupted an existing prepared binding");
   try {
-    resolve_point_batch_launcher(1, resolve_point_launcher(0, false));
-    throw std::logic_error("mismatched prepared batch accepted");
-  } catch (const std::invalid_argument&) {
-  }
-  try {
-    resolve_point_launcher(99999, false);
+    resolve_point_binding(99999, false);
     throw std::logic_error("unsupported functional admitted");
   } catch (const std::invalid_argument&) {
   }

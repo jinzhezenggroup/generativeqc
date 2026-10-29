@@ -82,6 +82,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
+- [generativeqc_calculation_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)
+- [generativeqc_batch_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-batch-prepare-named-ks-with-device-resources-v1)
 - [generativeqc_calculation_prepare_with_device_resources](#native-c-generativeqc-calculation-prepare-with-device-resources)
 - [generativeqc_calculation_get_device_resources](#native-c-generativeqc-calculation-get-device-resources)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
@@ -147,6 +150,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc_nonlocal_plan_destroy](#native-c-generativeqc-nonlocal-plan-destroy)
 - [generativeqc_nonlocal_plan_get_diagnostic](#native-c-generativeqc-nonlocal-plan-get-diagnostic)
 - [generativeqc_nonlocal_plan_execute](#native-c-generativeqc-nonlocal-plan-execute)
+- [generativeqc_provider_initialization_intent_version](#native-c-generativeqc-provider-initialization-intent-version)
+- [generativeqc_provider_initialization_capabilities_v1](#native-c-generativeqc-provider-initialization-capabilities-v1)
+- [generativeqc_calculation_prepare_with_provider_initialization_v1](#native-c-generativeqc-calculation-prepare-with-provider-initialization-v1)
+- [generativeqc_context_close_provider_initialization_v1](#native-c-generativeqc-context-close-provider-initialization-v1)
 - [generativeqc::Error](#native-cpp-generativeqc-error)
 - [generativeqc::Error::Error](#native-cpp-generativeqc-error-error)
 - [generativeqc::Error::status](#native-cpp-generativeqc-error-status)
@@ -2213,6 +2220,85 @@ identity checks and execution-control-only ks_options.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
 
+(native-c-generativeqc-ks-d3-resource-query-v1)=
+## generativeqc_ks_d3_resource_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1 ( generativeqc_backend backend , const uint32_t * atom_counts , uint32_t system_count , generativeqc_d3_runtime_diagnostic * output ) ;
+```
+
+**Behavior.** Query the capacities of KS's retained per-system D3 correction owners.
+
+**Inputs.** A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+output are required. Every item must satisfy the production D3 atom bound.
+
+**Outputs.** Publishes summed host/device/table/workspace capacities. maximum_bytes is the
+minimum aggregate dispersion cap under the named batch's equal-per-item budget rule;
+it can exceed the sum of retained bytes for ragged inputs. Output is unchanged on failure.
+
+**Lifetime.** Borrows inputs only for this call; no owner or pointer is retained.
+
+**Errors.** Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+
+**Execution.** Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+
+**Units.** Atom counts are dimensionless and all capacities are bytes.
+
+(native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)=
+## generativeqc_calculation_prepare_named_ks_with_device_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resources_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , const generativeqc_device_resources * resources , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Prepare the complete named KS program with retained native device admission.
+
+**Inputs.** Named preparation inputs plus a live resources handle on the context's CUDA device.
+Its selected inventory must include both electronic and correction capacities.
+
+**Outputs.** Clears calculation on entry and publishes an owned calculation on success.
+
+**Lifetime.** Copies inputs and shares resource ownership; the context must outlive the owner.
+Closing the caller's resource handle cannot detach admission from execution or destruction.
+
+**Errors.** Same named-program validation and device-admission statuses as ordinary preparation.
+Missing name/resources returns INVALID_ARGUMENT, with no unbudgeted retry.
+
+**Execution.** Synchronous; the shared prepared owner binds admission around setup and replay.
+
+**Units.** Coordinates in Bohr, energies in Hartree, capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-with-device-resources-v1)=
+## generativeqc_batch_prepare_named_ks_with_device_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_device_resources * resources , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare a complete input-ordered named KS batch with retained device admission.
+
+**Inputs.** Named batch preparation inputs plus a live resources handle on the context's CUDA
+device. The inventory includes electronic buffers and per-system correction owners.
+
+**Outputs.** Clears batch on entry and publishes one owning batch on success.
+
+**Lifetime.** Shares resource ownership across replay and geometry rebuild; the context must
+outlive the batch. The caller may close its resources handle after successful preparation.
+
+**Errors.** Same named-program and device-admission validation as scalar preparation; missing
+name/resources returns INVALID_ARGUMENT. Failure never retries without admission.
+
+**Execution.** Synchronous preparation; ordinary native batch replay and item failure isolation.
+
+**Units.** Coordinates in Bohr, energies in Hartree, capacities in bytes.
+
 (native-c-generativeqc-calculation-prepare-with-device-resources)=
 ## generativeqc_calculation_prepare_with_device_resources
 
@@ -4222,6 +4308,116 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 derived sigma=|grad rho|^2 Bohr^-8; energy Hartree. vrho/vsigma follow the unweighted
 functional-derivative convention before outer quadrature weights. Point/weight outputs
 differentiate independent fixed-grid coordinates/weights, not full nuclear motion.
+
+(native-c-generativeqc-provider-initialization-intent-version)=
+## generativeqc_provider_initialization_intent_version
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_provider_initialization_intent_version ( void ) ;
+```
+
+**Behavior.** Report the supported standalone intent ABI version.
+
+**Inputs.** None.
+
+**Outputs.** Returns 1.
+
+**Errors.** None.
+
+**Lifetime.** Retains no caller storage.
+
+**Execution.** Synchronous host metadata; no device or provider observation.
+
+**Units.** Dimensionless version.
+
+(native-c-generativeqc-provider-initialization-capabilities-v1)=
+## generativeqc_provider_initialization_capabilities_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_provider_initialization_capabilities_v1 ( void ) ;
+```
+
+**Behavior.** Report compiled software transport support, never qualification.
+
+**Inputs.** None.
+
+**Outputs.** Returns supported scalar conventional CUDA MP2/RCCSD bits.
+
+**Errors.** Unsupported builds return zero.
+
+**Lifetime.** Retains no caller storage.
+
+**Execution.** Synchronous host metadata; no context creation or CUDA query.
+
+**Units.** Dimensionless bit mask.
+
+(native-c-generativeqc-calculation-prepare-with-provider-initialization-v1)=
+## generativeqc_calculation_prepare_with_provider_initialization_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_provider_initialization_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * method , const generativeqc_provider_initialization_intent_v1 * intent , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Snapshot pending intent and delegate to the existing private
+candidate/publisher. NULL or a valid LEGACY_DEFAULT intent uses ordinary
+preparation. PENDING is limited to scalar restricted conventional CUDA
+MP2/RCCSD physical references; unsupported domains reject before publication.
+Actual identity is captured later by the native owner in its established
+context, never supplied or certified by this descriptor.
+
+**Inputs.** Valid context/system/method/output plus an optional complete v1 intent.
+
+**Outputs.** SUCCESS publishes one calculation through the existing publisher.
+With otherwise valid pointer arguments, failure leaves *calculation NULL.
+
+**Errors.** Bad intent header/version returns ABI_MISMATCH; malformed controls
+return INVALID_ARGUMENT; unsupported domain/build returns NOT_IMPLEMENTED.
+Existing preparation errors and accounting-basis refusals propagate.
+
+**Lifetime.** Intent storage need only outlive this call; plans own copied values.
+The complete intent is snapshotted before modifying calculation output.
+
+**Execution.** Synchronous preparation; this transport performs no identity probe,
+context create/reset/switch, numerical solve or independent publication.
+
+**Units.** allowance_bytes is a byte reservation, charged by the native owner.
+
+(native-c-generativeqc-context-close-provider-initialization-v1)=
+## generativeqc_context_close_provider_initialization_v1
+
+Source: [provider_initialization.h](../../include/generativeqc/provider_initialization.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_context_close_provider_initialization_v1 ( generativeqc_context * context ) ;
+```
+
+**Behavior.** Close a retained explicit provider owner before deleting SDK handles.
+A context with no explicit owner succeeds without a provider observation.
+
+**Inputs.** A valid live context; no caller identity or qualification metadata.
+
+**Outputs.** SUCCESS confirms owner closure but does not delete a published
+calculation or context. It reclaims an unpublished failed candidate only
+after its complete close is confirmed.
+
+**Errors.** NULL returns INVALID_ARGUMENT. Unavailable or failed owner close
+preserves its native status/detail and retains the original owner and budget.
+
+**Lifetime.** Failed close retains the context, plan, pins and original allowance.
+The caller keeps these handles alive until confirmation; void destroy refuses
+deletion of unconfirmed explicit owners.
+
+**Execution.** Synchronous native close in the original ambient context. Never
+creates, selects, retains or resets a context. An attempted uncertain physical
+close is latched by the physical owner and cannot be retried as cleanup.
+
+**Units.** Dimensionless native status; no allocation or peak is inferred.
 
 (native-cpp-generativeqc-error)=
 ## generativeqc::Error

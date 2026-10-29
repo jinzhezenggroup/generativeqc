@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_INTEGRAL_AD_CUDA_TEST") != "1",
-    reason="set GENERATIVEQC_INTEGRAL_AD_CUDA_TEST=1 inside a finite Slurm GPU job",
+    reason="set GENERATIVEQC_INTEGRAL_AD_CUDA_TEST=1 inside a finite Slurm or LSF GPU job",
 )
 
 
