@@ -2,7 +2,7 @@
 
 Source: `0a989656c`, stacked on full-range provider commit
 `3cb888fa3f2991a1c663f1144c647801883f0c7d` (PR #2762).
-[records.json](records.json) retains all complete endpoint outputs, source/binary/
+[records.json.xz](records.json.xz) retains all complete endpoint outputs, source/binary/
 input identities, controls and observable differences. RTX 5090 on node4,
 finite Slurm jobs 1344/1345; one fresh process per endpoint. These are individual
 samples, not a statistical hardware-wide crossover model.
