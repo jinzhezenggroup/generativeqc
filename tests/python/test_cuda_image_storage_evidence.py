@@ -2,6 +2,7 @@
 
 import json
 import runpy
+import shutil
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,61 @@ LOAD = REPLAY["load_receipt"]
 def receipt() -> dict:
     """Read a fresh receipt because replay decodes its samples in place."""
     return LOAD()
+
+
+def source_export(tmp_path: Path) -> Path:
+    """Copy the real offline replay inputs without a repository or history."""
+    root = tmp_path / "source"
+    bundle = root / "benchmarks/results" / BUNDLE.name
+    bundle.mkdir(parents=True)
+    for name in (
+        "reduce.py",
+        "receipts.json.xz",
+        "original-receipt.snapshot.json",
+        "summary.json",
+    ):
+        shutil.copyfile(BUNDLE / name, bundle / name)
+    tools = root / "tools"
+    tools.mkdir()
+    shutil.copyfile(
+        BUNDLE.parents[2] / "tools/restore_retained_evidence.py",
+        tools / "restore_retained_evidence.py",
+    )
+    return bundle
+
+
+def test_real_source_export_replays_without_git_or_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = source_export(tmp_path)
+
+    def unavailable(*args: object, **kwargs: object) -> None:
+        raise AssertionError("offline receipt must not invoke Git or a fetch")
+
+    monkeypatch.setattr("subprocess.run", unavailable)
+    reader = runpy.run_path(str(bundle / "reduce.py"))
+    result = reader["reduce"](reader["load_receipt"]())
+    assert sum(c["calls"] for c in result["campaigns"].values()) == 2075
+    assert result["campaigns"]["compression"]["failures"]
+    assert result["campaigns"]["mainline-default"]["failures"] == []
+
+
+@pytest.mark.parametrize("damage", ["same-size-change", "truncated", "missing"])
+def test_source_export_rejects_corrupt_or_missing_receipt(
+    tmp_path: Path, damage: str
+) -> None:
+    bundle = source_export(tmp_path)
+    path = bundle / "receipts.json.xz"
+    raw = path.read_bytes()
+    if damage == "same-size-change":
+        path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+    elif damage == "truncated":
+        path.write_bytes(raw[:-1])
+    else:
+        path.unlink()
+    reader = runpy.run_path(str(bundle / "reduce.py"))
+    with pytest.raises((ValueError, FileNotFoundError)):
+        reader["load_receipt"]()
 
 
 def test_complete_package_witnesses_replay_independent_of_row_order() -> None:

@@ -8,6 +8,7 @@ The complete collection recipe and raw-inventory identity accompany the receipt.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import lzma
 import runpy
@@ -17,7 +18,7 @@ from statistics import median
 
 
 def load_receipt(manifest: Path | None = None) -> dict:
-    """Read the authenticated original Git receipt, offline; never fetch."""
+    """Read the retained receipt offline; an explicit manifest audits history."""
     root = Path(__file__).resolve().parents[3]
     restore = runpy.run_path(str(root / "tools/restore_retained_evidence.py"))
     records = restore["_records"](
@@ -25,7 +26,22 @@ def load_receipt(manifest: Path | None = None) -> dict:
     )
     if len(records) != 1:
         raise ValueError("expected one original CUDA storage receipt")
-    return json.loads(lzma.decompress(restore["_read"](records[0])))
+    entry = records[0]
+    if manifest is not None:
+        data = restore["_read"](entry)
+    else:
+        # Routine replay and source exports need no historical Git object. Keep
+        # the exact original container and verify every declared byte identity.
+        data = Path(__file__).with_name("receipts.json.xz").read_bytes()
+        header = f"blob {len(data)}\0".encode()
+        if (
+            len(data) != entry["bytes"]
+            or hashlib.sha256(data).hexdigest() != entry["sha256"]
+            or hashlib.sha1(header + data, usedforsecurity=False).hexdigest()
+            != entry["git_blob_sha1"]
+        ):
+            raise ValueError("retained evidence checksum/size mismatch")
+    return json.loads(lzma.decompress(data))
 
 
 def force_error(a: dict, b: dict) -> float:
