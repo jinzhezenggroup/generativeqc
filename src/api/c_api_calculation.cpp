@@ -244,17 +244,6 @@ generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resour
                                               name);
 }
 
-generativeqc_status generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
-    generativeqc_context* context, const generativeqc_system* system,
-    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
-    const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
-  if (calculation) *calculation = nullptr;
-  if (!name || !resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return prepare_calculation(context, system, descriptor,
-                             generativeqc::api::device_resource_owner(resources), calculation,
-                             name);
-}
-
 generativeqc_status generativeqc_system_create_named_ks_v1(
     generativeqc_context* context, const generativeqc_system_descriptor* input,
     const generativeqc_named_ks_descriptor* named, generativeqc_system** system) {
