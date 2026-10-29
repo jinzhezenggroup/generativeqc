@@ -61,6 +61,17 @@ system libraries. Its native test executable needs a task-local `-rpath-link`
 to CUDA libraries and is invoked with the private loader; this is not a
 production CMake change.
 
+The charged UKS water check uses frozen spherical def2-TZVP through f,
+charge +1, multiplicity 2 and 24x8x16 quadrature. Original and moved geometries
+pass independent reference gates: maximum energy error 7.96e-13 Eh and maximum
+force error 1.65e-10 Eh/Bohr. Reconverged directional differences at steps 1e-3
+and 3e-4 Bohr have errors 1.54e-8 and 1.54e-9 Eh/Bohr (gate 2e-6).
+The strict reference needed 186 SCF cycles on the original geometry. Its first
+two-geometry run timed out after preserving that complete reference; a separate
+bounded run completed only the missing geometry, recording the original receipt
+hash. No native density seeds the reference. Earlier task-script type errors
+and the incomplete timeout receipt remain in the raw evidence.
+
 The endpoint driver retains cold setup plus energy/analytic forces, three warm
 calls, a moved geometry and three moved-warm calls. Standard cases use frozen
 spherical def2-SVP; r2SCAN-3c retains prescribed def2-mTZVPP, D4 and gCP. PBE
@@ -121,6 +132,18 @@ final portable generated-J/K/cold-reuse changes from the earlier tested branch.
 The follow-up restores those unchanged, previously qualified paths as well as
 this RSH fix. See [the portable J/K rationale](2026-10-29-portable-rys-jk.md)
 for that separate implementation and its complete numerical/performance evidence.
+
+The restored portable manifest also requires deliberate refresh of the existing
+SM120 stable-shard resource ledger. [CI job 123602639166](https://github.com/jinzhezenggroup/generativeqc/actions/runs/40917805079/job/123602639166)
+compiled the qualified shard with its pinned CUDA 12.9 production toolchain and
+flags: all 102 kernels retain identical REG/STACK/SHARED/LOCAL, and every other
+identity field matches. Its sole failure was the full manifest hash, because the
+portable profile changed. Regenerating the ledger with the validator's
+`measured_ledger` from this fresh measurement changes only `manifest_sha256`;
+no resource bound or integrity gate is relaxed. Report SHA256:
+`6a86abc60fe812acda0edb314d14c4abf780eab3d4d407142228c7ab26847c08`.
+The CI report, compile/cache receipts and cuobjdump output are retained locally;
+all 268 resource-ledger validator tests pass.
 
 Revisit the canonical boundary when another radial schedule has independent
 force qualification. Revisit the transport if provider streams, source lifetimes
