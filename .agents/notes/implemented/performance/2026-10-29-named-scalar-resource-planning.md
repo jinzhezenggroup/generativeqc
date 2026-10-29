@@ -21,6 +21,11 @@ whose requested force scratch changes its capacity, at the scalar boundary.
 Resolve scalar KS transport options only for paths that actually consume them;
 the prepared branch already owns its effective selection.
 
+Resolution also avoids serializing the same functional object twice just to
+compare it with itself. Distinct objects retain the complete semantic/provenance
+comparison, including equivalent copies and mismatched resolved snapshots. No
+cross-call cache or file-metadata shortcut is introduced.
+
 ## Invariants and validation
 
 External ResourcePlans still undergo full request, budget and selection checks.
