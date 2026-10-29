@@ -73,6 +73,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_hf_physical_audit_cpu_v1](#native-c-generativeqc-hf-physical-audit-cpu-v1)
 - [generativeqc_hf_system_projection_query_v1](#native-c-generativeqc-hf-system-projection-query-v1)
 - [generativeqc_hf_system_project_cpu_v1](#native-c-generativeqc-hf-system-project-cpu-v1)
+- [generativeqc_hf_fleet_projection_query_v1](#native-c-generativeqc-hf-fleet-projection-query-v1)
+- [generativeqc_hf_fleet_initialize_cpu_v1](#native-c-generativeqc-hf-fleet-initialize-cpu-v1)
 - [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
@@ -1919,6 +1921,81 @@ The numeric bound excludes caller buffers, prepared fleets and opaque provider o
 
 **Units.** Densities and coefficients follow each system's public AO normalization; occupation
 and electron trace count electrons, diagnostic residuals are dimensionless, capacity is bytes.
+
+(native-c-generativeqc-hf-fleet-projection-query-v1)=
+## generativeqc_hf_fleet_projection_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_fleet_projection_query_v1 ( const generativeqc_batch * target , const generativeqc_batch * source , const generativeqc_hf_fleet_projection_controls_v1 * controls , const generativeqc_batch_input_descriptor * inputs , uint32_t input_count , generativeqc_hf_fleet_projection_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query the shared native prepared HF transfer's numeric capacity and
+structural eligibility. Both fleets must be distinct, CPU RHF/UHF with matching
+spin method/count and all-electron through-g topology. The target must have warm
+starts enabled and no seeds. Only a successful current native source execution
+with retained density is eligible; imported/stale proposals never qualify.
+
+**Inputs.** Live borrowed source/target batches, complete current-ABI controls and
+output. Optional target coordinates follow ordinary batch descriptors: NULL
+inputs with count zero use prepared geometry; otherwise one descriptor per item.
+Controls require positive byte/AO limits and thresholds in (0,1].
+
+**Outputs.** Publishes conservative live numeric bounds even below the byte budget.
+With strict=0, invalid source/geometry/AO items are excluded; numerical rank or
+residual failure remains unknown until execution. No seed or result is changed.
+
+**Errors.** Invalid input or strict rejection returns INVALID_ARGUMENT; bad headers
+return ABI_MISMATCH. Unsupported owners/backend/ECP/angular domains return
+NOT_IMPLEMENTED. Errors leave output untouched and never invoke another policy.
+
+**Lifetime.** Borrows both owners and coordinates synchronously under both context
+locks. Callers must keep owners/contexts/buffers alive through the call.
+
+**Execution.** CPU metadata only, without overlap, eigensolver, SCF or GPU work.
+Running/closed owners are rejected; there are no Python/compiler callbacks.
+
+**Units.** Coordinates are Bohr; capacities are bytes; policy residuals are dimensionless.
+
+(native-c-generativeqc-hf-fleet-initialize-cpu-v1)=
+## generativeqc_hf_fleet_initialize_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_hf_fleet_initialize_cpu_v1 ( generativeqc_batch * target , const generativeqc_batch * source , const generativeqc_hf_fleet_projection_controls_v1 * controls , const generativeqc_batch_input_descriptor * inputs , uint32_t input_count , generativeqc_hf_fleet_projection_item_v1 * outputs , uint32_t output_count ) ;
+```
+
+**Behavior.** Project eligible native retained HF densities and atomically install
+every accepted target seed through the existing physical warm-state validator.
+Reuses the system/occupied projection owners; it does not copy equations or
+execute target SCF. A seed cannot serve as a converged projection source until
+target execution succeeds. The source owner remains unchanged.
+
+**Inputs.** Query-compatible live batches, controls and coordinate descriptors;
+one current-ABI fixed-stride output record per target item. Keep borrowed
+buffers alive and serialize owner/context destruction through return.
+
+**Outputs.** Publishes input-ordered per-item diagnostics after all accepted seeds
+validate and commit. With strict=0 an invalid item stays cold without discarding
+valid neighbors; strict=1 refuses the entire transaction. Output has no density
+or coefficient payload; those remain inside the native owners.
+
+**Errors.** Invalid/strict rejection returns INVALID_ARGUMENT; bad headers return
+ABI_MISMATCH; insufficient numeric workspace or allocation failure returns
+OUT_OF_MEMORY. Unsupported domains return NOT_IMPLEMENTED before science. Every
+failed call preserves target seeds and output records; there is no Python retry.
+
+**Lifetime.** Both context locks protect borrowed source state and target commit.
+All staging/scratch closes before return. No pointer from inputs is retained.
+
+**Execution.** Synchronous CPU FP64 overlap/projection/physical seed validation,
+no SCF, GPU access, Python/compiler import or callback. Numeric budget includes
+simultaneous candidates and validation; external arenas/metadata stay separate.
+
+**Units.** Coordinates are Bohr; density normalization follows the target AO basis;
+energy is Hartree, trace is electron count, residuals are dimensionless, capacity bytes.
 
 (native-c-generativeqc-basis-projection-query-v1)=
 ## generativeqc_basis_projection_query_v1
