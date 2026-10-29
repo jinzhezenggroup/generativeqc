@@ -1,0 +1,40 @@
+{
+  "schema": "generativeqc.h100-owner-v9-summary.v1",
+  "measured_source_base_commit": "964faab623f6bf9fb2a99f39a772924f382a41f4",
+  "source_manifest_sha256": "3fa2afc33233c35659199d680b7197a6f1257ff50338ea212735b2cdd49f3320",
+  "source_inputs": 105,
+  "tracked_inputs": 96,
+  "generated_inputs": 9,
+  "binary": {
+    "bytes": 874456,
+    "sha256": "aa3bb750e4941fa5e6447214151c71023079999f2e90801de19a4f3be2362768",
+    "mode": "0o755",
+    "device_raw": 1048794,
+    "inode": 61085729040,
+    "mtime_ns": 1793204721809761128,
+    "ctime_ns": 1793204721810113585
+  },
+  "A": 536870912,
+  "B_ref": 2147483648,
+  "B_endpoint": 2147483648,
+  "api_success_records": 53,
+  "inventory_slots": 21,
+  "close_operations": 24,
+  "observed_synchronized_free_delta_bytes": 375390208,
+  "full_generated_text_members": 95,
+  "full_original_generated_text_bytes": 5115835,
+  "science": "NOT_RUN",
+  "installed_sdk": "INCOMPLETE",
+  "capabilities_enabled": 0,
+  "default_allowance_changed": false,
+  "archives": {
+    "receipt.json.xz": {
+      "bytes": 179356,
+      "sha256": "ea5223930c01b6ae8b99703acb0969b73a680da4598ebb787add28fd87cfa374"
+    },
+    "source-closure.json.xz": {
+      "bytes": 76292,
+      "sha256": "d18b7d4c2f4ce65baefe9d643c539b8d097b7f12976315f54107582b0147fb19"
+    }
+  }
+}

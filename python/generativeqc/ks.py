@@ -175,6 +175,12 @@ class KsOptions:
         default=None, repr=False
     )
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
+    # Only resolution may bind this immutable option snapshot to a selector.
+    # dataclasses.replace resets it, so changed/profile-selected options require
+    # fresh validation. It is execution provenance, not scientific identity.
+    _resolved_selector: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         """Validate exclusive functional/composition inputs, grid, schedule, and budget."""
@@ -1077,6 +1083,8 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
         scf_domain=domain,
     )
     object.__setattr__(result, "_method_ir", method_ir)
+    if isinstance(method, str):
+        object.__setattr__(result, "_resolved_selector", method)
     return result
 
 

@@ -163,12 +163,13 @@ def test_master_python_seed_matches_python_shard_compilation_paths(
 def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     job = _job("python")
     tests = _step("python", "Run Python tests with coverage")
-    # Both job and test ceilings preserve the nightly tier, but posthf gets
-    # bounded extra time for its measured complete routine workload.
+    # Both job and test ceilings preserve the nightly tier; the extended shards
+    # get bounded extra time for their measured complete routine workloads.
     pattern = (
         r"timeout-minutes: \$\{\{ \(github.event_name == 'schedule' \|\| "
         r"github.event_name == 'workflow_dispatch'\) && (\d+) \|\| "
-        r"\(matrix.shard == 'posthf' && (\d+) \|\| (\d+)\) \}\}"
+        r"\(\(matrix.shard == 'posthf' \|\| matrix.shard == 'core-b' \|\| "
+        r"matrix.shard == 'compiler-heavy'\) && (\d+) \|\| (\d+)\) \}\}"
     )
     job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0])
     test_limits = re.search(pattern, tests)

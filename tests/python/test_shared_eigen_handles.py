@@ -165,6 +165,7 @@ def test_handle_header_keeps_vendor_and_method_abi_private() -> None:
     assert set(includes) <= {
         "cstddef",
         "cstdint",
+        "optional",
         "utility",
         "solver/cuda/symmetric_eigen_provider.hpp",
     }

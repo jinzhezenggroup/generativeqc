@@ -137,3 +137,106 @@ The srun exit is 1 and the final input-integrity check completes; the completed
 scheduler record expired before retrieval, and accounting storage is disabled.
 The running scheduler receipt and srun failure are retained without inventing
 a completed receipt.
+
+## Complete optional MD-J admission
+
+Source `b2e5de7d1` repairs both s/p/d optional XC and MD-J admission. In finite
+Slurm job 14909, both eight-group campaigns contain 1,792 complete calls. Default
+timing passes at 1.007475284577579; budget timing **still fails** at
+1.2613104189433968. Maximum E/F differences are 8.53e-14 / 5.11e-14 for the budget
+population. Both profiles now exactly preserve actual GPU work/storage:
+172,628 kernels, 5,648 allocations, 119,201,475 explicit peak bytes and zero final
+live bytes. All transfer counts/bytes and static storage also match the baseline.
+
+The source-matched Release CPU/CUDA builds, 127 CPU CTests, 138 GPU Python tests,
+installed independent-reference SDK and memcheck pass. All 27,409 frozen inputs
+were verified before and after the failed timing campaign. Completed scheduler
+and srun receipts retain the failure, alongside every raw population and both
+profiles in `md-complete-cuda-{default,budget}-samples.json.xz` and
+`md-complete-cuda-qualification.json.xz`.
+
+A subsequent cProfile diagnostic identifies redundant Python request generation:
+56 of 72 candidate resource-request calls occur during retained replay, consuming
+0.3641 seconds under the profiler. Native execution totals are comparable
+(candidate 7.46 seconds; baseline 7.53 seconds). This identifies the next repair;
+it does not convert the failed complete timing gate into a pass.
+
+The complete MD-J populations/receipts above and the first retained-request
+448-call diagnostic are now preserved byte-for-byte in ancestor `8f1c2b3f6`.
+`pre-replay-diagnostics-history.json` lists every file, byte count and checksum;
+offline restoration was verified before removing the working-tree copies.
+Both budget timing gates remain failed. The retained-request diagnostic reaches
+1.1008970446134168, with maximum E/F differences 9.95e-14 / 4.66e-14, and all 38
+D4 GPU checks pass after repairing two mutation-test fixtures. Its source,
+completed scheduler receipt, failures and exact runners remain recoverable.
+
+`optional-cpu-budget-samples.json.xz` retains the earlier source `9d0df5629` CPU
+budget qualification: 1,792 complete calls, eight groups, maximum ratio
+1.045464979193522, and exactly matching E/F. It is a source-bound CPU receipt;
+subsequent CUDA request/diagnostic reuse does not enable caching on CPU paths.
+
+`diagnostic-cache-{samples,receipts}.json.xz` retains the next two-group diagnostic
+at `8f1c2b3f6`, Slurm 14915: 448 calls, maximum ratio 1.073302195362344, E/F
+errors <=8.53e-14 / 2.45e-14, 82 relevant GPU tests passing. The timing gate
+still fails; this is not eight-group acceptance. Cold/scalar preparation remains
+the next optimization target after removing repeated diagnostic serialization.
+
+`catalog-carry-diagnostic*.json.xz` retains the subsequent two-group failure at
+`5e42386b2`, Slurm 14916: 448 calls, maximum ratio 1.079240692779798, E/F errors
+<=8.53e-14 / 3.16e-14 and 82 passing GPU tests. A warmed profile separates native
+preparation from frontend overhead and identifies the generic diagnostic copy.
+
+The diagnostic-cache and catalog-carry populations/receipts are retained in
+verified ancestor `1e214273b` through `intermediate-replay-history.json`. Their
+failed gates remain failed. Every restored byte was verified before migrating
+these four intermediate files to make room for complete eight-group results.
+
+## Complete replay/diagnostic qualification
+
+Production `1e214273b`, Slurm 14918, completes both eight-group campaigns with
+1,792 calls each. Default timing passes at 1.0130209401642423. Budget timing
+**fails** at 1.0586252112560126, confined to three scalar-complete cases; all
+batch cold, warm and moved phases pass. Both actual work/storage profiles
+exactly match the original baseline. Native/installed independent-reference
+checks, memcheck, 150 GPU tests and before/after integrity of 27,418 inputs pass.
+Completed scheduler/srun receipts retain the failed status. Every population,
+profile and exact runner is retained in `container-copy-cuda-*`.
+
+The complete `1e214273b` populations and receipt are recoverable byte-for-byte
+from `container-copy-history.json` (storage ancestor `a677a78c0`). Restoration
+was verified before migration. Default remains passing and budget remains failed;
+this retention change does not alter either acceptance result.
+
+`resolved-options-scalar-{samples,receipts}.json.xz` records the scoped follow-up
+at production `a677a78c0`, Slurm 14919. All 256 scalar-complete invocations in
+eight ABBA/BAAB groups pass at maximum ratio 1.0475317675582805, E/F errors
+<=8.89e-16 / 6.67e-16. All 112 relevant tests pass and both integrity checks and
+completed scheduler receipts succeed. This scalar-only diagnostic is not a
+replacement for complete fleet qualification.
+
+The full `a677a78c0` qualification (Slurm 14920) is retained in
+`resolved-options-cuda-*`. Both populations contain 1,792 complete calls across
+eight groups. Default passes at 1.0125901383084006; budget **fails** at
+1.0544497885332915 for PBE0 energy+forces scalar preparation. Maximum E/F
+differences are 1.28e-13 / 5.78e-14. All 180 GPU tests, native/installed SDK
+references, memcheck and before/after input integrity pass. Both actual GPU
+work/storage profiles exactly match baseline. Completed receipts preserve exit 1.
+
+## Constructor-local model identity qualification
+
+Production `af71794db`, Slurm 14922, passes both complete eight-group campaigns
+(1,792 calls each): default maximum 1.0172885315294833, budget maximum
+1.0333197109244316. Both GPU work/storage profiles exactly match baseline; all
+180 GPU tests, native/installed references, memcheck and frozen-input integrity
+gates pass. `basis-snapshot-cuda-*` retains every sample, profile, runner and
+completed receipt. The prior eight-group scalar diagnostic (Slurm 14921, 256
+calls) passes at 1.0415902454230368 and is included in the capsule. These receipts
+are bound to this source and binary; integrating newer master prerequisites
+requires a separate qualification.
+
+The full resolved-option/scalar diagnostics, constructor-snapshot populations
+and capsule, earlier CPU samples and original `qualification.json` are preserved
+byte-for-byte in `resolved-and-basis-history.json` (storage ancestor `8fd594f7a`).
+Every file was restored and checksum-verified before migration. This retains all
+passes and failures while keeping the unchanged 80 MiB evidence limit for the
+next integrated qualification and the dependent CLI inventories.

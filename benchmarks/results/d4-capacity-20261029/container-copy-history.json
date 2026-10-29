@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "a677a78c093106093856ac0196101c5e3111233d",
+  "file_count": 3,
+  "total_bytes": 184056,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/container-copy-cuda-budget-samples.json.xz",
+      "bytes": 85536,
+      "sha256": "247bc188def02ab1f38b31a0b8b5adafd41e2475c6fc3dad1d7a78326bf370f7"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/container-copy-cuda-default-samples.json.xz",
+      "bytes": 84756,
+      "sha256": "97fa985819c986ad103c0605a2bc0091af823d78ad5734183938cd992b814683"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/container-copy-cuda-qualification.json.xz",
+      "bytes": 13764,
+      "sha256": "8da6919d3523c174011646d4738a8647f2d0c2a3dd8c8ae19747b00023fbdb69"
+    }
+  ],
+  "retention": "Complete eight-group qualification measured production 1e214273b: default passes, budget fails at 1.0586252112560126. Preserve every sample/profile/receipt in this verified Git storage ancestor; never rewrite it."
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 
@@ -33,6 +34,9 @@ class PreparedSymmetricEigenHandles {
   std::uint32_t create_parameters() noexcept;
   std::uint32_t configure_jacobi(double tolerance, int max_sweeps, int sort) noexcept;
   void reset() noexcept;
+  std::optional<std::uint32_t> retire_jacobi_current() noexcept;
+  std::optional<std::uint32_t> retire_parameters_current() noexcept;
+  std::optional<std::uint32_t> retire_solver_current() noexcept;
 
   /** Immutable borrowed handles. Numeric workspace is supplied by its existing
    * arena owner at query/submission; this view never transfers ownership. */

@@ -37,7 +37,13 @@ _KEYS = (
 )
 
 
-def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) -> Any:
+def with_native_xc_capacity(
+    request: Any,
+    calculator: Any,
+    model: Any = None,
+    *,
+    _native_ks: bool | None = None,
+) -> Any:
     """Offer optional XC/MD-J storage for a complete, bounded native D4 owner.
 
     The preferred candidate includes explicit headroom from the selected native
@@ -68,7 +74,11 @@ def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) ->
             and isinstance(node.specification, D4Spec)
             for node in graph.primitives
         )
-        or select_resource_program(calculator, request) is None
+        or not (
+            select_resource_program(calculator, request) is not None
+            if _native_ks is None
+            else _native_ks
+        )
     ):
         return request
     items = json.loads(request.identity.topology)["items"]

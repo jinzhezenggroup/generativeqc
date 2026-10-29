@@ -100,9 +100,10 @@ convergence ordering, configured iteration limits and optional estimated cost
 before execution. Equality meets a budget. Calculator-built plans use the
 selected target library; standalone typed plans use the first configured
 library. Python retains graph/model/evidence validation and diagnostic text.
-Missing older-library protocols and integer metadata outside the fixed-width
-ABI use explicit compatibility. Native refusal or invalid receipts never retry
-another policy. This query does not establish final convergence or accuracy.
+Bounded integer inputs require the current native planning protocol. A missing
+library/protocol, native refusal or invalid receipt never selects another image
+or retries a Python policy. Integer metadata outside the fixed-width ABI retains
+explicit Python arithmetic. This query does not establish final convergence or accuracy.
 
 Diagnostics separately report source/target setup and execution, projection,
 final verification and context cleanup, while `total_seconds` covers the complete
@@ -125,9 +126,10 @@ The shared native `generativeqc_hf_verify_final_v1` policy owns scalar acceptanc
 strict-cleanup requirements and budget precedence. A running controller uses its
 selected target library; standalone verification uses the first configured
 library. Python validates typed identities and observable array shape and
-presents the native decision. Missing older-library protocols and Python integer
-metadata outside the fixed-width ABI retain explicit compatibility; a native
-error never triggers another verifier. This metadata policy does not rebuild the
+presents the native decision. Bounded integer inputs require the current native
+verification protocol; missing support and native errors never trigger another
+verifier or library search. Python integer metadata outside the fixed-width ABI
+retains explicit verification without truncation. This metadata policy does not rebuild the
 physical target or certify an empirical accuracy estimate.
 
 A force capability is established only by a finite, real numerical array with

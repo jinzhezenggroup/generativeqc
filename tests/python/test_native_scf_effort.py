@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import fields, replace
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -59,7 +60,7 @@ def propose(
 
 @pytest.fixture
 def library() -> Any:
-    result = native.optional_library()
+    result = native.require_library()
     assert result is not None, (
         "build the current native SCF-effort protocol for this gate"
     )
@@ -235,7 +236,7 @@ def test_native_failure_never_retries_and_next_valid_call_recovers(
     policy = controller(relax_after=1)
     state = policy.initial_state()
     with monkeypatch.context() as patch:
-        patch.setattr(native, "optional_library", lambda: Failure())
+        patch.setattr(native, "require_library", lambda: Failure())
         patch.setattr(ForceAwareScfPolicy, "_propose_next_python", forbidden)
         with pytest.raises(RuntimeError, match="GENERATIVEQC error 5"):
             propose(policy, state, 0.1)
@@ -243,17 +244,15 @@ def test_native_failure_never_retries_and_next_valid_call_recovers(
     assert propose(policy, state, 0.1).action == "relax"
 
 
-def test_missing_protocol_custom_predictor_and_unbounded_integers_stay_compatible(
+def test_custom_predictor_and_unbounded_integers_keep_declared_semantics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     policy = controller(relax_after=1)
-    monkeypatch.setattr(native, "optional_library", lambda: None)
-    assert propose(policy, policy.initial_state(), 0.1).action == "relax"
 
     def forbidden() -> Any:
         raise AssertionError("unsupported metadata queried native policy")
 
-    monkeypatch.setattr(native, "optional_library", forbidden)
+    monkeypatch.setattr(native, "require_library", forbidden)
 
     class Conservative(ScfForceErrorEstimator):
         def predict(self, *args: Any, **kwargs: Any) -> Any:
@@ -290,6 +289,48 @@ def test_selected_library_load_error_is_not_a_missing_protocol_retry(
     with pytest.raises(OSError) as caught:
         propose(controller(), ScfEffortState(2), 0.1)
     assert caught.value is error
+
+
+@pytest.mark.parametrize("operation", ["decide", "verify"])
+@pytest.mark.parametrize("missing", ["library", "decide", "verify"])
+def test_builtin_policy_requires_current_protocol_without_python_retry(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    missing: str,
+) -> None:
+    """An incomplete selected installation must not change the decision owner."""
+    selected = tmp_path / "selected.so"
+    if missing != "library":
+        selected.touch()
+        symbols = {
+            f"generativeqc_scf_effort_{name}_v1": object()
+            for name in ("decide", "verify")
+            if name != missing
+        }
+        monkeypatch.setattr(native.ctypes, "CDLL", lambda _: SimpleNamespace(**symbols))
+    monkeypatch.setattr(native._native, "_candidate_paths", lambda: iter((selected,)))
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("missing native support retried Python decisions")
+
+    monkeypatch.setattr(ForceAwareScfPolicy, "_propose_next_python", forbidden)
+    monkeypatch.setattr(ForceAwareScfPolicy, "_verify_final_python", forbidden)
+    policy = controller()
+    with pytest.raises(RuntimeError, match="require the current native"):
+        if operation == "decide":
+            propose(policy, policy.initial_state(), 0.1)
+        else:
+            policy.verify_final(
+                target_model_id="target",
+                observed_model_id="target",
+                level=policy.strict_level,
+                converged=True,
+                energy=-1.0,
+                energy_change=0.0,
+                density_rms=0.0,
+                force_max_abs=0.0,
+            )
 
 
 def test_public_abi_invalid_metadata_preserves_output(library: Any) -> None:
@@ -369,7 +410,7 @@ def test_native_final_failure_never_retries_python_gates(
     def forbidden(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("native final failure retried Python gates")
 
-    monkeypatch.setattr(native, "optional_library", lambda: Failure())
+    monkeypatch.setattr(native, "require_library", lambda: Failure())
     monkeypatch.setattr(ForceAwareScfPolicy, "_verify_final_python", forbidden)
     policy = controller()
     with pytest.raises(RuntimeError, match="GENERATIVEQC error 5"):
@@ -385,24 +426,6 @@ def test_native_final_failure_never_retries_python_gates(
         )
 
 
-def test_missing_protocol_preserves_final_compatibility(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(native, "optional_library", lambda: None)
-    policy = controller()
-    result = policy.verify_final(
-        target_model_id="target",
-        observed_model_id="target",
-        level=policy.strict_level,
-        converged=True,
-        energy=-1.0,
-        energy_change=0.0,
-        density_rms=0.0,
-        force_max_abs=0.0,
-    )
-    assert result.status == "observed_met" and result.reasons == ()
-
-
 def test_custom_identity_comparison_keeps_declared_compatibility(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -413,7 +436,7 @@ def test_custom_identity_comparison_keeps_declared_compatibility(
     def forbidden() -> Any:
         raise AssertionError("custom identity comparison was silently replaced")
 
-    monkeypatch.setattr(native, "optional_library", forbidden)
+    monkeypatch.setattr(native, "require_library", forbidden)
     policy = controller()
     result = policy.verify_final(
         target_model_id="target",
