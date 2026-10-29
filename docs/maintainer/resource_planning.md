@@ -241,7 +241,8 @@ fallback remains reserved even while optional storage is live. Shared resource
 handles retain separate promises for separate prepared owners.
 
 Selected external inventories retain the dense/single-tile path. Preliminary
-guesses, range/nonlocal/D4 corrections, automatic/generated-split programs,
+guesses, range/nonlocal corrections, legacy D4 and all named D3/D4 corrections,
+automatic/generated-split programs,
 explicit incremental J/K, application precision budgets and experimental PBE
 point precision retain incumbent admission. A native bound that does not fit
 also retains incumbent admission; this is a bounded fallback under the same
