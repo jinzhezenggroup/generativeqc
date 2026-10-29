@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from tools.libxc_bulk_metadata import (
+from generativeqc_compiler.xc.libxc_c_metadata import (
     CMetadataError,
     constant_definitions,
     constant_value,

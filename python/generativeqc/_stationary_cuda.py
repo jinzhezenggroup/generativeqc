@@ -39,6 +39,10 @@ from generativeqc_compiler.common.runtime_domain import (
     RuntimeTaskDomain,
     RuntimeTaskPage,
 )
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+    SEMILOCAL_FAMILY_CODES,
+)
 from generativeqc_compiler.dft.ao_map_plan import ExactAoMapResources
 from generativeqc_compiler.dft.cuda import (
     CudaGrid,
@@ -81,10 +85,6 @@ from generativeqc_compiler.method.stationary_resources import (
 )
 from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
-from generativeqc_compiler.xc._generated_native_semilocal import (
-    SEMILOCAL_FAMILY_BY_CODE,
-    SEMILOCAL_FAMILY_CODES,
-)
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from ._dft_gradient import (

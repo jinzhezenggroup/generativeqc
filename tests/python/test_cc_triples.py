@@ -45,7 +45,7 @@ def test_numerator_inventory_matches_pinned_source_and_execution(
     terms prevent cancellation from hiding an incorrect coefficient. The
     inventory operands refer to the transposed views used by the slow source.
     """
-    from tools.generativeqc_cc.triples import V_TERMS, W_TERMS, _v, _views, _w
+    from generativeqc_compiler.cc.triples import V_TERMS, W_TERMS, _v, _views, _w
 
     o, v = 2, 3
     ovvv, ovoo, ovov, fov, t1, t2, _, _ = _random_case(o, v, 17)
@@ -135,7 +135,7 @@ def test_reference_matches_verbatim_slow_kernel_shapes() -> None:
     table, so it must be symmetric under simultaneous (a,b,c) permutation.
     An independent re-implementation here rebuilds the table from the source
     einsum strings and compares it against the module's SLOW_TABLE."""
-    from tools.generativeqc_cc.triples import _LABELS, OP, SLOW_TABLE, VP
+    from generativeqc_compiler.cc.triples import _LABELS, OP, SLOW_TABLE, VP
 
     def inv(p: typing.Any) -> typing.Any:
         out = [0, 0, 0]
@@ -174,7 +174,7 @@ def _explicit_r3(w: typing.Any) -> typing.Any:
 
 
 def test_r3_coefficients_one_term_at_a_time() -> None:
-    from tools.generativeqc_cc.triples import R3, r3
+    from generativeqc_compiler.cc.triples import R3, r3
 
     rng = np.random.default_rng(3)
     w = rng.normal(size=(3, 3, 3))
@@ -196,7 +196,7 @@ def test_triangular_virtual_multiplicity_against_fullsum() -> None:
     permutation, so the ordered full sum equals 6 times the triangular sum
     after each triangle is re-weighted by 6/2/1.  Fullsum already checks this
     globally; here we assert the degeneracy function in isolation."""
-    from tools.generativeqc_cc.triples import _degeneracy
+    from generativeqc_compiler.cc.triples import _degeneracy
 
     # a == b == c -> 6
     assert _degeneracy(0, 0, 0) == 6
@@ -216,7 +216,7 @@ def test_explicit_degenerate_and_double_indices_numerically() -> None:
     test additionally nails the specific index patterns the issue calls for
     (a==b, a==c, b==c, a==b==c) by checking the degeneracy table directly.
     """
-    from tools.generativeqc_cc.triples import VP, _degeneracy, _permuted
+    from generativeqc_compiler.cc.triples import VP, _degeneracy, _permuted
 
     # All six virtual permutations of (a, b, c) must be reachable through VP
     # and each maps to a distinct triple index ordering.

@@ -16,9 +16,9 @@ from weakref import WeakValueDictionary
 import numpy as np
 from generativeqc import _native
 from generativeqc.profiles import canonical_hash
+from generativeqc.response_problem import ResponseCompatibilityError, ResponseProblem
 
 from .direct_cuda import CudaDirectJKBackend
-from .problem import ResponseCompatibilityError, ResponseProblem
 
 _DOUBLE = ct.POINTER(ct.c_double)
 

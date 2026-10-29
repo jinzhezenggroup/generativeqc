@@ -35,8 +35,8 @@ from .first_order import (
 )
 from .native import NativeRHFState
 from .perturbation import (
-    RHFNuclearBatchResponse,
-    solve_rhf_nuclear_perturbations,
+    StationaryNuclearBatchResponse,
+    solve_stationary_nuclear_perturbations,
 )
 
 
@@ -51,7 +51,7 @@ class RHFHVPBlockResult:
     pulay: np.ndarray | None
     two_electron: np.ndarray | None
     relaxation: np.ndarray | None
-    response_batch: RHFNuclearBatchResponse = field(repr=False)
+    response_batch: StationaryNuclearBatchResponse = field(repr=False)
     identity: str
     _diagnostics: dict = field(repr=False)
 
@@ -463,7 +463,7 @@ def rhf_hvp_many(
             return consume
 
         response_started = time.perf_counter()
-        batch = solve_rhf_nuclear_perturbations(
+        batch = solve_stationary_nuclear_perturbations(
             operator,
             frozen,
             overlap,

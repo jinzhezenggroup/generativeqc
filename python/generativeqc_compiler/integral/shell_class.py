@@ -31,9 +31,6 @@ def _triple(values: Sequence[_T]) -> tuple[_T, _T, _T]:
 
 
 CENTERS = ("first", "second", "third", "fourth")
-# Compatibility alias for the component-level dppp inspection CLI.  The
-# ordering itself is generated from the declarative shell specification.
-D_COMPONENTS = DPPP_SPEC.center_components[0]
 
 
 @dataclass(frozen=True, slots=True)

@@ -224,7 +224,9 @@ def screen_case(
     source_started = time.perf_counter()
     triples_source = np.zeros(coordinates.dimension)
     if triples:
-        from tools.generativeqc_cc.triples_response import accumulate_tile_triples_vjp
+        from generativeqc_compiler.cc.triples_response import (
+            accumulate_tile_triples_vjp,
+        )
 
         sources = accumulate_tile_triples_vjp(
             o,

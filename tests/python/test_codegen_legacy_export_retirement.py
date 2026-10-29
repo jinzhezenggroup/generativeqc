@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from generativeqc_compiler import integral
-from generativeqc_compiler.integral import cuda_lowering
+from generativeqc_compiler.integral import cuda_emitter
 
 RETIRED_EXPORTS = (
     "DpppFusedPlan",
@@ -16,7 +16,7 @@ RETIRED_EXPORTS = (
 
 
 def test_retired_dppp_and_ppps_1110_exports_do_not_return() -> None:
-    for module in (integral, cuda_lowering):
+    for module in (integral, cuda_emitter):
         for name in RETIRED_EXPORTS:
             assert not hasattr(module, name)
             assert name not in getattr(module, "__all__", ())

@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc import rks_hessian as rks_molecular
 
 import tools.generativeqc_hessian.analytic as hessian_analytic
-from tools.generativeqc_hessian import rks_molecular
 
 
 def _stub_operator(monkeypatch: pytest.MonkeyPatch) -> typing.Any:

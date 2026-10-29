@@ -18,6 +18,15 @@ from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm
+from generativeqc_compiler.cc.gradient_equations import (
+    build_ao_eri_weight_block_program,
+    build_ao_one_electron_weight_program,
+    build_ao_weight_program,
+    build_hamiltonian_programs,
+)
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS
 from generativeqc_compiler.common.evidence import canonical_hash
 
 from tools.generativeqc_posthf import MOBlock
@@ -41,16 +50,7 @@ from tools.generativeqc_response.implicit import (
     _immutable,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _vector_norm
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
-from .gradient_equations import (
-    build_ao_eri_weight_block_program,
-    build_ao_one_electron_weight_program,
-    build_ao_weight_program,
-    build_hamiltonian_programs,
-)
-from .lambda_equations import PARAMETERS
 from .lambda_response import BoundCCSDResponse
 from .lambda_solver import BoundCCSDLambda, LambdaOptions, _graph_bytes
 from .solver import SolverOptions, solve

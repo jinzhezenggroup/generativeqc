@@ -37,10 +37,8 @@ from generativeqc_compiler.integral.benchmark import (
     benchmark_command as standalone_benchmark_command,
 )
 from generativeqc_compiler.integral.benchmark import emit_shell_class_benchmark_cuda
-from generativeqc_compiler.integral.production import (
-    resolve_production_profile,
-    write_production_bundles,
-)
+from generativeqc_compiler.integral.production_bundle import write_production_bundles
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
