@@ -332,10 +332,44 @@ def test_cpu_compatibility_gradient_owner_has_reserved_capacity(library: Any) ->
                 )
 
 
-def test_resource_budget_constructor_uses_native_d4(library: Any) -> None:
-    calc = calculator(resource_budget=ResourceBudget(host_bytes=2 << 30))
-    result = calc.singlepoint(systems()[0], properties=("energy", "forces"))
-    assert result.converged and result.dispersion is not None
+@pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
+def test_resource_budget_constructor_uses_native_d4(
+    library: Any, properties: tuple[str, ...]
+) -> None:
+    """Scalar preparation must retain the complete correction budget boundary."""
+    from itertools import product
+
+    from generativeqc import ResourcePlan
+
+    atoms = systems()[0]
+    plain = calculator()
+    reference = plain.singlepoint(atoms, properties=properties)
+    full = plain.estimate_resources([atoms], properties=properties)
+    required = min(
+        ResourcePlan(
+            ResourceBudget(),
+            full.requests,
+            tuple(
+                (request.name, candidate.name)
+                for request, candidate in zip(full.requests, combination, strict=True)
+            ),
+            "feasible",
+        ).peak_bytes["host"]
+        for combination in product(*(request.candidates for request in full.requests))
+    )
+    for delta in (-1, 0):
+        calc = calculator(resource_budget=ResourceBudget(host_bytes=required + delta))
+        if delta < 0:
+            with pytest.raises(MemoryError, match="no supported plan fits"):
+                calc.singlepoint(atoms, properties=properties)
+            continue
+        result = calc.singlepoint(atoms, properties=properties)
+        assert result.converged and result.dispersion is not None
+        assert result.energy == pytest.approx(reference.energy, abs=2e-9)
+        if "forces" in properties:
+            np.testing.assert_allclose(result.forces, reference.forces, atol=2e-8)
+        else:
+            assert result.forces is None and result.dispersion.gradient is None
 
 
 def test_standalone_cuda_budget_preserves_bounded_worker_selection(
