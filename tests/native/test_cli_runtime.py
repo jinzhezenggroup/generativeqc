@@ -1209,7 +1209,7 @@ class RuntimeTests(unittest.TestCase):
     def test_named_d4_inventory_keeps_electronic_and_composite_boundaries(self) -> None:
         for method, extra in (
             ("pbe0-d4(bj-eeq-atm)-rks", ()),
-            ("r2scan-3c", ()),
+            ("r2scan-3c-rks", ()),
             ("pbe-d4-rks", ()),
             ("pbe-d4(bj-eeq-atm)-rks", ("--forces",)),
             ("pbe-d4(bj-eeq-atm)-rks", ("--density-fitting", "cpu")),
