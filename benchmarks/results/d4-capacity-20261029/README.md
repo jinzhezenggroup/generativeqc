@@ -185,3 +185,8 @@ the next optimization target after removing repeated diagnostic serialization.
 `5e42386b2`, Slurm 14916: 448 calls, maximum ratio 1.079240692779798, E/F errors
 <=8.53e-14 / 3.16e-14 and 82 passing GPU tests. A warmed profile separates native
 preparation from frontend overhead and identifies the generic diagnostic copy.
+
+The diagnostic-cache and catalog-carry populations/receipts are retained in
+verified ancestor `1e214273b` through `intermediate-replay-history.json`. Their
+failed gates remain failed. Every restored byte was verified before migrating
+these four intermediate files to make room for complete eight-group results.
