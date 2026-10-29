@@ -4,14 +4,14 @@ import typing
 from dataclasses import replace
 from fractions import Fraction
 
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+    SEMILOCAL_FAMILY_CODES,
+)
 from generativeqc_compiler.dft.ao import jet_indices
 from generativeqc_compiler.dft.xc_point_cuda import emit_device_point_value
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
-from ._generated_native_semilocal import (
-    SEMILOCAL_FAMILY_BY_CODE,
-    SEMILOCAL_FAMILY_CODES,
-)
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .automatic_point import emit_automatic_point
 from .automatic_semilocal import automatic_functional_name

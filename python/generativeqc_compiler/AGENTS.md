@@ -23,9 +23,9 @@ These rules apply under `python/generativeqc_compiler/`.
 - Keep checkout and installed compiler inventories logically identical. Do not add
   absolute installation paths, timestamps, bytecode, or transient compatibility
   shim bytes to source identities.
-- Compatibility facades must forward to canonical module objects rather than load
-  duplicate implementations. Retire them only after downstream callers migrate
-  and compatibility tests are the remaining repository users.
+- Import canonical implementation owners directly. Before the first release,
+  migrate repository callers and remove obsolete facades together; do not retain
+  aliases solely for hypothetical external callers.
 
 ## Validation and rationale
 

@@ -124,7 +124,6 @@ _EXPORTS = {
     "r2scan3c_d4_eeq": ".dispersion",
     "resolve_bulk_ks": ".bulk_ks",
     "resolve_bulk_ks_candidate": ".bulk_ks",
-    "resolve_public_bulk_ks": ".bulk_ks",
     "resolve_method": ".spec",
     "rccsd_electronic_method_ir": ".electronic",
     "rhf_electronic_method_ir": ".electronic",

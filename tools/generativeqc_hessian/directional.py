@@ -26,7 +26,10 @@ from tools.generativeqc_response import (
 
 from .first_order import checked_direction, generated_directional_first_order
 from .native import NativeRHFState
-from .perturbation import RHFNuclearResponse, solve_rhf_nuclear_perturbation
+from .perturbation import (
+    StationaryNuclearResponse,
+    solve_stationary_nuclear_perturbation,
+)
 
 
 @dataclass(frozen=True, eq=False)
@@ -36,7 +39,7 @@ class DirectionalRHFResponse:
     direction: np.ndarray
     frozen_fock_derivative: np.ndarray
     overlap_derivative: np.ndarray
-    response: RHFNuclearResponse
+    response: StationaryNuclearResponse
     identity: str
     _diagnostics: dict = field(repr=False)
 
@@ -173,7 +176,7 @@ def directional_rhf_response(
             resident_consumer_seconds += time.perf_counter() - started
 
         response_started = time.perf_counter()
-        response = solve_rhf_nuclear_perturbation(
+        response = solve_stationary_nuclear_perturbation(
             operator,
             frozen,
             overlap,

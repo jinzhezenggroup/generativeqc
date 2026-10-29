@@ -591,6 +591,13 @@ context/modules, graphs, stacks, pool/page retention and library internals.
 Those exclusions and any allowances are explicit in the plan. It is not a
 process-wide physical-memory cap.
 
+Native D4 correction owners also charge their retained CUDA buffers to an
+active device ledger. Partial construction and host exceptions release those
+charges; a surviving correction owner keeps its ledger alive after the submitting
+scope ends, including cross-thread destruction. Without an active ledger,
+standalone D4 retains its existing `maximum_bytes` worker-schedule bound. This
+allocation contract alone does not add D4 to global `ResourcePlan` admission.
+
 CPU diagnostics sample simultaneously owned integral/SCF/DIIS vector capacities
 at iteration boundaries. They **exclude transient recurrence/eigensolver
 allocations** and are not a complete allocator peak. Host execution is bounded

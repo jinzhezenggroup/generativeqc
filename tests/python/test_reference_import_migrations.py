@@ -35,7 +35,9 @@ def _shape(node: Any) -> Any:
 def test_import_migration_receipts_bind_exact_current_sources() -> None:
     payload = json.loads((ROOT / RECEIPT).read_text())
     assert "no new reference execution" in payload["scope"]
-    assert len(payload["sources"]) == 7
+    assert len(payload["sources"]) == 8
+    pairs = [(row["path"], row["historical_sha256"]) for row in payload["sources"]]
+    assert len(set(pairs)) == len(pairs)
     for record in payload["sources"]:
         data = (ROOT / record["path"]).read_bytes()
         assert hashlib.sha256(data).hexdigest() == record["current_sha256"]
@@ -55,11 +57,12 @@ def test_import_migration_receipts_bind_exact_current_sources() -> None:
 
 
 @pytest.mark.parametrize("mutation", ["formula", "import", "receipt", "path", "absent"])
+@pytest.mark.parametrize("source_index", range(8))
 def test_unreviewed_source_or_receipt_is_rejected(
-    tmp_path: Path, mutation: str
+    tmp_path: Path, mutation: str, source_index: int
 ) -> None:
     payload = json.loads((ROOT / RECEIPT).read_text())
-    record = payload["sources"][0]
+    record = payload["sources"][source_index]
     source = tmp_path / record["path"]
     source.parent.mkdir(parents=True)
     source.write_bytes((ROOT / record["path"]).read_bytes())

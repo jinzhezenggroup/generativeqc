@@ -5,17 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from generativeqc_compiler.integral import production, production_selection
-
-
-def test_production_preserves_selection_compatibility_reexports() -> None:
-    """Legacy production imports resolve to the canonical selection objects."""
-
-    assert production.KernelSelection is production_selection.KernelSelection
-    assert production._selection_integral is production_selection._selection_integral
-    assert (
-        production._SUPPORTED_RECURRENCES is production_selection._SUPPORTED_RECURRENCES
-    )
+from generativeqc_compiler.integral import production_selection
 
 
 def test_production_selection_has_leaf_dependencies() -> None:

@@ -111,7 +111,10 @@ function(generativeqc_add_cuda_shared_library target owner)
     set(anchor "${CMAKE_CURRENT_BINARY_DIR}/cuda-host/${target}_link.cpp")
     file(GENERATE OUTPUT "${anchor}" CONTENT "// Host link for a device-closed CUDA artifact.\n")
     add_library(${target} SHARED "${anchor}")
-    set_target_properties(${target} PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+    # AOT manifests seal the post-build ELF hash. Link with the final RPATH so
+    # cmake --install cannot rewrite an already authenticated device artifact.
+    set_target_properties(${target} PROPERTIES
+      CUDA_RESOLVE_DEVICE_SYMBOLS OFF BUILD_WITH_INSTALL_RPATH ON)
     target_link_libraries(${target} PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${host_archive}>")
     set(${owner} "${device_target}" PARENT_SCOPE)
   else()

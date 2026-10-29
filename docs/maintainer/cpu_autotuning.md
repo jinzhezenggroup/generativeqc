@@ -98,6 +98,7 @@ so unrelated BLAS/OpenMP pools cannot silently change the comparison.
 The reproducible artifact is
 `benchmarks/results/issue471-cpu-autotune.json.xz`; its reproducibility limits are
 recorded in the [benchmark results index](../../benchmarks/results/README.md).
+Read it with `lzma.open(path, "rt")`; decompression preserves the original JSON bytes.
 
 It uses the complete PSSS Cartesian shell with 192 contracted primitive records
 and an independent native dynamic-Jet value/derivative oracle from the fresh

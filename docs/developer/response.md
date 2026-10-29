@@ -618,7 +618,7 @@ and explicit Z-vector nonconvergence. The CC-specific weight/source ownership
 remains in the correlated-gradient consumer; no SCF/DIIS iteration tape is part
 of this contract.
 
-The `solve_rhf_nuclear_perturbations` consumer prepares ordered nuclear and
+The `solve_stationary_nuclear_perturbations` consumer prepares ordered nuclear and
 metric RHS columns, calls `solve_many` with final basis publication disabled,
 and reconstructs the occupied-orbital/density responses. `rhf_hvp_many` and
 `rhf_hessian` use that same boundary for bounded blocks. Their opt-in exact-RHF

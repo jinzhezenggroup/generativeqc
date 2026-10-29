@@ -133,13 +133,34 @@ transport-envelope reconstruction is claimed. The later four original collectors
 already retained those binaries remotely with inventory-only local coverage.
 Private paths and local aliases are not substitutes for public byte objects.
 
-`host-history.json.xz` restores 37 original uncompressed local HOST files. Four
-already-compressed original HOST/oracle files remain standalone and byte-identical.
-Those 41 files are historical provenance, not executable current launch entries.
-The local HOST mode scope is explicitly distinct from remote POSIX witnesses.
-The six artifacts are exactly those reviewed under
-`root-2732-two-size-lossless-storage-20261025`; storage classification is not
-whole-science approval. No newly nested compressed archive hides a byte budget.
+The complete scientific/runtime/control/source history and independent oracle
+remain in-tree. Ordinary `reader.py` replay still checks every actual return,
+force vector, source/device/release witness, work count and failed/NOT_RUN record.
+It reports the optional historical HOST audit as `NOT_RUN_HISTORICAL_AUDIT`,
+separately from numerical acceptance, using `historical-host-summary.json`.
+
+Four superseded HOST producer/failure capsules (490,912 bytes), plus their
+original artifact inventory, use the existing stock snapshot restorer at
+already-merged `dd4fa29891e84f2a7be234c30c1dbc7a3fa2de89`. All five original
+files were recovered and checked byte-for-byte before retirement. The snapshot
+retains their exact path, length, SHA256, Git blob and mode. No scientific
+payload, independent reference or actual runtime original was retired.
+
+The historical audit restores 37 uncompressed local HOST files and checks four
+standalone compressed originals, including the independent oracle that remains
+in the current tree. Its local HOST mode scope is distinct from remote POSIX
+witnesses. Run this optional audit explicitly:
+
+```console
+python tools/restore_retained_evidence.py --all --manifest benchmarks/results/h100-direct-wb97mv-20261024/historical-host-snapshot.json --output .artifacts/wb97-host-history
+python benchmarks/results/h100-direct-wb97mv-20261024/reader.py --host-history-root .artifacts/wb97-host-history/benchmarks/results/h100-direct-wb97mv-20261024
+```
+
+Shallow clones may need an explicit fetch of the pinned published commit first.
+Neither reader nor restorer fetches implicitly. Missing/corrupt HOST recovery
+still fails closed; ordinary offline numerical replay needs no history fetch.
+Storage classification and historical recovery are not whole-science approval.
+No new recovery framework or nested compressed archive is introduced.
 
 Both XZ decoders use a 96 MiB memory limit, a 64 MiB expanded envelope limit,
 EOF and no-trailing-data checks. Paths, duplicate members/JSON keys, base64,

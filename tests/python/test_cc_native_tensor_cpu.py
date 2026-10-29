@@ -5,16 +5,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.gradient_equations import build_hamiltonian_programs
+from generativeqc_compiler.cc.lambda_equations import build_lambda_programs
+from generativeqc_compiler.cc.triples_response import build_tile_triples_vjp
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.tensor import PackedLayout, execute
 from generativeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
-from tools.generativeqc_cc.gradient_equations import build_hamiltonian_programs
-from tools.generativeqc_cc.lambda_equations import build_lambda_programs
 from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
 from tools.generativeqc_cc.oracle import dense_feeds, random_case
-from tools.generativeqc_cc.triples_response import build_tile_triples_vjp
 
 
 def _native(program: typing.Any, tmp_path: Path) -> NativeTensorProgram:

@@ -44,3 +44,28 @@ Host-only dimensions were independently checked against PySCF (177 checks,
 one explicitly GPU-only skip). The small evidence addition is offset by
 losslessly encoding the historical issue471 autotuning JSON as XZ, with its
 original Git blob and decoded/encoded checksums retained separately.
+
+
+## Qualification-driver hardening
+
+The replay driver now rejects non-finite energies/force components and non-finite
+or non-positive timings before reduction. Existing E/F tolerances and the 1.05
+per-case performance gate are unchanged. `--response-timeout` (default 900 seconds)
+bounds each startup/sample response, including a partial line; failure and normal
+shutdown terminate and reap only the harness-owned worker sessions.
+
+This is a harness correction, not a replacement GPU campaign. All retained raw
+samples, their order and measurements are unchanged. The 22 host-only driver tests
+exercise the full entry point, invalid values, exact retained-population replay,
+and real silent/partial/failed/persistent workers and inherited-pipe cleanup.
+
+The original retained driver remains byte-exact reconstructible offline using
+`original-driver.reverse.patch.xz`; no PR-only Git ancestor is required:
+
+```bash
+cp qualify.py /tmp/cuda-basis-original-qualify.py
+xz -dc original-driver.reverse.patch.xz | patch /tmp/cuda-basis-original-qualify.py
+sha256sum /tmp/cuda-basis-original-qualify.py
+```
+
+Expected original-driver SHA-256: `8e59b3999819f942ffe5bc25b4403cb1d2c355583d4e17a508e5280f2ebe30d6`.

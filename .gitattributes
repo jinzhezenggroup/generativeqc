@@ -35,6 +35,9 @@ benchmarks/results/pbe0-xc-tiles-20261006/*.sh text eol=lf
 benchmarks/results/pbe0-xc-tiles-20261006/*.patch text eol=lf
 benchmarks/results/pbe0-xc-tiles-20261006/*.sha256 text eol=lf
 
+# These historical audit bindings authenticate the literal committed JSON bytes.
+benchmarks/results/h100-direct-wb97mv-20261024/historical-host-*.json text eol=lf
+
 # Scientific source-of-truth lives in upstream/manifest.json; these are derived
 # compatibility views or deterministic numerical products.
 manifests/libxc/7.0.0/manifest.json linguist-generated=true
