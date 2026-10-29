@@ -681,15 +681,19 @@ def test_retention_uses_independent_gate_before_journaling(
 
 
 @pytest.mark.parametrize("grid", [None, (48, 16, 32)])
+@pytest.mark.parametrize("scheduler", ["SLURM_JOB_ID", "LSB_JOBID"])
 def test_optional_grid_cli_reaches_later_argument_validation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     grid: tuple[int, int, int] | None,
+    scheduler: str,
 ) -> None:
     from benchmarks.readme_omol25 import main
 
-    monkeypatch.setenv("SLURM_JOB_ID", "test-only-no-gpu")
+    for name in ("SLURM_JOB_ID", "LSB_JOBID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(scheduler, "test-only-no-gpu")
     arguments = [
         "native",
         "--atoms",
@@ -698,6 +702,7 @@ def test_optional_grid_cli_reaches_later_argument_validation(
         str(tmp_path / "basis.json"),
         "--output",
         str(tmp_path / "result.json"),
+        "--allow-portable-build",
     ]
     if grid is not None:
         arguments += ["--grid", *map(str, grid)]

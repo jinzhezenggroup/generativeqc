@@ -32,6 +32,11 @@ Failure-injection tests cover missing libraries and each missing protocol throug
 both public decisions, with Python retry forbidden. Existing independent
 threshold tables, one-ULP boundaries, all final gate combinations, native error
 recovery and custom/unbounded cases remain the behavioral contract. Current
-source-bound complete CPU trajectories qualify unchanged built-in execution.
+executable policy tests and normal required CI remain the acceptance gates.
+The optional CPU trajectory capsule from the initial PR is not included in this
+source change. Its historical controller lacked timing validation and bounded
+child-response reads; it is not a current acceptance gate. This is not a claim
+that any recorded sample failed numerically, nor a durable offline recovery
+promise for a PR-only revision. No existing master evidence is removed.
 This does not implement the optimizer, migrate physical SCF stages, qualify a
 new CUDA context, or complete #2227 R4/R6.
