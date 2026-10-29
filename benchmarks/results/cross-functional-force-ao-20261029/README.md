@@ -24,11 +24,17 @@ cases. No default or crossover is promoted. The public native controller still
 uses dense force AO tiles; selected maps are invoked through the explicit
 stationary consumer after native SCF, without overriding native capabilities.
 
+Post-measurement acceptance checks now require exact `(atom_count, 3)` force
+shapes, finite energies/forces, and finite nonnegative physical residuals. All
+14 retained cases (140 explicit endpoints and 28 native controls) pass offline
+value replay under these checks. The original measured source patch and source
+hashes remain unchanged; this is not a new GPU run.
+
 ## Source and environment
 
 Base: `dc526e408174ce9d22049860a6dfa8349afc7a45`. Applying `source.patch.xz`
 restores the executable changes measured here; hashes in the acceptance record
-were checked against the submitted source. The 20 s/p and s/p/d stationary AOT
+identify the original measured source restored by that patch. The 20 s/p and s/p/d stationary AOT
 packages were rebuilt from that source with CUDA 12.9.86, GNU 13.3.0, real
 sm_120 code and verified sccache 0.16.0 CXX/CUDA launchers. Source/binary contract
 checks remained enabled. Build logs and pre/post shared-cache statistics stay

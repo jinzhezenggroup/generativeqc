@@ -124,7 +124,7 @@ def main() -> None:
     parser.add_argument(
         "--profile",
         default="auto",
-        help="strict auto, explicit portable, sm_XX, or a named manifest profile",
+        help="auto (tuned then portable), explicit portable, sm_XX, or a named manifest profile",
     )
     parser.add_argument(
         "--profile-map",

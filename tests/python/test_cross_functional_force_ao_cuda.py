@@ -31,6 +31,20 @@ pytestmark = pytest.mark.skipif(
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _assert_force_endpoint(energy: float, forces: np.ndarray, atom_count: int) -> None:
+    """Reject malformed or nonfinite E/F before any broadcasted comparison."""
+    assert np.isfinite(energy), "energy must be finite"
+    assert np.shape(forces) == (atom_count, 3), "forces must have shape (atoms, 3)"
+    assert np.all(np.isfinite(forces)), "forces must be finite"
+
+
+def _assert_physical_residual(residual: float) -> None:
+    """A converged physical RMS residual is finite and nonnegative."""
+    assert np.isfinite(residual) and 0 <= residual <= 1e-9, (
+        "physical residual must be finite and in [0, 1e-9]"
+    )
+
+
 @pytest.mark.parametrize("spin", ["rks", "uks"])
 @pytest.mark.parametrize(
     "method,xc,producer,split_grid",
@@ -110,7 +124,9 @@ def test_cross_functional_force_maps(
             assert reference.converged
             gradient = reference.nuc_grad_method()
             gradient.grid_response = True
-            references.append((energy, cp.asnumpy(-gradient.kernel())))
+            forces = cp.asnumpy(-gradient.kernel())
+            _assert_force_endpoint(energy, forces, len(case.atoms))
+            references.append((energy, forces))
     record_property(
         "force_map_reference",
         json.dumps(
@@ -166,6 +182,7 @@ def test_cross_functional_force_maps(
                     coordinates=(points,), strict=True, properties=("energy", "forces")
                 ).items[0]
             assert native.converged and native.executed_backend == "cuda"
+            _assert_force_endpoint(native.energy, native.forces, len(case.atoms))
             assert abs(native.energy - energy) <= 1e-8
             np.testing.assert_allclose(native.forces, forces, atol=3e-7, rtol=0)
             native_results.append(native)
@@ -226,6 +243,7 @@ def test_cross_functional_force_maps(
                     actual_forces, force_work = batch._public_dft_cuda_force(0, atoms)
                     seconds = perf_counter() - started
                 energy, forces = references[geometry]
+                _assert_force_endpoint(result.energy, actual_forces, len(case.atoms))
                 energy_error = abs(result.energy - energy)
                 force_error = float(np.max(np.abs(actual_forces - forces)))
                 samples.append(
@@ -253,7 +271,7 @@ def test_cross_functional_force_maps(
                 # including a numerical failure; a policy label is insufficient.
                 record_property("force_map_endpoints", json.dumps(samples))
                 assert result.executed_backend == "cuda" and result.converged
-                assert result.physical_residual_rms <= 1e-9
+                _assert_physical_residual(result.physical_residual_rms)
                 assert energy_error <= 1e-8
                 assert force_error <= 3e-7
                 np.testing.assert_allclose(

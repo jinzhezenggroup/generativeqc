@@ -679,8 +679,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "device_ao_map_reserve_sha256": (
             "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
         ),
-        "resident_ao_cache_sha256": (
-            "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
+        "resident_ao_cache_sha256": current_python_owner_identity(
+            "python/generativeqc/_stationary_cuda.py",
+            "_stationary_resident_ao_cache",
         ),
         "native_owner_sha256": current_native_identity("struct Owner {"),
         "native_allocation_sha256": current_native_identity("size_t allocation("),
@@ -737,8 +738,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_phased_becke_allocation_sha256": (
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
-        "native_phased_becke_admission_sha256": (
-            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+        "native_phased_becke_admission_sha256": current_native_identity(
+            "int stationary_configure_phased_becke_v1("
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -5144,6 +5145,12 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
     assert_native_create_contract(source, tmp_path, required_native_cxx)
 
 
+def test_resource_semantics_accept_capability_based_targets() -> None:
+    qualify_capacity._geometry_resource_contract(
+        ROOT / "python/generativeqc_compiler/method/stationary_resources.py"
+    )
+
+
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -5151,6 +5158,25 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
         ("+ 1  # atom prefix offsets", "+ 0  # atom prefix offsets"),
         ("if required <= budget_bytes - allocation - center_bytes:", "if True:"),
         ("except ValueError as error:", "except Exception as error:"),
+        (
+            "type(atoms) is int and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS",
+            (
+                'type(atoms) is int and target.architecture == "sm_120" '
+                "and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS"
+            ),
+        ),
+        (
+            "and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS",
+            "and True",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.shared_memory_per_block",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.tuning_maximum_shared_bytes",
+        ),
     ],
 )
 def test_resource_semantics_reject_missing_panels_and_unbounded_fallback(
@@ -5183,3 +5209,42 @@ def test_native_grid_abi_provenance_accepts_benign_reader_edits(
         "native_grid_abi_sha256"
     }
     assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("state._source.check_current()", "None"),
+        ("device=resident.device", "device=0"),
+        ("grid.geometry_generation,", "0,"),
+        ("float(cutoff),", "1e-16,"),
+        (
+            "if owner is None or prepared._resident_ao_map_key != key:",
+            "if owner is None:",
+        ),
+        ("owner.reset_work()", "None"),
+        ("        owner = None\n", "        pass\n"),
+        ("prepared._resident_ao_maps = None", "None"),
+        ("prepared._resident_ao_map_key = None", "None"),
+    ],
+)
+def test_resident_ao_binding_witness_rejects_lifecycle_drift(
+    old: str, new: str
+) -> None:
+    from tools.dft_mp_v1.prepared_contracts import check_resident_ao_binding
+
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_stationary_resident_ao_cache"
+    )
+    check_resident_ao_binding(owner)
+    segment = ast.get_source_segment(source, owner)
+    assert segment is not None and old in segment
+    changed = ast.parse(segment.replace(old, new)).body[0]
+    with pytest.raises(
+        RuntimeError, match="resident AO policy lifecycle contract changed"
+    ):
+        check_resident_ao_binding(changed)
