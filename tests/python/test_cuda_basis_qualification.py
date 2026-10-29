@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -22,15 +23,21 @@ BUNDLE = (
 
 
 @pytest.fixture
-def driver():
+def driver() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(BUNDLE / "qualify.py")))
 
 
-def invoke(driver, monkeypatch, tmp_path, samples, metadata=None):
+def invoke(
+    driver: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    samples: list[dict[str, Any]],
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Replay the complete entry point with deterministic worker responses."""
     workers = []
 
-    def start(*args, **kwargs):
+    def start(*args: object, **kwargs: Any) -> SimpleNamespace:
         role = "AB"[len(workers)]
         rows = [record["rows"] for record in samples if record["engine"] == role]
         worker = SimpleNamespace(
@@ -46,7 +53,7 @@ def invoke(driver, monkeypatch, tmp_path, samples, metadata=None):
         workers.append(worker)
         return worker
 
-    def stop(worker):
+    def stop(worker: SimpleNamespace) -> None:
         worker.stopped = True
 
     output = tmp_path / "samples.json.xz"
@@ -81,7 +88,7 @@ def invoke(driver, monkeypatch, tmp_path, samples, metadata=None):
         return json.load(stream)
 
 
-def population():
+def population() -> list[dict[str, Any]]:
     item = {
         "energy": -1.0,
         "forces": [[0.0, 0.0, 0.0]],
@@ -118,7 +125,14 @@ def population():
         ("seconds", sys.float_info.max, "both"),
     ],
 )
-def test_invalid_values_are_rejected(driver, monkeypatch, tmp_path, field, value, role):
+def test_invalid_values_are_rejected(
+    driver: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: float | list[list[float]],
+    role: str,
+) -> None:
     samples = population()
     for record in samples:
         if role in (record["engine"], "both"):
@@ -132,8 +146,12 @@ def test_invalid_values_are_rejected(driver, monkeypatch, tmp_path, field, value
     "field,value", [("energy", -0.5), ("forces", [[0.5, 0.0, 0.0]])]
 )
 def test_existing_scientific_limits_are_not_relaxed(
-    driver, monkeypatch, tmp_path, field, value
-):
+    driver: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: float | list[list[float]],
+) -> None:
     samples = population()
     for record in samples:
         if record["engine"] == "B":
@@ -142,12 +160,16 @@ def test_existing_scientific_limits_are_not_relaxed(
         invoke(driver, monkeypatch, tmp_path, samples)
 
 
-def test_valid_complete_entry_point(driver, monkeypatch, tmp_path):
+def test_valid_complete_entry_point(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     report = invoke(driver, monkeypatch, tmp_path, population())
     assert report["all_within_1_05"] and report["maximum_ratio"] == 1.0
 
 
-def test_serialization_rejects_nonfinite_metadata(driver, monkeypatch, tmp_path):
+def test_serialization_rejects_nonfinite_metadata(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     with pytest.raises(ValueError):
         invoke(
             driver,
@@ -159,8 +181,8 @@ def test_serialization_rejects_nonfinite_metadata(driver, monkeypatch, tmp_path)
 
 
 def test_actual_retained_population_replays_without_remeasurement(
-    driver, monkeypatch, tmp_path
-):
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     with lzma.open(BUNDLE / "cuda-samples.json.xz", "rt") as stream:
         retained = json.load(stream)
     report = invoke(
@@ -190,7 +212,9 @@ def test_actual_retained_population_replays_without_remeasurement(
         ("print('invalid',flush=True)", ValueError),
     ],
 )
-def test_worker_response_deadline_and_failure_cleanup(driver, code, error):
+def test_worker_response_deadline_and_failure_cleanup(
+    driver: SimpleNamespace, code: str, error: type[Exception]
+) -> None:
     worker = subprocess.Popen(
         [sys.executable, "-c", code],
         stdin=subprocess.PIPE,
@@ -210,7 +234,7 @@ def test_worker_response_deadline_and_failure_cleanup(driver, code, error):
     assert time.monotonic() - started < 12
 
 
-def test_persistent_child_readiness_and_sample(driver):
+def test_persistent_child_readiness_and_sample(driver: SimpleNamespace) -> None:
     code = "import sys;print('{\"ready\":{}}',flush=True);sys.stdin.readline();print('{\"rows\":[]}',flush=True);sys.stdin.readline()"
     worker = subprocess.Popen(
         [sys.executable, "-c", code],
@@ -231,11 +255,13 @@ def test_persistent_child_readiness_and_sample(driver):
     assert worker.poll() is not None
 
 
-def test_startup_timeout_cleans_up_all_started_children(driver, monkeypatch, tmp_path):
+def test_startup_timeout_cleans_up_all_started_children(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     real_start = subprocess.Popen
     workers = []
 
-    def start(*args, **kwargs):
+    def start(*args: object, **kwargs: Any) -> subprocess.Popen[str]:
         code = "import time;time.sleep(60)"
         if not workers:
             code = "import time;print('{\"ready\":{}}',flush=True);time.sleep(60)"
@@ -280,7 +306,9 @@ def test_startup_timeout_cleans_up_all_started_children(driver, monkeypatch, tmp
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="POSIX inherited-pipe ownership")
-def test_exited_parent_does_not_leave_a_descendant_pipe_owner(driver):
+def test_exited_parent_does_not_leave_a_descendant_pipe_owner(
+    driver: SimpleNamespace,
+) -> None:
     import select
 
     code = (
