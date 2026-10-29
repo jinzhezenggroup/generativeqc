@@ -50,6 +50,10 @@ class ContextOwner:
         """Release resident work under the transaction lock; later calls rebuild."""
         with self.lock:
             if self._context.value:
+                if getattr(self, "_provider_initialization_retained", False):
+                    raise RuntimeError(
+                        "provider transaction retains this native context"
+                    )
                 self._library.generativeqc_context_destroy(self._context)
                 self._context = ctypes.c_void_p()
             self._identity = None

@@ -15,6 +15,8 @@
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/precision_work.hpp"
 #include "scf/provider_initialization.hpp"
+#include "scf/provider_initialization_intent.hpp"
+#include "scf/provider_initialization_runtime.hpp"
 
 namespace generativeqc::scf {
 
@@ -150,6 +152,10 @@ struct ScfOptions {
   /** Native-only immutable request; absent preserves legacy provider admission.
    * No public method-descriptor transport is provided by this internal field. */
   std::optional<ProviderInitializationRequest> reference_provider_initialization;
+  /** SDK intent is copied before preparation. The native owner binds actual
+   * provider identity later; neither field supplies caller qualification. */
+  std::optional<ProviderInitializationIntent> reference_provider_initialization_intent;
+  std::shared_ptr<PendingReferenceProviderOwner> reference_provider_initialization_owner;
   /**
    * Requested floating-point execution policy. \p std::nullopt (absent) preserves
    * the legacy GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch; an
