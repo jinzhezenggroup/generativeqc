@@ -526,8 +526,8 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   }
   const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
   if (reserve_optional_md &&
-      (!runtime::active_device_resource_ledger || direct_coulomb_optional_authorized()) && nao >= 8 &&
-      (!disabled || std::strcmp(disabled, "1") != 0))
+      (!runtime::active_device_resource_ledger || direct_coulomb_optional_authorized()) &&
+      nao >= 8 && (!disabled || std::strcmp(disabled, "1") != 0))
     add(1, cuda_execution::kMdJDefaultReservation);
   return bytes;
 }
