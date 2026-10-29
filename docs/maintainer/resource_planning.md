@@ -50,6 +50,14 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+CUDA resource identities retain the binary digest of an already-loaded native
+image across frontend wrappers. A bounded process-local cache holds the actual
+library owners, preventing loader-handle reuse from aliasing another image;
+per-wrapper profile identity stays separate. New images and metadata-only
+adapters without loader ownership are hashed independently. Replacing a library
+path does not change the identity of an image already loaded from that path;
+in-place modification of loaded library bytes is unsupported.
+
 ## Native composition authority
 
 Hückel preparation planning queries the selected native library's
