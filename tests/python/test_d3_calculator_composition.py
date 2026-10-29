@@ -187,9 +187,9 @@ def test_resource_budget_automatically_composes_ks_and_d3_requests() -> None:
         assert batch.dispersion_diagnostic is not None
 
 
-def test_global_resource_budget_does_not_admit_d4_gcp_yet() -> None:
+def test_global_resource_budget_does_not_admit_composite_gcp_yet() -> None:
     graph = resolve_method("R2SCAN-3c", spin="unpolarized")
-    with pytest.raises(NotImplementedError, match="D4/gCP"):
+    with pytest.raises(NotImplementedError, match="gCP"):
         Calculator(method=graph, resource_budget=ResourceBudget())
 
 
