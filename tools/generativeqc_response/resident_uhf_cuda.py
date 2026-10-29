@@ -15,8 +15,8 @@ from weakref import WeakValueDictionary
 import numpy as np
 from generativeqc import _native
 from generativeqc.profiles import canonical_hash
+from generativeqc.response_problem import ResponseCompatibilityError
 
-from .problem import ResponseCompatibilityError
 from .spin_cuda import CudaSpinJKBackend
 from .uhf import UHFResponseProblem, uhf_operator_identity
 

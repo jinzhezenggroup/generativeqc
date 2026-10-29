@@ -5,8 +5,8 @@ from fractions import Fraction
 from typing import NoReturn
 
 import pytest
+from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.xc import geometry_cuda
-from generativeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.xc.spec import FunctionalSpec, functional
 
 R2SCAN_CODE = next(

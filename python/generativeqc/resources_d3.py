@@ -160,6 +160,58 @@ def _d3_spec(graph: MethodIR) -> D3Spec:
     return corrections[0].specification
 
 
+def _ks_d3_inventory(
+    counts: tuple[int, ...], backend: str, library: typing.Any
+) -> dict[str, int]:
+    """Read KS's actual per-item correction layout, including replicated tables.
+
+    Selection requires this ABI before planning. A rejected or malformed native
+    receipt cannot be repaired by sizing a different, standalone ragged owner.
+    """
+    from . import _native
+
+    query = library.generativeqc_ks_d3_resource_query_v1
+    query.argtypes = [
+        ctypes.c_int32,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.c_uint32,
+        ctypes.POINTER(_native.D3RuntimeDiagnostic),
+    ]
+    query.restype = ctypes.c_int
+    values = _native.D3RuntimeDiagnostic(
+        ctypes.sizeof(_native.D3RuntimeDiagnostic), _native.ABI_VERSION
+    )
+    _native.check(
+        library,
+        query(
+            int(backend == "cuda"),
+            (ctypes.c_uint32 * len(counts))(*counts),
+            len(counts),
+            ctypes.byref(values),
+        ),
+    )
+    inventory = {
+        key: checked_bytes(int(getattr(values, key)), "KS D3 " + key)
+        for key in _D3_RESOURCE_KEYS[:-1]
+    }
+    inventory["retained_bytes"] = checked_bytes(
+        sum(inventory[key] for key in _D3_RESOURCE_KEYS[:3]), "KS D3 retained_bytes"
+    )
+    inventory["minimum_maximum_bytes"] = checked_bytes(
+        int(values.maximum_bytes), "KS D3 minimum_maximum_bytes"
+    )
+    if (
+        values.backend != int(backend == "cuda")
+        or values.system_count != len(counts)
+        or values.total_atoms != sum(counts)
+        or values.maximum_atoms != max(counts)
+        or not 0 < inventory["retained_bytes"] <= inventory["minimum_maximum_bytes"]
+        or (backend == "cpu" and inventory["device_bytes"] != 0)
+    ):
+        raise ValueError("native KS D3 inventory returned inconsistent capacity")
+    return inventory
+
+
 def _normalized_atomic_numbers(systems: typing.Any) -> tuple[tuple[int, ...], ...]:
     normalized = tuple(tuple(system) for system in systems)
     if not normalized or any(not system for system in normalized):
@@ -182,12 +234,15 @@ def d3_resource_request(
     first_phase: int = 0,
     last_phase: int = 0,
     library: typing.Any = None,
+    _native_ks: bool = False,
 ) -> ResourceRequest:
     """Describe the retained production D3(BJ) owner without allocating it.
 
     An already-loaded ``library`` supplies native sizing when its additive
     query exists. No library is loaded here; absent symbols retain portable
     metadata sizing, while discovered native failures are authoritative.
+    The selected complete KS program uses its distinct per-item native query;
+    its equal-share local cap is checked independently of global live storage.
     """
     if not isinstance(method, MethodIR):
         raise TypeError("D3 resource planning requires a MethodIR")
@@ -212,13 +267,15 @@ def d3_resource_request(
         "device_id": device_id,
         "inventory_version": 1,
         "inventory_owner": (
-            "native-d3-layout-v1"
+            "native-ks-d3-layout-v1"
+            if _native_ks
+            else "native-d3-layout-v1"
             if getattr(library, "generativeqc_resource_d3_layout_v1", None) is not None
             else "portable-d3-layout-v1"
         ),
         "maximum_bytes": maximum_bytes,
         "method_ir_identity": method.identity,
-        "schedule": "retained-native-d3-bj",
+        "schedule": "retained-native-ks-d3" if _native_ks else "retained-native-d3-bj",
     }
     identity = ResourceIdentity(
         method.identifier,
@@ -260,19 +317,24 @@ def d3_resource_request(
             unsupported_reason=unsupported,
         )
 
-    inventory = _d3_inventory(counts, backend, library)
+    inventory = (
+        _ks_d3_inventory(counts, backend, library)
+        if _native_ks
+        else _d3_inventory(counts, backend, library)
+    )
     plan_host_bytes = inventory["plan_host_bytes"]
     execution_host_bytes = inventory["execution_host_bytes"]
     device_bytes = inventory["device_bytes"]
     retained_total = inventory["retained_bytes"]
-    if retained_total > maximum_bytes:
+    required_budget = inventory.get("minimum_maximum_bytes", retained_total)
+    if required_budget > maximum_bytes:
         return ResourceRequest(
             name,
             identity,
             (),
             exclusions,
             infeasible_reason=(
-                f"production D3(BJ) retained owner requires {retained_total} bytes, "
+                f"production D3(BJ) retained owner requires {required_budget} bytes, "
                 f"exceeding dispersion maximum_bytes={maximum_bytes}"
             ),
         )
@@ -295,6 +357,24 @@ def d3_resource_request(
             kind="persistent",
         ),
     ]
+    if _native_ks and backend == "cpu":
+        # Native CPU force admission is per prepared item and includes bounded
+        # derivative work, which this correction-only shape query cannot prove.
+        # An unadmitted electronic force may retain the established standalone
+        # correction-gradient consumer alongside the native energy owners.
+        # Reserve its complete numeric layout before either endpoint executes;
+        # its correction energy is never added a second time.
+        compatibility = _d3_inventory(counts, backend, library)
+        estimates.append(
+            ResourceEstimate(
+                "D3 CPU compatibility force owner allowance",
+                compatibility["retained_bytes"],
+                "pageable",
+                first_phase,
+                last_phase,
+                kind="persistent",
+            )
+        )
     if backend == "cuda":
         estimates.append(
             ResourceEstimate(

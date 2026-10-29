@@ -1,0 +1,62 @@
+{
+  "changed_build_inputs": {
+    "CMakeLists.txt": "141e4b83e4b6d76232ed627e44d1cfcea77e729111faa3aba7f2f1c82801f974",
+    "cmake/GenerativeQCCuda.cmake": "6cf2af472faceb0a43abfa66f1aee7426a536e07e814713b8aad88bc8d2aba20",
+    "python/generativeqc_compiler/integral/first_derivative_schedule.py": "c160959924ba6bfb441c1eaf734ea0ff25c584a95861fbdca76ce887becad4e9",
+    "python/generativeqc_compiler/method/stationary_cuda.py": "f478097a8cbcf3656a01f7126914e08b4abb9b808d7f42081c3567b2f1c4c602",
+    "python/generativeqc_compiler/method/stationary_native_cuda.py": "4bff2ede2f710534b95ec849607099f1103d1858a57ffdd674360d7ef0b1dc76",
+    "tools/generate_native_stationary_cuda.py": "c47b2ab47daf6f49ae4aa6b8fdc3166f6f77bd0c7994b0d5c1deba0c1dcb9fc9",
+    "tools/generate_stationary_force_aot.py": "b5163ef9d697f3efb8a562ca1873acd63eb269f77425c8fe84d5e19c4ddae503"
+  },
+  "combined_image_request": [
+    "120-virtual",
+    "120-real"
+  ],
+  "cuda_artifacts": [
+    {
+      "binary_sha256": "afc2228f114824d07c4fd4d1b26d7e91da471bea07336f788f3f068deaa76d53",
+      "key": "5f8d337436f8c51e8f16549c0be3854f099bb9e01ebfa681970a0e2ae83d4b95",
+      "schema": "generativeqc.cuda.link/1",
+      "target": "sm_120",
+      "toolchain": {
+        "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+        "ptxas": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      }
+    },
+    {
+      "binary_sha256": "91cbe98bad375905d9e25e5c603349fce1f3c727ce6d50afdcbc7cf29df5b853",
+      "key": "8279999bc15f349737404501f580070f2a5f2362a605a3b3746326c1245434fa",
+      "schema": "generativeqc.cuda.object/1",
+      "target": "sm_80",
+      "toolchain": {
+        "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+        "ptxas": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      }
+    },
+    {
+      "binary_sha256": "d0fac2808d24803b805af2d932d4e138fa69770259581169aad43a1b8614596b",
+      "key": "925b612ddf39ccc6a9087b89351c6832693f7a77a35b056072f821fe3b2fed9a",
+      "schema": "generativeqc.cuda.link/1",
+      "target": "sm_80",
+      "toolchain": {
+        "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+        "ptxas": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      }
+    },
+    {
+      "binary_sha256": "21b484af64e06d7f681972516353143b57f333e3869af565440e2904c0b3a805",
+      "key": "f9ec513c7d040695c763b885a40143a7afb4e4b106e63e8b6f8cc49702838927",
+      "schema": "generativeqc.cuda.object/1",
+      "target": "sm_120",
+      "toolchain": {
+        "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+        "ptxas": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      }
+    }
+  ],
+  "cuobjdump": {
+    "ptx": "PTX file    1: image.cu.1.sm_120.ptx\n",
+    "sass": "ELF file    1: image.cu.1.sm_120.cubin\n"
+  },
+  "real_gpu_executed": false
+}

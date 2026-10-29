@@ -10,11 +10,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-from tools.generativeqc_cc.triples import (
-    triples_energy,
-)
-from tools.generativeqc_cc.triples_tiles import (
+from generativeqc_compiler.cc.triples import triples_energy
+from generativeqc_compiler.cc.triples_tiles import (
     TileSpec,
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,

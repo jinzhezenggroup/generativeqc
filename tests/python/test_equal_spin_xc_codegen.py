@@ -23,13 +23,13 @@ from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.equal_spin import equal_spin_roots
 from generativeqc_compiler.xc.geometry_cuda import _emit_composed_point
 from generativeqc_compiler.xc.semilocal_codegen import build_roots
-
-from tools.generate_xc_b3lyp_cuda import emit_b3lyp_device
-from tools.generate_xc_r2scan_cuda import emit_r2scan_device
-from tools.generate_xc_split_hybrid_cuda import (
+from generativeqc_compiler.xc.split_hybrid_codegen import (
     emit_split_hybrid_device,
     emit_split_hybrid_device_body,
 )
+
+from tools.generate_xc_b3lyp_cuda import emit_b3lyp_device
+from tools.generate_xc_r2scan_cuda import emit_r2scan_device
 from tools.generate_xc_wb97mv_cuda import emit_wb97mv_device
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -5,7 +5,7 @@ import math
 import typing
 from dataclasses import asdict, dataclass
 
-from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
+from generativeqc_compiler.dft._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
 from generativeqc_compiler.xc.density_work import (
     DENSITY_WORK_DOMAIN,
     DENSITY_WORK_DOMAIN_VERSION,

@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.lowering.selection import (
+    supports_component_lane_rys,
+)
 
 from .capabilities import CAPABILITY_STREAMING_FOCK, normalize_capabilities
-from .cuda_lowering import supports_component_lane_rys
 from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import IntegralIR, KernelConsumer, build_integral_ir

@@ -193,5 +193,5 @@ def test_calculator_passes_loaded_library_to_composed_d3_plan() -> None:
     request = next(request for request in plan.requests if request.name == "d3")
     assert (
         json.loads(request.identity.schedule)["inventory_owner"]
-        == "native-d3-layout-v1"
+        == "native-ks-d3-layout-v1"
     )

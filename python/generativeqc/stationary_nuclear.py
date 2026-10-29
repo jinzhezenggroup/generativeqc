@@ -16,11 +16,8 @@ import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 
 __all__ = [
-    "RHFNuclearBatchResponse",
-    "RHFNuclearResponse",
     "StationaryNuclearBatchResponse",
     "StationaryNuclearResponse",
-    "build_rhf_nuclear_rhs",
     "build_stationary_nuclear_rhs",
     "metric_density_response_mo",
     "solve_stationary_nuclear_perturbation",
@@ -102,24 +99,6 @@ def build_stationary_nuclear_rhs(
     eps_i = energies[occupied, None]
     eps_a = energies[None, virtual]
     return ai - 0.5 * (eps_i + eps_a) * overlap_ia
-
-
-def build_rhf_nuclear_rhs(
-    frozen_fock_derivative_mo: typing.Any,
-    overlap_derivative_mo: typing.Any,
-    metric_fock_response_mo: typing.Any,
-    orbital_energies: typing.Any,
-    *,
-    nocc: int,
-) -> np.ndarray:
-    """Backward-compatible RHF name for the common closed-shell RHS algebra."""
-    return build_stationary_nuclear_rhs(
-        frozen_fock_derivative_mo,
-        overlap_derivative_mo,
-        metric_fock_response_mo,
-        orbital_energies,
-        nocc=nocc,
-    )
 
 
 @dataclass(frozen=True, eq=False)
@@ -427,7 +406,3 @@ def solve_stationary_nuclear_perturbations(
         for item, result in zip(prepared, results, strict=True)
     )
     return StationaryNuclearBatchResponse(responses, multi)
-
-
-RHFNuclearResponse = StationaryNuclearResponse
-RHFNuclearBatchResponse = StationaryNuclearBatchResponse

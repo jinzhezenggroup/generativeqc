@@ -16,6 +16,23 @@ from pathlib import Path
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc_compiler.cc.gradient_equations import (
+    build_ao_eri_weight_block_program,
+    build_ao_one_electron_weight_program,
+    build_ao_weight_program,
+)
+from generativeqc_compiler.cc.triples import (
+    _check_denominators,
+    _validate,
+    triples_energy,
+)
+from generativeqc_compiler.cc.triples_response import TRIPLES_RESPONSE_INPUTS
+from generativeqc_compiler.cc.triples_tiles import (
+    TriplesTileEnumerator,
+    _tile_input_feeds,
+    build_tile_triples_program,
+)
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.resources import ResourceBudget
@@ -29,7 +46,6 @@ from tools.generativeqc_response.implicit import (
     _checked_bytes,
     _immutable,
 )
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 from .complete_gradient import (
     BoundCCSDGradient,
@@ -38,16 +54,10 @@ from .complete_gradient import (
     _derivative_bytes,
     _validate_source,
 )
-from .gradient_equations import (
-    build_ao_eri_weight_block_program,
-    build_ao_one_electron_weight_program,
-    build_ao_weight_program,
-)
 from .lambda_cuda import PreparedCUDALambda
 from .lambda_solver import BoundCCSDLambda, _graph_bytes
 from .native_tensor_cuda import CudaCCTensorExecutor
 from .solver import solve
-from .triples import _check_denominators, _validate, triples_energy
 from .triples_cuda import TriplesTileConfig
 from .triples_lambda_response import (
     BoundCCSDTResponse,
@@ -55,15 +65,9 @@ from .triples_lambda_response import (
     solve_corrected_lambda,
 )
 from .triples_orbital_response import BoundCCSDTOrbitalResponse
-from .triples_response import TRIPLES_RESPONSE_INPUTS
 from .triples_response_cuda import (
     CudaTriplesResponseTiles,
     solve_corrected_lambda_cuda,
-)
-from .triples_tiles import (
-    TriplesTileEnumerator,
-    _tile_input_feeds,
-    build_tile_triples_program,
 )
 
 

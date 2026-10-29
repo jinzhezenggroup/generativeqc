@@ -11,8 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from _cc_owner_test_support import compile_owner, write_df_cpu_headers
-
-from tools.generativeqc_cc.triples_response import full_triples_vjp
+from generativeqc_compiler.cc.triples_response import full_triples_vjp
 
 NAMES = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 

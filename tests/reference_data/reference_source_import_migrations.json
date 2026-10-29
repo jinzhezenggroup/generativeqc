@@ -31,13 +31,15 @@
     {
       "path": "tools/generate_cc_triples_references.py",
       "historical_sha256": "90c51308796b765d8a8f3a2345d397e1aae205c7f62b300d9d9122cd0d94f3aa",
-      "current_sha256": "0fe807bdb468fef05a733dc59f4f4d8f70ed4d63adfbfd5e2055b982d69dcb90",
+      "current_sha256": "b336391c22a4a1cd6a7cc552baee2f9293e529d0e13e02b6fab83013f357214c",
       "non_import_ast_sha256": "71d9ab30536ba7dff01ffd1937fffd218002db7d32afef12c5973e333fd52bcb",
       "removed_imports": [
-        "from tools.generativeqc_validation.schema import canonical_hash, file_hash"
+        "from tools.generativeqc_validation.schema import canonical_hash, file_hash",
+        "from tools.generativeqc_cc.triples import triples_energy"
       ],
       "added_imports": [
-        "from generativeqc_compiler.common.evidence import canonical_hash, file_hash"
+        "from generativeqc_compiler.common.evidence import canonical_hash, file_hash",
+        "from generativeqc_compiler.cc.triples import triples_energy"
       ]
     },
     {
@@ -93,6 +95,19 @@
         "from generativeqc_compiler.common.provenance import canonical_hash, file_hash",
         "from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid"
       ]
+    },
+    {
+      "path": "tools/generate_cc_triples_references.py",
+      "historical_sha256": "0fe807bdb468fef05a733dc59f4f4d8f70ed4d63adfbfd5e2055b982d69dcb90",
+      "current_sha256": "b336391c22a4a1cd6a7cc552baee2f9293e529d0e13e02b6fab83013f357214c",
+      "non_import_ast_sha256": "71d9ab30536ba7dff01ffd1937fffd218002db7d32afef12c5973e333fd52bcb",
+      "removed_imports": [
+        "from tools.generativeqc_cc.triples import triples_energy"
+      ],
+      "added_imports": [
+        "from generativeqc_compiler.cc.triples import triples_energy"
+      ],
+      "source_base_commit": "99c1193b4365fe80e63cdeb49441373ab7e7bb56"
     }
   ]
 }

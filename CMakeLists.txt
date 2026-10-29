@@ -96,6 +96,8 @@ option(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK
        "Share native direct numerical code through a bounded NVIDIA device link" ON)
 option(GENERATIVEQC_PRUNE_CUDA_ARCHIVES
        "Prune resolved CUDA link inputs from private host-link archive copies" ON)
+option(GENERATIVEQC_COMPRESS_CUDA_FATBINS
+       "Compress NVIDIA device images (smaller files, additional first-load work)" OFF)
 option(GENERATIVEQC_CUDA_FAST_COMPILE
        "Use compiler-oriented CUDA options (never for release measurements)" OFF)
 option(GENERATIVEQC_ENABLE_CXX_PCH
@@ -110,6 +112,8 @@ set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING
     "Optional native CUDA compiler job limit; empty follows the build tool parallelism")
 set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING
     "Optional independent generated-AOT CUDA job limit; empty follows native CUDA scheduling")
+set(GENERATIVEQC_STATIONARY_AOT_SOURCE_CACHE "" CACHE PATH
+    "Optional shared target-independent stationary source cache across AOT build directories")
 set(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "1" CACHE STRING
     "NVCC split-compile threads for generated AOT kernels; 1 preserves production code generation")
 set(GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS "1" CACHE STRING
@@ -261,6 +265,8 @@ if(GENERATIVEQC_ENABLE_CUDA)
         "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCCudaCompression.cmake")
+    generativeqc_configure_cuda_compression()
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
     # numeric profile identity is derived below for manifest and cache paths.
     set(_generativeqc_cuda_compile_architectures ${CMAKE_CUDA_ARCHITECTURES})

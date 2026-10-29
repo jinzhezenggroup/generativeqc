@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import typing
 from pathlib import Path
@@ -36,31 +37,50 @@ from generativeqc_compiler.integral import (
     build_shell_class_contraction_kernel,
     cuda_target_info,
 )
-from generativeqc_compiler.integral.autotune import (
+from generativeqc_compiler.integral.batch_benchmark import KernelResources
+from generativeqc_compiler.integral.tuning.analysis import (
     StaticAlgebraModel,
     _analysis_roots,
-    _compile_trial,
-    _oracle_symbol_prefix,
     _packed_force_geometry_analysis,
-    _production_fock_schedule_index,
-    _read_shell_class_file,
-    _requested_shell_class_names,
-    _resolve_specifications,
-    _run_autotune,
+    static_algebra_model,
+)
+from generativeqc_compiler.integral.tuning.driver import _run_autotune
+from generativeqc_compiler.integral.tuning.emission import (
+    _oracle_symbol_prefix,
     emit_schedule_driver,
     emit_schedule_oracle_translation_unit,
     emit_schedule_translation_unit,
-    estimate_occupancy,
-    schedule_payload,
-    static_algebra_model,
-    supported_schedule_trials,
-    write_tuned_manifest,
 )
-from generativeqc_compiler.integral.batch_benchmark import KernelResources
+from generativeqc_compiler.integral.tuning.inputs import (
+    _read_shell_class_file,
+    _requested_shell_class_names,
+    _resolve_specifications,
+)
+from generativeqc_compiler.integral.tuning.manifest import write_tuned_manifest
+from generativeqc_compiler.integral.tuning.policy import (
+    _production_fock_schedule_index,
+    schedule_payload,
+    supported_schedule_trials,
+)
+from generativeqc_compiler.integral.tuning.process import _compile_trial
+from generativeqc_compiler.integral.tuning.resources import estimate_occupancy
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_tuning_module_exposes_cli_help() -> None:
+    """The canonical module must run its CLI without the removed facade."""
+    result = subprocess.run(
+        [sys.executable, "-m", "generativeqc_compiler.integral.tuning.cli", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert "--shell-class" in result.stdout
+    assert "--compile-timeout" in result.stdout
 
 
 def test_autotune_compile_timeout_terminates_the_compiler_process_group(

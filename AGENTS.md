@@ -5,6 +5,11 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 
 ## Repository-wide invariants
 
+- Before the first release, migrate callers directly to current interfaces rather
+  than retaining backward-compatibility aliases, import shims or obsolete APIs.
+  Update repository consumers, documentation and build inputs in the same change.
+  This does not relax scientific validation, artifact identity checks or bounded
+  resource fallbacks.
 - Prefer scientific correctness, reproducibility, and complete-endpoint behavior
   over isolated kernel or microbenchmark wins.
 - Production paths must not silently depend on CPU/PySCF/reference-oracle work

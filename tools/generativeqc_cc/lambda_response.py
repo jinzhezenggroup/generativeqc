@@ -14,6 +14,9 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS, build_parameter_vjp
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.solver_region import RegionDerivative, SolverRegion
 
@@ -23,10 +26,7 @@ from tools.generativeqc_response.implicit import (
     _checked_bytes,
     _immutable,
 )
-from tools.generativeqc_response.krylov import _vector_norm
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
-from .lambda_equations import PARAMETERS, build_parameter_vjp
 from .lambda_solver import BoundCCSDLambda, CCSDLambdaResult, _feed_hash, _graph_bytes
 
 if typing.TYPE_CHECKING:
