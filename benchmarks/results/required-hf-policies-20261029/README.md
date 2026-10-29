@@ -1,44 +1,30 @@
-# Required native progressive-HF policies — CPU qualification
+# Required native progressive-HF policies: historical CPU results
 
-Production/current native build: `e2157668e` (full revision in the capsule).
-Baseline frontend: `131144549f91223cf751a27874c365834cc7c443`.
-Both frontends use the current library, SHA-256
+This compatibility migration requires the current native planning and final
+verification protocols for bounded integers. It does not change scientific
+equations, acceptance thresholds, ABI or backend admission. Arbitrary-width
+integer behavior is unchanged. Missing independent observed accuracy can still
+leave final accuracy unverified.
+
+Author qualification at production `e2157668e` used baseline
+`131144549f91223cf751a27874c365834cc7c443`. The current library SHA-256 was
 `fa9450537f4018bfb472503a8de41b90ac69abc5e321cdd83e1b4e65e3a51b8a`.
-Native/build/compiler inputs are unchanged; this removes missing-protocol Python
-policy selection without changing scientific equations, ABI or backend admission.
+Two separate CPU image campaigns each contained 672 timed complete endpoints:
+RHF/UHF x Direct/DF, two geometries, ABBA/BAAB, three warmups and 21 samples.
+Reported maximum median ratios were 1.0016859405931222 (current image) and
+1.0041193828828907 (preceding shared image), below the unchanged 1.05 gate.
+Corresponding energies, full forces/density, physical residuals and semantic
+work matched exactly in the reviewed populations. No CUDA, exclusive-host,
+speedup or later-master qualification is claimed.
 
-The unchanged complete progressive-HF protocol runs RHF/UHF × Direct/DF,
-alternating two genuinely different H2/H2+ geometries. Each ABBA and BAAB block
-performs three warmups then 21 measured samples, for **672 timed endpoints**.
-Each endpoint constructs source/target calculators and the target snapshot/plan,
-executes source SCF, projection, target energy/forces, fixed-density physical
-audit and owner cleanup. Imports are excluded; no density persists across samples.
-OMP/OpenBLAS/MKL use one thread and paired arms share CPU 40. No exclusive-host,
-speedup, new numerical domain or CUDA claim is made.
+The author also reported 127 CTests, 95 focused Python checks and installed
+public-header SDK probes. These are historical receipts, not fresh test runs.
+[Review and verification limits](https://github.com/jinzhezenggroup/generativeqc/pull/2879#pullrequestreview-5694073201).
 
-All eight median-ratio gates pass the unchanged 1.05 limit; maximum ratio is
-**1.0016859405931222**. Every corresponding measured sample has exactly equal
-source/target energies, full target force and density arrays, physical residual,
-iteration/Fock counts, projection/restart and final disposition. Establishing the
-target does not manufacture independent observed accuracy: the final status may
-remain `unverified` without an independent accuracy assessment.
-
-The earlier shared-image campaign also completed 672 endpoints, maximum ratio
-1.0041193828828907. Its image was built at `fafe44f53`. The current-source rebuild
-produced a different binary, so the complete protocol was repeated above; both
-populations retain their own image identities and outcomes.
-
-The cached current-source Release build/install passes all 127 CTests and 95
-focused Python checks, including independent PySCF physical audits, exact/below
-capacity, integer/cost oracle comparisons, required-protocol refusal, all final
-gates and progressive execution. Both planning and final-verification SDK probes
-compile against installed public headers and run with `PATH=/nonexistent`.
-Verified sccache 0.16.0 wraps the compiler; shared cache counters are retained as
-provenance, not isolated compilation performance.
-
-`evidence.json.xz` contains every timed sample in both campaigns, exact replay
-source/command, native/frontend/binary identities, SDK receipts, test summaries,
-cache counters and ignored-log hashes. Decode it with
-`json.loads(lzma.decompress(path.read_bytes()))`. Reuse the retained runner with
-separate baseline/candidate checkouts and the qualified candidate image; preserve
-all four cases, both orders, three warmups, 21 samples and the 1.05 gate.
+The optional 27,524-byte raw capsule is not added to the merged checkout.
+[Original PR capsule](https://github.com/jinzhezenggroup/generativeqc/blob/7ca4b35058d503292318f01b6fbec63cc373649c/benchmarks/results/required-hf-policies-20261029/evidence.json.xz)
+contains both populations, replay source, identities and receipts; SHA-256:
+`0e84b308694db716159856c1f7b9660f238542afd7910a5ba7ca301c428f7540`.
+This PR-only history link is not a protected-history archival guarantee:
+a clean offline master clone cannot be assumed to recover or replay it.
+No sample values were filtered or rewritten, and no new run was requested.
