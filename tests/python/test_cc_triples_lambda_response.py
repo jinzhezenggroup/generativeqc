@@ -7,17 +7,17 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc_compiler.cc.triples import triples_energy
 from test_cc_lambda_response import _STRICT, _direction, _state
 
 from tools.generativeqc_cc import PreparedCCSD
 from tools.generativeqc_cc import solver as solver_module
-from tools.generativeqc_cc.triples import triples_energy
 from tools.generativeqc_cc.triples_lambda_response import (
     BoundCCSDTResponse,
     solve_corrected_lambda,
 )
 from tools.generativeqc_response.implicit import ImplicitSolveError
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @lru_cache(maxsize=2)

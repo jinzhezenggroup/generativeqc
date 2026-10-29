@@ -40,10 +40,6 @@ reference-test = [
 ]
 torch = ["torch>=2"]
 autotune = ["pyscf>=2.8"]
-# Compatibility alias retained for callers that already install
-# `generativeqc[cuda12]`. Linux CUDA wheel providers are base runtime dependencies
-# because NVCC registration constructors need cudart while libgenerativeqc.so loads.
-cuda12 = []
 # CuPy is only needed by the explicit low-level CUDA development owner, not by
 # public native-AOT CUDA Hessian/HVP calls or the Python-free C++ CLI.
 cuda-hessian = ["cupy-cuda12x>=13.6,<14"]

@@ -51,31 +51,29 @@ from generativeqc_compiler.integral import (
     evaluate_fused_shell_value,
     schedule_candidates,
 )
-from generativeqc_compiler.integral.autotune import (
-    _production_fock_schedule_index,
-    _requested_schedule_kinds,
-    emit_schedule_driver,
-    emit_schedule_oracle_translation_unit,
-    emit_schedule_resource_translation_unit,
-    emit_schedule_translation_unit,
-    schedule_payload,
-    supported_schedule_trials,
-    update_manifest_payload,
-)
 from generativeqc_compiler.integral.benchmark import (
     emit_dppp_benchmark_cuda,
     emit_shell_class_benchmark_cuda,
 )
 from generativeqc_compiler.integral.capabilities import CAPABILITY_K_BLOCK_FOCK
-from generativeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production_profile import (
     _schedule_from_payload,
     load_production_kernel_selections,
 )
 from generativeqc_compiler.integral.tuning.emission import (
+    emit_schedule_driver,
+    emit_schedule_oracle_translation_unit,
+    emit_schedule_resource_translation_unit,
+    emit_schedule_translation_unit,
     schedule_execution_source_identity,
 )
+from generativeqc_compiler.integral.tuning.inputs import _requested_schedule_kinds
+from generativeqc_compiler.integral.tuning.manifest import update_manifest_payload
 from generativeqc_compiler.integral.tuning.policy import (
+    _production_fock_schedule_index,
     deduplicate_execution_equivalent_trials,
+    schedule_payload,
+    supported_schedule_trials,
 )
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")

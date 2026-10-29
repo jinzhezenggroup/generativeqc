@@ -49,8 +49,7 @@ profile selection are still evaluated per load.
 Linux CUDA wheels keep NVIDIA user-space provider DSOs outside
 `libgenerativeqc.so`, but declare the reviewed CUDA 12 `nvidia-*` packages as
 runtime dependencies because NVCC registration runs when the CUDA-bearing native
-library is loaded. The historical `generativeqc[cuda12]` extra remains an empty
-compatibility alias. The NVIDIA kernel driver remains system-owned. See the
+library is loaded. The NVIDIA kernel driver remains system-owned. See the
 [CUDA wheel decision note](../../.agents/notes/implemented/architecture/2026-09-18-provider-free-cuda-wheels.md)
 for the retained provider boundary and fallback rationale.
 
@@ -103,7 +102,10 @@ The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.
 
 Linux NVIDIA builds default to `GENERATIVEQC_PRUNE_CUDA_ARCHIVES=ON`.
-The private Direct and GFN2 archives first complete their own device links.
+The private Direct, GFN2 and native stationary archives first complete their own
+device links. Standalone stationary AOT libraries use the same device-closed
+archive ownership before their final shared-library link, retaining their public
+filenames, entry points and artifact manifests.
 `nvprune` then creates separate host-link copies without the resolved relocatable
 device inputs, preserving all requested executable cubins, PTX and registration
 wrappers. Original archives remain available for device linking and incremental
@@ -128,6 +130,16 @@ translation units remain outside that PCH. Keep it off with the default compiler
 cache workflow unless the cache has been explicitly configured for PCH support.
 
 ## CUDA architecture and AOT profiles
+
+NVIDIA builds can opt into `GENERATIVEQC_COMPRESS_CUDA_FATBINS=ON` (default `OFF`). The legacy
+fatbinary compressor stores cubin/PTX images compactly during compilation and
+device linking, including optional AOT libraries. It preserves the architecture
+inventory and executable code. Set the option to `OFF` to restore the toolchain's
+storage defaults. This reduces installed size, not mathematical compilation
+work; image decompression contributes to first-load latency, so enable it only
+after qualifying cold as well as warm endpoints for the intended workload. The newer
+`--compress-mode=size` format is not selected, since it requires drivers from
+CUDA 12.4 or later independently of CUDA minor-version compatibility.
 
 CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, `90`, and
 `100`. Only `sm_120` currently has a measured generated-shell profile. The

@@ -49,3 +49,15 @@ RMS reductions use `math.fsum` so Python 3.10 and newer interpreters reproduce
 the same strict derived summary. All original binary64 values, raw member
 hashes and scientific gates stay unchanged; no approximate summary comparison
 is used. The earlier naive-sum Linux replay refusal remains in the PR evidence.
+
+## Storage
+
+The existing 80 MiB aggregate and 2 MiB change-review limits remain unchanged.
+Room for this live numerical report comes from separately verified Git recovery
+of four superseded HOST producer/failure capsules in
+[`h100-direct-wb97mv-20261024`](../h100-direct-wb97mv-20261024/README.md#lossless-storage-and-availability).
+All archived bytes were stock-restored from a protected published ancestor before
+retirement. Its 98 actual E/F returns, 72 formal returns, 10 NOT_RUN, independent
+oracles and full runtime/scientific/source originals remain in-tree and still
+replay offline. Optional HOST history is audited explicitly. This storage change
+adds no numerical qualification or current-default performance claim.

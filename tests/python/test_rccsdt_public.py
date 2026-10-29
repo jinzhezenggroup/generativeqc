@@ -10,8 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc import Calculator, method_capabilities
+from generativeqc_compiler.cc.triples import INVENTORY_HASH
 
-from tools.generativeqc_cc.triples import INVENTORY_HASH
 from tools.validate_ccsd_t_gradient import analytic_oracle
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -10,9 +10,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.triples_tiles import build_runtime_tile_triples_program
 from generativeqc_compiler.tensor import execute, transpose_program
-
-from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_program
 
 INPUTS = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 

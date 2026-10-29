@@ -11,8 +11,7 @@ from generativeqc_compiler.xc._generated_libxc_methods import (
     BLOCKED_LIBXC_METHODS,
     LIBXC_METHODS,
 )
-
-from tools.libxc_method_metadata import extract_method_registrations
+from generativeqc_compiler.xc.libxc_method_metadata import extract_method_registrations
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBXC = ROOT / "upstream" / "libxc" / "7.0.0"
@@ -341,7 +340,7 @@ def test_generated_libxc_method_module_is_fresh() -> None:
     "expression", ("0.1234567890123456789012345", "1.234567890123456789e-37", "1e-400")
 )
 def test_fraction_parser_retains_decimal_source_digits(expression: str) -> None:
-    from tools.libxc_method_metadata import _fraction_value
+    from generativeqc_compiler.xc.libxc_method_metadata import _fraction_value
 
     assert _fraction_value(expression, {}) == Fraction(expression)
 

@@ -16,17 +16,15 @@ import pytest
 from generativeqc import _stationary_rsh_cpu as runtime
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.integral.derivative_aot_registry import (
+    AOT_ANGULAR_DOMAIN,
+    component_groups,
+    entry_prefix_for_key,
+    make_key,
+    program_source,
     radial_inventory_from_payload,
 )
 from generativeqc_compiler.integral.ir import four_center_eri_operator
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.integral.rsh_cpu_aot import (
-    AOT_ANGULAR_DOMAIN,
-    component_groups,
-    entry_prefix,
-    inventory_size,
-    program_source,
-)
 from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
@@ -78,7 +76,6 @@ def _fake_s_basis() -> SimpleNamespace:
 
 
 def test_wb97mv_rsh_aot_inventory_is_bounded_and_complete() -> None:
-    assert inventory_size() == 34
     assert len(_wb97mv_ranges()) == 2
     count = 0
     prefixes = set()
@@ -125,7 +122,7 @@ def test_range_exchange_prefers_packaged_cpu_aot(
         item for item in _wb97mv_ranges() if item.operator == "short-range"
     )
     radial = _radial(primitive)
-    prefix = entry_prefix(radial, (0, 0, 0, 0), 0)
+    prefix = entry_prefix_for_key(make_key(radial, (0, 0, 0, 0), 0, backend="cpu"))
     library = type("Library", (), {})()
     setattr(library, f"{prefix}_identity_v2", object())
 
@@ -197,7 +194,7 @@ def test_grouped_aot_reuses_one_prepared_plan(
     )
     radial = _radial(primitive)
     angular = (1, 1, 1, 1)
-    prefix = entry_prefix(radial, angular, 0)
+    prefix = entry_prefix_for_key(make_key(radial, angular, 0, backend="cpu"))
     library = type("Library", (), {})()
     setattr(library, f"{prefix}_identity_v2", object())
 
@@ -301,7 +298,9 @@ def test_native_library_exports_wb97mv_rsh_aot() -> None:
         for angular_value in product(AOT_ANGULAR_DOMAIN, repeat=4):
             angular = tuple(angular_value)
             for group_index in range(len(component_groups(angular))):
-                prefix = entry_prefix(radial, angular, group_index)
+                prefix = entry_prefix_for_key(
+                    make_key(radial, angular, group_index, backend="cpu")
+                )
                 assert getattr(library, f"{prefix}_identity_v2")
                 assert getattr(library, f"{prefix}_create_v2")
                 assert getattr(library, f"{prefix}_run_v2")

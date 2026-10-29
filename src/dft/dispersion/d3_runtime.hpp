@@ -45,6 +45,15 @@ struct D3ResourceUsage {
 D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t systems,
                                   std::uint64_t atoms, std::uint64_t maximum_atoms);
 
+/** Capacity of KS's simultaneously retained one-system correction owners.
+ * This differs from a standalone ragged D3Plan: each CUDA owner has its own
+ * tables, and each CPU owner has its own execution allowance. maximum_bytes
+ * reports the minimum aggregate cap under KS's equal-per-item budget rule.
+ * Geometry rebuild destroys the old item before constructing its replacement.
+ */
+D3ResourceUsage ks_d3_resource_usage(generativeqc_backend backend,
+                                     std::span<const std::uint32_t> atom_counts);
+
 struct D3CudaOwner;
 
 class D3Plan {

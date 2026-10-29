@@ -6,6 +6,7 @@
 
 #include "d3_data.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
+#include "runtime/resource_cuda.cuh"
 
 namespace generativeqc::dft::dispersion {
 
@@ -66,7 +67,7 @@ bool allocate(T*& pointer, std::size_t count, std::string& detail) {
     pointer = nullptr;
     return true;
   }
-  const auto error = cudaMalloc(reinterpret_cast<void**>(&pointer), count * sizeof(T));
+  const auto error = runtime::resource_cuda_malloc(&pointer, count * sizeof(T));
   if (error == cudaSuccess) return true;
   detail = std::string("D3 CUDA allocation failed: ") + cudaGetErrorString(error);
   return false;
@@ -332,7 +333,10 @@ D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t> 
     return nullptr;
   }
 
-  auto owner = std::make_unique<D3CudaOwner>();
+  // Setup can throw while formatting a failure or staging a table. Retire
+  // every partial allocation (and its ledger charge) on exception paths too.
+  std::unique_ptr<D3CudaOwner, decltype(&destroy_d3_cuda_owner)> owner(new D3CudaOwner(),
+                                                                       destroy_d3_cuda_owner);
   owner->device_id = device_id;
   owner->systems = static_cast<std::uint32_t>(offsets.size() - 1);
   owner->atoms = atomic_numbers.size();
@@ -393,19 +397,19 @@ void destroy_d3_cuda_owner(D3CudaOwner* owner) noexcept {
   DeviceScope scope(owner->device_id);
   if (scope.error() == cudaSuccess) {
     if (owner->stream) cudaStreamSynchronize(owner->stream);
-    cudaFree(owner->reference_c6);
-    cudaFree(owner->reference_cn);
-    cudaFree(owner->pairs);
-    cudaFree(owner->elements);
-    cudaFree(owner->workspace);
-    cudaFree(owner->gradients);
-    cudaFree(owner->energies);
-    cudaFree(owner->statuses);
-    cudaFree(owner->want_gradient);
-    cudaFree(owner->active);
-    cudaFree(owner->coordinates);
-    cudaFree(owner->atomic_numbers);
-    cudaFree(owner->offsets);
+    runtime::resource_cuda_free(owner->reference_c6);
+    runtime::resource_cuda_free(owner->reference_cn);
+    runtime::resource_cuda_free(owner->pairs);
+    runtime::resource_cuda_free(owner->elements);
+    runtime::resource_cuda_free(owner->workspace);
+    runtime::resource_cuda_free(owner->gradients);
+    runtime::resource_cuda_free(owner->energies);
+    runtime::resource_cuda_free(owner->statuses);
+    runtime::resource_cuda_free(owner->want_gradient);
+    runtime::resource_cuda_free(owner->active);
+    runtime::resource_cuda_free(owner->coordinates);
+    runtime::resource_cuda_free(owner->atomic_numbers);
+    runtime::resource_cuda_free(owner->offsets);
     if (owner->stream) cudaStreamDestroy(owner->stream);
   }
   delete owner;

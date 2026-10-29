@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.h100-direct-historical-host-summary.v1",
+  "current_history_audit": "NOT_RUN; use explicit restored history",
+  "snapshot_manifest": "historical-host-snapshot.json",
+  "snapshot_manifest_sha256": "fe28818cf95c542a5e5a2f861d17f677a7206636375681fc6bb9e81590d35e31",
+  "original_audit_result": {
+    "original_uncompressed_members": 37,
+    "standalone_original_compressed_files": 4,
+    "V2_probe_returncode": 1,
+    "V2_verified_control_originals": 27,
+    "V2_full_suite": "UNAVAILABLE: final receipt publication failed",
+    "source_transport_sha256": "f39e0b091c69883e51381b67bb06d9362d38e5384e6ba3bd5264753fbda7e4ef",
+    "mode_scope": "initial local policy; not a remote POSIX witness"
+  },
+  "scope": "Recorded prior HOST audit only, not new execution or numerical acceptance. Every archived byte was stock-restored and verified before retirement."
+}

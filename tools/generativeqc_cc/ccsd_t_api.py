@@ -24,6 +24,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import numpy as np
+from generativeqc_compiler.cc.triples import INVENTORY_HASH
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.provenance import canonical_hash
@@ -33,7 +34,6 @@ from tools.generativeqc_posthf.reference import ReferenceSnapshot
 from .api import RCCSDResult
 from .api import energy as rccsd_energy
 from .solver import CCSDResult, SolverOptions
-from .triples import INVENTORY_HASH
 from .triples_cuda import (
     CudaTriplesResult,
     CudaTriplesTiles,

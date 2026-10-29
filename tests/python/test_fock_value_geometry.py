@@ -11,7 +11,9 @@ from generativeqc_compiler.integral import (
     emit_shell_class_fused_cuda,
 )
 from generativeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
-from generativeqc_compiler.integral.production import load_production_kernel_selections
+from generativeqc_compiler.integral.production_profile import (
+    load_production_kernel_selections,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
