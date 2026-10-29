@@ -52,9 +52,18 @@ else:
     )(PROFILE)
 CLASSES = tuple(item.spec.name for item in SELECTIONS)
 
+CAMPAIGN_REQUESTED = os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") == "1" and bool(
+    os.environ.get("GENERATIVEQC_RYS_VALUE_LIBRARY")
+)
+if CAMPAIGN_REQUESTED and not CLASSES:
+    raise ValueError(
+        "requested Rys qualification has an empty kernel inventory; "
+        "select a compiled family (GENERATIVEQC_RYS_VALUE_FAMILY=primary "
+        "for the portable primary bundle)"
+    )
+
 pytestmark = pytest.mark.skipif(
-    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
-    or not os.environ.get("GENERATIVEQC_RYS_VALUE_LIBRARY"),
+    not CAMPAIGN_REQUESTED,
     reason="requires a scheduled GPU and an explicitly built Rys value library",
 )
 
