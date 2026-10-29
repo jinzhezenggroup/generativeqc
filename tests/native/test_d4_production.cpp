@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "d4_eeq_oracle_fixtures.hpp"
@@ -10,6 +12,17 @@
 
 #if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime.h>
+
+#include "runtime/resource_ledger.hpp"
+extern "C" {
+void* generativeqc_resource_ledger_create_v1(std::size_t, int);
+void generativeqc_resource_ledger_destroy_v1(void*);
+int generativeqc_resource_ledger_bind_v1(void*);
+int generativeqc_resource_ledger_read_v1(void*, std::uint64_t*);
+int generativeqc_resource_tracking_begin_v1(unsigned);
+int generativeqc_resource_tracking_end_v1(std::uint64_t*, std::uint64_t*);
+void d4_cuda_fail_after_allocations_for_test_v1();
+}
 extern "C" void d4_cuda_fail_after_coordinate_upload_for_test_v1();
 #endif
 
@@ -98,6 +111,110 @@ void finite_difference(generativeqc_backend backend) {
 }
 
 #if GENERATIVEQC_HAS_CUDA
+// Use the library binding ABI so the test exercises the same allocation
+// authority as a prepared frontend, including detached owner destruction.
+void require(bool condition, const char* message) {
+  if (!condition) throw std::runtime_error(message);
+}
+
+struct Ledger {
+  void* handle{};
+  explicit Ledger(std::uint64_t limit) : handle(generativeqc_resource_ledger_create_v1(limit, 0)) {
+    require(handle != nullptr, "D4 ledger creation failed");
+  }
+  ~Ledger() { generativeqc_resource_ledger_destroy_v1(handle); }
+  std::array<std::uint64_t, 4> read() const {
+    std::array<std::uint64_t, 4> values{};
+    require(generativeqc_resource_ledger_read_v1(handle, values.data()) == 0,
+            "D4 ledger read failed");
+    return values;
+  }
+};
+
+struct LedgerScope {
+  explicit LedgerScope(const Ledger& ledger) {
+    require(generativeqc_resource_tracking_begin_v1(1) == 0, "D4 observation begin failed");
+    require(generativeqc_resource_ledger_bind_v1(ledger.handle) == 0, "D4 ledger bind failed");
+  }
+  ~LedgerScope() {
+    std::uint64_t peak{}, samples{};
+    generativeqc_resource_tracking_end_v1(&peak, &samples);
+  }
+};
+
+void bounded_device_lifetime() {
+  const auto& f = kEEQOracleFixtures[0];
+  auto unbounded = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
+  const auto required = unbounded->resources().device_bytes;
+  unbounded.reset();
+  require(required > 1, "D4 resource diagnostic omitted CUDA storage");
+
+  // First-allocation, partial-construction and final-allocation shortages must
+  // leave no live charge; the independent diagnostic fixes the exact boundary.
+  for (const auto limit : {std::uint64_t{0}, required / 2, required - 1}) {
+    Ledger ledger(limit);
+    bool refused = false;
+    {
+      LedgerScope scope(ledger);
+      try {
+        auto plan = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
+      } catch (const std::runtime_error& error) {
+        refused = std::string(error.what()).find("allocation failed") != std::string::npos;
+      }
+    }
+    const auto receipt = ledger.read();
+    require(refused && receipt[0] == 0 && receipt[1] <= limit && receipt[3] > 0,
+            "D4 allocation escaped its cap or leaked a partial owner");
+  }
+
+  Ledger ledger(required);
+  std::unique_ptr<D4Plan> plan;
+  {
+    LedgerScope scope(ledger);
+    plan = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
+    require(ledger.read()[0] == required, "D4 live bytes disagree with the native diagnostic");
+    std::vector<double> xyz(f.xyz.begin(), f.xyz.begin() + 3 * f.atoms);
+    std::vector<D4Status> statuses;
+    std::vector<double> components, gradients, charges;
+    execute_one(*plan, xyz, true, statuses, components, gradients, charges);
+    require(statuses == std::vector<D4Status>{D4Status::success} &&
+                near(components[0] + components[1], f.energy, 2e-13),
+            "budgeted D4 disagrees with the independent energy oracle");
+    for (int i = 0; i < 3 * f.atoms; ++i)
+      require(near(gradients[i], f.gradient[i], 2e-12),
+              "budgeted D4 disagrees with the independent gradient oracle");
+    require(ledger.read()[0] == required && ledger.read()[3] == 0,
+            "D4 execution exceeded the exact retained capacity");
+  }
+  // The ledger binding is thread-local; allocation ownership must outlive it.
+  std::thread release([owner = std::move(plan)]() mutable { owner.reset(); });
+  release.join();
+  require(ledger.read()[0] == 0, "D4 cross-thread destruction retained live device bytes");
+
+  {
+    LedgerScope scope(ledger);
+    d4_cuda_fail_after_allocations_for_test_v1();
+    bool refused = false;
+    try {
+      auto failed = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
+    } catch (const std::runtime_error& error) {
+      refused = std::string(error.what()).find("host allocation failed") != std::string::npos;
+    }
+    require(refused && ledger.read()[0] == 0,
+            "D4 host exception leaked partially constructed CUDA storage");
+    plan = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
+  }
+  // Closing observation metadata is legal while the prepared owner is live.
+  // A weak witness checks final retirement without retaining the ledger itself.
+  std::weak_ptr<generativeqc::runtime::DeviceResourceLedger> lifetime =
+      *static_cast<std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>*>(ledger.handle);
+  generativeqc_resource_ledger_destroy_v1(ledger.handle);
+  ledger.handle = nullptr;
+  require(!lifetime.expired(), "D4 detached owner lost its allocation authority");
+  plan.reset();
+  require(lifetime.expired(), "D4 final owner retained ledger metadata");
+}
+
 void changed_geometry_failure_recovery() {
   const auto& f = kEEQOracleFixtures[0];
   auto plan = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
@@ -147,7 +264,10 @@ int main(int argc, char** argv) {
     independent_oracles(backend);
     finite_difference(backend);
 #if GENERATIVEQC_HAS_CUDA
-    if (device) changed_geometry_failure_recovery();
+    if (device) {
+      changed_geometry_failure_recovery();
+      bounded_device_lifetime();
+    }
 #endif
     std::puts(device ? "production D4 CUDA oracle/FD gates passed"
                      : "production D4 CPU oracle/FD gates passed");
