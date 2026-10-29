@@ -248,8 +248,12 @@ point batches can spend only capacity left after those promises. The dense XC
 fallback remains reserved even while optional storage is live. Shared resource
 handles retain separate promises for separate prepared owners.
 
+Individual legacy/named D4 corrections add their allocator-owned retained
+device capacity to the same fleet promise. Their tables and force workspace
+remain protected through warm replay, failed rebuild and later fleet preparation.
 Selected external inventories retain the dense/single-tile path. Preliminary
-guesses, range/nonlocal/D4 corrections, automatic/generated-split programs,
+guesses, range/nonlocal corrections, named D3 and composite gCP corrections,
+automatic/generated-split programs,
 explicit incremental J/K, application precision budgets and experimental PBE
 point precision retain incumbent admission. A native bound that does not fit
 also retains incumbent admission; this is a bounded fallback under the same
@@ -325,14 +329,14 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
-CPU HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
+CPU and CUDA HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
 query obtain public/Cartesian AO, shell, primitive and maximum-angular counts
 from native compact expanded-contraction rows. The AO rule is shared with
 normalized native systems. Count overflow or native refusal never retries
 Python arithmetic; failed queries leave native outputs unchanged. The query
 does not read coordinates or coefficients, allocate scientific arrays, load a
-provider, or qualify an otherwise unsupported method/basis. Missing-symbol,
-library-free and CUDA planning retain explicit portable shape arithmetic.
+provider, or qualify an otherwise unsupported method/basis. Missing-symbol and
+library-free planning retain explicit portable shape arithmetic.
 Python still owns basis expansion and mathematical provenance in this planner;
 these counts are not complete allocation, provider, lease or RSS authority.
 
@@ -444,6 +448,21 @@ CUDA plans require the existing native stationary-capacity context. Selected
 native failures propagate. Missing inventory support leaves ordinary D4 available
 but rejects global D4 plans. Composite D4/gCP and electronic domains already
 excluded by KS planning remain unsupported.
+
+For bounded strict-FP64 all-electron s/p/d Direct PBE/PBE0-D4 CUDA contexts, the additive
+`generativeqc_resource_ks_d4_optional_cuda_v1` query supplies an optional XC
+headroom candidate. It reserves mapped AO arenas, spatial copies, the native
+default point-panel ceiling and optional MD-J headroom concurrently. MD-J and
+optional component reuse share the existing 128 MiB native device ceiling and
+can use only unpromised capacity after the complete mandatory fleet is reserved.
+Their host staging and value metadata have a separate conservative envelope.
+Other public resource owners retain their original direct Coulomb admission.
+This is a conservative declared
+capacity, not a measured allocation peak. The selected complete KS+D4 owner
+receives a numeric cap containing only its own estimates, including provider
+allowances that native preparation converts into retained leases. It cannot
+spend unrelated global-plan capacity. Original selected-inventory candidates
+remain available when the extra headroom does not fit or the protocol is absent.
 
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |

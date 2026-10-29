@@ -292,6 +292,23 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
+std::size_t cuda_ks_point_batch_budget(const CudaXcLayout& layout) {
+  const bool large =
+      layout.nao >= 512 && layout.npoint >= (1U << 19) && layout.jets >= 4 && layout.work_jets >= 4;
+  return large ? std::size_t{1} << 30
+               : product(std::size_t{32} << 20, std::max(layout.jets, layout.work_jets));
+}
+
+std::array<std::size_t, 2> cuda_ks_optional_xc_capacity(const CudaXcLayout& layout) {
+  const auto maps = cuda_xc_ao_selection_resources(layout);
+  // Keep the default admission threshold, including its dense fallback. The
+  // point budget is deliberately a ceiling, not a prediction from one geometry.
+  const bool mapped = maps.host_peak_bytes <= (64U << 20);
+  return {mapped ? maps.host_peak_bytes : 0,
+          sum(sum(mapped ? maps.device_bytes : 0, product(layout.npoint, 4 * sizeof(double))),
+              cuda_ks_point_batch_budget(layout))};
+}
+
 struct CudaKsPlan::Impl : KsStateStorage {
   const scf::PreparedFockPlan& provider;
   const scf::PreparedFockPlan* range_provider{};
@@ -2144,10 +2161,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // one. Charge the optional capacity by the larger live panel width
           // so AO storage does not collapse otherwise eligible point batches.
           // Explicit caps and the bounded allocation retry below stay exact.
-          const auto automatic_point_batch_budget =
-              large_point_batch ? std::size_t{1} << 30
-                                : product(incumbent_point_batch_budget,
-                                          std::max(xc_layout.jets, xc_layout.work_jets));
+          const auto automatic_point_batch_budget = cuda_ks_point_batch_budget(xc_layout);
           const auto point_batch_budget =
               point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", automatic_point_batch_budget);
           const bool explicit_point_batch_budget =

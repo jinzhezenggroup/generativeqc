@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ctypes as ct
 import json
+from dataclasses import replace
 from typing import Any
 
 from generativeqc_compiler.common.resources import (
@@ -34,6 +35,117 @@ _KEYS = (
     "table_bytes",
     "workspace_bytes",
 )
+
+
+def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) -> Any:
+    """Offer optional XC/MD-J storage for a complete, bounded native D4 owner.
+
+    The preferred candidate includes explicit headroom from the selected native
+    image. The original selected-inventory candidates remain available at tight
+    limits. Only this candidate requests NumericCap admission: native preparation
+    must reserve the entire electronic and correction fleet before spending any
+    optional bytes. Unrelated global-plan requests never lend their capacity.
+    """
+    from ._named_ks import select_resource_program
+    from .ks import _native_semilocal_code
+
+    query = getattr(
+        calculator._library, "generativeqc_resource_ks_d4_optional_cuda_v1", None
+    )
+    graph = calculator._dispersion_method_ir
+    model = calculator._ks_options if model is None else model
+    if (
+        query is None
+        or request.identity.backend != "cuda"
+        or graph is None
+        or calculator._initial_guess is not None
+        or calculator._precision_mode != _native.PRECISION_FP64
+        or model.xc_schedule != "device_fused"
+        or model.has_nonlocal_correlation
+        or getattr(calculator, "_application_precision_budget", None) is not None
+        or not any(
+            isinstance(node, DispersionCorrectionPrimitive)
+            and isinstance(node.specification, D4Spec)
+            for node in graph.primitives
+        )
+        or select_resource_program(calculator, request) is None
+    ):
+        return request
+    items = json.loads(request.identity.topology)["items"]
+    if any(
+        item["orbital"]["maximum_angular"] > 2 or item["orbital"].get("ecp_terms")
+        for item in items
+    ):
+        return request
+    cached = next(
+        (
+            candidate
+            for candidate in request.candidates
+            if dict(candidate.decisions).get("cuda_stationary_cache") == "cached"
+        ),
+        None,
+    )
+    if cached is None:
+        return request
+    query.argtypes = [ct.c_size_t] * 8 + [ct.POINTER(ct.c_uint64), ct.c_size_t]
+    query.restype = ct.c_int
+    host = device = 0
+    for item in items:
+        row = (ct.c_uint64 * 2)()
+        status = query(
+            item["orbital"]["nbf"],
+            item["atoms"],
+            item["orbital"]["primitives"],
+            item["grid_points"],
+            calculator._diis_history,
+            item["spins"],
+            _native_semilocal_code(model.method_ir),
+            model.tile_points,
+            row,
+            len(row),
+        )
+        if status == 2:
+            return request
+        if status or not row[1]:
+            raise ValueError("native D4 optional capacity query failed")
+        host = checked_bytes(host + row[0], "optional XC/MD-J host capacity")
+        device = checked_bytes(device + row[1], "optional XC/MD-J device capacity")
+    decisions = dict(cached.decisions)
+    decisions.update(
+        native_d4_complete_cap="1",
+        xc_ao_selection="native promise with bounded optional map capacity",
+        xc_point_batching="native promise with bounded optional panel capacity",
+        direct_coulomb="native promise with bounded optional MD-J capacity",
+    )
+    preferred = replace(
+        cached,
+        name=cached.name + "-optional-xc",
+        estimates=(
+            *cached.estimates,
+            ResourceEstimate(
+                "native optional XC/MD-J host headroom", host, "pageable", 0, 0
+            ),
+            ResourceEstimate(
+                "native optional XC/MD-J device headroom",
+                device,
+                f"device:{calculator._device_id}",
+                0,
+                0,
+            ),
+        ),
+        relative_cost=0,
+        decisions=tuple(decisions.items()),
+    )
+    return replace(
+        request,
+        candidates=(
+            preferred,
+            *(
+                replace(c, relative_cost=c.relative_cost + 1)
+                for c in request.candidates
+            ),
+        ),
+    )
 
 
 def _ks_d4_inventory(

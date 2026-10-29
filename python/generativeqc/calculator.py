@@ -2331,9 +2331,14 @@ class Calculator:
             ks_options=ks_options,
             properties=properties,
         )
-        return with_initial_guess_resources(
+        request = with_initial_guess_resources(
             request, self, systems, charges, multiplicities
         )
+        if self._dispersion_method_ir is not None:
+            from .resources_d4 import with_native_xc_capacity
+
+            request = with_native_xc_capacity(request, self, ks_options)
+        return request
 
     def _base_resource_request(
         self,

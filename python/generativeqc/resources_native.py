@@ -142,6 +142,13 @@ class NativeDeviceLedger:
             raise ValueError("native device ledger requires a CUDA request")
         selected = dict(plan.selections)[owner]
         candidate = next(c for c in request.candidates if c.name == selected)
+        self._native_complete_cap = (
+            dict(candidate.decisions).get("native_d4_complete_cap") == "1"
+        )
+        if self._native_complete_cap and (
+            owner != "ks" or component_owners != ("d4",) or prepared_kind != "batch"
+        ):
+            raise ValueError("native D4 capacity requires its complete prepared owner")
         # A complete native program owns its corrections in the same lifetime
         # scope. Their selected capacities must be charged to this ledger too;
         # global planning still retains separate, inspectable request identities.
@@ -258,12 +265,24 @@ class NativeDeviceLedger:
                 for estimate in estimates
             )
         )
+        if self._native_complete_cap:
+            # The validated candidate owns exactly KS and D4. Its private cap
+            # includes provider allowances because native promises convert those
+            # into leases; no other global request's bytes enter this handle.
+            devices = {row.device for row in rows if row.space == 4}
+            if len(devices) != 1:
+                raise ValueError("native D4 capacity requires one visible device")
+            device = devices.pop()
+            cap = _account(estimates)[0][f"device:{device}"]
+            rows = (_native.DeviceResourceBuffer * 1)(
+                _native.DeviceResourceBuffer(cap, 4, device, 0, 0, 0)
+            )
         descriptor = _native.DeviceResourceDescriptor(
             ctypes.sizeof(_native.DeviceResourceDescriptor),
             _native.ABI_VERSION,
             rows,
             len(rows),
-            0,  # Selected inventory, even when it contains only one numeric row.
+            int(self._native_complete_cap),
         )
         handle = ctypes.c_void_p()
         status = self.library.generativeqc_device_resources_create(
@@ -297,7 +316,7 @@ class NativeDeviceLedger:
                 == ctypes.sizeof(_native.DeviceResourceDiagnostic)
                 and snapshot.abi_version == _native.ABI_VERSION
                 and snapshot.requested_bytes_available == 1
-                and snapshot.admission == 0
+                and snapshot.admission == int(self._native_complete_cap)
                 and not any(
                     getattr(snapshot, name)
                     for name in (
@@ -434,7 +453,7 @@ class NativeDeviceLedger:
             or snapshot.device != self.device
             or snapshot.numeric_limit != self.limit
             or snapshot.requested_bytes_available not in (0, 1)
-            or snapshot.admission != 0
+            or snapshot.admission != int(self._native_complete_cap)
             or not snapshot.numeric_live_bytes
             <= snapshot.numeric_peak_bytes
             <= snapshot.numeric_limit
@@ -482,6 +501,9 @@ class NativeDeviceLedger:
             },
         }
         device["admission"]["limit_bytes"] = snapshot.numeric_limit
+        device["admission"]["mode"] = (
+            "numeric-cap" if self._native_complete_cap else "selected-inventory"
+        )
         if self._capacity_admission is not None:
             device["capacity_admission"] = dict(self._capacity_admission)
         return {

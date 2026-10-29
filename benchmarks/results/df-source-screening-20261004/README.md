@@ -117,7 +117,7 @@ geometry-dependent regeneration.
   intrusive counter replay; its times are excluded from clean medians.
 - [resource-boundary.json.gz](resource-boundary.json.gz) preserves the larger
   resource observations, including unsuccessful attempts.
-- [validation.json](validation.json) records exact binaries, source hashes,
+- [validation.json.xz](validation.json.xz) records exact binaries, source hashes,
   compiler/cache settings, test cases, sanitizer receipts and all matched
   baseline failures. [measured-source.patch.gz](measured-source.patch.gz)
   reconstructs the measured dirty source from `7d1152038`.
