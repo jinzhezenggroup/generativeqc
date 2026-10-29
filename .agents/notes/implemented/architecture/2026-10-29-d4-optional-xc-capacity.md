@@ -95,3 +95,29 @@ combined peak, while the separate exact/below-floor test covers refusal.
 - #2227 R2/R6; #2872; #2875.
 - [Original promise rationale](2026-10-26-native-xc-capacity-promises.md).
 - [Failed selected-inventory diagnosis](../../rejected/2026-10-26-prepared-admission-xc-reservations.md).
+
+## Retained request validation
+
+Complete MD-J admission at `b2e5de7d1` restores exact GPU work/storage, but its
+budget timing still fails at 1.2613104. The retained campaign and host profile in
+`benchmarks/results/d4-capacity-20261029/md-complete-cuda-qualification.json.xz`
+show that replay reconstructs 56 complete requests for already prepared owners.
+
+A complete native CUDA D4 batch now retains its validated immutable electronic
+request. Execution still verifies the scientific model and initial-guess policy,
+then compares the remaining planning inputs by value: immutable topology,
+charge/spin, effective KS profile, backend/device, library, supported properties
+and the entire environment. Any difference falls back to full reconstruction
+and equality checking against the prepared plan. Unrelated environment changes
+can therefore pass validation; changed resource schedules cannot borrow stale
+capacity. Comparing all environment entries also covers controls consumed by
+native inventory queries without maintaining a second Python control registry.
+External plans retain their full native validation before preparation. CPU
+output-aware force rebudgeting and all other owners retain their existing path.
+The cache holds one request per prepared owner and does not replace native
+capacity enforcement or correction ownership.
+
+This deliberately rejects a process-wide identity-only request cache: it could
+miss model mutation, batch-local profile selection or environment scheduling.
+The optimization's complete-endpoint timing acceptance still requires the same
+8-group gate, including scalar preparation and moved-geometry replay.

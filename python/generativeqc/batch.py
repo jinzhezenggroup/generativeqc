@@ -301,6 +301,7 @@ class PreparedBatch:
         self.resource_diagnostics = None
         self._resource_ledger = None
         self._resource_prepare = None
+        self._cuda_d4_resource_replay = None
         dispersion_request = None
         resource_native_name = None
         if resource_plan is not None or calculator._resource_budget is not None:
@@ -368,6 +369,20 @@ class PreparedBatch:
                     "CUDA resource plans exclude optional profiling allocations"
                 )
         self._model_signature = calculator._model_signature()
+        if (
+            resource_native_name is not None
+            and request.identity.backend == "cuda"
+            and dispersion_request is not None
+            and dispersion_request.name == "d4"
+            and calculator._initial_guess is None
+        ):
+            # Native D4 retains its complete conservative force capacity across
+            # replays. The validated request can outlive planning as long as
+            # both the scientific snapshot and planning inputs remain intact.
+            self._cuda_d4_resource_replay = (
+                self._resource_replay_inputs(),
+                request,
+            )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
             for atoms, charge, multiplicity in zip(
@@ -1152,16 +1167,54 @@ class PreparedBatch:
                 return False
         return True
 
+    def _resource_replay_inputs(self) -> typing.Any:
+        """Snapshot planning inputs beyond the execute-time model signature.
+
+        Atom records and their enclosing tuples are immutable. Effective KS
+        options get a value snapshot, including any batch-local profile choice.
+        Keep the complete environment: native inventory queries may consume
+        controls that Python does not know about. A change triggers ordinary
+        request validation, so unrelated environment changes remain harmless.
+        This is local to the retained native owner, never a process-wide cache.
+        """
+        calculator = self._calculator
+        return (
+            calculator._library,
+            calculator._device_name,
+            calculator._device_id,
+            calculator._method_name,
+            calculator._representation_name,
+            calculator._capabilities.supported_properties,
+            self._systems,
+            self._charges,
+            self._multiplicities,
+            self._effective_ks_options.to_payload(),
+            self._planned_properties,
+            dict(os.environ),
+        )
+
     def _execution_resource_request(self, properties: frozenset[str]) -> typing.Any:
-        """Rebudget optional CPU force scratch without changing resident owners."""
+        """Validate replay capacity; rebudget optional CPU force scratch.
+
+        ``execute`` has already checked the scientific model and initial-guess
+        identity. Only a complete native CUDA D4 owner may reuse its immutable
+        prepared request; all other paths retain full request reconstruction.
+        External plans still undergo full validation before native preparation.
+        """
         calculator = self._calculator
         options = {
             "charges": self._charges,
             "multiplicities": self._multiplicities,
             "ks_options": self._effective_ks_options,
         }
-        expected = calculator._resource_request(
-            self._systems, **options, properties=self._planned_properties
+        replay = self._cuda_d4_resource_replay
+        inputs = self._resource_replay_inputs() if replay is not None else None
+        expected = (
+            replay[1]
+            if replay is not None and inputs == replay[0]
+            else calculator._resource_request(
+                self._systems, **options, properties=self._planned_properties
+            )
         )
         if expected != next(
             request
@@ -1171,6 +1224,8 @@ class PreparedBatch:
             raise ValueError(
                 f"{expected.name.upper()} resource inputs or execution schedule changed after preparation"
             )
+        if replay is not None:
+            self._cuda_d4_resource_replay = (inputs, expected)
         if not self._output_aware_cpu_forces:
             return expected, self.resource_plan
         candidate = self.resource_plan

@@ -449,6 +449,12 @@ native failures propagate. Missing inventory support leaves ordinary D4 availabl
 but rejects global D4 plans. Composite D4/gCP and electronic domains already
 excluded by KS planning remain unsupported.
 
+Complete native CUDA D4 batches retain their validated electronic resource request
+across replay. The scientific model and remaining planning inputs, including the
+effective KS profile and process environment, are checked before reuse. Changed
+inputs trigger full request validation against the prepared plan. External plans
+are validated before preparation; CPU force rebudgeting remains output-aware.
+
 For bounded strict-FP64 all-electron s/p/d Direct PBE/PBE0-D4 CUDA contexts, the additive
 `generativeqc_resource_ks_d4_optional_cuda_v1` query supplies an optional XC
 headroom candidate. It reserves mapped AO arenas, spatial copies, the native
