@@ -62,3 +62,78 @@ max E/F differences 5.69e-14 / 1.74e-14; scalar median ratios range from 0.1750 
 profile falls from 10.50 to 0.60 seconds. Raw samples and command/provenance are
 retained as `image-identity-diagnostic*`. This isolates one overhead; it is **not**
 a replacement for the original eight-group D4 budget gate, which remains failed.
+
+## Frontend planning follow-ups
+
+`frontend-planning.json.xz` preserves every new sample, source/library identity,
+exact scalar replay script and verification receipt. Rebuilt source `9db31ac68`
+passed 127 CPU CTests, but its eight-group full CPU budget campaign still failed
+with 1,792 calls and maximum ratio 1.0817157850930228 (E/F exactly equal).
+
+`c4ab3d38e` removes redundant scalar planning at the named prepared boundary; its
+eight-group scalar diagnostic still failed at 1.055734386993908. `e31c100aa` also
+avoids comparing one functional object with itself through duplicate serialized
+provenance, retaining full comparison of distinct objects. Its scalar diagnostic
+passes at 1.0431432846967614 over 256 complete calls, with identical E/F and
+published work. These are scalar-only diagnostics, not complete fleet acceptance.
+Native/build/compiler inputs are unchanged from the rebuilt `9db31ac68` image.
+
+The scalar budget-boundary suite passes 69 checks. Model/semantic coverage passes
+117 checks plus four post-SCF rejection checks after restoring exact pinned
+reference inputs. The complete updated CPU budget campaign at frontend `e31c100aa` then passed
+1,792 calls in eight ABBA/BAAB groups: maximum ratio 1.0454224827459262, identical
+E/F and published work. It uses the same strict matched CPU controls and native
+`9db31ac68` image as the preceding campaign; compiled inputs are unchanged.
+All original failed campaigns remain failed.
+
+## Current CUDA qualification
+
+The rebuilt `e31c100aa` CUDA image completed both full campaigns in finite Slurm
+job 14867 on node1 with its assigned device visibility. Each campaign contains
+1,792 complete calls in eight ABBA/BAAB groups. Default execution passes timing
+at maximum ratio 1.009080760957646 and preserves actual GPU work/storage.
+Budgeted execution **still fails** timing at 3.4192218547904325. Its maximum
+E/F differences are 5.12e-13 Eh / 1.22e-13 Eh/Bohr; published SCF work matches,
+but actual kernels remain 172,628 → 221,476 and explicit dynamic peak remains
+119,201,475 → 106,994,261 bytes, with zero final live bytes. Frontend planning
+repairs do not repair selected-inventory optional-XC suppression.
+
+Native D4 tests, installed independent-reference SDK execution with
+`PATH=/nonexistent`, 93 GPU Python tests and memcheck (zero errors/leaks) pass.
+The job exits 1 at the changed-work/storage profile gate after preserving both
+timing populations and profiles. Since that gate bypassed the shell's normal
+final integrity step, a separate metadata-only check verified all 13,618 frozen
+inputs after failure. The completed Slurm receipt preserves the failed status.
+
+`current-cuda-{default,budget}-samples.json.xz` retains every sample, and
+`current-cuda-qualification.json.xz` records the source and binary identities,
+both profile summaries, exact replay source, test/sanitizer/scheduler receipts,
+and hashes of ignored bulk logs. These source-bound results supersede the
+latest-status claims only; the original failed campaigns remain available.
+
+`current-storage.json` records lossless encoding of three older result JSON
+files to make room for the current complete populations. Original Git blobs and
+decoded/encoded hashes preserve every value; historical reconstruction patches
+and recovery manifests retain their original paths in the recorded Git trees.
+
+## Earlier diagnostic storage
+
+The six intermediate hashing/planning/current-CUDA evidence files named above
+are retained byte-for-byte in the existing ancestor recorded by
+`pre-optional-history.json`. Restore them with the same offline restoration
+command, passing that manifest. Their failed timing/work gates remain failed.
+This migration keeps the unchanged aggregate evidence cap while retaining the
+next complete optional-XC qualification. No historical Git ancestry is rewritten.
+
+## Rejected s/p-only optional-XC admission
+
+`sp-only-cuda-qualification.json.xz` retains both full 1,792-call campaigns
+and profiles for source `9d0df5629`, finite Slurm job 14903. Default timing
+passes at 1.01182439, but budget timing fails at 3.47645361: the original
+def2-SVP water member contains d shells outside that first promise domain.
+Actual kernels are 172,628 versus 216,916; the budget regression is unresolved
+at that source. Numerical/lifecycle checks and 138 Python GPU tests pass.
+The srun exit is 1 and the final input-integrity check completes; the completed
+scheduler record expired before retrieval, and accounting storage is disabled.
+The running scheduler receipt and srun failure are retained without inventing
+a completed receipt.

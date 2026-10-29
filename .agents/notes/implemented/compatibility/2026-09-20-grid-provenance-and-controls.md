@@ -22,7 +22,7 @@ because the control names changed. Do not change production grids or gates.
 
 ## Historical evidence and remaining boundaries
 
-The archived `benchmarks/results/issue596-production-grid/grid_policy_convergence.json`
+The archived `benchmarks/results/issue596-production-grid/grid_policy_convergence.json.xz`
 is schema version 1. Its `pbe-legacy48` row measures the element-aware v2 radial
 control, not the historical unit-radius default. Preserve those original bytes
 and measured results; do not relabel them as a newly measured v1 endpoint.

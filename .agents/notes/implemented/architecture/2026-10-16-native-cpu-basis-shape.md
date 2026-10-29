@@ -56,3 +56,7 @@ acceptance. Full provider/lease/receipt authority remains separate R2 work.
 
 - #2227 R2/R6; #933; #934.
 - `docs/maintainer/resource_planning.md`.
+
+The separately qualified CUDA consumer follows in
+[native CUDA basis counts](2026-10-29-native-cuda-basis-shape.md); this note's
+original CPU qualification scope remains unchanged.

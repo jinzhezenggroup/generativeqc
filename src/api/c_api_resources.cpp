@@ -508,6 +508,46 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
 #endif
 }
 
+/** Additive headroom for complete native D4/PBE capacity admission. A caller
+ * must retain the ordinary selected inventory as its low-memory alternative.
+ * This private shape query neither changes SelectedInventory authority nor
+ * admits a method: the prepared NumericCap owner validates its full context.
+ * Output is host and device headroom; errors leave both values unchanged. */
+int generativeqc_resource_ks_d4_optional_cuda_v1(std::size_t nao, std::size_t atoms,
+                                                 std::size_t primitives, std::size_t points,
+                                                 std::size_t diis_history, std::size_t spins,
+                                                 std::size_t functional, std::size_t tile_points,
+                                                 std::uint64_t* output, std::size_t count) {
+  if (!output || count != 2 || diis_history > 64 || (spins != 1 && spins != 2) ||
+      functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
+#if GENERATIVEQC_HAS_CUDA
+  const auto* family = generativeqc::dft::semilocal_family_metadata_from_code(functional);
+  if (!family || family->family != generativeqc::dft::SemilocalFamily::Pbe) return 2;
+  try {
+    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
+        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+    const auto extra = generativeqc::dft::cuda_ks_optional_xc_capacity(xc);
+    const auto coulomb = generativeqc::scf::cuda_direct_coulomb_optional_capacity(nao);
+    // The complete promise also reserves the diagnostic history-square panel,
+    // which can be activated on a later geometry rebuild.
+    const auto device = generativeqc::runtime::size_add(
+        generativeqc::runtime::size_add(extra[1], coulomb[1]),
+        generativeqc::runtime::size_mul(
+            sizeof(double), generativeqc::runtime::size_mul(diis_history, diis_history)));
+    const auto host = generativeqc::runtime::size_add(extra[0], coulomb[0]);
+    output[0] = host;
+    output[1] = device;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+#else
+  return 2;
+#endif
+}
+
 int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
                                      std::size_t diis_history, std::size_t spins, std::size_t pbe,
