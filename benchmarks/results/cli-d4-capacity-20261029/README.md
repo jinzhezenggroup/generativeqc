@@ -1,6 +1,22 @@
 # Native CLI D4 capacity qualification
 
-Current integrated source `a508ecbe4` includes parent `b2e5de7d1` without rewriting
+Current source `456a46502` includes master `3045c7e90` and the repaired D4 runtime.
+Its Release CPU installation passes all 17 CLI CTests and named D4 inventory with
+Python/compiler absent from PATH. The unchanged eight-group, 4,032-call complete
+metadata matrix passes at maximum ratio **1.0088375983048101**. Outputs match after
+the existing source/plan identity normalization. No scientific/GPU execution is
+claimed by this CLI timing.
+
+`current-samples.json.xz` and `current-qualification.json.xz` retain every sample,
+reference, installed product hash, executed runner and validation receipt.
+`qualify.py` is the formatted, AST-equivalent reproduction script. The preceding
+receipts and exact old runner/README remain recoverable through
+`pre-integration-history.json`; offline restoration was verified before replacing
+the current records. Historical qualifications below retain their original sources.
+
+## Previous integrated qualification
+
+Previous integrated source `a508ecbe4` includes parent `b2e5de7d1` without rewriting
 history. The rebuilt installed CLI passes all three CLI contract/catalog CTests
 and named D4 inventory with Python/compiler absent from PATH. The original
 4,032-call, eight-group ABBA/BAAB matrix passes at maximum ratio

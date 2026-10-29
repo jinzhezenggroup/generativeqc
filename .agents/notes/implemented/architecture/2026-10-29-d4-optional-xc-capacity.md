@@ -184,3 +184,11 @@ work/storage, and all 180 GPU tests and independent native/SDK references pass.
 The preceding scalar diagnostic is retained separately within the receipt. New
 upstream provider-lifetime integration is a different source/binary qualification;
 the successful pre-integration receipt must not substitute for that validation.
+
+Integration at `2b1441760` preserves the newer provider lifetime and passes fresh
+qualification in Slurm 14923: default 1.0167437 and budget 1.0330590 across the
+same two 1,792-call eight-group populations. Both actual GPU work/storage profiles
+still match baseline, with 194 GPU/Python checks, independent native/installed
+references, memcheck and all 27,475 input checks passing. These source-bound
+receipts are retained as `integrated-cuda-*`; earlier raw measurements remain
+recoverable through verified Git-ancestry manifests without raising storage caps.
