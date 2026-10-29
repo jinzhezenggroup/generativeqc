@@ -52,14 +52,35 @@ if [ ! -f "${GQC_VENV}/.deps-ok" ]; then
   pip install --no-cache-dir sccache
   # cupy must match the CUDA major version loaded above. gpu4pyscf is only used
   # by the optional comparison arm, not by GenerativeQC itself.
+  #
+  # threadpoolctl is load-bearing, not cosmetic: env.sh pins
+  # OPENBLAS_NUM_THREADS=1, but the numpy/scipy wheels bundle libscipy_openblas,
+  # which does not honour that variable unless threadpoolctl is installed.
+  # Without it the GPU4PySCF arm runs with unbounded BLAS threads and loses time
+  # to oversubscription, making the reference arm look slower than it is and
+  # silently biasing the very comparison this run exists to produce.
   pip install --no-cache-dir "cupy-cuda12x>=13,<14" "gpu4pyscf>=1.8,<2" \
-      "pyscf>=2.6" numpy scipy h5py
+      "pyscf>=2.6" numpy scipy h5py threadpoolctl
   touch "${GQC_VENV}/.deps-ok"
 fi
 
 python3 - <<'PY'
 import sys, numpy, pyscf
 print(f"[deps] python {sys.version.split()[0]} numpy {numpy.__version__} pyscf {pyscf.__version__}")
+try:
+    import threadpoolctl
+    # env.sh pins OPENBLAS_NUM_THREADS=1 for the run; assert it actually binds,
+    # otherwise the GPU4PySCF arm silently loses time to BLAS oversubscription.
+    pools = threadpoolctl.threadpool_info()
+    print(f"[deps] threadpoolctl {threadpoolctl.__version__} pools={len(pools)}")
+    wide = [p for p in pools if (p.get("num_threads") or 1) != 1]
+    for p in wide:
+        print(f"[deps] warning: {p.get('internal_api')} {p.get('filepath')} "
+              f"num_threads={p.get('num_threads')}")
+except ImportError:
+    print("[deps] warning: threadpoolctl missing; BLAS thread pinning is NOT enforced")
+except Exception as exc:
+    print(f"[deps] warning: threadpool check failed -> {exc}")
 try:
     import cupy, gpu4pyscf
     print(f"[deps] cupy {cupy.__version__} gpu4pyscf {gpu4pyscf.__version__}")
