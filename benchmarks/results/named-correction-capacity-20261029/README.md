@@ -50,3 +50,15 @@ To keep the existing 80 MiB evidence limit, the historical independent-reference
 JSON named in `storage.json` is stored losslessly as XZ. Its original Git blob,
 decoded/encoded checksums and every reference value are preserved; no numerical
 coverage or acceptance criterion is removed.
+
+## Recorder validation repair
+
+The measured recorder is preserved byte-for-byte in `qualify.original.py.xz`.
+The current `qualify.py` rejects nonfinite energy/forces, nonpositive or
+nonfinite timings and invalid reduced ratios; strict JSON cannot publish NaN.
+A finite `--response-timeout` (default 900 seconds per complete response)
+bounds readiness and samples, and cleanup stops only harness-owned worker
+sessions. Host-only regression tests cover malformed values, silent/partial
+responses and cleanup. The actual 1,792-endpoint population and scientific
+tolerances are unchanged; its complete report replays exactly with the repaired
+reducer. This is not a new GPU campaign or raw-cap performance qualification.
