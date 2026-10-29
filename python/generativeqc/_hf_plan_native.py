@@ -1,8 +1,9 @@
 """Numerical plan admission through the selected native HF runtime.
 
 Standalone typed plans discover only the first configured library. Running
-calculators supply their own library. Missing protocols and integers outside
-the ABI retain compatibility; a native rejection never retries that policy.
+calculators supply their own library. Bounded built-in inputs require the current
+protocol; integers outside the ABI keep explicit Python arithmetic. Native
+rejection never retries that policy.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ def _load(path: str) -> typing.Any:
     """Bind one selected library without searching past a missing protocol."""
     library = ctypes.CDLL(path)
     if getattr(library, "generativeqc_hf_plan_query_v1", None) is None:
-        return None
+        raise RuntimeError("HF planning requires the current native plan protocol")
     library.generativeqc_get_abi_version.restype = ctypes.c_uint32
     library.generativeqc_get_abi_version.argtypes = []
     if library.generativeqc_get_abi_version() != _native.ABI_VERSION:
@@ -70,12 +71,12 @@ def _load(path: str) -> typing.Any:
     return library
 
 
-def optional_library() -> typing.Any:
-    """Use the first configured existing path, or explicit compatibility."""
+def require_library() -> typing.Any:
+    """Use the first configured image; missing support cannot change policy ownership."""
     for candidate in _native._candidate_paths():
         if candidate.exists():
             return _load(str(candidate.resolve()))
-    return None
+    raise RuntimeError("HF planning requires the current native library")
 
 
 def failures(
@@ -94,10 +95,10 @@ def failures(
     )
     if any(type(value) is not int or not 0 < value < 2**64 for value in counts):
         return _compatibility_failures(source, target, budget)
-    selected = optional_library() if library is None else library
+    selected = require_library() if library is None else library
     operation = getattr(selected, "generativeqc_hf_plan_query_v1", None)
     if operation is None:
-        return _compatibility_failures(source, target, budget)
+        raise RuntimeError("HF planning requires the current native plan protocol")
     costs = (
         source.estimated_cost_units,
         target.estimated_cost_units,
@@ -133,7 +134,7 @@ def failures(
 def _compatibility_failures(
     source: typing.Any, target: typing.Any, budget: typing.Any
 ) -> int:
-    """Preserve old-library and arbitrary-width Python integer planning."""
+    """Preserve arbitrary-width Python integer planning without truncating limits."""
     failed = 0
     if (
         source.convergence.energy_change < target.convergence.energy_change
