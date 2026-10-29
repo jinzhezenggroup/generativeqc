@@ -2320,7 +2320,14 @@ class Calculator:
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
         properties: typing.Any = None,
+        _include_native_program: bool = False,
     ) -> typing.Any:
+        """Build capacity metadata, optionally carrying its native discovery result.
+
+        CUDA preparation consumes the same local catalog selection for optional
+        headroom, correction sizing and native preparation. This avoids repeated
+        graph serialization without caching discovery across library lifetimes.
+        """
         from .initial_guess import with_initial_guess_resources
 
         systems = tuple(tuple(system) for system in systems)
@@ -2334,11 +2341,23 @@ class Calculator:
         request = with_initial_guess_resources(
             request, self, systems, charges, multiplicities
         )
+        native_program = None
+        if _include_native_program:
+            from ._named_ks import select_resource_program
+
+            native_program = select_resource_program(self, request)
         if self._dispersion_method_ir is not None:
             from .resources_d4 import with_native_xc_capacity
 
-            request = with_native_xc_capacity(request, self, ks_options)
-        return request
+            request = with_native_xc_capacity(
+                request,
+                self,
+                ks_options,
+                _native_ks=native_program is not None
+                if _include_native_program
+                else None,
+            )
+        return (request, native_program) if _include_native_program else request
 
     def _base_resource_request(
         self,
@@ -2446,7 +2465,11 @@ class Calculator:
         return request
 
     def _dispersion_resource_request(
-        self, systems: typing.Any, electronic_request: typing.Any
+        self,
+        systems: typing.Any,
+        electronic_request: typing.Any,
+        *,
+        _native_ks: bool | None = None,
     ) -> typing.Any:
         """Present the native correction inventory for an admitted global plan."""
         if self._dispersion_method_ir is None:
@@ -2478,7 +2501,11 @@ class Calculator:
 
         from ._named_ks import select_resource_program
 
-        native_ks = select_resource_program(self, electronic_request) is not None
+        native_ks = (
+            select_resource_program(self, electronic_request) is not None
+            if _native_ks is None
+            else _native_ks
+        )
         if isinstance(corrections[0].specification, D4Spec):
             if not native_ks:
                 raise NotImplementedError(

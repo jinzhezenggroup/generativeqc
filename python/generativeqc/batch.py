@@ -307,16 +307,30 @@ class PreparedBatch:
         if resource_plan is not None or calculator._resource_budget is not None:
             from ._named_ks import select_resource_program
 
+            share_native_program = (
+                calculator._device_name == "cuda"
+                and calculator._dispersion_method_ir is not None
+            )
             request = calculator._resource_request(
                 self._systems,
                 charges=self._charges,
                 multiplicities=self._multiplicities,
                 ks_options=self._effective_ks_options,
                 properties=self._planned_properties,
+                **({"_include_native_program": True} if share_native_program else {}),
             )
-            resource_native_name = select_resource_program(calculator, request)
+            if share_native_program:
+                request, resource_native_name = request
+            else:
+                resource_native_name = select_resource_program(calculator, request)
             dispersion_request = calculator._dispersion_resource_request(
-                self._systems, request
+                self._systems,
+                request,
+                **(
+                    {"_native_ks": resource_native_name is not None}
+                    if share_native_program
+                    else {}
+                ),
             )
             requests = (
                 (request,)

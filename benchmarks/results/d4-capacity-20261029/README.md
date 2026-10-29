@@ -160,3 +160,23 @@ A subsequent cProfile diagnostic identifies redundant Python request generation:
 0.3641 seconds under the profiler. Native execution totals are comparable
 (candidate 7.46 seconds; baseline 7.53 seconds). This identifies the next repair;
 it does not convert the failed complete timing gate into a pass.
+
+The complete MD-J populations/receipts above and the first retained-request
+448-call diagnostic are now preserved byte-for-byte in ancestor `8f1c2b3f6`.
+`pre-replay-diagnostics-history.json` lists every file, byte count and checksum;
+offline restoration was verified before removing the working-tree copies.
+Both budget timing gates remain failed. The retained-request diagnostic reaches
+1.1008970446134168, with maximum E/F differences 9.95e-14 / 4.66e-14, and all 38
+D4 GPU checks pass after repairing two mutation-test fixtures. Its source,
+completed scheduler receipt, failures and exact runners remain recoverable.
+
+`optional-cpu-budget-samples.json.xz` retains the earlier source `9d0df5629` CPU
+budget qualification: 1,792 complete calls, eight groups, maximum ratio
+1.045464979193522, and exactly matching E/F. It is a source-bound CPU receipt;
+subsequent CUDA request/diagnostic reuse does not enable caching on CPU paths.
+
+`diagnostic-cache-{samples,receipts}.json.xz` retains the next two-group diagnostic
+at `8f1c2b3f6`, Slurm 14915: 448 calls, maximum ratio 1.073302195362344, E/F
+errors <=8.53e-14 / 2.45e-14, 82 relevant GPU tests passing. The timing gate
+still fails; this is not eight-group acceptance. Cold/scalar preparation remains
+the next optimization target after removing repeated diagnostic serialization.

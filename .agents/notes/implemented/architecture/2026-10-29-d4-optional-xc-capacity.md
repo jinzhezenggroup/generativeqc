@@ -134,3 +134,12 @@ ledgers also retain one immutable plan serialization, returning a deep copy for
 each diagnostic. Plan replacement invalidates that cache by value. Native
 observations and capacity verification remain fresh, and public diagnostic
 mutation cannot change the private snapshot or any later observation.
+
+Detached diagnostic reuse at `8f1c2b3f6` reduces the next two-group maximum to
+1.0733022 (Slurm 14915), but preparation/scalar cases still miss the gate.
+Preparation was rediscovering the same full native graph for optional headroom,
+correction sizing and the actual prepared owner. CUDA preparation now carries
+one local selection result through those consumers. This result never crosses
+a constructor or loaded-library lifetime; public dry runs and CPU callers retain
+their original discovery boundary. Native catalog refusal and preparation
+failures remain authoritative, without a second discovery/compatibility retry.
