@@ -33,9 +33,9 @@ SHAPE = {
 }
 
 
-@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_120"])
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_90", "sm_120"])
 @pytest.mark.parametrize("atoms", [1, 3, 6, 11, 12, 24, 32, 33, 48, 96, 128])
-def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
+def test_automatic_cooperation_follows_resource_caps_and_shape(
     architecture: str, atoms: int
 ) -> None:
     target = cuda_target_info(architecture)
@@ -46,9 +46,7 @@ def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
     generic = plan_stationary_cuda_resources(
         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
     )
-    expected_threads = (
-        BECKE_COOPERATIVE_THREADS if architecture == "sm_120" and atoms >= 12 else 1
-    )
+    expected_threads = BECKE_COOPERATIVE_THREADS if atoms >= 12 else 1
     assert automatic.becke_threads_per_point == expected_threads
     assert generic.becke_threads_per_point == 1
     assert automatic.allocation_bytes == generic.allocation_bytes

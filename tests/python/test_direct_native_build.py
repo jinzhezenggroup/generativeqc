@@ -11,6 +11,8 @@ import pytest
 @pytest.mark.parametrize(
     "architectures,enabled,linked,global_link",
     [
+        ("80-real", "ON", True, "OFF"),
+        ("80", "ON", True, "OFF"),
         ("120-real", "ON", True, "OFF"),
         ("120-virtual", "ON", True, "OFF"),
         ("120", "ON", True, "OFF"),
@@ -60,12 +62,14 @@ def test_direct_device_link_preserves_architecture_request(
     owner = "generativeqc_direct_native" if linked else "generativeqc"
     direct = command(f"CMakeFiles/{owner}.dir/src/scf/cuda/direct_reference_force.cu.o")
     assert ("-rdc=true" in direct) == linked
+    architecture = architectures.split("-")[0]
     if architectures.endswith("-real"):
-        assert "code=[sm_120]" in direct
+        assert f"code=[sm_{architecture}]" in direct
     elif architectures.endswith("-virtual"):
-        assert "code=[compute_120]" in direct
+        assert f"code=[compute_{architecture}]" in direct
     else:
-        assert "code=[compute_120,sm_120]" in direct
+        assert f"code=[compute_{architecture},sm_{architecture}]" in direct
+    assert ("--disable-optimizer-constants" in direct) == linked
     # A direct archive must not drag an unrelated SCF kernel into device linking.
     assert (
         "-rdc=true"
@@ -81,4 +85,4 @@ def test_direct_device_link_preserves_architecture_request(
     if architectures.endswith("-virtual"):
         assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE" not in host
     else:
-        assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE=120" in host
+        assert f"GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE={architecture}" in host

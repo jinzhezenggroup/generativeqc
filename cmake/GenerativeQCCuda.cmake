@@ -179,6 +179,12 @@ macro(generativeqc_configure_cuda_backend target)
       CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
     generativeqc_set_cuda_compile_pool(
       generativeqc_direct_native "${_generativeqc_cuda_compile_pool}")
+    # The shared recurrence call graph can overflow ptxas's compiler-generated
+    # constant bank at device link (observed with CUDA 12.9 on SM80 and SM89).
+    # Keep literal constants in instructions for this archive; unrelated AOT
+    # kernels and independently compiled launch owners keep their normal policy.
+    target_compile_options(generativeqc_direct_native PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=--disable-optimizer-constants>)
     if(GENERATIVEQC_CUDA_FAST_COMPILE)
       target_compile_options(generativeqc_direct_native PRIVATE --Ofast-compile=max)
     endif()
