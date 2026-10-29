@@ -10,8 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
-from tools.generativeqc_cc.triples import triples_fullsum
+from generativeqc_compiler.cc.triples import triples_fullsum
 
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(

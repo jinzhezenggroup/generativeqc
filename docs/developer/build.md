@@ -49,8 +49,7 @@ profile selection are still evaluated per load.
 Linux CUDA wheels keep NVIDIA user-space provider DSOs outside
 `libgenerativeqc.so`, but declare the reviewed CUDA 12 `nvidia-*` packages as
 runtime dependencies because NVCC registration runs when the CUDA-bearing native
-library is loaded. The historical `generativeqc[cuda12]` extra remains an empty
-compatibility alias. The NVIDIA kernel driver remains system-owned. See the
+library is loaded. The NVIDIA kernel driver remains system-owned. See the
 [CUDA wheel decision note](../../.agents/notes/implemented/architecture/2026-09-18-provider-free-cuda-wheels.md)
 for the retained provider boundary and fallback rationale.
 

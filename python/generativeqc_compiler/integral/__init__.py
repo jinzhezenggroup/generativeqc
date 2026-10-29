@@ -12,13 +12,18 @@ from generativeqc_compiler.common.backend import (
 )
 from generativeqc_compiler.common.cuda_target import (
     CUDA_TARGETS,
-    DEFAULT_CUDA_TARGET,
     CudaArchitecture,
     CudaTargetInfo,
     cuda_architecture,
     cuda_target_info,
     normalize_cuda_architecture,
     normalize_cuda_compile_architecture,
+)
+from generativeqc_compiler.integral.lowering.legacy import (
+    emit_ppps_resident_bra_rys3_cuda,
+)
+from generativeqc_compiler.integral.lowering.selection import (
+    supports_component_lane_rys,
 )
 
 from .blocks import (
@@ -39,10 +44,6 @@ from .blocks import (
 from .cache import NvrtcCacheSpec, integral_cache_key, nvrtc_cache_key
 from .capabilities import query_integral_capability
 from .cuda_emitter import emit_shell_class_fused_cuda
-from .cuda_lowering import (
-    emit_ppps_resident_bra_rys3_cuda,
-    supports_component_lane_rys,
-)
 from .cuda_schedule import (
     AlgebraForm,
     AlgebraFusion,
@@ -189,7 +190,6 @@ __all__ = [
     "CUDA_TARGETS",
     "DDDD_SPEC",
     "DDPS_SPEC",
-    "DEFAULT_CUDA_TARGET",
     "DPDS_SPEC",
     "DPPP_SPEC",
     "FDDD_SPEC",

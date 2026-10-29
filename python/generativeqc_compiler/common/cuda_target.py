@@ -284,9 +284,3 @@ def cuda_target_info(architecture: str | int) -> CudaTargetInfo:
         tuning_maximum_stack_bytes=64,
         packed_register_caps=(160, 176),
     )
-
-
-# Compatibility-only explicit target for downstream callers that imported the
-# historical name. Generic compiler APIs must not use this object as an
-# implicit default; callers select a concrete target with cuda_target_info().
-DEFAULT_CUDA_TARGET = CUDA_TARGETS["sm_120"]
