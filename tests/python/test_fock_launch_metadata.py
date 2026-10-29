@@ -5,12 +5,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from generativeqc_compiler.integral.cuda_schedule import ScheduleIR, ScheduleKind
-from generativeqc_compiler.integral.production import (
-    _streaming_fock_source,
+from generativeqc_compiler.integral.production_emission import _streaming_fock_source
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_registry import (
     emit_multi_registry_source,
     emit_registry_header,
     emit_registry_source,
-    resolve_production_profile,
 )
 
 

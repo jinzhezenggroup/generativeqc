@@ -6,6 +6,9 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _HostKrylovEngine
+from generativeqc_compiler.cc.gradient_equations import build_fock_weight_program
 from generativeqc_compiler.tensor import Program, execute
 from test_cc_complete_gradient import _direct_fields, _source
 from test_cc_native_tensor_cuda import _fake_executor
@@ -19,7 +22,6 @@ from tools.generativeqc_cc import (
     solve,
     solve_corrected_lambda,
 )
-from tools.generativeqc_cc.gradient_equations import build_fock_weight_program
 from tools.generativeqc_cc.oracle import random_case
 from tools.generativeqc_cc.triples_orbital_response import (
     _minimum_same_space_gap,
@@ -28,8 +30,6 @@ from tools.generativeqc_cc.triples_orbital_response import (
 from tools.generativeqc_posthf.export import export_rhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_response import NativeJKBackend, RHFResponseOperator
-from tools.generativeqc_response.krylov import _HostKrylovEngine
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @contextmanager

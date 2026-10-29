@@ -15,10 +15,10 @@ from generativeqc.ks import (
     scf_domain_for_method,
 )
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
 from generativeqc_compiler.dft.ao import NativeAO
 from generativeqc_compiler.dft.grid import ExplicitGrid, GridSpec
 from generativeqc_compiler.method import resolve_bulk_ks
-from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 

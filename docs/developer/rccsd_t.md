@@ -146,7 +146,7 @@ dimensions, so a wrong subscript cannot silently change the inventory hash.
 
 ## Bounded CUDA tiles
 
-`tools/generativeqc_cc/triples_tiles.py` decomposes the triangular `a>=b>=c`
+`python/generativeqc_compiler/cc/triples_tiles.py` decomposes the triangular `a>=b>=c`
 virtual sum into a-chunked tiles (`TriplesTileEnumerator`); occupied space
 is never chunked. `tile_triples_energy` / `tile_triples_energy_masked` are
 the per-tile CPU reference and the masked-domain oracle;

@@ -15,7 +15,7 @@ from types import MappingProxyType
 import numpy as np
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.xc._generated_native_semilocal import (
+from generativeqc_compiler.dft._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_BY_CODE,

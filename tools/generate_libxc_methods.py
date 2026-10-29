@@ -14,11 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from tools import source_registry
-from tools.libxc_method_metadata import (
+from generativeqc_compiler.xc.libxc_method_metadata import (
     METHOD_METADATA_SEMANTICS,
     extract_method_registrations,
 )
+
+from tools import source_registry
 
 REVISION = "7.0.0"
 SOURCE_ROOT = ROOT / "upstream" / "libxc" / REVISION
@@ -145,8 +146,7 @@ def register_product() -> None:
         "canonical_inputs": {
             name: _digest(ROOT / name)
             for name in (
-                "tools/libxc_bulk_metadata.py",
-                "tools/libxc_method_metadata.py",
+                "python/generativeqc_compiler/xc/libxc_c_metadata.py",
                 "python/generativeqc_compiler/xc/libxc_method_metadata.py",
             )
         },

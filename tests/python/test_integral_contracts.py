@@ -550,7 +550,9 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
     Current ABI, dispatch, numerical and cache contracts have executable tests;
     the separately measured static-resource ledger remains a required gate.
     """
-    from generativeqc_compiler.integral.production import write_production_bundles
+    from generativeqc_compiler.integral.production_bundle import (
+        write_production_bundles,
+    )
     from generativeqc_compiler.integral.production_emission import emit_profile_shard
     from generativeqc_compiler.integral.production_k_block import (
         direct_k_block_candidates,
@@ -613,7 +615,9 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
 def test_incompatible_production_profiles_are_rejected(
     tmp_path: typing.Any,
 ) -> None:
-    from generativeqc_compiler.integral.production import resolve_production_profile
+    from generativeqc_compiler.integral.production_profile import (
+        resolve_production_profile,
+    )
 
     manifest = json.loads(
         Path(

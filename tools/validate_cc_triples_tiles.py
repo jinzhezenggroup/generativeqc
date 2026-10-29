@@ -35,11 +35,11 @@ for candidate in (ROOT, Path(os.environ.get("SCRATCH", "")) / "repo"):
 _compiler_sys.path.insert(0, str(ROOT / "python"))
 
 import numpy as np
+from generativeqc_compiler.cc.triples import triples_energy
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
 
-from tools.generativeqc_cc.triples import triples_energy
 from tools.generativeqc_cc.triples_cuda import (
     CudaTriplesTiles,
     TriplesTileConfig,
@@ -56,8 +56,8 @@ GROUND_TRUTH = {
 
 
 QUALIFICATION_SOURCE_PATHS = (
-    "tools/generativeqc_cc/triples.py",
-    "tools/generativeqc_cc/triples_tiles.py",
+    "python/generativeqc_compiler/cc/triples.py",
+    "python/generativeqc_compiler/cc/triples_tiles.py",
     "tools/generativeqc_cc/triples_cuda.py",
     "tools/validate_cc_triples_tiles.py",
 )

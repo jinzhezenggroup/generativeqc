@@ -7,6 +7,9 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.lowering.legacy import (
+    emit_ppps_resident_bra_rys3_cuda,
+)
 
 from .capabilities import (
     CAPABILITY_LOCAL_PACKED_STREAMING_FOCK,
@@ -14,7 +17,6 @@ from .capabilities import (
     CAPABILITY_STREAMING_FOCK,
 )
 from .cuda_emitter import emit_shell_class_fused_cuda
-from .cuda_lowering import emit_ppps_resident_bra_rys3_cuda
 from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer

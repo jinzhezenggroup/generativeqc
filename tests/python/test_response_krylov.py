@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseProblem
 
 from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 from tools.generativeqc_response import (
@@ -19,7 +20,6 @@ from tools.generativeqc_response import (
     solve,
     solve_many,
 )
-from tools.generativeqc_response.problem import ResponseProblem
 
 
 class _MatrixOperator:
@@ -823,7 +823,7 @@ def test_cost_ledger_does_not_count_operator_time_as_orthogonalization(
     strategy: str, monkeypatch: typing.Any
 ) -> None:
     """A deterministic clock separates action cost without timing assertions."""
-    from tools.generativeqc_response import krylov
+    from generativeqc import response_solver as krylov
 
     clock = [0.0]
     operator = _synthetic_operator(size=6)
@@ -861,10 +861,7 @@ def test_cost_ledger_does_not_count_operator_time_as_orthogonalization(
 @pytest.mark.parametrize("scale", (1e-150, 1.0, 1e150))
 def test_engine_thin_range_factor_matches_independent_dense_svd(scale: float) -> None:
     """Qualify range/rank decisions at both sides of the breakdown cutoff."""
-    from tools.generativeqc_response.krylov import (
-        _block_range_factor,
-        _HostKrylovEngine,
-    )
+    from generativeqc.response_solver import _block_range_factor, _HostKrylovEngine
 
     rng = np.random.default_rng(179)
     left, _ = np.linalg.qr(rng.normal(size=(37, 4)))

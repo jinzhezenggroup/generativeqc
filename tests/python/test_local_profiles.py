@@ -536,11 +536,11 @@ def test_explicit_tuner_help_needs_no_native_library(
 
 
 def test_generic_numerical_driver_supports_tuned_s_and_p_consumers() -> None:
-    from generativeqc_compiler.integral.autotune import supported_schedule_trials
     from generativeqc_compiler.integral.benchmark import emit_shell_class_resource_cuda
     from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
     from generativeqc_compiler.integral.ir import KernelConsumer
     from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+    from generativeqc_compiler.integral.tuning.policy import supported_schedule_trials
 
     from tools.generativeqc_validation.f_shell_cuda import emit_numerical_driver
 

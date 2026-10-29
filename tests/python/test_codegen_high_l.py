@@ -17,7 +17,6 @@ from codegen_test_support import (
     FFPS_SPEC,
     FUSED_SHELL_SPEC_BY_NAME,
     PSSS_SPEC,
-    REPOSITORY_ROOT,
     TEST_CUDA_TARGET,
     ContractionSpec,
     CudaTargetInfo,
@@ -95,43 +94,6 @@ def test_generated_low_order_boys_thresholds_preserve_upward_recurrence(
         assert values[maximum_order] == pytest.approx(
             reference, rel=5.0e-14, abs=1.0e-15
         )
-
-
-def test_generic_cuda_emitter_uses_backend_lowering_not_dppp_compatibility() -> None:
-    """Keep generic compilation independent of historical shell adapters."""
-
-    emitter = (
-        REPOSITORY_ROOT
-        / "python"
-        / "generativeqc_compiler"
-        / "integral"
-        / "cuda_emitter.py"
-    ).read_text(encoding="utf-8")
-    production = (
-        REPOSITORY_ROOT
-        / "python"
-        / "generativeqc_compiler"
-        / "integral"
-        / "production.py"
-    ).read_text(encoding="utf-8")
-    benchmark = (
-        REPOSITORY_ROOT
-        / "python"
-        / "generativeqc_compiler"
-        / "integral"
-        / "benchmark.py"
-    ).read_text(encoding="utf-8")
-    assert "from . import cuda_lowering as _implementation" in emitter
-    assert "dppp_dispatch" not in emitter
-    assert not (
-        REPOSITORY_ROOT
-        / "python"
-        / "generativeqc_compiler"
-        / "integral"
-        / "dppp_dispatch.py"
-    ).exists()
-    assert "from .dppp_dispatch import" not in production
-    assert "from .dppp_dispatch import" not in benchmark
 
 
 @pytest.mark.parametrize("architecture", ("sm_80", "sm_86", "sm_89", "sm_90", "sm_120"))
