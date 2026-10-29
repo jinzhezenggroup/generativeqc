@@ -137,3 +137,26 @@ The srun exit is 1 and the final input-integrity check completes; the completed
 scheduler record expired before retrieval, and accounting storage is disabled.
 The running scheduler receipt and srun failure are retained without inventing
 a completed receipt.
+
+## Complete optional MD-J admission
+
+Source `b2e5de7d1` repairs both s/p/d optional XC and MD-J admission. In finite
+Slurm job 14909, both eight-group campaigns contain 1,792 complete calls. Default
+timing passes at 1.007475284577579; budget timing **still fails** at
+1.2613104189433968. Maximum E/F differences are 8.53e-14 / 5.11e-14 for the budget
+population. Both profiles now exactly preserve actual GPU work/storage:
+172,628 kernels, 5,648 allocations, 119,201,475 explicit peak bytes and zero final
+live bytes. All transfer counts/bytes and static storage also match the baseline.
+
+The source-matched Release CPU/CUDA builds, 127 CPU CTests, 138 GPU Python tests,
+installed independent-reference SDK and memcheck pass. All 27,409 frozen inputs
+were verified before and after the failed timing campaign. Completed scheduler
+and srun receipts retain the failure, alongside every raw population and both
+profiles in `md-complete-cuda-{default,budget}-samples.json.xz` and
+`md-complete-cuda-qualification.json.xz`.
+
+A subsequent cProfile diagnostic identifies redundant Python request generation:
+56 of 72 candidate resource-request calls occur during retained replay, consuming
+0.3641 seconds under the profiler. Native execution totals are comparable
+(candidate 7.46 seconds; baseline 7.53 seconds). This identifies the next repair;
+it does not convert the failed complete timing gate into a pass.
