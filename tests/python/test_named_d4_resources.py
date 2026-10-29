@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes as ct
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ from generativeqc import (
     dispersion,
     resources_d4,
 )
-from generativeqc.ks import KsOptions
+from generativeqc.ks import KsOptions, resolve_ks_options
 from generativeqc_compiler.method import resolve_method
 
 
@@ -46,6 +47,88 @@ def calculator(device: str = "cpu", **kwargs: Any) -> Calculator:
         initial_guess=None,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize(
+    "control,value",
+    [
+        ("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "1"),
+        ("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK", "1"),
+        ("GENERATIVEQC_DF_PROGRESS_TRACE", "1"),
+        ("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "warp"),
+        ("GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR", "1"),
+    ],
+)
+def test_cuda_replay_rejects_changed_planning_environment(
+    library: Any, monkeypatch: pytest.MonkeyPatch, control: str, value: str
+) -> None:
+    """Retained capacity cannot authorize a different execution schedule."""
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires a finite Slurm CUDA allocation")
+    assert os.environ.get("SLURM_JOB_ID")
+    monkeypatch.delenv(control, raising=False)
+    calc = calculator(
+        "cuda", resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
+    )
+    with calc.prepare_batch(systems()) as batch:
+        reference = batch.execute(properties=("energy",), strict=True)
+        with monkeypatch.context() as changed:
+            changed.setenv(control, value)
+            with pytest.raises(ValueError, match="execution schedule changed"):
+                batch.execute(properties=("energy",), strict=True)
+        # An unrelated environment edit revalidates successfully, and neither a
+        # rejected schedule nor that edit invalidates the retained warm owner.
+        monkeypatch.setenv("QC_TEST_UNRELATED_REPLAY_INPUT", "changed")
+        for _ in range(2):
+            actual = batch.execute(properties=("energy",), strict=True)
+            assert actual.energies == pytest.approx(reference.energies, abs=2e-8)
+
+
+@pytest.mark.parametrize("mutation", ["model", "effective_options", "plan"])
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_replay_rejects_changed_scientific_inputs(
+    library: Any, monkeypatch: pytest.MonkeyPatch, mutation: str, device: str
+) -> None:
+    """Value changes must be detected even while the same batch remains alive."""
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a finite Slurm CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID")
+    calc = calculator(
+        device, resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
+    )
+    with calc.prepare_batch(systems()) as batch:
+        if mutation == "model":
+            monkeypatch.setattr(calc, "_energy_tolerance", 2e-10)
+            error, message = RuntimeError, "basis/model identity changed"
+        elif mutation == "effective_options":
+            monkeypatch.setattr(
+                batch,
+                "_effective_ks_options",
+                resolve_ks_options(
+                    calc._method_name,
+                    replace(batch._effective_ks_options, tile_points=128),
+                ),
+            )
+            error, message = ValueError, "execution schedule changed"
+        else:
+            request = next(r for r in batch.resource_plan.requests if r.name == "ks")
+            topology = json.loads(request.identity.topology)
+            topology["items"][0]["atoms"] += 1
+            changed = replace(
+                request,
+                identity=replace(request.identity, topology=json.dumps(topology)),
+            )
+            batch.resource_plan = replace(
+                batch.resource_plan,
+                requests=tuple(
+                    changed if r.name == "ks" else r
+                    for r in batch.resource_plan.requests
+                ),
+            )
+            error, message = ValueError, "execution schedule changed"
+        with pytest.raises(error, match=message):
+            batch.execute(properties=("energy",), strict=True)
 
 
 @pytest.mark.parametrize("counts", [(1,), (2, 3, 7), (256, 1)])
@@ -144,6 +227,9 @@ def test_budgeted_complete_d4_replay_failure_and_recovery(
     monkeypatch.setattr(dispersion, "D4CorrectionBatch", forbidden)
     with calc.prepare_batch(systems(), resource_plan=plan) as batch:
         assert batch._native_dispersion is not None
+        assert batch.basis_metadata == tuple(
+            calc.basis_metadata(atoms) for atoms in systems()
+        )
         if device == "cuda" and hasattr(
             library, "generativeqc_resource_ks_d4_optional_cuda_v1"
         ):

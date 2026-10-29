@@ -1,0 +1,37 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "9a0c072e279b29413085b6fa588821267478a9d9",
+  "file_count": 5,
+  "total_bytes": 725760,
+  "purpose": "Historical HOST producer packets and test streams only. No scientific arrays, independent references, actual runtime originals, source patches or executable offline acceptance inputs are retired.",
+  "recovery": "python tools/restore_retained_evidence.py --all --manifest benchmarks/results/h100-small-cbs-correctness-20261024/historical-host-snapshot.json --output .artifacts/recovered-small-cbs-host",
+  "fetch_policy": "No implicit fetch. In a shallow checkout, explicitly obtain the pinned already-merged commit before requesting historical recovery.",
+  "outcome": "Original fixed32 matrix remains INCOMPLETE:16 returns,2 provider refusals,14 NOT_RUN. Historical packet recovery does not run chemistry.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/frozen-host-packet-v2.json.xz",
+      "bytes": 92892,
+      "sha256": "0ad6b48505c06ba05db697709b4173d756dff140019e6f7da5720e2728a0f0b8"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/frozen-host-packet-v3.json.xz",
+      "bytes": 231044,
+      "sha256": "25b07f18f30ee99216538ef087f7f107c707d8a1b0fce2620494238d8e8671f0"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/frozen-host-packet-v4.json.xz",
+      "bytes": 365704,
+      "sha256": "cf1f173d413e9b7571be7b1f209b1a4796ae1a90a1c3ec71783f02249371bfca"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/host-receipts-v2.json.xz",
+      "bytes": 20924,
+      "sha256": "1fc2ee88db1bf446ad272064741cba6243840daf3c9c8b30ce0ea2ee14623a0b"
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/host-receipts-v4.json.xz",
+      "bytes": 15196,
+      "sha256": "bf21aed21c77704480fe0882b5ef17be6c2ddd849e3e1fe383df4921e48dc8b8"
+    }
+  ]
+}

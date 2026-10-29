@@ -175,6 +175,7 @@ class Calculator:
         precision: str = "fp64",
         target_accuracy: TargetAccuracy | None = None,
         resource_budget: typing.Any = None,
+        provider_initialization: typing.Any = None,
         ks_options: typing.Any = None,
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
@@ -239,6 +240,30 @@ class Calculator:
             if not isinstance(resource_budget, ResourceBudget):
                 raise TypeError("resource_budget must be a ResourceBudget")
         self._resource_budget = resource_budget
+        self._provider_initialization_intent = None
+        if provider_initialization is not None:
+            from .provider_initialization import ProviderInitializationIntent
+
+            if not isinstance(provider_initialization, ProviderInitializationIntent):
+                raise TypeError("provider_initialization must be an immutable intent")
+            conventional = density_fitting is False or (
+                isinstance(density_fitting, str) and density_fitting.lower() == "none"
+            )
+            if (
+                not isinstance(method, str)
+                or method.lower() not in {"mp2", "ccsd", "rccsd"}
+                or str(device).lower() != "cuda"
+                or not conventional
+                or auxiliary_basis is not None
+                or ks_options is not None
+                or resource_budget is not None
+            ):
+                raise NotImplementedError(
+                    "provider intent requires scalar conventional CUDA MP2/RCCSD without a ledger"
+                )
+            self._provider_initialization_intent = ProviderInitializationIntent(
+                provider_initialization.allowance_bytes
+            )
         self._automatic_initial_guess = (
             isinstance(initial_guess, str) and initial_guess == "auto"
         )
@@ -1811,6 +1836,14 @@ class Calculator:
                 "representation": self._basis_representation,
                 "method": self._method,
                 **(
+                    {
+                        "provider_initialization_allowance_bytes": self._provider_initialization_intent.allowance_bytes
+                    }
+                    if getattr(self, "_provider_initialization_intent", None)
+                    is not None
+                    else {}
+                ),
+                **(
                     {"ks_options": self._ks_options.to_payload()}
                     if self._ks_options
                     else {}
@@ -1892,6 +1925,25 @@ class Calculator:
         self, atoms: typing.Any, *, charge: typing.Any = 0, multiplicity: typing.Any = 1
     ) -> typing.Any:
         """Resolve complete orbital/auxiliary scientific identities for this model."""
+        return self._basis_metadata_from_snapshot(
+            atoms, charge=charge, multiplicity=multiplicity
+        )
+
+    def _basis_metadata_from_snapshot(
+        self,
+        atoms: typing.Any,
+        *,
+        charge: typing.Any = 0,
+        multiplicity: typing.Any = 1,
+        model_signature: typing.Any = None,
+    ) -> typing.Any:
+        """Resolve item metadata against one synchronous prepared model snapshot.
+
+        A CUDA D4 constructor already computes the complete model signature
+        immediately before resolving its items. Carry that value through this
+        local operation; public calls and later executions still recompute it.
+        This does not retain a signature across caller-visible mutation points.
+        """
         atoms = tuple(Atom.from_value(a) for a in atoms)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
@@ -1937,7 +1989,9 @@ class Calculator:
             )
         result["model_identity"] = canonical_hash(
             {
-                "calculator": self._model_signature(),
+                "calculator": self._model_signature()
+                if model_signature is None
+                else model_signature,
                 "basis": result,
                 "charge": int(charge),
                 "multiplicity": int(multiplicity),
@@ -2320,7 +2374,14 @@ class Calculator:
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
         properties: typing.Any = None,
+        _include_native_program: bool = False,
     ) -> typing.Any:
+        """Build capacity metadata, optionally carrying its native discovery result.
+
+        CUDA preparation consumes the same local catalog selection for optional
+        headroom, correction sizing and native preparation. This avoids repeated
+        graph serialization without caching discovery across library lifetimes.
+        """
         from .initial_guess import with_initial_guess_resources
 
         systems = tuple(tuple(system) for system in systems)
@@ -2334,11 +2395,23 @@ class Calculator:
         request = with_initial_guess_resources(
             request, self, systems, charges, multiplicities
         )
+        native_program = None
+        if _include_native_program:
+            from ._named_ks import select_resource_program
+
+            native_program = select_resource_program(self, request)
         if self._dispersion_method_ir is not None:
             from .resources_d4 import with_native_xc_capacity
 
-            request = with_native_xc_capacity(request, self, ks_options)
-        return request
+            request = with_native_xc_capacity(
+                request,
+                self,
+                ks_options,
+                _native_ks=native_program is not None
+                if _include_native_program
+                else None,
+            )
+        return (request, native_program) if _include_native_program else request
 
     def _base_resource_request(
         self,
@@ -2446,7 +2519,11 @@ class Calculator:
         return request
 
     def _dispersion_resource_request(
-        self, systems: typing.Any, electronic_request: typing.Any
+        self,
+        systems: typing.Any,
+        electronic_request: typing.Any,
+        *,
+        _native_ks: bool | None = None,
     ) -> typing.Any:
         """Present the native correction inventory for an admitted global plan."""
         if self._dispersion_method_ir is None:
@@ -2478,7 +2555,11 @@ class Calculator:
 
         from ._named_ks import select_resource_program
 
-        native_ks = select_resource_program(self, electronic_request) is not None
+        native_ks = (
+            select_resource_program(self, electronic_request) is not None
+            if _native_ks is None
+            else _native_ks
+        )
         if isinstance(corrections[0].specification, D4Spec):
             if not native_ks:
                 raise NotImplementedError(
@@ -2639,6 +2720,10 @@ class Calculator:
         it as a context manager. It is not concurrently re-entrant.
         See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
+        if getattr(self, "_provider_initialization_intent", None) is not None:
+            raise NotImplementedError(
+                "provider initialization intent does not admit batch execution"
+            )
         if not self._capabilities.supports_batch:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not support prepared batches"
@@ -3072,6 +3157,10 @@ class Calculator:
         Method-specific response solves remain separate, while the reference,
         exact integral source and compatible correction-basis OVOV block are shared.
         """
+        if getattr(self, "_provider_initialization_intent", None) is not None:
+            raise NotImplementedError(
+                "provider initialization intent does not admit companion execution"
+            )
         names = tuple(companions)
         allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
         if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
@@ -3115,6 +3204,11 @@ class Calculator:
         component_outputs: dict[str, Result] | None = None,
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
+        intent = getattr(self, "_provider_initialization_intent", None)
+        if intent is not None:
+            from ._provider_initialization_lifetime import require_no_pending_owner
+
+            require_no_pending_owner()
         if properties is None:
             properties = self._default_properties()
         if isinstance(properties, (str, bytes)):
@@ -3205,7 +3299,19 @@ class Calculator:
             charges=(charge,),
             multiplicities=(multiplicity,),
         )
-        if self._singlepoint_context is not None:
+        if getattr(self, "_provider_initialization_intent", None) is not None and (
+            multiplicity != 1 or resource_plan is not None
+        ):
+            raise NotImplementedError(
+                "provider intent does not admit unrestricted or ledger execution"
+            )
+        provider_transaction = None
+        if intent is not None:
+            from ._provider_initialization_lifetime import begin
+
+            provider_transaction = begin(self._library, self._singlepoint_context)
+            context = provider_transaction.context
+        elif self._singlepoint_context is not None:
             context = self._singlepoint_context.get(self._context_descriptor())
         else:
             context = ctypes.c_void_p()
@@ -3221,7 +3327,12 @@ class Calculator:
         ledger = None
         resource_prepare = None
         resource_diagnostics = None
+        primary_error: BaseException | None = None
+        if provider_transaction is not None:
+            provider_transaction.calculation = calculation
         try:
+            if provider_transaction is not None:
+                context = provider_transaction.open_context(self._context_descriptor())
             if (
                 resource_plan is not None
                 and resource_plan.requests[0].identity.backend == "cuda"
@@ -3238,6 +3349,8 @@ class Calculator:
             system = self._create_native_system(
                 context, native_atoms, charge, multiplicity
             )
+            if provider_transaction is not None:
+                provider_transaction.system = system
             if self._auxiliary_basis is not None:
                 auxiliary_system = self._create_native_system(
                     context,
@@ -3246,6 +3359,8 @@ class Calculator:
                     multiplicity,
                     self._auxiliary_basis,
                 )
+                if provider_transaction is not None:
+                    provider_transaction.auxiliary_system = auxiliary_system
             method_descriptor = self._method_descriptor(
                 auxiliary_system if auxiliary_system.value else None,
                 resource_plan=resource_plan,
@@ -3254,6 +3369,20 @@ class Calculator:
             )
 
             def prepare() -> typing.Any:
+                intent = getattr(self, "_provider_initialization_intent", None)
+                if intent is not None:
+                    from ._provider_initialization_native import (
+                        prepare as prepare_intent,
+                    )
+
+                    return prepare_intent(
+                        self._library,
+                        context,
+                        system,
+                        ctypes.byref(method_descriptor),
+                        ctypes.byref(calculation),
+                        intent,
+                    )
                 if resource_prepare is not None:
                     return resource_prepare(
                         context,
@@ -3468,14 +3597,21 @@ class Calculator:
                         else None,
                     )
             return native_result
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
-            if calculation.value:
-                self._library.generativeqc_calculation_destroy(calculation)
-            if system.value:
-                self._library.generativeqc_system_destroy(system)
-            if auxiliary_system.value:
-                self._library.generativeqc_system_destroy(auxiliary_system)
-            if self._singlepoint_context is None:
-                self._library.generativeqc_context_destroy(context)
-            if ledger is not None:
-                ledger.close()
+            if provider_transaction is not None:
+                provider_transaction.budget_lease = ledger
+                provider_transaction.close_preserving_primary(primary_error)
+            else:
+                if calculation.value:
+                    self._library.generativeqc_calculation_destroy(calculation)
+                if system.value:
+                    self._library.generativeqc_system_destroy(system)
+                if auxiliary_system.value:
+                    self._library.generativeqc_system_destroy(auxiliary_system)
+                if self._singlepoint_context is None:
+                    self._library.generativeqc_context_destroy(context)
+                if ledger is not None:
+                    ledger.close()

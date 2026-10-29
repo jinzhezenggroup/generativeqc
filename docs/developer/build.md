@@ -31,8 +31,9 @@ GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
 
 For a CUDA build, set `CUDACXX` to the desired NVCC and select the target
 architecture, for example `GENERATIVEQC_CUDA_ARCHITECTURES=89` for Ada. Targets
-without a measured shell profile also need
-`CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable"`.
+without a tuned or explicitly compatible shell profile automatically use the
+portable CUDA implementation. `CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable"`
+forces that implementation even when a tuned profile is available.
 
 The source-tree Python interface finds `build/libgenerativeqc.so`
 automatically. An installed wheel loads its bundled library first;
@@ -143,23 +144,28 @@ CUDA 12.4 or later independently of CUDA minor-version compatibility.
 
 CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, `90`, and
 `100`. Only `sm_120` currently has a measured generated-shell profile. The
-`auto` mode is fail-closed: a target without a tuned or explicitly compatible
-profile is a configuration error rather than an implicit generic fallback.
+`auto` mode selects an exact or explicitly compatible profile first, then the
+portable CUDA implementation. The fallback retains portable, untuned metadata.
+Explicit incompatible profile requests and invalid or ambiguous manifests
+remain errors.
 
-A distributable fat binary can opt into portable kernels for untuned targets
-while overriding `sm_120` with its measured profile:
+The shared native direct-integral archive disables ptxas optimizer constants to
+keep its device-linked recurrence graph within the compiler constant-bank limit.
+This is scoped to that archive; independently compiled CUDA kernels retain their
+normal compilation policy.
+
+A distributable fat binary automatically uses portable kernels for untuned
+targets and the measured profile for `sm_120`:
 
 ```bash
 cmake -S . -B build -G Ninja \
   -DCMAKE_CUDA_COMPILER=/path/to/cuda/bin/nvcc \
-  -DGENERATIVEQC_CUDA_ARCHITECTURES="80;90;120" \
-  -DGENERATIVEQC_AOT_PROFILE=portable \
-  -DGENERATIVEQC_AOT_PROFILES="sm_120"
+  -DGENERATIVEQC_CUDA_ARCHITECTURES="80;90;120"
 ```
 
 Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
-entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` only when the validated
-generic CUDA path is an intentional build choice.
+entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
+generic CUDA path for every target, including measured architectures.
 
 Derivative shell registries follow the same target/profile mapping, including
 custom manifests. Portable targets and builds with shell AOT disabled retain

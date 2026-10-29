@@ -6,6 +6,22 @@ import typing
 from generativeqc_compiler.common.resources import ResourceAllocationError, _account
 
 
+def _copy_plan_payload(value: typing.Any) -> typing.Any:
+    """Detach the canonical plan's containers while sharing immutable scalars.
+
+    Plan serialization contains only JSON scalars and dict/list/tuple containers;
+    there are no native handles, cycles or arbitrary Python objects to copy.
+    Preserve tuple types, which JSON round trips would turn into lists.
+    """
+    if isinstance(value, dict):
+        return {key: _copy_plan_payload(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_copy_plan_payload(item) for item in value)
+    if isinstance(value, list):
+        return [_copy_plan_payload(item) for item in value]
+    return value
+
+
 def observe_method_call(
     library: typing.Any,
     plan: typing.Any,
@@ -36,7 +52,12 @@ def observe_method_call(
         ledger=None if native_managed else ledger,
     )
     diagnostics = dict(previous or {})
-    diagnostics.update(plan=plan.to_dict(), owner=owner, phase=phase)
+    payload = (
+        ledger._plan_diagnostic(plan)
+        if native_managed and getattr(ledger, "_native_complete_cap", False)
+        else plan.to_dict()
+    )
+    diagnostics.update(plan=payload, owner=owner, phase=phase)
 
     def evidence() -> typing.Any:
         if native_managed:
@@ -125,6 +146,21 @@ class NativeDeviceLedger:
     and v3 reports them separately from actual allocations and requested bytes.
     Each ledger belongs to one prepared request on one visible CUDA device.
     """
+
+    def _plan_diagnostic(self, plan: typing.Any) -> typing.Any:
+        """Copy immutable D4 plan metadata without repeating its derivation.
+
+        ResourcePlan freezes its complete request/estimate graph. Keep one
+        private serialization per ledger; replacement plans are compared by
+        value and reserialized. Public diagnostics receive an independent deep
+        copy so caller edits cannot corrupt later observations or admission.
+        Runtime observations and their capacity checks are always fresh.
+        """
+        cached = getattr(self, "_serialized_plan", None)
+        if cached is None or plan != cached[0]:
+            cached = (plan, plan.to_dict())
+            self._serialized_plan = cached
+        return _copy_plan_payload(cached[1])
 
     def __init__(
         self,

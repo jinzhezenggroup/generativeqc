@@ -256,16 +256,14 @@ def plan_stationary_cuda_resources(
     Small tiles and tight budgets naturally retain a single-block schedule.
     A tail uses only min(planned lanes, tail points) of the retained panels.
     No device probe or allocation is part of this compiler planning function.
-    Automatic cooperation is restricted to the measured sm_120 large-point
-    domain. Explicit False retains the generic schedule; unqualified targets
-    and small systems retain it automatically. Shared-memory admission below
-    is mandatory even when cooperation is requested.
+    Automatic cooperation follows the molecular size and target resource caps.
+    Explicit False retains the generic schedule; small systems and insufficient
+    thread/shared-memory capacity retain it automatically. No architecture
+    whitelist is needed by the generated arithmetic or synchronization.
     """
     if cooperative_becke is None:
         cooperative_becke = (
-            target.compute_capability == (12, 0)
-            and type(atoms) is int
-            and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS
+            type(atoms) is int and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS
         )
     if type(cooperative_becke) is not bool:
         raise ValueError("cooperative Becke selection must be boolean")
@@ -330,7 +328,6 @@ def plan_stationary_cuda_resources(
         and lanes == points
         and center_bytes
         and becke_threads > 1
-        and target.compute_capability == (12, 0)
         and target.maximum_threads_per_block >= 128
     ):
         phase_plan = PhasedBeckePlan(atoms, points)

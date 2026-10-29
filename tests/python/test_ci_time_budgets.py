@@ -214,12 +214,12 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
     "filename, job, shard, routine_minutes",
     [
         ("ci.yml", "python", "core-a", 40),
-        ("ci.yml", "python", "core-b", 40),
+        ("ci.yml", "python", "core-b", 45),
         ("ci.yml", "python", "core-c", 40),
         ("ci.yml", "python", "uccsd-forces", 40),
         ("ci.yml", "python", "runtime-heavy", 40),
         ("ci.yml", "python", "posthf", 45),
-        ("ci.yml", "python", "compiler-heavy", 40),
+        ("ci.yml", "python", "compiler-heavy", 45),
         ("ci.yml", "python", "ecp-forces", 40),
         ("cumetal-cuda.yml", "cuda-tests", "", 30),
     ],
@@ -233,7 +233,7 @@ def test_full_qualification_has_a_separate_finite_budget(
     match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
     assert match, "full qualification must have a finite timeout"
     budget = match[1]
-    # Evaluate the actual matrix context: posthf has a bounded routine exception,
+    # Evaluate the actual matrix context: extended shards have bounded routine exceptions,
     # while every shard still receives the independent full-qualification budget.
     context = {"matrix.shard": shard}
     for event in ("schedule", "workflow_dispatch"):

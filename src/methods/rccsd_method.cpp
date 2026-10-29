@@ -28,6 +28,8 @@
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/correlation_convergence.hpp"
+#include "methods/provider_initialization_intent.hpp"
+#include "methods/provider_initialization_lifetime.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
@@ -443,6 +445,7 @@ RccsdNativeState execute_rccsd_prepared(
     auto correlation_options = solver_options;
     run_with_cuda_reference_budget(
         cuda_reference_plan, solver_options.max_bytes,
+        reference_options.reference_provider_initialization_owner,
         [&](std::size_t budget) { correlation_options.max_bytes = budget; });
     hf.density.clear();
     hf.density.shrink_to_fit();
@@ -515,19 +518,26 @@ RccsdNativeState execute_rccsd_prepared(
       source = nullptr;
       return true;
     };
-    run_with_cuda_reference_budget(cuda_reference_plan, solver_options.max_bytes,
-                                   [&](std::size_t budget) {
-                                     correlation_options.max_bytes = budget;
-                                     try {
-                                       state.problem = build();
-                                     } catch (const std::length_error&) {
-                                       if (!retire_optional_source()) throw;
-                                       state.problem = build();
-                                     } catch (const std::bad_alloc&) {
-                                       if (!retire_optional_source()) throw;
-                                       state.problem = build();
-                                     }
-                                   });
+    run_with_cuda_reference_budget(
+        cuda_reference_plan, solver_options.max_bytes,
+        reference_options.reference_provider_initialization_owner, [&](std::size_t) {
+          const auto build_current = [&] {
+            return run_with_cuda_reference_capacity(cuda_reference_plan, solver_options.max_bytes,
+                                                    [&](std::size_t available) {
+                                                      correlation_options.max_bytes = available;
+                                                      return build();
+                                                    });
+          };
+          try {
+            state.problem = build_current();
+          } catch (const std::length_error&) {
+            if (!retire_optional_source()) throw;
+            state.problem = build_current();
+          } catch (const std::bad_alloc&) {
+            if (!retire_optional_source()) throw;
+            state.problem = build_current();
+          }
+        });
     const auto provider_phase_peak =
         posthf::checked_add(retained_plan_bytes(), state.problem.provider_peak_bytes);
     const double problem_seconds =
@@ -574,22 +584,27 @@ RccsdNativeState execute_rccsd_prepared(
 #endif
     } else {
       run_with_cuda_reference_budget(
-          cuda_reference_plan, solver_options.max_bytes, [&](std::size_t budget) {
-            correlation_options.max_bytes = budget;
+          cuda_reference_plan, solver_options.max_bytes,
+          reference_options.reference_provider_initialization_owner, [&](std::size_t) {
+            const auto solve_current = [&] {
+              return run_with_cuda_reference_capacity(
+                  cuda_reference_plan, solver_options.max_bytes, [&](std::size_t available) {
+                    correlation_options.max_bytes = available;
+                    return cuda ? cc::solve_cuda(state.problem, correlation_options,
+                                                 execution.device_id())
+                                : cc::solve_cpu(state.problem, correlation_options);
+                  });
+            };
             try {
-              state.solved =
-                  cuda ? cc::solve_cuda(state.problem, correlation_options, execution.device_id())
-                       : cc::solve_cpu(state.problem, correlation_options);
+              state.solved = solve_current();
             } catch (const std::length_error&) {
               if (!retire_optional_source()) throw;
               state.problem.reference_retained_bytes -= exact_source_retained;
-              state.solved =
-                  cc::solve_cuda(state.problem, correlation_options, execution.device_id());
+              state.solved = solve_current();
             } catch (const std::bad_alloc&) {
               if (!retire_optional_source()) throw;
               state.problem.reference_retained_bytes -= exact_source_retained;
-              state.solved =
-                  cc::solve_cuda(state.problem, correlation_options, execution.device_id());
+              state.solved = solve_current();
             }
           });
     }
@@ -711,7 +726,9 @@ RccsdNativeState execute_rccsd_prepared(
   }
 }
 
-class RccsdPrepared final : public PreparedCalculation, public ReferenceSeededCalculation {
+class RccsdPrepared final : public PreparedCalculation,
+                            public ReferenceSeededCalculation,
+                            public ProviderInitializationCloseable {
  public:
   RccsdPrepared(Capabilities capabilities, runtime::ExecutionContext execution, core::System system,
                 scf::ScfOptions reference_options, cc::SolverOptions solver_options,
@@ -722,8 +739,18 @@ class RccsdPrepared final : public PreparedCalculation, public ReferenceSeededCa
         system_(std::move(system)),
         reference_options_(reference_options),
         solver_options_(solver_options),
-        reference_capacity_(reference_capacity) {}
+        reference_capacity_(reference_capacity),
+        cuda_reference_plan_(reference_options.reference_provider_initialization_owner) {}
 
+  generativeqc_status close_provider_initialization_current(std::string& detail) override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!reference_options_.reference_provider_initialization_owner)
+      return GENERATIVEQC_STATUS_SUCCESS;
+    const auto report = reference_options_.reference_provider_initialization_owner->close_current();
+    if (report.confirmed()) return GENERATIVEQC_STATUS_SUCCESS;
+    detail = report.detail.empty() ? "physical reference close unavailable" : report.detail;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
   runtime::ExecutionResourceSnapshot execution_resources() const noexcept override {
@@ -757,6 +784,10 @@ class RccsdPrepared final : public PreparedCalculation, public ReferenceSeededCa
   void transfer_reference_execution_to(ReferenceSeededCalculation& target) override {
     auto* compatible = dynamic_cast<RccsdPrepared*>(&target);
     if (!compatible) throw std::logic_error("incompatible correlated reference owner");
+    if (reference_options_.reference_provider_initialization_owner ||
+        compatible->reference_options_.reference_provider_initialization_owner)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "pending reference cannot transfer to another calculation");
     compatible->cuda_reference_plan_ = std::move(cuda_reference_plan_);
   }
 
@@ -766,6 +797,8 @@ class RccsdPrepared final : public PreparedCalculation, public ReferenceSeededCa
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
+    if (reference_options_.reference_provider_initialization_owner)
+      reference_options_.reference_provider_initialization_owner->begin_reference_replay();
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     if (warm_capacity >= solver_options_.max_bytes ||
@@ -839,7 +872,8 @@ class RccsdPrepared final : public PreparedCalculation, public ReferenceSeededCa
         posthf::checked_add(state.budget, state.reference_execution_plan_bytes);
     auto force = run_with_rccsd_reference_source(state, [&] {
       return run_with_cuda_reference_budget(
-          cuda_reference_plan_.slot(), phase_budget, [&](std::size_t budget) {
+          cuda_reference_plan_.slot(), phase_budget,
+          reference_options_.reference_provider_initialization_owner, [&](std::size_t budget) {
             if (!state.reference_interaction_source && !cpu_exact_plan_)
               force_source = force_raw_source.get();
             if (!force_source) {
@@ -1043,15 +1077,26 @@ generativeqc_status validate_rccsd_system(generativeqc_method, const core::Syste
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
+namespace {
+std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation_impl(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor, const core::System*) {
+    const generativeqc_method_descriptor& descriptor,
+    std::optional<scf::ProviderInitializationIntent> pending) {
+  if (pending) require_provider_initialization_intent_scope(context, system, descriptor);
   runtime::ExecutionContext execution(context);
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
   const auto convergence = correlation_convergence(descriptor);
   auto solver_options = cc_options(descriptor, budget, convergence);
   auto reference = reference_options(descriptor, budget, convergence);
+  reference.reference_provider_initialization_intent = pending;
+#if GENERATIVEQC_HAS_CUDA
+  if (pending)
+    reference.reference_provider_initialization_owner =
+        scf::make_pending_reference_provider_owner(*pending, context.device_id, budget, budget);
+#else
+  if (pending) throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA RCCSD is not compiled");
+#endif
   const auto reference_capacity = posthf::rhf_reference_capacity(
       system, reference.diis_history, execution.backend() == GENERATIVEQC_BACKEND_CPU_REFERENCE);
   if (reference_capacity > budget)
@@ -1059,6 +1104,22 @@ std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
   return std::make_unique<RccsdPrepared>(capabilities, std::move(execution), system, reference,
                                          solver_options, reference_capacity);
+}
+
+}  // namespace
+
+std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
+    const Capabilities& caps, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
+  return prepare_rccsd_calculation_impl(caps, context, system, descriptor, {});
+}
+
+void prepare_rccsd_calculation_with_provider_initialization_intent_into(
+    const Capabilities& caps, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System*,
+    scf::ProviderInitializationIntent pending, std::unique_ptr<PreparedCalculation>& destination) {
+  if (destination) throw std::invalid_argument("pending RCCSD destination is already occupied");
+  destination = prepare_rccsd_calculation_impl(caps, context, system, descriptor, pending);
 }
 
 std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities& capabilities,

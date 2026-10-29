@@ -5,6 +5,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/native_method_inputs.hpp"
+#include "api/provider_initialization_lifetime.hpp"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 #include "runtime/context.hpp"
@@ -34,7 +35,21 @@ generativeqc_status generativeqc_context_create(const generativeqc_context_descr
   }
 }
 
-void generativeqc_context_destroy(generativeqc_context* context) { delete context; }
+void generativeqc_context_destroy(generativeqc_context* context) {
+  if (!context) return;
+  // Do not destroy the mutex while its guard is alive.
+  {
+    std::lock_guard<std::recursive_mutex> lock(context->mutex);
+    if (generativeqc::api::close_provider_initialization_context(context) !=
+        GENERATIVEQC_STATUS_SUCCESS)
+      return;
+    if (context->provider_initialization_calculation) {
+      context->last_detail = "destroy the retained explicit calculation before its context";
+      return;
+    }
+  }
+  delete context;
+}
 
 const char* generativeqc_context_get_last_detail(const generativeqc_context* context) {
   if (context == nullptr) return "invalid context";

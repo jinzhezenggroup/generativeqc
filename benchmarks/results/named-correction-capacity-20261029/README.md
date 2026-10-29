@@ -50,3 +50,28 @@ To keep the existing 80 MiB evidence limit, the historical independent-reference
 JSON named in `storage.json` is stored losslessly as XZ. Its original Git blob,
 decoded/encoded checksums and every reference value are preserved; no numerical
 coverage or acceptance criterion is removed.
+
+## Recorder validation repair
+
+The measured recorder is preserved byte-for-byte in `qualify.original.py.xz`.
+The current `qualify.py` rejects nonfinite energy/forces, nonpositive or
+nonfinite timings and invalid reduced ratios; strict JSON cannot publish NaN.
+A finite `--response-timeout` (default 900 seconds per complete response)
+bounds readiness and samples, and cleanup stops only harness-owned worker
+sessions. Host-only regression tests cover malformed values, silent/partial
+responses and cleanup. The actual 1,792-endpoint population and scientific
+tolerances are unchanged; its complete report replays exactly with the repaired
+reducer. This is not a new GPU campaign or raw-cap performance qualification.
+
+## Lossless sample storage
+
+`cuda-samples.json.xz` is recompressed with XZ preset 9 extreme from 86,452 to
+80,560 bytes. The stored SHA-256 is
+`52d726f653729c3a9b7065f5afebca4a9d949058ed8135ff89dc5c654c0967ae`.
+Its 6,182,154 decoded bytes are unchanged, with SHA-256
+`f218debf73bd23c6c2a3c6263ea474cc38f7b9e01b6d5138a3b22df7bfec91d7`.
+The original encoded measurement identity in `identities.json.xz` is retained,
+not relabeled: its original 86,452-byte receipt remains available in
+[protected history](https://github.com/jinzhezenggroup/generativeqc/blob/a3d7e5c3deff7e7590bb4cb7479b49a72a594611/benchmarks/results/named-correction-capacity-20261029/cuda-samples.json.xz).
+Every sample, ratio and metadata value is preserved; this storage-only change
+adds no measurement and changes no acceptance gate.
