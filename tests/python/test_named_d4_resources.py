@@ -262,18 +262,34 @@ def test_global_exact_and_below_capacity_gate(library: Any, device: str) -> None
         if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
             pytest.skip("requires a finite Slurm CUDA allocation")
         assert os.environ.get("SLURM_JOB_ID")
+    from itertools import product
+
+    from generativeqc import ResourcePlan
+
     calc = calculator(device)
     full = calc.estimate_resources(systems())
+    space = "device" if device == "cuda" else "host"
+    # CUDA may drop optional electronic caches below the preferred plan's
+    # peak. Independently enumerate the declared alternatives to test the
+    # mandatory floor, without treating that valid fallback as a failure.
+    required = min(
+        ResourcePlan(
+            ResourceBudget(),
+            full.requests,
+            tuple(
+                (request.name, candidate.name)
+                for request, candidate in zip(full.requests, combination, strict=True)
+            ),
+            "feasible",
+        ).peak_bytes[space]
+        for combination in product(*(request.candidates for request in full.requests))
+    )
     for delta in (-1, 0):
         plan = plan_resources(
             full.requests,
             ResourceBudget(
                 **{
-                    "device_bytes"
-                    if device == "cuda"
-                    else "host_bytes": full.peak_bytes[
-                        "device" if device == "cuda" else "host"
-                    ]
+                    "device_bytes" if device == "cuda" else "host_bytes": required
                     + delta
                 }
             ),

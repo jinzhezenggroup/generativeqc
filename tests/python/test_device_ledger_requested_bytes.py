@@ -491,7 +491,7 @@ def ledger_probe(
 ) -> Path:
     """Link actual ledger C APIs; discard unrelated CPU shape-query sections."""
     folder = tmp_path_factory.mktemp("device-ledger-requests")
-    # The production resource translation unit also owns ECP and D3 queries.
+    # The production resource translation unit also owns ECP, D3 and D4 queries.
     # Generate their real headers instead of relying on a prior CMake build.
     subprocess.run(
         [
@@ -515,6 +515,22 @@ def ledger_probe(
             str(ROOT / "tools/generativeqc_d3/generate_native_data.py"),
             "--output",
             str(folder / "d3_data.hpp"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    # D4's runtime header consumes the shared native method parameters even
+    # though the linker discards its unrelated capacity entry points here.
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(ROOT / "tools/generate_method_parameters.py"),
+            "--cpp-output",
+            str(folder / "generated_method_parameters.hpp"),
         ],
         check=True,
         capture_output=True,
