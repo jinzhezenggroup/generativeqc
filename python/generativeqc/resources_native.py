@@ -1,10 +1,25 @@
 """Private native accounting for accepted prepared resource requests."""
 
-import copy
 import ctypes
 import typing
 
 from generativeqc_compiler.common.resources import ResourceAllocationError, _account
+
+
+def _copy_plan_payload(value: typing.Any) -> typing.Any:
+    """Detach the canonical plan's containers while sharing immutable scalars.
+
+    Plan serialization contains only JSON scalars and dict/list/tuple containers;
+    there are no native handles, cycles or arbitrary Python objects to copy.
+    Preserve tuple types, which JSON round trips would turn into lists.
+    """
+    if isinstance(value, dict):
+        return {key: _copy_plan_payload(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_copy_plan_payload(item) for item in value)
+    if isinstance(value, list):
+        return [_copy_plan_payload(item) for item in value]
+    return value
 
 
 def observe_method_call(
@@ -145,7 +160,7 @@ class NativeDeviceLedger:
         if cached is None or plan != cached[0]:
             cached = (plan, plan.to_dict())
             self._serialized_plan = cached
-        return copy.deepcopy(cached[1])
+        return _copy_plan_payload(cached[1])
 
     def __init__(
         self,

@@ -143,3 +143,12 @@ one local selection result through those consumers. This result never crosses
 a constructor or loaded-library lifetime; public dry runs and CPU callers retain
 their original discovery boundary. Native catalog refusal and preparation
 failures remain authoritative, without a second discovery/compatibility retry.
+
+The catalog-carry two-group diagnostic (`5e42386b2`, Slurm 14916) still fails
+at 1.0792407. Warmed profiling shows comparable actual native preparation
+(0.6178/0.6134 seconds baseline/candidate), but 72 diagnostic-template copies
+consume 0.1614 seconds under the profiler. General-purpose `deepcopy` is not a
+suitable implementation for this canonical data-only tree. Copy dict/list/tuple
+containers directly, sharing only immutable JSON scalars; retain tuple types and
+the existing mutation, changed-plan and authoritative-capacity tests. JSON
+round-tripping was rejected because it changes tuple containers to lists.

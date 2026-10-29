@@ -180,3 +180,8 @@ at `8f1c2b3f6`, Slurm 14915: 448 calls, maximum ratio 1.073302195362344, E/F
 errors <=8.53e-14 / 2.45e-14, 82 relevant GPU tests passing. The timing gate
 still fails; this is not eight-group acceptance. Cold/scalar preparation remains
 the next optimization target after removing repeated diagnostic serialization.
+
+`catalog-carry-diagnostic*.json.xz` retains the subsequent two-group failure at
+`5e42386b2`, Slurm 14916: 448 calls, maximum ratio 1.079240692779798, E/F errors
+<=8.53e-14 / 3.16e-14 and 82 passing GPU tests. A warmed profile separates native
+preparation from frontend overhead and identifies the generic diagnostic copy.
