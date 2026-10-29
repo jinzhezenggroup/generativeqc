@@ -176,3 +176,11 @@ validation order and all later execute-time mutation checks. The independent
 public metadata query must produce the same complete identity for each item.
 Do not retain this signature across caller-visible mutation points or extend
 the optimization to unrelated prepared owners without qualification.
+
+Full qualification of this constructor-local snapshot (`af71794db`, Slurm
+14922) passes both eight-group populations: default 1.0172885, budget 1.0333197.
+Each contains 1,792 complete calls; both profiles exactly preserve baseline GPU
+work/storage, and all 180 GPU tests and independent native/SDK references pass.
+The preceding scalar diagnostic is retained separately within the receipt. New
+upstream provider-lifetime integration is a different source/binary qualification;
+the successful pre-integration receipt must not substitute for that validation.

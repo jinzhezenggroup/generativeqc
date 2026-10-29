@@ -221,3 +221,15 @@ eight groups. Default passes at 1.0125901383084006; budget **fails** at
 differences are 1.28e-13 / 5.78e-14. All 180 GPU tests, native/installed SDK
 references, memcheck and before/after input integrity pass. Both actual GPU
 work/storage profiles exactly match baseline. Completed receipts preserve exit 1.
+
+## Constructor-local model identity qualification
+
+Production `af71794db`, Slurm 14922, passes both complete eight-group campaigns
+(1,792 calls each): default maximum 1.0172885315294833, budget maximum
+1.0333197109244316. Both GPU work/storage profiles exactly match baseline; all
+180 GPU tests, native/installed references, memcheck and frozen-input integrity
+gates pass. `basis-snapshot-cuda-*` retains every sample, profile, runner and
+completed receipt. The prior eight-group scalar diagnostic (Slurm 14921, 256
+calls) passes at 1.0415902454230368 and is included in the capsule. These receipts
+are bound to this source and binary; integrating newer master prerequisites
+requires a separate qualification.
