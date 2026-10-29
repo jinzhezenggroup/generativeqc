@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm, resident_vector_slots
+from generativeqc_compiler.cc.gradient_equations import build_fock_weight_program
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS
 from generativeqc_compiler.common.evidence import canonical_hash
 
 from tools.generativeqc_response.implicit import (
@@ -22,12 +26,8 @@ from tools.generativeqc_response.implicit import (
     _immutable,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _vector_norm, resident_vector_slots
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 from .complete_gradient import BoundCCSDOrbitalResponse, CCSDGradientOptions
-from .gradient_equations import build_fock_weight_program
-from .lambda_equations import PARAMETERS
 from .lambda_solver import _feed_hash
 from .triples_lambda_response import BoundCCSDTResponse
 

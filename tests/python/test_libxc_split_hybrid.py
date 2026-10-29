@@ -4,8 +4,7 @@ from fractions import Fraction
 
 import pytest
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
-
-from tools.libxc_split_hybrid import (
+from generativeqc_compiler.xc.split_hybrid_program import (
     available_split_global_hybrids,
     build_split_global_hybrid,
 )

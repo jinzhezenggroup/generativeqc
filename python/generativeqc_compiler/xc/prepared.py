@@ -43,6 +43,7 @@ from generativeqc_compiler.dft.features import (
     spin_densities,
 )
 from generativeqc_compiler.dft.grid import checked_int
+from generativeqc_compiler.dft.native_semilocal import legacy_grid_xc_selector
 from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
@@ -55,7 +56,6 @@ from generativeqc_compiler.dft.xc_schedule import (
 from .contractions import GeometryPartials
 from .integration import _tiles
 from .native import NativeContractionProgram
-from .native_semilocal import legacy_grid_xc_selector
 from .program_ir import fixed_density_tile_program
 from .spec import UnsupportedXC
 

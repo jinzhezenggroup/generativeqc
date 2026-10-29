@@ -355,7 +355,7 @@ def test_empty_native_spatial_masks_have_zero_native_calls(
 def test_native_full_spin_solver_adapter_and_source_staleness(
     native_factory: typing.Any,
 ) -> None:
-    from tools.generativeqc_response.xc import FixedDensityXCDerivativeKernel
+    from generativeqc.response_xc import FixedDensityXCDerivativeKernel
 
     meta, data, grid = fixture("h2")
     spec = functional("PBE")

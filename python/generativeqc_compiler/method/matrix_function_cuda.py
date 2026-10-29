@@ -139,8 +139,3 @@ inline void launch_symmetric_pseudoinverse_vjp(
 }}  // namespace generativeqc::tensor
 #endif
 """
-
-
-def emit_pseudoinverse_vjp_cuda() -> str:
-    """Backward-compatible name for the shared generated custom-rule header."""
-    return emit_symmetric_matrix_function_vjp_cuda()

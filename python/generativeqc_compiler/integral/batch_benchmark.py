@@ -29,10 +29,13 @@ from generativeqc_compiler.common.cuda_resources import (
 )
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo, cuda_target_info
 from generativeqc_compiler.common.provenance import find_nvcc
+from generativeqc_compiler.integral.production_profile import (
+    load_production_fock_manifest,
+    load_production_manifest,
+)
 
 from .benchmark import emit_shell_class_benchmark_cuda
 from .ir import KernelConsumer
-from .production import load_production_fock_manifest, load_production_manifest
 from .shell_spec import (
     FUSED_SHELL_SPEC_BY_NAME,
     FUSED_SHELL_SPECS,

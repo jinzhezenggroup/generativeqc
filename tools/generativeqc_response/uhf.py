@@ -9,12 +9,15 @@ from hashlib import sha256
 
 import numpy as np
 from generativeqc.profiles import canonical_hash
+from generativeqc.response_problem import (
+    ResponseCompatibilityError,
+    ResponseUnsupported,
+)
 
 from tools.generativeqc_posthf.reference import immutable
 
 from .backends import CudaDFJKBackend
 from .direct_cuda import CudaDirectJKBackend
-from .problem import ResponseCompatibilityError, ResponseUnsupported
 
 
 def _symmetric_matrix(

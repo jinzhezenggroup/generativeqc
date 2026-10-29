@@ -15,8 +15,8 @@ from generativeqc_compiler.common.cuda_adapter import (
 )
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral import benchmark
-from generativeqc_compiler.integral.autotune import supported_schedule_trials
 from generativeqc_compiler.integral.shell_spec import DPDS_SPEC
+from generativeqc_compiler.integral.tuning.policy import supported_schedule_trials
 from generativeqc_compiler.integral.tuning.process import _compile_trial
 
 ROOT = Path(__file__).resolve().parents[2]

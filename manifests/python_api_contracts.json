@@ -417,11 +417,8 @@
     "generativeqc.rks_response.NativeRKSResponse": "generativeqc/rks_response.py:NativeRKSResponse",
     "generativeqc.rks_response.RKSResponseReference": "generativeqc/rks_response.py:RKSResponseReference",
     "generativeqc.run_progressive_hf": "generativeqc/progressive_controller.py:run_progressive_hf",
-    "generativeqc.stationary_nuclear.RHFNuclearBatchResponse": "generativeqc/stationary_nuclear.py:StationaryNuclearBatchResponse",
-    "generativeqc.stationary_nuclear.RHFNuclearResponse": "generativeqc/stationary_nuclear.py:StationaryNuclearResponse",
     "generativeqc.stationary_nuclear.StationaryNuclearBatchResponse": "generativeqc/stationary_nuclear.py:StationaryNuclearBatchResponse",
     "generativeqc.stationary_nuclear.StationaryNuclearResponse": "generativeqc/stationary_nuclear.py:StationaryNuclearResponse",
-    "generativeqc.stationary_nuclear.build_rhf_nuclear_rhs": "generativeqc/stationary_nuclear.py:build_rhf_nuclear_rhs",
     "generativeqc.stationary_nuclear.build_stationary_nuclear_rhs": "generativeqc/stationary_nuclear.py:build_stationary_nuclear_rhs",
     "generativeqc.stationary_nuclear.metric_density_response_mo": "generativeqc/stationary_nuclear.py:metric_density_response_mo",
     "generativeqc.stationary_nuclear.solve_stationary_nuclear_perturbation": "generativeqc/stationary_nuclear.py:solve_stationary_nuclear_perturbation",
@@ -7080,16 +7077,6 @@
       "profile": "record",
       "facets": {
         "behavior": "docstring",
-        "ownership": "docs/reference/python_contracts.md#python-response-ownership",
-        "values": "docs/reference/python_contracts.md#python-response-values"
-      }
-    },
-    "generativeqc/stationary_nuclear.py:build_rhf_nuclear_rhs": {
-      "kind": "function",
-      "profile": "transformation",
-      "facets": {
-        "behavior": "docstring",
-        "errors": "docs/reference/python_contracts.md#python-response-errors",
         "ownership": "docs/reference/python_contracts.md#python-response-ownership",
         "values": "docs/reference/python_contracts.md#python-response-values"
       }

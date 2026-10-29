@@ -5,36 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from generativeqc_compiler.integral import production, production_profile
-
-
-def test_production_preserves_profile_compatibility_reexports() -> None:
-    """Legacy production imports resolve to the canonical profile objects."""
-
-    assert production.ProfileMatch is production_profile.ProfileMatch
-    assert (
-        production._schedule_from_payload is production_profile._schedule_from_payload
-    )
-    assert (
-        production.ResolvedProductionProfile
-        is production_profile.ResolvedProductionProfile
-    )
-    assert (
-        production.resolve_production_profile
-        is production_profile.resolve_production_profile
-    )
-    assert (
-        production.load_production_kernel_selections
-        is production_profile.load_production_kernel_selections
-    )
-    assert (
-        production.load_production_manifest
-        is production_profile.load_production_manifest
-    )
-    assert (
-        production.load_production_fock_manifest
-        is production_profile.load_production_fock_manifest
-    )
+from generativeqc_compiler.integral import production_profile
 
 
 def test_production_profile_avoids_emission_orchestration_dependencies() -> None:

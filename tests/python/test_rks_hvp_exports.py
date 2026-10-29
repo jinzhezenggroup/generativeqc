@@ -30,7 +30,7 @@ def test_rks_hvp_export_is_independent_of_import_order(order: str, repeat: int) 
         elif order == "result":
             from tools.generativeqc_hessian import RKSHVPResult
         elif order == "implementation":
-            importlib.import_module("tools.generativeqc_hessian.rks_molecular")
+            importlib.import_module("generativeqc.rks_hessian")
 
         for _ in range(int(repeat)):
             from tools.generativeqc_hessian import RKSHVPResult, rks_hvp
@@ -40,7 +40,7 @@ def test_rks_hvp_export_is_independent_of_import_order(order: str, repeat: int) 
             assert package.rks_hvp is rks_hvp
             assert package.RKSHVPResult is RKSHVPResult
 
-            # The compatibility facade must expose the installed production objects.
+            # The tools API exposes the installed production objects.
             owner = importlib.import_module("generativeqc.rks_hessian")
             assert rks_hvp is owner.rks_hvp
             assert RKSHVPResult is owner.RKSHVPResult

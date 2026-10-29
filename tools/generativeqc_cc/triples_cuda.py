@@ -24,8 +24,8 @@ import time
 import typing
 from dataclasses import dataclass, field
 
-from .triples import _check_denominators, _validate
-from .triples_tiles import (
+from generativeqc_compiler.cc.triples import _check_denominators, _validate
+from generativeqc_compiler.cc.triples_tiles import (
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,
     runtime_tile_capacity,
@@ -281,7 +281,9 @@ class CudaTriplesTiles:
         # Opt-in CPU masked reference (validation/debug only)
         if oracle:
             t0 = time.perf_counter()
-            from .triples_tiles import tile_triples_energy_masked
+            from generativeqc_compiler.cc.triples_tiles import (
+                tile_triples_energy_masked,
+            )
 
             for tile in tiles:
                 cpu_masked = tile_triples_energy_masked(
@@ -363,7 +365,7 @@ def cpu_triples_tiles(
     no plan identity).  Useful for testing parity on systems without a GPU.
 
     The masked CPU oracle is never computed by this function; use
-    :func:`tools.generativeqc_cc.triples_tiles.tile_triples_energy_masked`
+    :func:`generativeqc_compiler.cc.triples_tiles.tile_triples_energy_masked`
     directly for per-tile validation.
     """
     ovvv = arrays["ovvv"]
@@ -379,7 +381,7 @@ def cpu_triples_tiles(
     _validate(nocc, nvir, ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v)
     _check_denominators(eps_o, eps_v, denominator_threshold)
 
-    from .triples_tiles import tile_triples_energy
+    from generativeqc_compiler.cc.triples_tiles import tile_triples_energy
 
     enumerator = TriplesTileEnumerator(nocc, nvir, vir_chunk_size=vir_chunk_size)
     tiles = list(enumerator)

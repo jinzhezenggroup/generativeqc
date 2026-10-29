@@ -8,6 +8,12 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc_compiler.cc.lambda_equations import (
+    PARAMETERS,
+    build_lambda_programs,
+    build_parameter_vjp,
+)
 from generativeqc_compiler.common.solver_region import RegionDerivative
 from generativeqc_compiler.tensor import PackedLayout, Program, execute
 from test_cc_solver import fixture_problem
@@ -21,18 +27,12 @@ from tools.generativeqc_cc import (
     solve,
 )
 from tools.generativeqc_cc import solver as solver_module
-from tools.generativeqc_cc.lambda_equations import (
-    PARAMETERS,
-    build_lambda_programs,
-    build_parameter_vjp,
-)
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 from tools.generativeqc_posthf import MOBlock
 from tools.generativeqc_posthf.export import export_rhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.sources import NativeSource
 from tools.generativeqc_response.implicit import ImplicitSolveError
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 _STRICT = SolverOptions(
     max_iterations=120, residual_tolerance=1e-12, energy_tolerance=1e-14
