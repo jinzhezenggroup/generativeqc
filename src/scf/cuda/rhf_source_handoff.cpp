@@ -13,6 +13,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
+#include "scf/cuda/rhf_source_view.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "tensor/cuda_error.hpp"
 
@@ -20,33 +21,6 @@ namespace generativeqc::scf {
 namespace {
 using posthf::checked_add;
 using posthf::checked_mul;
-
-/** Only the existing public-AO ERI producer's immutable inputs are copied.
- * Quartet queues, density-aware bounds, Cartesian J/K projections and all
- * solver arrays are intentionally absent from this source-only owner. */
-template <class Visit>
-void source_fields(const CudaRhfBucketPlan& owner, cuda_execution::DeviceBatch& target,
-                   Visit visit) {
-  const auto& h = owner.topology;
-  const auto& l = owner.layout;
-  visit(target.atom_offsets, l.atom_offsets, h.atom_offsets.size());
-  visit(target.atom_systems, l.atom_systems, h.atom_systems.size());
-  visit(target.atomic_numbers, l.atomic_numbers, h.atomic_numbers.size());
-  // Dynamic positions are removed from the host topology after packing.
-  visit(target.positions, l.positions, checked_mul(owner.total_atoms, 3));
-  visit(target.system_shell_offsets, l.system_shell_offsets, h.system_shell_offsets.size());
-  visit(target.shell_atoms, l.shell_atoms, h.shell_atoms.size());
-  visit(target.shell_angular, l.shell_angular, h.shell_angular.size());
-  visit(target.shell_ao_offsets, l.shell_ao_offsets, h.shell_ao_offsets.size());
-  visit(target.shell_primitive_offsets, l.shell_primitive_offsets,
-        h.shell_primitive_offsets.size());
-  visit(target.ao_shells, l.ao_shells, h.ao_shells.size());
-  visit(target.ao_term_counts, l.ao_term_counts, h.ao_term_counts.size());
-  visit(target.ao_term_angular, l.ao_term_angular, h.ao_term_angular.size());
-  visit(target.ao_term_coefficients, l.ao_term_coefficients, h.ao_term_coefficients.size());
-  visit(target.primitive_exponents, l.primitive_exponents, h.primitive_exponents.size());
-  visit(target.primitive_coefficients, l.primitive_coefficients, h.primitive_coefficients.size());
-}
 
 class RhfInteractionSource final : public integrals::ElectronInteractionSource {
  public:
@@ -120,7 +94,7 @@ CudaRhfSourceHandoff detach_rhf_cuda_source(const CudaRhfBucketPlan& owner, core
     copy_bytes = checked_add(copy_bytes, bytes);
     return std::pair{offset, bytes};
   };
-  source_fields(owner, batch, [&](auto*& pointer, auto offset, auto count) {
+  visit_rhf_source_fields(owner, batch, [&](auto*& pointer, auto offset, auto count) {
     (void)reserve(pointer, offset, count);
   });
   const auto allocation_bytes = compact_bytes;
@@ -149,16 +123,17 @@ CudaRhfSourceHandoff detach_rhf_cuda_source(const CudaRhfBucketPlan& owner, core
       // Physical-reference publication already fenced the producing RHF stream.
       // Fence this compaction stream before the adapter releases the old arena.
       compact_bytes = copy_bytes = 0;
-      source_fields(owner, plan->batch, [&](auto*& pointer, auto source_offset, auto count) {
-        const auto [offset, bytes] = reserve(pointer, source_offset, count);
-        auto* destination = static_cast<unsigned char*>(plan->allocations[0]) + offset;
-        pointer = reinterpret_cast<std::remove_reference_t<decltype(pointer)>>(destination);
-        if (bytes)
-          cuda_check(cudaMemcpyAsync(
-              destination,
-              static_cast<const unsigned char*>(owner.resources.arena_) + source_offset, bytes,
-              cudaMemcpyDeviceToDevice, plan->stream));
-      });
+      visit_rhf_source_fields(
+          owner, plan->batch, [&](auto*& pointer, auto source_offset, auto count) {
+            const auto [offset, bytes] = reserve(pointer, source_offset, count);
+            auto* destination = static_cast<unsigned char*>(plan->allocations[0]) + offset;
+            pointer = reinterpret_cast<std::remove_reference_t<decltype(pointer)>>(destination);
+            if (bytes)
+              cuda_check(cudaMemcpyAsync(
+                  destination,
+                  static_cast<const unsigned char*>(owner.resources.arena_) + source_offset, bytes,
+                  cudaMemcpyDeviceToDevice, plan->stream));
+          });
       cuda_check(cudaStreamSynchronize(plan->stream));
       result.device_copy_bytes = copy_bytes;
       result.source =

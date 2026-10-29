@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import inspect
+import subprocess
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -105,8 +106,10 @@ def test_cuda_scalar_lowering_automatically_emits_equal_spin(component: str) -> 
 
 def test_new_registered_shapes_automatically_join_dispatch(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    """Admission and ingredient traits, not names/codes, select every variant."""
+    """Execute opaque registrations to verify admission and ingredient dispatch."""
     records = []
     for index, width in enumerate((1, 4, 5)):
         record = dict(SEMILOCAL_FAMILIES[0])
@@ -131,14 +134,79 @@ def test_new_registered_shapes_automatically_join_dispatch(
         "SEMILOCAL_FAMILY_BY_CODE",
         {record["code"]: record for record in records},
     )
-    source = ao_cuda.emit_native_xc_contraction_kernels()
-    for width in (1, 4, 5):
-        assert f"case semilocal_family_code(SemilocalFamily::Opaque{width}):" in source
-        threads = 32 if width == 4 else 128
-        assert f"return &launch_point_batches<{width}, {threads}>;" in source
-    assert "SemilocalFamily::Excluded" not in source
-    assert "functional <=" not in source
-    assert "functional > static_cast<I>(SemilocalFamily::Pbe)" not in source
+    # Launch stubs expose the selected ABI shape without copying the selector.
+    # Codes outside every production range catch accidental ordinal admission.
+    source = tmp_path / "opaque_dispatch.cpp"
+    source.write_text(
+        r"""
+#include <cstdint>
+#include <cstdlib>
+#include <initializer_list>
+#include <stdexcept>
+enum class SemilocalFamily { Opaque1 = 900, Opaque4 = 901, Opaque5 = 902, Excluded = 999 };
+constexpr unsigned semilocal_family_code(SemilocalFamily f) { return unsigned(f); }
+using CudaXcPointLauncher = void (*)();
+using CudaXcPointBatchLauncher = void (*)();
+struct Program { CudaXcPointLauncher launch; };
+struct CudaXcPointBinding {
+  CudaXcPointLauncher launch;
+  CudaXcPointBatchLauncher launch_batch;
+  const Program* automatic_program;
+};
+struct CudaXcPointCapabilities { bool local_ao_selection, mixed_density_contraction; };
+namespace generated {
+bool split_hybrid_registered(unsigned) { return false; }
+bool split_hybrid_is_mgga(unsigned) { return false; }
+bool split_hybrid_fp64_local_ao(unsigned) { return false; }
+const Program* automatic_cuda_point_entry(unsigned) { return nullptr; }
+}
+unsigned selected_code, selected_terms, selected_threads;
+bool selected_response;
+template <unsigned Code, bool Response, bool Specialized = false> void launch_points() {
+  selected_code = Code;
+  selected_response = Response;
+}
+template <unsigned Terms, unsigned Threads, bool Specialized = false> void launch_point_batches() {
+  selected_terms = Terms;
+  selected_threads = Threads;
+}
+template <unsigned Terms> void launch_split_hybrid_points() { throw std::logic_error("split"); }
+void launch_mixed_pbe_points() { throw std::logic_error("mixed"); }
+void launch_mixed_pbe_point_batches() { throw std::logic_error("mixed batch"); }
+"""
+        + ao_cuda.emit_native_xc_point_dispatch()
+        + r"""
+int main() {
+  const unsigned widths[]{1, 4, 5};
+  for (unsigned index = 0; index < 3; ++index) {
+    for (bool response : {false, true}) {
+      const auto binding = resolve_point_binding(900 + index, response);
+      if (!binding.launch || binding.automatic_program) return 1;
+      binding.launch();
+      if (selected_code != 900 + index || selected_response != response) return 2;
+      if (bool(binding.launch_batch) != !response) return 3;
+      if (binding.launch_batch) {
+        binding.launch_batch();
+        if (selected_terms != widths[index] ||
+            selected_threads != (widths[index] == 4 ? 32 : 128)) return 4;
+      }
+    }
+  }
+  for (const unsigned excluded : {0U, 5U, 899U, 903U, 999U}) {
+    for (bool response : {false, true}) {
+      try {
+        resolve_point_binding(excluded, response);
+        return 5;
+      } catch (const std::invalid_argument&) {}
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    binary = tmp_path / "opaque_dispatch"
+    native_cxx.build_executable([source], binary, compile_args=("-std=c++17", "-O2"))
+    subprocess.run([str(binary)], check=True)
 
 
 @pytest.fixture(scope="module")

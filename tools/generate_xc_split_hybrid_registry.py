@@ -13,9 +13,8 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.xc import libxc_bulk
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
-
-from tools.generate_xc_split_hybrid_cuda import emit_split_hybrid_device_body
-from tools.libxc_split_hybrid import build_split_global_hybrid
+from generativeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device_body
+from generativeqc_compiler.xc.split_hybrid_program import build_split_global_hybrid
 
 MANIFEST = ROOT / "manifests" / "cuda_split_hybrids.json"
 GGA_CODE_BASE = 0x10000

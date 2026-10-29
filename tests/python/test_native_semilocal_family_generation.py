@@ -5,7 +5,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.xc._generated_native_semilocal import (
+from generativeqc_compiler.dft._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_BY_CODE,
@@ -25,9 +25,6 @@ def test_native_semilocal_generated_outputs_are_current() -> None:
     assert (
         ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
     ).read_text(encoding="utf-8") == generator.emit_python(families)
-    assert (
-        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-    ).read_text(encoding="utf-8") == generator.emit_python_compat()
 
 
 def test_native_semilocal_transport_codes_are_manifest_owned() -> None:
@@ -129,24 +126,6 @@ def test_python_cuda_fast_path_capability_census_is_manifest_owned() -> None:
     } == CUDA_FAST_PATH_CENSUS
 
 
-def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
-    from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
-
-    source = emit_native_xc_point_dispatch()
-    for item in SEMILOCAL_FAMILIES:
-        code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
-        assert f"&launch_points<{code}, false>;" in source
-        assert (f"&launch_points<{code}, true>;" in source) == (
-            item["cuda_fast_paths"]["response"] == "qualified"
-        )
-        for response in (False, True):
-            consumer = str(response).lower()
-            assert (f"&launch_points<{code}, {consumer}, true>" in source) == (
-                item["symbol"] == "Pbe"
-                and (not response or item["cuda_fast_paths"]["response"] == "qualified")
-            )
-
-
 def test_grid_jit_tracks_and_ships_capability_headers() -> None:
     import re
 
@@ -163,17 +142,6 @@ def test_grid_jit_tracks_and_ships_capability_headers() -> None:
     for relative in ("src/dft/semilocal_family.hpp", "src/dft/xc_capabilities.hpp"):
         assert ROOT / relative in headers
         assert packaged[relative] == f"generativeqc_compiler/assets/{relative}"
-
-
-def test_legacy_xc_metadata_imports_share_canonical_dft_records() -> None:
-    from generativeqc_compiler.dft import _generated_native_semilocal as native
-    from generativeqc_compiler.xc import _generated_native_semilocal as legacy
-
-    assert legacy.SEMILOCAL_FAMILIES is native.SEMILOCAL_FAMILIES
-    assert legacy.SEMILOCAL_FAMILY_BY_CODE is native.SEMILOCAL_FAMILY_BY_CODE
-    assert (
-        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-    ).read_text() == generator.emit_python_compat()
 
 
 def test_grid_native_layer_does_not_import_xc_algebra() -> None:

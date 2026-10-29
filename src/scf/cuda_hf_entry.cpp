@@ -14,6 +14,7 @@
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/cuda/rhf_source_handoff.hpp"
+#include "scf/cuda/rhf_source_view.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/mean_field.hpp"
@@ -24,11 +25,12 @@ namespace {
 using RhfPlanOwner = std::unique_ptr<CudaRhfBucketPlan, void (*)(CudaRhfBucketPlan*)>;
 
 bool exact_reference_source_identity(const CudaRhfBucketPlan* plan, const core::System& system,
-                                     const ScfOptions& requested_options, int device_id) noexcept {
+                                     const ScfOptions& requested_options, int device_id,
+                                     bool borrowed_inputs = false) noexcept {
   try {
     if (plan == nullptr || !plan->initialized || plan->batch_size != 1 || plan->unrestricted ||
         plan->resources.device_id_ != device_id || plan->resources.stream_ == nullptr ||
-        plan->resources.reference_eri_ == nullptr) {
+        (!borrowed_inputs && plan->resources.reference_eri_ == nullptr)) {
       return false;
     }
     if (!plan->options.export_physical_reference || plan->options.screening_tolerance != 0.0 ||
@@ -47,10 +49,12 @@ bool exact_reference_source_identity(const CudaRhfBucketPlan* plan, const core::
 
     const auto n = molecule::ao_count(system);
     if (n != plan->nbf) return false;
-    const auto n2 = posthf::checked_mul(n, n);
-    const auto n4 = posthf::checked_mul(n2, n2);
-    if (plan->resources.reference_eri_bytes_ != posthf::checked_mul(n4, sizeof(double)))
-      return false;
+    if (!borrowed_inputs) {
+      const auto n2 = posthf::checked_mul(n, n);
+      const auto n4 = posthf::checked_mul(n2, n2);
+      if (plan->resources.reference_eri_bytes_ != posthf::checked_mul(n4, sizeof(double)))
+        return false;
+    }
 
     cuda_execution::HostBatch candidate;
     const std::vector<core::System> systems{system};
@@ -187,7 +191,127 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
   mutable std::vector<StreamUse> uses_;
 };
 
+/** Opt-in source owns host metadata/access only. CUDA storage, graphs and all
+ * consumer events remain in the same pending native reference owner. */
+class PendingRhfReferenceInteractionSource final : public integrals::ElectronInteractionSource {
+ public:
+  PendingRhfReferenceInteractionSource(core::System&& system,
+                                       std::shared_ptr<PendingReferenceProviderOwner> owner,
+                                       std::size_t retained)
+      : system_(std::move(system)),
+        owner_(std::move(owner)),
+        lease_(owner_->acquire_source_lease()),
+        view_(borrow_rhf_source_batch(*owner_->bucket())),
+        resident_(owner_->bucket()->resources.reference_eri_),
+        retained_(retained),
+        nbf_(owner_->bucket()->nbf),
+        device_(owner_->bucket()->resources.device_id_) {}
+  ~PendingRhfReferenceInteractionSource() override { owner_->release_source_lease(lease_); }
+  CudaRhfBucketPlan* release_plan() const noexcept {
+    try {
+      auto guard = owner_->acquire_borrow_lock();
+      if (!lease_->load(std::memory_order_acquire) || !owner_->finish_uses_current())
+        return nullptr;
+      auto* plan = owner_->bucket();
+      owner_->release_source_lease(lease_);
+      return plan;
+    } catch (...) {
+      return nullptr;
+    }
+  }
+  const core::System& orbital() const override { return system_; }
+  std::size_t nbf() const override { return nbf_; }
+  std::size_t naux() const override { return 0; }
+  std::size_t retained_numeric_bytes() const override { return retained_; }
+  bool supports(Operator op) const noexcept override { return op == Operator::eri; }
+  bool supports_host_read(Operator) const noexcept override { return false; }
+  bool supports_device_read(Operator op, int device) const noexcept override {
+    return op == Operator::eri && device == device_ && lease_->load(std::memory_order_acquire);
+  }
+  void read(Operator, const std::array<std::size_t, 4>&, const std::array<std::size_t, 4>&, double*,
+            std::size_t) const override {
+    throw std::invalid_argument("pending native RHF source is device-only");
+  }
+  void read_device(Operator op, const std::array<std::size_t, 4>& begin,
+                   const std::array<std::size_t, 4>& count,
+                   integrals::DeviceInteractionTarget target, std::size_t elements) const override {
+    auto guard = owner_->acquire_borrow_lock();
+    owner_->require_current();
+    if (!supports_device_read(op, target.device) || !target.values || !target.stream ||
+        target.capacity < elements)
+      throw std::invalid_argument("invalid pending RHF interaction target");
+    std::size_t expected = 1;
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      if (!count[axis] || begin[axis] > nbf_ || count[axis] > nbf_ - begin[axis])
+        throw std::invalid_argument("pending RHF interaction tile exceeds its public basis");
+      expected = posthf::checked_mul(expected, count[axis]);
+    }
+    if (expected != elements)
+      throw std::invalid_argument("pending RHF interaction tile extent mismatch");
+    auto stream = static_cast<cudaStream_t>(target.stream);
+    auto& use = owner_->prepare_use(target.stream);
+    use.pending = true;
+    use.recorded = false;
+    try {
+      if (resident_) {
+        cuda_execution::launch_copy_resident_eri_tile(stream, resident_, nbf_, begin, count,
+                                                      elements, target.values);
+      } else {
+        cudaPointerAttributes attributes{};
+        const auto status = cudaPointerGetAttributes(&attributes, target.values);
+        if (status != cudaSuccess || attributes.type != cudaMemoryTypeDevice ||
+            attributes.device != device_)
+          throw std::invalid_argument("pending RHF ERI output is not on the original device");
+        const bool full =
+            std::all_of(begin.begin(), begin.end(), [](auto x) { return x == 0; }) &&
+            std::all_of(count.begin(), count.end(), [&](auto x) { return x == nbf_; });
+        // Same exact incumbent producer and orbit/rectangle selection as the
+        // compact direct source; this view borrows the original live arena.
+        if (full)
+          cuda_execution::launch_build_eri_system_orbits(stream, view_, 0, elements, target.values);
+        else
+          cuda_execution::launch_independent_eri_tile(stream, view_, 0, begin, count, elements,
+                                                      target.values);
+      }
+      const auto launch = cudaPeekAtLastError();
+      if (launch != cudaSuccess)
+        throw std::runtime_error("pending reference source launch failed: status=" +
+                                 std::to_string(launch));
+      const auto recorded = cudaEventRecord(static_cast<cudaEvent_t>(use.event), stream);
+      if (recorded != cudaSuccess)
+        throw std::runtime_error("pending reference source event record failed: status=" +
+                                 std::to_string(recorded));
+      use.recorded = true;
+    } catch (...) {
+      // Keep the original error; an unavailable drain leaves event/whole owner
+      // retained. There is no context select or device-wide cleanup fallback.
+      try {
+        (void)owner_->finish_use_current(use);
+      } catch (...) {
+      }
+      throw;
+    }
+  }
+
+ private:
+  core::System system_;
+  std::shared_ptr<PendingReferenceProviderOwner> owner_;
+  std::shared_ptr<std::atomic<bool>> lease_;
+  cuda_execution::DeviceBatch view_;
+  const double* resident_{};
+  std::size_t retained_{}, nbf_{};
+  int device_{-1};
+};
+
 }  // namespace
+
+std::shared_ptr<const integrals::ElectronInteractionSource> make_pending_rhf_reference_source(
+    core::System&& system, std::shared_ptr<PendingReferenceProviderOwner> owner,
+    std::size_t retained_bytes) {
+  if (!owner || !owner->bucket()) throw std::invalid_argument("pending source has no native owner");
+  return std::make_shared<PendingRhfReferenceInteractionSource>(std::move(system), std::move(owner),
+                                                                retained_bytes);
+}
 
 // Host-only single-system adapters share the bucket execution and error
 // contract. Keep them outside the kernel translation unit so host changes
@@ -273,6 +397,40 @@ ScfResult run_rhf_cuda_cached(
     throw std::runtime_error("CUDA RHF execution failed");
   ScfResult scf = std::move(result.front().scf);
   if (handoff && scf.reference) handoff->numeric_peak_bytes = scf.reference->numeric_capacity_bytes;
+  if (options.reference_provider_initialization_owner) {
+    // Keep one physical owner in both resident and bounded nonresident modes.
+    // Borrowing incumbent inputs avoids a second compact CUDA plan/stream.
+    if (interaction_source && scf.converged && scf.reference &&
+        exact_reference_source_identity(*plan, system, options, device_id, true)) {
+      try {
+        auto& source_system = systems.front();
+        const auto source_host = posthf::checked_add(
+            posthf::source_capacity(source_system),
+            posthf::checked_add(runtime::vector_bytes(source_system.ecp_terms),
+                                sizeof(PendingRhfReferenceInteractionSource) + 128));
+        const auto peak = posthf::checked_add(scf.reference->numeric_capacity_bytes, source_host);
+        if (peak <= options.reference_memory_budget_bytes) {
+          const auto retained =
+              posthf::checked_add(hf_cuda_retained_numeric_bytes(*plan), source_host);
+          auto source = make_pending_rhf_reference_source(
+              std::move(source_system), options.reference_provider_initialization_owner, retained);
+          *interaction_source = std::move(source);
+          *plan = nullptr;  // logical reservation transfers; physical owner stays unchanged
+          if (handoff) handoff->numeric_peak_bytes = peak;
+        } else if (handoff)
+          handoff->resource_fallback = true;
+      } catch (const std::bad_alloc&) {
+        if (handoff) handoff->resource_fallback = true;
+      } catch (const std::length_error&) {
+        if (handoff) handoff->resource_fallback = true;
+      } catch (const std::overflow_error&) {
+        if (handoff) handoff->resource_fallback = true;
+      }
+    }
+    // If host publication cannot fit, the original cached bucket and ordinary
+    // bounded post-HF producer remain available with their existing reservation.
+    return scf;
+  }
   const bool resident_eligible = interaction_source && scf.converged && scf.reference &&
                                  exact_reference_source_identity(*plan, system, options, device_id);
   if (resident_eligible) {
@@ -323,6 +481,14 @@ bool reclaim_rhf_cuda_reference_plan(
     CudaRhfBucketPlan** plan,
     std::shared_ptr<const integrals::ElectronInteractionSource>& interaction_source) noexcept {
   if (!plan || *plan || !interaction_source || interaction_source.use_count() != 1) return false;
+  if (const auto* pending =
+          dynamic_cast<const PendingRhfReferenceInteractionSource*>(interaction_source.get())) {
+    auto* released = pending->release_plan();
+    if (!released) return false;
+    interaction_source.reset();
+    *plan = released;
+    return true;
+  }
   const auto* source =
       dynamic_cast<const CudaRhfReferenceInteractionSource*>(interaction_source.get());
   if (!source) return false;

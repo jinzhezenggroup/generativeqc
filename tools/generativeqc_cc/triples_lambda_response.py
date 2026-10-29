@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import _vector_norm
+from generativeqc_compiler.cc.lambda_equations import PARAMETERS, build_parameter_vjp
+from generativeqc_compiler.cc.triples import build_triples_program
+from generativeqc_compiler.cc.triples_response import accumulate_tile_triples_vjp
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.tensor import PackedLayout
 
@@ -22,14 +27,9 @@ from tools.generativeqc_response.implicit import (
     _immutable,
     checked_transpose_solve,
 )
-from tools.generativeqc_response.krylov import _vector_norm
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
-from .lambda_equations import PARAMETERS, build_parameter_vjp
 from .lambda_response import BoundCCSDResponse
 from .lambda_solver import BoundCCSDLambda, CCSDLambdaResult, _feed_hash
-from .triples import build_triples_program
-from .triples_response import accumulate_tile_triples_vjp
 
 _DIRECT_TRIPLES_PARAMETERS = frozenset(("fov", "ovov", "ovvv", "ovoo"))
 

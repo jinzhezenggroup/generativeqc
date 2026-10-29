@@ -2,18 +2,28 @@
 
 The package intentionally separates three concerns:
 
-* :mod:`problem` owns immutable scientific/compatibility snapshots.
-* :mod:`operators` owns matrix-free JVP/VJP actions.
-* :mod:`krylov` owns bounded linear-solver and recycling state.
+* :mod:`generativeqc.response_problem` owns immutable scientific snapshots.
+* :mod:`generativeqc.response_operator` owns matrix-free JVP/VJP actions.
+* :mod:`generativeqc.response_solver` owns bounded linear-solver and recycling state.
 
 CC-specific right-hand sides and weights remain in their consuming issue.  The
 shared contract here is only the orbital-response problem, operator action and
 linear solve.
 """
 
-from .backends import CudaDFJKBackend, DenseAOResponseBackend, NativeJKBackend
-from .direct_cuda import CudaDirectJKBackend
-from .krylov import (
+from generativeqc.response_operator import (
+    CPKSResponseOperator,
+    DenseMatrixResponseOperator,
+    RHFResponseOperator,
+)
+from generativeqc.response_problem import (
+    ResponseCompatibilityError,
+    ResponseProblem,
+    ResponseSolveError,
+    ResponseUnsupported,
+    RotationLayout,
+)
+from generativeqc.response_solver import (
     DiagonalPreconditioner,
     GMRESOptions,
     KrylovRecycleSpace,
@@ -23,20 +33,12 @@ from .krylov import (
     solve,
     solve_many,
 )
+from generativeqc.response_xc import FixedDensityXCDerivativeKernel
+
+from .backends import CudaDFJKBackend, DenseAOResponseBackend, NativeJKBackend
+from .direct_cuda import CudaDirectJKBackend
 from .native_ks import NativeRKSResponse, NativeUKSResponse
-from .operators import (
-    CPKSResponseOperator,
-    DenseMatrixResponseOperator,
-    RHFResponseOperator,
-)
 from .oracle import explicit_rhf_response_matrix, finite_rotation_jvp
-from .problem import (
-    ResponseCompatibilityError,
-    ResponseProblem,
-    ResponseSolveError,
-    ResponseUnsupported,
-    RotationLayout,
-)
 from .resident_cuda import CudaResidentRHFResponse
 from .resident_uhf_cuda import CudaResidentUHFResponse
 from .spin_cuda import CudaSpinJKBackend
@@ -47,7 +49,6 @@ from .uhf import (
     UHFSpinRotationLayout,
     UKSResponseOperator,
 )
-from .xc import FixedDensityXCDerivativeKernel
 
 __all__ = [
     "CPKSResponseOperator",

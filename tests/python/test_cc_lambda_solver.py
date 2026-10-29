@@ -6,6 +6,8 @@ from dataclasses import FrozenInstanceError, replace
 
 import numpy as np
 import pytest
+from generativeqc.response_problem import ResponseCompatibilityError
+from generativeqc.response_solver import GMRESOptions
 from generativeqc_compiler.tensor import execute
 from test_cc_solver import fixture_problem
 
@@ -22,8 +24,6 @@ from tools.generativeqc_posthf.export import export_rhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.sources import NativeSource
 from tools.generativeqc_response.implicit import ImplicitSolveError, ResponseGMRES
-from tools.generativeqc_response.krylov import GMRESOptions
-from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @pytest.fixture(scope="module", params=("h2", "h2o", "nh3"))

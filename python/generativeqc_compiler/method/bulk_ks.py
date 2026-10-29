@@ -253,21 +253,3 @@ def resolve_bulk_ks(
         admission="default-allow/explicit-blacklist",
         backend=backend,
     )
-
-
-def resolve_public_bulk_ks(
-    name: str,
-    *,
-    spin: str = "unpolarized",
-    backend: str = "cpu",
-    evidence: typing.Mapping[str, typing.Any] | None = None,
-    identifier: str | None = None,
-) -> BulkKsResolution:
-    """Compatibility alias for default-allow automatic Libxc public routing."""
-    return resolve_bulk_ks(
-        name,
-        spin=spin,
-        backend=backend,
-        evidence=evidence,
-        identifier=identifier,
-    )

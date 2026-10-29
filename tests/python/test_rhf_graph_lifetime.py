@@ -21,6 +21,7 @@ using cudaStream_t = void*;
 using cudaEvent_t = void*;
 using cudaError_t = int;
 constexpr int cudaSuccess = 0;
+constexpr int cudaErrorUnknown = 999;
 constexpr int cudaErrorInvalidResourceHandle = 400;
 constexpr int cudaStreamCaptureModeThreadLocal = 1;
 constexpr unsigned long long cudaGraphInstantiateFlagDeviceLaunch = 4;

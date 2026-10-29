@@ -398,7 +398,7 @@ def test_project_metadata_declares_cuda_runtime_providers() -> None:
         "nvidia-nvjitlink-cu12",
     }
     assert required <= {dependency.split(">=", 1)[0] for dependency in dependencies}
-    assert project["project"]["optional-dependencies"]["cuda12"] == []
+    assert "cuda12" not in project["project"]["optional-dependencies"]
 
 
 def test_cibuildwheel_uses_base_dependencies_for_provider_smoke() -> None:

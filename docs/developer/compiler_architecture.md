@@ -129,8 +129,9 @@ The independent fixed-grid Python reference remains outside production codegen.
 
 ## Lowering and tuning modules
 
-`integral.cuda_lowering` and `integral.cuda_emitter` retain callable facades.
-The implementation resides in `integral.lowering`:
+`integral.cuda_emitter` exposes the generic CUDA shell interface directly from
+`integral.lowering`. Consumers of specialized lowering helpers import their
+implementation owner:
 
 - `selection`, `algebra` and `common` handle validation, structured expression
   emission and shared CUDA support.
@@ -146,7 +147,7 @@ Consumer modules depend on shared emission/algebra helpers. Shared helpers do
 not call back into dispatch. Recurrence mathematics is still represented by
 the existing IR and scalar graph; splitting files introduces no new equations.
 
-`integral.autotune` delegates to `integral.tuning`. `analysis` estimates
+`integral.tuning.cli` is the tuning entry point. `analysis` estimates
 candidate structure, `policy` enumerates/promotes schedules, `emission` writes
 candidate source, `manifest` serializes promotion records, `resources` applies
 resource gates, `process` handles external processes, `inputs` normalizes input,
@@ -304,12 +305,19 @@ tools/generativeqc_dft forwarding packages were removed rather than retained as
 compatibility aliases. Repository generators and tests import canonical owners
 directly; generated-artifact identities therefore contain no shim bytes.
 
-The production RCCSD energy/residual and canonical MP2 energy equations are also
-owned by `generativeqc_compiler.cc` and `generativeqc_compiler.mp2`. Narrow
-`tools.generativeqc_cc.{inventory,equations,doubles}` and
-`tools.generativeqc_mp2.equations` module aliases remain temporarily for
-repository callers while they migrate; production-path ledgers may not name a
-`tools/` scientific owner.
+The production RCCSD energy/residual and canonical MP2 energy equations are
+owned by `generativeqc_compiler.cc` and `generativeqc_compiler.mp2`. Repository
+tools import those owners directly. Response and Hessian consumers likewise
+import the installed `generativeqc.response_*`, `generativeqc.stationary_nuclear`,
+`generativeqc.second_order` and `generativeqc.rks_hessian*` modules. Production
+selection, profile, emission and bundle consumers import the corresponding
+`integral.production_*` owner. Native semilocal execution metadata belongs to
+`generativeqc_compiler.dft.native_semilocal`; range derivative AOT generation uses
+`integral.derivative_aot_registry`.
+
+The project has no released compatibility contract. Obsolete import paths and
+renamed callables are removed when repository consumers migrate. Mathematical
+identity checks and rebuilds for changed compiler inputs remain required.
 
 ## Structural verification
 
