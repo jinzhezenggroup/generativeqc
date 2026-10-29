@@ -180,7 +180,7 @@ class IntegralHF:
         if integral_storage == "direct" and backend != "cpu":
             raise ValueError("direct integral AD storage currently requires CPU")
         object.__setattr__(self, "integral_storage", integral_storage)
-        checked_integer(device, "device", low=0, high=2**31 - 1)
+        device = checked_integer(device, "device", low=0, high=2**31 - 1)
         object.__setattr__(self, "backend", backend)
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "method", method)

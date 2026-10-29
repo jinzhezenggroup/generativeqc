@@ -5144,6 +5144,12 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
     assert_native_create_contract(source, tmp_path, required_native_cxx)
 
 
+def test_resource_semantics_accept_capability_based_targets() -> None:
+    qualify_capacity._geometry_resource_contract(
+        ROOT / "python/generativeqc_compiler/method/stationary_resources.py"
+    )
+
+
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -5151,6 +5157,25 @@ def test_capacity_resource_provenance_allows_benign_source_edits(
         ("+ 1  # atom prefix offsets", "+ 0  # atom prefix offsets"),
         ("if required <= budget_bytes - allocation - center_bytes:", "if True:"),
         ("except ValueError as error:", "except Exception as error:"),
+        (
+            "type(atoms) is int and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS",
+            (
+                'type(atoms) is int and target.architecture == "sm_120" '
+                "and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS"
+            ),
+        ),
+        (
+            "and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS",
+            "and True",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.shared_memory_per_block",
+        ),
+        (
+            "<= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)",
+            "<= target.tuning_maximum_shared_bytes",
+        ),
     ],
 )
 def test_resource_semantics_reject_missing_panels_and_unbounded_fallback(
