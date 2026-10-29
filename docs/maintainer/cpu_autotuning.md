@@ -96,7 +96,7 @@ so unrelated BLAS/OpenMP pools cannot silently change the comparison.
 ## Retained PSSS selection evidence
 
 The reproducible artifact is
-`benchmarks/results/issue471-cpu-autotune.json`; its reproducibility limits are
+`benchmarks/results/issue471-cpu-autotune.json.xz`; its reproducibility limits are
 recorded in the [benchmark results index](../../benchmarks/results/README.md).
 
 It uses the complete PSSS Cartesian shell with 192 contracted primitive records

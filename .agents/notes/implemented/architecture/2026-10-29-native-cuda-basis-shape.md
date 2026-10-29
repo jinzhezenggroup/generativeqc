@@ -32,7 +32,11 @@ def2-TZVP under both planner backends. Actual HF/KS planning refuses selected
 native failures before device inventory; portable arithmetic and library
 discovery are poisoned. The existing signed-limit, transactional rejection,
 old-library and prepared-state recovery gates remain. Real CUDA warm-state and
-complete endpoint qualification must retain their own source/binary identities.
+complete endpoint qualification retains its own source/binary identities in
+[the qualification receipt](../../../../benchmarks/results/cuda-basis-capacity-20261029/README.md):
+Slurm 14851 passed 103 checks and 1,792 timed calls, maximum median ratio
+1.01755, with identical complete GPU work/storage. The initial recorder failure
+is retained separately and supplies no timing acceptance.
 
 ## References
 
