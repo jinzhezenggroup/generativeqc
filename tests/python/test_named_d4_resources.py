@@ -85,15 +85,17 @@ def test_cuda_replay_rejects_changed_planning_environment(
 
 
 @pytest.mark.parametrize("mutation", ["model", "effective_options", "plan"])
-def test_cuda_replay_rejects_changed_scientific_inputs(
-    library: Any, monkeypatch: pytest.MonkeyPatch, mutation: str
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_replay_rejects_changed_scientific_inputs(
+    library: Any, monkeypatch: pytest.MonkeyPatch, mutation: str, device: str
 ) -> None:
     """Value changes must be detected even while the same batch remains alive."""
-    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires a finite Slurm CUDA allocation")
-    assert os.environ.get("SLURM_JOB_ID")
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+            pytest.skip("requires a finite Slurm CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID")
     calc = calculator(
-        "cuda", resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
+        device, resource_budget=ResourceBudget(host_bytes=2 << 30, device_bytes=2 << 30)
     )
     with calc.prepare_batch(systems()) as batch:
         if mutation == "model":
@@ -110,7 +112,7 @@ def test_cuda_replay_rejects_changed_scientific_inputs(
             )
             error, message = ValueError, "execution schedule changed"
         else:
-            request = batch.resource_plan.requests[0]
+            request = next(r for r in batch.resource_plan.requests if r.name == "ks")
             topology = json.loads(request.identity.topology)
             topology["items"][0]["atoms"] += 1
             changed = replace(
@@ -119,7 +121,10 @@ def test_cuda_replay_rejects_changed_scientific_inputs(
             )
             batch.resource_plan = replace(
                 batch.resource_plan,
-                requests=(changed, *batch.resource_plan.requests[1:]),
+                requests=tuple(
+                    changed if r.name == "ks" else r
+                    for r in batch.resource_plan.requests
+                ),
             )
             error, message = ValueError, "execution schedule changed"
         with pytest.raises(error, match=message):
