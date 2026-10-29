@@ -13,13 +13,13 @@
     },
     {
       "path": "historical-host-snapshot.json",
-      "bytes": 2465,
-      "sha256": "fe28818cf95c542a5e5a2f861d17f677a7206636375681fc6bb9e81590d35e31"
+      "bytes": 2419,
+      "sha256": "e525ccbc80c13241a39d1b906e76c8b9b6048a4a46889996a2d6257ad6f2eca6"
     },
     {
       "path": "historical-host-summary.json",
-      "bytes": 900,
-      "sha256": "9d3393a2e6e331f328236e5eecfa9d766d2b96016fa08e0c49f46443646ac5b5"
+      "bytes": 884,
+      "sha256": "b294f357b6e56fac54ad6aade797bc3af91aa54e28665ade33c17ef38bf18caa"
     }
   ]
 }

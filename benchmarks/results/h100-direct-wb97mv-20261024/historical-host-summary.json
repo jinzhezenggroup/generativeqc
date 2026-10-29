@@ -2,7 +2,7 @@
   "schema": "generativeqc.h100-direct-historical-host-summary.v1",
   "current_history_audit": "NOT_RUN; use explicit restored history",
   "snapshot_manifest": "historical-host-snapshot.json",
-  "snapshot_manifest_sha256": "fe28818cf95c542a5e5a2f861d17f677a7206636375681fc6bb9e81590d35e31",
+  "snapshot_manifest_sha256": "e525ccbc80c13241a39d1b906e76c8b9b6048a4a46889996a2d6257ad6f2eca6",
   "original_audit_result": {
     "original_uncompressed_members": 37,
     "standalone_original_compressed_files": 4,
