@@ -118,6 +118,8 @@ class IntegralHF:
     bounds symbolic generation. Backend selection is explicit and never retries with another backend.
     Call close() when finished; results and returned snapshots remain valid.
     Configuration and topology are immutable after construction.
+    CUDA compilation detects the selected visible device's architecture unless
+    cuda_arch is explicitly supplied. It does not change scheduler visibility.
     """
 
     def __init__(
@@ -132,7 +134,7 @@ class IntegralHF:
         integral_storage: str = "dense",
         backend: str = "cpu",
         device: int = 0,
-        cuda_arch: str = "sm_120",
+        cuda_arch: str | None = None,
         cache: str | Path = ".artifacts/integral-ad",
         max_bytes: int = 64 << 20,
         max_work: int = 100_000_000,
@@ -361,13 +363,19 @@ class IntegralHF:
             from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
             from generativeqc_compiler.common.cuda_target import cuda_target_info
 
+            from generativeqc._cuda_device import device_architecture
             from generativeqc.profiles import find_nvcc
 
             nvcc = find_nvcc()
             if nvcc is None:
                 raise RuntimeError("CUDA integral AD requires an NVCC toolchain")
+            # Compile for the scheduler-visible device, including nonzero
+            # ordinals, instead of assuming the developer's GPU architecture.
+            selected_arch = (
+                cuda_arch if cuda_arch is not None else device_architecture(device)
+            )
             compiler = CudaCompilerAdapter(
-                nvcc, cuda_target_info(cuda_arch), compile_timeout
+                nvcc, cuda_target_info(selected_arch), compile_timeout
             )
             options = ("--fmad=false", "-O1", f"-I{header.parent}")
             headers += (asset_path("src/integrals/parameter_ad_cuda_runtime.cuh"),)

@@ -594,6 +594,11 @@ without an SCF solve. `energy(...)` evaluates only the primal HF endpoint.
 Energy is in Hartree; coordinate energy gradients are in Hartree/Bohr, and
 basis gradients are per corresponding raw input unit.
 
+For standalone CUDA owners, `cuda_arch=None` detects the architecture of the
+selected `device` within scheduler visibility. An explicit `cuda_arch="sm_80"`
+can select a compilation target; it must be compatible with the executing GPU.
+CPU owners do not probe CUDA.
+
 Owner configuration is immutable. Calls copy input arrays before native
 execution. Returned value/gradient arrays are immutable owned snapshots that
 outlive `close()`. Later execution on a closed owner raises `RuntimeError`.

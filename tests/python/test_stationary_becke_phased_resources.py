@@ -23,8 +23,9 @@ from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
     [(atoms, points) for atoms in (33, 48, 96, 128) for points in (1, 17, 256, 257)]
     + [(96, 1024)],
 )
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_90", "sm_120"])
 def test_optional_phases_reserve_scratch_seeds_and_indices(
-    atoms: int, points: int
+    atoms: int, points: int, architecture: str
 ) -> None:
     shape = {
         "atoms": atoms,
@@ -34,7 +35,7 @@ def test_optional_phases_reserve_scratch_seeds_and_indices(
         "tasks": 256,
         "spins": 1,
         "sources": 8,
-        "target": cuda_target_info("sm_120"),
+        "target": cuda_target_info(architecture),
     }
     baseline = plan_stationary_cuda_resources(**shape, budget_bytes=1 << 30)
     planned = plan_stationary_cuda_resources(
@@ -56,7 +57,9 @@ def test_optional_phases_reserve_scratch_seeds_and_indices(
         assert admitted.geometry_lanes == points
 
 
-def test_phases_keep_small_uncached_unqualified_and_multi_point_lanes_bounded() -> None:
+def test_phases_keep_small_uncached_resource_limited_and_multi_point_lanes_bounded() -> (
+    None
+):
     target = cuda_target_info("sm_120")
     shape = {
         "atoms": 96,
@@ -72,7 +75,7 @@ def test_phases_keep_small_uncached_unqualified_and_multi_point_lanes_bounded() 
         {"atoms": 24},
         {"points": GEOMETRY_MAX_LANES + 1},
         {"cooperative_becke": False},
-        {"target": cuda_target_info("sm_80")},
+        {"target": replace(target, shared_memory_per_block=1024)},
         {"target": replace(target, maximum_threads_per_block=64)},
     ):
         arguments = {**shape, **changes}
@@ -95,8 +98,10 @@ def test_phases_keep_small_uncached_unqualified_and_multi_point_lanes_bounded() 
 
 
 @pytest.mark.parametrize("atoms", [24, 33, 48, 96, 128])
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_90", "sm_120"])
 def test_primitive_admission_reuses_exact_concurrent_phase_reservation(
     atoms: int,
+    architecture: str,
 ) -> None:
     shape = {
         "atoms": atoms,
@@ -106,7 +111,7 @@ def test_primitive_admission_reuses_exact_concurrent_phase_reservation(
         "tasks": 256,
         "spins": 1,
         "sources": 8,
-        "target": cuda_target_info("sm_120"),
+        "target": cuda_target_info(architecture),
     }
     phased = plan_stationary_cuda_resources(
         **shape, budget_bytes=1 << 30, phased_becke=True
@@ -125,7 +130,11 @@ def test_primitive_admission_reuses_exact_concurrent_phase_reservation(
         assert bounded.geometry_lanes == phased.geometry_lanes
     for changes in (
         {"cooperative_becke": False},
-        {"target": cuda_target_info("sm_80")},
+        {
+            "target": replace(
+                cuda_target_info(architecture), shared_memory_per_block=1024
+            )
+        },
     ):
         bounded = plan_stationary_cuda_resources(
             **{**shape, **changes}, budget_bytes=1 << 30, becke_primitive=True

@@ -81,6 +81,48 @@ def test_invalid_device_is_rejected_before_driver_access(
         _cuda_device.device_architecture(device)
 
 
+@pytest.mark.parametrize(
+    "backend,explicit", [("cuda", None), ("cuda", "sm_90"), ("cpu", None)]
+)
+def test_integral_ad_compiles_for_selected_device(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    backend: str,
+    explicit: str | None,
+) -> None:
+    """Integral AD discovers the chosen ordinal only for automatic CUDA targets."""
+    from generativeqc import Primitive, Shell
+    from generativeqc.experimental import integral_autodiff
+
+    shells = tuple(Shell(i, 0, (Primitive(1.0, 1.0),)) for i in range(2))
+    calculator = Mock(
+        return_value=SimpleNamespace(_basis_for_atoms=lambda atoms: shells)
+    )
+    monkeypatch.setattr(integral_autodiff, "Calculator", calculator)
+    probe = Mock(return_value="sm_80")
+    monkeypatch.setattr(_cuda_device, "device_architecture", probe)
+    monkeypatch.setattr(profiles, "find_nvcc", lambda: Path("nvcc"))
+
+    class ReachedCompiler(Exception):
+        pass
+
+    def compile_program(compiler: Any, *args: Any, **kwargs: Any) -> None:
+        if backend == "cuda":
+            assert compiler.target.architecture == (explicit or "sm_80")
+        raise ReachedCompiler
+
+    monkeypatch.setattr(integral_autodiff, "compile_runtime", compile_program)
+    with pytest.raises(ReachedCompiler):
+        integral_autodiff.IntegralHF(
+            ("H", "H"), backend=backend, device=2, cuda_arch=explicit, cache=tmp_path
+        )
+    assert calculator.call_args.kwargs["device_id"] == 2
+    if backend == "cuda" and explicit is None:
+        probe.assert_called_with(2)
+    else:
+        probe.assert_not_called()
+
+
 @pytest.mark.parametrize("explicit", [None, "sm_90"])
 def test_array_api_compiles_for_detected_or_explicit_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, explicit: str | None

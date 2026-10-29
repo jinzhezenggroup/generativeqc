@@ -163,8 +163,8 @@ def test_phase_force_matches_energy_derivatives_and_existing_fallback(
 ) -> None:
     """Every emitted program keeps moved forces at cached and minimum capacity."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
-        pytest.skip("requires an explicitly Slurm-allocated GPU")
-    assert os.environ.get("SLURM_JOB_ID")
+        pytest.skip("requires an explicitly Slurm- or LSF-allocated GPU")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     import ctypes
 
     import numpy as np
@@ -607,7 +607,9 @@ int main() {
   assert(run(min + center + phase, 0, 0));
   center_miss = false;
   props.major = 8;
-  assert(run(min + center + phase, 0, 0));
+  assert(run(min + center + phase, 0, phase));
+  props.major = 9;
+  assert(run(min + center + phase, 0, phase));
   props.major = 12;
   props.maxThreadsPerBlock = 64;
   assert(run(min + center + phase, 0, 0));
