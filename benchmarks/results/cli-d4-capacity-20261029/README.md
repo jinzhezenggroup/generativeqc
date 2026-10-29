@@ -1,4 +1,21 @@
-# Native CLI D4 capacity consumer
+# Native CLI D4 capacity qualification
+
+Current integrated source `a508ecbe4` includes parent `b2e5de7d1` without rewriting
+history. The rebuilt installed CLI passes all three CLI contract/catalog CTests
+and named D4 inventory with Python/compiler absent from PATH. The original
+4,032-call, eight-group ABBA/BAAB matrix passes at maximum ratio
+**1.0033716924716194**, with matching outputs after the existing identity
+normalization. This remains metadata-only qualification, with no GPU execution
+or scientific endpoint claim.
+
+`current-samples.json.xz` retains every timing and reference output;
+`current-qualification.json.xz` binds source, executable/library, runner and
+validation receipts. `qualify.py` is the exact current replay script. Original
+samples, identities and runner remain recoverable through `original-history.json`
+using `tools/restore_retained_evidence.py --all --manifest ... --output ...`.
+Restoration was verified before removing duplicate current-tree bytes.
+
+## Original source qualification
 
 Production `1f9920fa5` extends the existing allocation inventory, stacked on
 #2872's D4 capacity query. Its scientific runtime is unchanged. Named PBE D4
