@@ -464,7 +464,7 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
+    "14fc5eabdb1a6994593caa6c8e85e92253027e96b16981fa1990d96384b897fb"
 )
 # Binary-scaled admission and the out-of-line normalization dispatch are part
 # of the reviewed owner contract, including the incumbent fallback schedule.
@@ -1298,7 +1298,7 @@ def _check_geometry_resources(module: ModuleType) -> None:
         pairs = atoms * (atoms - 1) // 2
         base = arena(candidate, 17, True)
         phase = 8 * (4 * pairs * 17 + (12 * atoms + 2) * 17 + pairs)
-        for architecture in ("sm_80", "sm_120"):
+        for architecture in ("sm_80", "sm_90", "sm_120"):
             device = cuda_target_info(architecture)
             for explicit in (None, False, True):
                 for requested in (False, True):
@@ -1310,22 +1310,15 @@ def _check_geometry_resources(module: ModuleType) -> None:
                             cooperative_becke=explicit,
                             phased_becke=requested,
                         )
-                        cooperative = (
-                            explicit
-                            if explicit is not None
-                            else architecture == "sm_120" and atoms >= 12
-                        )
+                        # All these targets have the required launch/shared
+                        # resources. Tuning provenance must not veto a legal
+                        # cooperative or phased reservation.
+                        cooperative = explicit if explicit is not None else atoms >= 12
                         active = cooperative and atoms > 1
-                        admitted = (
-                            requested
-                            and active
-                            and atoms > 32
-                            and architecture == "sm_120"
-                            and delta == 0
-                        )
+                        admitted = requested and active and atoms > 32 and delta == 0
                         require(
                             planned.phased_becke_bytes == (phase if admitted else 0),
-                            "optional phase budget/target admission",
+                            "optional phase budget and shape admission",
                         )
                         require(
                             planned.becke_threads_per_point == (128 if active else 1),
