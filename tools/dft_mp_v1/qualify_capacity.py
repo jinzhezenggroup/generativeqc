@@ -18,7 +18,7 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -1298,7 +1298,7 @@ def _check_geometry_resources(module: ModuleType) -> None:
         pairs = atoms * (atoms - 1) // 2
         base = arena(candidate, 17, True)
         phase = 8 * (4 * pairs * 17 + (12 * atoms + 2) * 17 + pairs)
-        for architecture in ("sm_80", "sm_90", "sm_120"):
+        for architecture in ("sm_80", "sm_89", "sm_90", "sm_120"):
             device = cuda_target_info(architecture)
             for explicit in (None, False, True):
                 for requested in (False, True):
@@ -1310,15 +1310,12 @@ def _check_geometry_resources(module: ModuleType) -> None:
                             cooperative_becke=explicit,
                             phased_becke=requested,
                         )
-                        # All these targets have the required launch/shared
-                        # resources. Tuning provenance must not veto a legal
-                        # cooperative or phased reservation.
                         cooperative = explicit if explicit is not None else atoms >= 12
                         active = cooperative and atoms > 1
                         admitted = requested and active and atoms > 32 and delta == 0
                         require(
                             planned.phased_becke_bytes == (phase if admitted else 0),
-                            "optional phase budget and shape admission",
+                            "optional phase budget/target admission",
                         )
                         require(
                             planned.becke_threads_per_point == (128 if active else 1),
@@ -1326,6 +1323,25 @@ def _check_geometry_resources(module: ModuleType) -> None:
                         )
             default = resources(**candidate, target=device, budget_bytes=1 << 30)
             require(default.phased_becke_bytes == 0, "phased storage is opt-in")
+            # Architecture alone neither admits nor refuses a bounded schedule.
+            for limits in (
+                {"maximum_threads_per_block": 127},
+                {"shared_memory_per_block": 16},
+                {"tuning_maximum_shared_bytes": 16},
+            ):
+                bounded = resources(
+                    **candidate,
+                    target=replace(device, **limits),
+                    budget_bytes=1 << 30,
+                    cooperative_becke=True,
+                    phased_becke=True,
+                )
+                require(
+                    bounded.becke_threads_per_point == 1
+                    and bounded.becke_shared_bytes == 0
+                    and bounded.phased_becke_bytes == 0,
+                    "cooperative resource limits preserve bounded fallback",
+                )
 
     schedule = module.plan_stationary_cuda_grid_schedule
     for explicit in (None, 37, 4096):

@@ -614,6 +614,16 @@ int main() {
   props.maxThreadsPerBlock = 64;
   assert(run(min + center + phase, 0, 0));
   props.maxThreadsPerBlock = 1024;
+  props.maxThreadsDim[0] = 127;
+  assert(run(min + center + phase, 0, 0));
+  props.maxThreadsDim[0] = 1024;
+  props.maxGridSize[1] = int(atoms * (atoms - 1) / 2) - 1;
+  assert(run(min + center + phase, 0, 0));
+  props.maxGridSize[1] = 65535;
+  props.maxGridSize[0] = 1;
+  assert(run(min + center + phase, 0, 0));
+  props.maxGridSize[0] = 65535;
+  assert(run(min + center + phase, 0, phase));
   alloc_status = cudaErrorMemoryAllocation;
   assert(run(min + center + phase, 0, 0));
   alloc_status = 0;

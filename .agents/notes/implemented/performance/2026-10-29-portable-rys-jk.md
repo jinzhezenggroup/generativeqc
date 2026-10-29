@@ -140,12 +140,28 @@ Fock counts match at 13/19. The 48-atom cold solve changes 18 to 17 Focks; final
 12 versus 13 Focks. Preserve those counts: the whole moved/cold speedup is not
 an isolated kernel measurement.
 
-The final embedded binary identity equals the exact final source inventory:
+The qualified binary's embedded identity equals its exact retained source inventory:
 `056a57493efb119dfbdbcdb90b4fd5400e89c1024392897b279cc92f826ff2f2`.
 Earlier trials used an external manifest, whose hash and CMake setting must be
 combined with the recorded base-source and binary identities. Final primary
 generated source is byte-identical to the packed trial's primary source; only
 optional families and the separately qualified small cold policy differ.
+
+Before publication, the remote PR branch acquired a separate device-ordinal
+normalization fix and stronger capacity regressions. Integration preserves them.
+The sole production-inventory difference from the GPU-qualified source is
+`python/generativeqc/experimental/integral_autodiff.py`: retain the return value
+of `checked_integer` so NumPy integer ordinals reach the CUDA driver as ordinary
+integers. Its real driver-boundary host test covers both scalar types. All J/K,
+Becke and ordinary benchmark endpoint sources remain unchanged. The integrated
+inventory is `b2ae0550b2e95eff39850166b2ad4a2e8e01ba8ba6e4f9df5142ee7605420d83`;
+`integrated-source-identity.json` records the exact one-line production delta.
+Do not claim that the integrated whole-source inventory is byte-identical to
+the earlier qualified binary's source inventory.
+The post-integration host run passed 858 capacity, device-selection and native
+budget checks; 1,230 optional device-campaign cases were skipped. Integration
+pre-commit checks passed. The remote report-provenance helper and additional
+thread/shared-memory/grid-limit negative controls are preserved.
 
 Final raw archive SHA256:
 `e7f993df80180ddf42e4e2f6ffe3c7123e1442f2d83349e3b4c4adf29bdfc42d`.

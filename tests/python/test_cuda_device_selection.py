@@ -84,11 +84,13 @@ def test_invalid_device_is_rejected_before_driver_access(
 @pytest.mark.parametrize(
     "backend,explicit", [("cuda", None), ("cuda", "sm_90"), ("cpu", None)]
 )
+@pytest.mark.parametrize("device", [2, np.int64(2)])
 def test_integral_ad_compiles_for_selected_device(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     backend: str,
     explicit: str | None,
+    device: Any,
 ) -> None:
     """Integral AD discovers the chosen ordinal only for automatic CUDA targets."""
     from generativeqc import Primitive, Shell
@@ -99,7 +101,25 @@ def test_integral_ad_compiles_for_selected_device(
         return_value=SimpleNamespace(_basis_for_atoms=lambda atoms: shells)
     )
     monkeypatch.setattr(integral_autodiff, "Calculator", calculator)
-    probe = Mock(return_value="sm_80")
+
+    def get_device(output: Any, ordinal: int) -> int:
+        assert ordinal == 2
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_int))[0] = 7
+        return 0
+
+    def compute_capability(major: Any, minor: Any, handle: ctypes.c_int) -> int:
+        assert handle.value == 7
+        ctypes.cast(major, ctypes.POINTER(ctypes.c_int))[0] = 8
+        ctypes.cast(minor, ctypes.POINTER(ctypes.c_int))[0] = 0
+        return 0
+
+    driver = SimpleNamespace(
+        cuInit=Mock(return_value=0),
+        cuDeviceGet=Mock(side_effect=get_device),
+        cuDeviceComputeCapability=Mock(side_effect=compute_capability),
+    )
+    monkeypatch.setattr(ctypes, "CDLL", lambda name: driver)
+    probe = Mock(wraps=_cuda_device.device_architecture)
     monkeypatch.setattr(_cuda_device, "device_architecture", probe)
     monkeypatch.setattr(profiles, "find_nvcc", lambda: Path("nvcc"))
 
@@ -114,13 +134,33 @@ def test_integral_ad_compiles_for_selected_device(
     monkeypatch.setattr(integral_autodiff, "compile_runtime", compile_program)
     with pytest.raises(ReachedCompiler):
         integral_autodiff.IntegralHF(
-            ("H", "H"), backend=backend, device=2, cuda_arch=explicit, cache=tmp_path
+            ("H", "H"),
+            backend=backend,
+            device=device,
+            cuda_arch=explicit,
+            cache=tmp_path,
         )
     assert calculator.call_args.kwargs["device_id"] == 2
     if backend == "cuda" and explicit is None:
         probe.assert_called_with(2)
     else:
         probe.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "device", [-1, True, 2**31, 2.0, np.bool_(True), np.float64(2.0)]
+)
+def test_integral_ad_rejects_invalid_device_before_native_access(
+    monkeypatch: pytest.MonkeyPatch, device: Any
+) -> None:
+    """Normalize integer scalars without admitting booleans, floats or overflow."""
+    from generativeqc.experimental import integral_autodiff
+
+    forbidden = Mock(side_effect=AssertionError("invalid device reached native access"))
+    monkeypatch.setattr(ctypes, "CDLL", forbidden)
+    monkeypatch.setattr(integral_autodiff, "Calculator", forbidden)
+    with pytest.raises(ValueError, match="device must be an integer"):
+        integral_autodiff.IntegralHF(("H", "H"), backend="cuda", device=device)
 
 
 @pytest.mark.parametrize("explicit", [None, "sm_90"])
