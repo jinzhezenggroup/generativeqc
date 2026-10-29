@@ -84,6 +84,11 @@ and signature metadata. Ordered Schwarz borrows existing device scratch and
 uses this same admitted host envelope. Missing capacity retains generated J;
 uncorrected, DF and other public resource owners do not inherit this authority.
 This repair requires fresh numerical, lifetime and complete-endpoint evidence.
+The larger regression now uses 5 GiB host capacity: its 3.244 GB mandatory host
+setup plus two conservative optional MD staging envelopes exceeds 4 GiB.
+The original small-fixture performance matrix retains its 2 GiB host/device
+caps; this larger regression still asserts actual optional admission and bounded
+combined peak, while the separate exact/below-floor test covers refusal.
 
 ## References
 
