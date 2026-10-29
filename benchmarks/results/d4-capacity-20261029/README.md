@@ -240,3 +240,21 @@ byte-for-byte in `resolved-and-basis-history.json` (storage ancestor `8fd594f7a`
 Every file was restored and checksum-verified before migration. This retains all
 passes and failures while keeping the unchanged 80 MiB evidence limit for the
 next integrated qualification and the dependent CLI inventories.
+
+## Current master integration qualification
+
+Production `2b1441760` integrates master `3045c7e90`, preserving its provider
+lifetime and merged CI tail budgets. Slurm 14923 passes both unchanged eight-group
+1,792-call populations: default maximum **1.0167437095874685**, budget maximum
+**1.0330590474587127**. Both profiles exactly match baseline work/storage: 172,628
+kernels, 5,648 allocations, 119,201,475 explicit peak bytes, zero final live bytes,
+identical static storage and all transfer counts/bytes. The scope excludes opaque
+vendor/driver storage from explicit allocation peaks.
+
+All 194 GPU/Python checks, independent native/installed SDK references, memcheck
+and before/after integrity of 27,475 frozen inputs pass; completed scheduler and
+srun receipts preserve exit 0. `integrated-cuda-*` retains every raw timing,
+profile summary/CSV, exact runner, source/library identity and validation receipt.
+The exact source builds in Release/sm120 with verified sccache; 869 host checks
+and 25 subtests pass (27 skipped). Source-bound earlier CPU timing remains in
+`resolved-and-basis-history.json` and is not reclassified as a new CPU benchmark.
