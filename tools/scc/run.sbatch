@@ -27,19 +27,26 @@
 #   #SBATCH -A <ACCOUNT>
 # or pass --account=<ACCOUNT> on the command line.
 #
+# --qos is not optional on this site. Each partition admits exactly one QoS
+# (GPU-8A100 admits gpu_8a100), and the account has no DefaultQOS, so omitting
+# it fails with "Invalid qos specification" even when -p and -A are correct.
+# When you override -p you must override --qos too.
+#
 #SBATCH -J gqc-run
 #SBATCH -o gqc-run-%j.out
 #SBATCH -e gqc-run-%j.err
 #SBATCH -p GPU-8A100
 #SBATCH -N 1
-#SBATCH -n 8
+#SBATCH -n 1
+#SBATCH -c 8
 #SBATCH --gres=gpu:a100:1
-#SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
 
-# Why one GPU and 8 CPUs: cases run serially, one process each, with
-# single-threaded BLAS/OMP so the timings are single-device endpoint numbers.
+# Why -n 1 -c 8 rather than -n 8: the cases run serially, one process each, so a
+# single task holds the cores. Asking for -n 8 with --cpus-per-task=8 requests
+# 64 cores, the whole node, which is both unnecessary and bad for queueing.
+# BLAS/OMP stay single-threaded so the timings are single-device endpoints.
 #
 # Why 4 hours: the baseline group is minutes, but the defects group contains
 # wb97m-v, which on an RTX 5090 took 1130 s for a single cold evaluation with 39
