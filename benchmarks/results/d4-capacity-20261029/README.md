@@ -62,3 +62,23 @@ max E/F differences 5.69e-14 / 1.74e-14; scalar median ratios range from 0.1750 
 profile falls from 10.50 to 0.60 seconds. Raw samples and command/provenance are
 retained as `image-identity-diagnostic*`. This isolates one overhead; it is **not**
 a replacement for the original eight-group D4 budget gate, which remains failed.
+
+## Frontend planning follow-ups
+
+`frontend-planning.json.xz` preserves every new sample, source/library identity,
+exact scalar replay script and verification receipt. Rebuilt source `9db31ac68`
+passed 127 CPU CTests, but its eight-group full CPU budget campaign still failed
+with 1,792 calls and maximum ratio 1.0817157850930228 (E/F exactly equal).
+
+`c4ab3d38e` removes redundant scalar planning at the named prepared boundary; its
+eight-group scalar diagnostic still failed at 1.055734386993908. `e31c100aa` also
+avoids comparing one functional object with itself through duplicate serialized
+provenance, retaining full comparison of distinct objects. Its scalar diagnostic
+passes at 1.0431432846967614 over 256 complete calls, with identical E/F and
+published work. These are scalar-only diagnostics, not complete fleet acceptance.
+Native/build/compiler inputs are unchanged from the rebuilt `9db31ac68` image.
+
+The scalar budget-boundary suite passes 69 checks. Model/semantic coverage passes
+117 checks plus four post-SCF rejection checks after restoring exact pinned
+reference inputs. Complete updated CPU and CUDA budget qualification remains
+necessary; the original failed campaigns remain failed.
