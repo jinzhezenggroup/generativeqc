@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 base = Path("/tmp/qc-2227-d4-capacity-cpu-install/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
-candidate = Path("/tmp/qc-2227-cli-d4-complete-20261030/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
+candidate = Path("/tmp/qc-2227-cli-d4-integrated-install/bin/generativeqc")  # noqa: S108 -- recorded immutable installation
 geometry = Path("tests/data/h2_bohr.xyz").resolve()
 environment = {**os.environ, "PATH": "/nonexistent", "GENERATIVEQC_PROFILE": "off"}
 for key in (
@@ -92,7 +92,7 @@ report = {
     "reference": reference,
     "samples": samples,
 }
-Path(".artifacts/cli-d4/current-cli-samples.json").write_text(
+Path(".artifacts/integration-20261030/cli-samples.json").write_text(
     json.dumps(report, separators=(",", ":")) + "\n"
 )
 print(
