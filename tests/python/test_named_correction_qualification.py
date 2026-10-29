@@ -335,3 +335,14 @@ def test_exited_parent_does_not_leave_a_descendant_pipe_owner(
         driver._stop_worker(worker)
         worker.stdin.close()
         worker.stdout.close()
+
+
+def test_broadcastable_force_shape_mismatch_is_rejected(
+    driver: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = population()
+    for record in samples:
+        if record["engine"] == "B":
+            record["rows"][0]["items"][0]["forces"] = [0.0, 0.0, 0.0]
+    with pytest.raises(RuntimeError, match="force shape changed"):
+        invoke(driver, monkeypatch, tmp_path, samples)

@@ -174,6 +174,8 @@ def main() -> None:
                             np.isfinite(reference[field])
                         ):
                             raise RuntimeError(f"{key}: non-finite {field}")
+                        if np.shape(actual[field]) != np.shape(reference[field]):
+                            raise RuntimeError(f"{key}: force shape changed")
                         difference = float(
                             np.max(
                                 np.abs(
