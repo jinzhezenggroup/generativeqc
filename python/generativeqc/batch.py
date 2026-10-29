@@ -1188,7 +1188,11 @@ class PreparedBatch:
             self._systems,
             self._charges,
             self._multiplicities,
-            self._effective_ks_options.to_payload(),
+            # execute's model signature already serializes these exact options.
+            # A separately selected profile still needs its own value snapshot.
+            None
+            if self._effective_ks_options is calculator._ks_options
+            else self._effective_ks_options.to_payload(),
             self._planned_properties,
             dict(os.environ),
         )

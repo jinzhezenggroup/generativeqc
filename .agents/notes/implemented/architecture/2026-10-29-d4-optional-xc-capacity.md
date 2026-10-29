@@ -121,3 +121,16 @@ This deliberately rejects a process-wide identity-only request cache: it could
 miss model mutation, batch-local profile selection or environment scheduling.
 The optimization's complete-endpoint timing acceptance still requires the same
 8-group gate, including scalar preparation and moved-geometry replay.
+
+The first retained-request diagnostic at production `49705a84e` (test fixes at
+`82c37dbf4`, Slurm 14913) still fails the 1.05 gate: 448 complete calls in two
+groups yield 1.1008970. Its full population is retained as a diagnostic, not a
+replacement for eight-group qualification. A subsequent host profile shows
+72 replay-input snapshots spend 0.122 seconds under the profiler, and 72 plan
+serializations spend 0.075 seconds. When effective options are the calculator's
+own options, the already-required model signature proves their value; only a
+separately selected profile needs an additional payload snapshot. Complete D4
+ledgers also retain one immutable plan serialization, returning a deep copy for
+each diagnostic. Plan replacement invalidates that cache by value. Native
+observations and capacity verification remain fresh, and public diagnostic
+mutation cannot change the private snapshot or any later observation.
