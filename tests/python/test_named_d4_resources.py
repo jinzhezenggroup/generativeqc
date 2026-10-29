@@ -292,10 +292,11 @@ def test_larger_cuda_d4_fleet_keeps_bounded_optional_fallback(
 
     if not optional_protocol:
         calc._library = WithoutOptionalProtocol()
-    # Four d-shell waters have a declared host setup bound above 2 GiB.
-    # Keep the original endpoint campaign's smaller-fixture caps unchanged.
+    # Four d-shell waters have a declared host setup bound above 3 GB; both
+    # items also reserve optional MD metadata/staging. Five GiB admits that
+    # preferred candidate without changing the smaller timing matrix's caps.
     plan = calc.estimate_resources(
-        fleet, budget=ResourceBudget(host_bytes=4 << 30, device_bytes=2 << 30)
+        fleet, budget=ResourceBudget(host_bytes=5 << 30, device_bytes=2 << 30)
     )
     with calc.prepare_batch(fleet, resource_plan=plan) as batch:
         for _ in range(2):
