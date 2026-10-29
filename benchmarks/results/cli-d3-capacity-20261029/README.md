@@ -1,4 +1,19 @@
-# Native CLI D3 resource consumer qualification
+# Native CLI D3 capacity qualification
+
+Integrated source `8cdafb7fc` retains the shared D4 parent and passes all three
+CLI contract/catalog CTests plus installed named D3 inventory with Python and
+compiler absent from PATH. The original 6,720-call eight-group ABBA/BAAB matrix
+passes at maximum ratio **1.0078294245522916**, with unchanged normalized outputs.
+This is metadata-only qualification; it makes no scientific/GPU execution claim.
+
+Every current timing/reference output is in `current-samples.json.xz`;
+`current-qualification.json.xz` binds source, binaries, exact runner and validation
+receipts. Historical samples, identity receipt and runner are restored through
+`original-history.json` with `tools/restore_retained_evidence.py`. Restoration
+was verified before removing duplicate current-tree bytes. The separate
+`storage.json` continues to describe the original RHF record compaction.
+
+## Original source qualification
 
 Production source: `8b681c7e8` (full revision in `identities.json.xz`).
 The native D3 capacity owner is unchanged; this adds its installed CLI consumer
