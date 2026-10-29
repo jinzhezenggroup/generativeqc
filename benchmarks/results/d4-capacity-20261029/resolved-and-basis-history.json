@@ -1,0 +1,59 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8fd594f7aa5b33aab56015ae94f328e144d657cb",
+  "file_count": 10,
+  "total_bytes": 449063,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/basis-snapshot-cuda-budget-samples.json.xz",
+      "bytes": 84928,
+      "sha256": "f5dc5b7d9975992ad93fca65ca693cd18950278c8164c3f63a3d81104d14ce1f"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/basis-snapshot-cuda-default-samples.json.xz",
+      "bytes": 84784,
+      "sha256": "13e1dbe94f7a45de5e8adf06e78ef4701b5b1f352237996ccd491803a4b1159f"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/resolved-options-cuda-budget-samples.json.xz",
+      "bytes": 85184,
+      "sha256": "07f3395fdbfa094f13f0b886a8ebcff7e83c0b30ebefa794e56317cf421be0ab"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/resolved-options-cuda-default-samples.json.xz",
+      "bytes": 85124,
+      "sha256": "14fee2568e5af0ecf2d9c2e97df287562c3dcf603776ae42d265a4637ef6ca5c"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/resolved-options-cuda-qualification.json.xz",
+      "bytes": 17908,
+      "sha256": "465e6bf70271dc08a4c361f625a3bcbd95e4e2da9c9a8137030b1a859d86a76e"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/resolved-options-scalar-receipts.json.xz",
+      "bytes": 10876,
+      "sha256": "3d661fdc08f62121dcc880da99b1b67ed83a1b4a9df055f5168f44bd7e26a851"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/resolved-options-scalar-samples.json.xz",
+      "bytes": 5416,
+      "sha256": "c25250b19f196ca73729b9951cda9bd760565f8aad627f78e6014364c3d2b2d9"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/optional-cpu-budget-samples.json.xz",
+      "bytes": 31224,
+      "sha256": "baec7e8555376dfd326b2744022dcbbb538d63082a6813942bdd99c1ba605a95"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/basis-snapshot-cuda-qualification.json.xz",
+      "bytes": 24552,
+      "sha256": "c383e5f59cd054fa913489a089fa07571fbddd5941d38ba16f42f025fd0e6305"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/qualification.json",
+      "bytes": 19067,
+      "sha256": "fd284ae360518db3ad23ee884889d905b55acf0c1a981c21d70708700edbbd68"
+    }
+  ],
+  "retention": "Preserve all a677 full/scalar results and passing af71794db complete populations byte-for-byte in verified Git ancestry. Their original source, gate outcomes and binaries remain unchanged; do not rewrite history. Includes source-bound earlier CPU receipts and original qualification metadata; no current-source CPU timing is claimed."
+}

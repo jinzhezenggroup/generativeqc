@@ -233,3 +233,10 @@ completed receipt. The prior eight-group scalar diagnostic (Slurm 14921, 256
 calls) passes at 1.0415902454230368 and is included in the capsule. These receipts
 are bound to this source and binary; integrating newer master prerequisites
 requires a separate qualification.
+
+The full resolved-option/scalar diagnostics, constructor-snapshot populations
+and capsule, earlier CPU samples and original `qualification.json` are preserved
+byte-for-byte in `resolved-and-basis-history.json` (storage ancestor `8fd594f7a`).
+Every file was restored and checksum-verified before migration. This retains all
+passes and failures while keeping the unchanged 80 MiB evidence limit for the
+next integrated qualification and the dependent CLI inventories.
