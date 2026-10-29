@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -49,11 +50,12 @@ def test_expanded_contraction_counts_match_portable_metadata(
 
 @pytest.mark.parametrize("basis", ("sto-3g", "def2-svp", "def2-tzvp"))
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
 def test_actual_basis_record_matches_independent_pyscf_dimensions(
-    library: Any, basis: str, representation: str
+    library: Any, basis: str, representation: str, backend: str
 ) -> None:
     gto = pytest.importorskip("pyscf.gto")
-    arguments = (WATER, basis, representation, "cpu", 0, 1, "orbital")
+    arguments = (WATER, basis, representation, backend, 0, 1, "orbital")
     record = _basis_record(*arguments, library=library)
     assert record == _basis_record(*arguments)
     molecule = gto.M(
@@ -126,8 +128,9 @@ def test_native_shape_covers_distinct_density_fitting_auxiliary_basis(
 
 
 @pytest.mark.parametrize("status", (1, 2, -1))
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
 def test_discovered_native_rejection_never_retries_python(
-    status: int, monkeypatch: pytest.MonkeyPatch
+    status: int, backend: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def reject(*args: Any) -> int:
         return status
@@ -138,7 +141,27 @@ def test_discovered_native_rejection_never_retries_python(
     monkeypatch.setattr(shapes, "_portable_basis_shape", forbidden)
     loaded = SimpleNamespace(generativeqc_resource_basis_shape_v1=reject)
     with pytest.raises(ValueError, match="native basis topology rejected"):
-        _basis_record(WATER, "sto-3g", None, "cpu", 0, 1, "orbital", library=loaded)
+        _basis_record(WATER, "sto-3g", None, backend, 0, 1, "orbital", library=loaded)
+
+
+@pytest.mark.parametrize("method", ("rhf", "uhf", "pbe-rks", "pbe-uks"))
+def test_cuda_planner_topology_refusal_precedes_device_inventory(
+    library: Any, method: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The selected native shape owner can refuse without any GPU discovery."""
+
+    def reject(*args: Any) -> int:
+        return -1
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("CUDA planning retried portable counts or selected another library")
+
+    monkeypatch.setattr(shapes, "_portable_basis_shape", forbidden)
+    monkeypatch.setattr(_native, "load_library", forbidden)
+    monkeypatch.setattr(library, "generativeqc_resource_basis_shape_v1", reject)
+    estimate = estimate_ks_resources if "pbe" in method else estimate_hf_resources
+    with pytest.raises(ValueError, match="native basis topology rejected"):
+        estimate([WATER], method=method, backend="cuda", library=library)
 
 
 @pytest.mark.parametrize(
@@ -219,13 +242,18 @@ def test_exact_signed_count_limit_and_next_count_failure(library: Any) -> None:
             shapes._basis_shape((0, 0), (maximum, 1), "cartesian", library=loaded)
 
 
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
 def test_shape_rejection_does_not_invalidate_a_prepared_warm_state(
-    library: Any, monkeypatch: pytest.MonkeyPatch
+    library: Any, device: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed estimate must not mutate an already-admitted scientific owner."""
+    if device == "cuda":
+        if os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
+            pytest.skip("requires a finite Slurm CUDA allocation")
+        assert os.environ.get("SLURM_JOB_ID")
     atoms = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     calculator = Calculator(
-        method="rhf", device="cpu", resource_budget=ResourceBudget(host_bytes=1 << 30)
+        method="rhf", device=device, resource_budget=ResourceBudget(host_bytes=1 << 30)
     )
     with calculator.prepare_batch([atoms]) as prepared:
         cold = prepared.execute(strict=True).items[0]
