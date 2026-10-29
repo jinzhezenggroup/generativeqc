@@ -580,7 +580,7 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
         baseline["shard_count"],
         baseline["architectures"],
         # The legacy fixture intentionally includes an untuned sm_90 bundle.
-        # Request it explicitly; strict auto must not silently select portable.
+        # Keep the historical fixture's explicit profile selection reproducible.
         profile_by_architecture={"sm_90": "portable_cuda"},
         unit_mode=baseline["unit_mode"],
     )

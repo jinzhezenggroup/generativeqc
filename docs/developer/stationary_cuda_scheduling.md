@@ -56,7 +56,9 @@ The compiled native controller also admits the existing phased Becke geometry
 executor for 48–128 atoms across its complete admitted RKS/UKS profile catalog.
 The schedule has no functional-name whitelist: partition response is independent
 of the XC point model and spin channels. It requires full point lanes,
-retained center geometry and the executor's actual-device sm_120 checks.
+retained center geometry and sufficient actual-device thread/grid dimensions.
+Both the compiler resource plan and native executor use capability checks;
+compute capability or GPU model names do not exclude an otherwise valid plan.
 This is an execution-policy change, not a new partition formula or a pruning
 rule; the grid, screening thresholds and arithmetic policies are unchanged.
 Mixed geometry retains its existing executor. Composite/nonlocal owners already
