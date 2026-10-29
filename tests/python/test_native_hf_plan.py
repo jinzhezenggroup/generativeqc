@@ -97,11 +97,9 @@ def test_exact_limits_and_identity_are_preserved(
         maximum_total_iterations=120,
         maximum_estimated_cost_units=5.0,
     )
-    portable = DeterministicHFPlan(
-        PROBLEM, (source, target), budget, _library=SimpleNamespace()
-    )
+    portable = DeterministicHFPlan(PROBLEM, (source, target), budget, _library=library)
     forbid_compatibility(monkeypatch)
-    monkeypatch.setattr(native, "optional_library", lambda: library)
+    monkeypatch.setattr(native, "require_library", lambda: library)
     plan = DeterministicHFPlan(PROBLEM, (source, target), budget)
     assert plan == portable and plan.identity == portable.identity
     assert asdict(plan) == asdict(portable) and "_library" not in asdict(plan)
@@ -191,12 +189,10 @@ def test_selected_old_library_and_wide_integer_compatibility(
     def forbidden() -> None:
         raise AssertionError("selected owner searched for another library")
 
-    monkeypatch.setattr(native, "optional_library", forbidden)
+    monkeypatch.setattr(native, "require_library", forbidden)
     source, target = stages()
-    assert (
+    with pytest.raises(RuntimeError, match="requires the current native plan protocol"):
         native.failures(source, target, ProgressiveBudget(), library=SimpleNamespace())
-        == 0
-    )
     wide = replace(
         source, convergence=replace(source.convergence, maximum_iterations=2**80)
     )
@@ -212,6 +208,21 @@ def test_selected_old_library_and_wide_integer_compatibility(
         )
         == 0
     )
+
+
+@pytest.mark.parametrize("missing", ["library", "protocol"])
+def test_standalone_plan_requires_current_native_support(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    """Typed standalone plans cannot silently select Python numerical admission."""
+    selected = tmp_path / "selected.so"
+    if missing == "protocol":
+        selected.touch()
+        monkeypatch.setattr(native.ctypes, "CDLL", lambda _: SimpleNamespace())
+    monkeypatch.setattr(native._native, "_candidate_paths", lambda: iter((selected,)))
+    forbid_compatibility(monkeypatch)
+    with pytest.raises(RuntimeError, match="HF planning requires the current native"):
+        DeterministicHFPlan(PROBLEM, stages(), ProgressiveBudget())
 
 
 @pytest.mark.parametrize("corrupt", [False, True])
