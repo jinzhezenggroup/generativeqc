@@ -20,7 +20,7 @@ from generativeqc import (
     dispersion,
     resources_d4,
 )
-from generativeqc.ks import KsOptions
+from generativeqc.ks import KsOptions, resolve_ks_options
 from generativeqc_compiler.method import resolve_method
 
 
@@ -103,13 +103,19 @@ def test_cuda_replay_rejects_changed_scientific_inputs(
             monkeypatch.setattr(
                 batch,
                 "_effective_ks_options",
-                replace(batch._effective_ks_options, tile_points=128),
+                resolve_ks_options(
+                    calc._method_name,
+                    replace(batch._effective_ks_options, tile_points=128),
+                ),
             )
             error, message = ValueError, "execution schedule changed"
         else:
             request = batch.resource_plan.requests[0]
+            topology = json.loads(request.identity.topology)
+            topology["items"][0]["atoms"] += 1
             changed = replace(
-                request, identity=replace(request.identity, topology="{}")
+                request,
+                identity=replace(request.identity, topology=json.dumps(topology)),
             )
             batch.resource_plan = replace(
                 batch.resource_plan,
