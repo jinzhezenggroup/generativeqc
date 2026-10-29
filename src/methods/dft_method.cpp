@@ -141,7 +141,7 @@ unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
-enum class KsProviderPurpose { scf, derivative_only };
+enum class KsProviderPurpose { scf, mandatory_scf, derivative_only };
 
 /** Keep SCF's established optional J allowance separate from a lazy force lease.
  * Derivative order alone cannot distinguish these owners: the primary SCF
@@ -518,7 +518,8 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
     const auto direct =
         approximation == scf::FockApproximation::Exact
             ? ks_provider_bytes(system, backend,
-                                ks_direct_derivative_order(strategy, backend, execution_plan))
+                                ks_direct_derivative_order(strategy, backend, execution_plan),
+                                KsProviderPurpose::mandatory_scf)
             : 0;
     const auto aux = ks_auxiliary_for_system(system, auxiliary);
     const auto fock = scf::prepared_fock_device_capacity(
@@ -555,7 +556,8 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
                   scf::cuda_ks_one_electron_capacity(cart, atoms, shells, primitives, true)});
   }
   return runtime::DeviceCapacityReservation::try_create(
-      ledger, runtime::size_add(fleet.inventory()[8], correction_bytes));
+      ledger, runtime::size_add(fleet.inventory()[8], correction_bytes),
+      approximation == scf::FockApproximation::Exact && correction_bytes != 0);
 #else
   (void)systems;
   (void)execution_plan;

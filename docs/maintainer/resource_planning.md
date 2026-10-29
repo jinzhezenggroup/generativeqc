@@ -451,8 +451,13 @@ excluded by KS planning remain unsupported.
 
 For bounded strict-FP64 all-electron s/p/d Direct PBE/PBE0-D4 CUDA contexts, the additive
 `generativeqc_resource_ks_d4_optional_cuda_v1` query supplies an optional XC
-headroom candidate. It reserves mapped AO arenas, spatial copies and the native
-default point-panel ceiling concurrently. This is a conservative declared
+headroom candidate. It reserves mapped AO arenas, spatial copies, the native
+default point-panel ceiling and optional MD-J headroom concurrently. MD-J and
+optional component reuse share the existing 128 MiB native device ceiling and
+can use only unpromised capacity after the complete mandatory fleet is reserved.
+Their host staging and value metadata have a separate conservative envelope.
+Other public resource owners retain their original direct Coulomb admission.
+This is a conservative declared
 capacity, not a measured allocation peak. The selected complete KS+D4 owner
 receives a numeric cap containing only its own estimates, including provider
 allowances that native preparation converts into retained leases. It cannot

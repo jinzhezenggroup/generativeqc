@@ -529,12 +529,15 @@ int generativeqc_resource_ks_d4_optional_cuda_v1(std::size_t nao, std::size_t at
         atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
         tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
     const auto extra = generativeqc::dft::cuda_ks_optional_xc_capacity(xc);
+    const auto coulomb = generativeqc::scf::cuda_direct_coulomb_optional_capacity(nao);
     // The complete promise also reserves the diagnostic history-square panel,
     // which can be activated on a later geometry rebuild.
     const auto device = generativeqc::runtime::size_add(
-        extra[1], generativeqc::runtime::size_mul(
-                      sizeof(double), generativeqc::runtime::size_mul(diis_history, diis_history)));
-    output[0] = extra[0];
+        generativeqc::runtime::size_add(extra[1], coulomb[1]),
+        generativeqc::runtime::size_mul(
+            sizeof(double), generativeqc::runtime::size_mul(diis_history, diis_history)));
+    const auto host = generativeqc::runtime::size_add(extra[0], coulomb[0]);
+    output[0] = host;
     output[1] = device;
     return 0;
   } catch (...) {

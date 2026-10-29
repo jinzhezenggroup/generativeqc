@@ -56,7 +56,8 @@ The first complete run at `9d0df5629` (Slurm 14903) passes the default campaign
 at 1.01182439 but fails the budget campaign at 3.47645361. The s/p-only promise
 does not cover the original matrix's d-shell water/def2-SVP member, so whole
 fleets retain selected-inventory fallback. Preserve every sample and both
-profiles in `sp-only-cuda-qualification.json.xz`. The srun exit is 1; the completed
+profiles in `sp-only-cuda-qualification.json.xz`, recoverable through the
+verified `sp-only-history.json` Git snapshot manifest. The srun exit is 1; the completed
 scheduler record expired before retrieval and accounting storage is disabled.
 The running record and failure output remain evidence, without an invented
 completed scheduler receipt.
@@ -69,6 +70,20 @@ again. Its initial 2 GiB host cap correctly refused the declared 3.244 GB host
 setup bound; this larger test uses 4 GiB host and 2 GiB device capacity. The
 original timing matrix keeps both of its 2 GiB caps and its unchanged 1.05 gate.
 This extension still needs the full qualification matrix.
+
+The d-shell diagnostic (Slurm 14907) still launches 172,970 kernels against
+172,628: public admission suppresses the MD-J source even after XC admission is
+repaired. Complete individual Direct D4 promises now carry narrow authority to
+try that optional source. Their mandatory sizing explicitly excludes MD-J,
+independent of any surrounding promise. During optional construction, a scope
+withholds all mandatory credit; MD-J and subsequent optional component reuse
+share at most 128 MiB of unpromised capacity. Every sizing check uses the smaller
+of the local owner budget, that ceiling and current unpromised capacity.
+The native additive query reserves this ceiling and conservative host staging
+and signature metadata. Ordered Schwarz borrows existing device scratch and
+uses this same admitted host envelope. Missing capacity retains generated J;
+uncorrected, DF and other public resource owners do not inherit this authority.
+This repair requires fresh numerical, lifetime and complete-endpoint evidence.
 
 ## References
 

@@ -38,7 +38,7 @@ _KEYS = (
 
 
 def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) -> Any:
-    """Offer optional XC storage only for a complete, bounded native D4 owner.
+    """Offer optional XC/MD-J storage for a complete, bounded native D4 owner.
 
     The preferred candidate includes explicit headroom from the selected native
     image. The original selected-inventory candidates remain available at tight
@@ -107,14 +107,15 @@ def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) ->
         if status == 2:
             return request
         if status or not row[1]:
-            raise ValueError("native D4 optional XC capacity query failed")
-        host = checked_bytes(host + row[0], "optional XC host capacity")
-        device = checked_bytes(device + row[1], "optional XC device capacity")
+            raise ValueError("native D4 optional capacity query failed")
+        host = checked_bytes(host + row[0], "optional XC/MD-J host capacity")
+        device = checked_bytes(device + row[1], "optional XC/MD-J device capacity")
     decisions = dict(cached.decisions)
     decisions.update(
         native_d4_complete_cap="1",
         xc_ao_selection="native promise with bounded optional map capacity",
         xc_point_batching="native promise with bounded optional panel capacity",
+        direct_coulomb="native promise with bounded optional MD-J capacity",
     )
     preferred = replace(
         cached,
@@ -122,10 +123,10 @@ def with_native_xc_capacity(request: Any, calculator: Any, model: Any = None) ->
         estimates=(
             *cached.estimates,
             ResourceEstimate(
-                "native optional XC host headroom", host, "pageable", 0, 0
+                "native optional XC/MD-J host headroom", host, "pageable", 0, 0
             ),
             ResourceEstimate(
-                "native optional XC device headroom",
+                "native optional XC/MD-J device headroom",
                 device,
                 f"device:{calculator._device_id}",
                 0,
