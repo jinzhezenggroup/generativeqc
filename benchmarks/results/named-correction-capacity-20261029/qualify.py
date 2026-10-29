@@ -109,10 +109,7 @@ def main() -> None:
                 stdout=subprocess.PIPE,
                 text=True,
                 start_new_session=True,
-                env={
-                    **environment,
-                    "BASIS_QUALIFY_NATIVE_COUNTS": "1" if name == "B" else "0",
-                },
+                env=environment,
             )
             workers[name] = worker
             metadata[name] = _response(worker, args.response_timeout)["ready"]
