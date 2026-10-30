@@ -164,6 +164,15 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
   assert((resources->precision_work==std::array<std::uint64_t,3>{}));
   if (occupied) {
     ++occupied_calls;
+    const bool recycled = mode==4;
+    assert(bool(occupied->recyclable_final_projection)==recycled);
+    if(recycled) {
+      assert(occupied->recyclable_final_projection==active->auxiliary_tile_values);
+      assert(occupied->recyclable_final_projection_elements==16);
+      assert(active->completed_occupied_projection_rank==0);
+      // Simulate a bridge failure after consuming its exclusive scratch lease.
+      occupied->recyclable_final_projection[0]=123;
+    }
     if(mode>=19) {
       // A corrected determinant must project B anew, never reuse the old U.
       assert(!occupied->final_fitted_occupied_projection);

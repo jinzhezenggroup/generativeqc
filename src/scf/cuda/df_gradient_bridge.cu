@@ -1043,6 +1043,13 @@ generativeqc_status execute_cuda_df_hf_gradient(
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
+    if (occupied->recyclable_final_projection &&
+        (occupied->recyclable_final_projection != occupied->final_fitted_occupied_projection ||
+         terms.size() != 1 ||
+         occupied->recyclable_final_projection_elements != n * a * occupied->factors[0].rank)) {
+      detail = "recycled DF scratch must identify the exclusive final projection allocation";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
     if (occupied->final_fitted_occupied_projection &&
         (!whitened || !whitened->packed_pairs || terms.size() != 1 || !occupied->factors[0].rank ||
          occupied->factors[0].density_scale != 2.0)) {
@@ -1527,6 +1534,18 @@ generativeqc_status execute_cuda_df_hf_gradient(
           std::max(occupied_largest, n * n + (whitened ? n * occupied_max_rank : 0));
       const auto factor_capacity =
           static_cast<std::size_t>(available / sizeof(double) - fixed_elements);
+      // A current fitted final projection has already eliminated the source
+      // projection pass. Larger bounded derivative panels then amortize shell
+      // launches; unqualified/raw/UHF factors retain their existing schedule.
+      const std::size_t occupied_tile =
+          occupied && occupied->final_fitted_occupied_projection ? 512 : 64;
+      const auto preferred_scratch = std::max(occupied_scratch, std::min(a, occupied_tile) * n * n);
+      const bool recycle_projection =
+          occupied && occupied->recyclable_final_projection && whitened &&
+          df_recycled_projection_preferred(factor_capacity, occupied_retained, occupied_scratch,
+                                           preferred_scratch,
+                                           occupied->recyclable_final_projection_elements);
+      const auto owned_occupied_scratch = recycle_projection ? 0 : occupied_scratch;
       const char* requested_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
       const char* requested_dot = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
       const char* requested_scatter = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
@@ -1541,7 +1560,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const bool owned_occupied =
           !whitened_response && occupied && (whitened || panel_capacity <= a) &&
           occupied_retained <= factor_capacity &&
-          occupied_scratch <= factor_capacity - occupied_retained &&
+          owned_occupied_scratch <= factor_capacity - occupied_retained &&
           (!requested_algebra || std::string_view(requested_algebra) == "blas") &&
           (!requested_dot || std::string_view(requested_dot) != "1") &&
           (!requested_scatter || !*requested_scatter);
@@ -1573,7 +1592,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                         panel_capacity > a;
       const auto capacity =
           owned_occupied
-              ? std::min(std::size_t{64}, (factor_capacity - occupied_retained) / (n * n))
+              ? std::min(occupied_tile,
+                         (recycle_projection ? occupied->recyclable_final_projection_elements
+                                             : factor_capacity - occupied_retained) /
+                             (n * n))
               : (single_fitted_tensor ? panel_capacity - a : panel_capacity / 2);
       auto tile = std::min({a, capacity, maximum_auxiliary_tile ? maximum_auxiliary_tile : a});
       const double* densities = nullptr;
@@ -1613,7 +1635,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
                        : block,
                    whitened_response) +
                (single_fitted_tensor ? (a - block) * n * n : 0) +
-               (owned_occupied ? occupied_retained + std::max(occupied_scratch, block * n * n) : 0);
+               (owned_occupied
+                    ? occupied_retained +
+                          (recycle_projection ? 0 : std::max(occupied_scratch, block * n * n))
+                    : 0);
       };
       const auto orbital_shells = orbital.shells.size();
       const auto auxiliary_shells = auxiliary.shells.size();
@@ -1685,7 +1710,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // exchange_response becomes the bounded derivative panel after fitting.
         owned_buffers.staging_weights =
             workspace + cuda_df_response_workspace_elements(n, a, terms.size(), 0);
-        owned_buffers.exchange_response = owned_buffers.staging_weights + occupied_retained;
+        // contract_occupied_response first finishes C^T*U into staging_weights.
+        // Its next gather may then overwrite U; all later projection/derivative
+        // phases use this exclusive interval on the same ordered stream.
+        owned_buffers.exchange_response = recycle_projection
+                                              ? occupied->recyclable_final_projection
+                                              : owned_buffers.staging_weights + occupied_retained;
         owned_buffers.raw_auxiliary_major = workspace + 4 * a * a + 2 * n * n;
         owned_buffers.staging_elements = occupied_retained;
         owned_buffers.exchange_elements = std::max(occupied_scratch, tile * n * n);
@@ -1712,7 +1742,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
         }
         runtime::cuda_trace::trace_counter(
             "response_owned_occupied_projection_bytes",
-            (occupied_retained + owned_buffers.exchange_elements) * sizeof(double));
+            (occupied_retained + (recycle_projection ? 0 : owned_buffers.exchange_elements)) *
+                sizeof(double));
+        runtime::cuda_trace::trace_counter(
+            "response_recycled_final_projection_scratch_bytes",
+            recycle_projection ? owned_buffers.exchange_elements * sizeof(double) : 0);
       }
       arena.stats.device_response = true;
       arena.stats.occupied_response =

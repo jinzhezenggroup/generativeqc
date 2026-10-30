@@ -44,16 +44,15 @@ class CudaStationaryController {
   CudaStationaryController(const CudaStationaryController&) = delete;
   CudaStationaryController& operator=(const CudaStationaryController&) = delete;
 
-  generativeqc_status gradient(const CudaKsResidentDensityBinding& density,
-                               const CudaKsResidentStationaryWeightsBinding& weights,
-                               const scf::PreparedFockPlan& fock,
-                               const std::function<bool()>& token_current,
-                               std::vector<double>& output, std::string& detail,
-                               bool allow_spatial_default = false,
-                               scf::DirectForcePrecisionRequest* precision = nullptr,
-                               const scf::ResolvedFockBuild* range = nullptr,
-                               const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr,
-                               const scf::PreparedFockPlan* range_provider = nullptr);
+  generativeqc_status gradient(
+      const CudaKsResidentDensityBinding& density,
+      const CudaKsResidentStationaryWeightsBinding& weights, const scf::PreparedFockPlan& fock,
+      const std::function<bool()>& token_current, std::vector<double>& output, std::string& detail,
+      bool allow_spatial_default = false, scf::DirectForcePrecisionRequest* precision = nullptr,
+      const scf::ResolvedFockBuild* range = nullptr,
+      const CudaKsResidentNonlocalFeaturesBinding* nonlocal = nullptr,
+      const scf::PreparedFockPlan* range_provider = nullptr,
+      const CudaKsResidentFittedProjectionBinding* fitted_projection = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:

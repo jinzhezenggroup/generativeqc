@@ -368,7 +368,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         plan->value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
         !plan->metric_full_rank[0] || !plan->metric_response_valid[0] ||
         plan->completed_occupied_projection_rank != borrowed.rank ||
-        borrowed.projection != plan->auxiliary_tile_values) {
+        borrowed.projection != plan->auxiliary_tile_values ||
+        plan->nbf * plan->naux * borrowed.rank > plan->projection_capacity) {
       detail = "borrowed fitted projection does not match the current DF provider";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
@@ -612,6 +613,13 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         streamed_factors.naux = plan->naux;
         streamed_factors.owner_identity = plan->factor_basis_identity;
         streamed_factors.final_fitted_occupied_projection = borrowed_fitted_projection->projection;
+        // The authenticated one-shot U lease was revoked above. Its buffer
+        // may become derivative scratch after C^T*U finishes on this stream.
+        // The bridge chooses recycling only when owned scratch would shrink
+        // the preferred tile or force the repeated-fit bounded fallback.
+        streamed_factors.recyclable_final_projection = plan->auxiliary_tile_values;
+        streamed_factors.recyclable_final_projection_elements =
+            plan->nbf * plan->naux * borrowed_fitted_projection->rank;
         runtime::cuda_trace::trace_counter("response_reused_final_fitted_projection", 1);
         runtime::cuda_trace::trace_counter(
             "response_reused_final_fitted_projection_bytes",
