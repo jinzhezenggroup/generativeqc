@@ -49,4 +49,10 @@ python .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-
 
 ## Lossless shared storage
 
-The earlier published V4/V6 receipt JSON bytes now share `v4-v6-receipts.tar.xz` in the family root. The V4 source closure is a three-file delta against the unchanged V6 source archive, which V7 also requires. Both historical replays verify recovery of the exact original compressed archive bytes before checking their unchanged engineering outcomes. Original archive SHA256/length fields remain in each summary. This storage change does not recover private redacted remote bytes or establish SDK/scientific acceptance. Use the family-root `restore_original_archives.py --output <fresh-directory>` for offline byte recovery.
+The earlier published V4/V6 receipt JSON bytes now share `v4-v6-receipts.tar.xz` in the family root. The V4 source closure is a three-file delta against the unchanged V6 source archive, which V7 also requires. Both historical replays verify recovery of the exact original compressed archive bytes before checking their unchanged engineering outcomes. Original archive SHA256/length fields remain in each summary. This storage change does not recover private redacted remote bytes or establish SDK/scientific acceptance. Recover the exact earlier compressed archives with the original restorer in the
+verified snapshot, using a fresh output directory:
+
+```console
+python -I -S -B .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/restore_original_archives.py \
+  --output .artifacts/h100-provider-original-compressed
+```
