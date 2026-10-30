@@ -652,6 +652,10 @@ def tuning_schedule_candidates(
                                             algebra_fusion=algebra_fusion,
                                             algebra_form=algebra_form,
                                             unroll_pair_terms=unroll_pair_terms,
+                                            # Register caps replace occupancy
+                                            # launch bounds, including a Rys
+                                            # packed baseline's default bound.
+                                            minimum_blocks_per_sm=0,
                                             maximum_registers=maximum_registers,
                                         )
                                     )

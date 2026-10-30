@@ -51,9 +51,9 @@ insufficient. No GPU model-name whitelist is introduced.
   counts, absent consumers, unsupported recurrence or target block overflow.
 - Existing optional alternative kernels and native resource fallbacks remain
   explicit; portable metadata does not falsely advertise measured tuning.
-- The schedule-only tuner cannot promote a subset/Wick measurement under a
-  retained independent Rys recurrence. Its manifest writer refuses the update
-  without mutation until promotion carries the actual qualified IR and baseline.
+- The tuner measures the actual independent consumer IR and carries it through
+  manifest publication. Schedule-only callers cannot promote a subset/Wick
+  measurement under a retained Rys recurrence; rejection leaves rows unchanged.
 
 ## Evidence
 

@@ -38,7 +38,7 @@ from ..cuda_schedule import (
     ScheduleIR,
     ScheduleKind,
 )
-from ..ir import KernelConsumer
+from ..ir import IntegralIR, KernelConsumer
 from .emission import (
     _oracle_schedule_trial,
     _oracle_symbol_prefix,
@@ -723,6 +723,7 @@ def _run_autotune(
         winners: dict[str, ScheduleIR] = {}
         winner_rows = []
         winner_provenance: dict[str, dict[str, object]] = {}
+        winner_integrals: dict[str, IntegralIR] = {}
         for spec in specifications:
             passing = passing_by_class.get(spec.name, [])
             if not passing:
@@ -840,6 +841,8 @@ def _run_autotune(
                     ]
                     continue
                 winners[spec.name] = trial.schedule
+                if trial.integral is not None:
+                    winner_integrals[spec.name] = trial.integral
                 winner_rows.append(
                     {
                         "shell_class": spec.name,
@@ -882,6 +885,7 @@ def _run_autotune(
                     winners,
                     selected_consumer,
                     winner_provenance,
+                    qualified_integrals=winner_integrals,
                 )
                 manifest_written = True
 

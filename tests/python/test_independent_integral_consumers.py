@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.production_bundle import (
     write_production_bundle,
@@ -18,6 +19,7 @@ from generativeqc_compiler.integral.production_profile import resolve_production
 from generativeqc_compiler.integral.production_selection import (
     split_independent_consumers,
 )
+from generativeqc_compiler.integral.tuning import policy as tuning_policy
 from generativeqc_compiler.integral.tuning.manifest import update_manifest_payload
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -202,3 +204,42 @@ def test_independent_consumers_compile_and_link(tmp_path: Path, multiple: bool) 
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("consumer", (KernelConsumer.FOCK, KernelConsumer.FORCE))
+def test_tuning_carries_the_measured_independent_integral_to_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, consumer: KernelConsumer
+) -> None:
+    """Retuning geometry keeps the actual value/derivative mathematics and peer."""
+    manifest = _manifest(tmp_path / "manifest.json")
+    selection = resolve_production_profile(manifest, "sm_80").selections[0]
+    force, fock = split_independent_consumers(selection)
+    selected = fock if consumer == KernelConsumer.FOCK else force
+    monkeypatch.setattr(tuning_policy, "_PRODUCTION_MANIFEST_PATH", manifest)
+    trials = tuning_policy.supported_schedule_trials(
+        selection.spec, consumer, cuda_target_info("sm_80")
+    )
+    assert trials and all(trial.integral == selected.integral for trial in trials)
+    payload = json.loads(manifest.read_text())
+    update_manifest_payload(
+        payload,
+        "portable_cuda",
+        {selection.spec.name: selected.schedule},
+        consumer,
+        qualified_integrals={selection.spec.name: selected.integral},
+    )
+    manifest.write_text(json.dumps(payload))
+    updated = resolve_production_profile(manifest, "sm_80").selections[0]
+    assert split_independent_consumers(updated) == (force, fock)
+    with pytest.raises(ValueError, match="qualified tuning integral differs"):
+        update_manifest_payload(
+            payload,
+            "portable_cuda",
+            {selection.spec.name: selected.schedule},
+            consumer,
+            qualified_integrals={
+                selection.spec.name: (
+                    force if consumer == KernelConsumer.FOCK else fock
+                ).integral
+            },
+        )

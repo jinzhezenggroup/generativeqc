@@ -287,17 +287,27 @@ schedule is derived from the value request. Force retains the row's primary
 support namespaces prevent force scheduling from changing the Fock algorithm.
 Rows without `fock_recurrence` retain joint lowering and its existing support
 sharing. Target legality does not establish measured performance qualification.
-The schedule-only autotuning manifest writer refuses to overwrite independent
-recurrences: its subset/Wick trials cannot qualify a geometry under an
-unmeasured retained Rys recurrence.
+Autotuning retains the independent consumer's scientific IR in its trials and
+passes the qualified IR through manifest publication. Schedule-only callers
+cannot overwrite independent recurrences: a subset/Wick measurement does not
+qualify a geometry under a retained Rys recurrence.
 
 CMake selects profiles with `GENERATIVEQC_AOT_PROFILE` or `GENERATIVEQC_AOT_PROFILES`.
 `auto` prefers an exact measured or explicitly compatible profile, then selects
 `portable_cuda`. Explicit incompatible requests and ambiguous manifests fail.
-The portable profile provides generated value-only Rys J/K kernels through the
-qualified s/p/d domain, using lane-local packed tasks where mathematically
-eligible and target-legal component schedules otherwise. It remains untuned;
-`dddd`, derivatives and uncovered classes retain their native fallbacks.
+The portable profile provides value kernels for every canonical s/p/d class.
+Most use independently scheduled value-only Rys J/K kernels with lane-local
+packed tasks or target-legal component schedules; `dddd` retains the tiled
+subset/Wick value companion of its Rys force implementation. Generated force
+coverage supplements the native low-order consumers. Higher classes and refused
+optional resources retain explicit native fallbacks. The profile remains
+untuned on other targets: an A100-tested seed does not imply optimal scheduling
+on every GPU. For a materialized portable topology that cannot fill one
+persistent worker round per generated force class on average, the runtime
+reuses its existing angular force queue. The crossover uses actual shell work
+and the resource-derived worker grid. Larger materialized and bounded plans
+retain generated forces. Existing measured target profiles retain their own
+selections.
 `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF` omits all generated shell objects.
 
 Optional production code shapes are declared per manifest row through the

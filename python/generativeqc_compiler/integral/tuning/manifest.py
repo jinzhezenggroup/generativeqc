@@ -13,7 +13,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..ir import KernelConsumer
+from ..ir import IntegralIR, KernelConsumer, build_integral_ir
+from ..shell_spec import FUSED_SHELL_SPEC_BY_NAME
 from .policy import schedule_payload
 from .shared import _PROVENANCE_FIELDS
 
@@ -52,13 +53,17 @@ def update_manifest_payload(
     winners: Mapping[str, ScheduleIR],
     consumer: KernelConsumer | str = KernelConsumer.FORCE,
     provenance: Mapping[str, Mapping[str, object]] | None = None,
+    *,
+    qualified_integrals: Mapping[str, IntegralIR] | None = None,
 ) -> dict[str, object]:
     """Return a v2 manifest with measured winners installed for one GPU.
 
     ``provenance`` may carry endpoint and compiler measurements for each
     winner.  Keeping those values beside the schedule lets a later promotion
     apply the compile/runtime Pareto policy instead of silently optimizing only
-    a synthetic kernel timer.
+    a synthetic kernel timer. ``qualified_integrals`` binds independent
+    consumer winners to the exact recurrence and output request that was
+    measured; mismatches are rejected before any manifest row changes.
     """
 
     if payload.get("schema_version") != 2:
@@ -75,22 +80,36 @@ def update_manifest_payload(
     if not isinstance(kernels, list):
         raise TypeError("architecture profile requires a kernels list")
 
-    # This writer receives schedule-only subset/Wick trials, not the value and
-    # derivative IRs used by independent lowering. Installing their geometry
-    # under a retained Rys recurrence would publish a kernel that was never
-    # measured. Refuse before mutating any row; a future recurrence-aware tuner
-    # must carry the qualified IR and its actual incumbent through promotion.
-    if any(
-        isinstance(row, dict)
-        and row.get("shell_class") in winners
-        and row.get("fock_recurrence") is not None
-        for row in kernels
-    ):
-        raise ValueError(
-            "schedule-only tuning cannot update independent Fock/force recurrences"
-        )
-
     selected_consumer = KernelConsumer(consumer)
+    # Legacy schedule-only callers cannot attest which recurrence was measured.
+    # Check every independent winner before mutating any row. The driver carries
+    # the complete qualified scientific request through this publication boundary.
+    for row in kernels:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("shell_class")
+        if (
+            not isinstance(name, str)
+            or name not in winners
+            or row.get("fock_recurrence") is None
+        ):
+            continue
+        if qualified_integrals is None or name not in qualified_integrals:
+            raise ValueError(
+                "schedule-only tuning cannot update independent Fock/force recurrences"
+            )
+        recurrence = (
+            row["fock_recurrence"]
+            if selected_consumer == KernelConsumer.FOCK
+            else row.get("recurrence", "subset_wick")
+        )
+        expected = build_integral_ir(
+            FUSED_SHELL_SPEC_BY_NAME[name], (selected_consumer,), recurrence=recurrence
+        )
+        if qualified_integrals[name] != expected:
+            raise ValueError(
+                "qualified tuning integral differs from the retained consumer"
+            )
     # Force and Fock may deliberately use different execution geometries for
     # the same shell class.  A Fock autotune must therefore update the
     # optional ``fock_schedule`` field while preserving the force schedule;
@@ -153,6 +172,8 @@ def write_tuned_manifest(
     winners: Mapping[str, ScheduleIR],
     consumer: KernelConsumer | str = KernelConsumer.FORCE,
     provenance: Mapping[str, Mapping[str, object]] | None = None,
+    *,
+    qualified_integrals: Mapping[str, IntegralIR] | None = None,
 ) -> None:
     """Write architecture winners without mutating the source manifest in place.
 
@@ -169,6 +190,7 @@ def write_tuned_manifest(
         winners,
         consumer,
         provenance,
+        qualified_integrals=qualified_integrals,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None

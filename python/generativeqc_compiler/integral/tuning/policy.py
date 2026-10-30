@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING
 from generativeqc_compiler.integral.production_profile import (
     load_production_kernel_selections,
 )
+from generativeqc_compiler.integral.production_selection import (
+    split_independent_consumers,
+)
 
 from ..cuda_schedule import (
     AlgebraOrdering,
@@ -297,9 +300,9 @@ def supported_schedule_trials(
 ) -> tuple[ScheduleTrial, ...]:
     """Return the schedule variants implemented by the current CUDA emitter.
 
-    Fock trials retain the force companion because production uses one
-    canonical task ABI, while timing and resource gates select only the
-    requested consumer's kernels.
+    Joint production rows retain their force companion and canonical task
+    ABI. Independent rows instead carry the actual value-only or force-only
+    IR; timing and resource gates select only the requested consumer.
     """
 
     if target is None:
@@ -313,6 +316,26 @@ def supported_schedule_trials(
         raise ValueError(f"{spec.name} exceeds the current s/p/d/f CUDA lowering")
     selected_consumer = KernelConsumer(consumer)
     explicit_integral = integral
+    if integral is None:
+        # Independent production consumers must be measured with their actual
+        # recurrence. A schedule-only subset/Wick baseline is a different
+        # kernel, even if its geometry matches the shipped value mapping.
+        incumbent = next(
+            (
+                selection
+                for selection in load_production_kernel_selections(
+                    _PRODUCTION_MANIFEST_PATH, architecture=target.architecture
+                )
+                if selection.spec == spec and selection.fock_recurrence is not None
+            ),
+            None,
+        )
+        if incumbent is not None:
+            force, fock = split_independent_consumers(incumbent)
+            integral = (
+                fock if selected_consumer == KernelConsumer.FOCK else force
+            ).integral
+            explicit_integral = integral
     if integral is None:
         consumers = (
             (KernelConsumer.FOCK, KernelConsumer.FORCE)

@@ -14,6 +14,7 @@
 #include "api/precision.hpp"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
+#include "scf/cuda/force_queue_policy.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/direct_task_layout.hpp"
 #include "scf/generated_shell_task.hpp"
@@ -141,6 +142,24 @@ void verify_cold_hf_screening_domain() {
     ScopedEnv disabled("GENERATIVEQC_HF_COLD_SCREENING", "0");
     rejects(cold);
   }
+}
+
+void verify_portable_force_work_policy() {
+  using generativeqc::scf::cuda_policy::portable_force_prefers_angular_queue;
+  require(portable_force_prefers_angular_queue(200U, 3U, 100U),
+          "small complete topologies reuse the angular force queue");
+  require(!portable_force_prefers_angular_queue(201U, 3U, 100U),
+          "work beyond one worker round keeps generated force consumers");
+  require(portable_force_prefers_angular_queue(201U, 3U, 101U),
+          "force crossover follows the actual device worker capacity");
+  require(!portable_force_prefers_angular_queue(1U, 0U, 100U) &&
+              !portable_force_prefers_angular_queue(1U, 3U, 0U) &&
+              !portable_force_prefers_angular_queue(0U, 3U, 100U),
+          "missing work metadata cannot authorize the angular preference");
+  require(!portable_force_prefers_angular_queue(std::numeric_limits<std::uint64_t>::max(),
+                                                std::numeric_limits<std::uint64_t>::max(),
+                                                std::numeric_limits<unsigned>::max()),
+          "large topologies cannot wrap the portable worker bound");
 }
 
 void verify_direct_jk_target_policy() {
@@ -845,6 +864,7 @@ void verify_precision_work_query_contract() {
 
 int main() {
   try {
+    verify_portable_force_work_policy();
     verify_direct_jk_target_policy();
     verify_cold_hf_screening_domain();
     verify_auto_budget_admission();
