@@ -32,6 +32,9 @@ The receipt-bound version-2 reuse contracts retain their original producer,
 controls, geometry, CPU/GPU spot check, software maps and scientific-input
 review. Replay recomputes these gates and separately subtracts every full force
 vector with `math.fsum` RMS arithmetic. It does not trust saved pass flags.
+Integrity and numerical checks remain active with `python -O`; replay also
+requires the exact seven unique scientific populations, with labels bound to
+their method, route, size, engine and fitting contract.
 The oracle producer audit's unresolved full-script reconstruction for 14
 denser-grid **DFT** receipts does not apply to the HF-only observations here.
 

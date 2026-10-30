@@ -23,31 +23,67 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def check(condition: bool, message: str) -> None:
+    """Keep every integrity and numerical gate active under Python optimization."""
+    if not condition:
+        raise ValueError(message)
+
+
 def main() -> None:
     manifest = json.loads((HERE / "manifest.json").read_text())
     for name, entry in manifest["files"].items():
         path = HERE / name
-        assert path.stat().st_size == entry["bytes"]
-        assert digest(path) == entry["sha256"]
+        check(
+            path.stat().st_size == entry['bytes'],
+            "validation failed: path.stat().st_size == entry['bytes']",
+        )
+        check(
+            digest(path) == entry['sha256'],
+            "validation failed: digest(path) == entry['sha256']",
+        )
     for entry in manifest["executed_adapters"].values():
         source = lzma.decompress((HERE / entry["path"]).read_bytes())
-        assert len(source) == entry["original_bytes"]
-        assert hashlib.sha256(source).hexdigest() == entry["original_sha256"]
+        check(
+            len(source) == entry['original_bytes'],
+            "validation failed: len(source) == entry['original_bytes']",
+        )
+        check(
+            hashlib.sha256(source).hexdigest() == entry['original_sha256'],
+            "validation failed: hashlib.sha256(source).hexdigest() == entry['original_sha256']",
+        )
     blob = lzma.decompress((HERE / "observations.json.xz").read_bytes())
-    assert b"/global_user/" not in blob
+    check(
+        b'/global_user/' not in blob,
+        "validation failed: b'/global_user/' not in blob",
+    )
     bundle = json.loads(blob)
-    assert bundle["source_revision"] == manifest["measured_revision"]
+    check(
+        bundle['source_revision'] == manifest['measured_revision'],
+        "validation failed: bundle['source_revision'] == manifest['measured_revision']",
+    )
     oracle_path = ROOT / manifest["oracle"]["path"]
-    assert digest(oracle_path) == manifest["oracle"]["sha256"]
+    check(
+        digest(oracle_path) == manifest['oracle']['sha256'],
+        "validation failed: digest(oracle_path) == manifest['oracle']['sha256']",
+    )
     oracles = json.loads(lzma.decompress(oracle_path.read_bytes()))
     auxiliary = json.loads((HERE / "hf-reference.json").read_text())
     basis_hash = hashlib.sha256(
         json.dumps(auxiliary["basis"], sort_keys=True).encode()
     ).hexdigest()
-    assert basis_hash == auxiliary["basis_sha256"]
-    assert auxiliary["selection"] == "cc-pvtz-jkfit"
+    check(
+        basis_hash == auxiliary['basis_sha256'],
+        "validation failed: basis_hash == auxiliary['basis_sha256']",
+    )
+    check(
+        auxiliary['selection'] == 'cc-pvtz-jkfit',
+        "validation failed: auxiliary['selection'] == 'cc-pvtz-jkfit'",
+    )
     native_basis = load_basis(HERE / "hf-auxiliary.json")
-    assert native_basis.representation == "spherical"
+    check(
+        native_basis.representation == 'spherical',
+        "validation failed: native_basis.representation == 'spherical'",
+    )
     roundtrip = {
         SYMBOLS[element.atomic_number - 1]: [
             [
@@ -61,66 +97,133 @@ def main() -> None:
         ]
         for element in native_basis.elements
     }
-    assert roundtrip == auxiliary["basis"]
-    assert {
-        SYMBOLS[e.atomic_number - 1]: sum(
-            (2 * s.angular_momentum + 1) * len(s.coefficients) for s in e.shells
-        )
-        for e in native_basis.elements
-    } == {"H": 30, "O": 79}
+    check(
+        roundtrip == auxiliary['basis'],
+        "validation failed: roundtrip == auxiliary['basis']",
+    )
+    check(
+        {SYMBOLS[e.atomic_number - 1]: sum(((2 * s.angular_momentum + 1) * len(s.coefficients) for s in e.shells)) for e in native_basis.elements} == {'H': 30, 'O': 79},
+        "validation failed: {SYMBOLS[e.atomic_number - 1]: sum(((2 * s.angular_momentum + 1) * len(s.coefficients) for s in e.shells)) for e in native_basis.elements} == {'H': 30, 'O': 79}",
+    )
     cpu = bundle["cpu_fit_scan"]
     cpu_oracle = next(
         r for r in oracles if (r["method"], r["atoms"], r["backend"]) == ("hf", 3, "cpu")
     )
-    assert cpu["geometry_bohr"] == cpu_oracle["geometry_bohr"]
-    assert cpu["direct"]["energy"] == cpu_oracle["samples"][-1]["energy"]
-    assert cpu["direct"]["forces"] == cpu_oracle["samples"][-1]["forces"]
+    check(
+        cpu['geometry_bohr'] == cpu_oracle['geometry_bohr'],
+        "validation failed: cpu['geometry_bohr'] == cpu_oracle['geometry_bohr']",
+    )
+    check(
+        cpu['direct']['energy'] == cpu_oracle['samples'][-1]['energy'],
+        "validation failed: cpu['direct']['energy'] == cpu_oracle['samples'][-1]['energy']",
+    )
+    check(
+        cpu['direct']['forces'] == cpu_oracle['samples'][-1]['forces'],
+        "validation failed: cpu['direct']['forces'] == cpu_oracle['samples'][-1]['forces']",
+    )
+    expected_cases = {
+        (atoms, arm, "cc-pvtz-jkfit")
+        for atoms in (3, 48, 96)
+        for arm in ("standard", "gpu4pyscf")
+    } | {(3, "gpu4pyscf", "stock-default")}
+    cases = []
     summary = []
     for population in bundle["populations"]:
         record = population["record"]
         plan = population["plan"]
-        assert record["status"] == "complete" and len(record["samples"]) == 4
-        assert record["source_revision"] == manifest["measured_revision"]
+        check(
+            record["method"] == "hf" and record["mode"] == "df",
+            "fitting evidence requires an HF-DF population",
+        )
+        case = (record["atoms"], record["arm"], population["fitting_contract"])
+        check(
+            population["id"] == f"hf-{case[0]}-{case[1]}-{case[2]}",
+            "population identifier differs from its scientific fields",
+        )
+        cases.append(case)
+        check(
+            record['status'] == 'complete' and len(record['samples']) == 4,
+            "validation failed: record['status'] == 'complete' and len(record['samples']) == 4",
+        )
+        check(
+            record['source_revision'] == manifest['measured_revision'],
+            "validation failed: record['source_revision'] == manifest['measured_revision']",
+        )
         fitted = population["fitting_contract"] == "cc-pvtz-jkfit"
         adapter = "endpoint.py" if record["arm"] == "standard" else (
             "hf-fit-reference.py" if fitted else "endpoint.py"
         )
-        assert record["runner_sha256"] == (
-            manifest["executed_adapters"][adapter]["original_sha256"]
+        check(
+            record['runner_sha256'] == manifest['executed_adapters'][adapter]['original_sha256'],
+            "validation failed: record['runner_sha256'] == manifest['executed_adapters'][adapter]['original_sha256']",
         )
-        assert plan["endpoint_sha256"] == record["runner_sha256"]
-        assert record["geometry_bohr"] == plan["geometry_bohr"]
-        assert record["accelerator"]["nvidia_smi"]["uuid"] == (
-            "GPU-b62d2463-27e7-bf5f-41a5-3ea1a4f99508"
+        check(
+            plan['endpoint_sha256'] == record['runner_sha256'],
+            "validation failed: plan['endpoint_sha256'] == record['runner_sha256']",
         )
-        assert record["slurm_job_id"] is None
-        assert record["scheduler"]["kind"] == "qz_job"
-        assert all(value == "1" for value in record["thread_controls"].values())
+        check(
+            record['geometry_bohr'] == plan['geometry_bohr'],
+            "validation failed: record['geometry_bohr'] == plan['geometry_bohr']",
+        )
+        check(
+            record['accelerator']['nvidia_smi']['uuid'] == 'GPU-b62d2463-27e7-bf5f-41a5-3ea1a4f99508',
+            "validation failed: record['accelerator']['nvidia_smi']['uuid'] == 'GPU-b62d2463-27e7-bf5f-41a5-3ea1a4f99508'",
+        )
+        check(
+            record['slurm_job_id'] is None,
+            "validation failed: record['slurm_job_id'] is None",
+        )
+        check(
+            record['scheduler']['kind'] == 'qz_job',
+            "validation failed: record['scheduler']['kind'] == 'qz_job'",
+        )
+        check(
+            all((value == '1' for value in record['thread_controls'].values())),
+            "validation failed: all((value == '1' for value in record['thread_controls'].values()))",
+        )
         if fitted:
             for name in ("hf-auxiliary.json", "hf-reference.json"):
-                assert plan["input_sha256"][name] == digest(HERE / name)
+                check(
+                    plan['input_sha256'][name] == digest(HERE / name),
+                    "validation failed: plan['input_sha256'][name] == digest(HERE / name)",
+                )
         result = qualify(
             [record], oracles, reference_reuse=bundle["reference_reuse"]
         )[0]
-        assert result["status"] == ("qualified" if fitted else "failed")
+        check(
+            result['status'] == ('qualified' if fitted else 'failed'),
+            "validation failed: result['status'] == ('qualified' if fitted else 'failed')",
+        )
         target = next(
             row
             for row in oracles
             if (row["method"], row["atoms"], row["backend"])
             == ("hf", record["atoms"], "cuda")
         )
-        assert target["geometry_bohr"] == record["geometry_bohr"]
+        check(
+            target['geometry_bohr'] == record['geometry_bohr'],
+            "validation failed: target['geometry_bohr'] == record['geometry_bohr']",
+        )
         expected = target["samples"][-1]
         checks = []
         for sample in record["samples"]:
-            assert sample["converged"]
+            check(
+                sample['converged'],
+                "validation failed: sample['converged']",
+            )
             differences = [
                 x - y
                 for a, b in zip(sample["forces"], expected["forces"], strict=True)
                 for x, y in zip(a, b, strict=True)
             ]
-            assert len(differences) == 3 * record["atoms"]
-            assert all(math.isfinite(x) for x in differences)
+            check(
+                len(differences) == 3 * record['atoms'],
+                "validation failed: len(differences) == 3 * record['atoms']",
+            )
+            check(
+                all((math.isfinite(x) for x in differences)),
+                'validation failed: all((math.isfinite(x) for x in differences))',
+            )
             errors = {
                 "energy_abs_per_atom_hartree": abs(
                     sample["energy"] - expected["energy"]
@@ -131,29 +234,30 @@ def main() -> None:
                     math.fsum(x * x for x in differences) / len(differences)
                 ),
             }
-            assert all(
-                errors[key] <= threshold
-                for key, threshold in COMMON_GATES.items()
-                if fitted or key != "energy_abs_per_atom_hartree"
+            check(
+                all((errors[key] <= threshold for key, threshold in COMMON_GATES.items() if fitted or key != 'energy_abs_per_atom_hartree')),
+                "validation failed: all((errors[key] <= threshold for key, threshold in COMMON_GATES.items() if fitted or key != 'energy_abs_per_atom_hartree'))",
             )
             if not fitted:
-                assert (
-                    errors["energy_abs_per_atom_hartree"]
-                    > COMMON_GATES["energy_abs_per_atom_hartree"]
+                check(
+                    errors['energy_abs_per_atom_hartree'] > COMMON_GATES['energy_abs_per_atom_hartree'],
+                    "validation failed: errors['energy_abs_per_atom_hartree'] > COMMON_GATES['energy_abs_per_atom_hartree']",
                 )
             checks.append(errors)
         if record["arm"] == "standard":
-            assert record["native_build"]["library_sha256"] == (
-                bundle["source_build"]["stage"]["artifacts"]["libgenerativeqc.so"]
+            check(
+                record['native_build']['library_sha256'] == bundle['source_build']['stage']['artifacts']['libgenerativeqc.so'],
+                "validation failed: record['native_build']['library_sha256'] == bundle['source_build']['stage']['artifacts']['libgenerativeqc.so']",
             )
         else:
-            assert record["environment"]["packages"]["gpu4pyscf"] == "1.9.0"
+            check(
+                record['environment']['packages']['gpu4pyscf'] == '1.9.0',
+                "validation failed: record['environment']['packages']['gpu4pyscf'] == '1.9.0'",
+            )
             if fitted:
-                assert all(
-                    s["settings"]["auxiliary_basis_sha256"] == basis_hash
-                    and s["settings"]["auxiliary_aos"] == 139 * record["atoms"] // 3
-                    and s["settings"]["auxbasis_response"] is True
-                    for s in record["samples"]
+                check(
+                    all((s['settings']['auxiliary_basis_sha256'] == basis_hash and s['settings']['auxiliary_aos'] == 139 * record['atoms'] // 3 and (s['settings']['auxbasis_response'] is True) for s in record['samples'])),
+                    "validation failed: all((s['settings']['auxiliary_basis_sha256'] == basis_hash and s['settings']['auxiliary_aos'] == 139 * record['atoms'] // 3 and (s['settings']['auxbasis_response'] is True) for s in record['samples']))",
                 )
         summary.append(
             {
@@ -164,8 +268,16 @@ def main() -> None:
                 },
             }
         )
-    assert len(summary) == 7
-    assert sum(row["status"] == "qualified" for row in summary) == 6
+    check(
+        len(summary) == 7,
+        'validation failed: len(summary) == 7',
+    )
+    check(
+        sum((row['status'] == 'qualified' for row in summary)) == 6,
+        "validation failed: sum((row['status'] == 'qualified' for row in summary)) == 6",
+    )
+    check(len(cases) == len(set(cases)), "duplicate scientific population")
+    check(set(cases) == expected_cases, "missing or unexpected scientific population")
     print(json.dumps({"status": "PASS", "populations": summary}, indent=2))
 
 
