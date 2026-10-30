@@ -128,6 +128,11 @@ source-identity receipt and raw archive retain their exact bytes.
 
 ## Revisit when
 
+The follow-up [portable Rys J/K decision](../performance/2026-10-29-portable-rys-jk.md)
+extends this qualification with generated value coverage for untuned targets and
+records the rejected cold-regressing alternatives. The measurements above retain
+their original, empty-portable-profile implementation identity.
+
 Add measured architecture-specific schedules only with independent numerical and
 complete-endpoint evidence. Revisit the compiler flag when a supported toolchain
 links the full recurrence graph without constant overflow and preserves endpoint

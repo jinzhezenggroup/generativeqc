@@ -148,6 +148,11 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
+/** Publish resident RSH sources without changing the qualified radial schedule.
+ * The canonical split emits FullRangeJk followed by RangeCorrection on the same
+ * stream. Consumers reconstruct the SR/LR channels using their bound model.
+ * Other schedules emit RangeSeparatedJk directly. Every view expires when its
+ * callback returns, so consumers must enqueue their reads before reuse. */
 generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,

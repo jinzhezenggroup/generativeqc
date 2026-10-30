@@ -223,6 +223,32 @@ generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
     detail = "prepared CUDA resident RSH derivative has incompatible scientific identity";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
+  if (c.exchange.omega == 0.3 && c.exchange.coefficient != 0.0 &&
+      std::isfinite(p.exchange.coefficient / c.exchange.coefficient)) {
+    // Preserve the host derivative adapter's specialized full/LR traversals.
+    // Both callbacks borrow the same prepared stream: the consumer must copy
+    // the full-range channels before the LR traversal reuses their storage.
+    // Its existing RangeCorrection transport reconstructs SR = Full - LR;
+    // neither a host force array nor another integral owner is needed.
+    const auto status = consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+        plan, density, beta, matrix_elements, consumer, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    return consume_cuda_direct_shell_rsh_energy_derivatives_device(
+        source, p.spin, 0.0, 0.0, c.exchange.coefficient, c.exchange.omega, density, beta,
+        matrix_elements,
+        [&](const CudaDerivativeSourceView& value) {
+          if (value.kind != CudaDerivativeSourceKind::RangeSeparatedJk || value.channels != 3)
+            throw std::invalid_argument("LR provider returned incompatible source rows");
+          auto correction = value;
+          correction.kind = CudaDerivativeSourceKind::RangeCorrection;
+          correction.values += 2 * correction.coordinates;
+          correction.channels = 1;
+          consumer(correction);
+        },
+        detail);
+  }
+  // Other radial schedules, and vanishing/too-small corrections for which
+  // recomposition has no finite ratio, retain the complete fused source.
   return consume_cuda_direct_shell_rsh_energy_derivatives_device(
       source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
       p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
