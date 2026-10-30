@@ -82,6 +82,16 @@ measurements, including source/binary identities and post-measurement formatting
 Large-grid experiments are a distinct rejected arm and are not production code.
 Raw source-matched receipts remain under `.artifacts/a100-catchup-20261031/`.
 
+Integration with master `2b64a412e` adds its source-bound native Libxc catalog.
+The PR's changed compiler/native inputs invalidate its old exact transition
+tokens. Compare against the last retained summary before refreshing them:
+all 221 changes are identity changes, with zero new stage demotions and exactly
+unchanged qualification counts. Native stages were already unqualified and the
+historical campaign remains stale, with zero current observed native contexts.
+Retain that summary as the new previous baseline, regenerate the exact tokens
+and snapshot, and run the unchanged catalog checker. This does not requalify
+historical Libxc measurements or alter public structural functional selection.
+
 ## Rejected alternatives
 
 Adding an SM80-only entry repeats the whitelist defect. Unconditionally treating

@@ -21,6 +21,7 @@ from generativeqc.automatic_artifacts import read_automatic_artifact_diagnostic
 from generativeqc.ks_diagnostics import read_ks_transport_diagnostic
 from generativeqc_compiler.common.provenance import atomic_json, file_hash
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from test_dft_complete_cuda import no_cpu_derivatives
 from test_libxc_automatic_cuda_ks import ATOMS, MOVED, _physical_state, _reference
 from test_libxc_automatic_point_native import NAMES
@@ -98,7 +99,7 @@ def _boundary_counts(
 
 def _calculator(name: str, spins: int, **overrides: Any) -> Calculator:
     """Freeze the scientific controls; the Hcore seed is independent of PySCF."""
-    controls = {
+    controls: dict[str, Any] = {
         "method": f"libxc-{'rks' if spins == 1 else 'uks'}:{name}",
         "basis": "sto-3g",
         "device": "cuda",
@@ -302,6 +303,28 @@ def _lifecycle(
             rows.append(
                 {
                     "phase": phase,
+                    # Retain the measured gates, not just the test's pass flag:
+                    # the offline catalog must recheck endpoint coverage.
+                    "coordinates": [list(position) for _, position in geometry],
+                    "energy": float(result.energy),
+                    "reference_energy": float(reference),
+                    "fixed_density_energy": float(fixed),
+                    "density_error": float(
+                        np.max(
+                            np.abs(
+                                state["density"]
+                                - density.reshape(state["density"].shape)
+                            )
+                        )
+                    ),
+                    "fock_error": float(
+                        np.max(
+                            np.abs(state["fock"] - fock.reshape(state["fock"].shape))
+                        )
+                    ),
+                    "directional_error": float(directional_error),
+                    "converged": bool(result.converged),
+                    "executed_backend": result.executed_backend,
                     "artifact": receipt,
                     "independent_boundary_counts": boundary,
                     "endpoint_seconds": seconds,
@@ -336,6 +359,20 @@ def _lifecycle(
             {
                 "schema": "generativeqc.native-automatic-cuda-forces.v1",
                 "name": name,
+                "subject_identity": functional_capability(name).identity,
+                "context": {
+                    "precision": "fp64",
+                    "basis": "sto-3g",
+                    "basis_max_l": 0 if tag == "h4" else 1,
+                    "integrals": "direct",
+                    "ecp": False,
+                    "grid": [24, 8, 16],
+                    "partition_iterations": 3,
+                    "tile_points": 37,
+                    "fixture": tag,
+                    "full_vector": full_vector,
+                    "reference": "PySCF-2.14.0/Libxc-7.0.0",
+                },
                 "spins": spins,
                 "charge": charge,
                 "multiplicity": multiplicity,
