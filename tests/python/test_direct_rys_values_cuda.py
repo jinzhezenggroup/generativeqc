@@ -43,8 +43,8 @@ if FAMILY == "primary":
     SELECTIONS = tuple(
         item
         for item in PROFILE.selections
-        if item.consumers == (KernelConsumer.FOCK,)
-        and item.recurrence.startswith("rys")
+        if KernelConsumer.FOCK in item.consumers
+        and (item.fock_recurrence or item.recurrence).startswith("rys")
     )
 else:
     SELECTIONS = (

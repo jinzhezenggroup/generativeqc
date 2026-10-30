@@ -243,3 +243,39 @@ def test_tuning_carries_the_measured_independent_integral_to_publication(
                 ).integral
             },
         )
+
+def test_portable_uniform_warp_force_unroll_pragmas_target_loops() -> None:
+    """CuMetal requires every emitted unroll pragma to precede a real loop."""
+    from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
+    from generativeqc_compiler.integral.lowering.force_rys_uniform import (
+        _emit_rys_uniform_warp_force_consumer_cuda,
+    )
+
+    profile = resolve_production_profile(
+        REPOSITORY_ROOT
+        / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_80",
+        "portable",
+    )
+    selection = next(item for item in profile.selections if item.spec.name == "pppp")
+    parts = split_independent_consumers(selection)
+    assert parts is not None
+    force, _ = parts
+    plan = build_fused_shell_plan(
+        force.spec,
+        schedule=force.schedule,
+        integral=force.integral,
+        target=profile.target,
+    )
+    source = _emit_rys_uniform_warp_force_consumer_cuda(
+        force.spec, plan, force.schedule.minimum_blocks_per_sm
+    )
+    assert "const double fourth_0" in source
+    lines = source.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip().startswith("#pragma unroll"):
+            assert index + 1 < len(lines)
+            assert lines[index + 1].lstrip().startswith(("for (", "for(")), (
+                index,
+                lines[index + 1],
+            )
