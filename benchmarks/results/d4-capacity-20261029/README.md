@@ -258,3 +258,20 @@ profile summary/CSV, exact runner, source/library identity and validation receip
 The exact source builds in Release/sm120 with verified sccache; 869 host checks
 and 25 subtests pass (27 skipped). Source-bound earlier CPU timing remains in
 `resolved-and-basis-history.json` and is not reclassified as a new CPU benchmark.
+
+## Acceptance-driver hardening (post-measurement)
+
+`qualify.py` now rejects non-finite energies/forces, mismatched force shapes,
+and non-finite or non-positive timings before reduction. Complete worker
+responses have a finite deadline, and failure cleanup stops only the harness's
+own process sessions. Scientific tolerances and the 1.05 performance gate are
+unchanged. `qualify.original.py.xz` preserves the exact pre-hardening driver;
+retained source/library identities and raw samples are not relabeled.
+
+Offline replay of both retained `integrated-cuda-*-samples.json.xz` populations
+through the hardened entry point preserves every sample, ratio and reported
+scientific maximum: 1,792 calls each, default maximum 1.0167437095874685 and
+budget maximum 1.0330590474587127. This is validation of existing observations,
+not a new GPU measurement. CPU-only regressions cover malformed science and
+timing, broadcastable force mismatches, unchanged tolerances, complete/partial
+worker responses, deadlines and cleanup, plus both retained populations.
