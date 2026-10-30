@@ -35,7 +35,7 @@ from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer, build_integral_ir
 from .production_selection import _SUPPORTED_RECURRENCES, KernelSelection
 from .shell_spec import FUSED_SHELL_SPEC_BY_NAME, ShellClassSpec
-from .specialize import specialize_fock_integral
+from .specialize import specialize_fock_integral, specialize_integral_ir
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -469,8 +469,22 @@ def _selections_from_rows(
                 target=target,
             )
         fock_schedule_payload = row.get("fock_schedule")
+        fock_recurrence = row.get("fock_recurrence")
+        independent_fock = None
+        if fock_recurrence is not None:
+            if not isinstance(fock_recurrence, str):
+                raise ValueError(f"{name} fock_recurrence must be a string")
+            independent_fock = specialize_integral_ir(
+                build_integral_ir(spec, consumers, recurrence=recurrence),
+                consumers=(KernelConsumer.FOCK,),
+                recurrence=fock_recurrence,
+            )
         if fock_schedule_payload is None:
-            if (
+            if independent_fock is not None:
+                fock_schedule = build_fused_shell_plan(
+                    spec, integral=independent_fock, target=target
+                ).schedule
+            elif (
                 KernelConsumer.FOCK in consumers
                 and schedule.kind == ScheduleKind.THREAD_TASKS
             ):
@@ -506,7 +520,11 @@ def _selections_from_rows(
                 consumers,
                 recurrence=recurrence,
             )
-            fock_integral = specialize_fock_integral(shared_integral)
+            fock_integral = (
+                independent_fock
+                if independent_fock is not None
+                else specialize_fock_integral(shared_integral)
+            )
             build_fused_shell_plan(
                 spec,
                 schedule=fock_schedule,
@@ -525,6 +543,7 @@ def _selections_from_rows(
                 recurrence=recurrence,
                 resident_force_recurrence=resident_force_recurrence,
                 fock_schedule=fock_schedule,
+                fock_recurrence=fock_recurrence,
                 fock_route=cast("str", row.get("fock_route", "paged")),
                 capabilities=capabilities,
                 runtime_seconds=_optional_nonnegative_number(

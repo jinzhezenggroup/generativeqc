@@ -26,8 +26,13 @@ exchange, while GPU4PySCF fits both.
 Old Direct HF 48/96 baselines omit force contributions and are invalid speed
 baselines. The corrected candidate restores that work. Other warm changes
 exceeding 5% were absent on PRO 6000/5090; the A100 PBE DF three-atom cohort
-contains a 47-to-70 ms increase, with samples decaying from 82 to 64 ms,
-requiring a paired repeat before a no-regression claim.
+contains a 47-to-70 ms increase, with samples decaying from 82 to 64 ms. Three
+separate paired repeats did not reproduce it: baseline warm medians were
+57.87/46.52/46.44 ms and candidate medians were 46.74/46.26/47.53 ms. Their
+energies agreed exactly and maximum force differences were below 2e-14.
+`paired_repeats` retains all nine warm samples per arm, receipt hashes, binary
+identities and scheduler provenance. The original noisy cohort remains intact;
+these repeats do not establish a universal no-regression guarantee.
 
 See [the DF note](../../../.agents/notes/implemented/performance/2026-10-30-final-df-projection-and-pressure-scratch.md)
 and [the map note](../../../.agents/notes/implemented/performance/2026-10-30-nonlocal-stationary-ao-maps.md).

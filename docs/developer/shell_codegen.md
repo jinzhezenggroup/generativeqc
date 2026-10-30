@@ -278,6 +278,19 @@ high-component subgroup baselines omitted from generic schedule discovery),
 autotune reads that schedule directly from the manifest instead of maintaining
 a second shell-name allowlist.
 
+Dual-consumer rows can additionally declare `fock_recurrence` to lower the value
+consumer independently. This field selects a value-only Rys recurrence with the
+exact root count required by the shared mathematical IR; `fock_schedule` is
+validated against that value request and the actual target. If omitted, its
+schedule is derived from the value request. Force retains the row's primary
+`recurrence` and `schedule`, including any resident force companion. Separate
+support namespaces prevent force scheduling from changing the Fock algorithm.
+Rows without `fock_recurrence` retain joint lowering and its existing support
+sharing. Target legality does not establish measured performance qualification.
+The schedule-only autotuning manifest writer refuses to overwrite independent
+recurrences: its subset/Wick trials cannot qualify a geometry under an
+unmeasured retained Rys recurrence.
+
 CMake selects profiles with `GENERATIVEQC_AOT_PROFILE` or `GENERATIVEQC_AOT_PROFILES`.
 `auto` prefers an exact measured or explicitly compatible profile, then selects
 `portable_cuda`. Explicit incompatible requests and ambiguous manifests fail.

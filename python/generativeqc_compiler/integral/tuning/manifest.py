@@ -75,6 +75,21 @@ def update_manifest_payload(
     if not isinstance(kernels, list):
         raise TypeError("architecture profile requires a kernels list")
 
+    # This writer receives schedule-only subset/Wick trials, not the value and
+    # derivative IRs used by independent lowering. Installing their geometry
+    # under a retained Rys recurrence would publish a kernel that was never
+    # measured. Refuse before mutating any row; a future recurrence-aware tuner
+    # must carry the qualified IR and its actual incumbent through promotion.
+    if any(
+        isinstance(row, dict)
+        and row.get("shell_class") in winners
+        and row.get("fock_recurrence") is not None
+        for row in kernels
+    ):
+        raise ValueError(
+            "schedule-only tuning cannot update independent Fock/force recurrences"
+        )
+
     selected_consumer = KernelConsumer(consumer)
     # Force and Fock may deliberately use different execution geometries for
     # the same shell class.  A Fock autotune must therefore update the
