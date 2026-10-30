@@ -513,7 +513,11 @@ generativeqc_status CudaStationaryController::gradient(
                                consume, detail)
                          : scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
                                fock, density.alpha, density.beta, density.matrix_elements, consume,
-                               detail, allow_spatial_default, precision);
+                               detail,
+                               fock.strategy().spec.spin != scf::FockSpin::Restricted ||
+                                   !fock.strategy().spec.exchange.present ||
+                                   binding_->full_range_exchange == 0.0,
+                               allow_spatial_default, precision);
     }
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::vector<double> candidate(centers_.size());
