@@ -55,6 +55,11 @@ evidence. `docs/cuda_ownership/` records CUDA semantic ownership. The generated
 [bulk Libxc import report](../libxc_bulk_import.md) and
 [Maple importer coverage](../libxc_maple_coverage.md) describe importer state.
 
+The [native Libxc qualification report](libxc_qualification.md) separately records
+source-bound CPU/CUDA molecular evidence. It is regenerated from retained native
+receipts and checked against current inputs in CI. It is not a public selector
+allow-list.
+
 These are implementation and validation inputs. A low-level generated kernel,
 imported functional, compiler representation, or ownership entry does not by
 itself establish an end-to-end public method/property capability.
