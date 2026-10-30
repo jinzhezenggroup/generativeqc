@@ -124,7 +124,11 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
       const auto points = pair.quadrature.point_count;
       pair.points_per_atom =
           nonlocal_grid->spec().version == 4 ? 0 : grid_points_per_atom(nonlocal_grid->spec());
-      pair.layout = nlc::vv10_cuda_device_layout(points, tile_points_, true, true);
+      // The molecular domain producer marks density-screened rows with -0.
+      // Select its qualified pair schedule just as the standalone force owner
+      // does. Active signed/zero quadrature weights retain their derivatives;
+      // raw fixed-grid consumers do not have this molecular mask contract.
+      pair.layout = nlc::vv10_cuda_device_layout(points, tile_points_, true, true, true);
       pair.effective.allocate(device, 5 * points);
       pair.seeds.allocate(device, 6 * points + 1);
       pair.workspace.allocate(device, pair.layout.workspace_bytes / sizeof(double));

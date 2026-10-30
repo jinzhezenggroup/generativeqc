@@ -94,7 +94,7 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
     }
   }
   if (binding.model.nonlocal_b != 0) {
-    const auto pair = nlc::vv10_cuda_device_layout(nonlocal_points, tile_points, true, true);
+    const auto pair = nlc::vv10_cuda_device_layout(nonlocal_points, tile_points, true, true, true);
     capacity.nonlocal_device_bytes = runtime::size_add(
         pair.workspace_bytes,
         runtime::size_add(

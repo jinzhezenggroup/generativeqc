@@ -65,3 +65,44 @@ from clean/default integration.
 Do not promote the 2048-point/64-MiB combination globally, relabel the pilot as a
 clean default build, or infer a GPU4PySCF win from the narrowly faster PBE0/B3LYP
 samples without repeated same-device controls.
+
+## Follow-up diagnosis: response headroom, not VV10 pair tiling
+
+A subsequent same-binary A100 diagnostic applied the separately qualified
+molecular VV10 schedule and compared 2048 against 256 force points under the
+same 64-MiB lane cap. One cold and one warm endpoint per arm were traced; these
+are component diagnostics, not endpoint-ranking populations.
+
+The 2048-point warm call took 75.572 seconds versus 25.964 at 256 points. SCF
+remained one iteration and one Fock, taking about 2.45 seconds in both. The
+larger tile actually improved semilocal geometry (2.914 to 1.474 seconds) and
+nonlocal geometry (2.308 to 1.407 seconds). VV10 force pairs remained about
+8.69 seconds in both arms. No optional SCF storage was retired by
+`prepare_force_memory`.
+
+The retained controller grew from 388,545,756 to 889,391,164 bytes. Warm free
+headroom fell from 1,457,848,320 to 954,531,840 bytes. At 256 points the occupied
+DF exchange response retained 740,556,800 bytes and recycled 2,415,919,104 bytes
+of the authenticated final projection; its trace took 0.924 seconds. At 2048
+points the retained factors no longer fitted alongside mandatory response
+storage. The first occupied attempt was refused, and its bounded fallback
+performed **4,489 fitted-panel GEMMs** over 67 auxiliary panels, taking
+**52.846 seconds**. This explains the warm-only cliff despite faster grids and
+unchanged SCF work. The old raw-row VV10 experiment had an additional pair cost;
+the new diagnostic does not relabel those historical bytes or timings.
+
+Automatic force batching must therefore account for retained storage across
+complete replays and the minimum space needed to avoid repeated fitting. Merely
+checking that the grid arena fits, or freeing SCF caches opportunistically, is
+insufficient. Consider sharing dead grid scratch with the subsequent response,
+or preserving response headroom in joint admission. The existing authenticated
+projection recycling already works; it cannot eliminate the separate live
+occupied-factor and metric storage requirement. Do not globally raise the grid
+cap or add a functional/GPU-name exception to hide this resource interaction.
+
+Raw diagnostic receipts, work counters, source snapshots and the rejected
+candidate build are under `.artifacts/vv10-native-mask-20261031/`. Production
+keeps its original tile and geometry-memory limits.
+The [compact follow-up evidence](../../../benchmarks/results/native-vv10-molecular-20261031/README.md)
+retains the original diagnostic receipt/source/trace hashes and aggregated warm
+phase/work observations separately from the qualified three-repeat populations.

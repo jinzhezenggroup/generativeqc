@@ -111,3 +111,9 @@ SHA256 values are verified by decompression; no numeric field was removed.
 See the [portable selection decision](../../../.agents/notes/implemented/performance/2026-10-31-portable-df-rys.md),
 [coalesced gradient decision](../../../.agents/notes/implemented/performance/2026-10-31-coalesced-df-hybrid-gradient.md),
 and [grid investigation](../../../.agents/notes/proposed/2026-10-31-stationary-grid-batching.md).
+
+The subsequent [native molecular VV10 integration](../native-vv10-molecular-20261031/README.md)
+retains separate measurements: A100 WB97M-V DF96 improves to 25.939 seconds,
+and the large-grid regression is traced to response headroom and repeated
+fitting. Those later results do not replace this campaign's original timings
+or source identities.
