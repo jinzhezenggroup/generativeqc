@@ -442,7 +442,8 @@ int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool unrestri
 // mistakes in the host decomposition, without evaluating any integral kernel.
 void full_sources(double* force,const double* density,double cj,double ck,
                   bool separate,bool accumulate=false,const double* seed=nullptr) {
-  if(separate!=separate_sources) throw std::runtime_error("wrong full-range source layout");
+  if(separate!=(separate_sources && ck!=0.0))
+    throw std::runtime_error("wrong full-range traversal layout");
   if(bilinear_route && seed!=density+4)
     throw std::runtime_error("shell consumer lost the Cartesian seed view");
   const double j=bilinear_route ? direct_force_density_coefficient_scaled<false>(
