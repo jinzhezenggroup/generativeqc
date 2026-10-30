@@ -3003,6 +3003,104 @@ GENERATIVEQC_API generativeqc_status generativeqc_hf_system_project_cpu_v1(
     uint64_t density_count, generativeqc_basis_projection_output_v1* outputs,
     uint64_t output_count);
 
+/** Prepared-fleet CPU projection controls. strict is 0 (reject individual items)
+ * or 1 (reject the whole transaction); no failure ever partially installs seeds.
+ * Numeric workspace and AO limits are positive; reserved is zero. */
+typedef struct generativeqc_hf_fleet_projection_controls_v1 {
+  uint32_t struct_size, abi_version, strict, reserved;
+  uint64_t maximum_ao, maximum_host_bytes;
+  double relative_threshold, validation_tolerance, maximum_residual;
+} generativeqc_hf_fleet_projection_controls_v1;
+
+/** Conservative bounds if all structurally eligible projections succeed.
+ * Numeric peak includes staged candidates and sequential restore validation.
+ * Prepared arenas, caller coordinates, topology metadata and opaque provider
+ * allocations remain separate; this is not whole-process RSS. */
+typedef struct generativeqc_hf_fleet_projection_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t numeric_peak_bytes, retained_bytes, largest_density_bytes;
+} generativeqc_hf_fleet_projection_capacity_v1;
+
+/** One spin's existing metric projection diagnostics, without scientific arrays. */
+typedef struct generativeqc_hf_projection_spin_v1 {
+  uint64_t source_metric_rank, target_metric_rank, occupied_rank;
+  double minimum_projected_norm_squared, projection_residual, normal_equation_residual;
+  double metric_orthogonality_error, electron_trace, metric_idempotency_error;
+} generativeqc_hf_projection_spin_v1;
+
+/** Detached per-item receipt. accepted is 0 or 1; spin_count is 1 (RHF) or 2
+ * (UHF) for accepted proposals, otherwise zero. reason is a NUL-terminated
+ * diagnostic excerpt for rejection. Unused diagnostics and reserved are zero.
+ * Source energy/iterations describe the source, never target convergence. */
+typedef struct generativeqc_hf_fleet_projection_item_v1 {
+  uint32_t struct_size, abi_version, accepted, spin_count;
+  int32_t source_iterations;
+  uint32_t reserved;
+  uint64_t numeric_workspace_bytes;
+  double source_energy;
+  char reason[512];
+  generativeqc_hf_projection_spin_v1 spins[2];
+} generativeqc_hf_fleet_projection_item_v1;
+
+/** @native-contract generativeqc_hf_fleet_projection_query_v1
+ * @behavior Query the shared native prepared HF transfer's numeric capacity and
+ * structural eligibility. Both fleets must be distinct, CPU RHF/UHF with matching
+ * spin method/count and all-electron through-g topology. The target must have warm
+ * starts enabled and no seeds. Only a successful current native source execution
+ * with retained density is eligible; imported/stale proposals never qualify.
+ * @inputs Live borrowed source/target batches, complete current-ABI controls and
+ * output. Optional target coordinates follow ordinary batch descriptors: NULL
+ * inputs with count zero use prepared geometry; otherwise one descriptor per item.
+ * Controls require positive byte/AO limits and thresholds in (0,1].
+ * @outputs Publishes conservative live numeric bounds even below the byte budget.
+ * With strict=0, invalid source/geometry/AO items are excluded; numerical rank or
+ * residual failure remains unknown until execution. No seed or result is changed.
+ * @errors Invalid input or strict rejection returns INVALID_ARGUMENT; bad headers
+ * return ABI_MISMATCH. Unsupported owners/backend/ECP/angular domains return
+ * NOT_IMPLEMENTED. Errors leave output untouched and never invoke another policy.
+ * @lifetime Borrows both owners and coordinates synchronously under both context
+ * locks. Callers must keep owners/contexts/buffers alive through the call.
+ * @execution CPU metadata only, without overlap, eigensolver, SCF or GPU work.
+ * Running/closed owners are rejected; there are no Python/compiler callbacks.
+ * @units Coordinates are Bohr; capacities are bytes; policy residuals are dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_fleet_projection_query_v1(
+    const generativeqc_batch* target, const generativeqc_batch* source,
+    const generativeqc_hf_fleet_projection_controls_v1* controls,
+    const generativeqc_batch_input_descriptor* inputs, uint32_t input_count,
+    generativeqc_hf_fleet_projection_capacity_v1* output);
+
+/** @native-contract generativeqc_hf_fleet_initialize_cpu_v1
+ * @behavior Project eligible native retained HF densities and atomically install
+ * every accepted target seed through the existing physical warm-state validator.
+ * Reuses the system/occupied projection owners; it does not copy equations or
+ * execute target SCF. A seed cannot serve as a converged projection source until
+ * target execution succeeds. The source owner remains unchanged.
+ * @inputs Query-compatible live batches, controls and coordinate descriptors;
+ * one current-ABI fixed-stride output record per target item. Keep borrowed
+ * buffers alive and serialize owner/context destruction through return.
+ * @outputs Publishes input-ordered per-item diagnostics after all accepted seeds
+ * validate and commit. With strict=0 an invalid item stays cold without discarding
+ * valid neighbors; strict=1 refuses the entire transaction. Output has no density
+ * or coefficient payload; those remain inside the native owners.
+ * @errors Invalid/strict rejection returns INVALID_ARGUMENT; bad headers return
+ * ABI_MISMATCH; insufficient numeric workspace or allocation failure returns
+ * OUT_OF_MEMORY. Unsupported domains return NOT_IMPLEMENTED before science. Every
+ * failed call preserves target seeds and output records; there is no Python retry.
+ * @lifetime Both context locks protect borrowed source state and target commit.
+ * All staging/scratch closes before return. No pointer from inputs is retained.
+ * @execution Synchronous CPU FP64 overlap/projection/physical seed validation,
+ * no SCF, GPU access, Python/compiler import or callback. Numeric budget includes
+ * simultaneous candidates and validation; external arenas/metadata stay separate.
+ * @units Coordinates are Bohr; density normalization follows the target AO basis;
+ * energy is Hartree, trace is electron count, residuals are dimensionless, capacity bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_hf_fleet_initialize_cpu_v1(
+    generativeqc_batch* target, const generativeqc_batch* source,
+    const generativeqc_hf_fleet_projection_controls_v1* controls,
+    const generativeqc_batch_input_descriptor* inputs, uint32_t input_count,
+    generativeqc_hf_fleet_projection_item_v1* outputs, uint32_t output_count);
+
 /** @native-contract generativeqc_basis_projection_query_v1
  * @behavior Query the shared occupied transport's conservative numeric capacity, without
  * admitting a target calculation or inspecting numerical inputs.
@@ -3168,6 +3266,59 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
     generativeqc_batch_flags flags, generativeqc_batch** batch);
+
+/** @native-contract generativeqc_ks_d3_resource_query_v1
+ * @behavior Query the capacities of KS's retained per-system D3 correction owners.
+ * @inputs A CPU_REFERENCE or CUDA selector, nonempty uint32 atom counts, and an ABI-headed
+ * output are required. Every item must satisfy the production D3 atom bound.
+ * @outputs Publishes summed host/device/table/workspace capacities. maximum_bytes is the
+ * minimum aggregate dispersion cap under the named batch's equal-per-item budget rule;
+ * it can exceed the sum of retained bytes for ragged inputs. Output is unchanged on failure.
+ * @lifetime Borrows inputs only for this call; no owner or pointer is retained.
+ * @errors Invalid shape/backend returns INVALID_ARGUMENT; bad output header ABI_MISMATCH.
+ * @execution Allocation-free shape query; CUDA is a selector even in CPU-only libraries.
+ * This is correction capacity only, not complete KS admission, RSS or vendor-memory sizing.
+ * @units Atom counts are dimensionless and all capacities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_d3_resource_query_v1(
+    generativeqc_backend backend, const uint32_t* atom_counts, uint32_t system_count,
+    generativeqc_d3_runtime_diagnostic* output);
+
+/** @native-contract generativeqc_calculation_prepare_named_ks_with_device_resources_v1
+ * @behavior Prepare the complete named KS program with retained native device admission.
+ * @inputs Named preparation inputs plus a live resources handle on the context's CUDA device.
+ * Its selected inventory must include both electronic and correction capacities.
+ * @outputs Clears calculation on entry and publishes an owned calculation on success.
+ * @lifetime Copies inputs and shares resource ownership; the context must outlive the owner.
+ * Closing the caller's resource handle cannot detach admission from execution or destruction.
+ * @errors Same named-program validation and device-admission statuses as ordinary preparation.
+ * Missing name/resources returns INVALID_ARGUMENT, with no unbudgeted retry.
+ * @execution Synchronous; the shared prepared owner binds admission around setup and replay.
+ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_calculation_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_device_resources* resources, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_batch_prepare_named_ks_with_device_resources_v1
+ * @behavior Prepare a complete input-ordered named KS batch with retained device admission.
+ * @inputs Named batch preparation inputs plus a live resources handle on the context's CUDA
+ * device. The inventory includes electronic buffers and per-system correction owners.
+ * @outputs Clears batch on entry and publishes one owning batch on success.
+ * @lifetime Shares resource ownership across replay and geometry rebuild; the context must
+ * outlive the batch. The caller may close its resources handle after successful preparation.
+ * @errors Same named-program and device-admission validation as scalar preparation; missing
+ * name/resources returns INVALID_ARGUMENT. Failure never retries without admission.
+ * @execution Synchronous preparation; ordinary native batch replay and item failure isolation.
+ * @units Coordinates in Bohr, energies in Hartree, capacities in bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_device_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_device_resources* resources,
+    generativeqc_batch** batch);
 
 /** @native-contract generativeqc_calculation_prepare_with_device_resources
  * @behavior Prepare the same scientific calculation with native-owned device admission.

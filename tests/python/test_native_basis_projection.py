@@ -224,7 +224,11 @@ def test_missing_protocol_is_compatibility(
 def test_prepared_projection_honors_native_capacity(
     native_projection: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from generativeqc import Calculator
+    from generativeqc import Calculator, _fleet_projection_native
+
+    # Exercise the older numeric-only protocol; prepared-fleet capacity has
+    # separate real exact/below-limit coverage in test_native_fleet_projection.
+    monkeypatch.setattr(_fleet_projection_native, "bind", lambda library: False)
 
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     source = Calculator(basis="sto-3g")

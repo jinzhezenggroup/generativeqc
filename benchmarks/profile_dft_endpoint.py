@@ -1,7 +1,7 @@
 """Intrusive cold/first-warm attribution using the unchanged README endpoint.
 
 Run as ``python -m benchmarks.profile_dft_endpoint --capture warm --method ...
-native ... --reference ... --output ...`` under finite srun. All ordinary
+native ... --reference ... --output ...`` in a finite Slurm or LSF GPU job. All ordinary
 README scientific options/gates apply. The deliberate stop after the first
 frozen warm return is a diagnostic population, never a completed timing cohort.
 Nsight may capture the warm call via cudaProfilerApi; ``--capture all`` includes
@@ -115,8 +115,8 @@ def main() -> None:
     parser.add_argument("--output", type=raw_output_path, required=True)
     known, remaining = parser.parse_known_args()
     remaining += ["--output", str(known.output)]
-    if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("real-GPU profiling requires finite srun")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        parser.error("real-GPU profiling requires a finite Slurm or LSF GPU allocation")
 
     import cupy as cp
     from generativeqc import Calculator, dispersion

@@ -61,6 +61,10 @@ class ResolvedProductionProfile:
     selections: tuple[KernelSelection, ...]
     cuda_toolkit: str
     preferred_rys_task_fock_shell_classes: tuple[str, ...] | None = None
+    # Alternative experimental Fock families share the primary CUDA modules.
+    # Their code size therefore contributes to first-launch loading even when
+    # the runtime uses only the primary generated kernels.
+    optional_fock_variants: bool = True
 
     @property
     def portable(self) -> bool:
@@ -150,7 +154,11 @@ def _resolve_profile_payload(
     architecture: str,
     requested_profile: str,
 ) -> tuple[str, dict[str, object], ProfileMatch]:
-    """Resolve explicit portable requests or fail-closed tuned profiles."""
+    """Prefer qualified schedules and retain portable CUDA for other targets.
+
+    Missing tuning evidence is a performance property, not a hardware support
+    boundary. Explicit profile requests still reject incompatible schedules.
+    """
 
     architectures = payload.get("architectures")
     if not isinstance(architectures, dict):
@@ -203,10 +211,9 @@ def _resolve_profile_payload(
         )
     if compatible:
         return compatible[0][0], compatible[0][1], ProfileMatch.COMPATIBLE
-    raise ValueError(
-        f"no tuned or compatible production profile for {architecture}; "
-        "request 'portable_cuda' explicitly to use the generic CUDA path"
-    )
+    # Reuse the explicit portable resolver so auto has the same manifest
+    # validation and truthful untuned metadata, including custom manifests.
+    return _resolve_profile_payload(payload, architecture, "portable_cuda")
 
 
 def _validate_measured_target(
@@ -545,7 +552,7 @@ def resolve_production_profile(
     architecture: str | None = None,
     profile: str = "auto",
 ) -> ResolvedProductionProfile:
-    """Resolve one target; generic CUDA requires an explicit portable request."""
+    """Resolve a target without requiring architecture-specific tuning evidence."""
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -571,7 +578,9 @@ def resolve_production_profile(
             if isinstance(accepted_architecture, str)
             else "sm_120"
         )
-        if profile in ("portable", "portable_cuda"):
+        if profile in ("portable", "portable_cuda") or (
+            profile == "auto" and selected_architecture != accepted_architecture
+        ):
             return ResolvedProductionProfile(
                 target=target,
                 profile="portable_cuda",
@@ -630,6 +639,9 @@ def resolve_production_profile(
     toolkit = profile_payload.get("cuda_toolkit", "")
     if not isinstance(toolkit, str):
         raise TypeError("profile cuda_toolkit must be a string")
+    optional_fock_variants = profile_payload.get("optional_fock_variants", True)
+    if not isinstance(optional_fock_variants, bool):
+        raise TypeError("profile optional_fock_variants must be a boolean")
     return ResolvedProductionProfile(
         target=target,
         profile=profile_name,
@@ -637,6 +649,7 @@ def resolve_production_profile(
         tuned=tuned,
         selections=selections,
         cuda_toolkit=toolkit,
+        optional_fock_variants=optional_fock_variants,
         preferred_rys_task_fock_shell_classes=_qualified_rys_task_classes(
             profile_payload, tuned=tuned
         ),

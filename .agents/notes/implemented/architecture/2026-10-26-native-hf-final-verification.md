@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-26
 
+The missing-library/protocol allowance is superseded by
+[the current-protocol requirement](../compatibility/2026-10-29-required-hf-policy-protocols.md).
+The independent policy and arbitrary-width integer behavior remain unchanged.
+
 ## Problem
 
 The native bounded HF schedule ordered scientific stages, but Python still

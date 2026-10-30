@@ -120,6 +120,7 @@ using CudaXcPointLauncher = void (*)();
 using CudaXcPointBatchLauncher = void (*)();
 template <unsigned F, bool R, bool Specialized = false> void launch_points() {}
 template <unsigned Mask> void launch_split_hybrid_points() {}
+template <unsigned Terms, unsigned Threads, bool Specialized = false> void launch_point_batches() {}
 void launch_mixed_pbe_points() {}
 void launch_mixed_pbe_point_batches() {}
 }
@@ -132,6 +133,11 @@ struct AutomaticPointStub {
 const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
 }
 namespace cuda_xc_detail {
+struct CudaXcPointBinding {
+  CudaXcPointLauncher launch{};
+  CudaXcPointBatchLauncher launch_batch{};
+  const generated::AutomaticPointStub* automatic_program{};
+};
 """
         + emit_native_xc_point_dispatch()
         + "\n}\n"

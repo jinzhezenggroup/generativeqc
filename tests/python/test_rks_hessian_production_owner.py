@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib
 import subprocess
 import sys
 from pathlib import Path
@@ -11,22 +10,10 @@ from pathlib import Path
 import generativeqc.rks_hessian as production_hessian
 import generativeqc.rks_hessian_directional as production_directional
 import generativeqc.rks_hessian_integrals as production_integrals
-import pytest
 
 import tools.generativeqc_hessian as tools_api
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def test_tools_rks_hessian_modules_are_production_aliases() -> None:
-    assert (
-        importlib.import_module("tools.generativeqc_hessian.rks_directional")
-        is production_directional
-    )
-    assert (
-        importlib.import_module("tools.generativeqc_hessian.rks_molecular")
-        is production_hessian
-    )
 
 
 def test_tools_top_level_rks_hessian_api_reuses_production_objects() -> None:
@@ -108,50 +95,6 @@ for function, arguments in (
     else:
         raise AssertionError("RKS endpoint accepted an invalid response operator")
 """
-
-
-@pytest.mark.parametrize("first_import", ["production", "alias"])
-def test_rks_module_aliases_preserve_contracts_in_both_import_orders(
-    first_import: str,
-) -> None:
-    _run_isolated(
-        """
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root / "python"), str(root)]
-contracts = (
-    ("rks_hessian_directional", "rks_directional", (
-        "DirectionalRKSBatchResponse", "DirectionalRKSResponse", "RKSXCHVPComponents",
-        "directional_rks_response", "directional_rks_responses",
-        "native_rks_xc_hvp_components",
-    )),
-    ("rks_hessian", "rks_molecular", (
-        "RKSHessianResult", "RKSHVPBatchResult", "RKSHVPResult",
-        "rks_hessian", "rks_hvp", "rks_hvp_many",
-    )),
-)
-for owner, alias, _ in contracts:
-    importlib.import_module(
-        "generativeqc." + owner if sys.argv[2] == "production"
-        else "tools.generativeqc_hessian." + alias
-    )
-facade = importlib.import_module("tools.generativeqc_hessian")
-for owner, alias, names in contracts:
-    production = importlib.import_module("generativeqc." + owner)
-    compatibility = importlib.import_module("tools.generativeqc_hessian." + alias)
-    assert compatibility is production
-    for name in names:
-        assert name in facade.__all__, name
-        assert getattr(facade, name) is getattr(compatibility, name), name
-directional = importlib.import_module("tools.generativeqc_hessian.rks_directional")
-molecular = importlib.import_module("tools.generativeqc_hessian.rks_molecular")
-"""
-        + _RKS_RESULT_CONTRACT,
-        first_import,
-    )
 
 
 def test_rks_results_and_rejection_execute_without_repository_tools() -> None:

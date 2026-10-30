@@ -179,6 +179,12 @@ macro(generativeqc_configure_cuda_backend target)
       CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
     generativeqc_set_cuda_compile_pool(
       generativeqc_direct_native "${_generativeqc_cuda_compile_pool}")
+    # The shared recurrence call graph can overflow ptxas's compiler-generated
+    # constant bank at device link (observed with CUDA 12.9 on SM80 and SM89).
+    # Keep literal constants in instructions for this archive; unrelated AOT
+    # kernels and independently compiled launch owners keep their normal policy.
+    target_compile_options(generativeqc_direct_native PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=--disable-optimizer-constants>)
     if(GENERATIVEQC_CUDA_FAST_COMPILE)
       target_compile_options(generativeqc_direct_native PRIVATE --Ofast-compile=max)
     endif()
@@ -602,7 +608,11 @@ macro(generativeqc_configure_cuda_backend target)
       if(NOT GENERATIVEQC_PYTHON_WHEEL)
         target_link_libraries(generativeqc_native_stationary PRIVATE CUDA::cudart CUDA::cublas)
       endif()
-      target_link_libraries(${target} PRIVATE generativeqc_native_stationary)
+      # This archive owns a complete device link, just like Direct and GFN2.
+      # The final host consumer does not need its resolved relocatable inputs.
+      generativeqc_cuda_host_archive(generativeqc_native_stationary
+                                    _generativeqc_stationary_host_archive)
+      target_link_libraries(${target} PRIVATE ${_generativeqc_stationary_host_archive})
       set(_native_registry "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/native_registry.cpp")
       generativeqc_register_generated_sources(
         NAME generativeqc_native_stationary_registry_codegen
@@ -651,24 +661,24 @@ macro(generativeqc_configure_cuda_backend target)
           "Generating ${_generativeqc_stationary_name} stationary CUDA AOT source")
       set(_generativeqc_stationary_target
           "generativeqc_stationary_${_generativeqc_stationary_name}")
-      add_library(${_generativeqc_stationary_target} SHARED
+      generativeqc_add_cuda_shared_library(${_generativeqc_stationary_target} _generativeqc_stationary_target_owner
                   "${_generativeqc_stationary_source}"
                   $<TARGET_OBJECTS:generativeqc_stationary_sp_primitives>)
-      add_dependencies(${_generativeqc_stationary_target}
+      add_dependencies(${_generativeqc_stationary_target_owner}
                        "generativeqc_stationary_${_generativeqc_stationary_name}_codegen"
                        generativeqc_stationary_sp_primitives)
-      target_include_directories(${_generativeqc_stationary_target} PRIVATE
+      target_include_directories(${_generativeqc_stationary_target_owner} PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/src")
-      target_compile_definitions(${_generativeqc_stationary_target} PRIVATE
+      target_compile_definitions(${_generativeqc_stationary_target_owner} PRIVATE
           GENERATIVEQC_HAS_CUDA=1)
-      target_compile_options(${_generativeqc_stationary_target} PRIVATE
+      target_compile_options(${_generativeqc_stationary_target_owner} PRIVATE
           $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>
           $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
       if(NOT GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS STREQUAL "1")
-        target_compile_options(${_generativeqc_stationary_target} PRIVATE
+        target_compile_options(${_generativeqc_stationary_target_owner} PRIVATE
           $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:--split-compile=${GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS}>)
       endif()
-      set_target_properties(${_generativeqc_stationary_target} PROPERTIES
+      set_target_properties(${_generativeqc_stationary_target_owner} PROPERTIES
           CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}"
           CUDA_STANDARD 20
           CUDA_STANDARD_REQUIRED ON
@@ -677,11 +687,15 @@ macro(generativeqc_configure_cuda_backend target)
           POSITION_INDEPENDENT_CODE ON
           OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}")
       generativeqc_set_cuda_compile_pool(
-          ${_generativeqc_stationary_target} "${_generativeqc_aot_compile_pool}")
+          ${_generativeqc_stationary_target_owner} "${_generativeqc_aot_compile_pool}")
       if(GENERATIVEQC_PYTHON_WHEEL)
+        # Import synthesis owns the final ELF link; the private device archive
+        # only consumes its provider-free headers and usage requirements.
         generativeqc_attach_cuda_implib(${_generativeqc_stationary_target})
+        target_link_libraries(${_generativeqc_stationary_target_owner} PRIVATE
+                              generativeqc_cuda_wheel_imports)
       else()
-        target_link_libraries(${_generativeqc_stationary_target} PRIVATE
+        target_link_libraries(${_generativeqc_stationary_target_owner} PRIVATE
                               CUDA::cudart CUDA::cublas)
       endif()
       generativeqc_register_generated_sources(
@@ -739,20 +753,20 @@ macro(generativeqc_configure_cuda_backend target)
           "Generating ${_generativeqc_stationary_name} stationary CUDA s/p/d wrapper")
       set(_generativeqc_stationary_spd_target
           "generativeqc_stationary_${_generativeqc_stationary_name}_spd")
-      add_library(${_generativeqc_stationary_spd_target} SHARED
+      generativeqc_add_cuda_shared_library(${_generativeqc_stationary_spd_target} _generativeqc_stationary_spd_target_owner
                   "${_generativeqc_stationary_spd_source}"
                   $<TARGET_OBJECTS:generativeqc_stationary_spd_primitives>)
-      add_dependencies(${_generativeqc_stationary_spd_target}
+      add_dependencies(${_generativeqc_stationary_spd_target_owner}
                        "${_generativeqc_stationary_spd_codegen}"
                        generativeqc_stationary_spd_primitives)
-      target_include_directories(${_generativeqc_stationary_spd_target} PRIVATE
+      target_include_directories(${_generativeqc_stationary_spd_target_owner} PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/src")
-      target_compile_definitions(${_generativeqc_stationary_spd_target} PRIVATE
+      target_compile_definitions(${_generativeqc_stationary_spd_target_owner} PRIVATE
           GENERATIVEQC_HAS_CUDA=1)
-      target_compile_options(${_generativeqc_stationary_spd_target} PRIVATE
+      target_compile_options(${_generativeqc_stationary_spd_target_owner} PRIVATE
           $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>
           $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
-      set_target_properties(${_generativeqc_stationary_spd_target} PROPERTIES
+      set_target_properties(${_generativeqc_stationary_spd_target_owner} PROPERTIES
           CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}"
           CUDA_STANDARD 20
           CUDA_STANDARD_REQUIRED ON
@@ -761,11 +775,13 @@ macro(generativeqc_configure_cuda_backend target)
           POSITION_INDEPENDENT_CODE ON
           OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd")
       generativeqc_set_cuda_compile_pool(
-          ${_generativeqc_stationary_spd_target} "${_generativeqc_aot_compile_pool}")
+          ${_generativeqc_stationary_spd_target_owner} "${_generativeqc_aot_compile_pool}")
       if(GENERATIVEQC_PYTHON_WHEEL)
         generativeqc_attach_cuda_implib(${_generativeqc_stationary_spd_target})
+        target_link_libraries(${_generativeqc_stationary_spd_target_owner} PRIVATE
+                              generativeqc_cuda_wheel_imports)
       else()
-        target_link_libraries(${_generativeqc_stationary_spd_target} PRIVATE
+        target_link_libraries(${_generativeqc_stationary_spd_target_owner} PRIVATE
                               CUDA::cudart CUDA::cublas)
       endif()
       generativeqc_register_generated_sources(

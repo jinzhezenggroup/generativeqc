@@ -1,0 +1,101 @@
+{
+  "source_base": "a3ec1f8fd8116fc70cf945ab2e7dd97f1e0d42a6",
+  "dirty_production_patch": "source.patch.xz",
+  "patch_sha256": "87bb9c05168b57d66ab12bec244d05826345b14be1c11663219fffb6a4836d6d",
+  "patch_bytes": 45281,
+  "reconstructed_paths": [
+    "cmake/GenerativeQCSources.cmake",
+    "include/generativeqc/generativeqc.h",
+    "python/generativeqc/_fleet_projection_native.py",
+    "python/generativeqc/progressive.py",
+    "src/api/c_api_fleet_projection.cpp",
+    "src/methods/batch_capabilities.hpp",
+    "src/methods/hf_method.cpp",
+    "src/scf/fleet.cpp",
+    "src/scf/fleet.hpp",
+    "src/scf/fleet_projection.cpp",
+    "src/scf/fleet_projection.hpp"
+  ],
+  "runner": "node3",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "cpu": "AMD EPYC 7K62 48-Core Processor",
+  "numpy": "2.5.1",
+  "pyscf": "2.14.0",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "cache": "sccache 0.16.0",
+  "candidate_configure": [
+    "cmake",
+    "-S",
+    "CANDIDATE",
+    "-B",
+    "CANDIDATE/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+    "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=/home/jzzeng/.local/bin/sccache",
+    "-DCMAKE_PREFIX_PATH=/home/jzzeng/miniconda3"
+  ],
+  "baseline_configure": "same settings in separate BASELINE/build",
+  "benchmark_sha256": "604d0569113da3f62e6819d5967707f0deb5ca2360ba4ebe670253b03e61f47e",
+  "qualification": {
+    "ctest": {
+      "passed": 126,
+      "failed": 0
+    },
+    "focused_python": {
+      "passed": 140,
+      "skipped": 4,
+      "skip_reason": "CUDA checkpoint cases in CPU-only build"
+    },
+    "installed_sdk": "public-header RHF/UHF shared-context transfer, PATH=/nonexistent and empty inherited environment",
+    "typecheck": "ty 0.0.82 passed",
+    "documentation": "Sphinx warnings-as-errors passed",
+    "additional_python": {
+      "passed": 162,
+      "deselected": 14,
+      "subtests_passed": 25,
+      "selection": "batch lifecycle/coordinates/properties, native capacity/projection and ABI checks; explicit -k not cuda",
+      "first_run": "161 passed plus one older-protocol injection selecting the new path; explicit old-protocol selection fixed it; all 44 native-basis-projection tests then passed"
+    },
+    "hooks": "all configured applicable hooks passed",
+    "endpoint": {
+      "samples": 1008,
+      "groups": 12,
+      "maximum_median_ratio": 1.0121695090051055,
+      "limit": 1.05,
+      "scientific_work_signature_mismatches": 0
+    }
+  },
+  "initial_extended_timing_attempt": {
+    "status": "incomplete",
+    "reason": "Initial extended water/def2-SVP ragged endpoint sampling exceeded the local timing allocation before its first block published; no baseline/candidate comparison or gate result was produced. Existing H2/H2+ matrix is unchanged in the replacement; added ragged performance cases use H2/He. Water/OH moved-geometry Direct/DF independent numerical qualification remains covered separately.",
+    "worker_cpu_seconds_at_stop": 832.62,
+    "stopped_unix": 1793179116.6686568,
+    "harness_sha256": "5eea2d85e35e5c8bdcffb53b45478dd90174662137506d6da63214062430034c"
+  },
+  "compiler_cache_observations": {
+    "before": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+    "after_separate_builds": "Compile requests                    252\nCompile requests executed           252\nCache hits                            0\nCache misses                        252\nCache misses (C/C++)                252\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                        252\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  3.344 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                            1 GiB\nMax cache size                       10 GiB\n",
+    "interpretation": "Cumulative shared-server counters, not isolated build-speed measurements. Neither cache nor source identity was cleared or weakened."
+  },
+  "reproduction_command": [
+    "python",
+    "benchmarks/results/hf-fleet-transfer-20261028/benchmark.py",
+    "--baseline",
+    "BASELINE",
+    "--candidate",
+    "CANDIDATE",
+    "--baseline-library",
+    "BASELINE/build/libgenerativeqc.so",
+    "--candidate-library",
+    "CANDIDATE/build/libgenerativeqc.so",
+    "--output",
+    "IGNORED/samples.json"
+  ],
+  "stored_sha256": {
+    "source.patch.xz": "24d01a48fbe2adaf639b4a6b42fb3b580679fb5f6e437ec94add06b0daccecc6",
+    "samples.json.xz": "6378a8ee43729be57ba2b5691828df0e591377fc86ffb2b4c4b2c193bbc1dbc8",
+    "../benchmark.py": "604d0569113da3f62e6819d5967707f0deb5ca2360ba4ebe670253b03e61f47e"
+  },
+  "benchmark_path": "../benchmark.py"
+}

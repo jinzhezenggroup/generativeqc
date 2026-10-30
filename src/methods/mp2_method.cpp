@@ -17,6 +17,8 @@
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/correlation_convergence.hpp"
 #include "methods/df_rccsdt_method.hpp"
+#include "methods/provider_initialization_intent.hpp"
+#include "methods/provider_initialization_lifetime.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
@@ -41,7 +43,9 @@ struct DeviceScope {
   ~DeviceScope() { cudaSetDevice(previous); }
 };
 #endif
-class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalculation {
+class Mp2Prepared final : public PreparedCalculation,
+                          public ReferenceSeededCalculation,
+                          public ProviderInitializationCloseable {
  public:
   Mp2Prepared(Capabilities caps, core::ContextState& context, core::System system,
               std::optional<core::System> auxiliary, scf::ScfOptions options, std::size_t budget,
@@ -58,7 +62,16 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
         threshold_(threshold),
         convergence_(convergence),
         density_fitted_(density_fitted),
-        fitted_cuda_(fitted_cuda) {}
+        fitted_cuda_(fitted_cuda),
+        cuda_reference_plan_(options.reference_provider_initialization_owner) {}
+  generativeqc_status close_provider_initialization_current(std::string& detail) override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!options_.reference_provider_initialization_owner) return GENERATIVEQC_STATUS_SUCCESS;
+    const auto report = options_.reference_provider_initialization_owner->close_current();
+    if (report.confirmed()) return GENERATIVEQC_STATUS_SUCCESS;
+    detail = report.detail.empty() ? "physical reference close unavailable" : report.detail;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
   const Capabilities& capabilities() const noexcept override { return caps_; }
   std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic() const override {
@@ -87,6 +100,10 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
   void transfer_reference_execution_to(ReferenceSeededCalculation& target) override {
     auto* compatible = dynamic_cast<Mp2Prepared*>(&target);
     if (!compatible) throw std::logic_error("incompatible correlated reference owner");
+    if (options_.reference_provider_initialization_owner ||
+        compatible->options_.reference_provider_initialization_owner)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "pending reference cannot transfer to another calculation");
     compatible->cuda_reference_plan_ = std::move(cuda_reference_plan_);
   }
 
@@ -123,7 +140,10 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
             "CUDA RI-MP2 analytic forces are not implemented; select the explicit CPU RI route");
 #if GENERATIVEQC_HAS_CUDA
       std::unique_ptr<DeviceScope> device_scope;
-      if (execution_cuda) device_scope = std::make_unique<DeviceScope>(context_.device_id);
+      if (options_.reference_provider_initialization_owner)
+        options_.reference_provider_initialization_owner->begin_reference_replay();
+      else if (execution_cuda)
+        device_scope = std::make_unique<DeviceScope>(context_.device_id);
 #else
       if (execution_cuda)
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
@@ -229,12 +249,18 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
       std::size_t component_peak = 0;
       const auto run_phase = [&](auto&& operation) {
         return run_with_cuda_reference_budget(
-            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
-              if (component_capacity >= correlation_budget)
-                throw std::length_error("MP2 companion outputs exhaust the memory budget");
-              correlation_budget -= component_capacity;
+            reference_plan, phase_budget, options_.reference_provider_initialization_owner,
+            [&](std::size_t) {
+              const auto run_current = [&]() -> decltype(auto) {
+                return run_with_cuda_reference_capacity(
+                    reference_plan, phase_budget, [&](std::size_t available) -> decltype(auto) {
+                      if (component_capacity >= available)
+                        throw std::length_error("MP2 companion outputs exhaust the memory budget");
+                      return operation(available - component_capacity);
+                    });
+              };
               try {
-                return operation(correlation_budget);
+                return run_current();
               } catch (const std::length_error& error) {
                 if (!reference_source) throw;
                 runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
@@ -250,7 +276,9 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
               conventional_source = nullptr;
               reference_source.reset();
               runtime::df_progress::Scope::label("mp2_reference_source_fallback", "memory");
-              return operation(correlation_budget);
+              // Source destruction may return its still-live bucket (including
+              // A) to the cache. Re-read that reservation before the retry.
+              return run_current();
             });
       };
       if (components & kHfComponent) {
@@ -597,9 +625,12 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
+namespace {
+std::unique_ptr<PreparedCalculation> prepare_mp2_calculation_impl(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& d, const core::System* auxiliary_basis) {
+    const generativeqc_method_descriptor& d, const core::System* auxiliary_basis,
+    std::optional<scf::ProviderInitializationIntent> pending) {
+  if (pending) require_provider_initialization_intent_scope(context, system, d);
   const auto density_fitting_mode = d.density_fitting_mode;
   if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||
       density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
@@ -675,6 +706,14 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
   options.compute_forces = false;
   options.export_physical_reference = true;
   options.reference_memory_budget_bytes = budget;
+  options.reference_provider_initialization_intent = pending;
+#if GENERATIVEQC_HAS_CUDA
+  if (pending)
+    options.reference_provider_initialization_owner =
+        scf::make_pending_reference_provider_owner(*pending, context.device_id, budget, budget);
+#else
+  if (pending) throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
+#endif
   options.density_fitting_mode = density_fitting_mode;
   options.density_fitting_relative_threshold =
       d.density_fitting_relative_threshold != 0 ? d.density_fitting_relative_threshold : 1e-10;
@@ -726,6 +765,24 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
   return std::make_unique<Mp2Prepared>(caps, context, system, std::move(auxiliary), options, budget,
                                        reference_capacity, threshold, density_fitted, fitted_cuda,
                                        convergence);
+}
+
+}  // namespace
+
+std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
+    const Capabilities& caps, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary) {
+  return prepare_mp2_calculation_impl(caps, context, system, descriptor, auxiliary, {});
+}
+
+void prepare_mp2_calculation_with_provider_initialization_intent_into(
+    const Capabilities& caps, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary,
+    scf::ProviderInitializationIntent pending, std::unique_ptr<PreparedCalculation>& destination) {
+  if (destination) throw std::invalid_argument("pending MP2 destination is already occupied");
+  // The common factory constructs metadata/inert ownership only. The retained
+  // destination is published before execute can create the first CUDA resource.
+  destination = prepare_mp2_calculation_impl(caps, context, system, descriptor, auxiliary, pending);
 }
 
 std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilities,

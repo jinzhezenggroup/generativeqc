@@ -1,0 +1,46 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "dd4fa29891e84f2a7be234c30c1dbc7a3fa2de89",
+  "file_count": 5,
+  "total_bytes": 491978,
+  "purpose": "Four superseded historical HOST producer/failure capsules and their original artifact inventory only. The complete98 actual EF returns,72 formal returns,10 NOT_RUN, full force vectors, independent oracles, actual runtime/source/control originals and numerical replay stay in-tree. Historical HOST recovery is an explicit separate audit.",
+  "recovery": "python tools/restore_retained_evidence.py --all --manifest benchmarks/results/h100-direct-wb97mv-20261024/historical-host-snapshot.json --output .artifacts/wb97-host-history",
+  "network": "No implicit fetch, GPU work, compilation or restored-code execution. Explicitly obtain this already-merged anchor in shallow clones before optional history recovery.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/host-history.json.xz",
+      "bytes": 123644,
+      "sha256": "562d6fa079c808bf0c2bdf8b7dcffef4ebd825731b5681aec54fa8f32a3a2830",
+      "git_blob_sha1": "915858a56e45c90b177b3892da5c84abfbc36c96",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v2.json.xz",
+      "bytes": 173416,
+      "sha256": "625b256ae227563a025240f3a14983a9163692b64b8be7a45f175a29ace4a180",
+      "git_blob_sha1": "b3227b13314a30e1ececd660e404c308a638c9ef",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/frozen-host-packet-v3.json.xz",
+      "bytes": 188864,
+      "sha256": "56c313ef7c43ee6da05bd6051567c07cf6b712521e859e481d94938f6dcb026b",
+      "git_blob_sha1": "99ab35d281ac727f1cb74bcd46360619445d2a65",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/root-host-v2-failed-originals.json.xz",
+      "bytes": 4988,
+      "sha256": "0cef5a78fc9db2bb2559c2c8f73ac252d3ee02256d85eb610aae914c61192bbf",
+      "git_blob_sha1": "4739270476be863a67bd1771ee50cbdc849b646d",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/h100-direct-wb97mv-20261024/artifacts.json",
+      "bytes": 1066,
+      "sha256": "12ae71ddf8f20634230b2fedd25d1b72c8494658fedd207de002d3f5fc3eb609",
+      "git_blob_sha1": "9240af5be7fc3dbded5b1db8c307372da889e012",
+      "git_mode": "100644"
+    }
+  ]
+}

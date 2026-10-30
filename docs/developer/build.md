@@ -31,8 +31,9 @@ GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
 
 For a CUDA build, set `CUDACXX` to the desired NVCC and select the target
 architecture, for example `GENERATIVEQC_CUDA_ARCHITECTURES=89` for Ada. Targets
-without a measured shell profile also need
-`CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable"`.
+without a tuned or explicitly compatible shell profile automatically use the
+portable CUDA implementation. `CMAKE_ARGS="-DGENERATIVEQC_AOT_PROFILE=portable"`
+forces that implementation even when a tuned profile is available.
 
 The source-tree Python interface finds `build/libgenerativeqc.so`
 automatically. An installed wheel loads its bundled library first;
@@ -49,8 +50,7 @@ profile selection are still evaluated per load.
 Linux CUDA wheels keep NVIDIA user-space provider DSOs outside
 `libgenerativeqc.so`, but declare the reviewed CUDA 12 `nvidia-*` packages as
 runtime dependencies because NVCC registration runs when the CUDA-bearing native
-library is loaded. The historical `generativeqc[cuda12]` extra remains an empty
-compatibility alias. The NVIDIA kernel driver remains system-owned. See the
+library is loaded. The NVIDIA kernel driver remains system-owned. See the
 [CUDA wheel decision note](../../.agents/notes/implemented/architecture/2026-09-18-provider-free-cuda-wheels.md)
 for the retained provider boundary and fallback rationale.
 
@@ -103,7 +103,10 @@ The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.
 
 Linux NVIDIA builds default to `GENERATIVEQC_PRUNE_CUDA_ARCHIVES=ON`.
-The private Direct and GFN2 archives first complete their own device links.
+The private Direct, GFN2 and native stationary archives first complete their own
+device links. Standalone stationary AOT libraries use the same device-closed
+archive ownership before their final shared-library link, retaining their public
+filenames, entry points and artifact manifests.
 `nvprune` then creates separate host-link copies without the resolved relocatable
 device inputs, preserving all requested executable cubins, PTX and registration
 wrappers. Original archives remain available for device linking and incremental
@@ -129,25 +132,42 @@ cache workflow unless the cache has been explicitly configured for PCH support.
 
 ## CUDA architecture and AOT profiles
 
+NVIDIA builds can opt into `GENERATIVEQC_COMPRESS_CUDA_FATBINS=ON` (default `OFF`). The legacy
+fatbinary compressor stores cubin/PTX images compactly during compilation and
+device linking, including optional AOT libraries. It preserves the architecture
+inventory and executable code. Set the option to `OFF` to restore the toolchain's
+storage defaults. This reduces installed size, not mathematical compilation
+work; image decompression contributes to first-load latency, so enable it only
+after qualifying cold as well as warm endpoints for the intended workload. The newer
+`--compress-mode=size` format is not selected, since it requires drivers from
+CUDA 12.4 or later independently of CUDA minor-version compatibility.
+
 CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, `90`, and
 `100`. Only `sm_120` currently has a measured generated-shell profile. The
-`auto` mode is fail-closed: a target without a tuned or explicitly compatible
-profile is a configuration error rather than an implicit generic fallback.
+`auto` mode selects an exact or explicitly compatible profile first, then the
+portable CUDA implementation, including generated value-only Rys J/K coverage.
+The fallback retains portable, untuned metadata; see the
+[shell-codegen profile contract](shell_codegen.md) for coverage and fallbacks.
+Explicit incompatible profile requests and invalid or ambiguous manifests
+remain errors.
 
-A distributable fat binary can opt into portable kernels for untuned targets
-while overriding `sm_120` with its measured profile:
+The shared native direct-integral archive disables ptxas optimizer constants to
+keep its device-linked recurrence graph within the compiler constant-bank limit.
+This is scoped to that archive; independently compiled CUDA kernels retain their
+normal compilation policy.
+
+A distributable fat binary automatically uses portable kernels for untuned
+targets and the measured profile for `sm_120`:
 
 ```bash
 cmake -S . -B build -G Ninja \
   -DCMAKE_CUDA_COMPILER=/path/to/cuda/bin/nvcc \
-  -DGENERATIVEQC_CUDA_ARCHITECTURES="80;90;120" \
-  -DGENERATIVEQC_AOT_PROFILE=portable \
-  -DGENERATIVEQC_AOT_PROFILES="sm_120"
+  -DGENERATIVEQC_CUDA_ARCHITECTURES="80;90;120"
 ```
 
 Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
-entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` only when the validated
-generic CUDA path is an intentional build choice.
+entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
+generic CUDA path for every target, including measured architectures.
 
 Derivative shell registries follow the same target/profile mapping, including
 custom manifests. Portable targets and builds with shell AOT disabled retain

@@ -4,24 +4,45 @@ Only CUDA submission/completion and the bucket solver are replaced. Deferred
 streams expose ownership errors without a GPU, integrals, or SCF execution.
 """
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+from tools.check_native_api_contracts import tokens
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("host C++ compiler and ccache required")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
+def source_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    compiler, cache = native_cxx.compiler, native_cxx.cache
     text = (ROOT / "src/scf/cuda_hf_entry.cpp").read_text()
-    source_class = text[text.index("class CudaRhfReferenceInteractionSource final") :]
-    source_class = source_class[: source_class.index("\n}  // namespace")]
+    start = text.index("class CudaRhfReferenceInteractionSource final")
+    # Isolate this executable owner independently of adjacent opt-in classes.
+    depth = 0
+    opened = False
+    for token in tokens(text[start:]):
+        if token.text == "{":
+            depth += 1
+            opened = True
+        elif token.text == "}":
+            depth -= 1
+            if opened and depth == 0:
+                end = start + token.end
+                assert text[end:].lstrip().startswith(";")
+                source_class = text[start:end] + ";\n"
+                break
+    else:
+        raise AssertionError("reference source class has no complete definition")
     adapters = text[
         text.index("ScfResult run_rhf_cuda(") : text.index("ScfResult run_uhf_cuda(")
     ]
@@ -171,7 +192,15 @@ class ElectronInteractionSource {
  virtual void read_device(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,DeviceInteractionTarget,std::size_t) const=0;
 };
 }
-struct ScfOptions { bool hooks=false,strict_initial_density=false; std::size_t reference_memory_budget_bytes=2000; };
+struct ScfOptions {
+ bool hooks=false,strict_initial_density=false;
+ std::size_t reference_memory_budget_bytes=2000;
+ std::nullptr_t reference_provider_initialization_owner=nullptr;
+};
+std::shared_ptr<const integrals::ElectronInteractionSource> make_pending_rhf_reference_source(
+ core::System&&,std::nullptr_t,std::size_t) {
+ throw std::logic_error("legacy source fixture entered opt-in owner branch");
+}
 struct CudaRhfBucketPlan {
  struct Resources { int device_id_=0; double* reference_eri_=reinterpret_cast<double*>(4); } resources;
  CudaRhfBucketPlan(){ ++live; }
@@ -206,7 +235,7 @@ std::vector<RhfBucketItem> run_rhf_cuda_bucket_cached(CudaRhfBucketPlan** p,cons
  return {item};
 }
 std::vector<RhfBucketItem> run_rhf_cuda_bucket(const std::vector<core::System>&,const ScfOptions&,const std::vector<const std::vector<double>*>&,int){ return {RhfBucketItem{}}; }
-bool exact_reference_source_identity(const CudaRhfBucketPlan*,const core::System&,const ScfOptions&,int){ return mode<22; }
+bool exact_reference_source_identity(const CudaRhfBucketPlan*,const core::System&,const ScfOptions&,int,bool=false){ return mode<22; }
 std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) {
  if(mode==11) fail_allocation=true;
  return mode==14?std::numeric_limits<std::size_t>::max():1000;
@@ -243,6 +272,12 @@ ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan**,const core::System&,const ScfO
  const std::vector<double>*,bool*,std::shared_ptr<const integrals::ElectronInteractionSource>*,CudaRhfSourceHandoff* = nullptr);
 ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,const std::vector<double>*,
  std::shared_ptr<const integrals::ElectronInteractionSource>*,CudaRhfSourceHandoff* = nullptr);
+// The legacy fixture never constructs an opt-in source. Keep its RTTI target
+// complete and fail closed if the legacy adapter unexpectedly selects it.
+class PendingRhfReferenceInteractionSource : public integrals::ElectronInteractionSource {
+ public:
+ CudaRhfBucketPlan* release_plan() const noexcept { std::abort(); }
+};
 """
 
 MAIN = r"""

@@ -49,6 +49,31 @@ D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t sy
   return r;
 }
 
+D3ResourceUsage ks_d3_resource_usage(generativeqc_backend backend,
+                                     std::span<const std::uint32_t> atom_counts) {
+  if (atom_counts.empty() || atom_counts.size() > std::numeric_limits<std::uint32_t>::max())
+    throw std::invalid_argument("invalid KS D3 fleet shape");
+  D3ResourceUsage total{};
+  total.system_count = static_cast<std::uint32_t>(atom_counts.size());
+  std::uint64_t largest_owner = 0;
+  // Validated uint32 item counts and D3's per-item atom cap bound all sums
+  // below signed int64, even though the fleet need not fit one ragged owner.
+  for (const auto atoms : atom_counts) {
+    const auto item = d3_resource_usage(backend, 1, atoms, atoms);
+    total.plan_host_bytes += item.plan_host_bytes;
+    total.execution_host_bytes += item.execution_host_bytes;
+    total.device_bytes += item.device_bytes;
+    total.table_bytes += item.table_bytes;
+    total.workspace_bytes += item.workspace_bytes;
+    total.total_atoms += atoms;
+    total.maximum_atoms = std::max(total.maximum_atoms, atoms);
+    largest_owner = std::max(largest_owner,
+                             item.plan_host_bytes + item.execution_host_bytes + item.device_bytes);
+  }
+  total.maximum_bytes = largest_owner * total.system_count;
+  return total;
+}
+
 std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device_id,
                                         std::vector<std::uint32_t> offsets,
                                         std::vector<std::int32_t> atomic_numbers,

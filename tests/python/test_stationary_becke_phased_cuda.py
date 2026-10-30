@@ -42,8 +42,8 @@ def native() -> SimpleNamespace:
     path = os.environ.get("GENERATIVEQC_PHASED_OWNER_PROBE")
     if not path:
         pytest.skip("shared-owner qualification artifact not configured")
-    if not os.environ.get("SLURM_JOB_ID"):
-        pytest.fail("real-GPU tests require a finite Slurm allocation")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        pytest.fail("real-GPU tests require a finite Slurm or LSF allocation")
     cupy = pytest.importorskip("cupy")
     library = ct.CDLL(str(Path(path).resolve()))
     tail = [ct.c_char_p, ct.c_size_t]

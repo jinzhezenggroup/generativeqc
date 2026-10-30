@@ -39,9 +39,8 @@ cotangents and their response JVPs. rVV10 remains unsupported at this planning
 boundary. A compiled source rule does not qualify a molecular endpoint.
 
 Molecular execution is a separate method-neutral layer. Its canonical installed
-owner is `generativeqc.second_order`;
-`tools.generativeqc_hessian.stationary_executor` is a compatibility re-export of
-that module and contains no second implementation.
+owner is `generativeqc.second_order`; repository Hessian tools import this owner
+directly rather than retaining a second implementation.
 `StationarySecondOrderExecutor` accepts only a plan identity and complete
 ordered source inventory, one perturbation provider, one opaque stationary
 response driver and exactly one contributor per declared source. It performs one
@@ -80,19 +79,19 @@ RHS construction, occupied-orbital/density reconstruction and the single-/multi-
 RHS consumer contract live there without importing repository `tools.*`.
 Method-specific Fock physics remains injected through the response operator's
 `induced_fock(delta_density)` contract. The shared GMRES implementation
-is installed as `generativeqc.response_solver`; tools response/Hessian
-imports are compatibility aliases or wrappers around the same production
-objects. Existing `solve_rhf_nuclear_perturbation[s]` names remain strict RHF
-compatibility wrappers.
+is installed as `generativeqc.response_solver`. Repository response/Hessian
+tools import these production owners directly. The tools perturbation adapter
+binds `solve_stationary_nuclear_perturbation[s]` to that shared GMRES solver for
+both RHF and RKS operators.
 
 The CPU direct all-electron Cartesian LDA/PBE RKS path has installed
 production owners for the live CPKS state/J/XC binding, nuclear-direction
 response, NativeAO-owned generated first/second integral response, complete
 seven-source molecular HVP, shared multi-RHS CPKS and raw bounded full-Hessian
 assembly. The existing finite-difference, raw-symmetry and resource-admission
-tests continue to qualify the same scientific contract. Repository
-`tools.generativeqc_hessian.rks_directional` and `rks_molecular` are module
-aliases to those installed consumers. The same owner is exposed through
+tests continue to qualify the same scientific contract. Repository consumers
+import `generativeqc.rks_hessian_directional` and `generativeqc.rks_hessian`
+directly. The same owner is exposed through
 `Calculator.hessian_vector_product()` and `Calculator.hessian()` for CPU direct
 all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
 explicit integral/output budgets and report the executed public endpoint in

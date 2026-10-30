@@ -10,8 +10,8 @@
       "family": "libxc-native-catalog-20261028",
       "classification": "required-compact-accepted-evidence",
       "role": "independent-native-endpoint-acceptance-inputs",
-      "bytes": 241228,
-      "sha256": "6d7aceb94dad16806a1c9e27d644ad36de64a66ed4e3d3756da61b5d06322f59"
+      "bytes": 227880,
+      "sha256": "ff85346595cbd70df34e247c37de5c90c2e943af61b6cb305d49533c6786887d"
     }
   ]
 }

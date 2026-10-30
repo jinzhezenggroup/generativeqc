@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.triples_response import accumulate_tile_triples_vjp
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from test_cc_triples_response_cuda import (
@@ -14,7 +15,6 @@ from test_cc_triples_response_cuda import (
 )
 
 from tools.generativeqc_cc.lambda_solver import BoundCCSDLambda
-from tools.generativeqc_cc.triples_response import accumulate_tile_triples_vjp
 
 
 @pytest.mark.parametrize("selected", ("t1", "fov"))

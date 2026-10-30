@@ -8,6 +8,8 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_provider_initialization.cpp
+    src/api/c_api_provider_initialization_lifetime.cpp
     src/api/c_api_integral_ad.cpp
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
@@ -15,6 +17,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
+    src/api/c_api_fleet_projection.cpp
     src/api/c_api_hf_physical_audit.cpp
     src/api/c_api_response.cpp
     src/api/c_api_df_gradient.cpp
@@ -143,6 +146,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/density_fitting.cpp
     src/scf/hf_df_resources.cpp
     src/scf/fleet.cpp
+    src/scf/fleet_projection.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
     src/scf/explicit_integral_backend.cpp
@@ -187,6 +191,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_eigensolver_probe.cu
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
+      src/scf/cuda/rhf_provider_owner.cpp
       src/scf/cuda/hf_initial_guess.cpp
       src/scf/cuda/warm_density.cpp
       src/scf/cuda/rhf_source_handoff.cpp

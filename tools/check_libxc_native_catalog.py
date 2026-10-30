@@ -40,9 +40,11 @@ def render(report: dict, previous: dict) -> str:
         "# Native automatic Libxc qualification",
         "",
         f"Measured source revision: `{report['measured_source_commit']}`.",
-        f"Source inputs: `{report['source_identity']}`.",
-        f"Embedded native source identity: `{report['native_source_identity']}`.",
-        f"Executed native library SHA-256: `{report['native_library']['sha256']}`.",
+        f"Retained measured source inputs: `{report['measured_source_identity']}`.",
+        f"Current checked source inputs: `{report['source_identity']}`.",
+        f"Current checked native input identity: `{report['native_source_identity']}`.",
+        f"Retained evidence stale for checked inputs: `{report['stale']}`.",
+        f"Retained executed native library SHA-256: `{report['native_library']['sha256']}`.",
         "Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.",
         (
             f"Structurally selectable non-curated automatic registrations: {report['structurally_selectable']}; "
@@ -69,8 +71,10 @@ def render(report: dict, previous: dict) -> str:
         )
     lines += [
         "",
-        f"Measured backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
-        "All records retain exact geometry, grid, precision, binary and derivative scope.",
+        f"Current-source admitted backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
+        "Historical measurements remain in the retained campaign; stale receipts are not",
+        "counted as current-source admitted contexts. Admitted records retain exact",
+        "geometry, grid, precision, binary and derivative scope.",
         "The [manifest](../../manifests/libxc/native-qualification.json) locates the",
         "compressed machine-readable snapshot and independent numerical receipts.",
         "",

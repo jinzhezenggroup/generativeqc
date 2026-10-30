@@ -462,6 +462,23 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   preflight_reference_provider_initialization(options.reference_provider_initialization,
                                               options.export_physical_reference);
+  const auto pending_resident_selection =
+      options.reference_provider_initialization_owner
+          ? reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"))
+          : ReferenceResidentValuesSelection::disabled;
+  if (options.reference_provider_initialization_owner) {
+    options.reference_provider_initialization_owner->require_current();
+    if (!options.export_physical_reference || unrestricted || systems.size() != 1 ||
+        !options.reference_provider_initialization_intent ||
+        options.reference_provider_initialization)
+      throw std::invalid_argument(
+          "pending provider intent requires one restricted physical reference");
+    if (pending_resident_selection == ReferenceResidentValuesSelection::forced)
+      throw ProviderInitializationUnavailable(
+          "forced transient resident source is outside pending-owner lifetime scope");
+    if (pending_resident_selection == ReferenceResidentValuesSelection::invalid)
+      throw std::invalid_argument("invalid reference resident-values selection");
+  }
   const runtime::ResidencyExecution residency_execution(runtime::ResidencyOwner::hf_bucket);
   using SourceRole = runtime::ResidencyRole;
   using SourceSite = runtime::ResidencySite;
@@ -1181,8 +1198,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   plan.resident_previous_energy.clear();
   std::size_t reference_base_bytes = 0;
   const ReferenceProviders reference_providers{use_cublas, use_cusolver};
-  const auto reference_provider_allowance = provider_initialization_allowance(
-      options.reference_provider_initialization, reference_providers);
+  const auto reference_provider_allowance = declared_reference_provider_allowance(
+      options.reference_provider_initialization, options.reference_provider_initialization_intent,
+      reference_providers);
   if (options.export_physical_reference) {
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
@@ -1206,7 +1224,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
   }
-  cudaError_t cuda_error = cudaSetDevice(device_id);
+  cudaError_t cuda_error = options.reference_provider_initialization_owner &&
+                                   options.reference_provider_initialization_owner->identity_bound()
+                               ? cudaSuccess
+                               : cudaSetDevice(device_id);
   if (cuda_error != cudaSuccess) {
     fill_global_failure(outputs, cuda_status(cuda_error));
     return outputs;
@@ -1244,7 +1265,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.persistent_quartet_worker_blocks =
         direct_target.multiprocessor_count * direct_schedule.persistent_quartet_warps_per_sm;
   }
-  if (explicit_provider_initialization(options.reference_provider_initialization)) {
+  if (options.reference_provider_initialization_owner) {
+    const auto family = !reference_providers.solver
+                            ? std::optional<ProviderInitializationEigenFamily>{}
+                        : use_jacobi ? ProviderInitializationEigenFamily::jacobi_batched
+                        : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
+                            ? ProviderInitializationEigenFamily::xsyevd
+                            : ProviderInitializationEigenFamily::xsyev_batched;
+    auto& owner = *options.reference_provider_initialization_owner;
+    owner.bind_current(reference_providers, family);
+    resources.provider_initialization_ = owner.resolved();
+    resources.provider_identity_pins_ = owner.pins();
+  } else if (explicit_provider_initialization(options.reference_provider_initialization)) {
     const auto identity = runtime::observe_cuda_provider_identity(
         reference_providers.mask(), {reinterpret_cast<const void*>(&cudaRuntimeGetVersion),
                                      reinterpret_cast<const void*>(&cublasCreate),
@@ -2142,8 +2174,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // and retires those graphs before freeing source values on every exit.
   std::unique_ptr<RhfResidentValues> resident_values;
   const auto resident_value_selection =
-      reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
+      options.reference_provider_initialization_owner
+          ? pending_resident_selection
+          : reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
+  // The opt-in owner retains the incumbent bounded producer, without a separate
+  // transient values/graph owner. Legacy resident-value selection is unchanged.
   const bool resident_value_requested =
+      !options.reference_provider_initialization_owner &&
       resident_value_selection != ReferenceResidentValuesSelection::disabled;
   // Finite public ledgers have no optional quartic reservation. Ordinary cold
   // solves use a small source domain qualified against their fused Fock path;
@@ -4784,12 +4821,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                  ~explicit_generated_force_shell_class_mask
            : 0U) &
       ~(bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
+  // Only the force registry can authorize a generated force consumer. Portable
+  // profiles also contain Fock-only classes, which must remain visible to the
+  // bounded correctness fallback. dddd is the sole Fock-advertised exception:
+  // launch_bounded_native_force below owns its independent native derivative.
   const std::uint64_t selected_force_shell_class_mask =
       (explicit_generated_force_shell_class_mask |
-       (bounded_direct_streaming
-            ? generated::enabled_fock_shell_class_mask() & kStreamingFockShellClassMask &
-                  ~kBoundedNativePagedForceShellClassMask
-            : 0U)) &
+       (bounded_direct_streaming ? generated::enabled_fock_shell_class_mask() & kDdddShellClassMask
+                                 : 0U)) &
       host_present_shell_class_mask;
   const std::uint64_t native_streaming_force_shell_class_mask =
       bounded_direct_streaming ? selected_force_shell_class_mask & kDdddShellClassMask &
@@ -4814,9 +4853,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const std::uint64_t bounded_force_legacy_queue_shell_class_mask =
       bounded_direct_count_diagnostic ? generated_queued_force_shell_class_mask
                                       : bounded_first_wave_force_shell_class_mask;
-  const std::uint64_t covered_force_shell_class_mask = generated_shell_class_mask |
-                                                       native_streaming_force_shell_class_mask |
-                                                       bounded_native_paged_force_shell_class_mask;
+  const std::uint64_t covered_force_shell_class_mask =
+      generated_shell_class_mask | native_streaming_force_shell_class_mask |
+      bounded_native_paged_force_shell_class_mask |
+      (bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
   const std::uint64_t uncovered_force_shell_class_mask =
       host_present_shell_class_mask & ~covered_force_shell_class_mask;
   // A tuned compatible profile is a production qualification claim. Once all

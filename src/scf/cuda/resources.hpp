@@ -9,6 +9,7 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/provider_initialization.hpp"
+#include "scf/provider_initialization_teardown.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -23,6 +24,12 @@ struct DirectTileValidationRecord;
 class CudaResources {
  public:
   ~CudaResources();
+  static ProviderOwnerSchema inventory_schema();
+  ProviderOwnerInventory inventory() const;
+  ProviderInitializationTeardownReport close_current_context(
+      ProviderOwnerCloseExtension* = nullptr);
+  void enter_explicit_retirement_protocol() noexcept { explicit_retirement_managed_ = true; }
+  void mark_teardown_complete();
 
   /** Borrow library state while retaining ownership in the prepared bucket. */
   EigensolverResources eigensolver_view() const;
@@ -64,6 +71,9 @@ class CudaResources {
   std::size_t reference_peak_bytes_{};
   /** Synchronized initialization free-memory delta, not an owned allocation. */
   std::size_t provider_retained_bytes_{};
+
+ private:
+  bool explicit_retirement_managed_{}, explicit_retirement_closed_{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

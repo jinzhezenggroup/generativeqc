@@ -1,0 +1,52 @@
+{
+  "schema": "generativeqc.h100-provider-owner-summary.v2",
+  "source_manifest_sha256": "32fa9681327f988e9280d26625ef73575ac52529a44dab1427d9b3f02b7d216b",
+  "measured_source_base_commit": "f0cb1eabd36153b37a1763925d162d1a9360445a",
+  "binary": {
+    "bytes": 871240,
+    "sha256": "e07162852dfece9bc630505eefcc853312178df7eddf73dffed5f84bef56182a",
+    "mode": "0o755",
+    "device_raw": 2097244,
+    "inode": 6605507213,
+    "mtime_ns": 1793119998605140143,
+    "ctime_ns": 1793119998605140143
+  },
+  "A": 536870912,
+  "B_ref": 2147483648,
+  "B_endpoint": 2147483648,
+  "native_returncode": 0,
+  "native_group_absent": true,
+  "native_reaped": true,
+  "original_native_limit_seconds": 90,
+  "api_success_records": 53,
+  "inventory_slots": 21,
+  "close_operations": 24,
+  "observed_synchronized_free_delta_bytes": 375390208,
+  "host_contract_tests": 57,
+  "default_allowance_changed": false,
+  "science": "NOT_RUN",
+  "installed_sdk": "INCOMPLETE",
+  "privacy_redacted_originals": "UNAVAILABLE_IN_PUBLIC_CAPSULE",
+  "archives": {
+    "receipt.json.xz": {
+      "bytes": 77432,
+      "sha256": "c78aeb32930bb0d558e1d55d21ceefb108b5d846801a94abccd67b7115c61bd6"
+    },
+    "source-closure.json.xz": {
+      "bytes": 58788,
+      "sha256": "7c7672b228ea1f6bd9bb23d86c82bb3d6cd0581535c301081a7ae591d47bd20c"
+    }
+  },
+  "compacted_link_map": {
+    "original_bytes": 3059232,
+    "original_sha256": "830235468fe2cdb93139031d08d37e8a7aa34036741eea72dc14e4d04fef976a",
+    "retained_excerpt_bytes": 5170,
+    "full_text_in_current_capsule": false
+  },
+  "source_recovery": {
+    "mode": "V7 delta against immutable V6 archive",
+    "source_inputs": 102,
+    "changed_source_inputs": 3,
+    "base_sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
+  }
+}

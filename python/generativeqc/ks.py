@@ -11,6 +11,10 @@ from dataclasses import asdict, dataclass, field, replace
 from fractions import Fraction
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+)
 from generativeqc_compiler.dft.grid import (
     GridPolicy,
     GridSpec,
@@ -33,10 +37,6 @@ from generativeqc_compiler.method import (
     compile_ks_execution_plan,
     d4_composite_method_identifiers,
     resolve_method,
-)
-from generativeqc_compiler.xc._generated_native_semilocal import (
-    SCF_DOMAIN_BY_VERSION,
-    SEMILOCAL_FAMILIES,
 )
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (

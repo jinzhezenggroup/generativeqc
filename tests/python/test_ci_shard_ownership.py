@@ -263,7 +263,6 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_rccsd_codegen_no_numpy.py",
         "test_dft_mp_v1_capacity.py",
         "test_df_lambda_frontier.py",
-        "test_native_stationary_phased_budget.py",
     ):
         assert f"tests/python/{filename}" in targets
 
@@ -291,7 +290,7 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
-        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -342,7 +341,7 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
-        ("tests/python/test_native_stationary_phased_budget.py", "compiler-heavy"),
+        ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -465,7 +464,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         # Landed dedicated transfers supersede historical core pins.
         "ecp-forces": ("test_mixed_rsh_df_forces.py",),
         "compiler-heavy": (
-            "test_native_stationary_phased_budget.py",
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
             "test_cc_native_tensor_cpu.py",
@@ -480,6 +478,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
+            "test_native_stationary_phased_budget.py",
             "test_correlation_convergence.py",
             "test_bulk_aot_clangxx_closure.py",
             "test_cpu_hf_high_l.py",
@@ -555,7 +554,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_df_lambda_core_reuse.py": "core-a",
         "tests/python/test_correlation_convergence.py": "runtime-heavy",
-        "tests/python/test_native_stationary_phased_budget.py": "compiler-heavy",
+        "tests/python/test_native_stationary_phased_budget.py": "runtime-heavy",
         "tests/python/test_cpu_semilocal_force_contract.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
@@ -733,8 +732,14 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         in preparation
     )
     assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
-    assert "&& 90 || (matrix.shard == 'posthf' && 35 || 30)" in step
-    assert "&& 100 || (matrix.shard == 'posthf' && 45 || 40)" in source
+    assert (
+        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 35 || 30)"
+        in step
+    )
+    assert (
+        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && 45 || 40)"
+        in source
+    )
 
 
 @pytest.mark.parametrize(
@@ -748,7 +753,7 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         ('"${diagnostic_args[@]}"', '""'),
         ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
         ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
-        # Exercise full, ordinary, and posthf budgets independently. The old
+        # Exercise full, ordinary, and extended-shard budgets independently. The old
         # pre-exception fragments no longer reached the contract assertion.
         ("&& 90 ||", "&& 91 ||"),
         ("&& 100 ||", "&& 101 ||"),

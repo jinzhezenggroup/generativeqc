@@ -250,6 +250,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_occupied_projection_tests tests/native/test_occupied_projection.cpp)
     generativeqc_native_test(generativeqc_basis_projection_sdk_tests tests/native/test_basis_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_system_projection_sdk_tests tests/native/test_system_projection_sdk.cpp NO_SRC_INCLUDE)
+    generativeqc_native_test(generativeqc_fleet_projection_sdk_tests tests/native/test_fleet_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
@@ -437,7 +438,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_d3_cuda_replay_failure_tests
                        tests/native/test_d3_cuda_replay_failure.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
-    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE src/dft/dispersion/d3_cuda.cu)
+    target_sources(generativeqc_d3_cuda_replay_failure_tests PRIVATE
+      src/dft/dispersion/d3_cuda.cu src/dft/dispersion/d3_runtime.cpp)
+    target_compile_definitions(generativeqc_d3_cuda_replay_failure_tests PRIVATE
+      GENERATIVEQC_HAS_CUDA=1)
     add_dependencies(generativeqc_d3_cuda_replay_failure_tests generativeqc_d3_codegen)
     target_include_directories(generativeqc_d3_cuda_replay_failure_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")

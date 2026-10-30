@@ -1,4 +1,4 @@
-"""Compiler package ownership, bootstrap and legacy class identity regressions."""
+"""Compiler package ownership, bootstrap and canonical import regressions."""
 
 import os
 import subprocess
@@ -112,35 +112,6 @@ def test_stationary_grid_ad_may_only_consume_neutral_integral_algebra(
         f"import generativeqc_compiler.integral.{target}\n"
     )
     assert (not audit_structure(tmp_path)["errors"]) == allowed
-
-
-def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
-    import importlib
-
-    for legacy, canonical in (
-        ("tools.generativeqc_cc.inventory", "generativeqc_compiler.cc.inventory"),
-        ("tools.generativeqc_cc.equations", "generativeqc_compiler.cc.equations"),
-        ("tools.generativeqc_cc.doubles", "generativeqc_compiler.cc.doubles"),
-        (
-            "tools.generativeqc_cc.gradient_equations",
-            "generativeqc_compiler.cc.gradient_equations",
-        ),
-        (
-            "tools.generativeqc_cc.lambda_equations",
-            "generativeqc_compiler.cc.lambda_equations",
-        ),
-        ("tools.generativeqc_cc.triples", "generativeqc_compiler.cc.triples"),
-        (
-            "tools.generativeqc_cc.triples_tiles",
-            "generativeqc_compiler.cc.triples_tiles",
-        ),
-        (
-            "tools.generativeqc_cc.triples_response",
-            "generativeqc_compiler.cc.triples_response",
-        ),
-        ("tools.generativeqc_mp2.equations", "generativeqc_compiler.mp2.equations"),
-    ):
-        assert importlib.import_module(legacy) is importlib.import_module(canonical)
 
 
 @pytest.mark.parametrize("owner", ("xc", "dft"))

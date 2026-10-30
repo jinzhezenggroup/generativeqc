@@ -462,8 +462,11 @@ std::unique_ptr<runtime::DeviceCapacityReservation> ks_device_capacity_reservati
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
       execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
       execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
-      execution_plan.d4_correction || options.preliminary_guess || options.nonlocal_grid_spec ||
-      options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      // The legacy D4 flag does not cover compiler-named D3/D4 programs.
+      // Their retained owners are absent from this electronic-only bound;
+      // keep ordinary capped allocation until a complete bound includes them.
+      execution_plan.d4_correction || execution_plan.dispersion.kind || options.preliminary_guess ||
+      options.nonlocal_grid_spec || options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused ||
       options.incremental_direct_jk || !options.resolved_fock_build ||
       std::any_of(options.application_precision_budget.begin(),
@@ -739,6 +742,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           bytes = runtime::add_capacity(bytes, runtime::vector_bytes(matrix));
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) bytes = runtime::add_capacity(bytes, cuda_->resources().retained_host_numeric_bytes);
+    if (stationary_controller_)
+      bytes = runtime::add_capacity(bytes, stationary_controller_->resources().ao_map_host_bytes);
 #endif
     if (d4_) {
       const auto& resources = d4_->resources();
@@ -3653,6 +3658,21 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "named dispersion requires strict FP64");
     execution_plan.dispersion = *dispersion;
+    if (dispersion->kind != 3) {
+      std::vector<std::uint32_t> atom_counts;
+      atom_counts.reserve(systems.size());
+      for (const auto& system : systems) {
+        if (system.atoms.size() > dft::dispersion::kD3MaximumAtomsPerSystem)
+          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                            "D3 system exceeds the production per-system atom bound");
+        atom_counts.push_back(static_cast<std::uint32_t>(system.atoms.size()));
+      }
+      const auto correction_capacity =
+          dft::dispersion::ks_d3_resource_usage(context.requested_backend, atom_counts);
+      if (dispersion_bytes < correction_capacity.maximum_bytes)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "KS D3 fleet exceeds its equal-share correction budget");
+    }
     // KS retains a correction owner per system. Equal shares conservatively
     // bound their aggregate storage, including replicated immutable tables.
     execution_plan.dispersion_maximum_bytes = dispersion_bytes / systems.size();

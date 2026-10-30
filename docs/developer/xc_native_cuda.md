@@ -37,6 +37,16 @@ Transfer counters distinguish setup H2D from these requested D2H operations
 and count their synchronization boundaries. The surrounding method must also
 account for its density input, one-electron setup, J provider and final outputs.
 
+Curated, composed-hybrid and automatic Libxc point providers share one prepared
+`CudaXcPointBinding`. Preparation resolves the ordinary and qualified batch
+launchers together, preserving the selected PBE specialization if its environment
+policy later changes. A null batch launcher retains the bounded one-tile path;
+the existence of a raw automatic AOT batch kernel does not grant production
+batching. Automatic scientific descriptors remain attached for provenance.
+Curated domains, fused component algebra, response and precision qualifications
+retain their existing owners; this common execution binding does not substitute
+Libxc work-domain rules for a curated numerical model.
+
 The geometry, basis, grid and functional are immutable within a plan. Changes
 require a new plan. This device component itself currently supports exactly the
 LDA_X+LDA_C_PW and PBE_X+PBE_C compositions, with the

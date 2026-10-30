@@ -1,0 +1,93 @@
+{
+  "schema": "generativeqc.cuda-image-storage-summary.v1",
+  "historical_receipt_manifest": "original-receipt.snapshot.json",
+  "sizes": {
+    "df": {
+      "before": 293984736,
+      "after": 86426016,
+      "artifacts": 80
+    },
+    "package": {
+      "before": 557808568,
+      "after": 280618064,
+      "artifacts": 32
+    },
+    "native_historical": {
+      "before": 761557656,
+      "default": 660603544,
+      "compressed": 410591896,
+      "instruction_sections": 18666
+    },
+    "native_mainline": {
+      "before": 589663288,
+      "default": 566705208,
+      "instruction_sections": 13941
+    }
+  },
+  "campaigns": {
+    "compression": {
+      "calls": 500,
+      "failures": [
+        [
+          "df-96",
+          "cold",
+          1.036731835524434
+        ],
+        [
+          "dffast-96",
+          "cold",
+          1.0469563879486703
+        ],
+        [
+          "pbedf-96",
+          "cold",
+          1.0239024120689961
+        ]
+      ],
+      "maximum_ratio": 1.0469563879486703,
+      "paired_energy": 3.410605131648481e-13,
+      "paired_force": 4.6775028295087395e-11,
+      "oracle_energy": 6.139089236967266e-12,
+      "oracle_force": 7.33304568178994e-08
+    },
+    "pruning-followup": {
+      "calls": 575,
+      "failures": [
+        [
+          "direct-24",
+          "cold",
+          1.0232169147089318
+        ],
+        [
+          "pbe-96",
+          "warm",
+          1.0413884418141774
+        ]
+      ],
+      "maximum_ratio": 1.0413884418141774,
+      "paired_energy": 3.410605131648481e-13,
+      "paired_force": 5.306066697130518e-11,
+      "oracle_energy": 7.617018127348274e-12,
+      "oracle_force": 7.333046703195123e-08
+    },
+    "mainline-default": {
+      "calls": 1000,
+      "failures": [],
+      "maximum_ratio": 1.0169129584509538,
+      "paired_energy": 4.547473508864641e-13,
+      "paired_force": 5.403855141139502e-11,
+      "oracle_energy": 7.73070496506989e-12,
+      "oracle_force": 7.333051010860459e-08
+    }
+  },
+  "acceptance": {
+    "endpoint_ratio": 1.02,
+    "paired_energy_hartree": 1e-09,
+    "paired_force_hartree_per_bohr": 1e-08,
+    "oracle_energy_hartree": 1e-07,
+    "oracle_force_strict_hartree_per_bohr": 1e-06,
+    "oracle_force_fast_hartree_per_bohr": 1e-05,
+    "reported_work": "equal iterations, fock_builds, attempted_fp32_weighted_tasks, attempted_fp32_primitive_sources and weighted_task_retries; unavailable counters remain missing, not zero",
+    "negative_trials": "Compression and pruning-followup timing failures remain failures; only the 1000-call mainline-default campaign passes all timing gates."
+  }
+}

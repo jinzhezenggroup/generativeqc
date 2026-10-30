@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.common.provenance import canonical_hash
@@ -16,6 +19,9 @@ from generativeqc_compiler.xc.libxc_bulk_capabilities import available_capabilit
 from tools.generativeqc_validation import libxc_catalog as catalog
 from tools.generativeqc_validation.libxc_native_domain import native_domain_stage
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 ROOT = Path(__file__).resolve().parents[2]
 NAME = "LDA_C_VWN_4"
 
@@ -26,34 +32,104 @@ def bundle() -> dict:
     return catalog.load_json(ROOT / manifest["campaign"]["path"])
 
 
-def replay_recorded_source(bundle: dict) -> dict:
-    """Unit replay of recorded receipts, not a current-source admission claim.
+@contextmanager
+def recorded_contract() -> Iterator[dict]:
+    """Isolate historical source contracts, never current-source admission.
 
-    Only the filesystem provenance boundary is stubbed. Numerical receipts,
-    compiled objects, Graph/domain contracts and execution scope still undergo
-    their ordinary validation. The live-source test below uses no such stubs.
+    The manifest authenticates the unmodified campaign before this seam is
+    installed. Expected identities/contracts come from that immutable receipt,
+    not the test's possibly corrupted copy. Numerical values, context/ELF/work
+    validation, profile/cases and exact corruption rejection are not stubbed.
+    Current source identity and demotion are tested separately without this seam.
     """
-    recorded_inputs = dict.fromkeys(range(bundle["source_input_count"]), "recorded")
-    actual_hash = catalog.canonical_hash
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(catalog, "source_inventory", lambda root: recorded_inputs)
-        patch.setattr(
-            catalog,
-            "canonical_hash",
-            lambda value: (
-                bundle["source_identity"]
-                if value is recorded_inputs
-                else actual_hash(value)
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.xc import libxc_bulk_capabilities as capabilities
+
+    from tools import qualify_libxc_forces as force
+    from tools.generativeqc_validation import libxc_native_domain as domain
+
+    manifest = catalog.load_json(ROOT / "manifests/libxc/native-qualification.json")
+    path = ROOT / manifest["campaign"]["path"]
+    assert file_hash(path) == manifest["campaign"]["sha256"]
+    original = catalog.load_json(path)
+    original_identity = capabilities._capability_identity
+    original_point = domain._point
+
+    def identity(record: dict, source_identity: str) -> str:
+        retained = original["functionals"].get(record["name"])
+        return (
+            retained["subject_identity"]
+            if retained
+            else original_identity(record, source_identity)
+        )
+
+    def point(name: str, family: str, spin: str) -> SimpleNamespace:
+        retained = original["functionals"].get(name)
+        if retained is None:
+            return original_point(name, family, spin)
+        row = next(
+            r for r in retained["production-domain"]["records"] if r["spin"] == spin
+        )
+        return SimpleNamespace(
+            source_identity=row["point_source_identity"],
+            mathematical_contract=row["mathematics"],
+        )
+
+    def resolution(name: str, *, backend: str, spin: str) -> SimpleNamespace:
+        assert backend == "cpu"
+        rows = original["functionals"][name]["cpu"]["result"]["rows"]
+        row = next(r for r in rows if r["spin"] == spin)
+        state = row["state_identity"]
+        return SimpleNamespace(
+            to_payload=lambda: deepcopy(row["resolution"]),
+            method=SimpleNamespace(spin=spin),
+            required_ingredients=tuple(state["ingredients"]),
+            plan=SimpleNamespace(
+                semilocal=SimpleNamespace(
+                    functional=SimpleNamespace(identity=state["functional_identity"])
+                )
             ),
         )
-        patch.setattr(
-            catalog,
-            "_source_identity",
-            lambda root, inventory: bundle["native_build_verification"][
-                "measured_input_identity"
-            ],
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(capabilities, "_capability_identity", identity)
+        patch.setattr(domain, "_point", point)
+        patch.setattr(force, "resolve_bulk_ks", resolution)
+        yield original
+
+
+@pytest.fixture
+def historical_contract() -> Iterator[None]:
+    with recorded_contract():
+        yield
+
+
+def replay_recorded_source(bundle: dict) -> dict:
+    """Replay authenticated historical receipts, not live-source qualification."""
+    with recorded_contract() as original:
+        recorded_inputs = dict.fromkeys(
+            range(original["source_input_count"]), "recorded"
         )
-        return catalog.ingest(bundle, ROOT)
+        actual_hash = catalog.canonical_hash
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(catalog, "source_inventory", lambda root: recorded_inputs)
+            patch.setattr(
+                catalog,
+                "canonical_hash",
+                lambda value: (
+                    original["source_identity"]
+                    if value is recorded_inputs
+                    else actual_hash(value)
+                ),
+            )
+            patch.setattr(
+                catalog,
+                "_source_identity",
+                lambda root, inventory: original["native_build_verification"][
+                    "measured_input_identity"
+                ],
+            )
+            return catalog.ingest(bundle, ROOT)
 
 
 @pytest.fixture(scope="module")
@@ -63,12 +139,13 @@ def report(bundle: dict) -> dict:
 
 def test_live_receipts_allow_truthful_source_demotion(bundle: dict) -> None:
     live = catalog.ingest(bundle, ROOT)
-    assert len(live["observed_endpoints"]) == 44
     if live["stale"]:
+        assert not live["observed_endpoints"]
         assert not live["endpoints"]
         assert live["summary"]["qualified_counts"]["forces"] == 0
         assert live["summary"]["blocked_counts"]["forces"] == 11
     else:
+        assert len(live["observed_endpoints"]) == 44
         assert live["summary"]["qualified_counts"]["forces"] == 11
 
 
@@ -120,7 +197,9 @@ def test_fixture_rounding_allowance_does_not_relax_domain(corruption: str) -> No
     assert not same_fixture_inputs(changed, expected)
 
 
-def test_real_receipts_reach_multifamily_dag_without_whitelisting(report: dict) -> None:
+def test_real_receipts_reach_multifamily_dag_without_whitelisting(
+    historical_contract: None, report: dict
+) -> None:
     assert not report["stale"]
     assert report["summary"]["qualified_counts"]["forces"] == 11
     assert len(report["observed_endpoints"]) == 44
@@ -148,7 +227,9 @@ def test_real_receipts_reach_multifamily_dag_without_whitelisting(report: dict) 
         "force_executable_artifact",
     ],
 )
-def test_actual_loaded_callback_mismatch_is_rejected(bundle: dict, owner: str) -> None:
+def test_actual_loaded_callback_mismatch_is_rejected(
+    historical_contract: None, bundle: dict, owner: str
+) -> None:
     row = deepcopy(bundle["functionals"][NAME]["cuda"][0])
     row["rows"][0]["artifact"][owner]["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="object mismatch"):
@@ -176,7 +257,7 @@ def test_actual_loaded_callback_mismatch_is_rejected(bundle: dict, owner: str) -
     ],
 )
 def test_cuda_replays_raw_gates_instead_of_trusting_pass_labels(
-    bundle: dict, corruption: str
+    historical_contract: None, bundle: dict, corruption: str
 ) -> None:
     record = deepcopy(bundle["functionals"][NAME]["cuda"][0])
     row = record["rows"][0]
@@ -214,7 +295,7 @@ def test_cuda_replays_raw_gates_instead_of_trusting_pass_labels(
 
 @pytest.mark.parametrize("corruption", ["library", "lifecycle", "energy", "work"])
 def test_cpu_real_full_vector_receipt_is_revalidated(
-    bundle: dict, corruption: str
+    historical_contract: None, bundle: dict, corruption: str
 ) -> None:
     record = deepcopy(bundle["functionals"][NAME]["cpu"])
     result = record["result"]
@@ -247,7 +328,7 @@ def test_cpu_real_full_vector_receipt_is_revalidated(
     ],
 )
 def test_native_domain_rejects_stale_contract_or_numerical_evidence(
-    bundle: dict, field: str
+    historical_contract: None, bundle: dict, field: str
 ) -> None:
     domain = deepcopy(bundle["functionals"][NAME]["production-domain"])
     row = domain["records"][0]
@@ -278,7 +359,7 @@ def test_native_domain_rejects_stale_contract_or_numerical_evidence(
     ["precision", "integrals", "ecp", "basis_max_l", "product", "grid", "coordinates"],
 )
 def test_unmeasured_execution_context_cannot_borrow_a_stage(
-    report: dict, change: str
+    historical_contract: None, report: dict, change: str
 ) -> None:
     row = next(
         r for r in report["endpoints"] if r["name"] == NAME and r["product"] == "forces"
@@ -374,7 +455,7 @@ def test_cuda_cannot_borrow_another_job_environment(bundle: dict) -> None:
     changed = deepcopy(bundle)
     changed["functionals"][NAME]["cuda"][0]["slurm_job_id"] = "unknown-job"
     with pytest.raises(ValueError, match="matching execution environment"):
-        catalog.ingest(changed, ROOT)
+        replay_recorded_source(changed)
 
 
 def test_embedded_native_source_must_match_build_inputs(bundle: dict) -> None:
@@ -386,7 +467,7 @@ def test_embedded_native_source_must_match_build_inputs(bundle: dict) -> None:
 
 @pytest.mark.parametrize("missing", ["cuda", "polarized", "forces"])
 def test_other_backend_spin_or_product_cannot_fill_missing_coverage(
-    report: dict, missing: str
+    historical_contract: None, report: dict, missing: str
 ) -> None:
     from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
     from generativeqc_compiler.xc.endpoint_capability import resolve_endpoint_capability
@@ -435,3 +516,41 @@ def test_live_checker_rejects_changed_toolchain_and_old_update_baseline(
         checker.check(checker.MANIFEST)
     with pytest.raises(ValueError, match="older baseline cannot hide"):
         checker.check(checker.MANIFEST, write=True)
+
+
+@pytest.mark.parametrize(
+    "field", ["source", "subject", "worker", "resolution", "functional"]
+)
+def test_historical_seam_does_not_authenticate_mutated_provenance(
+    bundle: dict, field: str
+) -> None:
+    changed = deepcopy(bundle)
+    record = changed["functionals"][NAME]
+    if field == "source":
+        changed["source_identity"] = "0" * 64
+        changed["build"]["source_identity"] = "0" * 64
+        after = replay_recorded_source(changed)
+        assert after["stale"] and not after["endpoints"]
+    elif field == "subject":
+        record["subject_identity"] = "0" * 64
+        after = replay_recorded_source(changed)
+        assert not any(row["name"] == NAME for row in after["endpoints"])
+    else:
+        if field == "worker":
+            domain = record["production-domain"]
+            domain["records"][0]["point_source_identity"] = "0" * 64
+            domain["identity"] = canonical_hash(
+                {k: v for k, v in domain.items() if k != "identity"}
+            )
+        else:
+            result = record["cpu"]["result"]
+            row = result["rows"][0]
+            if field == "resolution":
+                row["resolution"] = {}
+            else:
+                row["state_identity"]["functional_identity"] = "0" * 64
+            result["identity"] = canonical_hash(
+                {k: v for k, v in result.items() if k != "identity"}
+            )
+        with pytest.raises(ValueError):
+            replay_recorded_source(changed)

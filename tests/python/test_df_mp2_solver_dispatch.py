@@ -26,9 +26,18 @@ def test_mp2_demand_bypasses_cc_iteration(
     unit.write_text(
         r"""
 #include <cassert>
+#include "methods/correlated_cuda_reference.hpp"
 #include "methods/rccsd_method.hpp"
 #include "posthf/capacity.hpp"
 using namespace generativeqc;
+namespace generativeqc::scf {
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {
+  assert(!plan); return 0;
+}
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept {
+  assert(!plan);
+}
+}
 int mp2_entries = 0, cc_entries = 0;
 std::size_t expected_caller = 0;
 bool expected_response = false;
@@ -82,9 +91,9 @@ int main() {
     correlation_options.denominator_threshold=1e-8;
     struct { int device_id() const { return 7; } } execution;
     scf::CudaRhfBucketPlan** cuda_reference_plan=nullptr;
-    auto run_with_cuda_reference_budget=[](auto*, std::size_t budget, auto&& action) {
-      action(budget);
-    };
+    scf::ScfOptions reference_options;
+    using methods::detail::run_with_cuda_reference_budget;
+    using methods::detail::run_with_cuda_reference_capacity;
     auto retire_optional_source=[] { return false; };
     std::size_t exact_source_retained=16;
     mp2_entries=cc_entries=0;
