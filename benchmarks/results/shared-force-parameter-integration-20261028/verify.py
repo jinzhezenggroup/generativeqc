@@ -13,7 +13,17 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent
 
 
-def verify(phase: str) -> dict:
+def _decode(name: str, stored: bytes, identity: dict) -> bytes:
+    """Authenticate storage and original bytes, including explicit restorations."""
+    assert len(stored) == identity["stored_bytes"], name
+    assert hashlib.sha256(stored).hexdigest() == identity["stored_sha256"], name
+    original = lzma.decompress(stored)
+    assert len(original) == identity["original_bytes"], name
+    assert hashlib.sha256(original).hexdigest() == identity["original_sha256"], name
+    return original
+
+
+def verify(phase: str, *, build_inputs: Path | None = None) -> dict:
     """Authenticate exact stored bytes and replay the recorded force gates.
 
     Center-energy, density and Fock gates execute in the retained test driver;
@@ -23,14 +33,24 @@ def verify(phase: str) -> dict:
     manifest = json.loads((ROOT / f"{phase}-manifest.json").read_text())
     records = {}
     for name, identity in manifest["files"].items():
-        stored = (ROOT / name).read_bytes()
-        assert len(stored) == identity["stored_bytes"], name
-        assert hashlib.sha256(stored).hexdigest() == identity["stored_sha256"], name
-        original = lzma.decompress(stored)
-        assert len(original) == identity["original_bytes"], name
-        assert hashlib.sha256(original).hexdigest() == identity["original_sha256"], name
+        original = _decode(name, (ROOT / name).read_bytes(), identity)
         if name.endswith(".json.xz"):
             records[Path(name).name.removesuffix(".xz")] = json.loads(original)
+
+    # The source census is historical reconstruction data, not a numerical
+    # input. Normal replay stays offline in source archives and shallow clones;
+    # an explicit restored census receives the same original-byte checks.
+    archived = manifest.get("archived_files", {})
+    identity = archived.get("final/build-inputs.json.xz")
+    if identity is not None:
+        assert (
+            identity["original_sha256"]
+            == (manifest["build_input_verification"]["input_inventory_sha256"])
+        )
+    if build_inputs is not None:
+        if identity is None:
+            raise ValueError("this phase has no archived build-input census")
+        _decode("final/build-inputs.json.xz", build_inputs.read_bytes(), identity)
 
     summary = records["summary.json"]
     expected = {(row["name"], row["spins"]) for row in summary}
@@ -72,9 +92,14 @@ def verify(phase: str) -> dict:
             directions += len(projected)
     assert seen == expected and len(libraries) == 1
     assert not manifest["build_input_verification"]["mismatches"]
-    assert manifest["build_input_verification"]["source_commit"] == manifest["source_commit"]
+    assert (
+        manifest["build_input_verification"]["source_commit"]
+        == manifest["source_commit"]
+    )
     for name, binding in manifest.get("drivers", {}).items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == binding["sha256"]
+        assert (
+            hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == binding["sha256"]
+        )
     if phase == "final":
         assert (len(seen), endpoints, directions) == (18, 54, 186)
         assert libraries == {manifest["library"]["sha256"]}
@@ -97,10 +122,15 @@ def verify(phase: str) -> dict:
         "finite_difference_directions": directions,
         "cli_cases": len(cli["rows"]),
         "current_compiler_admission": False,
+        "archived_build_inputs_verified": build_inputs is not None,
     }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("pre-r1", "final"), default="final")
-    print(json.dumps(verify(parser.parse_args().phase), indent=2))
+    parser.add_argument(
+        "--build-inputs", type=Path, help="explicit restored final/build-inputs.json.xz"
+    )
+    args = parser.parse_args()
+    print(json.dumps(verify(args.phase, build_inputs=args.build_inputs), indent=2))
