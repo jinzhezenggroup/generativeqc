@@ -35,6 +35,19 @@ def canonical(value: object) -> bytes:
     return (json.dumps(value, indent=2, allow_nan=False) + "\n").encode()
 
 
+def h100_snapshot_uuid(snapshot: str) -> str:
+    """Validate the reported model, architecture and allocation-wide MIG state."""
+    fields = [field.strip() for field in snapshot.split(",")]
+    check(
+        len(fields) >= 5
+        and fields[0] == "NVIDIA H100 80GB HBM3"
+        and fields[1].startswith("GPU-")
+        and fields[2:4] == ["9.0", "Disabled"],
+        "device snapshot is not H100 80GB HBM3 SM90 with MIG disabled",
+    )
+    return fields[1]
+
+
 def main() -> None:
     manifest = json.loads((HERE / "manifest.json").read_text())
     check(
@@ -118,6 +131,8 @@ def main() -> None:
         {k: v["revision"] for k, v in built["sources"].items()} == manifest["sources"],
         "build/source pair differs",
     )
+    check(len(built["device"]) == 1, "build must report one physical GPU")
+    h100_snapshot_uuid(built["device"][0])
     for name in ["oracle", "auxiliary_inputs"]:
         check(
             digest((ROOT / manifest[name]["path"]).read_bytes())
@@ -197,6 +212,11 @@ def main() -> None:
         bind(folder + "/campaign.json", campaign)
         bind(folder + "/reference-reuse-v2.json", cohort["reference_reuse"])
         check(
+            h100_snapshot_uuid(campaign["device"]["snapshot"])
+            == campaign["device"]["uuid"],
+            "campaign device snapshot/UUID differs",
+        )
+        check(
             campaign["status"] == status
             and len(campaign["runs"]) == len(cohort["populations"]) == population_count,
             "incomplete population",
@@ -208,6 +228,12 @@ def main() -> None:
             ],
             "original build binding differs",
         )
+        for script, script_digest in campaign["scripts"].items():
+            if script.endswith(".py"):
+                check(
+                    script in producers and digest(producers[script]) == script_digest,
+                    "campaign Python producer differs: " + script,
+                )
         if folder != "df-trace-v1":
             runtime_path = (
                 "reference-runtime-pilot.json"
@@ -218,8 +244,17 @@ def main() -> None:
             runtime = cohort["reference_runtime"]
             check(
                 runtime["status"] == "PASS_REFERENCE_RUNTIME_AND_CUTENSOR_ONLY"
-                and campaign["device"]["uuid"] in runtime["device"],
+                and h100_snapshot_uuid(runtime["device"]) == campaign["device"]["uuid"],
                 "actual reference runtime/device differs",
+            )
+            runtime_script = (
+                "reference-smoke.py"
+                if folder == "pilot-v1"
+                else "reference-runtime-pairs.py"
+            )
+            check(
+                runtime["script_sha256"] == digest(producers[runtime_script]),
+                "reference runtime producer differs",
             )
             check(
                 campaign["reference_runtime_sha256"]
@@ -347,6 +382,8 @@ def main() -> None:
             )
             check(
                 raw["accelerator"]["nvidia_smi"]["uuid"] == campaign["device"]["uuid"]
+                and raw["accelerator"]["name"] == "NVIDIA H100 80GB HBM3"
+                and raw["accelerator"]["compute_capability"] == [9, 0]
                 and raw["slurm_job_id"] is None
                 and raw["scheduler"]["kind"] == "qz_job",
                 "actual device/scheduler differs",
