@@ -472,7 +472,8 @@ generativeqc_status CudaStationaryController::gradient(
                       fitted_projection->stream};
       status = fock.consume_fitted_energy_derivatives(
           device_, reinterpret_cast<void*>(provider.stream), density.alpha, density.beta,
-          weights.density, consume, detail, false, fitted_projection ? &projection : nullptr);
+          weights.density, consume, detail, false, fitted_projection ? &projection : nullptr,
+          !composite);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       if (composite) {
         if (!range_provider)

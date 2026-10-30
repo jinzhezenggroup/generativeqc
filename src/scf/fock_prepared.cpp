@@ -778,7 +778,7 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components_wi
 generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
     int device, void* stream, const double* alpha, const double* beta, const double* total,
     const CudaDerivativeSourceConsumer& consume, std::string& detail, bool range_correction,
-    const CudaDfBorrowedFittedProjection* projection) const {
+    const CudaDfBorrowedFittedProjection* projection, bool combine_full_range) const {
   if (!impl_->cuda_df || !impl_->fitted || !impl_->retained_fitted_derivative_order) {
     detail = "prepared provider has no retained CUDA DF derivative source";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -810,6 +810,18 @@ generativeqc_status PreparedFockPlan::consume_fitted_energy_derivatives(
   };
   // U aliases the provider's mutable response scratch. Exchange must consume
   // its authenticated lease before even a pure-J call revokes or overwrites it.
+  if (combine_full_range && !unrestricted && !range_correction && spec.coulomb.present &&
+      spec.exchange.present && spec.coulomb.op == FockOperator::FullRange &&
+      spec.exchange.op == FockOperator::FullRange) {
+    // RKS alpha is the total physical density. The response already supports
+    // both cotangents and can use the final occupied projection to obtain J's
+    // potential as well. Contract each A/M derivative once, after summing the
+    // exact weights; no independent component is manufactured from that sum.
+    const DensityFittingDensityResponse term{
+        {}, spec.coulomb.coefficient, -0.5 * spec.exchange.coefficient};
+    return submit({&term, 1}, {alpha, nullptr}, CudaDerivativeSourceKind::FullRangeJkSum,
+                  projection);
+  }
   if (spec.exchange.present) {
     // Same energy/Fock coefficient conversion as CudaFockProviderView::derivative.
     const double coefficient = -0.5 * spec.exchange.coefficient;

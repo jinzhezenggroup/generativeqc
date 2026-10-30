@@ -238,6 +238,35 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
               unpublished == std::vector<double>(6, 42.0),
           "missing grid sources partially published a native force");
   reset();
+  if (!ranged && binding.full_range_exchange && binding.spin_blocks == 1) {
+    // A total-only provider can supply the exact J+K sum, but it must not
+    // masquerade as either independent source or accept a duplicate part.
+    require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
+                    CudaDerivativeConvention::EnergyGradient) == 0,
+            error.data());
+    require(receive(CudaDerivativeSourceKind::Coulomb, provider.values + 12, 1,
+                    CudaDerivativeConvention::EnergyGradient) != 0,
+            "combined J/K accepted a duplicate Coulomb component");
+    reset();
+    require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
+                    CudaDerivativeConvention::EnergyGradient) == 0,
+            error.data());
+    std::fill(actual.begin(), actual.end(), 42.0);
+    require(binding.source_span(lease.owner, 0, binding.source_count, actual.data(), actual.size(),
+                                error.data(), error.size()) != 0 &&
+                std::all_of(actual.begin(), actual.end(), [](double value) { return value == 42; }),
+            "combined J/K fabricated independent source diagnostics");
+    reset();
+    submit();
+    require(binding.source_span(lease.owner, 0, binding.source_count, actual.data(), actual.size(),
+                                error.data(), error.size()) == 0,
+            "reset retained the previous combined source inventory");
+  } else {
+    require(receive(CudaDerivativeSourceKind::FullRangeJkSum, provider.values + 12, 1,
+                    CudaDerivativeConvention::EnergyGradient) != 0,
+            "a profile requiring separate sources accepted combined J/K");
+  }
+  reset();
   require(receive(CudaDerivativeSourceKind::OneElectron, provider.values, 1,
                   CudaDerivativeConvention::EnergyGradient) == 0 &&
               receive(CudaDerivativeSourceKind::OneElectron, provider.values, 1,

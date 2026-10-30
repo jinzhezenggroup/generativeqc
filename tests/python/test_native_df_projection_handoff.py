@@ -83,6 +83,8 @@ def test_resident_force_consumes_projection_before_scratch_reuse(
     The fake bridge checks the detached scientific coefficients, device density
     identity and callback channel. Failure injection ensures a failed K never
     continues into J; an absent projection still executes both bounded sources.
+    A total-only restricted consumer receives one correctly weighted J+K
+    source, while unrestricted consumers retain the independent components.
     """
     prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
     body = _definition(
@@ -131,7 +133,7 @@ struct PreparedFockPlan {
   const ResolvedFockBuild& strategy() const { return model; }
   generativeqc_status consume_fitted_energy_derivatives(int, void*, const double*, const double*,
       const double*, const CudaDerivativeSourceConsumer&, std::string&, bool,
-      const CudaDfBorrowedFittedProjection*) const;
+      const CudaDfBorrowedFittedProjection*, bool=false) const;
 };
 struct CudaFockProviderView {
   CudaFockProviderView(CudaDensityFittingJkPlan*, const Data&) {}
@@ -152,10 +154,11 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   assert(request && request->device_id == 0 && request->stream == reinterpret_cast<void*>(1));
   assert(request->matrix_elements == 4 && budget == 4096);
   const bool exchange = request->kind != CudaDerivativeSourceKind::Coulomb;
+  const bool combined = request->kind == CudaDerivativeSourceKind::FullRangeJkSum;
   assert(terms.size() == (exchange && unrestricted ? 2U : 1U));
   for (const auto& term : terms) {
     assert(term.density.empty());
-    assert(term.coulomb_coefficient == (exchange ? 0.0 : 1.0));
+    assert(term.coulomb_coefficient == (exchange && !combined ? 0.0 : 1.0));
     assert(term.exchange_coefficient == (exchange ? .125 : 0.0));
   }
   assert(request->densities[0] == (exchange ? expected_alpha : expected_total));
@@ -164,7 +167,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   if (projection) assert(scratch_live);
   scratch_live = false;
   if (exchange && fail_exchange) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  if (exchange)
+  if (exchange && !combined)
     assert(request->kind == (range ? CudaDerivativeSourceKind::RangeCorrection
                                   : CudaDerivativeSourceKind::Exchange));
   request->consume({request->kind, CudaDerivativeConvention::EnergyGradient, 0,
@@ -183,7 +186,7 @@ int main() {
   const CudaDerivativeSourceConsumer consume=[](const auto& view) {
     publications.push_back(view.kind);
   };
-  for (int mode=0; mode<10; ++mode) {
+  for (int mode=0; mode<14; ++mode) {
     State state;
     PreparedFockPlan plan{&state, {}};
     plan.model.spec.spin=FockSpin::Restricted;
@@ -192,23 +195,29 @@ int main() {
     plan.model.spec.exchange.present=true;
     plan.model.spec.exchange.coefficient=-.25;
     CudaDfBorrowedFittedProjection lease{0,coefficients,projected,2,2,1,stream};
-    expected_projection=mode==1 || mode==4 || mode==5 || mode==6 ? nullptr : &lease;
-    scratch_live=true; fail_exchange=mode==2; unrestricted=mode==4; range=mode==5 || mode==8;
+    expected_projection=mode==1 || mode==4 || mode==5 || mode==6 || mode==11 || mode==13
+                            ? nullptr : &lease;
+    scratch_live=true; fail_exchange=mode==2 || mode==12;
+    unrestricted=mode==4 || mode==13; range=mode==5 || mode==8;
     publications.clear();
     if (mode==3) lease.projection=nullptr;
-    if (mode==4 || mode==7) plan.model.spec.spin=FockSpin::Unrestricted;
+    if (mode==4 || mode==7 || mode==13) plan.model.spec.spin=FockSpin::Unrestricted;
     if (mode==5) plan.model.spec.coulomb.present=false;
     if (mode==6 || mode==9) plan.model.spec.exchange.present=false;
     std::string detail;
     const auto status=plan.consume_fitted_energy_derivatives(
-        0,stream,alpha,beta,total,consume,detail,range,expected_projection);
-    if (mode==3 || mode>=7) {
+        0,stream,alpha,beta,total,consume,detail,range,expected_projection,mode>=10);
+    if (mode==3 || (mode>=7 && mode<=9)) {
       assert(status==GENERATIVEQC_STATUS_INVALID_ARGUMENT && publications.empty());
-    } else if (mode==2) {
+    } else if (mode==2 || mode==12) {
       assert(status==GENERATIVEQC_STATUS_NUMERICAL_FAILURE && publications.empty());
     } else {
       assert(status==GENERATIVEQC_STATUS_SUCCESS);
-      if (mode==5 || mode==6) assert(publications.size()==1);
+      if (mode==10 || mode==11) {
+        assert(publications.size()==1);
+        assert(publications[0]==CudaDerivativeSourceKind::FullRangeJkSum);
+      }
+      else if (mode==5 || mode==6) assert(publications.size()==1);
       else {
         assert(publications.size()==2);
         assert(publications[0]==CudaDerivativeSourceKind::Exchange);

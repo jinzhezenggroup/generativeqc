@@ -114,5 +114,25 @@
       "transformation": "Consolidation of 21 full clean result documents and 3 separate diagnostics; original hashes and precise diagnostic-only omission are included in original_files. All clean results are unchanged."
     }
   },
-  "not_committed": "Build/test logs, native binaries, checkpoints and raw profiler/trace streams stay outside the source checkout; retained reduced ledgers include original trace hashes."
+  "not_committed": "Build/test logs, native binaries, checkpoints and raw profiler/trace streams stay outside the source checkout; retained reduced ledgers include original trace hashes.",
+  "storage": {
+    "equal-96.json": {
+      "path": "equal-96.json.gz",
+      "compression": "gzip",
+      "stored_bytes": 4464,
+      "stored_sha256": "167ffebcdee9dae035c8df292b4e8203a2188ed16a0002b6d9bf74b38a33884a",
+      "decoded_sha256": "d4f6302275307f39d7079501e161ea8ac1d85f9111ffa7089cfbf55f44102c2c",
+      "decoded_bytes": 40502,
+      "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
+    },
+    "equal-384.json": {
+      "path": "equal-384.json.gz",
+      "compression": "gzip",
+      "stored_bytes": 10676,
+      "stored_sha256": "f33ff528451908bbfef4a1b20d12e1c829e8792d7e71061e7593b1e3d9143fbd",
+      "decoded_sha256": "eb71153d3f1a48670ff3038e3e6ea441578ab5104e47f39c91d788e8ea492fa4",
+      "decoded_bytes": 71950,
+      "verified_against_git_revision": "9e6e2aec0953c307bae96215121e78e9d64e03b1"
+    }
+  }
 }

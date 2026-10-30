@@ -2,6 +2,12 @@
 
 > Full historical raw records are recoverable from the [verified Git snapshot](../retention-df-integration/README.md). Restore it before replaying the original raw-record commands. Compact summaries and all production-manifest references remain in this checkout.
 
+The retained `equal-96.json`, `equal-384.json`, and `equal-768.json` controls
+are stored as `.json.gz`. Decompression reproduces their retained JSON bytes;
+`retention.json` records the new storage checksums separately from the original
+scientific receipt checksums. For example, `gzip -dc equal-384.json.gz` reads
+the unchanged 384-AO control. No measurement or acceptance gate changed.
+
 ## Change and scope
 
 The compiler now generates cooperative Rys/compact derivatives for auxiliary-f

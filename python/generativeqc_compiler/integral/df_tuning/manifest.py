@@ -60,15 +60,24 @@ def load_manifest(path: typing.Any = MANIFEST) -> typing.Any:
     ``candidate`` selector admits the proposed mapping. This allows interleaved
     endpoints with one prepared state and one arena, without per-class controls
     or two simultaneously resident multi-gigabyte libraries/DF plans.
+
+    ``portable`` describes legal generated lowerings for any supported CUDA
+    target, independently of measured architecture tuning. Exact target rows
+    take precedence; classes absent from both profiles keep the polynomial
+    fallback. Portable promotion uses the same scientific evidence gates.
     """
     payload = json.loads(Path(path).read_text())
     if payload.get("schema_version") != 1 or not isinstance(
         payload.get("architectures"), dict
     ):
         raise ValueError("unsupported DF derivative production manifest")
-    for architecture, profile in payload["architectures"].items():
+    profiles = list(payload["architectures"].values())
+    for architecture in payload["architectures"]:
         if not re.fullmatch(r"sm_[1-9][0-9]+", architecture):
             raise ValueError("invalid target architecture")
+    if "portable" in payload:
+        profiles.append(payload["portable"])
+    for profile in profiles:
         _validate_profile(profile)
         if "baseline" in profile:
             baseline = profile["baseline"]
@@ -88,14 +97,31 @@ def emit_policy(path: typing.Any = MANIFEST) -> typing.Any:
     """Keep parsing and evidence handling out of the native response hot path."""
     manifest = load_manifest(path)
     entries = []
-    for architecture, profile in manifest["architectures"].items():
+    profiles = [
+        (f"architecture=={int(architecture[3:])}", profile)
+        for architecture, profile in manifest["architectures"].items()
+    ]
+    if "portable" in manifest:
+        # Zero is the runtime's explicit legacy/unprobed sentinel. All real
+        # targets may use portable kernels; tuning coverage is not availability.
+        profiles.append(("architecture!=0", manifest["portable"]))
+    for target, profile in profiles:
         arms = [(profile, "true")]
         if "baseline" in profile:
             arms = [(profile, "candidate"), (profile["baseline"], "!candidate")]
         for arm, selected in arms:
-            entries.extend((architecture, arm, row, selected) for row in arm["kernels"])
+            selector = selected
+            if (
+                "portable" in manifest
+                and target != "architecture!=0"
+                and not arm["qualified"]
+            ):
+                # A target tuning experiment must not shadow a qualified
+                # portable default. Only its explicit candidate arm may win.
+                selector = "candidate"
+            entries.extend((target, arm, row, selector) for row in arm["kernels"])
     lines = [
-        "// Generated architecture-specific DF derivative policy.",
+        "// Generated tuned and portable DF derivative policy.",
         "#pragma once",
         "namespace generativeqc::scf::generated_df_shell {",
         "struct ProductionChoice { unsigned variant; bool rys,available,qualified; };",
@@ -103,7 +129,7 @@ def emit_policy(path: typing.Any = MANIFEST) -> typing.Any:
         "template<unsigned A,unsigned B,unsigned C> struct DfProductionPolicy {",
         "  static constexpr ProductionChoice select(unsigned architecture, [[maybe_unused]] bool candidate=false) {",
     ]
-    for architecture, profile, row, selected in entries:
+    for target, profile, row, selected in entries:
         a, b, c = map(int, row["class"])
         variant = SCHEDULES.index(row["schedule"])
         rys = str(row["lowering"] == "rys").lower()
@@ -111,7 +137,7 @@ def emit_policy(path: typing.Any = MANIFEST) -> typing.Any:
         lines.extend(
             [
                 f"    if constexpr(A=={a} && B=={b} && C=={c})",
-                f"      if(architecture=={int(architecture[3:])} && {selected}) return {{{variant},{rys},true,{qualified}}};",
+                f"      if({target} && {selected}) return {{{variant},{rys},true,{qualified}}};",
             ]
         )
     lines.extend(

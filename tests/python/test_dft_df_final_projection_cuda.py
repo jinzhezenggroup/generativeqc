@@ -22,6 +22,57 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.mark.parametrize(
+    "method,functional", [("pbe0", "PBE0"), ("b3lyp", "B3LYP"), ("m06-2x", "M06-2X")]
+)
+@pytest.mark.parametrize("policy", ["auto", "candidate"])
+def test_combined_df_hybrid_forces_against_independent_moving_grid(
+    method: str, functional: str, policy: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Combined J/K cotangents retain full forces across cold, replay and motion.
+
+    PySCF owns SCF, three-center/metric derivatives and grid response. This
+    complements projection-hit checks, which only compare native execution
+    variants and cannot independently validate the summed response weights.
+    """
+    from test_treutler_endpoints import WATER, reference
+
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_POLICY", policy)
+    calc = Calculator(
+        method=f"{method}-rks",
+        basis="def2-svp",
+        auxiliary_basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        density_fitting="cuda",
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-13,
+        max_iterations=200,
+    )
+    initial = np.array([xyz for _, xyz in WATER])
+    moved = initial.copy()
+    moved[1] += [0.02, -0.01, 0.03]
+    with calc.prepare_batch([WATER], warm_start=True) as batch:
+        for positions in (initial, moved):
+            atoms = [
+                (symbol, xyz) for (symbol, _), xyz in zip(WATER, positions, strict=True)
+            ]
+            energy, forces = reference(
+                calc, fitted=True, functional=functional, atom_values=atoms
+            )
+            for _ in range(2):
+                result = batch.execute(
+                    [positions], strict=True, properties=("energy", "forces")
+                ).items[0]
+                assert result.energy == pytest.approx(energy, abs=2e-8, rel=0)
+                np.testing.assert_allclose(result.forces, forces, atol=3e-7, rtol=0)
+                np.testing.assert_allclose(
+                    result.forces.sum(axis=0), 0, atol=2e-9, rtol=0
+                )
+
+
 def _assert_projection_reuse(
     rows: list[dict[str, Any]], expected_hit: bool | None, coordinates: int
 ) -> None:
