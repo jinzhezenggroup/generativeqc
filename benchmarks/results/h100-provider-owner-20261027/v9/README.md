@@ -1,5 +1,10 @@
 # Current-input H100 owner engineering receipt
 
+This describes the recorded historical run. First restore the complete family
+using the [offline recovery instructions](../README.md#historical-snapshot-and-offline-replay).
+Archive paths and the original replay program refer to that verified snapshot;
+summary JSON bytes, original source identities and scope remain unchanged.
+
 The measured production inputs are from `964faab623f6bf9fb2a99f39a772924f382a41f4`:
 96 repository inputs and nine separately identified generated engineering inputs.
 This model-free run returned 53 successful CUDA/vendor statuses, 21 resource slots
@@ -8,7 +13,7 @@ compiler service closed explicitly; post-close device/context/library identities
 matched. Optional capabilities remain zero. **Installed SDK acceptance is
 INCOMPLETE; no molecule, solver, SCF or E+F was executed.**
 
-Run `python -I -S -B benchmarks/results/h100-provider-owner-20261027/v9/replay.py`
+Run `python -I -S -B .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/v9/replay.py`
 with Python 3.10+. It validates all 105 source inputs through the immutable V7/V6
 anchors, every public generated-text hash, native statuses, close inventory,
 identity matching, capacity arithmetic, original deadline/seal witnesses and

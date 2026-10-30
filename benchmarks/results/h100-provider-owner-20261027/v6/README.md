@@ -1,5 +1,10 @@
 # Follow-up H100 provider-owner engineering run
 
+This describes the recorded historical run. First restore the complete family
+using the [offline recovery instructions](../README.md#historical-snapshot-and-offline-replay).
+Archive paths and the original replay program refer to that verified snapshot;
+summary JSON bytes, original source identities and scope remain unchanged.
+
 This run exercises the lifecycle fixes at source base
 `a298c803a9a3f933f81ba26f9abda16247780e48`. Its complete measured input
 manifest is `dcf84602a429e70a2030c86c7b6d73333b4fb3448275526004d0674e96c8d97f`;
@@ -39,7 +44,7 @@ Replay the source identities, outcomes, budgets and conditional grant checks
 without a GPU, compiler or network:
 
 ```console
-python benchmarks/results/h100-provider-owner-20261027/v6/replay.py
+python .artifacts/h100-provider-owner-20261027-original/benchmarks/results/h100-provider-owner-20261027/v6/replay.py
 ```
 
 ## Lossless shared storage
