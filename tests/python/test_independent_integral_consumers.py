@@ -244,6 +244,7 @@ def test_tuning_carries_the_measured_independent_integral_to_publication(
             },
         )
 
+
 def test_portable_uniform_warp_force_unroll_pragmas_target_loops() -> None:
     """CuMetal requires every emitted unroll pragma to precede a real loop."""
     from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
