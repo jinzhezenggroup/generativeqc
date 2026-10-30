@@ -176,6 +176,8 @@ def test_compiled_target_reuses_rys_k_preference(architecture: str) -> None:
     """Mathematical coverage is shared; only a compiled target enables dispatch."""
     portable = resolve_production_profile(MANIFEST, architecture, "portable_cuda")
     assert preferred_rys_task_candidates(portable) == ()
+    # The portable primary already uses packed tasks where eligible; it does
+    # not inherit the tuned profile's optional K-family preference.
     assert "UINT64_C(0), UINT64_C(0)" in emit_multi_registry_source((portable,))
 
     # Simulate a separately compiled target without needing a GPU. Schedule

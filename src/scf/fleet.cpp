@@ -150,6 +150,7 @@ FleetPlan::FleetPlan(std::vector<core::System> systems, generativeqc_method meth
   if (!options_.resolved_fock_build) options_.resolved_fock_build = expected;
   const auto& strategy = *options_.resolved_fock_build;
   validate_resolved_fock_build(strategy);
+  if (strategy.backend == FockBackend::Cpu) projection_sources_.resize(systems_.size());
   if (strategy.spec.spin != expected.spec.spin || strategy.backend != backend ||
       strategy.screening_tolerance != options_.screening_tolerance ||
       (options_.compute_forces && strategy.spec.derivative_order != 1) ||
@@ -199,6 +200,7 @@ FleetPlan::~FleetPlan() {
 
 std::vector<FleetItemResult> FleetPlan::execute(
     const std::vector<std::optional<std::vector<double>>>& coordinates, bool compute_forces) {
+  invalidate_projection_source();
   // A replay can omit forces without mutating the prepared plan's controls.
   // Existing energy-only strategies remain energy-only even with default output.
   ScfOptions execution_options = options_;
@@ -236,8 +238,13 @@ std::vector<FleetItemResult> FleetPlan::execute(
   const auto finish_item = [&](std::size_t system_index, const core::System& execution_system) {
     const FleetItemResult& item = results[system_index];
     if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
-        warm_start_updates_enabled_)
+        warm_start_updates_enabled_) {
       retain_warm_state(system_index, execution_system, item.scf);
+      // Eligibility belongs to the newly retained successful density. A frozen
+      // or imported proposal must not acquire convergence from a later solve
+      // whose result was deliberately not retained.
+      if (!projection_sources_.empty()) projection_sources_[system_index] = 1;
+    }
   };
   const auto execute_one = [&](std::size_t system_index) {
     // CPU workers do not inherit the caller's thread-local observer. Open a
@@ -688,10 +695,18 @@ void FleetPlan::restore_warm_states(std::vector<std::optional<HfWarmState>> stat
   // A pre-existing device seed/energy must never supersede an imported seed.
   for (auto* plan : cuda_bucket_plans_) clear_rhf_cuda_bucket_warm_starts(plan);
   for (std::size_t i = 0; i < size(); ++i)
-    if (states[i]) warm_densities_[i].swap(states[i]);
+    if (states[i]) {
+      warm_densities_[i].swap(states[i]);
+      if (!projection_sources_.empty()) projection_sources_[i] = 0;
+    }
+}
+
+void FleetPlan::invalidate_projection_source() noexcept {
+  std::fill(projection_sources_.begin(), projection_sources_.end(), 0);
 }
 
 void FleetPlan::clear_warm_starts() {
+  invalidate_projection_source();
   for (auto& density : warm_densities_) density.reset();
   for (CudaRhfBucketPlan* plan : cuda_bucket_plans_) {
     clear_rhf_cuda_bucket_warm_starts(plan);

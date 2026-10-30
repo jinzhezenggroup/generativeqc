@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import numpy as np
 import pytest
 from generativeqc import Calculator, _native, _projection_native, progressive
+from generativeqc import _fleet_projection_native as fleet_native
 from generativeqc import _system_projection_native as native
 from generativeqc.calculator import Atom
 
@@ -272,6 +273,7 @@ def test_missing_protocol_retains_explicit_preparation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source, target = Calculator(basis="sto-3g"), Calculator(basis="def2-svp")
+    monkeypatch.setattr(fleet_native, "bind", lambda _: False)
     monkeypatch.setattr(native, "bind", lambda _: False)
     result = progressive.projected_singlepoint(target, source, H2)
     assert result.target.converged
@@ -282,6 +284,8 @@ def test_admitted_failure_never_retries_and_closes_systems(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source, target = Calculator(basis="sto-3g"), Calculator(basis="def2-svp")
+    # Exercise the retained system-only protocol of an older installed library.
+    monkeypatch.setattr(fleet_native, "bind", lambda _: False)
     library = target._library
     if not native.bind(library):
         pytest.skip("requires native system projection")

@@ -659,11 +659,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The short strict tail of a relaxed application-budget hybrid uses that same
     // generated provider. Rebuilding all FP32 source values in FP64 for two
     // closing Focks costs more than streaming those strict applications.
+    // Small strict hybrids still amortize a bounded source across the cold
+    // solve, even with generated J/K. Reuse the ordinary HF policy's 128
+    // Cartesian-AO domain; generated availability alone is not a cost model.
+    // The cold/provenance and complete-capacity gates below remain decisive,
+    // so warm calls never rebuild a quartic source for one Fock.
     // Mixed hybrid proposals, explicitly tighter stopping controls, uncovered
     // high-angular/range operators and forced requests keep their residency policy.
     if (requested == DirectJkSourceSelection::automatic && !has_range_correction &&
         (!has_exchange || !budget_fock || (strict_refinement && budget_stationarity)) &&
-        maximum_angular <= 2 &&
+        (!has_exchange || budget_fock || direct_nbf > 128) && maximum_angular <= 2 &&
         scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
                                                         source_strategy.spec))
       return;

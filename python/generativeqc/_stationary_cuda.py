@@ -3141,8 +3141,15 @@ def _stationary_device_ao_map_reserve(
     return min(requested_bytes, max(0, available))
 
 
+class _ResidentAoMapBinding(typing.Protocol):
+    """One optional map allowance retained by any stationary force owner."""
+
+    _resident_ao_maps: typing.Any
+    _resident_ao_map_key: tuple[typing.Any, ...] | None
+
+
 def _stationary_resident_ao_cache(
-    prepared: PreparedStationaryCudaExecution | None,
+    prepared: _ResidentAoMapBinding | None,
     grid: typing.Any,
     state: typing.Any,
     resident: typing.Any,
@@ -3152,7 +3159,12 @@ def _stationary_resident_ao_cache(
     producer: str = "sampled-jets",
     max_active_fraction: float = 1.0,
 ) -> typing.Any:
-    """Bind optional force masks to the current token-checked resident grid."""
+    """Bind ordinary or composite force maps to a token-checked resident grid.
+
+    Density-only replay preserves maps. Scientific identity, grid generations,
+    derivative layout and omission/resource policy all belong to the binding;
+    functional names do not. Disabled selection releases the optional owner.
+    """
     if cutoff is None or resident is None:
         if prepared is not None:
             prepared._resident_ao_maps = None
