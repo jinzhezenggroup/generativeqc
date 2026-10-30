@@ -52,6 +52,16 @@ int main() {
   assert(df_response_tile_with_headroom(maximum, maximum, 1, identity) == maximum-1);
   assert(df_response_tile_with_headroom(1, 0, maximum, identity) == 1);
   assert(df_response_tile_with_headroom(0, 0, 0, identity) == 0);
+  using generativeqc::scf::df_recycled_projection_preferred;
+  // Recycled storage cannot displace retained factors or authorize a scratch
+  // interval too small for the algorithm. It is optional when owned work fits.
+  assert(!df_recycled_projection_preferred(100, 101, 1, 20, 80));
+  assert(!df_recycled_projection_preferred(100, 60, 50, 60, 49));
+  assert(!df_recycled_projection_preferred(100, 60, 20, 40, 80));
+  assert(df_recycled_projection_preferred(100, 60, 20, 41, 80));
+  assert(df_recycled_projection_preferred(100, 60, 50, 60, 50));
+  assert(!df_recycled_projection_preferred(maximum, maximum-20, 20, 20, 80));
+  assert(df_recycled_projection_preferred(maximum, maximum-20, 20, 21, 80));
 }
 """)
     binary = tmp_path / "response_budget"

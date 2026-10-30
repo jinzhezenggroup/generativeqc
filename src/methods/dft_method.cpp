@@ -2117,17 +2117,35 @@ class KsPreparedState final : public KsSingleOwnerPort {
         status = cuda_->resident_final_nonlocal_features(expected, features, detail);
         if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       }
+      dft::CudaKsResidentFittedProjectionBinding projection;
+      if (density.spins == 1 && fock_.strategy().spec.exchange.present &&
+          fock_.strategy().spec.exchange.approximation == scf::FockApproximation::DensityFitted) {
+        // Reuse only the final K producer's authenticated factor/projection.
+        // A prior force may have consumed its scratch lease; repeated force
+        // calls then retain the bounded ordinary response at the same token.
+        std::string projection_detail;
+        const auto projection_status =
+            cuda_->resident_final_fitted_projection(expected, projection, projection_detail);
+        if (projection_status != GENERATIVEQC_STATUS_SUCCESS &&
+            projection_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+            projection_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+          detail = projection_detail;
+          return projection_status;
+        }
+      }
       status = stationary_controller_->gradient(
           density, weights, fock_, current, output, detail,
           qualified_spatial_force_default(precision), precision,
           range_strategy_ ? &*range_strategy_ : nullptr, nonlocal_ ? &features : nullptr,
           range_derivative_correction_ ? range_derivative_correction_.get()
-                                       : range_correction_.get());
+                                       : range_correction_.get(),
+          projection ? &projection : nullptr);
       if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
           (precision->mixed_geometry || precision->mixed_grid)) {
         // Failed geometry never publishes a partial result. Reset every source
         // and retry the complete gradient once in FP64 at the SAME final token.
         // Driver, token and resource failures must not masquerade as rounding.
+        // The first attempt may have consumed U; never lend it to this retry.
         ++precision->geometry_retries;
         detail.clear();
         status = stationary_controller_->gradient(

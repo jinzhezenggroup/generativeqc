@@ -106,3 +106,65 @@ def test_public_pbe0_packed_projection_hit_and_fallback(
     for result in answers[1:]:
         assert result.energy == pytest.approx(answers[0].energy, abs=1e-8, rel=0)
         np.testing.assert_allclose(result.forces, answers[0].forces, atol=3e-7, rtol=0)
+
+
+@pytest.mark.parametrize("budget_mib", [24, 64])
+def test_projection_scratch_preserves_warm_and_moved_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    budget_mib: int,
+) -> None:
+    """Exercise borrowed/owned scratch and compare all calls to bounded response.
+
+    The 24-MiB public cap admits final U but cannot hold the preferred independent
+    response panel. Trace completion proves the recycled interval was actually
+    used; the 64-MiB control keeps independent scratch. A smaller explicit grid
+    bounds this resource/lifetime test, without making a grid-accuracy claim.
+    """
+    from benchmarks.readme_hf_scaling import scaling_cases
+
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    atoms = scaling_cases()["water-12"].atoms
+    moved = np.array([xyz for _, xyz in atoms])
+    moved[1, 0] += 0.02
+    populations = []
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    for policy in ("off", "auto"):
+        trace = tmp_path / f"{budget_mib}-{policy}.jsonl"
+        monkeypatch.setenv("GENERATIVEQC_DF_FINAL_PROJECTION", policy)
+        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+        calculator = Calculator(
+            method="pbe0-rks",
+            basis="def2-svp",
+            auxiliary_basis="def2-svp",
+            basis_representation="spherical",
+            device="cuda",
+            density_fitting="auto",
+            density_fitting_memory_budget_bytes=budget_mib << 20,
+            ks_options=KsOptions(
+                grid=GridSpec(radial_points=16, angular_polar=8, angular_azimuth=16)
+            ),
+            max_iterations=200,
+            energy_tolerance=1e-12,
+            density_tolerance=1e-10,
+        )
+        with calculator.prepare_batch([atoms], warm_start=True) as batch:
+            cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            changed = batch.execute(
+                coordinates=[moved], strict=True, properties=("energy", "forces")
+            ).items[0]
+        populations.append((cold, warm, changed))
+        recycled = [
+            row
+            for row in read_trace(trace)
+            if row["operation"] == "force_response"
+            and row["counters"].get(
+                "response_recycled_final_projection_scratch_bytes", 0
+            )
+            and row["counters"].get("atom_coordinates") == 3 * len(atoms)
+        ]
+        assert len(recycled) == (3 if policy == "auto" and budget_mib == 24 else 0)
+    for baseline, candidate in zip(*populations, strict=True):
+        assert candidate.energy == pytest.approx(baseline.energy, abs=1e-9, rel=0)
+        np.testing.assert_allclose(candidate.forces, baseline.forces, atol=3e-8, rtol=0)
