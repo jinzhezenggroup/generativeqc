@@ -331,7 +331,12 @@ def supported_schedule_trials(
             None,
         )
         if incumbent is not None:
-            force, fock = split_independent_consumers(incumbent)
+            consumers = split_independent_consumers(incumbent)
+            if consumers is None:
+                raise ValueError(
+                    "independent production selection requires consumer IRs"
+                )
+            force, fock = consumers
             integral = (
                 fock if selected_consumer == KernelConsumer.FOCK else force
             ).integral
