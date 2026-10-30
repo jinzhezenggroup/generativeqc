@@ -82,6 +82,17 @@ observable errors are still checked. Keep original producer identities and the
 input review; never relabel old receipts. This numerical-reference reuse does
 not permit mixing native timing revisions in one figure.
 
+Separate production and reference installations use a version-2 reference-reuse
+manifest (`generativeqc.readme-oracle-reuse.v2`). Each receipt-bound entry keeps
+the original producer, driver and scientific-input contract and additionally
+records `reference_packages`, a list of exact accepted `measurement_packages`
+maps, and a nonempty `review` explaining the scientific-input audit. No package
+version is rewritten. Unlisted environments fail closed; original version-1
+contracts still require equal package maps. Every energy/force, grid-stability
+and CPU/GPU spot gate is recomputed independently of this provenance review.
+Slurm and LSF receipts retain their actual scheduler identifiers and device
+visibility; an LSF allocation must not be labelled with a fabricated Slurm ID.
+
 The LDA/PBE pruning qualification entry point is
 `python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
 inside a finite Slurm allocation. It measures fresh complete native and

@@ -53,14 +53,11 @@ make_bounded_generated_task_offsets(
     const bool queued_fock =
         fock_compiled[shell_class] &&
         (kStreamingFockShellClassMask & (std::uint64_t{1} << shell_class)) == 0U;
-    // Fock-only spd rows still compile an exact dormant force symbol for the
-    // bounded path.  Include their fixed-capacity slices without advertising
-    // them to ordinary fixed-topology force planning.
-    const bool queued_force =
-        (force_compiled[shell_class] ||
-         (fock_compiled[shell_class] &&
-          (kStreamingFockShellClassMask & (std::uint64_t{1} << shell_class)) != 0U)) &&
-        (kDdddShellClassMask & (std::uint64_t{1} << shell_class)) == 0U;
+    // Fock and force inventories are independent. A Fock-only row has no
+    // callable generated force consumer, so reserving a force slice for it
+    // would also starve the classes that can actually consume queued tasks.
+    const bool queued_force = force_compiled[shell_class] &&
+                              (kDdddShellClassMask & (std::uint64_t{1} << shell_class)) == 0U;
     // Direct pair-class streams consume no generated descriptor slice.
     compiled[shell_class] = queued_force || queued_fock;
   }
