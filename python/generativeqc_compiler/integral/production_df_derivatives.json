@@ -133,6 +133,41 @@
         "source_patch": "benchmarks/results/issue435-jkfit-rys/candidate.patch",
         "previous_spd_qualification": "benchmarks/results/issue418-cooperative-rys/class-ranking.json"
       }
+    },
+    "sm_90": {
+      "qualified": false,
+      "kernels": [
+        {"class": "000", "lowering": "rys", "schedule": "compact"},
+        {"class": "001", "lowering": "rys", "schedule": "compact"},
+        {"class": "002", "lowering": "rys", "schedule": "compact"},
+        {"class": "003", "lowering": "rys", "schedule": "compact"},
+        {"class": "100", "lowering": "rys", "schedule": "compact"},
+        {"class": "101", "lowering": "rys", "schedule": "compact"},
+        {"class": "102", "lowering": "rys", "schedule": "compact"},
+        {"class": "103", "lowering": "rys", "schedule": "compact"},
+        {"class": "110", "lowering": "rys", "schedule": "compact"},
+        {"class": "111", "lowering": "rys", "schedule": "compact"},
+        {"class": "112", "lowering": "rys", "schedule": "compact"},
+        {"class": "113", "lowering": "rys", "schedule": "compact"},
+        {"class": "200", "lowering": "rys", "schedule": "compact"},
+        {"class": "201", "lowering": "rys", "schedule": "compact"},
+        {"class": "202", "lowering": "rys", "schedule": "compact"},
+        {"class": "203", "lowering": "rys", "schedule": "compact"},
+        {"class": "210", "lowering": "rys", "schedule": "compact"},
+        {"class": "211", "lowering": "rys", "schedule": "compact"},
+        {"class": "212", "lowering": "rys", "schedule": "compact"},
+        {"class": "213", "lowering": "rys", "schedule": "compact"},
+        {"class": "220", "lowering": "rys", "schedule": "compact"},
+        {"class": "221", "lowering": "rys", "schedule": "compact"},
+        {"class": "222", "lowering": "rys", "schedule": "compact"}
+      ],
+      "provenance": {
+        "status": "preparation-only; no SM90 Rys qualification or timing",
+        "generator_sha256": "47add13379011250aa20575a4529413c2febf532d6193021a54e16508a2e41c7",
+        "toolchain": "Existing measured toolkit CUDA 12.9.86/GCC 12, target sm_90 Release -O3; candidate build pending",
+        "profile_sha256": "ed3507924b86382014b032979cd56d5435c5fc6c8de7dfdccf9344020d6438e6",
+        "candidate_report": ".agents/notes/proposed/2026-10-30-h100-df-rys-candidate.md"
+      }
     }
   }
 }
