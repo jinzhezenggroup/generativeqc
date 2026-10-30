@@ -3384,8 +3384,8 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
 generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default,
-    DirectForcePrecisionRequest* precision) {
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool separate_sources,
+    bool allow_spatial_default, DirectForcePrecisionRequest* precision) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -3419,7 +3419,7 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     try {
       direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
           *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-          exchange_coefficient, consumer, allow_spatial_default, precision));
+          exchange_coefficient, consumer, separate_sources, allow_spatial_default, precision));
     } catch (const generativeqc::Error& error) {
       // Preserve the callback's typed status through the existing provider
       // guard and its failure drain; driver failures are not bad seed input.

@@ -142,11 +142,13 @@ generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
     std::vector<double>& gradient, std::string& detail);
 
 /** Same scientific J/K traversal with callback-scoped resident force channels.
- * The callback enqueues use on the provider stream; no host result is staged. */
+ * The callback enqueues use on the provider stream; no host result is staged.
+ * Restricted total-gradient consumers may request separate_sources=false;
+ * independent diagnostics and unrestricted sources retain separate channels. */
 generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool separate_sources = true,
     bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with

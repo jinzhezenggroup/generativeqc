@@ -23,7 +23,7 @@ using generativeqc::core::System;
 // callback type exposed by the public transport contract.
 using ResidentDerivativeEntry = cudaError_t (*)(cuda_execution::GeneratedExchangePlan&, bool,
                                                 const double*, const double*, double, double,
-                                                const CudaDerivativeSourceConsumer&, bool,
+                                                const CudaDerivativeSourceConsumer&, bool, bool,
                                                 DirectForcePrecisionRequest*);
 static_assert(
     std::is_same_v<decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
@@ -477,7 +477,7 @@ void retained_direct_derivative_reuse() {
 /** Copy callback-scoped sources before the provider reuses its single force arena.
  * The UKS case deliberately has an empty beta density; host adapters and the
  * independent one-electron provider remain separate numerical witnesses. */
-void resident_derivative_sources() {
+void resident_derivative_sources(bool separate_sources) {
   const auto system = fixture(true);
   const auto extent = generativeqc::molecule::ao_count(system);
   const auto elements = extent * extent;
@@ -531,6 +531,28 @@ void resident_derivative_sources() {
                                                       1, 8U << 20, expected_hcore, expected_pulay,
                                                       detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail.c_str());
+    auto cpu_spec = strategy.spec;
+    cpu_spec.derivative_order = 1;
+    PreparedFockPlan cpu(system, nullptr, resolve_fock_build(cpu_spec, FockBackend::Cpu, 0.0), -1,
+                         0);
+    const auto oracle = cpu.energy_derivative_components(
+        density, spin == FockSpin::Unrestricted ? empty_beta : std::vector<double>{});
+    matrix(std::vector<double>(expected_jk.begin(), expected_jk.begin() + coordinates),
+           oracle.coulomb, "resident J independent CPU oracle");
+    matrix(std::vector<double>(expected_jk.begin() + coordinates, expected_jk.end()),
+           oracle.exchange, "resident K independent CPU oracle");
+    if (!separate_sources && spin == FockSpin::Unrestricted) {
+      std::size_t refused_callbacks = 0;
+      require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                  plan, alpha, spin_beta, elements, [&](const auto&) { ++refused_callbacks; },
+                  detail, false) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                  refused_callbacks == 0,
+              "total-only resident J/K admitted an unrestricted source");
+      continue;
+    }
+    require(cudaMemsetAsync(sources, 0, 4 * coordinates * sizeof(double), binding.stream) ==
+                cudaSuccess,
+            "resident derivative test destination reset failed");
     std::size_t callbacks = 0;
     const double* hcore_scratch = nullptr;
     const CudaDerivativeSourceConsumer consume = [&](const CudaDerivativeSourceView& view) {
@@ -538,9 +560,13 @@ void resident_derivative_sources() {
                   view.values && view.coordinates == coordinates,
               "resident derivative callback has invalid device/stream/extent");
       std::size_t slot = 0;
-      if (view.kind == CudaDerivativeSourceKind::FullRangeJk) {
-        require(view.channels == 2 && view.convention == CudaDerivativeConvention::Force,
-                "resident J/K lost its independent force channels");
+      if (view.kind == CudaDerivativeSourceKind::FullRangeJk ||
+          view.kind == CudaDerivativeSourceKind::FullRangeJkSum) {
+        require(view.kind == (separate_sources ? CudaDerivativeSourceKind::FullRangeJk
+                                               : CudaDerivativeSourceKind::FullRangeJkSum) &&
+                    view.channels == (separate_sources ? 2U : 1U) &&
+                    view.convention == CudaDerivativeConvention::Force,
+                "resident J/K changed its declared channel or force convention");
       } else {
         require(view.channels == 1 && view.convention == CudaDerivativeConvention::EnergyGradient,
                 "resident one-electron source changed derivative convention");
@@ -563,7 +589,8 @@ void resident_derivative_sources() {
     OneElectronGradientResources resources;
     const auto submit = [&] {
       require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-                  plan, alpha, spin_beta, elements, consume, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  plan, alpha, spin_beta, elements, consume, detail, separate_sources) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       require(consume_prepared_cuda_stationary_one_electron_pair(
                   plan.cuda_direct_source(), alpha, weight, elements, consume, detail,
@@ -581,8 +608,12 @@ void resident_derivative_sources() {
                             cudaMemcpyDeviceToHost, binding.stream) == cudaSuccess &&
                 cudaStreamSynchronize(binding.stream) == cudaSuccess,
             "resident source test publication failed");
-    for (std::size_t coordinate = 0; coordinate < 2 * coordinates; ++coordinate)
-      close(-actual[coordinate], expected_jk[coordinate], 2e-9, "resident J/K sign/channel oracle");
+    for (std::size_t coordinate = 0; coordinate < (separate_sources ? 2U : 1U) * coordinates;
+         ++coordinate) {
+      const auto expected = expected_jk[coordinate] +
+                            (separate_sources ? 0.0 : expected_jk[coordinates + coordinate]);
+      close(-actual[coordinate], expected, 2e-9, "resident J/K sign/channel oracle");
+    }
     matrix(std::vector<double>(actual.begin() + 2 * coordinates, actual.begin() + 3 * coordinates),
            expected_hcore, "resident hcore oracle");
     matrix(std::vector<double>(actual.begin() + 3 * coordinates, actual.end()), expected_pulay,
@@ -592,7 +623,7 @@ void resident_derivative_sources() {
                                     generativeqc_status jk_status,
                                     generativeqc_status one_electron_status) {
       require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-                  plan, alpha, spin_beta, elements, fail, detail) == jk_status,
+                  plan, alpha, spin_beta, elements, fail, detail, separate_sources) == jk_status,
               "resident J/K consumer failure lost its status");
       require(cudaStreamQuery(binding.stream) == cudaSuccess,
               "failed resident J/K callback returned before its copies drained");
@@ -644,7 +675,7 @@ void resident_derivative_sources() {
         "resident source capture fixture failed");
     std::vector<double> unpublished_hcore{42.0}, unpublished_pulay{43.0};
     require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-                plan, alpha, spin_beta, elements, consume, detail) ==
+                plan, alpha, spin_beta, elements, consume, detail, separate_sources) ==
                     GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                 consume_prepared_cuda_stationary_one_electron_pair(
                     plan.cuda_direct_source(), alpha, weight, elements, consume, detail) ==
@@ -900,7 +931,8 @@ int main(int argc, char** argv) {
     ragged_replay();
     prepared_replay();
     retained_direct_derivative_reuse();
-    resident_derivative_sources();
+    resident_derivative_sources(true);
+    resident_derivative_sources(false);
     retained_lr_only_derivative();
     retained_range_shell_d_parity();
     independent_reference_export();
