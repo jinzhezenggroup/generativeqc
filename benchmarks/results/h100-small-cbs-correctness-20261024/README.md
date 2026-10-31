@@ -1,5 +1,7 @@
 # H100 small CBS bounded correctness outcome
 
+Storage update: restore the historical payloads with [the offline recovery commands](../h100-history-retention-20261031/README.md) before running the replay examples below. Original scientific results and gates are unchanged.
+
 Refs #2727 and #2724. The **whole fixed32-slot matrix is INCOMPLETE**. This
 publication retains actual H100 results and refusals, not a completed parent,
 performance comparison, current-master SDK qualification or default promotion.
@@ -102,11 +104,16 @@ modes on POSIX and labels Windows mode application unavailable. The independent
 owner/root collections have identical bytes, hashes and modes for every common
 member. JSON envelope sizes are separate from raw member sums.
 
-From this directory, using new destinations:
+After the linked offline recovery, run from the repository root using new destinations:
 
-```text
-python verify_actual.py --output /new/originals --report /new/offline-report.json
-python test_restore_actual.py
+```bash
+uv run --no-env-file --no-project --python 3.12 \
+  python benchmarks/results/h100-small-cbs-correctness-20261024/verify_actual.py \
+  --capsule .artifacts/h100-history-20261031/benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz \
+  --output .artifacts/h100-cbs-restored-originals-20261031 \
+  --report .artifacts/h100-cbs-offline-replay-20261031.json
+uv run --no-env-file --no-project --python 3.12 \
+  python benchmarks/results/h100-small-cbs-correctness-20261024/test_restore_actual.py
 ```
 
 The first command verifies bounded XZ framing, safe no-clobber recovery, all
@@ -136,7 +143,12 @@ and SHA256. The standard offline recovery command in that manifest restores all
 five files without fetching, executing their operational scripts or running GPU
 work. Recovery has been checked against all original compressed bytes.
 
-All255 actual runtime originals, returned full vectors, independent references,
-qualified patch, prepared plans and executable numerical replay remain in this
-checkout. The two refusals, late first-Job admission failure and14 NOT_RUN slots
+All255 actual runtime originals and returned full vectors remain byte-for-byte
+recoverable through the historical payload snapshot below. Independent reference
+records, the qualified patch, prepared plans and executable numerical replay stay
+in this checkout. The two refusals, late first-Job admission failure and14 NOT_RUN slots
 retain their original outcomes. This storage change supplies no new acceptance.
+
+## Historical payload recovery
+
+The large original payloads for this historical source are stored byte-for-byte in existing Git history. Numerical summaries, unfavorable outcomes, original hashes and test fixtures remain in this checkout. Follow [the offline recovery commands](../h100-history-retention-20261031/README.md) before replay. Recovery does not rerun chemistry or promote this source to current production acceptance.

@@ -1,5 +1,7 @@
 # H100 integrated baseline: complete 99-process E+F matrix
 
+Storage update: restore the historical payloads with [the offline recovery commands](../h100-history-retention-20261031/README.md) before running the replay examples below. Original scientific results and gates are unchanged.
+
 The frozen `000517f82dc62130459a6fd92a27518a158c49cc` baseline returns
 396 qualified complete energy/analytic-force observations from 99 processes.
 At the selected whole-matrix `tile1024` policy, 19/30 physical primary inputs
@@ -50,7 +52,8 @@ From the repository root:
 
 ```bash
 uv run --no-env-file --no-project --python 3.12 --with numpy==2.2.6 \
-  python benchmarks/results/h100-integrated-baseline-20261030/replay.py
+  python benchmarks/results/h100-integrated-baseline-20261030/replay.py \
+  --payload-root .artifacts/h100-history-20261031/benchmarks/results/h100-integrated-baseline-20261030
 ```
 
 The reader reconstructs every force list before checking its normalized JSON
@@ -121,3 +124,7 @@ complete E+F calls. Each arm has one process; none is a final majority vote.
 | m06-2x | 96 | df | 1.232240 |
 | wb97m-v | 48 | direct | 0.711178 |
 | wb97m-v | 96 | direct | 0.614919 |
+
+## Historical payload recovery
+
+The large original payloads for this historical source are stored byte-for-byte in existing Git history. Numerical summaries, unfavorable outcomes, original hashes and test fixtures remain in this checkout. Follow [the offline recovery commands](../h100-history-retention-20261031/README.md) before replay. Recovery does not rerun chemistry or promote this source to current production acceptance.
