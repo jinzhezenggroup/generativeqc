@@ -285,7 +285,7 @@ def test_stage_evidence_rejects_changed_compiler_source(
 
     def changed(*families: str, assets: tuple[str, ...] = ()) -> dict[str, str]:
         result = original(*families, assets=assets)
-        result["python/generativeqc_compiler/integral/scalar_c.py"] = "0" * 64
+        result["python/generativeqc_compiler/xc/libxc_bulk.py"] = "0" * 64
         return result
 
     monkeypatch.setattr(paths, "source_hashes", changed)
@@ -492,3 +492,45 @@ def test_production_qualification_is_detached_from_caller_lists(
     assert stage.qualification == expected
     assert stage.to_payload()["qualification"] == expected
     assert "production-domain" in capability.qualified_stages
+
+
+@pytest.mark.parametrize(
+    "name", ("integral/expr.py", "integral/scalar_c.py", "integral/cuda.py")
+)
+def test_scalar_dependency_edits_invalidate_libxc_evidence(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    base = libxc_bulk_capabilities.functional_capability("GGA_X_PBE_SOL")
+    evidence = {"compiled-cpu": _stage_evidence(base, "compiled-cpu")}
+    original = libxc_bulk_capabilities.file_hash
+
+    def changed(path: Path) -> str:
+        if path == libxc_bulk_capabilities.paths.PACKAGE / name:
+            return "0" * 64
+        return original(path)
+
+    monkeypatch.setattr(libxc_bulk_capabilities, "file_hash", changed)
+    with pytest.raises(ValueError, match="subject identity mismatch"):
+        libxc_bulk_capabilities.functional_capability(base.name, evidence=evidence)
+
+
+def test_integral_tuning_edits_do_not_revoke_libxc_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc_compiler.common import paths
+
+    base = libxc_bulk_capabilities.functional_capability("GGA_X_PBE_SOL")
+    evidence = {"compiled-cpu": _stage_evidence(base, "compiled-cpu")}
+    original = paths.file_hash
+
+    def changed(path: Path) -> str:
+        if path == paths.PACKAGE / "integral/tuning/manifest.py":
+            return "0" * 64
+        return original(path)
+
+    monkeypatch.setattr(paths, "file_hash", changed)
+    qualified = libxc_bulk_capabilities.functional_capability(
+        base.name, evidence=evidence
+    )
+    assert qualified.identity == base.identity
+    assert "compiled-cpu" in qualified.qualified_stages
