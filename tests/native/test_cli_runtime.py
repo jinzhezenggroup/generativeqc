@@ -1076,6 +1076,222 @@ class RuntimeTests(unittest.TestCase):
                     )
                     self.assertEqual(bounded.returncode, status, bounded.stderr)
 
+    def test_named_d4_cli_adds_native_correction_owners(self) -> None:
+        """Shape-only queries add retained D4 storage and preserve every cap.
+
+        CUDA electronic leaves use the existing host-only interposer; the D4
+        query is the real CPU-library implementation and must not probe a GPU.
+        """
+
+        class Diagnostic(ctypes.Structure):
+            _fields_ = (
+                [(name, ctypes.c_uint32) for name in ("struct_size", "abi_version")]
+                + [(name, ctypes.c_int32) for name in ("backend", "profile")]
+                + [
+                    (name, ctypes.c_uint64)
+                    for name in (
+                        "plan_host_bytes",
+                        "execution_host_bytes",
+                        "device_bytes",
+                        "table_bytes",
+                        "workspace_bytes",
+                        "maximum_bytes",
+                        "total_atoms",
+                    )
+                ]
+                + [
+                    (name, ctypes.c_uint32)
+                    for name in (
+                        "system_count",
+                        "maximum_atoms",
+                        "worker_blocks",
+                        "workspace_slots",
+                    )
+                ]
+                + [
+                    (name, ctypes.c_uint64)
+                    for name in (
+                        "execution_count",
+                        "unchanged_geometry_replays",
+                        "changed_geometry_replays",
+                        "coordinate_h2d_bytes",
+                        "kernel_launches",
+                    )
+                ]
+                + [("atm_enabled", ctypes.c_int32)]
+            )
+
+        self._check_named_correction_inventory(
+            "generativeqc_ks_d4_resource_query_v1", Diagnostic, "pbe-d4(bj-eeq-atm)"
+        )
+
+    def test_named_d3_cli_adds_native_correction_owners(self) -> None:
+        """Both D3 damping programs consume the real per-item native inventory."""
+
+        class Diagnostic(ctypes.Structure):
+            _fields_ = (
+                [(name, ctypes.c_uint32) for name in ("struct_size", "abi_version")]
+                + [("backend", ctypes.c_int32)]
+                + [
+                    (name, ctypes.c_uint64)
+                    for name in (
+                        "plan_host_bytes",
+                        "execution_host_bytes",
+                        "device_bytes",
+                        "table_bytes",
+                        "workspace_bytes",
+                        "maximum_bytes",
+                        "total_atoms",
+                    )
+                ]
+                + [
+                    (name, ctypes.c_uint32)
+                    for name in ("system_count", "maximum_atoms")
+                ]
+            )
+
+        for prefix in ("pbe-d3(bj)", "pbe-d3(0)"):
+            self._check_named_correction_inventory(
+                "generativeqc_ks_d3_resource_query_v1", Diagnostic, prefix
+            )
+
+    def _check_named_correction_inventory(
+        self, query_name: str, Diagnostic: type[ctypes.Structure], prefix: str
+    ) -> None:
+        """Compare whole CLI capacities and exact/below gates to the public owner."""
+        self.env.pop("LD_PRELOAD", None)
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = getattr(library, query_name)
+        query.argtypes = [
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.c_uint32,
+            ctypes.POINTER(Diagnostic),
+        ]
+        query.restype = ctypes.c_int
+        abi_version = library.generativeqc_get_abi_version()
+        for backend in ("cpu", "cuda"):
+            if backend == "cuda":
+                if sys.platform != "linux":
+                    continue
+                self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+            for spin in ("rks", "uks"):
+                for batch in (1, 3):
+                    with self.subTest(backend=backend, spin=spin, batch=batch):
+                        common = ("--backend", backend, "--batch", str(batch))
+                        electronic = self.resources("--method", f"pbe-{spin}", *common)
+                        self.assertEqual(electronic.returncode, 0, electronic.stderr)
+                        base = json.loads(electronic.stdout)
+                        method = f"{prefix}-{spin}"
+                        result = self.resources("--method", method, *common)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        plan = json.loads(result.stdout)
+                        receipt = Diagnostic(ctypes.sizeof(Diagnostic), abi_version)
+                        self.assertEqual(
+                            query(
+                                backend == "cuda",
+                                (ctypes.c_uint32 * batch)(*([2] * batch)),
+                                batch,
+                                ctypes.byref(receipt),
+                            ),
+                            0,
+                        )
+                        for key in (
+                            "plan_host_bytes",
+                            "execution_host_bytes",
+                            "device_bytes",
+                            "table_bytes",
+                            "workspace_bytes",
+                        ):
+                            self.assertEqual(
+                                plan["correction_inventory"][key], getattr(receipt, key)
+                            )
+                        host_delta = (
+                            receipt.plan_host_bytes + receipt.execution_host_bytes
+                        )
+                        self.assertEqual(
+                            plan["peak_bytes"]["host"],
+                            base["peak_bytes"]["host"] + host_delta,
+                        )
+                        self.assertEqual(
+                            plan["resident_bytes"]["pageable"],
+                            base["resident_bytes"]["pageable"] + host_delta,
+                        )
+                        self.assertEqual(
+                            plan["peak_bytes"]["device"],
+                            base["peak_bytes"]["device"] + receipt.device_bytes,
+                        )
+                        self.assertEqual(plan["item_inventory"], base["item_inventory"])
+                        for flag, required in (
+                            ("--host-bytes", plan["peak_bytes"]["host"]),
+                            ("--device-bytes", plan["peak_bytes"]["device"]),
+                            ("--dispersion-memory-bytes", receipt.maximum_bytes),
+                        ):
+                            for delta in (0, -1) if required else (0,):
+                                bounded = self.resources(
+                                    "--method",
+                                    method,
+                                    *common,
+                                    flag,
+                                    str(required + delta),
+                                )
+                                self.assertEqual(
+                                    bounded.returncode,
+                                    0 if delta == 0 else 2,
+                                    bounded.stderr,
+                                )
+                                self.assertEqual(
+                                    json.loads(bounded.stdout)["status"],
+                                    "feasible" if delta == 0 else "infeasible",
+                                )
+
+    def test_named_d4_inventory_keeps_electronic_and_composite_boundaries(self) -> None:
+        for method, extra in (
+            ("pbe0-d4(bj-eeq-atm)-rks", ()),
+            ("r2scan-3c-rks", ()),
+            ("pbe-d4-rks", ()),
+            ("pbe-d4(bj-eeq-atm)-rks", ("--forces",)),
+            ("pbe-d4(bj-eeq-atm)-rks", ("--density-fitting", "cpu")),
+        ):
+            with self.subTest(method=method, extra=extra):
+                result = self.resources("--method", method, *extra)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+
+    def test_named_d3_inventory_keeps_electronic_and_force_boundaries(self) -> None:
+        for method, extra in (
+            ("pbe0-d3(bj)-rks", ()),
+            ("pbe-d3(bj)-rks", ("--forces",)),
+            ("pbe-d3(0)-uks", ("--density-fitting", "cpu")),
+        ):
+            with self.subTest(method=method, extra=extra):
+                result = self.resources("--method", method, *extra)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+
+    def test_named_d3_inventory_preserves_native_shape_refusal(self) -> None:
+        """A topology rejected by D3 cannot receive an electronic-only plan."""
+        atoms = 4098
+        geometry = self.root / "above-d3-domain.xyz"
+        geometry.write_text(
+            f"{atoms}\nshape-only refusal fixture\n"
+            + "".join(f"H {2 * index} 0 0\n" for index in range(atoms))
+        )
+        result = self.cli(
+            "resources",
+            str(geometry),
+            "--units",
+            "bohr",
+            "--method",
+            "pbe-d3(bj)-rks",
+            "--basis",
+            "sto-3g",
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["status"], "unsupported")
+        self.assertIn("native D3 correction inventory rejects", plan["diagnostic"])
+
     def test_cuda_ks_cli_uses_shared_native_host_fleet_without_gpu(self) -> None:
         """Synthetic device leaves retain both real native fleet owners."""
         if sys.platform != "linux":

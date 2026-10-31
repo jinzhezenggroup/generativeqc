@@ -1,0 +1,29 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "0808f5be36904b8370ee5a3a739a42d21a48bb67",
+  "file_count": 4,
+  "total_bytes": 63429,
+  "files": [
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/current-samples.json.xz",
+      "bytes": 54584,
+      "sha256": "0948e1c8a32b6a6f986c100b4a1a4041dd1440f2a7501447887183ee56c683b8"
+    },
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/current-qualification.json.xz",
+      "bytes": 2100,
+      "sha256": "467a9fc6d317f190287911a24140575a3714b5a5cd8581b4535109fef335f569"
+    },
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/qualify.py",
+      "bytes": 3663,
+      "sha256": "33ca92d67a6ddd75ebe08e5525b7fcc48c95f7177f2d64df6d448bd50412537a"
+    },
+    {
+      "path": "benchmarks/results/cli-d3-capacity-20261029/README.md",
+      "bytes": 3082,
+      "sha256": "348569a9e2b830bc384b129ca909410ba898558fc50acb0492d7547c5de21525"
+    }
+  ],
+  "retention": "Previous complete 8cdafb7fc CLI qualification before current master integration, preserved byte-for-byte. Storage ancestry is distinct from the measured production source."
+}
