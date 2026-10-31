@@ -124,3 +124,11 @@ acknowledgements remain recoverable from `04d316ce0` at the original manifest
 paths. Historical native qualification stays stale; no new endpoint admission
 is inferred. Seed adapter behavior tests, the incoming provenance/consumer
 tests and the retained independent performance-evidence reader are rerun.
+
+The later checkpoint-routing repair (`385f90ac8`) changes native sources and the
+complete source identity to
+`9e99ec9b6f144963f3d87faa02d5c7e553f03a0a21d29818c14700c9e73c32e7`.
+It forwards the optional products through the common warm-density validator for
+both spin conventions. The earlier byte-identity comparison applies only to the
+#2908 rebase, not this repair; the original GPU receipts remain measurements of
+`b6b63f90...` and do not qualify the later checkpoint routing.
