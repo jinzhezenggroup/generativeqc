@@ -1,0 +1,29 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "1e214273be8066af58e7de51e943052b4bf179a8",
+  "file_count": 4,
+  "total_bytes": 70332,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/catalog-carry-diagnostic-receipts.json.xz",
+      "bytes": 10060,
+      "sha256": "43a963824e828a6d1caded267347c2db47cc9b3e77456f685cfc514fc3a276d6"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/catalog-carry-diagnostic.json.xz",
+      "bytes": 25064,
+      "sha256": "a171dba7117ddd65b37c14abb2866864162ecd09a0a57602d88df10e556f574a"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/diagnostic-cache-receipts.json.xz",
+      "bytes": 9804,
+      "sha256": "cf37eb385941c9b1aaa536876f1367d4e308277e928217a77c5e828e52522fa0"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/diagnostic-cache-samples.json.xz",
+      "bytes": 25404,
+      "sha256": "e5e4a2c9801398987067e445f2727aa3cb46f1dc35eed4809e18770fac00d510"
+    }
+  ],
+  "retention": "Both intermediate replay diagnostics failed the timing gate. All raw populations, receipts and runners remain in this verified existing ancestor; never rewrite it."
+}

@@ -313,7 +313,8 @@ void capacity_reservations() {
             "public diagnostic conflated promises, numeric allocations or provider allowances");
   };
   DeviceResourceScope observation(ledger);
-  auto first = std::make_unique<DeviceCapacityReservation>(ledger, 80);
+  auto first = DeviceCapacityReservation::try_create(ledger, 80, true);
+  require(first != nullptr, "complete optional-source promise was refused");
   auto second = std::make_unique<DeviceCapacityReservation>(ledger, 32);
   snapshot(0, 0, 112);
   require(device_resource_available(0) == 16 && ledger->live == 0,
@@ -340,6 +341,8 @@ void capacity_reservations() {
   std::unique_ptr<DeviceProviderAllowance> provider;
   {
     DeviceCapacityScope scope(*first);
+    require(active_device_capacity_promise->optional_direct_coulomb,
+            "complete owner's optional-source authority was not retained");
     require(device_resource_available(0) == 80, "owner cannot use its promised capacity");
     {
       DeviceCapacityScope unpromised_owner(nullptr);
@@ -351,6 +354,8 @@ void capacity_reservations() {
             "unpromised nested owner lost its caller's promise");
     {
       DeviceUnpromisedCapacityScope optional_scope;
+      require(!active_device_capacity_promise,
+              "optional-source authority leaked into optional allocation scope");
       require(device_resource_available(0) == 0 &&
                   resource_cuda_malloc(&denied, 1) == cudaErrorMemoryAllocation,
               "optional scope borrowed its parent's mandatory promise");
@@ -365,6 +370,8 @@ void capacity_reservations() {
             "owner exceeded its declared bound");
     {
       DeviceCapacityScope nested(*second);
+      require(!active_device_capacity_promise->optional_direct_coulomb,
+              "ordinary nested owner inherited optional-source authority");
       require(device_resource_available(0) == 32, "nested owner borrowed wrong promise");
       void* temporary{};
       require(resource_cuda_malloc_async(&temporary, 32, nullptr) == cudaSuccess,
@@ -373,6 +380,8 @@ void capacity_reservations() {
                   device_resource_available(0) == 32, "rebuild capacity was not restored");
     }
     require(device_resource_available(0) == 0, "nested scope did not restore parent promise");
+    require(active_device_capacity_promise->optional_direct_coulomb,
+            "nested owner lost its caller's optional-source authority");
   }
   // Closing one metadata owner preserves both another owner's future and all
   // allocations that outlive the closed promise; frees may happen elsewhere.
@@ -491,7 +500,7 @@ def ledger_probe(
 ) -> Path:
     """Link actual ledger C APIs; discard unrelated CPU shape-query sections."""
     folder = tmp_path_factory.mktemp("device-ledger-requests")
-    # The production resource translation unit also owns ECP and D3 queries.
+    # The production resource translation unit also owns ECP, D3 and D4 queries.
     # Generate their real headers instead of relying on a prior CMake build.
     subprocess.run(
         [
@@ -515,6 +524,22 @@ def ledger_probe(
             str(ROOT / "tools/generativeqc_d3/generate_native_data.py"),
             "--output",
             str(folder / "d3_data.hpp"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    # D4's runtime header consumes the shared native method parameters even
+    # though the linker discards its unrelated capacity entry points here.
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(ROOT / "tools/generate_method_parameters.py"),
+            "--cpp-output",
+            str(folder / "generated_method_parameters.hpp"),
         ],
         check=True,
         capture_output=True,

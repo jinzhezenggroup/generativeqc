@@ -12,8 +12,9 @@ namespace generativeqc::scf::cuda_execution {
 
 /** Extra allowance requested by private KS's shape-only provider estimate.
  * This is a reservation hint, not a second cap on an already budgeted owner.
- * Actual MD storage must fit the direct plan's remaining capacity; public
- * ledger-bound plans cannot spend this optional allowance. */
+ * Actual MD storage must fit the direct plan's remaining capacity. Complete
+ * Direct D4 promises may additionally admit it from unpromised ledger capacity,
+ * bounded by this ceiling; other public ledger owners retain normal J. */
 inline constexpr std::size_t kMdJDefaultReservation = 128U << 20;
 inline constexpr double kMdJDensityErrorCap = 1e-12;
 

@@ -9,6 +9,7 @@
 #include "api/error.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
+#include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
@@ -55,6 +56,59 @@ generativeqc_status generativeqc_ks_d3_resource_query_v1(
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(nullptr);
+  }
+}
+
+generativeqc_status generativeqc_ks_d4_resource_query_v1(
+    generativeqc_backend backend, const std::uint32_t* atom_counts, std::uint32_t system_count,
+    generativeqc_d4_runtime_diagnostic* output) {
+  if (!atom_counts || !system_count || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    const auto r = generativeqc::dft::dispersion::ks_d4_resource_usage(
+        backend, std::span(atom_counts, system_count));
+    generativeqc_d4_runtime_diagnostic candidate{};
+    candidate.struct_size = output->struct_size;
+    candidate.abi_version = output->abi_version;
+    candidate.backend = backend;
+    candidate.plan_host_bytes = r.plan_host_bytes;
+    candidate.execution_host_bytes = r.execution_host_bytes;
+    candidate.device_bytes = r.device_bytes;
+    candidate.table_bytes = r.table_bytes;
+    candidate.workspace_bytes = r.workspace_bytes;
+    candidate.maximum_bytes = r.maximum_bytes;
+    candidate.total_atoms = r.total_atoms;
+    candidate.system_count = r.system_count;
+    candidate.maximum_atoms = r.maximum_atoms;
+    candidate.worker_blocks = r.worker_blocks;
+    candidate.workspace_slots = r.workspace_slots;
+    *output = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+}
+
+/** Private allocation-free standalone D4 schedule query, shared with prepare.
+ * Six capacities followed by worker slots. Invalid/below-budget requests leave
+ * every output unchanged; this is correction capacity, not method admission.
+ */
+int generativeqc_resource_d4_layout_v1(int backend, std::uint64_t systems, std::uint64_t atoms,
+                                       std::uint64_t maximum_atoms, std::uint64_t maximum_bytes,
+                                       std::uint64_t* values, std::size_t count) {
+  if (!values || count != 7 || (backend != 0 && backend != 1)) return -1;
+  try {
+    const auto r = generativeqc::dft::dispersion::d4_resource_usage(
+        static_cast<generativeqc_backend>(backend), systems, atoms, maximum_atoms, maximum_bytes);
+    const std::array<std::uint64_t, 7> result{
+        r.plan_host_bytes, r.execution_host_bytes,
+        r.device_bytes,    r.table_bytes,
+        r.workspace_bytes, r.plan_host_bytes + r.execution_host_bytes + r.device_bytes,
+        r.workspace_slots};
+    std::copy(result.begin(), result.end(), values);
+    return 0;
+  } catch (const std::exception&) {
+    return -1;
   }
 }
 
@@ -445,6 +499,46 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
     output[0] = state;
     output[1] = xc_and_grid;
     output[2] = direct;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+#else
+  return 2;
+#endif
+}
+
+/** Additive headroom for complete native D4/PBE capacity admission. A caller
+ * must retain the ordinary selected inventory as its low-memory alternative.
+ * This private shape query neither changes SelectedInventory authority nor
+ * admits a method: the prepared NumericCap owner validates its full context.
+ * Output is host and device headroom; errors leave both values unchanged. */
+int generativeqc_resource_ks_d4_optional_cuda_v1(std::size_t nao, std::size_t atoms,
+                                                 std::size_t primitives, std::size_t points,
+                                                 std::size_t diis_history, std::size_t spins,
+                                                 std::size_t functional, std::size_t tile_points,
+                                                 std::uint64_t* output, std::size_t count) {
+  if (!output || count != 2 || diis_history > 64 || (spins != 1 && spins != 2) ||
+      functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
+#if GENERATIVEQC_HAS_CUDA
+  const auto* family = generativeqc::dft::semilocal_family_metadata_from_code(functional);
+  if (!family || family->family != generativeqc::dft::SemilocalFamily::Pbe) return 2;
+  try {
+    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
+        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+    const auto extra = generativeqc::dft::cuda_ks_optional_xc_capacity(xc);
+    const auto coulomb = generativeqc::scf::cuda_direct_coulomb_optional_capacity(nao);
+    // The complete promise also reserves the diagnostic history-square panel,
+    // which can be activated on a later geometry rebuild.
+    const auto device = generativeqc::runtime::size_add(
+        generativeqc::runtime::size_add(extra[1], coulomb[1]),
+        generativeqc::runtime::size_mul(
+            sizeof(double), generativeqc::runtime::size_mul(diis_history, diis_history)));
+    const auto host = generativeqc::runtime::size_add(extra[0], coulomb[0]);
+    output[0] = host;
+    output[1] = device;
     return 0;
   } catch (...) {
     return 1;

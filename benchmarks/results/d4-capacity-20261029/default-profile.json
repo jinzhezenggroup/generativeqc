@@ -1,0 +1,51 @@
+{
+  "scope": "Complete untimed endpoint matrix; explicit dynamic CUDA storage only. Static and opaque provider/driver storage are excluded from the live peak.",
+  "baseline": {
+    "explicit_device_peak_bytes": 119201475,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 5648,
+    "static_device_bytes": 1805876,
+    "kernels": 172628,
+    "graph_calls": 0,
+    "copies": {
+      "Device-to-Device": {
+        "count": 3666,
+        "bytes": 278102208
+      },
+      "Device-to-Host": {
+        "count": 6038,
+        "bytes": 16284544
+      },
+      "Host-to-Device": {
+        "count": 5240,
+        "bytes": 26688360
+      }
+    }
+  },
+  "candidate": {
+    "explicit_device_peak_bytes": 119201475,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 5648,
+    "static_device_bytes": 1805876,
+    "kernels": 172628,
+    "graph_calls": 0,
+    "copies": {
+      "Device-to-Device": {
+        "count": 3666,
+        "bytes": 278102208
+      },
+      "Device-to-Host": {
+        "count": 6038,
+        "bytes": 16284544
+      },
+      "Host-to-Device": {
+        "count": 5240,
+        "bytes": 26688360
+      }
+    }
+  },
+  "sqlite_sha256": {
+    "baseline": "3dd8c875842c99934f4e770c3d99ff5200e8f603a99dfcd6cc8e796b16cff001",
+    "candidate": "cf342187358837ac42c948f77a31bcad4064a3fd9330d5be3eab7057973e3578"
+  }
+}

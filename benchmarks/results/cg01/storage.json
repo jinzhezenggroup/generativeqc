@@ -10,6 +10,26 @@
       "decoded_sha256": "1bc9dd514c7396fb9a3dd6a637a654fd6617c6bb00a55858c0c445412d143a2d",
       "original_path": "capabilities.json",
       "original_git_blob": "c7eda2c09616e59d1990c7b8d8cc51d0ea2366c7"
+    },
+    {
+      "path": "hf-cpu.json.xz",
+      "codec": "xz",
+      "stored_bytes": 5444,
+      "stored_sha256": "66c12ccd88c681098ceffe77b27da4856e813a367e9e8f3f59c47a2ea29fccc2",
+      "decoded_bytes": 67207,
+      "decoded_sha256": "2423bfc08f059d20efb65857467edbb713f5b54bb52230db46faede90339607a",
+      "original_path": "hf-cpu.json",
+      "original_git_blob": "396583199c12be4e225928a32bd718ed78d5d195"
+    },
+    {
+      "path": "hf-cuda-sm120.json.xz",
+      "codec": "xz",
+      "stored_bytes": 6040,
+      "stored_sha256": "1fe69da7b9d9929078656abed0f103bebe0bbc33d47bf331618dbff163aea741",
+      "decoded_bytes": 70391,
+      "decoded_sha256": "731c9a23e8439a55a612d34029c264f712a1ad8a9fbd841adf68849f6c58c8b4",
+      "original_path": "hf-cuda-sm120.json",
+      "original_git_blob": "080b8c3f82e6877106995567bfbe7cf2d2e26c43"
     }
   ]
 }

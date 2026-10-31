@@ -514,6 +514,23 @@ def test_live_checker_rejects_changed_toolchain_and_old_update_baseline(
     )
     with pytest.raises(ValueError, match="differs from retained snapshot"):
         checker.check(checker.MANIFEST)
+    # A legitimate refresh may make previous equal the retained summary.
+    # Explicitly simulate an older identity instead of relying on repository state.
+    previous_path = ROOT / manifest["previous"]["path"]
+    older = deepcopy(actual_load(previous_path))
+    first = next(iter(older["functionals"].values()))
+    first["identity"] = "0" * 64
+    monkeypatch.setattr(
+        checker,
+        "load_json",
+        lambda path: (
+            changed
+            if path == campaign_path
+            else older
+            if path == previous_path
+            else actual_load(path)
+        ),
+    )
     with pytest.raises(ValueError, match="older baseline cannot hide"):
         checker.check(checker.MANIFEST, write=True)
 

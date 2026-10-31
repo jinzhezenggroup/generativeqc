@@ -225,9 +225,9 @@ class Calculator:
         and compose r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
-        the retained external-correction owner. Production two-body D3(BJ)
-        also contributes its retained host/device capacity to the global
-        ResourceBudget; composite D4/gCP planning remains fail-closed.
+        the retained correction owner. Admitted complete native D3/D4 programs
+        contribute their retained host/device capacity to the global ResourceBudget;
+        composite gCP planning remains fail-closed.
         """
         if target_accuracy is not None and not isinstance(
             target_accuracy, TargetAccuracy
@@ -740,12 +740,17 @@ class Calculator:
                 for node in self._dispersion_method_ir.primitives
                 if isinstance(node, DispersionCorrectionPrimitive)
             )
-            if len(correction_nodes) != 1 or not isinstance(
-                correction_nodes[0].specification, D3Spec
+            if (
+                len(correction_nodes) != 1
+                or not isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
+                or any(
+                    isinstance(node, GeometricCounterpoisePrimitive)
+                    for node in self._dispersion_method_ir.primitives
+                )
             ):
                 raise NotImplementedError(
-                    "global resource_budget currently supports composed D3(BJ) only; "
-                    "composite D4/gCP planning remains unavailable"
+                    "global resource_budget supports individual D3/D4 corrections; "
+                    "composite gCP planning remains unavailable"
                 )
         if self._method == _native.METHOD_GFN2_XTB:
             # Backend-specific admission is owned by native calculation preparation.
@@ -1920,6 +1925,25 @@ class Calculator:
         self, atoms: typing.Any, *, charge: typing.Any = 0, multiplicity: typing.Any = 1
     ) -> typing.Any:
         """Resolve complete orbital/auxiliary scientific identities for this model."""
+        return self._basis_metadata_from_snapshot(
+            atoms, charge=charge, multiplicity=multiplicity
+        )
+
+    def _basis_metadata_from_snapshot(
+        self,
+        atoms: typing.Any,
+        *,
+        charge: typing.Any = 0,
+        multiplicity: typing.Any = 1,
+        model_signature: typing.Any = None,
+    ) -> typing.Any:
+        """Resolve item metadata against one synchronous prepared model snapshot.
+
+        A CUDA D4 constructor already computes the complete model signature
+        immediately before resolving its items. Carry that value through this
+        local operation; public calls and later executions still recompute it.
+        This does not retain a signature across caller-visible mutation points.
+        """
         atoms = tuple(Atom.from_value(a) for a in atoms)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
@@ -1965,7 +1989,9 @@ class Calculator:
             )
         result["model_identity"] = canonical_hash(
             {
-                "calculator": self._model_signature(),
+                "calculator": self._model_signature()
+                if model_signature is None
+                else model_signature,
                 "basis": result,
                 "charge": int(charge),
                 "multiplicity": int(multiplicity),
@@ -2348,7 +2374,14 @@ class Calculator:
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
         properties: typing.Any = None,
+        _include_native_program: bool = False,
     ) -> typing.Any:
+        """Build capacity metadata, optionally carrying its native discovery result.
+
+        CUDA preparation consumes the same local catalog selection for optional
+        headroom, correction sizing and native preparation. This avoids repeated
+        graph serialization without caching discovery across library lifetimes.
+        """
         from .initial_guess import with_initial_guess_resources
 
         systems = tuple(tuple(system) for system in systems)
@@ -2359,9 +2392,26 @@ class Calculator:
             ks_options=ks_options,
             properties=properties,
         )
-        return with_initial_guess_resources(
+        request = with_initial_guess_resources(
             request, self, systems, charges, multiplicities
         )
+        native_program = None
+        if _include_native_program:
+            from ._named_ks import select_resource_program
+
+            native_program = select_resource_program(self, request)
+        if self._dispersion_method_ir is not None:
+            from .resources_d4 import with_native_xc_capacity
+
+            request = with_native_xc_capacity(
+                request,
+                self,
+                ks_options,
+                _native_ks=native_program is not None
+                if _include_native_program
+                else None,
+            )
+        return (request, native_program) if _include_native_program else request
 
     def _base_resource_request(
         self,
@@ -2469,37 +2519,67 @@ class Calculator:
         return request
 
     def _dispersion_resource_request(
-        self, systems: typing.Any, electronic_request: typing.Any
+        self,
+        systems: typing.Any,
+        electronic_request: typing.Any,
+        *,
+        _native_ks: bool | None = None,
     ) -> typing.Any:
-        """Return the bounded D3 owner request for global planning, when present."""
+        """Present the native correction inventory for an admitted global plan."""
         if self._dispersion_method_ir is None:
             return None
 
-        from generativeqc_compiler.method import D3Spec, DispersionCorrectionPrimitive
+        from generativeqc_compiler.method import (
+            D3Spec,
+            D4Spec,
+            DispersionCorrectionPrimitive,
+            GeometricCounterpoisePrimitive,
+        )
 
         corrections = tuple(
             node
             for node in self._dispersion_method_ir.primitives
             if isinstance(node, DispersionCorrectionPrimitive)
         )
-        if len(corrections) != 1 or not isinstance(
-            corrections[0].specification, D3Spec
+        if (
+            len(corrections) != 1
+            or not isinstance(corrections[0].specification, (D3Spec, D4Spec))
+            or any(
+                isinstance(node, GeometricCounterpoisePrimitive)
+                for node in self._dispersion_method_ir.primitives
+            )
         ):
             raise NotImplementedError(
-                "global ResourcePlan currently supports composed D3(BJ) only"
+                "global ResourcePlan supports individual D3/D4 corrections; composite gCP is unavailable"
             )
 
         from ._named_ks import select_resource_program
-        from .resources_d3 import d3_resource_request
 
-        return d3_resource_request(
+        native_ks = (
+            select_resource_program(self, electronic_request) is not None
+            if _native_ks is None
+            else _native_ks
+        )
+        if isinstance(corrections[0].specification, D4Spec):
+            if not native_ks:
+                raise NotImplementedError(
+                    "global D4 ResourcePlan requires native KS correction capacity and qualified electronic ownership"
+                )
+            from .resources_d4 import d4_resource_request
+
+            request = d4_resource_request
+        else:
+            from .resources_d3 import d3_resource_request
+
+            request = d3_resource_request
+        return request(
             tuple(tuple(atom.atomic_number for atom in system) for system in systems),
             method=self._dispersion_method_ir,
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
             library=self._library,
-            _native_ks=select_resource_program(self, electronic_request) is not None,
+            _native_ks=native_ks,
         )
 
     def _effective_ks_selection(
@@ -3164,13 +3244,8 @@ class Calculator:
         if not native_atoms:
             raise ValueError("at least one atom is required")
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
-        effective_ks_options = self._effective_ks_options(
-            (native_atoms,),
-            charges=(charge,),
-            multiplicities=(multiplicity,),
-        )
         resource_plan = None
-        if self._resource_budget is not None:
+        if self._resource_budget is not None and self._dispersion_method_ir is None:
             resource_plan = self.estimate_resources(
                 [native_atoms],
                 charges=[charge],
@@ -3180,6 +3255,12 @@ class Calculator:
         if self._dispersion_method_ir is not None or (
             self._capabilities.family == "density_functional"
         ):
+            # Named corrections always reserve their complete electronic and
+            # correction inventories, independent of the requested output. Let
+            # the prepared owner build and admit that plan once. Passing a plan
+            # synthesized here would repeat its shape queries and then validate
+            # it as if it came from an external caller. Output-aware plain CPU
+            # KS retains the explicitly requested-property plan above.
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
             # scientific implementation in the single-system path. Energy-only
@@ -3213,6 +3294,11 @@ class Calculator:
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
                 )
+        effective_ks_options = self._effective_ks_options(
+            (native_atoms,),
+            charges=(charge,),
+            multiplicities=(multiplicity,),
+        )
         if getattr(self, "_provider_initialization_intent", None) is not None and (
             multiplicity != 1 or resource_plan is not None
         ):
