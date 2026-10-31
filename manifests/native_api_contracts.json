@@ -3288,6 +3288,22 @@
       ],
       "fields": [],
       "field_declarations": []
+    },
+    "generativeqc_ks_d4_resource_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "c653a296fd1acc1e6f1ba788088fca32296b6cc4b5be354bf12e39d0c261106a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
     }
   }
 }

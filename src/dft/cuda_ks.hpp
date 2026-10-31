@@ -28,6 +28,17 @@ class CudaStructuredProductBinding;
 
 namespace generativeqc::dft {
 
+struct CudaXcLayout;
+
+/** Shared default point-panel allowance. This is an upper bound on optional
+ * storage, not an allocation or a molecular capability claim. */
+std::size_t cuda_ks_point_batch_budget(const CudaXcLayout& layout);
+
+/** Recommended optional XC headroom for a complete native capacity promise.
+ * Includes the mapped arena, spatial grid copy and point panels concurrently;
+ * mandatory dense credit stays reserved for fallback and geometry rebuilds. */
+std::array<std::size_t, 2> cuda_ks_optional_xc_capacity(const CudaXcLayout& layout);
+
 /** Optional lowering resources already reserved by the enclosing resource
  * plan, in addition to the ordinary XC arena. Provider-internal device bytes
  * are withheld from the numeric allocation ledger; explicit cache allocations

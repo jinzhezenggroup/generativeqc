@@ -1,0 +1,19 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "05ef01b83f98cfc8d8eef1df25c5562c01aeec53",
+  "file_count": 2,
+  "total_bytes": 115612,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/cpu-budget-failed-samples.json.xz",
+      "bytes": 31308,
+      "sha256": "f390baefab2c599a7a6a92c7d6429a58b4cdf9a891021b087aaf372851020217"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/cuda-budget-failed-samples.json.xz",
+      "bytes": 84304,
+      "sha256": "2e11a0a709e68e8b335cd796e276b3cf6dc0225e0316b102463272945eeb0ecc"
+    }
+  ],
+  "retention": "Existing ancestor Git objects; failed measurements remain recoverable, without external archives or history rewriting."
+}

@@ -20,9 +20,9 @@
   ],
   "previous": {
     "path": "manifests/libxc/native-qualification-previous.json.xz",
-    "scope": "Exact last retained summary before precision-policy source integration; original manifest, previous and snapshot remain in Git commit 0388bcfbb42834e20fad577ac237d573772e9266 at the same paths.",
+    "scope": "last retained native qualification summary before D4 capacity integration",
     "sha256": "6b2dca66a65b5390256f2c76977a829ef9d48974a674a3604cac9fb60d13b964",
-    "source_commit": "0388bcfbb42834e20fad577ac237d573772e9266"
+    "source_commit": "7a8504bb11a1c8d64da44a658f232217466cbb64"
   },
   "report": "docs/reference/libxc_qualification.md",
   "schema": "generativeqc.libxc-native-catalog-manifest.v1",

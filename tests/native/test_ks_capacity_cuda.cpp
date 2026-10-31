@@ -70,9 +70,8 @@ void empty(const Resources& r) {
           "teardown retained charges");
 }
 
-/** Named corrections own storage outside the electronic-only promise. A raw
- * numeric cap still bounds every allocation, but cannot certify omitted future
- * owners or grant optional XC permission on their behalf. */
+/** D4's complete promise includes its retained correction owner. D3 still uses
+ * ordinary capped allocation until its complete lifetime is qualified. */
 void test_named_correction_admission() {
   generativeqc_context_descriptor descriptor{sizeof(descriptor), GENERATIVEQC_ABI_VERSION, 0,
                                              GENERATIVEQC_BACKEND_CUDA};
@@ -87,6 +86,7 @@ void test_named_correction_admission() {
                                "pbe-d3(bj)-uks", "pbe-d3(0)-uks", "pbe-d4(bj-eeq-atm)-uks"}) {
     const auto* entry = qc::methods::named_ks::find_method(selector);
     require(entry != nullptr, "named correction fixture is not registered");
+    const bool promised = std::string(selector).find("-d4(") != std::string::npos;
     method.method = entry->carrier;
     const std::string identity(entry->identity);
     const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION, selector,
@@ -98,13 +98,15 @@ void test_named_correction_admission() {
                 context.get(), system.get(), &method, &named, r.get(), &raw),
             context.get()->last_detail);
       Calculation calculation(raw, generativeqc_calculation_destroy);
-      require(snapshot(r, std::string(selector) + "-prepared").capacity_reserved_bytes == 0,
-              "named correction borrowed an incomplete electronic-only promise");
+      require((snapshot(r, std::string(selector) + "-prepared").capacity_reserved_bytes > 0) ==
+                  promised,
+              "named correction capacity ownership differs from its complete bound");
       const auto result = calculation->plan->execute(true);
       require(result.convergence.converged && std::isfinite(result.energy),
               "bounded named correction did not converge");
-      require(snapshot(r, std::string(selector) + "-executed").capacity_reserved_bytes == 0,
-              "named correction created an incomplete promise during execution");
+      require((snapshot(r, std::string(selector) + "-executed").capacity_reserved_bytes > 0) ==
+                  promised,
+              "named correction lost its retained future-owner promise");
       generativeqc_calculation* plain{};
       check(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
                                                          &named, &plain),
@@ -127,8 +129,9 @@ void test_named_correction_admission() {
                 GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, r.get(), &raw),
             context.get()->last_detail);
       Batch batch(raw, generativeqc_batch_destroy);
-      require(snapshot(r, std::string(selector) + "-fleet").capacity_reserved_bytes == 0,
-              "named fleet borrowed an incomplete electronic-only promise");
+      require(
+          (snapshot(r, std::string(selector) + "-fleet").capacity_reserved_bytes > 0) == promised,
+          "named fleet capacity ownership differs from its complete bound");
       for (const qc::methods::Coordinates& moved :
            {qc::methods::Coordinates{}, qc::methods::Coordinates{{{0, 0, -.7, .03, 0, .78}}, {}}}) {
         const auto values = batch->plan->execute(moved, true);
