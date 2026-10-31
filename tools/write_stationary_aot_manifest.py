@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import typing
 from pathlib import Path
@@ -40,6 +41,9 @@ from generativeqc_compiler.method.stationary_cuda import (
 )
 
 
+from tools.write_stationary_aot_reference import REFERENCE_SCHEMA
+
+
 def _code_objects(values: list[str]) -> list[dict[str, str]]:
     result = set()
     for value in values:
@@ -60,19 +64,50 @@ def _code_objects(values: list[str]) -> list[dict[str, str]]:
     ]
 
 
+def _expected_primitive_hashes(reference: Path, domain: str) -> tuple[str, ...]:
+    """Read a complete build-local independent reference, rejecting partial data."""
+    if domain not in ("sp", "spd"):
+        raise ValueError("unsupported stationary component domain")
+    payload = json.loads(reference.read_text())
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema", "sp", "spd"}
+        or payload["schema"] != REFERENCE_SCHEMA
+    ):
+        raise ValueError("invalid stationary AOT independent primitive reference")
+    for name, expected_count in (("sp", 1), ("spd", QUALIFIED_SPD_AOT_SHARDS)):
+        values = payload[name]
+        if (
+            not isinstance(values, list)
+            or len(values) != expected_count
+            or any(
+                not isinstance(value, str)
+                or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                for value in values
+            )
+        ):
+            raise ValueError("incomplete stationary AOT primitive reference")
+    return tuple(payload[domain])
+
+
 def _expected_component_sources(
     functional: int | None,
     *,
     spin: str | None,
     profile: str | None,
     iterations: int,
+    reference: Path | None = None,
 ) -> tuple[str, tuple[str, ...]]:
-    units = derivative_cuda_sources(QUALIFIED_SPD_COMPONENTS)
-    if (
-        CUDA_REQUESTS_PER_UNIT != QUALIFIED_SPD_AOT_SHARD_WIDTH
-        or len(units) != QUALIFIED_SPD_AOT_SHARDS
-    ):
-        raise RuntimeError("stationary s/p/d AOT shard contract drift")
+    if reference is None:
+        units = derivative_cuda_sources(QUALIFIED_SPD_COMPONENTS)
+        if (
+            CUDA_REQUESTS_PER_UNIT != QUALIFIED_SPD_AOT_SHARD_WIDTH
+            or len(units) != QUALIFIED_SPD_AOT_SHARDS
+        ):
+            raise RuntimeError("stationary s/p/d AOT shard contract drift")
+        primitive_hashes = tuple(canonical_hash(source) for _, source in units)
+    else:
+        primitive_hashes = _expected_primitive_hashes(reference, "spd")
     wrapper = (
         emit_stationary_profile_component_aot_wrapper_cuda(
             profile, iterations=iterations
@@ -84,13 +119,17 @@ def _expected_component_sources(
             iterations=iterations,
         )
     )
-    return (wrapper, tuple(source for _, source in units))
-
+    return wrapper, primitive_hashes
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument(
+        "--expected-primitives",
+        type=Path,
+        help="Independent build-local primitive hashes; not a persistent source cache",
+    )
     parser.add_argument("--primitive-source", type=Path, action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--functional", type=int, choices=(0, 1, 2))
@@ -142,13 +181,12 @@ def main() -> None:
             spin=spin,
             profile=profile,
             iterations=args.iterations,
+            reference=args.expected_primitives,
         )
         source_identity = canonical_hash(
             {
                 "wrapper": canonical_hash(expected_wrapper),
-                "primitives": tuple(
-                    canonical_hash(source) for source in expected_primitives
-                ),
+                "primitives": expected_primitives,
             }
         )
         if actual_identity != source_identity:
@@ -173,15 +211,18 @@ def main() -> None:
             "wrapper": source_identity,
             "primitives": (canonical_hash(args.primitive_source[0].read_text()),),
         }
+        expected_primitive = (
+            canonical_hash(emit_first_derivative_cuda(qualified_sp_requests()))
+            if args.expected_primitives is None
+            else _expected_primitive_hashes(args.expected_primitives, "sp")[0]
+        )
         expected = {
             "wrapper": canonical_hash(
                 emit_stationary_profile_aot_wrapper_cuda(
                     profile, iterations=args.iterations
                 )
             ),
-            "primitives": (
-                canonical_hash(emit_first_derivative_cuda(qualified_sp_requests())),
-            ),
+            "primitives": (expected_primitive,),
         }
         source_identity = canonical_hash(expected)
         if canonical_hash(actual) != source_identity:
