@@ -260,10 +260,6 @@ measured_core_runtime_paths=(
   # Move the complete DF mixed-precision module off core-a without changing
   # the original modulo slot or dropping a single numerical certificate.
   tests/python/test_df_cc_mixed_precision.py
-  # Run 38890127895 left all four ECP Hessian cases in a late serial tail
-  # (~453 worker-seconds); runtime-heavy finished in 659 s. Keep every case
-  # and the original core slot while moving this complete file to loadfile.
-  tests/python/test_wb97mv_ecp_hessian.py
 )
 # PR #1934 / run 37238512811 still left the broad core shards with
 # a large measured long tail. Keep these newly measured files out of
@@ -275,6 +271,11 @@ rebalance_paths=(
   # Preserve its ordinary core slot and all cases on existing worksteal workers.
   tests/python/test_uccsd_t_lambda.py
   "${measured_core_runtime_paths[@]}"
+  # Run 41174408456 completed runtime-heavy's assertions in 1810 s, just
+  # beyond its unchanged 1800 s ceiling. Keep the ECP Hessian core slot
+  # while transferring its intact 585-worker-second module to ecp-forces,
+  # whose whole Python step completed in 973 s in that same run.
+  tests/python/test_wb97mv_ecp_hessian.py
   # Run 39351749228 reached minute 28 before the final tight VV10 case.
   # Preserve the core modulo slot, but transfer the complete endpoint file
   # to posthf (838 s in the same run) with whole-file fixture ownership.
@@ -642,6 +643,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Its module-scoped emission must not be split across worksteal workers.
     if git ls-files --error-unmatch -- tests/python/test_df_shell_units.py >/dev/null 2>&1; then
       test_targets+=(tests/python/test_df_shell_units.py)
+    fi
+    # Preserve every Hessian case and its whole-file fixture ownership.
+    # Select tracked missing files as well, so incomplete checkouts fail closed.
+    if git ls-files --error-unmatch -- tests/python/test_wb97mv_ecp_hessian.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_wb97mv_ecp_hessian.py)
     fi
     ;;
   compiler-heavy)
