@@ -473,8 +473,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("measured arms require --method, --output and --source-revision")
     if args.warm_repeats < 1:
         parser.error("warm repeats must be positive")
-    if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("real GPU work requires a finite Slurm GPU allocation")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        parser.error("real GPU work requires a finite Slurm or LSF GPU allocation")
     if args.output.exists():
         raise FileExistsError(args.output)
     import cupy as cp
@@ -498,7 +498,19 @@ def main(argv: list[str] | None = None) -> None:
         "spin": 0,
         "source_revision": args.source_revision,
         "runner_sha256": digest(Path(__file__)),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        # Preserve the actual allocation and visibility on both schedulers.
+        "scheduler": {
+            name: os.environ.get(name)
+            for name in (
+                "SLURM_JOB_ID",
+                "SLURM_JOB_NODELIST",
+                "LSB_JOBID",
+                "LSB_QUEUE",
+                "LSB_HOSTS",
+                "CUDA_VISIBLE_DEVICES",
+            )
+        },
         "thread_controls": {
             name: os.environ.get(name)
             for name in (

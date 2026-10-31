@@ -912,7 +912,12 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
   // Total-force consumers combine the compiler-owned cotangents before AD;
   // derivative exports retain independent channels on exactly the same domain.
   const auto output_elements = (separate_sources ? 2U : 1U) * coordinates;
+  // A disabled exchange source needs no second cotangent traversal. Preserve
+  // the requested two-channel publication: the full reset below leaves K zero
+  // while the existing combined kernel writes the sole J contribution to slot 0.
+  const bool split_traversal = separate_sources && exchange_coefficient != 0.0;
   runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
+  runtime::cuda_trace::trace_counter("direct_force_traversal_channels", split_traversal ? 2U : 1U);
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
@@ -928,7 +933,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
           coulomb_coefficient, exchange_coefficient, p.bounded_block_domain, p.force_resident_bra,
-          separate_sources);
+          split_traversal);
       if (error != cudaSuccess) return error;
     } else {
       error = launch_bounded_shell_energy_derivative(
@@ -936,7 +941,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
-          exchange_coefficient, p.bounded_block_domain, separate_sources, shared.topology,
+          exchange_coefficient, p.bounded_block_domain, split_traversal, shared.topology,
           resolve_direct_spd_force_schedule(p.spd_force_schedule, allow_spatial_default));
       if (error != cudaSuccess) return error;
     }

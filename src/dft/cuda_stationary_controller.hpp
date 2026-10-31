@@ -19,6 +19,7 @@ struct CudaStationaryResources {
   std::size_t grid_provider_retained_bytes{}, grid_prepare_device_delta{};
   std::size_t grid_provider_allowance_bytes{};
   std::size_t minimum_device_bytes{};
+  std::size_t ao_map_host_bytes{};
   /** Optional center/phase geometry cache selected from the same fleet budget. */
   bool cached_geometry{};
   std::array<std::uint64_t, 24> stationary_work{};
@@ -67,6 +68,7 @@ class CudaStationaryController {
   core::System system_;
   std::size_t maximum_device_bytes_{};
   void *grid_{}, *stationary_{};
+  bool indexed_grid_{};
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
   std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;
   CudaStationaryResources resources_;

@@ -141,3 +141,26 @@ restores the complete integrated sample bundle. Original pre-integration sample
 recovery remains bound to `bcf1124fc` as described above. Summaries and reproduction
 programs stay in the current tree. This is existing-Git retention, with no new
 external archive, release asset, changed checksum or increased storage limit.
+
+
+## Qualification-driver repair (2026-10-31)
+
+The replay driver now rejects non-finite energies, derivative components and
+non-finite or non-positive timings before applying the unchanged scientific and
+1.05 per-case performance gates. Derivative array shapes must match exactly.
+`--response-timeout` (default 900 seconds) bounds each startup/sample response,
+including partial lines; cleanup terminates and reaps only harness-owned sessions.
+Reports reject NaN/Infinity during JSON serialization.
+
+This is a harness repair, not a new CPU/GPU qualification campaign. All retained
+measurements, sample order, production source identities and historical receipt
+checksums remain unchanged. `identities.json` describes the original driver; its
+exact bytes remain recoverable offline by applying the retained reverse patch:
+
+```bash
+cp qualify.py /tmp/original-qualify.py
+xz -dc original-driver.reverse.patch.xz | patch /tmp/original-qualify.py
+sha256sum /tmp/original-qualify.py
+```
+
+Expected original-driver SHA-256: `6bf48344a0f52f2967213fa47f00aa3c1f33cc18df480bb71492f97302e70c6c`.

@@ -145,7 +145,9 @@ CUDA 12.4 or later independently of CUDA minor-version compatibility.
 CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, `90`, and
 `100`. Only `sm_120` currently has a measured generated-shell profile. The
 `auto` mode selects an exact or explicitly compatible profile first, then the
-portable CUDA implementation. The fallback retains portable, untuned metadata.
+portable CUDA implementation, including generated value-only Rys J/K coverage.
+The fallback retains portable, untuned metadata; see the
+[shell-codegen profile contract](shell_codegen.md) for coverage and fallbacks.
 Explicit incompatible profile requests and invalid or ambiguous manifests
 remain errors.
 

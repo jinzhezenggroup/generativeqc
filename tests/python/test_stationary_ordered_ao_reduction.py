@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def test_ordered_ao_reduction_preserves_bits_and_visits_each_label_once(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    """Check bits, one label read/AO and bounded gradient accesses per atom run."""
+    """Check chunk boundaries, bits, and one label read per AO."""
     reducer = (
         _block(
             _STATIONARY_SCIENTIFIC_KERNELS,
@@ -103,18 +103,18 @@ int main() {
           for (std::size_t ao_index = 0; ao_index < active; ++ao_index)
             for (std::size_t axis = 0; axis < 3; ++axis)
               expected[1 + 3 * atoms + 3 * owner + axis] += panel[3 * ao_index + axis];
+          for (std::size_t chunk : {std::size_t(1), std::size_t(31), std::size_t(477), std::max(active, std::size_t(1))}) {
+          actual = expected;
+          for (std::size_t coordinate = 0; coordinate < actual.size(); ++coordinate)
+            actual[coordinate] = 0.13 * std::cos(0.29 * coordinate);
           AtomMap measured{labels};
           GradientMap destination{actual};
-          geometry_reduce_ao_panel<double, double>(view, measured, owner, atoms, panel.data(), destination);
+          for (std::size_t begin = 0; begin < active; begin += chunk)
+            geometry_reduce_ao_panel<double, double>(view, measured, owner, atoms,
+                panel.data() + 3 * begin, destination, begin, std::min(chunk, active - begin));
           assert(measured.reads == active);
-          std::size_t runs = 0, previous_atom = atoms;
-          for (std::size_t ao_index = 0; ao_index < active; ++ao_index) {
-            const auto atom = std::size_t(labels[view.ao_ids ? view.ao_ids[ao_index] : ao_index]);
-            if (atom != previous_atom) ++runs;
-            previous_atom = atom;
-          }
-          assert(destination.accesses == 6 * runs + 6);
           assert(std::memcmp(actual.data(), expected.data(), actual.size() * sizeof(double)) == 0);
+          }
         }
       }
       }

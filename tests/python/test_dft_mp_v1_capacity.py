@@ -679,8 +679,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "device_ao_map_reserve_sha256": (
             "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
         ),
-        "resident_ao_cache_sha256": (
-            "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
+        "resident_ao_cache_sha256": current_python_owner_identity(
+            "python/generativeqc/_stationary_cuda.py",
+            "_stationary_resident_ao_cache",
         ),
         "native_owner_sha256": current_native_identity("struct Owner {"),
         "native_allocation_sha256": current_native_identity("size_t allocation("),
@@ -5208,3 +5209,42 @@ def test_native_grid_abi_provenance_accepts_benign_reader_edits(
         "native_grid_abi_sha256"
     }
     assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("state._source.check_current()", "None"),
+        ("device=resident.device", "device=0"),
+        ("grid.geometry_generation,", "0,"),
+        ("float(cutoff),", "1e-16,"),
+        (
+            "if owner is None or prepared._resident_ao_map_key != key:",
+            "if owner is None:",
+        ),
+        ("owner.reset_work()", "None"),
+        ("        owner = None\n", "        pass\n"),
+        ("prepared._resident_ao_maps = None", "None"),
+        ("prepared._resident_ao_map_key = None", "None"),
+    ],
+)
+def test_resident_ao_binding_witness_rejects_lifecycle_drift(
+    old: str, new: str
+) -> None:
+    from tools.dft_mp_v1.prepared_contracts import check_resident_ao_binding
+
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_stationary_resident_ao_cache"
+    )
+    check_resident_ao_binding(owner)
+    segment = ast.get_source_segment(source, owner)
+    assert segment is not None and old in segment
+    changed = ast.parse(segment.replace(old, new)).body[0]
+    with pytest.raises(
+        RuntimeError, match="resident AO policy lifecycle contract changed"
+    ):
+        check_resident_ao_binding(changed)

@@ -378,9 +378,6 @@ STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
 STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
 )
-STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
-    "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
-)
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
     "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
 )
@@ -870,6 +867,9 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
     wrapper, endpoint, cache, ensure, request, device_reserve = (
         owners[name] for name in names
     )
+    from tools.dft_mp_v1.prepared_contracts import check_resident_ao_binding
+
+    check_resident_ao_binding(cache)
     label = "stationary CUDA resident AO policy"
     for owner in (wrapper, endpoint, ensure, request, cache):
         defaults = {
@@ -2082,16 +2082,21 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "_stationary_device_ao_map_reserve",
             STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256,
         ),
-        ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
+        ("_stationary_resident_ao_cache", None),
     ):
         helpers = [
             node
             for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == name
         ]
-        if len(helpers) != 1 or _source_node_sha256(source, helpers[0]) != expected:
+        if len(helpers) != 1:
             raise RuntimeError(f"stationary CUDA {name} contract changed")
-        page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = expected
+        digest = _source_node_sha256(source, helpers[0])
+        if expected is not None and digest != expected:
+            raise RuntimeError(f"stationary CUDA {name} contract changed")
+        # The map binding is executed by the semantic policy contract below;
+        # its digest records current provenance, not annotation/docstring spelling.
+        page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = digest
 
     def default(name: str) -> int:
         value = signature.parameters[name].default

@@ -239,6 +239,12 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
       if constexpr (native_exchange_slot >= 0) {
         mask |= native_exchange_mask;
         second = scientific.sources + native_exchange_storage_slot * view->coordinates;
+      } else if constexpr (native_short_exchange_slot >= 0) {
+        // Direct RSH can retain the specialized full-range J/K source just as
+        // the fitted owner does. The following RangeCorrection replaces this
+        // provisional full K with the method's separate SR/LR contributions.
+        mask |= uint64_t{1} << native_short_exchange_slot;
+        second = scientific.sources + size_t(native_short_exchange_slot) * view->coordinates;
       }
     } else if (view->kind == CudaDerivativeSourceKind::RangeSeparatedJk) {
       if constexpr (native_short_exchange_slot >= 0 && native_long_exchange_slot >= 0) {

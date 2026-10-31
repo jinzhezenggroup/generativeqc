@@ -2,7 +2,7 @@
 
 Source: `0a989656c`, stacked on full-range provider commit
 `3cb888fa3f2991a1c663f1144c647801883f0c7d` (PR #2762).
-[records.json](records.json) retains all complete endpoint outputs, source/binary/
+[records.json.gz](records.json.gz) retains all complete endpoint outputs, source/binary/
 input identities, controls and observable differences. RTX 5090 on node4,
 finite Slurm jobs 1344/1345; one fresh process per endpoint. These are individual
 samples, not a statistical hardware-wide crossover model.
@@ -70,3 +70,6 @@ allowance, and 512-byte host tiles on the two water independent-direction cases.
 Full raw logs, compiler-cache receipts and binary artifacts remain under ignored
 `.artifacts/rhf-host/` and the isolated node2/node4
 `/data/jzzeng/rhf-host-response-20261025/` bundles.
+
+The JSON receipt is stored as deterministic gzip without changing its expanded
+bytes. Expanded SHA-256: `f2cf55787de2985126b53a1ded41f6b66b874d1c225a2ada88ec266712a2ef7a`.
