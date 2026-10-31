@@ -72,3 +72,21 @@ Its input count, digest and recorded verification remain local, alongside every
 numerical/failed-run receipt. Ordinary historical numerical replay needs no Git
 history; an explicit restored census retains both stored and original-byte
 integrity checks. Verify recovery before retiring that redundant census.
+
+## Precision-policy integration, 2026-10-31
+
+The #2859 merge with master `0388bcfbb42834e20fad577ac237d573772e9266`
+changes the checked native/frontend input identities. Its capability summary is
+identical to the existing master snapshot: evidence remains stale, the 197
+structurally selectable automatic registrations are unchanged, and no native
+endpoint or stronger qualification claim is promoted. The exact transition list
+from that last retained summary is empty.
+
+Rotate `previous` to that exact summary and regenerate the source-bound snapshot
+and report using the existing checker. The original manifest, previous summary,
+snapshot and their earlier transition acknowledgements remain byte-recoverable
+from the master commit above at their original paths. Measured campaign bytes,
+measured source/library identities and all historical manifests are unchanged.
+This is catalog metadata maintenance, not a new numerical qualification. A
+dependent PR must recompute its own checked input identities after integration;
+copying its parent's snapshot is insufficient when native inputs differ.

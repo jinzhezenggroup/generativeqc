@@ -2,16 +2,7 @@
   "schema": "generativeqc.legacy-large-evidence-family.v1",
   "family": "h100-pbe0-direct-df-20261029",
   "owner": "H100 PBE0 frozen endpoint matrix / issue2731",
-  "reason": "Full quantum E/F and semantic-work evidence for36process/144endpoint reporting, including all negative rankings and original/public byte distinctions. Restore recipes remove exact duplication only; no quantum value, independent gate or failed pilot outcome is dropped.",
+  "reason": "Full quantum E/F and semantic-work evidence for36process/144endpoint reporting, including all negative rankings and original/public byte distinctions. Restore recipes remove exact duplication only; no quantum value, independent gate or failed pilot outcome is dropped. Historical large raw payloads now have exact existing-Git recovery in benchmarks/results/h100-history-retention-20261031/snapshot.manifest.json; numerical summaries, original decisions and test inputs remain unchanged. No large payload from this family remains in the current checkout.",
   "review_document": "benchmarks/results/h100-pbe0-direct-df-20261029/README.md",
-  "files": [
-    {
-      "path": "benchmarks/results/h100-pbe0-direct-df-20261029/evidence.tar.xz",
-      "family": "h100-pbe0-direct-df-20261029",
-      "classification": "required-compact-accepted-evidence",
-      "role": "full-source-bound-independent-EF-matrix-and-reproduction",
-      "bytes": 374332,
-      "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
-    }
-  ]
+  "files": []
 }
