@@ -131,6 +131,15 @@ generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
 
+/** Borrow the retained general CUDA RSH derivative channels without a host
+ * download. The three contiguous rows use positive energy derivatives and
+ * remain valid only through the callback on the owning ordinary stream. */
+generativeqc_status consume_cuda_direct_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail);
+
 /** Full-range fixed-density [J',K'] energy derivatives through the retained
  * shell topology. The resident public-AO density is transformed once and
  * shell Schwarz+density screening drives the bounded production scheduler. */
@@ -156,9 +165,10 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     const CudaDerivativeSourceConsumer& consumer, std::string& detail,
     bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
-/** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
- * explicit omega. The retained owner performs one density transform and three
- * screened shell traversals; no public-AO quartet traversal is used. */
+/** RSH fixed-density derivatives [J', SR-K', LR-K'] with explicit omega.
+ * The qualified omega=0.3 shell schedule retains its full/LR decomposition.
+ * Other radial identities use the retained general CUDA source; neither path
+ * introduces another integral owner or a CPU scientific consumer. */
 generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
