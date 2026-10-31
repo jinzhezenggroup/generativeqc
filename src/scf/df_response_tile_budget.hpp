@@ -46,8 +46,7 @@ inline bool df_recycled_projection_preferred(std::size_t available, std::size_t 
                                              std::size_t preferred_scratch,
                                              std::size_t borrowed_capacity) noexcept {
   return retained <= available && minimum_scratch <= borrowed_capacity &&
-         preferred_scratch > available - retained &&
-         borrowed_capacity >= available - retained;
+         preferred_scratch > available - retained && borrowed_capacity >= available - retained;
 }
 
 /** Prefer optional work-reducing storage over the last few response columns.
