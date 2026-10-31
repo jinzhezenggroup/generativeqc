@@ -29,6 +29,7 @@ from .shared import _PRODUCTION_MANIFEST_PATH
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 
@@ -219,6 +220,7 @@ def schedule_payload(schedule: ScheduleIR) -> dict[str, object]:
 @cache
 def _production_fock_schedule_index(
     architecture: str,
+    manifest_path: Path | None = None,
 ) -> tuple[tuple[str, ScheduleIR], ...]:
     """Read explicit Fock baseline schedules from the production manifest.
 
@@ -231,7 +233,7 @@ def _production_fock_schedule_index(
     """
 
     selections = load_production_kernel_selections(
-        _PRODUCTION_MANIFEST_PATH,
+        manifest_path or _PRODUCTION_MANIFEST_PATH,
         architecture=architecture,
         profile="auto",
     )
@@ -248,11 +250,13 @@ def _production_fock_schedule_index(
 
 
 def _known_production_fock_subgroup_schedules(
-    spec: ShellClassSpec, target: CudaTargetInfo
+    spec: ShellClassSpec, target: CudaTargetInfo, manifest_path: Path
 ) -> tuple[ScheduleIR, ...]:
     """Return manifest-declared Fock baselines absent from generic search."""
 
-    schedule_by_name = dict(_production_fock_schedule_index(target.architecture))
+    schedule_by_name = dict(
+        _production_fock_schedule_index(target.architecture, manifest_path)
+    )
     schedule = schedule_by_name.get(spec.name)
     if schedule is None:
         return ()
@@ -263,11 +267,12 @@ def _known_production_fock_subgroup_schedules(
 @cache
 def _production_force_schedule_index(
     architecture: str,
+    manifest_path: Path | None = None,
 ) -> tuple[tuple[str, ScheduleIR], ...]:
     """Read explicit force baselines for opt-in recurrence qualification."""
 
     selections = load_production_kernel_selections(
-        _PRODUCTION_MANIFEST_PATH,
+        manifest_path or _PRODUCTION_MANIFEST_PATH,
         architecture=architecture,
         profile="auto",
     )
@@ -279,11 +284,13 @@ def _production_force_schedule_index(
 
 
 def _known_production_force_schedules(
-    spec: ShellClassSpec, target: CudaTargetInfo
+    spec: ShellClassSpec, target: CudaTargetInfo, manifest_path: Path
 ) -> tuple[ScheduleIR, ...]:
     """Return the current production force mapping for explicit recurrence IR."""
 
-    schedule_by_name = dict(_production_force_schedule_index(target.architecture))
+    schedule_by_name = dict(
+        _production_force_schedule_index(target.architecture, manifest_path)
+    )
     schedule = schedule_by_name.get(spec.name)
     if schedule is None:
         return ()
@@ -297,6 +304,7 @@ def supported_schedule_trials(
     target: CudaTargetInfo | None = None,
     *,
     integral: IntegralIR | None = None,
+    manifest_path: Path | None = None,
 ) -> tuple[ScheduleTrial, ...]:
     """Return the schedule variants implemented by the current CUDA emitter.
 
@@ -315,6 +323,7 @@ def supported_schedule_trials(
     if any(order > 3 for order in spec.angular):
         raise ValueError(f"{spec.name} exceeds the current s/p/d/f CUDA lowering")
     selected_consumer = KernelConsumer(consumer)
+    manifest_path = manifest_path or _PRODUCTION_MANIFEST_PATH
     explicit_integral = integral
     if integral is None:
         # Independent production consumers must be measured with their actual
@@ -324,7 +333,7 @@ def supported_schedule_trials(
             (
                 selection
                 for selection in load_production_kernel_selections(
-                    _PRODUCTION_MANIFEST_PATH, architecture=target.architecture
+                    manifest_path, architecture=target.architecture
                 )
                 if selection.spec == spec and selection.fock_recurrence is not None
             ),
@@ -369,9 +378,17 @@ def supported_schedule_trials(
             ScheduleKind.COMPONENT_LANES,
             ScheduleKind.TILED_COMPONENTS,
         )
+        and not (
+            selected_consumer == KernelConsumer.FORCE
+            and integral.derivative is not None
+            and integral.recurrence.startswith("rys")
+            and schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SHELL_TASK)
+        )
     ]
     if selected_consumer == KernelConsumer.FOCK:
-        schedules.extend(_known_production_fock_subgroup_schedules(spec, target))
+        schedules.extend(
+            _known_production_fock_subgroup_schedules(spec, target, manifest_path)
+        )
     elif explicit_integral is not None and integral.recurrence in (
         "rys3",
         "rys4",
@@ -381,7 +398,9 @@ def supported_schedule_trials(
         # generic schedule search (for example 1296-component dddd).  An
         # explicit fixed-root IntegralIR opts into comparing the exact current
         # production topology with its pressure-rematerialized peer.
-        production_force_schedules = _known_production_force_schedules(spec, target)
+        production_force_schedules = _known_production_force_schedules(
+            spec, target, manifest_path
+        )
         schedules.extend(production_force_schedules)
         schedules.extend(
             replace(

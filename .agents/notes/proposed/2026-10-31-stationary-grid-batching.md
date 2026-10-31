@@ -106,3 +106,19 @@ keeps its original tile and geometry-memory limits.
 The [compact follow-up evidence](../../../benchmarks/results/native-vv10-molecular-20261031/README.md)
 retains the original diagnostic receipt/source/trace hashes and aggregated warm
 phase/work observations separately from the qualified three-repeat populations.
+
+## Follow-up: remove dead metric scratch before joint grid planning
+
+The [occupied-response workspace decision](../implemented/performance/2026-10-31-occupied-response-metric-workspace.md)
+eliminates three unused metric matrices in the admitted explicit-root consumer.
+At the same 954,531,840-byte warm headroom, the 2048-point/64-MiB diagnostic now
+keeps its occupied factors: 0.921 seconds in that response and 23.626 seconds
+for the complete endpoint, with zero repeated fitted-panel GEMMs. The 256-point
+arm takes 25.948 seconds. Both diagnostic populations pass the unchanged
+independent numerical gates; ordinary cross-device ABBA controls remain within
+0.2%. The old failure and its measurements above remain valid historical evidence.
+
+This removes the demonstrated memory cliff without increasing a production cap.
+The larger diagnostic tile remains unpromoted: an automatic force policy still
+needs to preserve explicit tile requests and bound replay storage jointly with
+response. The earlier method-wide reserve still covers raw/truncated consumers.
