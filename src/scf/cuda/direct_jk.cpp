@@ -7,6 +7,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <optional>
 #include <stdexcept>
@@ -79,7 +80,9 @@ void direct_jk_require(bool condition, const char* message) {
 /** Only a complete native endpoint can authorize this optional source. */
 bool direct_coulomb_optional_authorized() {
   const auto& promise = runtime::active_device_capacity_promise;
-  return promise && promise->optional_direct_coulomb;
+  if (!promise) return false;
+  std::lock_guard<std::mutex> lock(runtime::device_resource_mutex);
+  return promise->open && promise->optional_direct_coulomb;
 }
 
 /** Default to bounded shell ownership for retained derivatives, not SCF values.

@@ -114,6 +114,12 @@ def main() -> None:
             workers[name] = worker
             metadata[name] = _response(worker, args.response_timeout)["ready"]
 
+        if (
+            environment.get("D4_QUALIFY_GLOBAL_BUDGET") == "1"
+            and metadata["B"].get("global_budget") is not True
+        ):
+            raise RuntimeError("candidate did not enable the global D4 budget")
+
         def sample(name: str) -> list[dict[str, Any]]:
             worker = workers[name]
             worker.stdin.write("{}\n")
@@ -167,6 +173,8 @@ def main() -> None:
                             raise RuntimeError(f"{key}: energy changed")
                     for field in ("forces",):
                         if actual[field] is None or reference[field] is None:
+                            if "forces" in row["case"].rsplit("/", 1)[-1].split("+"):
+                                raise RuntimeError(f"{key}: missing requested forces")
                             if actual[field] != reference[field]:
                                 raise RuntimeError("derivative publication changed")
                             continue
