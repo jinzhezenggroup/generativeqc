@@ -514,27 +514,26 @@ def test_live_checker_rejects_changed_toolchain_and_old_update_baseline(
     )
     with pytest.raises(ValueError, match="differs from retained snapshot"):
         checker.check(checker.MANIFEST)
-    # A legitimate source-only refresh can retain an equal summary. Construct
-    # an older identity explicitly rather than depending on checkout history,
-    # and never let this failure-injection test write the repository catalog.
+
+    # A legitimate catalog refresh can make previous equal the current summary.
+    # Construct an older identity explicitly so the guard remains exercised
+    # after that rotation, without relying on the repository's snapshot history.
     previous_path = ROOT / manifest["previous"]["path"]
-    older = deepcopy(actual_load(previous_path))
+    older = deepcopy(actual_load(ROOT / manifest["snapshot"])["summary"])
     older["functionals"][NAME]["identity"] = "0" * 64
-    monkeypatch.setattr(
-        checker,
-        "load_json",
-        lambda path: (
-            changed
-            if path == campaign_path
-            else older
-            if path == previous_path
-            else actual_load(path)
-        ),
-    )
+
+    def load(path: Path) -> dict:
+        if path == campaign_path:
+            return changed
+        if path == previous_path:
+            return older
+        return actual_load(path)
+
+    monkeypatch.setattr(checker, "load_json", load)
     monkeypatch.setattr(
         checker,
         "write_json",
-        lambda *_: pytest.fail("failure gate attempted a catalog write"),
+        lambda *_args: pytest.fail("rejected catalog updates must not write"),
     )
     with pytest.raises(ValueError, match="older baseline cannot hide"):
         checker.check(checker.MANIFEST, write=True)

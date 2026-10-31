@@ -1,0 +1,48 @@
+{
+  "scope": "Untimed complete 56-call matrix per engine, separate from timing; explicit dynamic CUDA allocations only, excluding static/opaque/provider-pool storage.",
+  "slurm_job_id": "14833",
+  "baseline": {
+    "explicit_device_peak_bytes": 118503293,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 5344,
+    "static_device_bytes": 1823689,
+    "kernels": 94042,
+    "graph_calls": 149,
+    "copies": {
+      "Device-to-Device": {
+        "count": 2706,
+        "bytes": 292245568
+      },
+      "Device-to-Host": {
+        "count": 5959,
+        "bytes": 16613368
+      },
+      "Host-to-Device": {
+        "count": 5658,
+        "bytes": 17760192
+      }
+    }
+  },
+  "candidate": {
+    "explicit_device_peak_bytes": 118503293,
+    "explicit_device_final_live_bytes": 0,
+    "explicit_device_allocation_count": 5344,
+    "static_device_bytes": 1823689,
+    "kernels": 94042,
+    "graph_calls": 149,
+    "copies": {
+      "Device-to-Device": {
+        "count": 2706,
+        "bytes": 292245568
+      },
+      "Device-to-Host": {
+        "count": 5959,
+        "bytes": 16613368
+      },
+      "Host-to-Device": {
+        "count": 5658,
+        "bytes": 17760192
+      }
+    }
+  }
+}
