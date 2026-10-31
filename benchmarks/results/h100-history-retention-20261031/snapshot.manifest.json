@@ -1,0 +1,59 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5bf1d00a9f4de2f47e381d2c9fba66fd43bf51ba",
+  "history_rewritten": false,
+  "file_count": 7,
+  "total_bytes": 1218292,
+  "files": [
+    {
+      "path": "benchmarks/results/h100-integrated-baseline-20261030/bindings.json.xz",
+      "bytes": 30672,
+      "sha256": "39ef56fec898f5c17fa4c5d44e71986ff0cc08e01feddc332e9a96df9a24ff40",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-integrated-baseline-20261030/documents.json.xz",
+      "bytes": 123656,
+      "sha256": "d5214c23ee4f8e183ebcf1eb9bcca4e8e74797ee8856388dcec1c586c33f7238",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-integrated-baseline-20261030/forces.npy.xz",
+      "bytes": 214440,
+      "sha256": "94293e1202383a7957c6b4e447eedc8b58a5345a33ef2767fd97019c9ed232c3",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-integrated-baseline-20261030/text-streams.bin.xz",
+      "bytes": 28440,
+      "sha256": "eb85ac74934e7fd24abbbaddbbd88c38063dfd886909d798b0229155fe394be9",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/actual-terminal-originals-v2.json.xz",
+      "bytes": 436816,
+      "sha256": "2e9a5aa83bd998bcf2b63703f590f97c93a67b87fc0e573c034fbb438510816f",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-small-cbs-correctness-20261024/publication.json",
+      "bytes": 9936,
+      "sha256": "82b643572889556b89c863e6999cbaa30ea8dccac46079f21720f4b9e2f0bcc5",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    },
+    {
+      "path": "benchmarks/results/h100-pbe0-direct-df-20261029/evidence.tar.xz",
+      "bytes": 374332,
+      "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97",
+      "checkout": "git-history",
+      "reason": "Historical H100 raw packet or original self-contained publication; all numerical outcomes, unfavorable rankings, thresholds and remaining reference fixtures stay tracked. Existing immutable Git bytes are restored before explicit offline replay."
+    }
+  ],
+  "scope": "Storage migration only. No H100 scientific re-acceptance, no release/tag/external archive, no evidence-budget increase. Current production DF or real required-CI input is not retired."
+}

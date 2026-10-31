@@ -1,5 +1,7 @@
 # H100 small CBS bounded correctness outcome
 
+Storage update: restore the historical payloads with [the offline recovery commands](../h100-history-retention-20261031/README.md) before running the replay examples below. Original scientific results and gates are unchanged.
+
 Refs #2727 and #2724. The **whole fixed32-slot matrix is INCOMPLETE**. This
 publication retains actual H100 results and refusals, not a completed parent,
 performance comparison, current-master SDK qualification or default promotion.
@@ -140,3 +142,7 @@ All255 actual runtime originals, returned full vectors, independent references,
 qualified patch, prepared plans and executable numerical replay remain in this
 checkout. The two refusals, late first-Job admission failure and14 NOT_RUN slots
 retain their original outcomes. This storage change supplies no new acceptance.
+
+## Historical payload recovery
+
+The large original payloads for this historical source are stored byte-for-byte in existing Git history. Numerical summaries, unfavorable outcomes, original hashes and test fixtures remain in this checkout. Follow [the offline recovery commands](../h100-history-retention-20261031/README.md) before replay. Recovery does not rerun chemistry or promote this source to current production acceptance.

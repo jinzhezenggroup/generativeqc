@@ -7,17 +7,23 @@
       "sha256": "35478688958cffcf9dbd7400d0cd7116dc15fd9607dcf7f717688843a45bde97"
     },
     "README.md": {
-      "bytes": 4867,
-      "sha256": "3b9d37cec4409a3c1657e3b602b3a7e5af6bd2d99cf55bbb1e48309d3c809304"
+      "bytes": 5525,
+      "sha256": "d410ed04701560df994166fc3006b58dd41ee71ee5b329749324e84f7b972ee7"
     },
     "replay.py": {
-      "bytes": 14251,
-      "sha256": "eb47861c8e0fd7edb43b1a5049355015dfe82326ab31a5a05bfd47e22c737835"
+      "bytes": 14541,
+      "sha256": "b191a6be4f94c0599f0a0171bc5edb9158f64094aaae489f3ba82c27aee6b388"
     },
     "summary.json": {
       "bytes": 11868,
       "sha256": "8118ac77619519b47862d2691fb1fa027921e203646789e50898b9a48d129453"
     }
   },
-  "restore_sha256": "37d3129f9944d2322c5c2a38a62b4df522f45fd92afff0bdae9d56260ede287a"
+  "restore_sha256": "37d3129f9944d2322c5c2a38a62b4df522f45fd92afff0bdae9d56260ede287a",
+  "storage_migration": {
+    "snapshot_manifest": "benchmarks/results/h100-history-retention-20261031/snapshot.manifest.json",
+    "historical_manifest_sha256": "8ddf2044dc049a1cb4f1f79868c327a071324cd84ae8d43fcad9088804bc4974",
+    "historical_manifest_revision": "5bf1d00a9f4de2f47e381d2c9fba66fd43bf51ba",
+    "scope": "Reader payload-path argument and current recovery documentation bindings only; evidence.tar.xz and numerical summary identities unchanged."
+  }
 }
