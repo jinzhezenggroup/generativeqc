@@ -12,7 +12,7 @@ R3 is excluded.
 
 Baseline is `8d6225b4fa49a82fdaca1abc1d56927008dde76c` (#2859). Final production
 source is `e8de3e4d9`; subsequent commits only retain qualification evidence.
-`identities.json` records full source IDs, both CPU/CUDA binary hashes and the
+`identities.json.xz` (lossless XZ-compressed JSON) records full source IDs, both CPU/CUDA binary hashes and the
 actual worker metadata. Release builds use GCC 11.4, CUDA 12.9.86/sm_120 and
 verified sccache 0.16.0. Before/after statistics describe the shared cache, not
 exclusive task hits. Full build logs and original Nsight databases remain in
@@ -112,3 +112,8 @@ Each payload is a JSON map containing lossless UTF-8 receipt text and decoded
 SHA-256. Older #2859 raw samples remain recoverable through its own identity
 manifest and unchanged source commit. Passing final measurements do not erase
 or retrospectively validate any earlier failure.
+
+The final sample payload is now also retained in existing commit
+`d40902292`, with its exact path/hash in `history.json`. This frees room for
+the next independent qualification under the same 80 MiB aggregate limit.
+The final sample contents and reported results are unchanged.
