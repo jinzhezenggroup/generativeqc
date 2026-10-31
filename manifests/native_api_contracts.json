@@ -3257,10 +3257,138 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_precision_admission_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "6945ff9d9fc440989c85bea62f87c2346b513c061aecd69b9a5714e420557808",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_precision_controls_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/precision_admission.h",
+      "signature_sha256": "99fe446bde04205a4ceab19ca7833e850797a3d6bb67822cb447577e70cf4c80",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_ks_d4_resource_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "c653a296fd1acc1e6f1ba788088fca32296b6cc4b5be354bf12e39d0c261106a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_scf_defaults_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/scf_defaults.h",
+      "signature_sha256": "e430239c2282bd85a9df2a6fa74dedaf00a180f8bf46192c1859fa3d2c5d81f2",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_batch_query_warm_seed_capacity_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "0a3c73b18df8dd25c8d177d2fc55433c3c47644890afcccbd3a1dac824a5b486",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_batch_capture_warm_seeds_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "9e318ed9f1bb57ba749dedf6b8fab6b702ad2c607dc5e35354aa1148c78a9a50",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_batch_restore_warm_seeds_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "d586bc730a6b835cfe87dc188905d75db87000b7d18ecc3be8a1faf741aebdd3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_warm_seed_snapshot_read_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "e272c0c0d56a293d5d8d39f758a69452c0ac4fe8b8a3495ceb5d483775546d29",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_warm_seed_snapshot_destroy": {
+      "kind": "c-function",
+      "header": "include/generativeqc/warm_seed.h",
+      "signature_sha256": "7312fdcd01c4d5308703a4eba1c9a52f1efc3a025d8792193738c16264afae91",
       "required_facets": [
         "behavior",
         "errors",

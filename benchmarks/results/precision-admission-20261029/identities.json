@@ -1,0 +1,120 @@
+{
+  "baseline_commit": "162ea8332179af8e2974562e30ae92f284bcc4f8",
+  "candidate_production_commit": "7adf42ceaab0fb32bb69232676fbfbba326d441e",
+  "scope": "Production sources frozen at candidate commit. Subsequent changes only qualify endpoints and correct three baseline-reproduced stale test state assertions.",
+  "binaries": {
+    "cpu": {
+      "A": {
+        "source": "/tmp/qc-2227-policy-baseline-162ea8332",
+        "library": "/tmp/qc-2227-policy-baseline-162ea8332/.artifacts/precision-policy/baseline-cpu.so",
+        "library_sha256": "4b64274f969c5ebbfd7906ff5296dbb449c62241fe80c1e9b0e2529bdb5a9e31",
+        "backend": "cpu",
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      },
+      "B": {
+        "source": "/tmp/qc-2227-non-r3-20261028",
+        "library": "build/libgenerativeqc.so",
+        "library_sha256": "ac6eca02cef833cb3f2a834418d30c9e81cfde533362ecae4d57654af63c8a15",
+        "backend": "cpu",
+        "slurm_job_id": null,
+        "cuda_visible_devices": ""
+      }
+    },
+    "cuda": {
+      "A": {
+        "source": "/home/jzzeng/codes/qc-2227-non-r3-20261028",
+        "library": "/home/jzzeng/codes/qc-2227-non-r3-20261028/artifacts/integrated/libgenerativeqc.so.0",
+        "library_sha256": "6d899cebe4ca3a5cc799fe93961bd5ac2c82b5d3b9d4620d4f90c4cc9dd316b1",
+        "backend": "cuda",
+        "slurm_job_id": "14833",
+        "cuda_visible_devices": "0"
+      },
+      "B": {
+        "source": "/home/jzzeng/codes/qc-2227-precision-policy-20261029",
+        "library": "/home/jzzeng/codes/qc-2227-precision-policy-20261029/artifacts/libgenerativeqc.so.0",
+        "library_sha256": "85877880d969f2bdbf3b124347224fa540bef3bd9a2760e7f01f09b4d54c63aa",
+        "backend": "cuda",
+        "slurm_job_id": "14833",
+        "cuda_visible_devices": "0"
+      }
+    }
+  },
+  "stationary_aot": {
+    "libgenerativeqc_stationary_m06_2x_rks.so": "ced00c36fdbb61be64db9f1bf2f327b68fd53bb2be75bf797dd8250a7a14f444",
+    "libgenerativeqc_stationary_pbe0_rks_spd.so": "2b5e63921bbf045be08da474e71922b285d6f084abec400923aa6f23471922f0",
+    "libgenerativeqc_stationary_wb97mv_uks_spd.so": "ce96698582514c6b090213e180e7e3a2f541ed505c79617cd6318574cb29b22f",
+    "libgenerativeqc_stationary_r2scan_uks.so": "fd7796f8b6e7ced7c0cc37314aa1025d049c51fd548470f7ff098493c032e7d6",
+    "libgenerativeqc_stationary_m06_2x_rks_spd.so": "64572d01617d109f1529eaaa8c7124c62b16d41fe4995a16494f052c580eeb9d",
+    "libgenerativeqc_stationary_b3lyp_uks_spd.so": "b9c91190ed2a56b50e1356e9b9a59c767ad455adc37b0840f06b410661132697",
+    "libgenerativeqc_stationary_b3lyp_rks_spd.so": "84a8c2dba313177b5bfb6256c5359d1224d833ee94db5506ccc1e8961999f647",
+    "libgenerativeqc_stationary_pbe_rks_spd.so": "908c366c98a5b0891a48ac129a4d18ff08a73077ed483e1db8401c831a0c70f4",
+    "libgenerativeqc_stationary_b3lyp_rks.so": "51b1c58e5ac68129fb2438c6bfe7e229fda25d8fd49303a6599e4a08a9056724",
+    "libgenerativeqc_stationary_lda_rks_spd.so": "265bd0d699b52710487123a7dc072aa530d34be6fd5174d96db6282ee3908bdf",
+    "libgenerativeqc_stationary_mn15_rks_spd.so": "04d77c30f9ad8e82420c915235e3701666c0319eb0c7a6a61fc523afca21c6b0",
+    "libgenerativeqc_stationary_pbe_uks.so": "65c5f6c2f0396871daddb41309b8449b753cdb998c68cb7ae21a915b8dbad486",
+    "libgenerativeqc_stationary_lda_uks_spd.so": "c6e952af4b7da955e9a1d579bc168e0126d4220118f8fc5f36ac404dde27c6be",
+    "libgenerativeqc_stationary_lda_uks.so": "2b14946566eaefd7cc9e86f1ca694dfc706ecf06d67d27ab45aac9016faa14c2",
+    "libgenerativeqc_stationary_mn15_uks.so": "19b3d0624a49603a2aa32e11643c01252f17b4971ee1526c402d3f510f6eeb90",
+    "libgenerativeqc_stationary_b3lyp_uks.so": "810dfdd546d80722ae3ef934a418c6585a50d0e22d33721c95b2383c79648a0d",
+    "libgenerativeqc_stationary_pbe0_uks.so": "a311a2f4414d4b54428d21593f5e7241c67fc9bd8167f5a7c5480b8f3c8339e7",
+    "libgenerativeqc_stationary_wb97mv_uks.so": "b36d28643adde58b9d4a29651e81556c2e0f07f85bc07e9cd041ac925aec52af",
+    "libgenerativeqc_stationary_wb97mv_rks_spd.so": "1746c43b48a76617d2ea56e098a57425eb957bb0d7530c6fa04b297facac9437",
+    "libgenerativeqc_stationary_pbe0_rks.so": "382152c7e72d5d9ec3b65b72bff82779067d9f8f815d0256afbbcdff118925b6",
+    "libgenerativeqc_stationary_m06_2x_uks.so": "b4da0d8f442dbd6dbc5cd62a6d001ce96f88e5b7075c2823c05b943692316c70",
+    "libgenerativeqc_stationary_r2scan_rks.so": "900ba1bceda96840d83a5d69fc32f8eb877a4791afce6f612a09c6281b62d2fc",
+    "libgenerativeqc_stationary_pbe_uks_spd.so": "1f1e9eeb6773cf30c994964175b9017ab7c8a211621d511f74ca13e75311fc0b",
+    "libgenerativeqc_stationary_pbe0_uks_spd.so": "22ee9d238829e48ab86d4f1961dfa102085424d512836e1aaccaebd0783655ae",
+    "libgenerativeqc_stationary_mn15_rks.so": "199ccfef3ee053ec0b81fcd6835f25201d1fc9f01c1d2f5c3f50ea8e6a6cb4d1",
+    "libgenerativeqc_stationary_lda_rks.so": "3d170903e7e58a7e816874c5aa1284ebfc0e392300670e8cc152fc1bd66cedd7",
+    "libgenerativeqc_stationary_r2scan_uks_spd.so": "1dc1fd505015bc95da617a6a38870b1ed144c5604cc2f5a3e001318fbebf9a58",
+    "libgenerativeqc_stationary_pbe_rks.so": "7e45103046519396d116ad3c092641756c084e93fe166e1588e93f5fa585adbf",
+    "libgenerativeqc_stationary_r2scan_rks_spd.so": "eb2d1ea9b9d88883f9add49ad9d7d7294c723cb4f74711ee7003f3d0c25b63a1",
+    "libgenerativeqc_stationary_wb97mv_rks.so": "1a3e496d43e1a8ce8fdc302fd13cef96b4ee43df8047a6aed61cc737b78cab3d",
+    "libgenerativeqc_stationary_m06_2x_uks_spd.so": "e6983e99a916f4eff9572ec795dc002e5a0b3a90d8301a7adce0dde733a36df4",
+    "libgenerativeqc_stationary_mn15_uks_spd.so": "2a442c277723ececb95bd456fa8a05929a9f88e346fed5fe54fd00472e7ad743"
+  },
+  "receipts": {
+    "qualify.py": {
+      "sha256": "0c10cf39c9383ff262b3ae42c1b7c72de3c38d54996797341e8fe12ec365e849",
+      "bytes": 6262
+    },
+    "README.md": {
+      "sha256": "2dff845970544c4e2d6af176ab56122c276e2ada5d56b51a848516588b90d38a",
+      "bytes": 6223
+    },
+    "endpoint_worker.py": {
+      "sha256": "9cc77c9b946bcec87c5abfc4ee46c830a0cc96b23affff750f13b3e1789562cb",
+      "bytes": 8584
+    },
+    "receipts.json.xz": {
+      "sha256": "65d565f1b687753e1f7da6ec9fb5c6dc3ff84e242a5395f5ecc7a68434b07b18",
+      "bytes": 38404,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/receipts.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
+    },
+    "cpu-samples.json.xz": {
+      "sha256": "47f6a9d7b21c2131d4af8d55849294744666d026de4870a065a66205416dad38",
+      "bytes": 32684,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/cpu-samples.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
+    },
+    "profile-summary.json": {
+      "sha256": "4cb5beea4b31f1db8ac9e794819a405b5b224b3a3f2e1258839d41f4ac30590d",
+      "bytes": 1224
+    },
+    "cuda-samples.json.xz": {
+      "sha256": "20448855318669b2a5e7072fbfef0fd8e7d73dfa532c2d700a0ac7342b42728e",
+      "bytes": 67300,
+      "git_commit": "8d6225b4fa49a82fdaca1abc1d56927008dde76c",
+      "git_path": "benchmarks/results/precision-admission-20261029/cuda-samples.json.xz",
+      "retention": "Exact original payload in existing Git history; removed from current tree for the unchanged 80 MiB aggregate budget."
+    },
+    "native_policy_guard.py": {
+      "sha256": "04f8dbe7f304f1a0d14a2fe62ca7e5217857bb18ff551b40b22a45222e040002",
+      "bytes": 876
+    }
+  }
+}

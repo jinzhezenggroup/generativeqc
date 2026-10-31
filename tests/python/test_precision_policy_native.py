@@ -26,6 +26,41 @@ H2 = tuple(
 
 
 @pytest.mark.parametrize("name", ("h2", "h2o", "hf-plus-uhf"))
+def test_fast_cpu_uses_native_admission_and_keeps_independent_audit(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unsupported Fast arithmetic still queries policy before its FP64 audit."""
+    from generativeqc import precision_policy
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("current library retried Python admission")
+
+    for suffix in ("budget_fock_work", "budget_fock_strict_warm", "standard_fallback"):
+        monkeypatch.setattr(
+            precision_policy, f"_compatibility_{suffix}_admitted", forbidden
+        )
+    fixture = next(
+        record for record in load_fixtures() if record["inputs"]["name"] == name
+    )
+    inputs = fixture["inputs"]
+    calculator = PrecisionCalculator(policy="fast", **calculator_inputs(inputs))
+    assert hasattr(
+        calculator._candidate._library, "generativeqc_precision_admission_query_v1"
+    )
+    observed = calculator.singlepoint(
+        zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True),
+        charge=inputs["charge"],
+        multiplicity=inputs["multiplicity"],
+    )
+    assert observed.precision_validation.status == "observed_met"
+    assert observed.precision_validation.solve_count == 2
+    assert abs(observed.energy - fixture["data"]["energy"]) < 1e-9
+    np.testing.assert_allclose(
+        observed.forces, fixture["data"]["forces"], atol=1e-8, rtol=0
+    )
+
+
+@pytest.mark.parametrize("name", ("h2", "h2o", "hf-plus-uhf"))
 def test_fp64_single_fp64_endpoint_against_independent_reference(name: str) -> None:
     """FP64 preserves native forces without using the oracle in production."""
     fixture = next(
