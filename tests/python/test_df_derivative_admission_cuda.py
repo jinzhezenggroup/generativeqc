@@ -92,11 +92,12 @@ def test_qualified_lowering_without_ao_shape_admission(
     control. The explicit shell consumer isolates lowering admission from
     the separately qualified automatic consumer/packet selection policy.
     """
+    from generativeqc import Calculator
+    from pyscf import gto, scf
+
     from benchmarks._cases import benchmark_cases
     from benchmarks._retained_basis import load_retained_comparison_basis
     from benchmarks.df_component_ledger import read_trace
-    from generativeqc import Calculator
-    from pyscf import gto, scf
 
     assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     case = benchmark_cases()[
