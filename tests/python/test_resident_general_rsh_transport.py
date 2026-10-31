@@ -77,6 +77,9 @@ struct CudaDirectJkPlan {
 cudaStreamCaptureStatus capture_state = cudaStreamCaptureStatusNone;
 unsigned kernels{}, shell_calls{}, clears{}, drains{}, callbacks{}, pending{};
 cudaError_t device_error = cudaSuccess, capture_error = cudaSuccess;
+const double* expected_alpha{};
+const double* expected_beta{};
+double expected_omega{};
 generativeqc_status source_cuda_status(cudaError_t) { return GENERATIVEQC_STATUS_CUDA_ERROR; }
 const char* cudaGetErrorString(cudaError_t) { return "injected driver failure"; }
 cudaError_t cudaSetDevice(int device) { assert(device == 2); return device_error; }
@@ -93,8 +96,9 @@ struct TraceOperation { TraceOperation(const char*, cudaStream_t, Shape) {} };
 void trace_counter(const char*, std::size_t) {}
 }
 void direct_rsh_derivatives(CudaDirectJkPlan* plan, std::size_t item, double cj,
-    double cs, double cl, bool unrestricted, double omega, const double*, const double* beta) {
-  assert(item == 0 && omega > 0 && (unrestricted ? beta != nullptr : beta == nullptr));
+    double cs, double cl, bool unrestricted, double omega, const double* alpha, const double* beta) {
+  assert(item == 0 && omega == expected_omega && alpha == expected_alpha && beta == expected_beta);
+  assert(unrestricted ? beta != nullptr : beta == nullptr);
   ++kernels;
   const double coefficients[]{cj, cs, cl};
   for (unsigned source = 0; source < 3; ++source)
@@ -128,6 +132,7 @@ int main() {
   };
   for (bool unrestricted : {false, true})
     for (double omega : {0.3, 0.4, 0.5}) {
+      expected_alpha = density; expected_beta = unrestricted ? beta : nullptr; expected_omega = omega;
       const auto old_drains = drains;
       const auto old_kernels = kernels;
       assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
@@ -147,6 +152,7 @@ int main() {
       [&](const auto& view) { receive(view); assert(view.convention == CudaDerivativeConvention::Force); },
       detail) == GENERATIVEQC_STATUS_SUCCESS && shell_calls == 1);
   plan.generated_exchange = nullptr; // General fallback needs no optional shell allocation.
+  expected_alpha = density; expected_beta = nullptr; expected_omega = 0.4;
   const auto old_kernels = kernels;
   assert(consume_cuda_direct_shell_rsh_energy_derivatives_device(
       &plan, FockSpin::Restricted, 0, 0, 0, 0.4, density, nullptr, 4,
