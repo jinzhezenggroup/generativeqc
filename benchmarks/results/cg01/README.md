@@ -8,8 +8,8 @@ hashes. Both native builds record `VIBEQC_CUDA_FAST_COMPILE=OFF`.
 
 | Artifact | Executed scope | Result |
 | --- | --- | --- |
-| [CPU HF](hf-cpu.json) | H2, five A/B samples per available workload; three finite-difference steps | Energy error `2.04e-14 Eh`, force max error `5.41e-15 Eh/bohr` |
-| [CUDA HF](hf-cuda-sm120.json) | Same H2 control on the Slurm-assigned RTX 5090, actual backend `cuda` | Energy error `1.95e-14 Eh`, force max error `5.31e-15 Eh/bohr` |
+| [CPU HF](hf-cpu.json.xz) | H2, five A/B samples per available workload; three finite-difference steps | Energy error `2.04e-14 Eh`, force max error `5.41e-15 Eh/bohr` |
+| [CUDA HF](hf-cuda-sm120.json.xz) | Same H2 control on the Slurm-assigned RTX 5090, actual backend `cuda` | Energy error `1.95e-14 Eh`, force max error `5.31e-15 Eh/bohr` |
 | [CUDA compilation](compile-sm120.json) | Deterministic generated SSSS source, NVCC 12.9, `-O3 -arch=sm_120`; four PTXAS resource rows | Compiled successfully; no GPU numerical or production claim |
 | [Class numerical tier](gpu-not-run.json) | Full #135 class-isolated f-shell matrix | Explicitly not scheduled by this small protocol control |
 | [Capability table](capabilities.json.xz) | Projection of the existing 55-class catalog, including all 34 f classes | Six distinct stages; FPPS selection explicitly provisional |
@@ -64,3 +64,7 @@ The capability table is losslessly XZ-compressed. [Storage identities](storage.j
 record the exact stored and decoded bytes; the decoded JSON and historical
 scientific source identities are unchanged. Read it with Python
 `lzma.open(path, "rt")` or `tools.generativeqc_validation.record.load_json`.
+
+HF records and the capability table use lossless XZ storage. `storage.json`
+authenticates the exact original and encoded bytes; all observations and
+qualification boundaries are unchanged.

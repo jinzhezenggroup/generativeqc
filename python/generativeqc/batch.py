@@ -301,21 +301,36 @@ class PreparedBatch:
         self.resource_diagnostics = None
         self._resource_ledger = None
         self._resource_prepare = None
+        self._cuda_d4_resource_replay = None
         dispersion_request = None
         resource_native_name = None
         if resource_plan is not None or calculator._resource_budget is not None:
             from ._named_ks import select_resource_program
 
+            share_native_program = (
+                calculator._device_name == "cuda"
+                and calculator._dispersion_method_ir is not None
+            )
             request = calculator._resource_request(
                 self._systems,
                 charges=self._charges,
                 multiplicities=self._multiplicities,
                 ks_options=self._effective_ks_options,
                 properties=self._planned_properties,
+                **({"_include_native_program": True} if share_native_program else {}),
             )
-            resource_native_name = select_resource_program(calculator, request)
+            if share_native_program:
+                request, resource_native_name = request
+            else:
+                resource_native_name = select_resource_program(calculator, request)
             dispersion_request = calculator._dispersion_resource_request(
-                self._systems, request
+                self._systems,
+                request,
+                **(
+                    {"_native_ks": resource_native_name is not None}
+                    if share_native_program
+                    else {}
+                ),
             )
             requests = (
                 (request,)
@@ -355,8 +370,9 @@ class PreparedBatch:
                     self.resource_plan,
                     owner=request.name,
                     prepared_kind="batch",
-                    component_owners=("d3",)
+                    component_owners=(dispersion_request.name,)
                     if resource_native_name is not None
+                    and dispersion_request is not None
                     else (),
                 )
                 self._resource_prepare = self._resource_ledger.prepared_call
@@ -367,8 +383,29 @@ class PreparedBatch:
                     "CUDA resource plans exclude optional profiling allocations"
                 )
         self._model_signature = calculator._model_signature()
+        if (
+            resource_native_name is not None
+            and request.identity.backend == "cuda"
+            and dispersion_request is not None
+            and dispersion_request.name == "d4"
+            and calculator._initial_guess is None
+        ):
+            # Native D4 retains its complete conservative force capacity across
+            # replays. The validated request can outlive planning as long as
+            # both the scientific snapshot and planning inputs remain intact.
+            self._cuda_d4_resource_replay = (
+                self._resource_replay_inputs(),
+                request,
+            )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
+            if self._cuda_d4_resource_replay is None
+            else calculator._basis_metadata_from_snapshot(
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                model_signature=self._model_signature,
+            )
             for atoms, charge, multiplicity in zip(
                 self._systems, self._charges, self._multiplicities, strict=True
             )
@@ -615,7 +652,7 @@ class PreparedBatch:
                 expected = {key: int(planned[key]) for key in actual}
                 if actual != expected:
                     raise RuntimeError(
-                        "prepared D3 resource inventory differs from the global ResourcePlan"
+                        "prepared dispersion resource inventory differs from the global ResourcePlan"
                     )
         except Exception:
             # Construction owns native handles before resource-status conversion,
@@ -1151,16 +1188,58 @@ class PreparedBatch:
                 return False
         return True
 
+    def _resource_replay_inputs(self) -> typing.Any:
+        """Snapshot planning inputs beyond the execute-time model signature.
+
+        Atom records and their enclosing tuples are immutable. Effective KS
+        options get a value snapshot, including any batch-local profile choice.
+        Keep the complete environment: native inventory queries may consume
+        controls that Python does not know about. A change triggers ordinary
+        request validation, so unrelated environment changes remain harmless.
+        This is local to the retained native owner, never a process-wide cache.
+        """
+        calculator = self._calculator
+        return (
+            calculator._library,
+            calculator._device_name,
+            calculator._device_id,
+            calculator._method_name,
+            calculator._representation_name,
+            calculator._capabilities.supported_properties,
+            self._systems,
+            self._charges,
+            self._multiplicities,
+            # execute's model signature already serializes these exact options.
+            # A separately selected profile still needs its own value snapshot.
+            None
+            if self._effective_ks_options is calculator._ks_options
+            else self._effective_ks_options.to_payload(),
+            self._planned_properties,
+            dict(os.environ),
+        )
+
     def _execution_resource_request(self, properties: frozenset[str]) -> typing.Any:
-        """Rebudget optional CPU force scratch without changing resident owners."""
+        """Validate replay capacity; rebudget optional CPU force scratch.
+
+        ``execute`` has already checked the scientific model and initial-guess
+        identity. Only a complete native CUDA D4 owner may reuse its immutable
+        prepared request; all other paths retain full request reconstruction.
+        External plans still undergo full validation before native preparation.
+        """
         calculator = self._calculator
         options = {
             "charges": self._charges,
             "multiplicities": self._multiplicities,
             "ks_options": self._effective_ks_options,
         }
-        expected = calculator._resource_request(
-            self._systems, **options, properties=self._planned_properties
+        replay = self._cuda_d4_resource_replay
+        inputs = self._resource_replay_inputs() if replay is not None else None
+        expected = (
+            replay[1]
+            if replay is not None and inputs == replay[0]
+            else calculator._resource_request(
+                self._systems, **options, properties=self._planned_properties
+            )
         )
         if expected != next(
             request
@@ -1170,6 +1249,8 @@ class PreparedBatch:
             raise ValueError(
                 f"{expected.name.upper()} resource inputs or execution schedule changed after preparation"
             )
+        if replay is not None:
+            self._cuda_d4_resource_replay = (inputs, expected)
         if not self._output_aware_cpu_forces:
             return expected, self.resource_plan
         candidate = self.resource_plan

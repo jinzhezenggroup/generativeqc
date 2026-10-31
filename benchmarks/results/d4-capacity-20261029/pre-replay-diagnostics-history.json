@@ -1,0 +1,34 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "8f1c2b3f689dfbfbbcfbb62c4f64cc334b164fbd",
+  "file_count": 5,
+  "total_bytes": 220824,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/md-complete-cuda-budget-samples.json.xz",
+      "bytes": 85516,
+      "sha256": "9ad92d178f233fded5cab7aa2304c09c78017f80ddeb9383ba6c26f04ce9ca55"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/md-complete-cuda-default-samples.json.xz",
+      "bytes": 84396,
+      "sha256": "ea0962fac05c22e928e5b59f1bda2063d205f1263f1dcc84d6d4be8b2dec5233"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/md-complete-cuda-qualification.json.xz",
+      "bytes": 13788,
+      "sha256": "bc2da030ddc07e3d6d5b97ff7e59405dd9d1e73ec02d866efc160eef45b4633a"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/replay-request-diagnostic-receipts.json.xz",
+      "bytes": 11560,
+      "sha256": "5169c68fe99302a6e032badc7238cda8567c2cdb9606bb8c5dfb0c14b55e77d5"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/replay-request-diagnostic.json.xz",
+      "bytes": 25564,
+      "sha256": "0f2e304c8ffde5df9330b9ec4464c8759eb8d488f9bc483af5a4659b5f80c144"
+    }
+  ],
+  "retention": "Complete optional MD-J qualification and first replay-request diagnostic retained unchanged in verified existing Git ancestry. Both budget timing gates failed; restore every raw sample, profile, fixture failure and scheduler receipt. Never rewrite this ancestor."
+}

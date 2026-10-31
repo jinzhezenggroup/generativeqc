@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "b0a46d18fc16c15353e98d56c361941555949de8",
+  "file_count": 1,
+  "total_bytes": 177956,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/sp-only-cuda-qualification.json.xz",
+      "bytes": 177956,
+      "sha256": "7a78227480729550753db08c33443f3f0d6624784f98f003225cc223bb21abc3"
+    }
+  ],
+  "retention": "Rejected s/p-only CUDA qualification retained in verified existing Git ancestry. Every sample, failed gate, numerical receipt and profile remains recoverable; never rewrite this ancestor."
+}

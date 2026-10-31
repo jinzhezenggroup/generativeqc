@@ -1,0 +1,39 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "975b8b2eee45119c95e9625cb88f94bcf4d19eb0",
+  "file_count": 6,
+  "total_bytes": 287120,
+  "files": [
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/current-cuda-budget-samples.json.xz",
+      "bytes": 85100,
+      "sha256": "74c3d8be22442845b743ae399a5a6ade3c76915f79ca6a3b9a4d83c5ded6c5fd"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/current-cuda-default-samples.json.xz",
+      "bytes": 85904,
+      "sha256": "1ecc709b83d4546b2d5d24b8ba845ac9213f0b2ead6b3c0c97a82b8d6ab8058d"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/current-cuda-qualification.json.xz",
+      "bytes": 12648,
+      "sha256": "804d233b6aaf4d0631c04f73ec318dff3b62f96ef92a0cc4ad1e34c9e3c8a6b1"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/frontend-planning.json.xz",
+      "bytes": 69552,
+      "sha256": "280816222bda4f86f05b75bbadbda2004684ecf48753c1610cc39b115bbc6a66"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/image-identity-diagnostic.json",
+      "bytes": 10936,
+      "sha256": "97caf8264edc6983c1bb3fe2aba1238de9a5e1811bc09e720e61b686b21583a4"
+    },
+    {
+      "path": "benchmarks/results/d4-capacity-20261029/image-identity-diagnostic.json.xz",
+      "bytes": 22980,
+      "sha256": "90a4d03f4824cb0185dc6aea910100973ff95991d77d8f8dc78e7bec6e9a7237"
+    }
+  ],
+  "retention": "Verified existing Git ancestry. Earlier failures remain failures; no external archive or rewritten history."
+}
