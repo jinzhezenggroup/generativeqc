@@ -16,13 +16,13 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires a finite Slurm GPU allocation",
+    reason="requires a finite Slurm or LSF GPU allocation",
 )
 
 
 @pytest.fixture(scope="module")
 def spectral_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
-    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     cuda = Path(os.environ["CUDA_PATH"])
     output = tmp_path_factory.mktemp("spectral-response") / "probe.so"
@@ -49,7 +49,7 @@ def spectral_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
     dp = ct.POINTER(ct.c_double)
     call.argtypes = (
         [ct.c_size_t] * 5
-        + [ct.c_uint, ct.c_bool]
+        + [ct.c_uint, ct.c_bool, ct.c_bool]
         + [dp] * 11
         + [ct.c_void_p, ct.c_size_t]
     )
@@ -60,9 +60,25 @@ def spectral_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
 @pytest.mark.parametrize("condition", (1e2, 1e6, 1e10))
 @pytest.mark.parametrize("tile", (1, 3, 11))
 @pytest.mark.parametrize(
-    "mode,policy",
-    ((0, "auto"), (1, "auto"), (1, "spectral"), (2, "auto")),
-    ids=("coulomb", "occupied-root", "occupied-factor-order", "final-reuse"),
+    "mode,policy,compact",
+    (
+        (0, "auto", False),
+        (1, "auto", False),
+        (1, "spectral", False),
+        (2, "auto", False),
+        (1, "auto", True),
+        (1, "spectral", True),
+        (2, "auto", True),
+    ),
+    ids=(
+        "coulomb",
+        "occupied-root",
+        "occupied-factor-order",
+        "final-reuse",
+        "compact-root",
+        "compact-factor-order",
+        "compact-final-reuse",
+    ),
 )
 @pytest.mark.parametrize("gauge", ("symmetric", "spectral", "explicit"))
 def test_rotated_metric_physical_adjoints(
@@ -71,6 +87,7 @@ def test_rotated_metric_physical_adjoints(
     tile: int,
     mode: int,
     policy: str,
+    compact: bool,
     gauge: str,
     monkeypatch: Any,
 ) -> None:
@@ -135,6 +152,7 @@ def test_rotated_metric_physical_adjoints(
         rank,
         mode,
         spectral,
+        compact,
         *(x.ctypes.data_as(dp) for x in arrays),
         explicit_root.ctypes.data_as(dp) if explicit_root is not None else None,
         bar_a.ctypes.data_as(dp),

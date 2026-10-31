@@ -1499,8 +1499,20 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // basis metadata, coordinates and final output have been charged. Every
       // new response allocation is owned here; launch wrappers allocate
       // nothing. Full borrowed J/K tensors stay charged to the value plan.
+      // The fitted occupied branch either executes or explicitly refuses
+      // allocation below; it cannot fall through to a general-layout consumer.
+      // Its full-rank metric adjoint needs no inverse/Frechet scratch. Retain
+      // one additional matrix only for an implicit spectral response root.
+      const bool compact_fitted_metric_workspace = occupied && whitened && !whitened_response;
+      const auto occupied_layout = df_occupied_response_workspace(
+          n, a, terms.size(), compact_fitted_metric_workspace,
+          whitened && whitened->spectral_basis && !whitened->factor_response_root);
+      if (!occupied_layout.elements) throw std::bad_alloc();
       const long double fixed_elements =
-          fixed_response_elements + (whitened_response ? 1.0L * a * n * n : 0.0L);
+          (compact_fitted_metric_workspace
+               ? static_cast<long double>(occupied_layout.elements) + 1.0L * terms.size() * n * n
+               : fixed_response_elements) +
+          (whitened_response ? 1.0L * a * n * n : 0.0L);
       // The prepared allowance is a ceiling, not a reservation of physical
       // memory. Other retained consumers (notably a nonlocal XC force owner)
       // may grow after the cold call. Replan the bounded auxiliary tile from
@@ -1627,13 +1639,15 @@ generativeqc_status execute_cuda_df_hf_gradient(
         }
       }
       const auto workspace_size = [&](std::size_t block) {
-        return cuda_df_response_workspace_elements(
-                   n, a, terms.size(),
-                   !whitened_response &&
-                           ((borrowed && borrowed->occupied_response) || owned_occupied)
-                       ? 0
-                       : block,
-                   whitened_response) +
+        return (compact_fitted_metric_workspace
+                    ? occupied_layout.elements
+                    : cuda_df_response_workspace_elements(
+                          n, a, terms.size(),
+                          !whitened_response &&
+                                  ((borrowed && borrowed->occupied_response) || owned_occupied)
+                              ? 0
+                              : block,
+                          whitened_response)) +
                (single_fitted_tensor ? (a - block) * n * n : 0) +
                (owned_occupied
                     ? occupied_retained +
@@ -1708,15 +1722,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // Raw A occupies the third, otherwise idle, AO temporary while the
         // first holds A*C. All-Q projections live in disjoint owned intervals;
         // exchange_response becomes the bounded derivative panel after fitting.
-        owned_buffers.staging_weights =
-            workspace + cuda_df_response_workspace_elements(n, a, terms.size(), 0);
+        owned_buffers.staging_weights = workspace + occupied_layout.elements;
         // contract_occupied_response first finishes C^T*U into staging_weights.
         // Its next gather may then overwrite U; all later projection/derivative
         // phases use this exclusive interval on the same ordered stream.
         owned_buffers.exchange_response = recycle_projection
                                               ? occupied->recyclable_final_projection
                                               : owned_buffers.staging_weights + occupied_retained;
-        owned_buffers.raw_auxiliary_major = workspace + 4 * a * a + 2 * n * n;
+        owned_buffers.raw_auxiliary_major = workspace + occupied_layout.ao_temporary + 2 * n * n;
         owned_buffers.staging_elements = occupied_retained;
         owned_buffers.exchange_elements = std::max(occupied_scratch, tile * n * n);
         owned_buffers.raw_elements = n * n;
@@ -1747,6 +1760,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
         runtime::cuda_trace::trace_counter(
             "response_recycled_final_projection_scratch_bytes",
             recycle_projection ? owned_buffers.exchange_elements * sizeof(double) : 0);
+        runtime::cuda_trace::trace_counter("response_metric_workspace_matrices",
+                                           occupied_layout.metric_matrices);
+        runtime::cuda_trace::trace_counter(
+            "response_metric_workspace_bytes_avoided",
+            (4 - occupied_layout.metric_matrices) * a * a * sizeof(double));
       }
       arena.stats.device_response = true;
       arena.stats.occupied_response =
@@ -2359,7 +2377,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
           packed_block_rows, read_fitted, single_fitted_tensor,
           owned_occupied ? &owned_buffers : nullptr,
           coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader,
-          raw_charge_reader, raw_derivative_consumer));
+          raw_charge_reader, raw_derivative_consumer, compact_fitted_metric_workspace));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

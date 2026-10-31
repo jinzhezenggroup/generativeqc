@@ -1,6 +1,6 @@
 """Explicit CUDA candidates require independent molecular and replay evidence.
 
-Run only in an allocated Slurm GPU job after building THIS checkout. These
+Run only in an allocated Slurm or LSF GPU job after building THIS checkout. These
 are correctness/work-census tests, not timing benchmarks or automatic promotion.
 """
 
@@ -14,21 +14,32 @@ from benchmarks._retained_basis import load_retained_basis
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
-    reason="requires an explicitly Slurm-allocated GPU",
+    reason="requires an explicitly Slurm- or LSF-allocated GPU",
 )
 
 
-@pytest.mark.parametrize("auxiliary", ["def2-svp", "cc-pvdz-jkfit"])
-@pytest.mark.parametrize("route", ["fitted", "raw-batched"])
+@pytest.mark.parametrize(
+    "auxiliary,route,compact_budget",
+    [
+        ("def2-svp", "fitted", False),
+        ("def2-svp", "raw-batched", False),
+        ("cc-pvdz-jkfit", "fitted", False),
+        ("cc-pvdz-jkfit", "raw-batched", False),
+        ("cc-pvdz-jkfit", "fitted", True),
+    ],
+)
 @pytest.mark.parametrize("consumer", ["auto", "qualify"])
 def test_occupied_response_independent_replay(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     auxiliary: str,
     route: str,
+    compact_budget: bool,
     consumer: str,
 ) -> None:
-    assert os.environ.get("SLURM_JOB_ID"), "GPU work must use a finite Slurm allocation"
+    assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"), (
+        "GPU work must use a finite Slurm or LSF allocation"
+    )
     from generativeqc import Calculator
     from pyscf import gto, scf
 
@@ -50,6 +61,14 @@ def test_occupied_response_independent_replay(
     a = reference.with_df.auxmol.nao_nr()
     fixed = 4 * a * a + 4 * n * n + 2 * a
     budget = 135000 if auxiliary == "def2-svp" else 8 * (fixed + 3 * a * n * n // 4)
+    if compact_budget:
+        # This allowance admits both occupied-factor buffers, the live metric
+        # adjoint and a spectral root, with half a matrix of metadata/panel
+        # headroom. It cannot hold even the old fixed four-matrix layout. Cold,
+        # warm and moved forces must retain their one-pass fitted response here.
+        rank = mol.nelectron // 2
+        budget = 8 * (5 * a * a // 2 + 4 * n * n + 2 * a + 2 * a * rank * rank)
+        assert budget < 8 * fixed
     for name in (
         "GENERATIVEQC_DF_WEIGHTED_EXECUTION",
         "GENERATIVEQC_DF_DERIVATIVE_PAIRS",

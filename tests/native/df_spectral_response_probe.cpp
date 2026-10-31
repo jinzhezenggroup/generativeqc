@@ -9,6 +9,7 @@
 
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/cuda/df_response_weights.cuh"
+#include "scf/df_response_tile_budget.hpp"
 
 namespace {
 void check(cudaError_t error) {
@@ -37,7 +38,7 @@ struct Storage {
 
 extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::size_t terms,
                                           std::size_t tile, std::size_t rank, unsigned mode,
-                                          bool spectral, const double* forward,
+                                          bool spectral, bool compact, const double* forward,
                                           const double* densities, const double* coefficients,
                                           const double* coulomb, const double* exchange,
                                           const double* eigenvectors, const double* eigenvalues,
@@ -76,7 +77,12 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
     std::vector<scf::DensityFittingDensityResponse> response;
     for (std::size_t t = 0; t < terms; ++t)
       response.push_back({{densities + t * matrix, matrix}, coulomb[t], exchange[t]});
-    auto* workspace = owner.allocate(scf::cuda_df_response_workspace_elements(n, a, terms, tile));
+    // Allocate exactly the selected contract, so sanitizer runs observe any
+    // access to a removed metric interval rather than hiding it in spare space.
+    const auto fixed =
+        scf::df_occupied_response_workspace(n, a, terms, compact, spectral && !explicit_root);
+    auto* workspace = owner.allocate(
+        compact ? fixed.elements : scf::cuda_df_response_workspace_elements(n, a, terms, tile));
     scf::CudaDfResponseBuffers occupied;
     if (mode) {
       occupied.occupied_response = true;
@@ -116,7 +122,7 @@ extern "C" int df_spectral_response_probe(std::size_t n, std::size_t a, std::siz
           }
         },
         nullptr, {}, false, {}, 256, {}, false, mode ? &occupied : nullptr,
-        mode ? nullptr : &fitted);
+        mode ? nullptr : &fitted, false, {}, {}, {}, compact);
     check(cudaStreamSynchronize(owner.stream));
     return static_cast<int>(status);
   } catch (const std::exception& error) {

@@ -1,8 +1,37 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 
 namespace generativeqc::scf {
+
+/** Disjoint fixed intervals for occupied response, measured in doubles.
+ * General/raw and truncated consumers retain four metric matrices. A fitted
+ * full-rank response differentiates through already rooted occupied factors:
+ * only its metric adjoint stays live, plus one root-construction matrix when
+ * the retained source is spectral and has no explicit response root. No
+ * inverse/Frechet scratch is needed in that admitted consumer. An empty layout
+ * rejects zero dimensions or element-count overflow; callers must validate the
+ * scientific/storage preconditions and admit the resulting byte allocation.
+ */
+struct DfOccupiedResponseWorkspace {
+  std::size_t metric_matrices{}, metric_adjoint{}, ao_temporary{}, charges{}, potentials{},
+      elements{};
+};
+
+inline DfOccupiedResponseWorkspace df_occupied_response_workspace(
+    std::size_t n, std::size_t a, std::size_t terms, bool compact_fitted = false,
+    bool construct_spectral_root = false) noexcept {
+  const auto matrices = compact_fitted ? (construct_spectral_root ? 2U : 1U) : 4U;
+  const auto maximum = std::numeric_limits<std::size_t>::max();
+  if (!n || !a || !terms || a > maximum / a / matrices || n > maximum / n / 3) return {};
+  const auto ao = matrices * a * a;
+  if (3 * n * n > maximum - ao) return {};
+  const auto charges = ao + 3 * n * n;
+  if (terms > (maximum - charges) / a / 2) return {};
+  const auto potentials = charges + terms * a;
+  return {matrices, matrices == 1 ? 0 : a * a, ao, charges, potentials, potentials + terms * a};
+}
 
 /** Recycle an authenticated dead projection only under response pressure.
  * Independent owned scratch is faster when its preferred panel already fits.
