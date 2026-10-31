@@ -1,11 +1,30 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 
 #include "generativeqc/precision_admission.h"
 
 namespace generativeqc::runtime {
+
+/** Preserve the qualified budget-Fock policy without inferring new capability.
+ * Requested tolerances are ceilings: selecting faster arithmetic cannot loosen
+ * a caller's explicit convergence or screening requirements. */
+inline generativeqc_precision_controls_v1 precision_controls(
+    const generativeqc_precision_controls_context_v1& c) noexcept {
+  generativeqc_precision_controls_v1 output{sizeof(output), GENERATIVEQC_ABI_VERSION, 1, 0, {}};
+  if (!c.modules_available || !c.ks_model || !c.restricted_spin || !c.self_consistent ||
+      !c.device_fused || c.energy_abs < 1e-5 || c.force_max_abs < 1e-4 ||
+      (c.force_rms != 0 && c.force_rms < 3e-5))
+    return output;
+  constexpr double ceilings[]{1e-6, 1e-4, 1e-10};
+  output.selected = 1;
+  for (unsigned i = 0; i != 3; ++i)
+    output.controls[i] =
+        c.override_mask & (1u << i) ? std::min(ceilings[i], c.requested_controls[i]) : ceilings[i];
+  return output;
+}
 
 /** Application evidence policy shared by language frontends. This consumes
  * execution-owned diagnostics; it neither schedules numerical work nor turns

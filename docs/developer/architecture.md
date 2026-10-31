@@ -597,8 +597,12 @@ strict warm reuse and Standard fallback use the same native predicates in the
 Python facade and SDK. Missing evidence remains unknown; explicitly unavailable
 fitted-HF counters retain their established exception. The query performs no
 numerical work and cannot qualify a method or replace an explicit observable
-audit. Python still owns model-gradient qualification and the
-candidate/auditor execution and seed lifetimes. Missing additive symbols retain
+audit. The companion `generativeqc_precision_controls_query_v1` selects the
+incumbent budget-Fock SCF controls from qualified model traits and preserves
+explicit caller ceilings. Availability still comes from the Direct capability
+or the fitted model qualification owner. Python retains model-gradient
+qualification, candidate/auditor execution and independent seed-history
+selection. Missing additive symbols retain
 compatibility; a selected native query failure propagates.
 
 Default SCF convergence controls are queried through
