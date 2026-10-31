@@ -9,6 +9,7 @@ Look up API names, units, method capabilities and numerical conventions here.
 - [Native symbol contracts](native_symbols.md) — source-owned C functions and C++ types and operations.
 - [Public method table](../public_methods.md) — generated canonical method identities and declared capabilities.
 - [Capability sources](capabilities.md)
+- [Native Libxc qualification](libxc_qualification.md) — generated evidence counts and exact measured scope.
 - [Units](units.md)
 - [COSX reference](cosx_reference.md)
 - [D4 reference](d4_reference.md)
@@ -27,6 +28,7 @@ native_api
 native_symbols
 ../public_methods
 capabilities
+libxc_qualification
 units
 cosx_reference
 d4_reference

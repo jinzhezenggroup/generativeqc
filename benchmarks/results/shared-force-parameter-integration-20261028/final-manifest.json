@@ -7,6 +7,15 @@
     "force_fd_atol": 3e-05,
     "translation_atol": 2e-08
   },
+  "archived_files": {
+    "final/build-inputs.json.xz": {
+      "original_bytes": 544162,
+      "original_sha256": "6f1fc6cc2b794f6df4a0ec8427c895c68208f627f174babff112bd662e973595",
+      "snapshot": "build-inputs-snapshot.json",
+      "stored_bytes": 166452,
+      "stored_sha256": "a11b661f9723de5f3b8f0c5bcfc336293cc4f638252c7bf7b0b7b3ccc8248573"
+    }
+  },
   "build_input_verification": {
     "input_count": 5951,
     "input_inventory_sha256": "6f1fc6cc2b794f6df4a0ec8427c895c68208f627f174babff112bd662e973595",
@@ -74,12 +83,6 @@
       "original_sha256": "76abcd0976ac0fb9216ea920aa9a2747a0b249b331d484928511aea9891033f9",
       "stored_bytes": 256,
       "stored_sha256": "451e0012720d8fd76ccf726274bcc8dd96cd6032f93bdb46a30f306cb4578736"
-    },
-    "final/build-inputs.json.xz": {
-      "original_bytes": 544162,
-      "original_sha256": "6f1fc6cc2b794f6df4a0ec8427c895c68208f627f174babff112bd662e973595",
-      "stored_bytes": 166452,
-      "stored_sha256": "a11b661f9723de5f3b8f0c5bcfc336293cc4f638252c7bf7b0b7b3ccc8248573"
     },
     "final/build.log.xz": {
       "original_bytes": 7803,

@@ -1158,9 +1158,319 @@
     },
     "portable_cuda": {
       "kind": "portable",
+      "optional_fock_variants": false,
       "cuda_toolkit": "12.9.1",
       "generator_abi": 1,
-      "kernels": []
+      "kernels": [
+        {
+          "shell_class": "ssss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys1",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 1,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "psss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys1",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 3,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "psps",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 9,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ppss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 9,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ppps",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 27,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "pppp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "dsss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 6,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dsps",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 18,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dspp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 54,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dsds",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 36,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dpss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys2",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 18,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dpps",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 54,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "dppp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "dpds",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "dpdp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys4",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "ddss",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock",
+            "local_packed_streaming_fock"
+          ],
+          "schedule": {
+            "kind": "packed_tasks",
+            "block_threads": 128,
+            "component_tile": 36,
+            "tasks_per_warp": 32,
+            "shared_coulomb": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ddps",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys3",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "ddpp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys4",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "ddds",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys4",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        },
+        {
+          "shell_class": "dddp",
+          "consumers": [
+            "fock"
+          ],
+          "recurrence": "rys4",
+          "capabilities": [
+            "streaming_fock"
+          ]
+        }
+      ]
     }
   }
 }

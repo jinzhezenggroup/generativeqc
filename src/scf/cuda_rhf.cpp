@@ -4821,12 +4821,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                  ~explicit_generated_force_shell_class_mask
            : 0U) &
       ~(bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
+  // Only the force registry can authorize a generated force consumer. Portable
+  // profiles also contain Fock-only classes, which must remain visible to the
+  // bounded correctness fallback. dddd is the sole Fock-advertised exception:
+  // launch_bounded_native_force below owns its independent native derivative.
   const std::uint64_t selected_force_shell_class_mask =
       (explicit_generated_force_shell_class_mask |
-       (bounded_direct_streaming
-            ? generated::enabled_fock_shell_class_mask() & kStreamingFockShellClassMask &
-                  ~kBoundedNativePagedForceShellClassMask
-            : 0U)) &
+       (bounded_direct_streaming ? generated::enabled_fock_shell_class_mask() & kDdddShellClassMask
+                                 : 0U)) &
       host_present_shell_class_mask;
   const std::uint64_t native_streaming_force_shell_class_mask =
       bounded_direct_streaming ? selected_force_shell_class_mask & kDdddShellClassMask &
@@ -4851,9 +4853,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const std::uint64_t bounded_force_legacy_queue_shell_class_mask =
       bounded_direct_count_diagnostic ? generated_queued_force_shell_class_mask
                                       : bounded_first_wave_force_shell_class_mask;
-  const std::uint64_t covered_force_shell_class_mask = generated_shell_class_mask |
-                                                       native_streaming_force_shell_class_mask |
-                                                       bounded_native_paged_force_shell_class_mask;
+  const std::uint64_t covered_force_shell_class_mask =
+      generated_shell_class_mask | native_streaming_force_shell_class_mask |
+      bounded_native_paged_force_shell_class_mask |
+      (bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
   const std::uint64_t uncovered_force_shell_class_mask =
       host_present_shell_class_mask & ~covered_force_shell_class_mask;
   // A tuned compatible profile is a production qualification claim. Once all

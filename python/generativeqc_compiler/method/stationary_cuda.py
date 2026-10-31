@@ -613,13 +613,14 @@ struct GeometryBlockTeam {
 template <class Arithmetic, class Accumulation>
 __device__ void geometry_reduce_ao_panel(generativeqc::dft::GridTaskView view,
     const int64_t* ao_atoms, size_t owner, size_t na, const Arithmetic* ao_gradient,
-    Accumulation* grad) {
+    Accumulation* grad, size_t ao_begin, size_t ao_count) {
   const size_t grid_coordinate = 3 * na + 3 * owner;
   Accumulation grid_gradient[3]{grad[grid_coordinate], grad[grid_coordinate + 1],
                           grad[grid_coordinate + 2]};
   size_t previous_atom = na;
   Accumulation atom_gradient[3]{};
-  for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+  for (size_t local = 0; local < ao_count; ++local) {
+    const size_t ao_index = ao_begin + local;
     const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
     const size_t atom = size_t(ao_atoms[global_ao]);
     if (atom != previous_atom) {
@@ -631,7 +632,7 @@ __device__ void geometry_reduce_ao_panel(generativeqc::dft::GridTaskView view,
       previous_atom = atom;
     }
     for (size_t axis = 0; axis < 3; ++axis) {
-      const Arithmetic value = ao_gradient[3 * ao_index + axis];
+      const Arithmetic value = ao_gradient[3 * local + axis];
       atom_gradient[axis] -= value;
       grid_gradient[axis] += value;
     }
@@ -670,8 +671,15 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       ? na - 1 : stationary_becke_pair_tile_rows;
   const size_t pair_capacity = na <= stationary_becke_retained_max_atoms
       ? na * (na - 1) / 2 : pair_rows * (2 * na - pair_rows - 1) / 2;
-  const bool cooperative_ao = point_words * sizeof(double) + 3 * view.nactive * sizeof(Arithmetic)
-      <= pair_capacity * sizeof(PairState);
+  // Fit a bounded AO chunk, not the entire basis. A slightly larger basis
+  // must not serialize every pullback when the same shared arena can serve
+  // successive chunks. Point storage remains live across all chunks; pair
+  // storage is still dead until the final collective barrier below.
+  const size_t pair_bytes = pair_capacity * sizeof(PairState);
+  const size_t point_bytes = point_words * sizeof(double);
+  const size_t ao_capacity = pair_bytes > point_bytes
+      ? (pair_bytes - point_bytes) / (3 * sizeof(Arithmetic)) : 0;
+  const bool cooperative_ao = ao_capacity != 0;
   auto* point_value = reinterpret_cast<StationaryPointValue*>(geometry_pair_storage);
   auto* ao_gradient = reinterpret_cast<Arithmetic*>(geometry_pair_storage + point_words);
   __shared__ GeometryBlockControl control;
@@ -720,35 +728,53 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       return;
     }
     if (cooperative_ao) {
-      for (size_t ao_index = threadIdx.x; ao_index < view.nactive; ao_index += blockDim.x) {
-        const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
-        if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
-          atomicExch(&control.collective_valid, 0);
-          continue;
+      auto* point_partial = reinterpret_cast<float*>(ws + 5 * na);
+      if constexpr (std::is_same_v<Arithmetic, float>) {
+        if (threadIdx.x == 0)
+          for (size_t coordinate = 0; coordinate < 6 * na; ++coordinate)
+            point_partial[coordinate] = 0;
+      }
+      for (size_t begin = 0; begin < view.nactive; begin += ao_capacity) {
+        const size_t count = std::min(ao_capacity, view.nactive - begin);
+        for (size_t local = threadIdx.x; local < count; local += blockDim.x) {
+          const size_t ao_index = begin + local;
+          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+          if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
+            atomicExch(&control.collective_valid, 0);
+            continue;
+          }
+          geometry_ao_gradient<Arithmetic>(view, work, p, ao_index, weights[p], *point_value,
+                                           ao_gradient + 3 * local);
         }
-        geometry_ao_gradient<Arithmetic>(view, work, p, ao_index, weights[p], *point_value,
-                             ao_gradient + 3 * ao_index);
+        __syncthreads();
+        if (!control.collective_valid) {
+          if (threadIdx.x == 0) atomicExch(error, 1);
+          return;
+        }
+        // Publish chunks in original AO order, including atom runs spanning
+        // chunk boundaries and arbitrary indexed maps. Do not tree-reduce or
+        // atomically accumulate floating-point gradients.
+        if (threadIdx.x == 0) {
+          if constexpr (std::is_same_v<Arithmetic, float>)
+            geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient,
+                                     point_partial, begin, count);
+          else
+            geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient,
+                                     grad, begin, count);
+        }
+        // Readers retire before the next AO producer reuses the same panel.
+        __syncthreads();
       }
-      __syncthreads();
-      if (!control.collective_valid) {
-        if (threadIdx.x == 0) atomicExch(error, 1);
-        return;
-      }
-      // One ordered traversal replaces na full AO-label scans. The producer's
-      // preceding collective vote validates every label before any scatter.
-      if (threadIdx.x == 0) {
-        if constexpr (std::is_same_v<Arithmetic, float>) {
-          // Recover translation from the same rounded point-local atom sums.
-          auto* point_partial = reinterpret_cast<float*>(ws + 5 * na);
-          for (size_t coordinate = 0; coordinate < 6 * na; ++coordinate) point_partial[coordinate] = 0;
-          geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient, point_partial);
+      if constexpr (std::is_same_v<Arithmetic, float>) {
+        // Recover translation once from the same rounded point-local atom
+        // sums, after every chunk has contributed to them.
+        if (threadIdx.x == 0)
           for (size_t atom = 0; atom < na; ++atom)
             for (size_t axis = 0; axis < 3; ++axis) {
               const double value = point_partial[3 * atom + axis];
               grad[3 * atom + axis] += value;
               grad[3 * na + 3 * owner + axis] -= value;
             }
-        } else geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient, grad);
       }
       // Every reader must finish before Becke overwrites the aliased panel.
       __syncthreads();

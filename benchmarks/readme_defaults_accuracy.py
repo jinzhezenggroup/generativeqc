@@ -136,8 +136,8 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=raw_output_path)
     parser.add_argument("--source-revision", required=True)
     args = parser.parse_args()
-    if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("qualification requires a finite Slurm allocation")
+    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
+        parser.error("qualification requires a finite Slurm or LSF allocation")
     if args.output.exists():
         raise FileExistsError(args.output)
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
@@ -159,7 +159,18 @@ def main() -> None:
                 "numpy": ("numpy",),
             }
         ),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "scheduler": {
+            name: os.environ.get(name)
+            for name in (
+                "SLURM_JOB_ID",
+                "SLURM_JOB_NODELIST",
+                "LSB_JOBID",
+                "LSB_QUEUE",
+                "LSB_HOSTS",
+                "CUDA_VISIBLE_DEVICES",
+            )
+        },
         "common_observable_gates": COMMON_GATES,
         "grid_stability_gate_fraction": 0.25,
         "status": "running",

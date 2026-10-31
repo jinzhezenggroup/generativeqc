@@ -19,7 +19,18 @@ from test_stationary_geometry_kernel_host import PREFIX
 
 @pytest.mark.parametrize(
     ("atoms", "aos"),
-    [(12, 2), (33, 2), (96, 2), (128, 2), (12, 96), (12, 1024), (96, 768), (128, 1024)],
+    [
+        (12, 2),
+        (33, 2),
+        (96, 2),
+        (128, 2),
+        (12, 96),
+        (12, 1024),
+        (48, 544),
+        (96, 768),
+        (96, 1088),
+        (128, 1024),
+    ],
 )
 @pytest.mark.parametrize("arithmetic", ("double", "float"))
 def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(

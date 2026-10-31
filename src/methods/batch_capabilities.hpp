@@ -11,6 +11,10 @@
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/warm_state.hpp"
 
+namespace generativeqc::scf {
+class FleetPlan;
+}
+
 namespace generativeqc::methods {
 
 /** Optional metadata from the geometry-correction owner. A query fills one
@@ -123,6 +127,15 @@ class BatchWarmStarts {
       std::size_t index) const = 0;
   virtual void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) = 0;
   virtual void set_warm_start_updates(bool enabled) = 0;
+};
+
+/** Optional native HF transfer facet. The adapter borrows both prepared owners
+ * under their context/lifecycle gates; it never reconstructs scientific systems. */
+class BatchHfProjection {
+ public:
+  virtual ~BatchHfProjection() = default;
+  virtual scf::FleetPlan& projection_fleet() = 0;
+  virtual const scf::FleetPlan& projection_fleet() const = 0;
 };
 
 /** CUDA direct J/K queue and resident PPPS profiles. */

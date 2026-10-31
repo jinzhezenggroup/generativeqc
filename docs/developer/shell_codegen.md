@@ -279,15 +279,25 @@ autotune reads that schedule directly from the manifest instead of maintaining
 a second shell-name allowlist.
 
 CMake selects profiles with `GENERATIVEQC_AOT_PROFILE` or `GENERATIVEQC_AOT_PROFILES`.
-`auto` resolves only an exact measured or explicitly compatible profile and is
-fail-closed when neither exists. Generic CUDA remains available through the
-explicit `portable`/`portable_cuda` profile; it is never selected by an `auto`
-miss. `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF` omits all generated shell objects.
+`auto` prefers an exact measured or explicitly compatible profile, then selects
+`portable_cuda`. Explicit incompatible requests and ambiguous manifests fail.
+The portable profile provides generated value-only Rys J/K kernels through the
+qualified s/p/d domain, using lane-local packed tasks where mathematically
+eligible and target-legal component schedules otherwise. It remains untuned;
+`dddd`, derivatives and uncovered classes retain their native fallbacks.
+`GENERATIVEQC_ENABLE_AOT_SHELLS=OFF` omits all generated shell objects.
 
 Optional production code shapes are declared per manifest row through the
 `capabilities` list. The current names are `streaming_fock`, `mixed_fock`, and
 `local_packed_streaming_fock`; an omitted list keeps those wrappers disabled.
 This metadata is profile-scoped and does not promote a candidate by itself.
+`optional_fock_variants` controls whether alternative Rys-value, Rys-task and
+restricted K-block families are compiled beside the primary kernels. It defaults
+to `true`; the portable profile sets it to `false` to bound first-launch module
+loading. Primary coverage and native fallbacks remain available. This build-size
+choice is independent of the target architecture and tuning provenance. An exact
+profile that disables variants must also remove any preference for an omitted
+variant; a stale preference remains an error.
 
 Large-shell tuning uses a staged compiler pipeline. Equivalent schedules share
 one separately compiled correctness oracle per component mapping; tiled oracle

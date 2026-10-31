@@ -71,6 +71,38 @@ def initialize_from(
         raise ProjectionRejected(
             "only RHF/UHF occupied density projection is supported"
         )
+    from . import _fleet_projection_native
+
+    native = _fleet_projection_native.initialize(
+        target,
+        source,
+        policy=policy,
+        strict=strict,
+        maximum_host_bytes=maximum_host_bytes,
+        started=start,
+    )
+    if native is not None:
+        return native
+    return _initialize_from_compatibility(
+        target,
+        source,
+        policy=policy,
+        strict=strict,
+        maximum_host_bytes=maximum_host_bytes,
+        start=start,
+    )
+
+
+def _initialize_from_compatibility(
+    target: typing.Any,
+    source: typing.Any,
+    *,
+    policy: typing.Any,
+    strict: bool,
+    maximum_host_bytes: int,
+    start: float,
+) -> typing.Any:
+    """Explicit old-protocol/custom/unsupported preparation; never native retry."""
     count = target.system_count
     states = (_native.HfWarmState * count)(*(_descriptor() for _ in range(count)))
     storage, reports = [], []

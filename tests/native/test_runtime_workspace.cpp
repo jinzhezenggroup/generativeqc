@@ -144,6 +144,43 @@ int main() {
          capacity.minimum_device_bytes ==
              capacity.grid.allocation_bytes + capacity.grid.provider_allowance + 128 &&
          capacity.cached_device_bytes == capacity.minimum_device_bytes + 48);
+  // Optional derivative-jet masks preserve the dense minimum. Include a
+  // partial last tile and both host/device offsets in discovery admission.
+  profile.geometry_max_scratch_bytes = 16U << 20;
+  for (const auto points : {131071U, 131072U, 131073U}) {
+    const auto mapped =
+        generativeqc::dft::cuda_stationary_capacity(profile, 48, 512, 512, points, 256);
+    assert((mapped.ao_map_bytes != 0) == (points >= 131072));
+    assert(mapped.cached_device_bytes == mapped.minimum_device_bytes + 48 + mapped.ao_map_bytes);
+    if (mapped.ao_map_bytes) {
+      const auto tiles = (points + 255) / 256;
+      assert(mapped.ao_map_host_bytes == (tiles + 1) * sizeof(std::size_t));
+      assert(mapped.ao_map_bytes == 2 * mapped.ao_map_host_bytes + tiles * 16 * sizeof(unsigned) +
+                                        512 * sizeof(std::size_t));
+      const auto mixed =
+          generativeqc::dft::cuda_stationary_capacity(profile, 48, 512, 512, points, 256, true);
+      assert(mixed.ao_map_bytes == mapped.ao_map_bytes &&
+             mixed.minimum_device_bytes == mapped.minimum_device_bytes &&
+             mixed.cached_device_bytes > mapped.cached_device_bytes);
+    }
+  }
+  // Masks exceeding their optional cap leave the existing cached geometry and
+  // dense minimum intact. Unsupported derivative orders never acquire masks.
+  const auto oversized_map =
+      generativeqc::dft::cuda_stationary_capacity(profile, 48, 512, 512, std::size_t{1} << 28, 256);
+  assert(!oversized_map.ao_map_bytes && !oversized_map.ao_map_host_bytes &&
+         oversized_map.cached_device_bytes == oversized_map.minimum_device_bytes + 48);
+  for (const auto jets : {1U, 4U, 10U, 20U}) {
+    profile.ao_jets = jets;
+    const auto order_capacity =
+        generativeqc::dft::cuda_stationary_capacity(profile, 48, 512, 512, 131072, 256);
+    assert((order_capacity.ao_map_bytes != 0) == (jets == 4 || jets == 10));
+  }
+  profile.ao_jets = 10;
+  profile.model.nonlocal_b = 1;
+  assert(!generativeqc::dft::cuda_stationary_capacity(profile, 48, 512, 512, 131072, 256)
+              .ao_map_bytes);
+  profile.model.nonlocal_b = 0;
   bool overflow_failed = false;
   try {
     (void)generativeqc::dft::cuda_stationary_capacity(
@@ -152,7 +189,9 @@ int main() {
     overflow_failed = true;
   }
   assert(overflow_failed);
-  for (const auto shape : {std::array<std::size_t, 3>{0, 100, 128}, {2, 99, 128}, {2, 100, 0}}) {
+  // Variable per-element grids admit ragged point counts.
+  assert(generativeqc::dft::cuda_stationary_capacity(profile, 2, 2, 2, 99, 128).tile_points == 99);
+  for (const auto shape : {std::array<std::size_t, 3>{0, 100, 128}, {2, 100, 0}}) {
     bool invalid = false;
     try {
       (void)generativeqc::dft::cuda_stationary_capacity(profile, shape[0], 2, 2, shape[1],

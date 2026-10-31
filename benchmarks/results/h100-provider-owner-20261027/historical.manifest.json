@@ -1,0 +1,109 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "15ab66a68a061355fda833a93e88484dbfee6360",
+  "file_count": 20,
+  "total_bytes": 946365,
+  "scope": "Exact published V4/V6/V7/V9 model-free H100 owner engineering history, including failed/refused control observations, dirty-source reconstruction, all original readers and privacy-redacted receipt streams. Current summaries remain unchanged. SCIENCE_NOT_RUN and SDK_INCOMPLETE remain; no molecular reference or live numerical consumer is moved. Offline recovery uses only existing local Git objects, never an implicit fetch or external upload.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/README.md",
+      "bytes": 4136,
+      "sha256": "12f7218ee2e04e2c76eb7d3d09a2bf1e0e20d415cc5d322bfa63df8e04f589c9"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/replay.py",
+      "bytes": 6524,
+      "sha256": "ff79ebda774b47995fb2650494bc76d37b7504dacb73a73bfeb2dc13b3dab245"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/restore_original_archives.py",
+      "bytes": 3241,
+      "sha256": "24312ab07b53a01a09c81501d947f412a3867780f51826bd5585433b6fbea4b0"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/source-closure.json.xz",
+      "bytes": 55292,
+      "sha256": "76445a6a299933b807f8b5c3eeb1aa6683007b6b6dc266b8ed4b30c9d6e42ec9"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/summary.json",
+      "bytes": 1867,
+      "sha256": "075d4b93ba87ea4fd61b3fea12db0250df1f5fc120c5b44956035412b54c84bc"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v4-v6-receipts.tar.xz",
+      "bytes": 260056,
+      "sha256": "0aeef5da2c72945093e2098cda0a024cde22a89edab6693e44b510b8b5da2c99"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/README.md",
+      "bytes": 3065,
+      "sha256": "5469039883d9236e943467f98387cca6bfb5b340894755a6ca4c3fc9b3a5bda8"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/replay.py",
+      "bytes": 6111,
+      "sha256": "b1d424f31187004a354595e982c5be388572af1919c6b7ffc4925acad8649bdc"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/source-closure.json.xz",
+      "bytes": 185568,
+      "sha256": "2b37d1a1ba7923dabe5fb4b3dfb0482b1f6e59c4210ca58ac6158c14c98be519"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v6/summary.json",
+      "bytes": 1949,
+      "sha256": "b2768a6f56cd92b3712beeb0a733e66334568e21b27f423f5ab46661aaa4a252"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v7/README.md",
+      "bytes": 3347,
+      "sha256": "41b5d8da9dde07c0cd7cfa9ff89335e456d698c4f8dd170c8f6378a782ea2805"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v7/receipt.json.xz",
+      "bytes": 77432,
+      "sha256": "c78aeb32930bb0d558e1d55d21ceefb108b5d846801a94abccd67b7115c61bd6"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v7/replay.py",
+      "bytes": 7079,
+      "sha256": "4a96e0448e906017afd087c1cadd155c5721cdf9191e91593067b0c723d5e71a"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v7/source-closure.json.xz",
+      "bytes": 58788,
+      "sha256": "7c7672b228ea1f6bd9bb23d86c82bb3d6cd0581535c301081a7ae591d47bd20c"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v7/summary.json",
+      "bytes": 1774,
+      "sha256": "e989462b1ceaa079629f2fd576fdf92475704e1e3864211a6505c27eb3660ccf"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v9/README.md",
+      "bytes": 3217,
+      "sha256": "5778c50da0ad161bf0e2553f60190e5582a12a26cd98dbc7ccad6e4472e9c798"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v9/receipt.json.xz",
+      "bytes": 179356,
+      "sha256": "ea5223930c01b6ae8b99703acb0969b73a680da4598ebb787add28fd87cfa374"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v9/replay.py",
+      "bytes": 9984,
+      "sha256": "f0d17db559ab214f02bbdc997a60c7edf75d9984b7219cee2d87eb6b30293b18"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v9/source-closure.json.xz",
+      "bytes": 76292,
+      "sha256": "d18b7d4c2f4ce65baefe9d643c539b8d097b7f12976315f54107582b0147fb19"
+    },
+    {
+      "path": "benchmarks/results/h100-provider-owner-20261027/v9/summary.json",
+      "bytes": 1287,
+      "sha256": "fe95f3f8f8be037ba824c067767c9c803628c5616a18072e5168676429e5fe5f"
+    }
+  ]
+}

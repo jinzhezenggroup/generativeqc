@@ -65,11 +65,6 @@ from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
 from ._geometry_response_cache import ExactGeometryResponseCache
 from ._ks_snapshot import _integral_source_resources
-from ._resident_ao_maps import (
-    ResidentAoMapCache,
-    ResidentAoMapDomain,
-    ResidentDeviceAoMapOwner,
-)
 from ._stationary_cuda import (
     _DOUBLE,
     _CudaSources,
@@ -79,6 +74,7 @@ from ._stationary_cuda import (
     _ptr,
     _resolve_becke_primitive_policy,
     _resolve_phased_becke_policy,
+    _stationary_resident_ao_cache,
 )
 from ._stationary_nonlocal_cuda import (
     resident_nonlocal_geometry,
@@ -174,7 +170,8 @@ class PreparedCompositeStationaryCudaGradient:
         self._stack = ExitStack()
         self._identity = None
         self._nonlocal = None
-        self._ao_maps = None
+        self._resident_ao_maps = None
+        self._resident_ao_map_key = None
         self._geometry_response = ExactGeometryResponseCache()
         self.executions = 0
         self.last_work = None
@@ -187,7 +184,8 @@ class PreparedCompositeStationaryCudaGradient:
             # seeds, including a failed downstream geometry enqueue.
             self._nonlocal.close()
             self._nonlocal = None
-        self._ao_maps = None
+        self._resident_ao_maps = None
+        self._resident_ao_map_key = None
         self._stack.close()
         self._identity = None
         self.last_work = None
@@ -737,47 +735,27 @@ class PreparedCompositeStationaryCudaGradient:
             component_seconds["density_and_nuclear_setup"] = (
                 perf_counter() - component_start
             )
-            ao_domain = None
+            lease = None
             if active_ao_cutoff is not None:
                 lease = source.cuda_resident_grid()
                 if lease is None:
                     raise NotImplementedError(
                         "active AO maps require the resident molecular grid"
                     )
-                ao_domain = ResidentAoMapDomain(
-                    self.grid.basis_identity,
-                    state.identity.geometry_identity,
-                    state.grid.identity,
-                    lease.device,
-                    lease.points,
-                    lease.point_count,
-                    tile_points,
-                    self.grid.plan.order,
-                )
-                if self._ao_maps is None or self._ao_maps.domain != ao_domain:
-                    self._ao_maps = (
-                        ResidentDeviceAoMapOwner(
-                            self.grid,
-                            ao_domain,
-                            cutoff=active_ao_cutoff,
-                            budget_bytes=ao_cache_allowance,
-                            max_active_fraction=active_ao_max_active_fraction,
-                            **(
-                                {"producer": active_ao_producer}
-                                if active_ao_producer == "exact-jets-native-bitmask"
-                                else {}
-                            ),
-                        )
-                        if active_ao_producer
-                        in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
-                        else ResidentAoMapCache(
-                            self.grid,
-                            ao_domain,
-                            cutoff=active_ao_cutoff,
-                            budget_bytes=ao_cache_allowance,
-                            producer=active_ao_producer,
-                        )
-                    )
+            # All stationary compositions share the same token, generation and
+            # policy binding. Release a replaced map before allocating its
+            # successor, so only one optional cache allowance can be live.
+            ao_maps = _stationary_resident_ao_cache(
+                self,
+                self.grid,
+                state,
+                lease,
+                cutoff=active_ao_cutoff,
+                budget_bytes=ao_cache_allowance,
+                producer=active_ao_producer,
+                max_active_fraction=active_ao_max_active_fraction,
+            )
+            ao_domain = None if ao_maps is None else ao_maps.domain
             resident_parts, resident_seconds, resident_work = (
                 resident_split_nonlocal_geometry
                 if split_grid
@@ -793,7 +771,7 @@ class PreparedCompositeStationaryCudaGradient:
                 ao_count=n,
                 functional=functional,
                 ingredients=grid_features,
-                ao_maps=self._ao_maps,
+                ao_maps=ao_maps,
                 ao_domain=ao_domain,
             )
         components.update(resident_parts)

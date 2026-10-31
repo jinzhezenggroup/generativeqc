@@ -184,6 +184,54 @@ void profile_sources(const generativeqc::dft::CudaStationaryBinding& binding) {
                 "native source slot/sign ownership changed");
     }
   }
+  if (ranged) {
+    // The resident Direct adapter publishes full J/K before reusing its force
+    // arena for the LR correction. Verify the actual device transport copies
+    // both full-range channels and reconstructs the named SR/LR source slots.
+    reset();
+    require(receive(CudaDerivativeSourceKind::RangeCorrection, provider.values + 24, 1,
+                    CudaDerivativeConvention::Force) != 0,
+            "range correction was admitted before its full-range exchange source");
+    reset();
+    require(receive(CudaDerivativeSourceKind::FullRangeJk, provider.values + 12, 2,
+                    CudaDerivativeConvention::Force) == 0,
+            error.data());
+    require(cudaMemsetAsync(provider.values + 12, 0, 12 * sizeof(double), provider.stream) ==
+                cudaSuccess,
+            "provider scratch reuse failed");
+    require(receive(CudaDerivativeSourceKind::RangeCorrection, provider.values + 24, 1,
+                    CudaDerivativeConvention::Force) == 0,
+            error.data());
+    require(binding.source_span(lease.owner, 0, binding.source_count, actual.data(), actual.size(),
+                                error.data(), error.size()) == 0,
+            error.data());
+    const auto fraction = binding.model.short_range_exchange /
+                          (binding.model.long_range_exchange - binding.model.short_range_exchange);
+    for (std::size_t source = 0; source < binding.source_count; ++source) {
+      const std::string name(binding.source_names[source]);
+      for (std::size_t coordinate = 0; coordinate < 6; ++coordinate) {
+        double expected{};
+        if (name == "coulomb")
+          expected = -input[12 + coordinate];
+        else if (name == "exchange_short_range")
+          expected = -input[18 + coordinate] + fraction * input[24 + coordinate];
+        else if (name == "exchange_long_range")
+          expected = -(1.0 + fraction) * input[24 + coordinate];
+        else
+          continue;
+        require(std::abs(actual[source * 6 + coordinate] - expected) < 1e-13,
+                "split resident RSH transport lost a source or reused expired provider storage");
+      }
+    }
+    require(receive(CudaDerivativeSourceKind::RangeCorrection, provider.values + 24, 1,
+                    CudaDerivativeConvention::Force) != 0,
+            "duplicate range correction was admitted");
+    reset();
+    require(cudaMemcpyAsync(provider.values, input.data(), input.size() * sizeof(double),
+                            cudaMemcpyHostToDevice, provider.stream) == cudaSuccess,
+            "provider test restoration failed");
+    submit();
+  }
   std::vector<double> unpublished(6, 42.0);
   require(binding.finish_gradient(lease.owner, 64, unpublished.data(), unpublished.size(),
                                   error.data(), error.size()) != 0 &&
