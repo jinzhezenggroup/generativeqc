@@ -591,10 +591,11 @@ and exclusions.
 `scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
 checkpoint, process-RSS cap or free-memory guarantee.
 
-Named `pbe-d4(bj-eeq-atm)-rks` and `pbe-d4(bj-eeq-atm)-uks` energy inventories
-combine the existing PBE inventory with the public native D4 capacity query.
+Named PBE D3(BJ), D3(0), and D4(BJ-EEQ-ATM) RKS/UKS energy inventories
+combine the existing PBE inventory with the corresponding public native
+correction-capacity query.
 The electronic graph is checked against the compiled PBE catalog; a shared
-carrier enum does not admit hybrid or range-separated graphs. D4 plan and
+carrier enum does not admit hybrid or range-separated graphs. Correction plan and
 execution storage remains resident per item, including replicated CUDA tables.
 `correction_inventory` reports those capacities and the equal-share minimum
 for `--dispersion-memory-bytes`. Both this local limit and the complete host/
