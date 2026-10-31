@@ -66,10 +66,11 @@ def _compatibility_seed_capacity(batch: Any) -> tuple[int, int]:
 class _SeedLease:
     """Detach only the supplying solver's seeds before releasing its device owner.
 
-    The historical HF-named native ABI also implements KS warm states. This is
-    same-model in-process transport, never transport between candidate and audit.
-    Native restoration validates source overlap/occupations and always reruns
-    the target SCF. Numeric staging and its validation scratch are bounded.
+    Native snapshots own numeric storage independently of the source context.
+    The older HF-named descriptor ABI remains missing-symbol compatibility for
+    HF and KS. This is same-model transport, never candidate-to-auditor transport.
+    Native restoration validates source overlap/occupations and target SCF still
+    executes. Numeric staging and its validation scratch remain bounded.
     """
 
     def __init__(self, batch: Any, maximum_bytes: int) -> None:
@@ -77,11 +78,38 @@ class _SeedLease:
         self.systems = batch._systems
         self.metadata = deepcopy(batch._warm_state)
         self.states = None
-        self.storage = []
+        self._storage = []
+        self._snapshot = None
         self.numeric_bytes = 0
+        self.largest_density_bytes = 0
         self.reserved_host_bytes = 0
         if not batch._warm_state.enabled:
             return
+        bound, largest_bound = _seed_capacity(batch)
+        if bound > maximum_bytes:
+            raise MemoryError("precision audit seed staging exceeds maximum_seed_bytes")
+        _resource_check(batch, bound, largest_bound)
+        from ._warm_seed_native import capture_snapshot
+
+        snapshot = capture_snapshot(batch, bound)
+        if snapshot is not None:
+            try:
+                self.numeric_bytes = snapshot.numeric_bytes
+                self.largest_density_bytes = snapshot.largest_density_bytes
+                self.reserved_host_bytes = _resource_check(
+                    batch, self.numeric_bytes, self.largest_density_bytes
+                )
+            except BaseException:
+                snapshot.close()
+                raise
+            self._snapshot = snapshot
+            return
+        self._capture_compatibility(batch, bound, largest_bound)
+
+    def _capture_compatibility(
+        self, batch: Any, bound: int, largest_bound: int
+    ) -> None:
+        """Copy descriptor arrays only for a library without native snapshots."""
         if not all(
             hasattr(batch._library, name)
             for name in (
@@ -92,10 +120,6 @@ class _SeedLease:
             raise NotImplementedError(
                 "native precision audit seed transport unavailable"
             )
-        bound, largest_bound = _seed_capacity(batch)
-        if bound > maximum_bytes:
-            raise MemoryError("precision audit seed staging exceeds maximum_seed_bytes")
-        _resource_check(batch, bound, largest_bound)
         descriptors = [_descriptor() for _ in range(batch.system_count)]
         largest = 0
         for index, state in enumerate(descriptors):
@@ -130,8 +154,17 @@ class _SeedLease:
                 )
                 density.setflags(write=False)
                 coordinates.setflags(write=False)
-                self.storage.extend((density, coordinates))
+                self._storage.extend((density, coordinates))
             self.states[index] = state
+
+    @property
+    def storage(self) -> list[np.ndarray]:
+        """Expose detached diagnostic arrays without shifting production ownership."""
+        return (
+            self._snapshot.diagnostic_arrays()
+            if self._snapshot is not None
+            else self._storage
+        )
 
     def restore(self, batch: Any, *, updates: bool) -> None:
         """Rebind the same model, retaining frozen source geometry and metadata."""
@@ -140,7 +173,10 @@ class _SeedLease:
             or batch._systems != self.systems
         ):
             raise ValueError("precision seed lease model/topology changed")
-        if self.states is not None:
+        if self._snapshot is not None:
+            _resource_check(batch, self.numeric_bytes, self.largest_density_bytes)
+            self._snapshot.restore(batch)
+        elif self.states is not None:
             _resource_check(batch, self.numeric_bytes, self.largest_density_bytes)
             _native.check(
                 batch._library,

@@ -16,7 +16,7 @@ R3 is excluded and the parent remains incomplete.
 
 Baseline production source is `e8de3e4d9` (#2864). Candidate production source
 is `115cc3c72`; later commits integrate the base's evidence and retain these
-receipts only. `identities.json` binds full source IDs, CPU/CUDA binary hashes
+receipts only. `identities.json.xz` (lossless XZ-compressed JSON) binds full source IDs, CPU/CUDA binary hashes
 and actual worker metadata. Builds use Release, GCC 11.4, CUDA 12.9.86/sm_120
 and verified sccache 0.16.0. Shared-cache statistics are not exclusive task hits.
 Full build logs, installed binaries and original Nsight databases remain in
@@ -99,3 +99,7 @@ executed scripts and profiler CSVs with SHA-256. To stay within the unchanged
 `git show COMMIT:PATH` and verify the checksum. Earlier SCF-default raw samples
 remain recoverable through their own manifest. No Release, external archive,
 parent closure or broader resource-authority claim is implied.
+
+Storage follow-up: `controls.json.xz` is retained at its original Git commit,
+with exact path, SHA-256 and byte count in `history.json`. Recover with
+`git show COMMIT:PATH`; this preserves all failures and acceptance records.

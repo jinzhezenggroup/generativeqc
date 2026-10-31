@@ -40,6 +40,10 @@ short-lived audit owner. The prior SCF-default decision remains applicable;
 this extraction shares transport lifetime and adds no scientific policy.
 Explicit query replacement and missing-symbol compatibility remain authoritative.
 
+The [native snapshot follow-up](2026-10-29-native-warm-seed-snapshots.md) moves
+numeric staging ownership separately. The capacity query and its exclusions
+remain unchanged; the follow-up retains independent history/model policy.
+
 ## Validation
 
 Compiled fault-injected owners forbid seed materialization and scientific work,

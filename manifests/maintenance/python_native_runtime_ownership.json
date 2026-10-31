@@ -1021,6 +1021,16 @@
           "path": "python/generativeqc/_warm_seed_native.py",
           "symbol": "seed_capacity",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_precision_batch.py",
+          "symbol": "_SeedLease._capture_compatibility",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/_warm_seed_native.py",
+          "symbol": "capture_snapshot",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -1036,7 +1046,8 @@
         "src/scf/system_projection.hpp",
         "src/runtime/precision_admission.hpp",
         "src/methods/scf_defaults.hpp",
-        "src/methods/warm_seed_capacity.hpp"
+        "src/methods/warm_seed_capacity.hpp",
+        "src/methods/warm_seed_snapshot.hpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
@@ -1054,7 +1065,7 @@
         "Admitted all-electron CPU HF system projection owns overlap preparation and every spin projection natively. Python retains per-item eligibility, immutable source transport, reports and transactional seed installation. Old/custom/unsupported domains retain explicit preparation compatibility; native execution failure never retries it. The composed capacity remains a numeric-matrix envelope rather than complete memory authority.",
         "The public native application-precision evidence policy owns budget-Fock operator admission, exact returned-state strict warm proof, and the Standard fallback decision. Python transports typed model traits and completed diagnostics; missing additive support retains explicit compatibility and selected failures never retry it. Complete-gradient qualification, candidate/audit/fallback execution, observable comparison and bounded independent seed lifetimes remain Python production owners; this query does not claim a native precision endpoint or new numerical qualification.",
         "Default SCF controls query the shared native catalog/grid policy for the incumbent qualified CUDA contexts. Python copies model/backend/ECP and immutable grid facts, while explicit caller overrides remain unchanged. Missing additive support alone retains the older-library selection policy. This neither qualifies new methods nor transfers precision execution or custom MethodIR resolution.",
-        "Precision seed staging queries immutable native prepared density dimensions and ordered atom counts before any resident seed export. Only absent additive support uses Python topology reconstruction. Numeric all-slot bounds do not transfer seed ownership, host reservation policy, independent audit histories or full provider memory authority."
+        "Precision seed staging queries immutable native prepared dimensions before resident export. Native immutable host snapshots own density/coordinate arrays, copying and release independently of source batch/context lifetime; restore reuses existing physical validation. Python retains same-model eligibility, validation reservations, metadata, update policy and independent candidate/auditor history selection. Only absent capacity/capture symbols permit topology/descriptor compatibility. Numeric bounds and snapshots do not establish complete host/provider memory authority or cross-model admission."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
@@ -1079,7 +1090,9 @@
         "tests/python/test_scf_convergence_defaults.py",
         "tests/python/test_standard_scf_convergence_cuda.py",
         "tests/native/test_warm_seed_capacity.cpp",
-        "tests/python/test_native_warm_seed_capacity.py"
+        "tests/python/test_native_warm_seed_capacity.py",
+        "tests/native/test_warm_seed_snapshot.cpp",
+        "tests/python/test_native_warm_seed_snapshot.py"
       ],
       "trackers": [
         "#933"
