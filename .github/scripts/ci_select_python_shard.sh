@@ -392,14 +392,15 @@ core_hotspots_a=(
   tests/python/test_cuda_xc_point_contract.py
   tests/python/test_uccsd_solver.py
   tests/python/test_cc_triples_tiles.py
-  # Run 41165110996 exhausted core-c's 30-minute test budget with all
-  # workers still active. These intact native contract modules consumed
-  # 525 + 280 worker-seconds; core-a completed its entire job in 24m39s.
-  # Pin only their owner, preserving ordinary modulo slots and all cases.
-  tests/python/test_native_stationary_shared_kernels.py
-  tests/python/test_native_stationary_cuda_binding.py
 )
 core_hotspots_b=(
+  # After precision/defaults integration, run 41183809495 exhausted core-a
+  # with all workers active and no failed reports. These intact modules used
+  # at least 624 + 291 worker-seconds; core-b's test step finished in 975 s.
+  # Preserve ordinary modulo slots and every case on the existing worksteal
+  # workers while moving the two measured owners to that lighter lane.
+  tests/python/test_native_stationary_shared_kernels.py
+  tests/python/test_native_stationary_cuda_binding.py
   # Run 40127914199 completed core-c tests at 1798.9s. Moving these
   # intact ~477-worker-second modules to core-a then exhausted its cold
   # corrected-Lambda lane in run 40135163162; core-b finished in 14m37s.
